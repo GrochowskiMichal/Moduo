@@ -1,9 +1,8 @@
 import { useEffect } from "react";
-import { Platform } from "react-native";
 import { router } from "expo-router";
 import { Text, View } from "../../src/tw";
 import { useAuth } from "../../src/providers/auth-provider";
-import { ClerkAuthPanel } from "../../src/components/auth/clerk-auth-panel";
+import { EmailAuthPanel } from "../../src/components/auth/email-auth-panel";
 
 export default function AuthScreen() {
   const { isSignedIn } = useAuth();
@@ -11,14 +10,6 @@ export default function AuthScreen() {
   useEffect(() => {
     if (isSignedIn) router.replace("/(app)");
   }, [isSignedIn]);
-
-  if (Platform.OS !== "web") {
-    return (
-      <View className="flex-1 bg-[#050608] items-center justify-center px-6">
-        <Text className="text-white text-lg">Use web/desktop to sign in.</Text>
-      </View>
-    );
-  }
 
   return (
     <View className="flex-1 bg-[#050608]">
@@ -29,7 +20,7 @@ export default function AuthScreen() {
           <Text className="text-[#98a2b3] text-xs">moduo</Text>
         </View>
         <View className="flex-1 items-center justify-center px-8 bg-[#05080f]">
-          <ClerkAuthPanel />
+          <EmailAuthPanel />
         </View>
       </View>
     </View>

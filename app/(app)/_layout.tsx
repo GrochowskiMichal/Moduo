@@ -1,9 +1,14 @@
 import { Redirect, Slot, usePathname, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { useUser } from "@clerk/clerk-expo";
 import { useAuth } from "../../src/providers/auth-provider";
 import { Pressable, Text, View } from "../../src/tw";
 import { UserMenu } from "../../src/components/user-menu";
+import {
+  dispatchNotesCreateKind,
+  dispatchNotesFocusSearch,
+  dispatchNotesToggleSidebar,
+} from "../../src/features/notes/ui/layout-events";
+import type { NoteKind } from "../../src/features/notes/types";
 
 type TabItem = { label: string; icon: string; href: string };
 const tabs: TabItem[] = [
@@ -15,39 +20,31 @@ const tabs: TabItem[] = [
   { label: "Tags", icon: "◇", href: "/tags" },
 ];
 
+const notesCreateActions: Array<{ label: string; kind: NoteKind; icon: string }> = [
+  { label: "New Section", kind: "category", icon: "▣" },
+  { label: "New Note Folder", kind: "folder", icon: "▢" },
+  { label: "New Note", kind: "note", icon: "☰" },
+];
+
 export default function AppLayout() {
-  const { isSignedIn, loading, userId, supabase } = useAuth();
-  const { user, isLoaded: clerkLoaded } = useUser();
+  const { isSignedIn, loading, userId, userEmail, supabase } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const isNotesRoute = pathname === "/notes";
   const [profileLoading, setProfileLoading] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [notesCreateMenuOpen, setNotesCreateMenuOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
 
     const syncProfile = async () => {
-      if (!isSignedIn || !supabase || !userId || !clerkLoaded) {
+      if (!isSignedIn || !supabase || !userId) {
         if (active) setProfileLoading(false);
         return;
       }
 
       try {
-        const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? null;
-        const providerFirstName = user?.firstName?.trim() || null;
-        const providerLastName = user?.lastName?.trim() || null;
-        const hasProviderNames = !!(providerFirstName && providerLastName);
-
-        if (primaryEmail) {
-          await supabase.rpc("sync_clerk_user", {
-            p_clerk_user_id: userId,
-            p_email: primaryEmail,
-            p_first_name: providerFirstName,
-            p_last_name: providerLastName,
-            p_onboarding_completed: hasProviderNames,
-          });
-        }
-
         const { data: current, error: selectError } = await supabase
           .from("users")
           .select("id,email,first_name,last_name,onboarding_completed")
@@ -55,21 +52,27 @@ export default function AppLayout() {
           .maybeSingle();
         if (selectError) throw selectError;
 
-        let nextNeedsOnboarding = true;
-        if (current) {
+        let nextNeedsOnboarding = false;
+        if (!current) {
+          const { error: upsertError } = await supabase.from("users").upsert(
+            {
+              id: userId,
+              email: userEmail,
+              onboarding_completed: false,
+            },
+            { onConflict: "id" }
+          );
+          if (upsertError) throw upsertError;
+          nextNeedsOnboarding = true;
+        } else {
           const hasStoredNames = !!(current.first_name?.trim() && current.last_name?.trim());
-          nextNeedsOnboarding = !(current.onboarding_completed || hasStoredNames || hasProviderNames);
+          nextNeedsOnboarding = !(current.onboarding_completed || hasStoredNames);
 
-          const patch: Record<string, unknown> = {};
-          if (!current.email && primaryEmail) patch.email = primaryEmail;
-          if (!hasStoredNames && hasProviderNames) {
-            patch.first_name = providerFirstName;
-            patch.last_name = providerLastName;
-            patch.onboarding_completed = true;
-            nextNeedsOnboarding = false;
-          }
-          if (Object.keys(patch).length > 0) {
-            const { error: updateError } = await supabase.from("users").update(patch).eq("id", userId);
+          if (!current.email && userEmail) {
+            const { error: updateError } = await supabase
+              .from("users")
+              .update({ email: userEmail })
+              .eq("id", userId);
             if (updateError) throw updateError;
           }
         }
@@ -86,7 +89,11 @@ export default function AppLayout() {
     return () => {
       active = false;
     };
-  }, [isSignedIn, supabase, userId, clerkLoaded, user]);
+  }, [isSignedIn, supabase, userId, userEmail]);
+
+  useEffect(() => {
+    if (!isNotesRoute) setNotesCreateMenuOpen(false);
+  }, [isNotesRoute]);
 
   if (loading) return null;
   if (!loading && !isSignedIn) return <Redirect href="/(auth)" />;
@@ -132,10 +139,55 @@ export default function AppLayout() {
       </View>
 
       <View className="items-center pb-5">
+        {isNotesRoute && notesCreateMenuOpen ? (
+          <View className="absolute bottom-[72px] rounded-2xl border border-[#1c2432] bg-[#0f131b] px-2 py-2 min-w-[320px]">
+            {notesCreateActions.map((entry) => (
+              <Pressable
+                key={entry.kind}
+                className="flex-row items-center justify-between px-3 py-3 rounded-lg"
+                onPress={() => {
+                  dispatchNotesCreateKind(entry.kind);
+                  setNotesCreateMenuOpen(false);
+                }}
+              >
+                <View className="flex-row items-center gap-3">
+                  <Text className="text-[#f08f42] text-base">{entry.icon}</Text>
+                  <Text className="text-[#cfd5e2] text-[18px]">{entry.label}</Text>
+                </View>
+                <Text className="text-[#a4acbd] text-2xl">+</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
         <View className="flex-row items-center px-4 py-2 gap-8">
-          <Text className="text-[#8b93a3] text-2xl">🪐</Text>
-          <Text className="text-[#8b93a3] text-2xl">⌕</Text>
-          <Text className="text-[#8b93a3] text-[34px] -mt-1">+</Text>
+          <Pressable
+            className="w-10 h-10 items-center justify-center"
+            onPress={() => {
+              if (!isNotesRoute) return;
+              dispatchNotesToggleSidebar();
+            }}
+          >
+            <Text className="text-[#8b93a3] text-2xl">◨</Text>
+          </Pressable>
+          <Pressable
+            className="w-10 h-10 items-center justify-center"
+            onPress={() => {
+              if (!isNotesRoute) return;
+              dispatchNotesFocusSearch();
+            }}
+          >
+            <Text className="text-[#8b93a3] text-2xl">⌕</Text>
+          </Pressable>
+          <Pressable
+            className={`w-10 h-10 items-center justify-center rounded-md ${isNotesRoute && notesCreateMenuOpen ? "bg-[#1b212d]" : "bg-[#11161f]"}`}
+            onPress={() => {
+              if (!isNotesRoute) return;
+              setNotesCreateMenuOpen((current) => !current);
+            }}
+          >
+            <Text className="text-[#cbd2df] text-[34px] -mt-1">+</Text>
+          </Pressable>
         </View>
       </View>
     </View>

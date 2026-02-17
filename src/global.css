@@ -2,6 +2,167 @@
 @import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css";
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 * {
   font-family: "Inter", "Inter_400Regular", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.notes-p {
+  margin: 0 0 10px;
+}
+
+.notes-h1,
+.notes-h2,
+.notes-h3 {
+  color: #f2f5ff;
+  margin: 14px 0 10px;
+}
+
+.notes-h1 {
+  font-size: 32px;
+}
+
+.notes-h2 {
+  font-size: 26px;
+}
+
+.notes-h3 {
+  font-size: 21px;
+}
+
+.notes-quote {
+  margin: 12px 0;
+  border-left: 3px solid #42557b;
+  padding-left: 12px;
+  color: #a8b5cf;
+}
+
+.notes-list-ul,
+.notes-list-ol,
+.notes-checklist {
+  margin: 8px 0 12px;
+}
+
+.notes-list-ul {
+  list-style: disc outside;
+  padding-left: 24px;
+}
+
+.notes-list-ol {
+  list-style: decimal outside;
+  padding-left: 28px;
+}
+
+.notes-list-item {
+  display: list-item;
+  margin: 3px 0;
+}
+
+.notes-list-item > .notes-list-ul,
+.notes-list-item > .notes-list-ol {
+  margin-top: 4px;
+}
+
+.notes-list-item .notes-p {
+  margin: 0;
+}
+
+.notes-list-item::marker {
+  color: #b8c5dd;
+}
+
+.notes-list-ul .notes-list-ul {
+  list-style-type: circle;
+}
+
+.notes-list-ul .notes-list-ul .notes-list-ul {
+  list-style-type: square;
+}
+
+.notes-list-ol .notes-list-ol {
+  list-style-type: lower-alpha;
+}
+
+.notes-list-ol .notes-list-ol .notes-list-ol {
+  list-style-type: lower-roman;
+}
+
+.notes-checklist {
+  list-style: none;
+  padding-left: 0;
+}
+
+.notes-list-item-unchecked,
+.notes-list-item-checked {
+  list-style: none;
+  position: relative;
+  padding-left: 28px;
+  margin: 4px 0;
+}
+
+.notes-list-item-unchecked .notes-p,
+.notes-list-item-checked .notes-p {
+  margin: 0;
+}
+
+.notes-list-item-unchecked::marker,
+.notes-list-item-checked::marker {
+  content: "";
+}
+
+.notes-list-item-unchecked::before,
+.notes-list-item-checked::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid #3b4d70;
+  background: #0f1727;
+}
+
+.notes-list-item-checked::before {
+  content: "✓";
+  color: #cdd6e9;
+  font-size: 12px;
+  display: grid;
+  place-items: center;
+}
+
+.notes-inline-code,
+.notes-code-block {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.notes-inline-code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #22314d;
+  background: #101a2a;
+}
+
+.notes-code-block {
+  display: block;
+  white-space: pre;
+  tab-size: 2;
+  overflow-x: auto;
+  line-height: 1.6;
+  font-size: 14px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: #0f1727;
+  border: 1px solid #22314b;
+  border-radius: 10px;
+  color: #dce4f6;
+}
+
+.notes-link {
+  color: #8cc4ff;
 }

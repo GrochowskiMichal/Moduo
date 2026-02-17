@@ -10,7 +10,14 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const allowed = isDev ? "http://localhost:8081" : `file://${path.join(__dirname, "../dist/index.html")}`;
+    if (!url.startsWith(allowed)) event.preventDefault();
   });
 
   if (isDev) {
