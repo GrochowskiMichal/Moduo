@@ -9,8 +9,5 @@ export const supabaseConfigError =
     ? "Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY."
     : null;
 
-export const supabase = supabaseConfigError
-  ? null
-  : createClient(supabaseUrl, publishableKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
-    });
+export const createSupabaseClient = (accessToken: () => Promise<string | null>) =>
+  createClient(supabaseUrl!, publishableKey!, { accessToken });

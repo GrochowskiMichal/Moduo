@@ -1,44 +1,43 @@
-import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { supabase, supabaseConfigError } from "../lib/supabase";
+import { createContext, PropsWithChildren, useContext, useMemo } from "react";
+import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
+import { createSupabaseClient, supabaseConfigError } from "../lib/supabase";
 
 type AuthContextValue = {
-  session: Session | null;
+  userId: string | null;
+  isSignedIn: boolean;
   loading: boolean;
   configError: string | null;
+  supabase: ReturnType<typeof createSupabaseClient> | null;
+  signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue>({
-  session: null,
+  userId: null,
+  isSignedIn: false,
   loading: true,
   configError: null,
+  supabase: null,
+  signOut: async () => {},
 });
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
-
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setLoading(false);
-    });
-
-    return () => data.subscription.unsubscribe();
-  }, []);
+  const { userId, isSignedIn, isLoaded, getToken, signOut } = useClerkAuth();
+  const supabase = useMemo(() => {
+    if (supabaseConfigError) return null;
+    return createSupabaseClient(async () => (await getToken()) ?? null);
+  }, [getToken]);
 
   return (
-    <AuthContext.Provider value={{ session, loading, configError: supabaseConfigError }}>
+    <AuthContext.Provider
+      value={{
+        userId: userId ?? null,
+        isSignedIn: !!isSignedIn,
+        loading: !isLoaded,
+        configError: supabaseConfigError,
+        supabase,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

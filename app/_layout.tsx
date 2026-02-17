@@ -1,14 +1,28 @@
+import "../src/global.css";
 import { Slot } from "expo-router";
-import { TamaguiProvider } from "@tamagui/core";
+import { ClerkProvider } from "@clerk/clerk-expo";
+import { tokenCache } from "@clerk/clerk-expo/token-cache";
+import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import { AuthProvider } from "../src/providers/auth-provider";
-import tamaguiConfig from "../tamagui.config";
+
+const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+  });
+
+  if (!clerkPublishableKey) return null;
+  if (!fontsLoaded) return null;
+
   return (
-    <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
+    <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
       <AuthProvider>
         <Slot />
       </AuthProvider>
-    </TamaguiProvider>
+    </ClerkProvider>
   );
 }
