@@ -16,6 +16,7 @@ type StatusListener = (status: NotesSyncStatus) => void;
 
 type RemotePullRow = {
   id: number;
+  workspace_id: string;
   note_id: string;
   client_id: string;
   client_seq: number;
@@ -99,8 +100,9 @@ class NotesRealtimeProvider implements Provider {
   }
 }
 
-function emptyCursor(noteId: string): SyncCursor {
+function emptyCursor(workspaceId: string, noteId: string): SyncCursor {
   return {
+    workspaceId,
     noteId,
     lastPulledUpdateId: 0,
     clientSeq: 0,
@@ -130,7 +132,8 @@ export class NotesSyncEngine {
 
   constructor(
     private readonly supabase: SupabaseClient,
-    private readonly ownerId: string
+    private readonly userId: string,
+    private readonly workspaceId: string
   ) {
     if (typeof window !== "undefined") {
       this.handleOnline = () => {
@@ -163,13 +166,20 @@ export class NotesSyncEngine {
   }
 
   private persistenceKey(noteId: string): string {
-    return `moduo-note-v2-${this.ownerId}-${noteId}`;
+    return `moduo-note-v3-${this.userId}-${this.workspaceId}-${noteId}`;
+  }
+
+  private get scopeKey(): string {
+    return `${this.userId}:${this.workspaceId}`;
   }
 
   async ensureCursor(noteId: string): Promise<SyncCursor> {
-    const existing = await notesLocalDB.syncCursors.get(noteId);
+    const existing = await notesLocalDB.syncCursors
+      .where("[workspaceId+noteId]")
+      .equals([this.workspaceId, noteId])
+      .first();
     if (existing) return existing;
-    const created = emptyCursor(noteId);
+    const created = emptyCursor(this.workspaceId, noteId);
     await notesLocalDB.syncCursors.put(created);
     return created;
   }
@@ -238,8 +248,8 @@ export class NotesSyncEngine {
       const { data: snapshot } = await this.supabase
         .from("note_documents")
         .select("snapshot_b64,last_compacted_update_id")
+        .eq("workspace_id", this.workspaceId)
         .eq("note_id", session.noteId)
-        .eq("owner_id", this.ownerId)
         .maybeSingle<RemoteDocSnapshot>();
 
       const cursor = await this.ensureCursor(session.noteId);
@@ -283,6 +293,7 @@ export class NotesSyncEngine {
 
   private async handleRealtimeUpdate(session: NoteSession, update: RemotePullRow): Promise<void> {
     if (session.destroyed) return;
+    if (update.workspace_id !== this.workspaceId) return;
 
     const cursor = await this.ensureCursor(session.noteId);
     cursor.lastPulledUpdateId = Math.max(cursor.lastPulledUpdateId, Number(update.id));
@@ -313,8 +324,10 @@ export class NotesSyncEngine {
 
     await notesLocalDB.outbox.put({
       id: `${this.clientId}:${noteId}:${nextSeq}`,
+      scopeKey: this.scopeKey,
+      workspaceId: this.workspaceId,
       noteId,
-      ownerId: this.ownerId,
+      ownerId: this.userId,
       clientId: this.clientId,
       clientSeq: nextSeq,
       updateB64: encodeUint8ToBase64(update),
@@ -329,12 +342,17 @@ export class NotesSyncEngine {
   }
 
   private async flushOutbox(session: NoteSession): Promise<void> {
-    const pending = await notesLocalDB.outbox.where("noteId").equals(session.noteId).sortBy("clientSeq");
+    const pending = await notesLocalDB.outbox
+      .where("scopeKey")
+      .equals(this.scopeKey)
+      .and((entry) => entry.noteId === session.noteId)
+      .sortBy("clientSeq");
     if (pending.length === 0) return;
 
     const batch = pending.slice(0, MAX_PUSH_BATCH_SIZE);
 
     const { data, error } = await this.supabase.rpc("note_push_updates", {
+      p_workspace_id: this.workspaceId,
       p_note_id: session.noteId,
       p_client_id: this.clientId,
       p_updates: batch.map((entry) => ({ client_seq: entry.clientSeq, update_b64: entry.updateB64 })),
@@ -360,6 +378,7 @@ export class NotesSyncEngine {
     const cursor = await this.ensureCursor(session.noteId);
 
     const { data, error } = await this.supabase.rpc("note_pull_updates", {
+      p_workspace_id: this.workspaceId,
       p_note_id: session.noteId,
       p_after_id: cursor.lastPulledUpdateId,
       p_limit: 500,
@@ -398,8 +417,9 @@ export class NotesSyncEngine {
 
     const { error } = await this.supabase.from("note_documents").upsert(
       {
+        workspace_id: this.workspaceId,
         note_id: session.noteId,
-        owner_id: this.ownerId,
+        owner_id: this.userId,
         snapshot_b64: snapshotB64,
         last_compacted_update_id: cursor.lastPulledUpdateId,
       },

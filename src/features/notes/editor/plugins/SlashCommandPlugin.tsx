@@ -254,7 +254,7 @@ export function SlashCommandPlugin() {
 
   return createPortal(
     <div
-      className="fixed z-[999] min-w-[260px] rounded-[12px] border border-[#25344e] bg-[#0d1320] p-[6px] shadow-[0_14px_30px_#00000057]"
+      className="fixed z-[999] min-w-[260px] rounded-[12px] border border-[#2a2a2a] bg-[#141414] p-[6px] shadow-[0_14px_30px_#00000057]"
       style={{ top: menu.top, left: menu.left }}
       role="listbox"
       aria-label="Slash Commands"
@@ -264,7 +264,7 @@ export function SlashCommandPlugin() {
           key={command.id}
           type="button"
           role="option"
-          className={`flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-2 text-[#d6ddf0] hover:bg-[#1c2942] ${selectedIndex === index ? "bg-[#1c2942]" : ""}`}
+          className={`flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-2 text-[#d8d8d8] hover:bg-[#202020] ${selectedIndex === index ? "bg-[#202020]" : ""}`}
           onMouseEnter={() => setSelectedIndex(index)}
           onMouseDown={(event) => {
             event.preventDefault();
@@ -275,7 +275,7 @@ export function SlashCommandPlugin() {
           }}
         >
           <span>{command.title}</span>
-          <span className="text-[11px] text-[#7f8da8]">{command.group}</span>
+          <span className="text-[11px] text-[#8a8a8a]">{command.group}</span>
         </button>
       ))}
     </div>,

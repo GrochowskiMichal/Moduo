@@ -8,7 +8,7 @@ type LocalMetaKV = {
 
 type LocalNotePin = {
   key: string;
-  ownerId: string;
+  scopeKey: string;
   noteId: string;
   isPinned: boolean;
   updatedAt: string;
@@ -38,6 +38,14 @@ export class NotesLocalDB extends Dexie {
       meta: "key",
       notePins: "key, ownerId, noteId, [ownerId+noteId], updatedAt",
     });
+
+    this.version(3).stores({
+      notes: "id, workspaceId, ownerId, parentId, [workspaceId+parentId], updatedAt, position, deletedAt",
+      syncCursors: "noteId, workspaceId, [workspaceId+noteId], lastPulledUpdateId, clientSeq",
+      outbox: "id, scopeKey, workspaceId, noteId, ownerId, clientId, clientSeq, createdAt",
+      meta: "key",
+      notePins: "key, scopeKey, noteId, [scopeKey+noteId], updatedAt",
+    });
   }
 }
 
@@ -52,22 +60,22 @@ export async function setMetaValue(key: string, value: string): Promise<void> {
   await notesLocalDB.meta.put({ key, value });
 }
 
-function pinKey(ownerId: string, noteId: string): string {
-  return `${ownerId}:${noteId}`;
+function pinKey(scopeKey: string, noteId: string): string {
+  return `${scopeKey}:${noteId}`;
 }
 
-export async function setLocalPin(ownerId: string, noteId: string, isPinned: boolean): Promise<void> {
+export async function setLocalPin(scopeKey: string, noteId: string, isPinned: boolean): Promise<void> {
   const now = new Date().toISOString();
   await notesLocalDB.notePins.put({
-    key: pinKey(ownerId, noteId),
-    ownerId,
+    key: pinKey(scopeKey, noteId),
+    scopeKey,
     noteId,
     isPinned,
     updatedAt: now,
   });
 }
 
-export async function getLocalPinMap(ownerId: string): Promise<Map<string, boolean>> {
-  const rows = await notesLocalDB.notePins.where("ownerId").equals(ownerId).toArray();
+export async function getLocalPinMap(scopeKey: string): Promise<Map<string, boolean>> {
+  const rows = await notesLocalDB.notePins.where("scopeKey").equals(scopeKey).toArray();
   return new Map(rows.map((row) => [row.noteId, row.isPinned]));
 }

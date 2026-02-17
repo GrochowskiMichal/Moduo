@@ -2,11 +2,13 @@ export type NoteKind = "category" | "folder" | "note";
 
 export type NoteMeta = {
   id: string;
+  workspaceId: string;
   ownerId: string;
   parentId: string | null;
   title: string;
   icon: string | null;
   kind: NoteKind;
+  tags: string[];
   isPinned: boolean;
   position: string;
   isArchived: boolean;
@@ -30,6 +32,7 @@ export type SyncUpdate = {
 };
 
 export type SyncCursor = {
+  workspaceId: string;
   noteId: string;
   lastPulledUpdateId: number;
   clientSeq: number;
@@ -58,6 +61,8 @@ export type SlashCommand = {
 
 export type LocalOutboxEntry = {
   id: string;
+  scopeKey: string;
+  workspaceId: string;
   noteId: string;
   ownerId: string;
   clientId: string;

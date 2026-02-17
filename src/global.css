@@ -19,7 +19,7 @@ body,
 .notes-h1,
 .notes-h2,
 .notes-h3 {
-  color: #f2f5ff;
+  color: #f1f1f1;
   margin: 14px 0 10px;
 }
 
@@ -37,9 +37,9 @@ body,
 
 .notes-quote {
   margin: 12px 0;
-  border-left: 3px solid #42557b;
+  border-left: 3px solid #3a3a3a;
   padding-left: 12px;
-  color: #a8b5cf;
+  color: #a3a3a3;
 }
 
 .notes-list-ul,
@@ -73,7 +73,7 @@ body,
 }
 
 .notes-list-item::marker {
-  color: #b8c5dd;
+  color: #9a9a9a;
 }
 
 .notes-list-ul .notes-list-ul {
@@ -124,13 +124,13 @@ body,
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  border: 1px solid #3b4d70;
-  background: #0f1727;
+  border: 1px solid #3a3a3a;
+  background: #141414;
 }
 
 .notes-list-item-checked::before {
   content: "✓";
-  color: #cdd6e9;
+  color: #d0d0d0;
   font-size: 12px;
   display: grid;
   place-items: center;
@@ -144,8 +144,8 @@ body,
 .notes-inline-code {
   padding: 1px 6px;
   border-radius: 4px;
-  border: 1px solid #22314d;
-  background: #101a2a;
+  border: 1px solid #2a2a2a;
+  background: #151515;
 }
 
 .notes-code-block {
@@ -157,12 +157,12 @@ body,
   font-size: 14px;
   margin: 12px 0;
   padding: 10px 12px;
-  background: #0f1727;
-  border: 1px solid #22314b;
+  background: #141414;
+  border: 1px solid #2a2a2a;
   border-radius: 10px;
-  color: #dce4f6;
+  color: #d8d8d8;
 }
 
 .notes-link {
-  color: #8cc4ff;
+  color: #a3a3a3;
 }

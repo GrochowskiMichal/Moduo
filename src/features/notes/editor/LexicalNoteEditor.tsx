@@ -22,6 +22,7 @@ import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
 type Props = {
   noteId: string;
   title: string;
+  editable?: boolean;
   onTitleChange: (nextTitle: string) => void;
   syncEngine: NotesSyncEngine;
 };
@@ -33,7 +34,7 @@ function NotesCodeHighlightPlugin() {
   return null;
 }
 
-export function LexicalNoteEditor({ noteId, title, onTitleChange, syncEngine }: Props) {
+export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChange, syncEngine }: Props) {
   const [draftTitle, setDraftTitle] = useState(title);
 
   useEffect(() => {
@@ -48,17 +49,12 @@ export function LexicalNoteEditor({ noteId, title, onTitleChange, syncEngine }: 
     return () => clearTimeout(timer);
   }, [draftTitle, onTitleChange, title]);
 
-  useEffect(() => {
-    return () => {
-      syncEngine.closeNote(noteId);
-    };
-  }, [noteId, syncEngine]);
-
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_1fr]">
       <input
-        className="mx-[22px] mb-[6px] mt-[18px] border-0 bg-transparent py-2 text-[30px] font-bold leading-[1.2] text-[#f1f4ff] outline-none"
+        className="mx-[22px] mb-[6px] mt-[18px] border-0 bg-transparent py-2 text-[30px] font-bold leading-[1.2] text-[#f1f1f1] outline-none"
         value={draftTitle}
+        disabled={!editable}
         onChange={(event) => setDraftTitle(event.target.value)}
         placeholder="Untitled"
       />
@@ -69,7 +65,7 @@ export function LexicalNoteEditor({ noteId, title, onTitleChange, syncEngine }: 
             key={`composer-${noteId}`}
             initialConfig={{
               namespace: `moduo-note-${noteId}`,
-              editable: true,
+              editable,
               onError: (error) => {
                 console.error("Lexical editor error:", error);
               },
@@ -100,10 +96,10 @@ export function LexicalNoteEditor({ noteId, title, onTitleChange, syncEngine }: 
           >
             <RichTextPlugin
               contentEditable={
-                <ContentEditable className="min-h-full px-[22px] pb-[90px] pt-[6px] text-[16px] leading-[1.7] text-[#d7dcef] outline-none" />
+                <ContentEditable className="min-h-full px-[22px] pb-[90px] pt-[6px] text-[16px] leading-[1.7] text-[#cfcfcf] outline-none" />
               }
               placeholder={
-                <div className="pointer-events-none absolute left-[22px] top-3 text-[#5f6b82]">
+                <div className="pointer-events-none absolute left-[22px] top-3 text-[#7a7a7a]">
                   Type '/' for commands...
                 </div>
               }
