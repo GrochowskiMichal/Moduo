@@ -4,6 +4,7 @@ import { usePathname, useRouter, Slot } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
+import { useDashboardContext } from "../../features/dashboard/providers/dashboard-provider";
 import { NotificationCenter } from "../notification-center";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { WorkspaceSettingsModal } from "../workspace-settings-modal";
@@ -28,7 +29,6 @@ import {
 import type { NoteKind } from "../../features/notes/types";
 
 type TabItem = { label: string; iconName: string; href: string; module?: "notes" | "tasks" };
-type DashboardView = { id: string; name: string };
 type TaskProjectOption = { id: string; name: string };
 
 const baseTabs: TabItem[] = [
@@ -58,22 +58,19 @@ const tasksCreateActions: Array<{ label: string; entity: "task" | "project"; ico
   { label: "New Project", entity: "project", icon: "◫" },
 ];
 
-function dashboardStorageKey(workspaceId: string) {
-  return `moduo:dashboard-views:${workspaceId}`;
-}
-
-function defaultDashboardViews(): DashboardView[] {
-  return [
-    { id: "main", name: "Main Dashboard" },
-    { id: "insights", name: "Insights" },
-  ];
-}
-
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const { signOut, supabase, userId } = useAuth();
   const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
+  const { 
+    views: dashboardViews, 
+    activeViewId: activeDashboardViewId, 
+    setActiveViewId: setActiveDashboardViewId,
+    createView: createDashboardView,
+    updateView: updateDashboardView,
+    deleteView: deleteDashboardView
+  } = useDashboardContext();
 
   const isDashboardRoute = pathname === "/";
   const isNotesRoute = pathname === "/notes";
@@ -90,8 +87,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const [taskProjectsLoaded, setTaskProjectsLoaded] = useState(false);
   const [selectedTaskProjectId, setSelectedTaskProjectId] = useState<string | null>(null);
 
-  const [dashboardViews, setDashboardViews] = useState<DashboardView[]>(defaultDashboardViews());
-  const [activeDashboardViewId, setActiveDashboardViewId] = useState<string>("main");
   const [hoveredDashboardViewId, setHoveredDashboardViewId] = useState<string | null>(null);
   const [hoveredTaskProjectId, setHoveredTaskProjectId] = useState<string | null>(null);
   const [showDashboardTabControls, setShowDashboardTabControls] = useState(isDashboardRoute);
@@ -132,6 +127,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       duration: 180,
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
+      
     }).start(({ finished }) => {
       if (finished) setShowDashboardTabControls(false);
     });
@@ -159,31 +155,15 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     });
   }, [isTasksRoute, tasksTabControlsAnim]);
 
+  // Dispatch event when active dashboard view changes
   useEffect(() => {
-    if (!selectedWorkspaceId || typeof window === "undefined") {
-      setDashboardViews(defaultDashboardViews());
-      setActiveDashboardViewId("main");
-      return;
+    if (activeDashboardViewId) {
+      const view = dashboardViews.find(v => v.id === activeDashboardViewId);
+      if (view) {
+        dispatchDashboardViewChange(activeDashboardViewId, view.name);
+      }
     }
-
-    const raw = window.localStorage.getItem(dashboardStorageKey(selectedWorkspaceId));
-    let parsed: DashboardView[] | null = null;
-    try {
-      parsed = raw ? (JSON.parse(raw) as DashboardView[]) : null;
-    } catch {
-      parsed = null;
-    }
-    const nextViews = Array.isArray(parsed) ? parsed : defaultDashboardViews();
-    const nextActive = nextViews.some((view) => view.id === activeDashboardViewId)
-      ? activeDashboardViewId
-      : (nextViews[0]?.id ?? "");
-
-    setDashboardViews(nextViews);
-    setActiveDashboardViewId(nextActive);
-    if (nextActive) {
-      dispatchDashboardViewChange(nextActive, nextViews.find((view) => view.id === nextActive)?.name ?? "Dashboard");
-    }
-  }, [activeDashboardViewId, selectedWorkspaceId]);
+  }, [activeDashboardViewId, dashboardViews]);
 
   const refreshTaskProjects = useCallback(async () => {
     if (!selectedWorkspaceId || !supabase || !isTasksRoute) {
@@ -217,11 +197,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     if (!isTasksRoute) return;
     dispatchTasksSelectProject(selectedTaskProjectId);
   }, [isTasksRoute, selectedTaskProjectId]);
-
-  useEffect(() => {
-    if (!selectedWorkspaceId || typeof window === "undefined") return;
-    window.localStorage.setItem(dashboardStorageKey(selectedWorkspaceId), JSON.stringify(dashboardViews));
-  }, [dashboardViews, selectedWorkspaceId]);
 
   useEffect(() => {
     writePanelsMap(featurePanels);
@@ -274,10 +249,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   }, []);
 
   const setActiveDashboardView = (viewId: string) => {
-    const view = dashboardViews.find((entry) => entry.id === viewId);
-    if (!view) return;
     setActiveDashboardViewId(viewId);
-    dispatchDashboardViewChange(view.id, view.name);
+    // Event dispatch is handled by useEffect
   };
 
   const setActiveTaskProject = (projectId: string | null) => {
@@ -347,47 +320,25 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     }
   };
 
-  const addDashboardView = () => {
+  const addDashboardView = async () => {
     const inputName = typeof window === "undefined" ? "New View" : window.prompt("Dashboard view name", "New View");
     if (!inputName || !inputName.trim()) return;
-    const next: DashboardView = {
-      id: `${Date.now()}`,
-      name: inputName.trim(),
-    };
-    setDashboardViews((current) => [...current, next]);
-    setActiveDashboardViewId(next.id);
-    dispatchDashboardViewChange(next.id, next.name);
+    await createDashboardView(inputName.trim());
     setDashboardViewMenuOpen(false);
   };
 
-  const renameDashboardView = (viewId: string) => {
+  const renameDashboardView = async (viewId: string) => {
     const existing = dashboardViews.find((view) => view.id === viewId);
     if (!existing) return;
     const nextName =
       typeof window === "undefined" ? existing.name : window.prompt("Rename dashboard view", existing.name);
     if (!nextName || !nextName.trim() || nextName.trim() === existing.name) return;
-    const resolvedName = nextName.trim();
-    setDashboardViews((current) =>
-      current.map((view) => (view.id === viewId ? { ...view, name: resolvedName } : view))
-    );
-    if (viewId === activeDashboardViewId) {
-      dispatchDashboardViewChange(viewId, resolvedName);
-    }
+    await updateDashboardView(viewId, { name: nextName.trim() });
   };
 
-  const removeDashboardView = (viewId: string) => {
+  const removeDashboardView = async (viewId: string) => {
     if (dashboardViews.length <= 1) return;
-    setDashboardViews((current) => {
-      const next = current.filter((view) => view.id !== viewId);
-      if (viewId === activeDashboardViewId) {
-        const fallback = next[0];
-        if (fallback) {
-          setActiveDashboardViewId(fallback.id);
-          dispatchDashboardViewChange(fallback.id, fallback.name);
-        }
-      }
-      return next;
-    });
+    await deleteDashboardView(viewId);
   };
 
   if (loading) {
@@ -488,7 +439,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                               translateX: tasksTabControlsAnim.interpolate({
                                 inputRange: [0, 1],
                                 outputRange: [-8, 0],
-                              }),
+                                }),
                             },
                           ],
                         }}

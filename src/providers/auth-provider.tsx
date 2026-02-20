@@ -1,6 +1,6 @@
-import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { createSupabaseClient, supabaseConfigError } from "../lib/supabase";
+import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
+import { supabase, supabaseConfigError } from "../lib/supabase";
 
 type AuthContextValue = {
   userId: string | null;
@@ -8,7 +8,7 @@ type AuthContextValue = {
   isSignedIn: boolean;
   loading: boolean;
   configError: string | null;
-  supabase: ReturnType<typeof createSupabaseClient> | null;
+  supabase: SupabaseClient | null;
   signOut: () => Promise<void>;
 };
 
@@ -26,11 +26,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
 
-  const supabase = useMemo(() => {
-    if (supabaseConfigError) return null;
-    return createSupabaseClient();
-  }, []);
-
   useEffect(() => {
     if (!supabase) {
       setLoading(false);
@@ -39,8 +34,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     let active = true;
 
+    const sb = supabase; // narrowed from null check above
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data } = await sb.auth.getSession();
       if (!active) return;
       setSession(data.session ?? null);
       setLoading(false);
@@ -50,17 +46,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = sb.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return;
       setSession(nextSession ?? null);
       setLoading(false);
+
+      // Log token refresh events to aid debugging
+      if (event === "TOKEN_REFRESHED") {
+        console.debug("[auth] token refreshed", {
+          userId: nextSession?.user?.id,
+          expiresAt: nextSession?.expires_at,
+        });
+      }
     });
 
     return () => {
       active = false;
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, []);
 
   const signOut = async () => {
     if (!supabase) return;

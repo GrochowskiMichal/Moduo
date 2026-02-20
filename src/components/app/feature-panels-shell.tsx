@@ -38,12 +38,12 @@ export function FeaturePanelsShell({ feature, center, left, right }: Props) {
   return (
     <div className={`grid h-full min-h-0 gap-4 p-4 bg-[#0C0C0C] ${layoutColumns}`}>
       {panelState.left ? (
-        <aside className="min-h-0 rounded-2xl bg-[#111111] p-4">
+        <aside className="min-h-0 rounded-2xl bg-[#111111] p-4 flex flex-col">
           {left ?? <div className="text-[#8f8f8f] text-[13px]">Feature tools panel</div>}
         </aside>
       ) : null}
 
-      <main className="min-h-0 rounded-2xl bg-[#111111] p-4 overflow-auto">{center}</main>
+      <main className="min-h-0 rounded-2xl bg-[#111111] p-4 overflow-auto relative">{center}</main>
 
       {panelState.right ? (
         <aside className="min-h-0 rounded-2xl bg-[#111111] p-4">

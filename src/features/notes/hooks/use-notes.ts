@@ -271,7 +271,7 @@ export function useNotes(supabase: SupabaseClient | null, params: UseNotesParams
     if (mapped.kind !== "category") setSelectedNoteId(mapped.id);
 
     if (mapped.kind !== "category") {
-      await supabase.from("note_documents").upsert(
+      const { error: docError } = await supabase.from("note_documents").upsert(
         {
           workspace_id: workspaceId,
           note_id: mapped.id,
@@ -281,6 +281,11 @@ export function useNotes(supabase: SupabaseClient | null, params: UseNotesParams
         },
         { onConflict: "note_id" }
       );
+
+      if (docError) {
+        console.error("Failed to seed note document:", docError);
+        throw docError;
+      }
     }
 
     return mapped.id;
@@ -524,7 +529,7 @@ export function useNotes(supabase: SupabaseClient | null, params: UseNotesParams
         .eq("workspace_id", workspaceId)
         .maybeSingle<{ snapshot_b64: string; last_compacted_update_id: number }>();
 
-      await supabase.from("note_documents").upsert(
+      const { error: docError } = await supabase.from("note_documents").upsert(
         {
           workspace_id: workspaceId,
           note_id: mapped.id,
@@ -534,6 +539,12 @@ export function useNotes(supabase: SupabaseClient | null, params: UseNotesParams
         },
         { onConflict: "note_id" }
       );
+
+      if (docError) {
+        console.error("Failed to seed duplicated note document:", docError);
+        throw docError;
+      }
+      
       setSelectedNoteId(mapped.id);
     }
 

@@ -10,7 +10,18 @@ import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
 const RECONCILE_INTERVAL_MS = 20_000;
 const FLUSH_DEBOUNCE_MS = 700;
 const MAX_PUSH_BATCH_SIZE = 16;
-const COMPACTION_THRESHOLD = 200;
+const COMPACTION_THRESHOLD = 1;
+const NOTES_DEBUG = true;
+
+function notesDebug(event: string, payload?: Record<string, unknown>): void {
+  if (!NOTES_DEBUG) return;
+  const stamp = new Date().toISOString();
+  if (payload) {
+    console.log(`[notes-sync][${stamp}] ${event}`, payload);
+    return;
+  }
+  console.log(`[notes-sync][${stamp}] ${event}`);
+}
 
 type StatusListener = (status: NotesSyncStatus) => void;
 
@@ -50,8 +61,14 @@ class NotesRealtimeProvider implements Provider {
     sync: new Set<(isSynced: boolean) => void>(),
     update: new Set<(arg: unknown) => void>(),
   };
+  private _synced = false;
+  private connected = false;
 
-  constructor(private readonly doc: Y.Doc) {
+  constructor(
+    private readonly doc: Y.Doc,
+    private readonly onConnect?: () => void,
+    private readonly onDisconnect?: () => void
+  ) {
     this.rawAwareness = new Awareness(doc);
     this.awareness = {
       getLocalState: () => this.rawAwareness.getLocalState() as any,
@@ -64,13 +81,31 @@ class NotesRealtimeProvider implements Provider {
   }
 
   connect(): void {
+    if (!this.connected) {
+      this.connected = true;
+      this.onConnect?.();
+      notesDebug("provider.connect");
+    }
     this.emit("status", { status: "connected" });
-    this.emit("sync", true);
+    if (this._synced) {
+      this.emit("sync", true);
+    }
   }
 
   disconnect(): void {
+    if (this.connected) {
+      this.connected = false;
+      this.onDisconnect?.();
+      notesDebug("provider.disconnect");
+    }
+    this.emit("sync", false);
     this.emit("status", { status: "disconnected" });
     this.rawAwareness.setLocalState(null);
+  }
+
+  setSynced(isSynced: boolean): void {
+    this._synced = isSynced;
+    this.emit("sync", isSynced);
   }
 
   on(type: "reload", cb: (doc: Y.Doc) => void): void;
@@ -192,6 +227,7 @@ export class NotesSyncEngine {
     const existing = this.sessions.get(noteId);
     if (existing && !existing.destroyed) {
       yjsDocMap.set(noteId, existing.doc);
+      notesDebug("provider.reuse-session", { noteId });
       return existing.provider;
     }
 
@@ -201,11 +237,33 @@ export class NotesSyncEngine {
       yjsDocMap.set(noteId, doc);
     }
 
-    const provider = new NotesRealtimeProvider(doc);
+    let connectedEditors = 0;
+    const provider = new NotesRealtimeProvider(
+      doc,
+      () => {
+        connectedEditors += 1;
+        notesDebug("editor.connected", { noteId, connectedEditors });
+      },
+      () => {
+        connectedEditors = Math.max(0, connectedEditors - 1);
+        notesDebug("editor.disconnected", { noteId, connectedEditors });
+      }
+    );
     const persistence = new IndexeddbPersistence(this.persistenceKey(noteId), doc);
 
     const onUpdate = (update: Uint8Array, origin: unknown) => {
+      notesDebug("doc.update", {
+        noteId,
+        origin: String(origin ?? "unknown"),
+        bytes: update.byteLength,
+        connectedEditors,
+      });
       if (origin === "remote" || origin === "bootstrap" || origin === "pull") return;
+      // Ignore teardown updates emitted while no editor is bound to this note.
+      if (connectedEditors === 0) {
+        notesDebug("doc.update.ignored-no-editor", { noteId, bytes: update.byteLength });
+        return;
+      }
       void this.enqueueLocalUpdate(noteId, update);
     };
 
@@ -230,7 +288,9 @@ export class NotesSyncEngine {
     }, RECONCILE_INTERVAL_MS);
 
     this.sessions.set(noteId, session);
-    provider.connect();
+    notesDebug("session.created", { noteId });
+    // provider.connect() is removed here to let the consumer (CollaborationPlugin) call it.
+    // This ensures listeners are attached before the 'sync' event is emitted.
 
     void this.bootstrapSession(session);
 
@@ -243,7 +303,21 @@ export class NotesSyncEngine {
     this.broadcastStatus(this.isOnline ? "syncing" : "offline");
 
     try {
+      // Wait for local IndexedDB to load
       await session.persistence.whenSynced;
+      notesDebug("bootstrap.persistence-synced", { noteId: session.noteId });
+
+      const hasLocalState = session.doc.store.clients.size > 0;
+      notesDebug("bootstrap.local-state", { noteId: session.noteId, hasLocalState });
+
+      // If offline, we stop here (but we already emitted sync)
+      if (!this.isOnline) {
+        if (hasLocalState && session.provider instanceof NotesRealtimeProvider) {
+          session.provider.setSynced(true);
+        }
+        this.broadcastStatus("offline");
+        return;
+      }
 
       const { data: snapshot } = await this.supabase
         .from("note_documents")
@@ -253,9 +327,16 @@ export class NotesSyncEngine {
         .maybeSingle<RemoteDocSnapshot>();
 
       const cursor = await this.ensureCursor(session.noteId);
+      notesDebug("bootstrap.state", {
+        noteId: session.noteId,
+        hasLocalState,
+        hasSnapshot: Boolean(snapshot?.snapshot_b64),
+        lastCompactedUpdateId: Number(snapshot?.last_compacted_update_id || 0),
+      });
 
-      if (snapshot?.snapshot_b64) {
+      if (snapshot?.snapshot_b64 && !hasLocalState) {
         Y.applyUpdate(session.doc, decodeBase64ToUint8(snapshot.snapshot_b64), "bootstrap");
+        notesDebug("bootstrap.snapshot-applied", { noteId: session.noteId });
         cursor.lastCompactedUpdateId = Math.max(
           cursor.lastCompactedUpdateId,
           Number(snapshot.last_compacted_update_id || 0)
@@ -265,6 +346,8 @@ export class NotesSyncEngine {
           Number(snapshot.last_compacted_update_id || 0)
         );
         await this.saveCursor(cursor);
+      } else if (snapshot?.snapshot_b64 && hasLocalState) {
+        notesDebug("bootstrap.snapshot-skipped-local-present", { noteId: session.noteId });
       }
 
       session.realtimeChannel = this.supabase
@@ -283,10 +366,12 @@ export class NotesSyncEngine {
         )
         .subscribe();
 
-      if (this.isOnline) {
-        await this.flushAndPull(session);
+      await this.flushAndPull(session);
+      if (session.provider instanceof NotesRealtimeProvider) {
+        session.provider.setSynced(true);
       }
     } catch {
+      notesDebug("bootstrap.error", { noteId: session.noteId });
       this.broadcastStatus("error");
     }
   }
@@ -303,8 +388,10 @@ export class NotesSyncEngine {
 
     try {
       Y.applyUpdate(session.doc, decodeBase64ToUint8(update.update_b64), "remote");
+      notesDebug("realtime.applied", { noteId: session.noteId, updateId: update.id, clientId: update.client_id });
       this.broadcastStatus(this.isOnline ? "synced" : "offline");
     } catch {
+      notesDebug("realtime.apply-error", { noteId: session.noteId, updateId: update.id });
       this.broadcastStatus("error");
     }
   }
@@ -333,6 +420,7 @@ export class NotesSyncEngine {
       updateB64: encodeUint8ToBase64(update),
       createdAt: nowIso(),
     });
+    notesDebug("outbox.enqueued", { noteId, clientSeq: nextSeq, bytes: update.byteLength });
 
     const session = this.sessions.get(noteId);
     if (session && !session.destroyed) {
@@ -350,6 +438,7 @@ export class NotesSyncEngine {
     if (pending.length === 0) return;
 
     const batch = pending.slice(0, MAX_PUSH_BATCH_SIZE);
+    notesDebug("outbox.flush", { noteId: session.noteId, pending: pending.length, batch: batch.length });
 
     const { data, error } = await this.supabase.rpc("note_push_updates", {
       p_workspace_id: this.workspaceId,
@@ -387,6 +476,7 @@ export class NotesSyncEngine {
     if (error) throw error;
 
     const rows = (Array.isArray(data) ? data : []) as RemotePullRow[];
+    notesDebug("pull.received", { noteId: session.noteId, count: rows.length });
     if (rows.length === 0) return [];
 
     for (const row of rows) {
@@ -411,6 +501,12 @@ export class NotesSyncEngine {
   private async maybeCompact(session: NoteSession): Promise<void> {
     const cursor = await this.ensureCursor(session.noteId);
     const pending = cursor.lastPulledUpdateId - cursor.lastCompactedUpdateId;
+    notesDebug("compact.check", {
+      noteId: session.noteId,
+      pending,
+      lastPulledUpdateId: cursor.lastPulledUpdateId,
+      lastCompactedUpdateId: cursor.lastCompactedUpdateId,
+    });
     if (pending < COMPACTION_THRESHOLD) return;
 
     const snapshotB64 = encodeUint8ToBase64(Y.encodeStateAsUpdate(session.doc));
@@ -430,6 +526,10 @@ export class NotesSyncEngine {
 
     cursor.lastCompactedUpdateId = cursor.lastPulledUpdateId;
     await this.saveCursor(cursor);
+    notesDebug("compact.saved", {
+      noteId: session.noteId,
+      lastCompactedUpdateId: cursor.lastCompactedUpdateId,
+    });
   }
 
   async flushAndPull(session: NoteSession): Promise<void> {
@@ -441,11 +541,14 @@ export class NotesSyncEngine {
     this.broadcastStatus("syncing");
 
     try {
+      notesDebug("sync.cycle.start", { noteId: session.noteId });
       await this.flushOutbox(session);
       await this.pullUpdates(session);
       await this.maybeCompact(session);
+      notesDebug("sync.cycle.end", { noteId: session.noteId, status: "synced" });
       this.broadcastStatus("synced");
     } catch {
+      notesDebug("sync.cycle.error", { noteId: session.noteId });
       this.broadcastStatus("error");
     }
   }
@@ -453,18 +556,27 @@ export class NotesSyncEngine {
   closeNote(noteId: string): void {
     const session = this.sessions.get(noteId);
     if (!session) return;
+    notesDebug("session.close", { noteId });
 
+    // Mark as destroyed so async loops stop
     session.destroyed = true;
+
+    // Clear timers
     if (session.flushTimer) clearTimeout(session.flushTimer);
     if (session.reconcileTimer) clearInterval(session.reconcileTimer);
+
+    // Detach Yjs listeners
     session.destroyDocListener();
     session.provider.disconnect();
 
+    // Disconnect Supabase Realtime
     if (session.realtimeChannel) {
       void this.supabase.removeChannel(session.realtimeChannel);
     }
 
-    session.persistence.destroy();
+    // Do NOT destroy the persistence. We want to keep local changes in IndexedDB.
+    // session.persistence.destroy();
+
     this.sessions.delete(noteId);
   }
 

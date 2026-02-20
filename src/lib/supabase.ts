@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
@@ -24,12 +24,19 @@ const secureStoreAuthStorage = {
   },
 };
 
-export const createSupabaseClient = () =>
-  createClient(supabaseUrl!, publishableKey!, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: Platform.OS === "web",
-      ...(Platform.OS === "web" ? {} : { storage: secureStoreAuthStorage }),
-    },
-  });
+/**
+ * Singleton Supabase client.
+ * Using a single instance avoids refresh-token races that occur when
+ * multiple `createClient` instances compete for the same single-use
+ * refresh token, which was the root cause of "Session expired" errors.
+ */
+export const supabase: SupabaseClient | null = supabaseConfigError
+  ? null
+  : createClient(supabaseUrl!, publishableKey!, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: Platform.OS === "web",
+        ...(Platform.OS === "web" ? {} : { storage: secureStoreAuthStorage }),
+      },
+    });

@@ -2,6 +2,7 @@ import { Redirect, Slot, usePathname } from "expo-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../src/providers/auth-provider";
 import { WorkspaceProvider } from "../../src/providers/workspace-provider";
+import { DashboardProvider } from "../../src/features/dashboard/providers/dashboard-provider";
 import { View } from "../../src/tw";
 import { AppChrome } from "../../src/components/app/app-chrome";
 
@@ -99,7 +100,9 @@ export default function AppLayout() {
 
   return (
     <WorkspaceProvider>
-      <AppChrome profileInitial={profileInitial} />
+      <DashboardProvider>
+        <AppChrome profileInitial={profileInitial} />
+      </DashboardProvider>
     </WorkspaceProvider>
   );
 }
