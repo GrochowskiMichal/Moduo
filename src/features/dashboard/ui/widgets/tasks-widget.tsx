@@ -1,153 +1,67 @@
-import React, { useMemo } from "react";
-import { useTasks } from "../../../tasks/hooks/use-tasks";
-import { WidgetConfig } from "../../types";
-import { useWorkspace } from "../../../../providers/workspace-provider";
-import { useAuth } from "../../../../providers/auth-provider";
+import { useMemo } from "react";
+import type { Task, TaskProject, TaskWorkflowState } from "../../../tasks/types";
+import type { WidgetConfig } from "../../types";
+import { WidgetShell } from "./widget-shell";
 
-interface TasksWidgetProps {
+type Props = {
+  tasks: Task[];
+  projects: TaskProject[];
+  states: TaskWorkflowState[];
   config: WidgetConfig;
-  onUpdateConfig: (config: Partial<WidgetConfig>) => void;
   isLocked: boolean;
-}
+  onUpdateConfig: (patch: Partial<WidgetConfig>) => void;
+};
 
-export function TasksWidget({ config, onUpdateConfig, isLocked }: TasksWidgetProps) {
-  const { selectedWorkspace, modulePermissions } = useWorkspace();
-  const { userId, supabase } = useAuth();
-  
-  const { tasks, projects, states, loading, updateTask } = useTasks(supabase, {
-    userId,
-    workspaceId: selectedWorkspace?.id ?? null,
-    modulePermission: modulePermissions.tasks,
-  });
+export function TasksWidget({ tasks, projects, states, config, isLocked, onUpdateConfig }: Props) {
+  const activeProjects = useMemo(() => projects.filter((project) => !project.deletedAt), [projects]);
+  const stateMap = useMemo(() => new Map(states.map((state) => [state.id, state])), [states]);
 
-  const filteredTasks = useMemo(() => {
-    let result = tasks.filter((t) => !t.deletedAt);
-
-    // Filter by project
-    if (config.projectIds && config.projectIds.length > 0) {
-      result = result.filter((t) => config.projectIds?.includes(t.projectId));
+  const filtered = useMemo(() => {
+    let current = tasks.filter((task) => !task.deletedAt);
+    if (config.projectIds?.length) {
+      current = current.filter((task) => config.projectIds?.includes(task.projectId));
     }
-
-    // Filter by tags
-    if (config.tags && config.tags.length > 0) {
-      result = result.filter((t) => 
-        t.tags?.some((tag) => config.tags?.includes(tag))
-      );
-    }
-    
-    // Sort by priority/date/etc? Default to position or created
-    return result.sort((a, b) => (a.priority - b.priority) || a.position.localeCompare(b.position));
-  }, [tasks, config.projectIds, config.tags]);
-
-  const projectOptions = useMemo(() => 
-    projects.filter(p => !p.deletedAt), 
-    [projects]
-  );
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse w-4 h-4 rounded-full bg-[#333]" />
-      </div>
-    );
-  }
+    return [...current].sort((a, b) => a.priority - b.priority || a.position.localeCompare(b.position));
+  }, [config.projectIds, tasks]);
 
   return (
-    <div className="flex flex-col h-full bg-[#111111]">
-      {/* Header / Filter Controls */}
-      <div className="px-4 py-3 border-b border-[#1e1e1e] bg-[#151515]/50 flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-           <span className="text-[#e5ecff] font-semibold text-xs uppercase tracking-wider">
-             Tasks ({filteredTasks.length})
-           </span>
-           {!isLocked && (
-             <button 
-               className="text-[#5f6c87] hover:text-[#e5ecff] text-[10px]"
-               onClick={() => {
-                 // Toggle filter view or something
-               }}
-             >
-               Filters
-             </button>
-           )}
-        </div>
-        
-        {/* Project Filter - Only show if not locked or if a project is selected to show context */}
-        {!isLocked && (
+    <WidgetShell
+      config={config}
+      title={`Tasks (${filtered.length})`}
+      controls={
+        !isLocked ? (
           <select
-            className="bg-[#111111] text-[#e5ecff] text-[11px] rounded border border-[#2a2a2a] p-1.5 w-full outline-none"
             value={config.projectIds?.[0] ?? ""}
-            onChange={(e) => {
-              const val = e.target.value;
-              onUpdateConfig({ 
-                projectIds: val ? [val] : undefined 
-              });
-            }}
+            onChange={(event) => onUpdateConfig({ projectIds: event.target.value ? [event.target.value] : undefined })}
+            className="max-w-[65%] rounded border border-[#2b2b2b] bg-[#141414] px-2 py-1 text-[11px] text-[#cfcfcf] outline-none"
           >
-            <option value="">All Projects</option>
-            {projectOptions.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+            <option value="">All projects</option>
+            {activeProjects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
             ))}
           </select>
-        )}
-      </div>
-
-      {/* Task List */}
-      <div className="flex-1 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-[#2a2a2a] scrollbar-track-transparent">
-        {filteredTasks.length === 0 ? (
-          <div className="text-center p-4 text-[#5f6c87] text-xs">
-            No tasks found.
-          </div>
+        ) : null
+      }
+    >
+      <div className="flex-1 overflow-y-auto px-2 py-2">
+        {filtered.length === 0 ? (
+          <p className="px-1 text-[12px] text-[#808080]">No tasks found.</p>
         ) : (
-          <div className="space-y-1">
-            {filteredTasks.map(task => {
-              const state = states.find(s => s.id === task.stateId);
-              return (
-                <div 
-                  key={task.id} 
-                  className="group flex items-center gap-2 p-2 rounded hover:bg-[#1a1a1a] border border-transparent hover:border-[#2a2a2a] transition-all cursor-pointer"
-                >
-                  <div 
-                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      task.priority === 0 ? "bg-red-500" : 
-                      task.priority === 1 ? "bg-orange-500" : 
-                      task.priority === 2 ? "bg-blue-500" : "bg-gray-600"
-                    }`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[#e5ecff] text-xs truncate leading-tight">
-                      {task.title}
-                    </div>
-                    <div className="text-[#5f6c87] text-[10px] truncate flex items-center gap-1 mt-0.5">
-                      <span>{state?.name ?? "Unknown"}</span>
-                      {task.dueDate && (
-                         <>
-                           <span>•</span>
-                           <span>{task.dueDate}</span>
-                         </>
-                      )}
-                    </div>
-                  </div>
-                  <input 
-                    type="checkbox" 
-                    className="opacity-0 group-hover:opacity-100 transition-opacity accent-[#3a4359] cursor-pointer"
-                    checked={state?.kind === 'done'}
-                    onChange={(e) => {
-                       // Find 'done' state for this project
-                       if (e.target.checked) {
-                         const doneState = states.find(s => s.projectId === task.projectId && s.kind === 'done');
-                         if (doneState) {
-                           updateTask(task.id, { stateId: doneState.id });
-                         }
-                       }
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
+          filtered.slice(0, 30).map((task) => {
+            const state = stateMap.get(task.stateId);
+            return (
+              <div key={task.id} className="mb-1 rounded-lg border border-transparent px-2 py-1 hover:border-[#232323] hover:bg-[#171717]">
+                <p className="truncate text-[12px] text-[#e8e8e8]">{task.title}</p>
+                <p className="mt-0.5 text-[10px] text-[#878787]">
+                  {state?.name ?? "Unknown"} {task.dueDate ? `• ${task.dueDate}` : ""}
+                </p>
+              </div>
+            );
+          })
         )}
       </div>
-    </div>
+    </WidgetShell>
   );
 }

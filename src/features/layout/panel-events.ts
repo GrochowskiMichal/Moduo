@@ -1,17 +1,25 @@
 export type FeatureLayoutKey =
   | "dashboard"
-  | "calendar"
   | "notes"
-  | "email"
   | "tasks"
-  | "tags"
-  | "form"
-  | "timesheet"
-  | "whiteboard"
   | "mindmap"
+  | "templates"
+  | "email"
+  | "calendar"
+  | "crm"
+  | "calendly"
+  | "forms"
+  | "feed"
   | "files"
+  | "brainstorm"
+  | "expanses"
+  | "revenue"
+  | "kpi-okr"
   | "stats"
-  | "budget";
+  | "analytics"
+  | "recordings"
+  | "timetracking"
+  | "roadmap";
 
 export type FeaturePanelState = {
   left: boolean;
@@ -21,42 +29,59 @@ export type FeaturePanelState = {
 export type FeaturePanelsMap = Record<FeatureLayoutKey, FeaturePanelState>;
 
 export const LAYOUT_PANELS_APPLY_EVENT = "moduo:layout:panels-apply";
-const LAYOUT_PANELS_STORAGE_KEY = "moduo:layout:panels-v1";
+export const LAYOUT_PANELS_SET_EVENT = "moduo:layout:panels-set";
+const LAYOUT_PANELS_STORAGE_KEY = "moduo:layout:panels-v2";
 
 const defaultState: FeaturePanelState = { left: true, right: true };
 
 function cloneDefaultMap(): FeaturePanelsMap {
   return {
     dashboard: { ...defaultState },
-    calendar: { ...defaultState },
     notes: { ...defaultState },
-    email: { ...defaultState },
     tasks: { ...defaultState },
-    tags: { ...defaultState },
-    form: { ...defaultState },
-    timesheet: { ...defaultState },
-    whiteboard: { ...defaultState },
     mindmap: { ...defaultState },
+    templates: { ...defaultState },
+    email: { ...defaultState },
+    calendar: { ...defaultState },
+    crm: { ...defaultState },
+    calendly: { ...defaultState },
+    forms: { ...defaultState },
+    feed: { ...defaultState },
     files: { ...defaultState },
+    brainstorm: { ...defaultState },
+    expanses: { ...defaultState },
+    revenue: { ...defaultState },
+    "kpi-okr": { ...defaultState },
     stats: { ...defaultState },
-    budget: { ...defaultState },
+    analytics: { ...defaultState },
+    recordings: { ...defaultState },
+    timetracking: { ...defaultState },
+    roadmap: { ...defaultState },
   };
 }
 
 export function routeToFeatureLayout(pathname: string): FeatureLayoutKey {
-  if (pathname === "/calendar") return "calendar";
-  if (pathname === "/notes") return "notes";
-  if (pathname === "/email") return "email";
+  if (pathname === "/dashboard" || pathname === "/") return "dashboard";
   if (pathname === "/tasks") return "tasks";
-  if (pathname === "/tags") return "tags";
-  if (pathname === "/form") return "form";
-  if (pathname === "/timesheet") return "timesheet";
-  if (pathname === "/whiteboard") return "whiteboard";
   if (pathname === "/mindmap") return "mindmap";
+  if (pathname === "/templates") return "templates";
+  if (pathname === "/email") return "email";
+  if (pathname === "/calendar") return "calendar";
+  if (pathname === "/crm") return "crm";
+  if (pathname === "/calendly") return "calendly";
+  if (pathname === "/forms") return "forms";
+  if (pathname === "/feed") return "feed";
   if (pathname === "/files") return "files";
+  if (pathname === "/brainstorm") return "brainstorm";
+  if (pathname === "/expanses") return "expanses";
+  if (pathname === "/revenue") return "revenue";
+  if (pathname === "/kpi-okr") return "kpi-okr";
   if (pathname === "/stats") return "stats";
-  if (pathname === "/budget") return "budget";
-  return "dashboard";
+  if (pathname === "/analytics") return "analytics";
+  if (pathname === "/recordings") return "recordings";
+  if (pathname === "/timetracking") return "timetracking";
+  if (pathname === "/roadmap") return "roadmap";
+  return "notes";
 }
 
 export function readPanelsMap(): FeaturePanelsMap {
@@ -96,4 +121,9 @@ export type LayoutPanelsApplyDetail = {
 export function dispatchLayoutPanelsApply(detail: LayoutPanelsApplyDetail) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_APPLY_EVENT, { detail }));
+}
+
+export function dispatchLayoutPanelsSet(detail: LayoutPanelsApplyDetail) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_SET_EVENT, { detail }));
 }

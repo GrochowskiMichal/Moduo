@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "moduo",
+  "version": "0.1.0",
+  "identifier": "com.moduo.desktop",
+  "build": {
+    "beforeBuildCommand": "bun run build:web",
+    "devUrl": "http://localhost:8081",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "moduo",
+        "width": 1280,
+        "height": 840,
+        "resizable": true,
+        "maximizable": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "macOS": {
+      "signingIdentity": null,
+      "hardenedRuntime": true
+    }
+  }
+}

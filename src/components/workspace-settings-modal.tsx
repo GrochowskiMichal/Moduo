@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Modal } from "react-native";
-import { Pressable, Text, TextInput, View } from "../tw";
+import { Modal, Pressable, Text, TextInput, View } from "../tw";
 import { useWorkspace } from "../providers/workspace-provider";
 import type { ModulePermission, WorkspaceRole } from "../features/workspaces/types";
 
@@ -47,8 +46,8 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <Pressable className="flex-1 bg-black/40" onPress={onClose} />
-      <View className="absolute inset-x-0 top-10 mx-auto w-[min(980px,95vw)] max-h-[84vh] rounded-2xl border border-[#1e2533] bg-[#0f141d] p-4 z-[999]">
+      <Pressable className="fixed inset-0 bg-black/40" onPress={onClose} />
+      <View className="fixed inset-x-0 top-10 mx-auto w-[min(980px,95vw)] max-h-[84vh] rounded-2xl border border-[#1e2533] bg-[#0f141d] p-4 z-[999] overflow-y-auto">
         <View className="flex-row items-center justify-between border-b border-[#1f2a3a] pb-3">
           <View>
             <Text className="text-[#edf1fa] text-[20px] font-semibold">Workspace Settings</Text>
@@ -88,9 +87,7 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                 <TextInput
                   value={notesPermission}
                   onChangeText={(value: string) =>
-                    setNotesPermission(
-                      permissionOptions.includes(value as ModulePermission) ? (value as ModulePermission) : "view"
-                    )
+                    setNotesPermission(permissionOptions.includes(value as ModulePermission) ? (value as ModulePermission) : "view")
                   }
                   placeholder="notes"
                   placeholderTextColor="#65738b"
@@ -99,9 +96,7 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                 <TextInput
                   value={tasksPermission}
                   onChangeText={(value: string) =>
-                    setTasksPermission(
-                      permissionOptions.includes(value as ModulePermission) ? (value as ModulePermission) : "view"
-                    )
+                    setTasksPermission(permissionOptions.includes(value as ModulePermission) ? (value as ModulePermission) : "view")
                   }
                   placeholder="tasks"
                   placeholderTextColor="#65738b"
@@ -141,7 +136,7 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
 
             <View className="rounded-xl border border-[#1d2534] bg-[#111824] p-3">
               <Text className="text-[#dce3f2] text-[15px] font-semibold">Members</Text>
-              <View className="mt-2 max-h-[220px]">
+              <View className="mt-2 max-h-[220px] overflow-y-auto">
                 {members.map((member) => (
                   <View key={member.id} className="mb-2 rounded-md border border-[#222d3f] px-3 py-2">
                     <View className="flex-row items-center justify-between">
@@ -175,7 +170,7 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
 
             <View className="rounded-xl border border-[#1d2534] bg-[#111824] p-3">
               <Text className="text-[#dce3f2] text-[15px] font-semibold">Invites</Text>
-              <View className="mt-2 max-h-[180px]">
+              <View className="mt-2 max-h-[180px] overflow-y-auto">
                 {invites.map((invite) => (
                   <View key={invite.id} className="mb-2 rounded-md border border-[#222d3f] px-3 py-2">
                     <View className="flex-row items-center justify-between">
@@ -207,10 +202,7 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                       >
                         <Text className="text-[#c6d1e6] text-[11px]">Set Edit</Text>
                       </Pressable>
-                      <Pressable
-                        className="rounded-md border border-[#463333] px-2 py-1"
-                        onPress={() => void revokeInvite(invite.id)}
-                      >
+                      <Pressable className="rounded-md border border-[#463333] px-2 py-1" onPress={() => void revokeInvite(invite.id)}>
                         <Text className="text-[#f5b7b7] text-[11px]">Revoke</Text>
                       </Pressable>
                     </View>

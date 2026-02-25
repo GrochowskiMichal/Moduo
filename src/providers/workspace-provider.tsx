@@ -1,4 +1,4 @@
-import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./auth-provider";
 import type {
   ModulePermission,
@@ -77,95 +77,66 @@ type WorkspaceContextValue = {
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
-type WorkspaceListRow = {
-  workspace_id: string;
-  workspace_name: string;
-  workspace_role: WorkspaceRole;
-  notes_permission: ModulePermission;
-  tasks_permission: ModulePermission;
-  is_deleted: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-type NotificationRow = {
-  id: string;
-  workspace_id: string | null;
-  event_type: string;
-  actor_user_id: string | null;
-  source_module: "notes" | "tasks" | null;
-  source_resource_type: "note" | "task_project" | "task" | null;
-  source_resource_id: string | null;
-  payload: Record<string, unknown>;
-  created_at: string;
-  read_at: string | null;
-};
-
 function storageKey(userId: string): string {
   return `moduo:selected-workspace:${userId}`;
 }
 
-function mapWorkspace(row: WorkspaceListRow): WorkspaceSummary {
-  return {
-    id: row.workspace_id,
-    name: row.workspace_name,
-    role: row.workspace_role,
-    permissions: {
-      notes: row.notes_permission,
-      tasks: row.tasks_permission,
-    },
-    isDeleted: row.is_deleted,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-function mapNotification(row: NotificationRow): WorkspaceNotification {
+function mapWorkspace(row: any): WorkspaceSummary {
   return {
     id: row.id,
-    workspaceId: row.workspace_id,
-    eventType: row.event_type,
-    actorUserId: row.actor_user_id,
-    sourceModule: row.source_module,
-    sourceResourceType: row.source_resource_type,
-    sourceResourceId: row.source_resource_id,
-    payload: row.payload ?? {},
-    createdAt: row.created_at,
-    readAt: row.read_at,
+    name: row.name,
+    role: (row.role ?? "owner") as WorkspaceRole,
+    permissions: {
+      notes: (row.permissions?.notes ?? "edit") as ModulePermission,
+      tasks: (row.permissions?.tasks ?? "edit") as ModulePermission,
+    },
+    isDeleted: !!row.isDeleted || !!row.is_deleted,
+    createdAt: row.createdAt ?? row.created_at ?? new Date().toISOString(),
+    updatedAt: row.updatedAt ?? row.updated_at ?? new Date().toISOString(),
   };
 }
 
-function toModulePermissions(
-  value?: Partial<Record<"notes" | "tasks", ModulePermission>>
-): Array<{ module: "notes" | "tasks"; permission: ModulePermission }> {
-  const notes = value?.notes ?? "edit";
-  const tasks = value?.tasks ?? "edit";
-  return [
-    { module: "notes", permission: notes },
-    { module: "tasks", permission: tasks },
-  ];
+function mapMember(row: any): WorkspaceMember {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId ?? row.workspace_id,
+    userId: row.userId ?? row.user_id,
+    role: (row.role ?? "viewer") as WorkspaceRole,
+    isActive: row.isActive ?? row.is_active ?? true,
+    removedAt: row.removedAt ?? row.removed_at ?? null,
+  };
 }
 
-function toItemAclTemplates(
-  value?: Array<{
-    module: "notes" | "tasks";
-    resourceType: "note" | "task_project" | "task";
-    resourceId: string;
-    effect: "allow" | "deny";
-    permission: ModulePermission;
-  }>
-) {
-  return (value ?? []).map((entry) => ({
-    module: entry.module,
-    resource_type: entry.resourceType,
-    resource_id: entry.resourceId,
-    effect: entry.effect,
-    permission: entry.permission,
-  }));
+function mapInvite(row: any): WorkspaceInvite {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId ?? row.workspace_id,
+    email: row.email,
+    role: (row.role ?? "viewer") as WorkspaceRole,
+    status: (row.status ?? "pending") as WorkspaceInvite["status"],
+    createdAt: row.createdAt ?? row.created_at ?? new Date().toISOString(),
+    updatedAt: row.updatedAt ?? row.updated_at ?? new Date().toISOString(),
+  };
+}
+
+function mapNotification(row: any): WorkspaceNotification {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId ?? row.workspace_id ?? null,
+    eventType: row.eventType ?? row.event_type ?? "notification",
+    actorUserId: row.actorUserId ?? row.actor_user_id ?? null,
+    sourceModule: row.sourceModule ?? row.source_module ?? null,
+    sourceResourceType: row.sourceResourceType ?? row.source_resource_type ?? null,
+    sourceResourceId: row.sourceResourceId ?? row.source_resource_id ?? null,
+    payload: (row.payload ?? {}) as Record<string, unknown>,
+    createdAt: row.createdAt ?? row.created_at ?? new Date().toISOString(),
+    readAt: row.readAt ?? row.read_at ?? null,
+  };
 }
 
 export function WorkspaceProvider({ children }: PropsWithChildren) {
-  const { supabase, userId } = useAuth();
+  const { runtime, userId } = useAuth();
+  const legacyMigrationRunRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
@@ -206,17 +177,14 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   );
 
   const refreshWorkspaces = useCallback(async () => {
-    if (!supabase || !userId) {
+    if (!runtime || !userId) {
       setWorkspaces([]);
       setSelectedWorkspaceId(null);
       return;
     }
 
-    const { data, error } = await supabase.rpc("workspace_list_for_current_user");
-    if (error) throw error;
-
-    const rows = (Array.isArray(data) ? data : []) as WorkspaceListRow[];
-    const next = rows.map(mapWorkspace);
+    const rows = await runtime.workspace.list();
+    const next = rows.map(mapWorkspace).filter((workspace) => !workspace.isDeleted);
     setWorkspaces(next);
 
     const persisted = typeof window !== "undefined" ? window.localStorage.getItem(storageKey(userId)) : null;
@@ -232,72 +200,26 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     if (resolvedSelected && typeof window !== "undefined") {
       window.localStorage.setItem(storageKey(userId), resolvedSelected);
     }
-  }, [selectedWorkspaceId, supabase, userId]);
+  }, [runtime, selectedWorkspaceId, userId]);
 
   const refreshAccessData = useCallback(async () => {
-    if (!supabase || !selectedWorkspaceId) {
+    if (!runtime || !selectedWorkspaceId) {
       setMembers([]);
       setInvites([]);
       return;
     }
 
-    const [{ data: membersRows, error: membersError }, { data: invitesRows, error: invitesError }] =
-      await Promise.all([
-        supabase
-          .from("workspace_members")
-          .select("id,workspace_id,user_id,role,is_active,removed_at")
-          .eq("workspace_id", selectedWorkspaceId)
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("workspace_invites")
-          .select("id,workspace_id,email,role,status,created_at,updated_at")
-          .eq("workspace_id", selectedWorkspaceId)
-          .order("created_at", { ascending: false }),
-      ]);
+    const [memberRows, inviteRows] = await Promise.all([
+      runtime.workspace.listMembers(selectedWorkspaceId),
+      runtime.workspace.listInvites(selectedWorkspaceId),
+    ]);
 
-    if (membersError) throw membersError;
-    if (invitesError) throw invitesError;
-
-    setMembers(
-      (Array.isArray(membersRows) ? membersRows : []).map((row: any) => ({
-        id: row.id,
-        workspaceId: row.workspace_id,
-        userId: row.user_id,
-        role: row.role,
-        isActive: row.is_active,
-        removedAt: row.removed_at,
-      }))
-    );
-
-    setInvites(
-      (Array.isArray(invitesRows) ? invitesRows : []).map((row: any) => ({
-        id: row.id,
-        workspaceId: row.workspace_id,
-        email: row.email,
-        role: row.role,
-        status: row.status,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }))
-    );
-  }, [selectedWorkspaceId, supabase]);
-
-  const fetchNotifications = useCallback(
-    async (scope: NotificationScope, limit = 150): Promise<WorkspaceNotification[]> => {
-      if (!supabase) return [];
-      const { data, error } = await supabase.rpc("workspace_list_notifications", {
-        p_scope: scope,
-        p_workspace_id: scope === "workspace" ? selectedWorkspaceId : null,
-        p_limit: limit,
-      });
-      if (error) throw error;
-      return (Array.isArray(data) ? data : []).map((row) => mapNotification(row as NotificationRow));
-    },
-    [selectedWorkspaceId, supabase]
-  );
+    setMembers(memberRows.map(mapMember));
+    setInvites(inviteRows.map(mapInvite));
+  }, [runtime, selectedWorkspaceId]);
 
   const refreshNotifications = useCallback(async () => {
-    if (!supabase || !userId) {
+    if (!runtime || !userId) {
       setNotifications([]);
       setUnreadCountWorkspace(0);
       setUnreadCountGlobal(0);
@@ -306,62 +228,56 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
 
     setNotificationsLoading(true);
     try {
-      const [workspaceFeed, globalFeed, activeFeed] = await Promise.all([
-        fetchNotifications("workspace", 250),
-        fetchNotifications("global", 250),
-        fetchNotifications(notificationsScope, 120),
-      ]);
+      const all = (await runtime.workspace.listNotifications()).map(mapNotification);
+      const workspaceFeed = all.filter((item) => item.workspaceId === selectedWorkspaceId);
+      const globalFeed = all;
+      const activeFeed = notificationsScope === "workspace" ? workspaceFeed : globalFeed;
       setUnreadCountWorkspace(workspaceFeed.filter((item) => !item.readAt).length);
       setUnreadCountGlobal(globalFeed.filter((item) => !item.readAt).length);
       setNotifications(activeFeed);
     } finally {
       setNotificationsLoading(false);
     }
-  }, [fetchNotifications, notificationsScope, supabase, userId]);
+  }, [runtime, userId, selectedWorkspaceId, notificationsScope]);
 
   const createWorkspace = useCallback(
     async (name = "New Workspace") => {
-      if (!supabase) return null;
-      const { data, error } = await supabase.rpc("workspace_create", { p_name: name.trim() || "New Workspace" });
-      if (error) throw error;
+      if (!runtime) return null;
+      const created = mapWorkspace(await runtime.workspace.create(name));
       await refreshWorkspaces();
-      const workspaceId = (data as { id?: string } | null)?.id ?? null;
-      if (workspaceId) selectWorkspace(workspaceId);
-      return workspaceId;
+      selectWorkspace(created.id);
+      return created.id;
     },
-    [refreshWorkspaces, selectWorkspace, supabase]
+    [refreshWorkspaces, runtime, selectWorkspace]
   );
 
   const renameWorkspace = useCallback(
     async (workspaceId: string, name: string) => {
-      if (!supabase) return;
+      if (!runtime) return;
       const trimmed = name.trim();
       if (!trimmed) return;
-      const { error } = await supabase.from("workspaces").update({ name: trimmed }).eq("id", workspaceId);
-      if (error) throw error;
+      await runtime.workspace.rename(workspaceId, trimmed);
       await refreshWorkspaces();
     },
-    [refreshWorkspaces, supabase]
+    [refreshWorkspaces, runtime]
   );
 
   const leaveWorkspace = useCallback(
     async (workspaceId: string) => {
-      if (!supabase) return;
-      const { error } = await supabase.rpc("workspace_leave", { p_workspace_id: workspaceId });
-      if (error) throw error;
+      if (!runtime) return;
+      await runtime.workspace.leave(workspaceId);
       await refreshWorkspaces();
     },
-    [refreshWorkspaces, supabase]
+    [refreshWorkspaces, runtime]
   );
 
   const softDeleteWorkspace = useCallback(
     async (workspaceId: string) => {
-      if (!supabase) return;
-      const { error } = await supabase.rpc("workspace_soft_delete", { p_workspace_id: workspaceId });
-      if (error) throw error;
+      if (!runtime) return;
+      await runtime.workspace.softDelete(workspaceId);
       await refreshWorkspaces();
     },
-    [refreshWorkspaces, supabase]
+    [refreshWorkspaces, runtime]
   );
 
   const sendInvite = useCallback(
@@ -377,19 +293,12 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         permission: ModulePermission;
       }>;
     }) => {
-      if (!supabase || !selectedWorkspaceId) return;
-      const { error } = await supabase.rpc("workspace_send_invite", {
-        p_workspace_id: selectedWorkspaceId,
-        p_email: args.email,
-        p_role: args.role,
-        p_module_permissions: toModulePermissions(args.modulePermissions),
-        p_item_acl_templates: toItemAclTemplates(args.itemAclTemplates),
-      });
-      if (error) throw error;
+      if (!runtime || !selectedWorkspaceId) return;
+      await runtime.workspace.issueInvite(selectedWorkspaceId, args.email, args.role, args.modulePermissions);
       await refreshAccessData();
       await refreshNotifications();
     },
-    [refreshAccessData, refreshNotifications, selectedWorkspaceId, supabase]
+    [refreshAccessData, refreshNotifications, runtime, selectedWorkspaceId]
   );
 
   const updateInvite = useCallback(
@@ -405,18 +314,12 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         permission: ModulePermission;
       }>;
     }) => {
-      if (!supabase) return;
-      const { error } = await supabase.rpc("workspace_update_invite", {
-        p_invite_id: args.inviteId,
-        p_role: args.role,
-        p_module_permissions: toModulePermissions(args.modulePermissions),
-        p_item_acl_templates: toItemAclTemplates(args.itemAclTemplates),
-      });
-      if (error) throw error;
+      if (!runtime) return;
+      await runtime.workspace.updateInvite(args.inviteId, args.role, args.modulePermissions);
       await refreshAccessData();
       await refreshNotifications();
     },
-    [refreshAccessData, refreshNotifications, supabase]
+    [refreshAccessData, refreshNotifications, runtime]
   );
 
   const updateMemberPermissions = useCallback(
@@ -432,55 +335,41 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         permission: ModulePermission;
       }>;
     }) => {
-      if (!supabase) return;
-      const { error } = await supabase.rpc("workspace_update_member_permissions", {
-        p_member_id: args.memberId,
-        p_role: args.role,
-        p_module_permissions: toModulePermissions(args.modulePermissions),
-        p_item_acl: toItemAclTemplates(args.itemAcl),
-      });
-      if (error) throw error;
+      if (!runtime) return;
+      await runtime.workspace.updateMemberPermissions(args.memberId, args.role, args.modulePermissions);
       await refreshAccessData();
       await refreshNotifications();
     },
-    [refreshAccessData, refreshNotifications, supabase]
+    [refreshAccessData, refreshNotifications, runtime]
   );
 
   const revokeInvite = useCallback(
     async (inviteId: string) => {
-      if (!supabase) return;
-      const { error } = await supabase.rpc("workspace_revoke_invite", { p_invite_id: inviteId });
-      if (error) throw error;
+      if (!runtime) return;
+      await runtime.workspace.revokeInvite(inviteId);
       await refreshAccessData();
       await refreshNotifications();
     },
-    [refreshAccessData, refreshNotifications, supabase]
+    [refreshAccessData, refreshNotifications, runtime]
   );
 
   const markNotificationRead = useCallback(
     async (notificationId: string) => {
-      if (!supabase) return;
-      const { error } = await supabase.rpc("workspace_mark_notification_read", {
-        p_notification_id: notificationId,
-      });
-      if (error) throw error;
+      if (!runtime) return;
+      await runtime.workspace.markNotificationRead(notificationId);
       await refreshNotifications();
     },
-    [refreshNotifications, supabase]
+    [refreshNotifications, runtime]
   );
 
   const markAllNotificationsRead = useCallback(async () => {
-    if (!supabase) return;
-    const { error } = await supabase.rpc("workspace_mark_all_notifications_read", {
-      p_scope: notificationsScope,
-      p_workspace_id: notificationsScope === "workspace" ? selectedWorkspaceId : null,
-    });
-    if (error) throw error;
+    if (!runtime) return;
+    await runtime.workspace.markAllNotificationsRead();
     await refreshNotifications();
-  }, [notificationsScope, refreshNotifications, selectedWorkspaceId, supabase]);
+  }, [refreshNotifications, runtime]);
 
   useEffect(() => {
-    if (!supabase || !userId) {
+    if (!runtime || !userId) {
       setLoading(false);
       setWorkspaces([]);
       setSelectedWorkspaceId(null);
@@ -491,11 +380,9 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     }
 
     let active = true;
-
     const run = async () => {
       setLoading(true);
       try {
-        await supabase.rpc("workspace_claim_invites");
         await refreshWorkspaces();
       } finally {
         if (active) setLoading(false);
@@ -506,7 +393,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     return () => {
       active = false;
     };
-  }, [refreshWorkspaces, supabase, userId]);
+  }, [refreshWorkspaces, runtime, userId]);
 
   useEffect(() => {
     void refreshAccessData();
@@ -515,6 +402,8 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void refreshNotifications();
   }, [notificationsScope, refreshNotifications, selectedWorkspaceId]);
+
+
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({

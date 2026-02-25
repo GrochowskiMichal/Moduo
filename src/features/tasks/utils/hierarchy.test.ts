@@ -7,8 +7,6 @@ const now = new Date().toISOString();
 function task(partial: Partial<Task> & Pick<Task, "id">): Task {
   const { id, ...rest } = partial;
   return {
-    ...rest,
-    id,
     workspaceId: "workspace",
     ownerId: "owner",
     projectId: "project",
@@ -24,6 +22,8 @@ function task(partial: Partial<Task> & Pick<Task, "id">): Task {
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
+    id,
+    ...rest,
   };
 }
 

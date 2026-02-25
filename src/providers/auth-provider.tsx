@@ -1,6 +1,5 @@
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
-import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { supabase, supabaseConfigError } from "../lib/supabase";
+import { runtime, runtimeConfigError, type ModuoRuntime, type RuntimeSession } from "../lib/runtime";
 
 type AuthContextValue = {
   userId: string | null;
@@ -8,7 +7,7 @@ type AuthContextValue = {
   isSignedIn: boolean;
   loading: boolean;
   configError: string | null;
-  supabase: SupabaseClient | null;
+  runtime: ModuoRuntime | null;
   signOut: () => Promise<void>;
 };
 
@@ -18,27 +17,36 @@ const AuthContext = createContext<AuthContextValue>({
   isSignedIn: false,
   loading: true,
   configError: null,
-  supabase: null,
+  runtime: null,
   signOut: async () => {},
 });
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<RuntimeSession | null>(null);
 
   useEffect(() => {
-    if (!supabase) {
+    if (!runtime) {
       setLoading(false);
       return;
     }
 
     let active = true;
+    const client = runtime;
 
-    const sb = supabase; // narrowed from null check above
     const init = async () => {
-      const { data } = await sb.auth.getSession();
+      // Restore from DB cache first.
+      const { data } = await client.auth.getSession();
       if (!active) return;
-      setSession(data.session ?? null);
+      if (data.session) {
+        setSession(data.session);
+        setLoading(false);
+        return;
+      }
+      // No cached session — attempt silent unlock from OS keychain.
+      const { data: autoData } = await client.auth.tryAutoUnlock();
+      if (!active) return;
+      setSession(autoData.session ?? null);
       setLoading(false);
     };
 
@@ -46,12 +54,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     const {
       data: { subscription },
-    } = sb.auth.onAuthStateChange((event, nextSession) => {
+    } = client.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return;
       setSession(nextSession ?? null);
       setLoading(false);
 
-      // Log token refresh events to aid debugging
       if (event === "TOKEN_REFRESHED") {
         console.debug("[auth] token refreshed", {
           userId: nextSession?.user?.id,
@@ -67,8 +74,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const signOut = async () => {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    if (!runtime) return;
+    await runtime.auth.signOut();
     setSession(null);
   };
 
@@ -79,8 +86,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         userEmail: session?.user?.email ?? null,
         isSignedIn: !!session?.user,
         loading,
-        configError: supabaseConfigError,
-        supabase,
+        configError: runtimeConfigError,
+        runtime,
         signOut,
       }}
     >

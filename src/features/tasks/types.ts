@@ -1,6 +1,6 @@
 export type TaskPriority = 0 | 1 | 2 | 3 | 4;
 
-export type TaskViewMode = "board" | "list";
+export type TaskViewMode = "board" | "list" | "gantt";
 
 export type TasksSyncStatus = "offline" | "syncing" | "synced" | "error";
 

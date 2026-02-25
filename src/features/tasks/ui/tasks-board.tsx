@@ -11,6 +11,7 @@ type Props = {
   projectName: string;
   projectNameById: Map<string, string>;
   creatorUserId: string | null;
+  currentUserAvatarUrl: string | null;
   assigneeOptions: Array<{ id: string; label: string; initial: string }>;
   selectedTaskId: string | null;
   onSelectTask: (taskId: string) => void;
@@ -29,6 +30,8 @@ type Props = {
     newStateId: string,
     beforeTaskId?: string | null
   ) => void | Promise<void>;
+  canEdit: boolean;
+  onCreateState?: () => Promise<void> | void;
 };
 
 type TaskCardProps = {
@@ -36,16 +39,29 @@ type TaskCardProps = {
   state: TaskWorkflowState;
   projectName: string;
   taskProjectName: string;
+  creatorUserId: string | null;
+  currentUserAvatarUrl: string | null;
   selected: boolean;
   onSelect: () => void;
 };
 
-function TaskCard({ task, state, projectName, taskProjectName, selected, onSelect }: TaskCardProps) {
+function TaskCard({
+  task,
+  state,
+  projectName,
+  taskProjectName,
+  creatorUserId,
+  currentUserAvatarUrl,
+  selected,
+  onSelect,
+}: TaskCardProps) {
   const draggable = useDraggable({ id: `task:${task.id}` });
   const droppable = useDroppable({ id: `task:${task.id}` });
   const priority = priorityVisual(task.priority);
   const dueDate = formatTaskDate(task.dueDate);
   const initial = task.assigneeId ? task.assigneeId.trim().charAt(0).toUpperCase() : null;
+  const isCurrentUserAssignee =
+    !!creatorUserId && !!task.assigneeId && task.assigneeId === creatorUserId;
   const style = {
     transform: CSS.Translate.toString(draggable.transform),
     opacity: draggable.isDragging ? 0.55 : 1,
@@ -62,43 +78,58 @@ function TaskCard({ task, state, projectName, taskProjectName, selected, onSelec
       style={style}
       {...draggable.attributes}
       {...draggable.listeners}
-      className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
-        droppable.isOver
-          ? "border-[#3a3a3a] bg-[#161616]"
+      className={`group w-full rounded-2xl border px-3.5 py-3 text-left transition-all duration-300 relative overflow-hidden backdrop-blur-md shadow-sm ${droppable.isOver
+          ? "border-indigo-500/50 bg-[#1c1c1c]/80 shadow-[0_4px_24px_rgba(99,102,241,0.15)]"
           : selected
-            ? "border-[#333333] bg-[#121212]"
-            : "border-[#262626] bg-[#101010] hover:bg-[#151515]"
-      }`}
+            ? "border-[#404040] bg-[#1a1a1a]/90 shadow-md transform scale-[1.02]"
+            : "border-[#2a2a2a] bg-[#141414]/60 hover:bg-[#1a1a1a]/80 hover:border-[#3a3a3a] hover:shadow-lg hover:-translate-y-0.5"
+        }`}
       onClick={onSelect}
     >
-      <div className="flex items-center gap-2">
-        <span className="text-[13px] leading-none" style={{ color: priority.color }}>
-          {priority.icon}
-        </span>
-        <div className="min-w-0 flex-1 truncate text-[12px] leading-tight text-[#e8ebf1]">{task.title || "Untitled"}</div>
-      </div>
-      {task.description ? (
-        <p className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-[#777f8e]">{task.description}</p>
-      ) : null}
-      {tags.length ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {tags.slice(0, 4).map((tag) => (
-            <span key={tag} className="rounded-full bg-[#161616] px-2 py-0.5 text-[9px] text-[#8f97a6]">
-              #{tag}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="mt-3 text-[10px] text-[#6f7682]">Project: {taskProjectName || projectName}</div>
-
-      <div className="mt-3 flex items-center justify-between">
-        <span className="text-[10px] text-[#7f8796]">{dueDate ? `◷ ${dueDate}` : "No due date"}</span>
-        {initial ? (
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-[#1d2129] text-[10px] font-semibold text-[#cfd4de]">
-            {initial}
+      <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className="relative z-10">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-[14px] leading-none drop-shadow-md" style={{ color: priority.color }}>
+            {priority.icon}
           </span>
+          <div className="min-w-0 flex-1 truncate text-[13px] font-medium leading-tight text-[#f0f2f5]">{task.title || "Untitled"}</div>
+        </div>
+        {task.description ? (
+          <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-[#8f96a3] font-light">{task.description}</p>
         ) : null}
+        {tags.length ? (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {tags.slice(0, 4).map((tag) => (
+              <span key={tag} className="rounded-md bg-[#222] border border-[#333] px-2 py-0.5 text-[9px] font-medium tracking-wide uppercase text-[#a0a8b8]">
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="mt-3.5 mb-1 text-[10px] text-[#5f6672] uppercase tracking-wider font-semibold">
+          {taskProjectName || projectName}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between border-t border-[#2a2a2a]/50 pt-3">
+          <span className="text-[10px] font-medium text-[#7f8796] flex items-center gap-1.5">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            {dueDate ? dueDate : "No due date"}
+          </span>
+          {initial ? (
+            isCurrentUserAssignee && currentUserAvatarUrl ? (
+              <img
+                src={currentUserAvatarUrl}
+                alt="Assignee avatar"
+                className="h-6 w-6 rounded-full border border-[#3a3a3a] object-cover shadow-inner"
+              />
+            ) : (
+              <span className="grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-[#2a2a2a] to-[#1a1a1a] shadow-inner border border-[#3a3a3a] text-[10px] font-bold text-[#e0e0e0]">
+                {initial}
+              </span>
+            )
+          ) : null}
+        </div>
       </div>
     </button>
   );
@@ -110,7 +141,7 @@ function ColumnDrop({ state, children }: { state: TaskWorkflowState; children: R
   return (
     <section
       ref={droppable.setNodeRef}
-      className={`min-h-[110px] rounded-xl p-1.5 ${droppable.isOver ? "bg-[#171717]" : "bg-transparent"}`}
+      className={`min-h-[150px] px-1.5 transition-colors duration-300 ${droppable.isOver ? "bg-[#161616]/35" : ""}`}
     >
       {children}
     </section>
@@ -123,11 +154,14 @@ export function TasksBoard({
   projectName,
   projectNameById,
   creatorUserId,
+  currentUserAvatarUrl,
   assigneeOptions,
   selectedTaskId,
   onSelectTask,
   onCreateTask,
   onMoveTask,
+  canEdit,
+  onCreateState,
 }: Props) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [draftByStateId, setDraftByStateId] = useState<
@@ -234,24 +268,28 @@ export function TasksBoard({
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="grid grid-flow-col auto-cols-[340px] items-start gap-3 overflow-x-auto pb-2">
+      <div className="grid h-full min-h-max grid-flow-col auto-cols-[340px] items-start gap-3 overflow-auto pb-4 pr-1">
         {states.map((state) => {
           const columnTasks = tasksByState.get(state.id) ?? [];
           const status = statusVisual(state.kind);
           return (
             <ColumnDrop key={state.id} state={state}>
-              <div className="mb-2 flex items-center gap-2 px-1.5">
-                <span className="text-[13px]" style={{ color: status.color }}>
-                  {status.icon}
+              <div className="mb-3 px-2 pt-1 pb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[14px] drop-shadow-md" style={{ color: status.color }}>
+                    {status.icon}
+                  </span>
+                  <span className="text-[14px] font-semibold tracking-wide text-[#e7ebf2]">{state.name}</span>
+                </div>
+                <span className="text-[10px] font-bold text-[#888]">
+                  {columnTasks.length}
                 </span>
-                <span className="text-[15px] text-[#e7ebf2]">{state.name}</span>
-                <span className="text-[11px] text-[#7d8596]">{columnTasks.length}</span>
               </div>
 
-              <div className="grid gap-2">
+              <div className="grid gap-2.5">
                 {columnTasks.length === 0 ? (
-                  <div className="rounded-lg bg-[#101010] px-3 py-3 text-[11px] text-[#777777]">
-                    No tasks
+                  <div className="px-3 py-6 text-center text-[12px] font-medium text-[#555] opacity-60">
+                    Drop tasks here
                   </div>
                 ) : (
                   columnTasks.map((task) => (
@@ -261,6 +299,8 @@ export function TasksBoard({
                       state={state}
                       projectName={projectName}
                       taskProjectName={projectNameById.get(task.projectId) ?? projectName}
+                      creatorUserId={creatorUserId}
+                      currentUserAvatarUrl={currentUserAvatarUrl}
                       selected={selectedTaskId === task.id}
                       onSelect={() => onSelectTask(task.id)}
                     />
@@ -268,7 +308,7 @@ export function TasksBoard({
                 )}
 
                 {draftByStateId[state.id] ? (
-                  <div className="rounded-xl border border-[#2a2a2a] bg-[#101010] p-3">
+                  <div className="rounded-2xl border border-[#333] shadow-xl bg-[#141414] p-3 animate-in fade-in slide-in-from-top-2 duration-200">
                     <input
                       autoFocus
                       value={draftByStateId[state.id]?.title ?? ""}
@@ -288,8 +328,8 @@ export function TasksBoard({
                         }
                         if (event.key === "Escape") closeDraft(state.id);
                       }}
-                      className="w-full bg-transparent text-[12px] text-[#e8ebf1] outline-none"
-                      placeholder="Task name"
+                      className="w-full bg-transparent text-[14px] font-medium text-[#e8ebf1] outline-none placeholder:text-[#555]"
+                      placeholder="Task name..."
                     />
                     <textarea
                       rows={2}
@@ -303,8 +343,8 @@ export function TasksBoard({
                           },
                         }))
                       }
-                      className="mt-2 w-full resize-none rounded-lg bg-[#171717] px-2 py-1.5 text-[10px] text-[#9ca5b4] outline-none"
-                      placeholder="Description"
+                      className="mt-3 w-full resize-none rounded-xl border border-[#2a2a2a] bg-[#0c0c0c] px-3 py-2 text-[11px] text-[#9ca5b4] outline-none placeholder:text-[#444] focus:border-[#444] transition-colors"
+                      placeholder="Add description..."
                     />
                     <div className="mt-2">
                       <TagInput
@@ -356,9 +396,25 @@ export function TasksBoard({
                       <label className="grid gap-1 text-[10px] text-[#7f8796]">
                         <span>Assignee</span>
                         <div className="flex items-center gap-2 rounded-md bg-[#171717] px-2 py-1">
-                          <span className="grid h-4 w-4 place-items-center rounded-full bg-[#222222] text-[9px] text-[#d5dbe5]">
-                            {(assigneeOptions.find((entry) => entry.id === (draftByStateId[state.id]?.assigneeId ?? creatorUserId))?.initial ?? "•")}
-                          </span>
+                          {(() => {
+                            const assigneeId = draftByStateId[state.id]?.assigneeId ?? creatorUserId;
+                            const initial = assigneeOptions.find((entry) => entry.id === assigneeId)?.initial ?? "•";
+                            const isMe = assigneeId === creatorUserId;
+                            if (isMe && currentUserAvatarUrl) {
+                              return (
+                                <img
+                                  src={currentUserAvatarUrl}
+                                  alt="Assignee avatar"
+                                  className="h-4 w-4 rounded-full border border-[#2f2f2f] object-cover"
+                                />
+                              );
+                            }
+                            return (
+                              <span className="grid h-4 w-4 place-items-center rounded-full bg-[#222222] text-[9px] font-bold text-[#d5dbe5]">
+                                {initial}
+                              </span>
+                            );
+                          })()}
                           <select
                             value={draftByStateId[state.id]?.assigneeId ?? ""}
                             className="min-w-0 flex-1 bg-transparent text-[10px] text-[#c7cdd8] outline-none"
@@ -366,8 +422,8 @@ export function TasksBoard({
                               setDraftByStateId((current) => ({
                                 ...current,
                                 [state.id]: {
-                                ...(current[state.id] ?? { title: "", description: "", tags: [], priority: 2, dueDate: "", assigneeId: creatorUserId }),
-                                assigneeId: event.target.value || null,
+                                  ...(current[state.id] ?? { title: "", description: "", tags: [], priority: 2, dueDate: "", assigneeId: creatorUserId }),
+                                  assigneeId: event.target.value || null,
                                 },
                               }))
                             }
@@ -430,6 +486,20 @@ export function TasksBoard({
             </ColumnDrop>
           );
         })}
+        {canEdit ? (
+          <section className="min-h-[150px] px-1.5">
+            <div className="mb-3 px-2 pt-1 pb-2 flex items-center justify-between">
+              <span className="text-[14px] font-semibold tracking-wide text-[#8f96a3]">Columns</span>
+            </div>
+            <button
+              type="button"
+              className="grid w-full place-items-center rounded-2xl border border-dashed border-[#2f3642] bg-[#11151b] px-4 py-8 text-[12px] font-medium text-[#7f8796] transition-colors hover:border-[#4b5568] hover:text-[#c7cfde]"
+              onClick={() => void onCreateState?.()}
+            >
+              + New column
+            </button>
+          </section>
+        ) : null}
       </div>
     </DndContext>
   );

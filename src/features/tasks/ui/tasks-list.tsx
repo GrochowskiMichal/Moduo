@@ -18,6 +18,8 @@ type Props = {
   states: TaskWorkflowState[];
   projectName: string;
   projectNameById: Map<string, string>;
+  currentUserId: string | null;
+  currentUserAvatarUrl: string | null;
   selectedTaskId: string | null;
   onSelectTask: (taskId: string) => void;
   onMoveTask: (
@@ -35,14 +37,28 @@ type RowProps = {
   state: TaskWorkflowState | null;
   projectName: string;
   taskProjectName: string;
+  currentUserId: string | null;
+  currentUserAvatarUrl: string | null;
   onSelect: () => void;
 };
 
-function ListRow({ task, depth, selected, state, projectName, taskProjectName, onSelect }: RowProps) {
+function ListRow({
+  task,
+  depth,
+  selected,
+  state,
+  projectName,
+  taskProjectName,
+  currentUserId,
+  currentUserAvatarUrl,
+  onSelect,
+}: RowProps) {
   const sortable = useSortable({ id: `task:${task.id}` });
   const status = statusVisual(state?.kind ?? "custom");
   const priority = priorityVisual(task.priority);
   const assigneeInitial = task.assigneeId ? task.assigneeId.trim().charAt(0).toUpperCase() : "—";
+  const isCurrentUserAssignee =
+    !!currentUserId && !!task.assigneeId && task.assigneeId === currentUserId;
   const tags = Array.isArray(task.tags) ? task.tags : [];
 
   return (
@@ -55,36 +71,61 @@ function ListRow({ task, depth, selected, state, projectName, taskProjectName, o
         marginLeft: depth * 18,
         opacity: sortable.isDragging ? 0.55 : 1,
       }}
-      className={`grid w-full grid-cols-[minmax(220px,1fr)_130px_110px_110px_60px_24px] items-center gap-2 border-b border-[#1e2128] px-2.5 py-2 text-left ${
-        selected ? "bg-[#121417]" : "hover:bg-[#111419]"
-      }`}
+      className={`group grid w-full grid-cols-[minmax(220px,1fr)_130px_110px_110px_60px_24px] items-center gap-4 mb-1.5 rounded-xl px-3 py-3 text-left transition-all duration-200 border border-transparent ${selected ? "bg-[#1c1c1c]/80 border-[#333] shadow-md transform scale-[1.005]" : "hover:bg-[#151515]/80 hover:border-[#2a2a2a] hover:shadow-sm"
+        }`}
       onClick={onSelect}
       {...sortable.attributes}
       {...sortable.listeners}
     >
-      <span className="truncate text-[12px] text-[#dbe0e8]">
+      <span className="flex items-center gap-2 truncate text-[13px] font-medium text-[#e4e4e4]">
         {task.title || "Untitled"}
         {tags.length ? (
-          <span className="ml-2 text-[10px] text-[#8a93a3]">{tags.map((tag) => `#${tag}`).join(" ")}</span>
+          <span className="ml-2 flex gap-1">
+            {tags.map((tag) => (
+              <span key={tag} className="rounded-md bg-[#222] border border-[#333] px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase text-[#a0a8b8]">
+                {tag}
+              </span>
+            ))}
+          </span>
         ) : null}
       </span>
-      <span className="flex items-center gap-1.5 truncate text-[11px] text-[#8f97a6]">
-        <span style={{ color: status.color }}>{status.icon}</span>
+      <span className="flex items-center gap-2 truncate text-[12px] text-[#9ca3af] font-medium">
+        <span className="drop-shadow-sm" style={{ color: status.color }}>{status.icon}</span>
         {state?.name ?? "Unknown"}
       </span>
-      <span className="flex items-center gap-1.5 text-[11px] text-[#8f97a6]">
-        <span style={{ color: priority.color }}>{priority.icon}</span>
+      <span className="flex items-center gap-1.5 text-[14px]">
+        <span className="drop-shadow-sm" style={{ color: priority.color }}>{priority.icon}</span>
       </span>
-      <span className="truncate text-[11px] text-[#858d9d]">Project: {taskProjectName || projectName}</span>
-      <span className="grid h-6 w-6 place-items-center rounded-full bg-[#1b2028] text-[10px] font-semibold text-[#d5dbe5]">
-        {assigneeInitial}
+      <span className="truncate text-[11px] font-medium uppercase tracking-wider text-[#6b7280]">
+        {taskProjectName || projectName}
       </span>
-      <span className="text-[13px] text-[#767f8f]">…</span>
+      {isCurrentUserAssignee && currentUserAvatarUrl ? (
+        <img
+          src={currentUserAvatarUrl}
+          alt="Assignee avatar"
+          className="h-7 w-7 rounded-full border border-[#3a3a3a] object-cover shadow-inner"
+        />
+      ) : (
+        <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-[#2a2a2a] to-[#1a1a1a] shadow-inner border border-[#3a3a3a] text-[11px] font-bold text-[#e0e0e0]">
+          {assigneeInitial}
+        </span>
+      )}
+      <span className="text-[14px] text-[#555] group-hover:text-[#aaa] transition-colors">…</span>
     </button>
   );
 }
 
-export function TasksList({ tasks, states, projectName, projectNameById, selectedTaskId, onSelectTask, onMoveTask }: Props) {
+export function TasksList({
+  tasks,
+  states,
+  projectName,
+  projectNameById,
+  currentUserId,
+  currentUserAvatarUrl,
+  selectedTaskId,
+  onSelectTask,
+  onMoveTask,
+}: Props) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const stateById = useMemo(() => new Map(states.map((state) => [state.id, state])), [states]);
@@ -118,7 +159,7 @@ export function TasksList({ tasks, states, projectName, projectNameById, selecte
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-      <div className="mb-1 grid grid-cols-[minmax(220px,1fr)_130px_110px_110px_60px_24px] gap-2 border-b border-[#1e2128] px-2.5 py-2 text-[10px] uppercase tracking-[0.08em] text-[#666f80]">
+      <div className="mb-3 grid grid-cols-[minmax(220px,1fr)_130px_110px_110px_60px_24px] gap-4 border-b border-[#222] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-[#777]">
         <span>Title</span>
         <span>Status</span>
         <span>Priority</span>
@@ -143,6 +184,8 @@ export function TasksList({ tasks, states, projectName, projectNameById, selecte
                 state={stateById.get(row.stateId) ?? null}
                 projectName={projectName}
                 taskProjectName={projectNameById.get(row.projectId) ?? projectName}
+                currentUserId={currentUserId}
+                currentUserAvatarUrl={currentUserAvatarUrl}
                 onSelect={() => onSelectTask(row.id)}
               />
             ))

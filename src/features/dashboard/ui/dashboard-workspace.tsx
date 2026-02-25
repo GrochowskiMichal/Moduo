@@ -1,173 +1,129 @@
-import React, { useState, useCallback, useRef } from "react";
-import {
-  DndContext,
-  DragOverlay,
-  useSensor,
-  useSensors,
-  PointerSensor,
-  DragStartEvent,
-  DragEndEvent,
-} from "@dnd-kit/core";
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { createPortal } from "react-dom";
-import { WidgetInstance, WidgetType, WidgetConfig } from "../types";
-import { WidgetsPanel } from "./widgets-panel";
-import { DashboardGrid } from "./dashboard-grid";
+import { useEffect, useRef, useState } from "react";
+import type { ModuoRuntime } from "../../../lib/runtime";
+import type { NoteMeta } from "../../notes/types";
+import type { Task, TaskProject, TaskWorkflowState } from "../../tasks/types";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
-import { useDashboardContext } from "../../dashboard/providers/dashboard-provider";
+import { useDashboard } from "../hooks/use-dashboard";
+import type { WidgetType } from "../types";
+import { DashboardGrid } from "./dashboard-grid";
+import {
+  DASHBOARD_VIEW_CHANGE_EVENT,
+  readStoredDashboardActiveView,
+  type DashboardViewChangeDetail,
+} from "./layout-events";
+import { WidgetsPanel } from "./widgets-panel";
 
 const GRID_SIZE = 40;
 
-export function DashboardWorkspace() {
-  const { 
-    activeViewId, 
-    widgets: widgetsByView, 
-    views,
-    updateView,
-    addWidget,
-    updateWidget,
-    deleteWidget
-  } = useDashboardContext();
+type Props = {
+  runtime: ModuoRuntime | null;
+  workspaceId: string;
+  notes: NoteMeta[];
+  tasks: Task[];
+  projects: TaskProject[];
+  states: TaskWorkflowState[];
+};
 
-  const currentWidgets = activeViewId ? (widgetsByView[activeViewId] || []) : [];
-  const activeView = views.find(v => v.id === activeViewId);
-  const isLocked = activeView?.isLocked ?? true;
-
-  const [activeId, setActiveId] = useState<string | null>(null);
+export function DashboardWorkspace({ runtime, workspaceId, notes, tasks, projects, states }: Props) {
+  const [activeViewId, setActiveViewId] = useState<string | null>(() => readStoredDashboardActiveView(workspaceId));
+  const { widgets, isLocked, isLoading, toggleLock, addWidget, moveWidget, resizeWidget, removeWidget, updateWidgetConfig } =
+    useDashboard(workspaceId, activeViewId, runtime);
   const [activeDragData, setActiveDragData] = useState<any>(null);
-  const gridRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setActiveViewId(readStoredDashboardActiveView(workspaceId));
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onViewChange = (event: Event) => {
+      const detail = (event as CustomEvent<DashboardViewChangeDetail>).detail;
+      if (detail?.viewId) setActiveViewId(detail.viewId);
+    };
+    window.addEventListener(DASHBOARD_VIEW_CHANGE_EVENT, onViewChange);
+    return () => window.removeEventListener(DASHBOARD_VIEW_CHANGE_EVENT, onViewChange);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
+      activationConstraint: { distance: 8 },
     })
   );
 
   const onDragStart = (event: DragStartEvent) => {
     if (isLocked) return;
-    setActiveId(String(event.active.id));
     setActiveDragData(event.active.data.current);
   };
 
-  const onDragEnd = async (event: DragEndEvent) => {
-    if (isLocked || !activeViewId) return;
-    const { active, over } = event;
-    const dragData = active.data.current;
-
-    setActiveId(null);
+  const onDragEnd = (event: DragEndEvent) => {
+    if (isLocked) return;
+    const dragData = event.active.data.current;
     setActiveDragData(null);
+    if (!event.over || !dragData) return;
 
-    if (!over) return;
-
-    // Handle new widget drop
-    if (dragData?.isSource) {
+    if (dragData.isSource) {
       const type = dragData.type as WidgetType;
-      
-      const finalRect = active.rect.current.translated;
+      const finalRect = event.active.rect.current.translated;
       const gridRect = gridRef.current?.getBoundingClientRect();
-
       let x = 0;
       let y = 0;
-
       if (finalRect && gridRect) {
         x = Math.round((finalRect.left - gridRect.left) / GRID_SIZE);
         y = Math.round((finalRect.top - gridRect.top) / GRID_SIZE);
       }
-      
-      await addWidget(activeViewId, type, Math.max(0, x), Math.max(0, y));
+      addWidget(type, x, y);
+      return;
     }
-    
-    // Handle existing widget move
-    if (dragData?.isWidget) {
-       const widgetId = active.id as string;
-       const widget = currentWidgets.find(w => w.id === widgetId);
-       if (!widget) return;
-       
-       const deltaX = Math.round(event.delta.x / GRID_SIZE);
-       const deltaY = Math.round(event.delta.y / GRID_SIZE);
-       
-       const newX = Math.max(0, widget.x + deltaX);
-       const newY = Math.max(0, widget.y + deltaY);
 
-       if (newX !== widget.x || newY !== widget.y) {
-         await updateWidget(widgetId, { x: newX, y: newY });
-       }
+    if (dragData.isWidget) {
+      const widget = widgets.find((entry) => entry.id === event.active.id);
+      if (!widget) return;
+      const nextX = Math.max(0, widget.x + Math.round(event.delta.x / GRID_SIZE));
+      const nextY = Math.max(0, widget.y + Math.round(event.delta.y / GRID_SIZE));
+      moveWidget(widget.id, nextX, nextY);
     }
   };
 
-  const handleUpdateConfig = useCallback(async (id: string, config: Partial<WidgetConfig>) => {
-    // Merge with existing config
-    const widget = currentWidgets.find(w => w.id === id);
-    if (!widget) return;
-    await updateWidget(id, { config: { ...widget.config, ...config } });
-  }, [currentWidgets, updateWidget]);
-
-  const handleRemoveWidget = useCallback(async (id: string) => {
-    if (isLocked) return;
-    await deleteWidget(id);
-  }, [isLocked, deleteWidget]);
-
-  const handleResize = useCallback(async (id: string, w: number, h: number) => {
-    if (isLocked) return;
-    await updateWidget(id, { w: Math.max(2, w), h: Math.max(2, h) });
-  }, [isLocked, updateWidget]);
-
-  const handleToggleLock = useCallback(async () => {
-    if (!activeViewId) return;
-    await updateView(activeViewId, { isLocked: !isLocked });
-  }, [activeViewId, isLocked, updateView]);
-
-  if (!activeViewId && views.length > 0) {
-    // If we have views but none active, loading or sync issue.
-    // Ideally useDashboard handles this, but we can render loading.
-    return <div className="flex-1 bg-[#0C0C0C]" />;
-  }
-
   return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-    >
+    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <FeaturePanelsShell
         feature="dashboard"
-        left={<WidgetsPanel activeView={activeView} isLocked={isLocked} onToggleLock={handleToggleLock} />}
+        left={<WidgetsPanel isLocked={isLocked} onToggleLock={toggleLock} />}
         center={
-          <div className="h-full w-full relative" ref={gridRef}>
-            <DashboardGrid 
-              widgets={currentWidgets} 
-              gridSize={GRID_SIZE} 
-              onUpdateConfig={handleUpdateConfig}
-              onRemove={handleRemoveWidget}
-              onResize={handleResize}
+          <div ref={gridRef} className="h-full w-full">
+            <DashboardGrid
+              widgets={widgets}
+              gridSize={GRID_SIZE}
               isLocked={isLocked}
+              runtime={runtime}
+              workspaceId={workspaceId}
+              notes={notes}
+              tasks={tasks}
+              projects={projects}
+              states={states}
+              onResize={resizeWidget}
+              onRemove={removeWidget}
+              onUpdateConfig={updateWidgetConfig}
             />
           </div>
         }
       />
 
-      {/* Drag Overlay */}
-      {typeof document !== "undefined" && createPortal(
-        <DragOverlay>
-          {activeId && activeDragData?.isSource ? (
-            <div className="bg-[#111111] p-3 rounded-lg border border-[#2a2a2a] shadow-xl w-[200px] opacity-80 cursor-grabbing">
-               <div className="font-medium text-[#e5ecff]">{activeDragData.label || activeDragData.type}</div>
-            </div>
-          ) : activeId && activeDragData?.isWidget ? (
-            <div 
-              className="bg-[#111111] rounded-xl border border-[#333333] shadow-2xl opacity-90 flex items-center justify-center"
-              style={{
-                width: activeDragData.widget.w * GRID_SIZE,
-                height: activeDragData.widget.h * GRID_SIZE,
-              }}
-            >
-               <div className="text-[#94a6cc] font-medium text-xs">Moving {activeDragData.widget.type}...</div>
-            </div>
-          ) : null}
-        </DragOverlay>,
-        document.body
-      )}
+      {typeof document !== "undefined"
+        ? createPortal(
+            <DragOverlay dropAnimation={null}>
+              {activeDragData?.isSource ? (
+                <div className="rounded-xl border border-[#2a2a2a] bg-[#121212] px-3 py-2 text-[13px] text-[#e8e8e8]">
+                  {activeDragData.label}
+                </div>
+              ) : null}
+            </DragOverlay>,
+            document.body
+          )
+        : null}
     </DndContext>
   );
 }

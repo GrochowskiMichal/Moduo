@@ -161,12 +161,15 @@ export function SlashCommandPlugin() {
   const [menu, setMenu] = useState<SlashMenuState | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const menuRef = useRef<SlashMenuState | null>(null);
+  const commandsRef = useRef<SlashCommand[]>([]);
+  const selectedIndexRef = useRef(0);
+  const menuSigRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    menuRef.current = menu;
-  }, [menu]);
+  menuRef.current = menu;
 
   const commands = useMemo(() => filterCommands(menu?.query ?? ""), [menu?.query]);
+  commandsRef.current = commands;
+  selectedIndexRef.current = selectedIndex;
 
   const applyCommandFromMenu = (command: SlashCommand, activeMenu: SlashMenuState) => {
     editor.focus();
@@ -188,6 +191,12 @@ export function SlashCommandPlugin() {
     return editor.registerUpdateListener(() => {
       if (typeof window === "undefined") return;
       const next = resolveSlashMenuState(editor);
+      const nextSig = next ? `${next.nodeKey}:${next.startOffset}` : null;
+      if (nextSig && nextSig !== menuSigRef.current) {
+        selectedIndexRef.current = 0;
+        setSelectedIndex(0);
+      }
+      menuSigRef.current = nextSig;
       setMenu(next);
     });
   }, [editor]);
@@ -196,27 +205,35 @@ export function SlashCommandPlugin() {
     return editor.registerCommand(
       KEY_ARROW_DOWN_COMMAND,
       (event) => {
-        if (!menuRef.current || commands.length === 0) return false;
+        const activeMenu = menuRef.current;
+        const activeCommands = commandsRef.current;
+        if (!activeMenu || activeCommands.length === 0) return false;
         event?.preventDefault();
-        setSelectedIndex((current) => (current + 1) % commands.length);
+        const next = (selectedIndexRef.current + 1) % activeCommands.length;
+        selectedIndexRef.current = next;
+        setSelectedIndex(next);
         return true;
       },
       COMMAND_PRIORITY_HIGH
     );
-  }, [commands.length, editor]);
+  }, [editor]);
 
   useEffect(() => {
     return editor.registerCommand(
       KEY_ARROW_UP_COMMAND,
       (event) => {
-        if (!menuRef.current || commands.length === 0) return false;
+        const activeMenu = menuRef.current;
+        const activeCommands = commandsRef.current;
+        if (!activeMenu || activeCommands.length === 0) return false;
         event?.preventDefault();
-        setSelectedIndex((current) => (current - 1 + commands.length) % commands.length);
+        const next = (selectedIndexRef.current - 1 + activeCommands.length) % activeCommands.length;
+        selectedIndexRef.current = next;
+        setSelectedIndex(next);
         return true;
       },
       COMMAND_PRIORITY_HIGH
     );
-  }, [commands.length, editor]);
+  }, [editor]);
 
   useEffect(() => {
     return editor.registerCommand(
@@ -236,25 +253,38 @@ export function SlashCommandPlugin() {
       KEY_ENTER_COMMAND,
       (event) => {
         const activeMenu = menuRef.current;
-        if (!activeMenu || commands.length === 0) return false;
-
+        const activeCommands = commandsRef.current;
+        if (!activeMenu || activeCommands.length === 0) return false;
         event?.preventDefault();
-        const command = commands[selectedIndex] ?? commands[0];
+        const command = activeCommands[selectedIndexRef.current] ?? activeCommands[0];
         if (!command) return true;
-
         applyCommandFromMenu(command, activeMenu);
         setMenu(null);
         return true;
       },
       COMMAND_PRIORITY_HIGH
     );
-  }, [commands, editor, selectedIndex]);
+  }, [editor]);
+
+  useEffect(() => {
+    if (!menu) return;
+    editor.focus();
+  }, [editor, menu]);
+
+  useEffect(() => {
+    const activeMenu = menuRef.current;
+    if (!activeMenu) return;
+    window.requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-slashcmd-index="${selectedIndex}"]`);
+      el?.scrollIntoView({ block: "nearest" });
+    });
+  }, [selectedIndex]);
 
   if (!menu || commands.length === 0) return null;
 
   return createPortal(
     <div
-      className="fixed z-[999] min-w-[260px] rounded-[12px] border border-[#2a2a2a] bg-[#141414] p-[6px] shadow-[0_14px_30px_#00000057]"
+      className="fixed z-[999] max-h-[360px] min-w-[260px] overflow-y-auto rounded-[12px] border border-[#2a2a2a] bg-[#141414] p-[6px] shadow-[0_14px_30px_#00000057] custom-scrollbar"
       style={{ top: menu.top, left: menu.left }}
       role="listbox"
       aria-label="Slash Commands"
@@ -264,7 +294,13 @@ export function SlashCommandPlugin() {
           key={command.id}
           type="button"
           role="option"
-          className={`flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-2 text-[#d8d8d8] hover:bg-[#202020] ${selectedIndex === index ? "bg-[#202020]" : ""}`}
+          aria-selected={selectedIndex === index}
+          data-slashcmd-index={index}
+          className={`group flex w-full cursor-pointer items-center justify-between rounded-[10px] border px-[10px] py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/10 ${
+            selectedIndex === index
+              ? "border-[#3a3a3a] bg-[#202020] text-[#f1f1f1]"
+              : "border-transparent bg-transparent text-[#d8d8d8] hover:border-[#2f2f2f] hover:bg-[#1c1c1c]"
+          }`}
           onMouseEnter={() => setSelectedIndex(index)}
           onMouseDown={(event) => {
             event.preventDefault();
@@ -274,8 +310,10 @@ export function SlashCommandPlugin() {
             setMenu(null);
           }}
         >
-          <span>{command.title}</span>
-          <span className="text-[11px] text-[#8a8a8a]">{command.group}</span>
+          <span className="min-w-0 truncate">{command.title}</span>
+          <span className={`text-[11px] ${selectedIndex === index ? "text-[#b0b0b0]" : "text-[#8a8a8a]"}`}>
+            {command.group}
+          </span>
         </button>
       ))}
     </div>,

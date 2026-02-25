@@ -11,9 +11,11 @@ type Props = {
   center: ReactNode;
   left?: ReactNode;
   right?: ReactNode;
+  /** When true the right panel is never rendered, regardless of saved state */
+  hideRight?: boolean;
 };
 
-export function FeaturePanelsShell({ feature, center, left, right }: Props) {
+export function FeaturePanelsShell({ feature, center, left, right, hideRight = false }: Props) {
   const [panelState, setPanelState] = useState(() => readFeaturePanelState(feature));
 
   useEffect(() => {
@@ -27,26 +29,28 @@ export function FeaturePanelsShell({ feature, center, left, right }: Props) {
     return () => window.removeEventListener(LAYOUT_PANELS_APPLY_EVENT, onApplyPanels);
   }, [feature]);
 
+  const showRight = panelState.right && !hideRight;
+
   const layoutColumns = panelState.left
-    ? panelState.right
+    ? showRight
       ? "grid-cols-[20fr_50fr_30fr]"
       : "grid-cols-[20fr_80fr]"
-    : panelState.right
+    : showRight
       ? "grid-cols-[70fr_30fr]"
       : "grid-cols-[1fr]";
 
   return (
-    <div className={`grid h-full min-h-0 gap-4 p-4 bg-[#0C0C0C] ${layoutColumns}`}>
+    <div className={`grid h-full min-h-0 gap-4 bg-[#0C0C0C] px-4 pb-2 pt-2 ${layoutColumns}`}>
       {panelState.left ? (
-        <aside className="min-h-0 rounded-2xl bg-[#111111] p-4 flex flex-col">
+        <aside className="min-h-0 min-w-0 h-full rounded-2xl bg-[#111111] p-4 flex flex-col">
           {left ?? <div className="text-[#8f8f8f] text-[13px]">Feature tools panel</div>}
         </aside>
       ) : null}
 
-      <main className="min-h-0 rounded-2xl bg-[#111111] p-4 overflow-auto relative">{center}</main>
+      <main className="min-h-0 min-w-0 h-full rounded-2xl bg-[#111111] p-4 overflow-auto relative">{center}</main>
 
-      {panelState.right ? (
-        <aside className="min-h-0 rounded-2xl bg-[#111111] p-4">
+      {showRight ? (
+        <aside className="min-h-0 min-w-0 h-full rounded-2xl bg-[#111111] p-4">
           {right ?? (
             <div className="text-[#9a9a9a] text-[13px]">Graph relations tree, feature coming soon.</div>
           )}
