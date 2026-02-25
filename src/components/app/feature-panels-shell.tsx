@@ -42,7 +42,7 @@ export function FeaturePanelsShell({ feature, center, left, right, hideRight = f
   return (
     <div className={`grid h-full min-h-0 gap-4 bg-[#0C0C0C] px-4 pb-2 pt-2 ${layoutColumns}`}>
       {panelState.left ? (
-        <aside className="min-h-0 min-w-0 h-full rounded-2xl bg-[#111111] p-4 flex flex-col">
+        <aside className="min-h-0 min-w-0 h-full rounded-2xl bg-[#111111] p-4 flex flex-col overflow-y-auto">
           {left ?? <div className="text-[#8f8f8f] text-[13px]">Feature tools panel</div>}
         </aside>
       ) : null}

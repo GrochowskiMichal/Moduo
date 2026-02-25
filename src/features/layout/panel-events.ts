@@ -9,6 +9,7 @@ export type FeatureLayoutKey =
   | "crm"
   | "calendly"
   | "forms"
+  | "activity"
   | "feed"
   | "files"
   | "brainstorm"
@@ -46,6 +47,7 @@ function cloneDefaultMap(): FeaturePanelsMap {
     crm: { ...defaultState },
     calendly: { ...defaultState },
     forms: { ...defaultState },
+    activity: { ...defaultState },
     feed: { ...defaultState },
     files: { ...defaultState },
     brainstorm: { ...defaultState },
@@ -70,6 +72,7 @@ export function routeToFeatureLayout(pathname: string): FeatureLayoutKey {
   if (pathname === "/crm") return "crm";
   if (pathname === "/calendly") return "calendly";
   if (pathname === "/forms") return "forms";
+  if (pathname === "/activity") return "activity";
   if (pathname === "/feed") return "feed";
   if (pathname === "/files") return "files";
   if (pathname === "/brainstorm") return "brainstorm";

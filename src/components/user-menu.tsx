@@ -16,13 +16,15 @@ export function UserMenu({ avatarDataUrl, profileInitial = "U" }: Props) {
   return (
     <View className="relative flex-row items-center">
       <Pressable
-        className="h-9 w-9 overflow-hidden rounded-full border border-[#2a2a2a] bg-[#0c0c0c] items-center justify-center"
+        className="relative h-9 w-9 overflow-hidden rounded-full border border-[#2a2a2a] bg-[#0c0c0c] items-center justify-center"
         onPress={() => setMenuOpen((v: boolean) => !v)}
       >
         {avatarDataUrl ? (
           <Image source={{ uri: avatarDataUrl }} className="h-full w-full" contentFit="cover" />
         ) : (
-          <Text className="text-[#f1f1f1] text-[13px] font-semibold">{profileInitial}</Text>
+          <View className="absolute inset-0 flex items-center justify-center">
+            <Text className="text-center text-[13px] font-semibold leading-none text-[#f1f1f1]">{profileInitial}</Text>
+          </View>
         )}
       </Pressable>
       <Modal transparent visible={menuOpen} animationType="fade" onRequestClose={() => setMenuOpen(false)}>

@@ -170,6 +170,7 @@ pub fn run() {
             commands::email::email_connect,
             commands::email::email_fetch,
             commands::email::email_send,
+            commands::system::open_external_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running moduo desktop application");

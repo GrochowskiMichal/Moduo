@@ -271,7 +271,7 @@ export function TasksBoard({
       <div className="grid h-full min-h-max grid-flow-col auto-cols-[340px] items-start gap-3 overflow-auto pb-4 pr-1">
         {states.map((state) => {
           const columnTasks = tasksByState.get(state.id) ?? [];
-          const status = statusVisual(state.kind);
+          const status = statusVisual(state.kind, state.color, state.icon);
           return (
             <ColumnDrop key={state.id} state={state}>
               <div className="mb-3 px-2 pt-1 pb-2 flex items-center justify-between">
@@ -488,12 +488,9 @@ export function TasksBoard({
         })}
         {canEdit ? (
           <section className="min-h-[150px] px-1.5">
-            <div className="mb-3 px-2 pt-1 pb-2 flex items-center justify-between">
-              <span className="text-[14px] font-semibold tracking-wide text-[#8f96a3]">Columns</span>
-            </div>
             <button
               type="button"
-              className="grid w-full place-items-center rounded-2xl border border-dashed border-[#2f3642] bg-[#11151b] px-4 py-8 text-[12px] font-medium text-[#7f8796] transition-colors hover:border-[#4b5568] hover:text-[#c7cfde]"
+              className="px-2 py-1.5 text-left text-[11px] text-[#717a89] hover:text-[#9aa3b2]"
               onClick={() => void onCreateState?.()}
             >
               + New column

@@ -13,7 +13,6 @@ import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { CollaborationPlugin, CollaborationPluginV2__EXPERIMENTAL } from "@lexical/react/LexicalCollaborationPlugin";
 import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
-import { TabIndentationPlugin } from "@lexical/react/LexicalTabIndentationPlugin";
 import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import {
@@ -51,20 +50,32 @@ function NotesListTabIndentationPlugin() {
       KEY_TAB_COMMAND,
       (event) => {
         if (!event) return false;
-        const inListItem = editor.getEditorState().read(() => {
+        const listContext = editor.getEditorState().read(() => {
           const selection = $getSelection();
-          if (!$isRangeSelection(selection)) return false;
+          if (!$isRangeSelection(selection)) return { inListItem: false, canIndent: false };
           let node = selection.anchor.getNode();
           while (node && !$isListItemNode(node)) {
             const parent = node.getParent();
             if (!parent) break;
             node = parent;
           }
-          return $isListItemNode(node);
+          if (!$isListItemNode(node)) return { inListItem: false, canIndent: false };
+
+          const hasPreviousSibling = $isListItemNode(node.getPreviousSibling());
+
+          return {
+            inListItem: true,
+            canIndent: hasPreviousSibling,
+          };
         });
-        if (!inListItem) return false;
+        if (!listContext.inListItem) return false;
 
         event.preventDefault();
+
+        if (!event.shiftKey && !listContext.canIndent) {
+          return true;
+        }
+
         editor.dispatchCommand(event.shiftKey ? OUTDENT_CONTENT_COMMAND : INDENT_CONTENT_COMMAND, undefined);
         return true;
       },
@@ -77,38 +88,31 @@ function NotesListTabIndentationPlugin() {
 
 export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChange, syncEngine }: Props) {
   const [draftTitle, setDraftTitle] = useState(title);
-  const [bootstrapInfo, setBootstrapInfo] = useState<{ noteId: string, ready: boolean }>({
-    noteId,
-    ready: false,
-  });
-  const collabReady = bootstrapInfo.noteId === noteId && bootstrapInfo.ready;
-  const collabSession = useMemo(
-    () => (collabReady ? syncEngine.getOrCreateSession(noteId) : null),
-    [collabReady, noteId, syncEngine]
-  );
+  const collabSession = useMemo(() => syncEngine.getOrCreateSession(noteId), [noteId, syncEngine]);
+  const [collabReady, setCollabReady] = useState(() => collabSession.persistence.synced);
   const collabMode = useMemo(() => {
-    if (!collabSession) return "v1";
     if (collabSession.doc.share.has("root-v2")) return "v2";
     if (collabSession.doc.store.clients.size === 0) return "v2";
     return "v1";
   }, [collabSession]);
   useEffect(() => {
     let active = true;
-    setBootstrapInfo({ noteId, ready: false });
+    setCollabReady(collabSession.persistence.synced);
 
-    const session = syncEngine.getOrCreateSession(noteId);
-    session.persistence.whenSynced.then(() => {
-      if (active) {
-        setBootstrapInfo({ noteId, ready: true });
-      }
-    }).catch(err => {
-      console.error(`[LexicalNoteEditor] session.whenSynced ERROR: noteId=${noteId}, error=${err}`);
-    });
+    if (!collabSession.persistence.synced) {
+      collabSession.persistence.whenSynced.then(() => {
+        if (active) {
+          setCollabReady(true);
+        }
+      }).catch(err => {
+        console.error(`[LexicalNoteEditor] session.whenSynced ERROR: noteId=${noteId}, error=${err}`);
+      });
+    }
 
     return () => {
       active = false;
     };
-  }, [noteId, syncEngine]);
+  }, [collabSession, noteId]);
 
   // Keep a ref to the most-recent in-flight flush promise so we can kick it off
   // from the synchronous effect cleanup (React cleanups cannot be async) without
@@ -188,7 +192,7 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
                   <ContentEditable className="min-h-full px-[22px] pb-[90px] pt-[6px] text-[16px] leading-[1.7] text-[#cfcfcf] outline-none" />
                 }
                 placeholder={
-                  <div className="pointer-events-none absolute left-[22px] top-3 text-[#7a7a7a]">
+                  <div className="pointer-events-none absolute left-[22px] top-[6px] text-[16px] leading-[1.7] text-[#7a7a7a]">
                     Type '/' for commands...
                   </div>
                 }
@@ -197,7 +201,6 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
               <HistoryPlugin />
               <ListPlugin />
               <CheckListPlugin />
-              <TabIndentationPlugin maxIndent={8} />
               <NotesListTabIndentationPlugin />
               <NotesCodeHighlightPlugin />
               <LinkPlugin />

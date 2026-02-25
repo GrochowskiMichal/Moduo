@@ -12,6 +12,7 @@ import { CalendarPage } from "./routes/pages/calendar-page";
 import { CrmPage } from "./routes/pages/crm-page";
 import { CalendlyPage } from "./routes/pages/calendly-page";
 import { FormsPage } from "./routes/pages/forms-page";
+import { ActivityPage } from "./routes/pages/activity-page";
 import { FeedPage } from "./routes/pages/feed-page";
 import { FilesPage } from "./routes/pages/files-page";
 import { BrainstormPage } from "./routes/pages/brainstorm-page";
@@ -114,6 +115,12 @@ const formsRoute = createRoute({
   component: FormsPage,
 });
 
+const activityRoute = createRoute({
+  getParentRoute: () => appGateRoute,
+  path: "/activity",
+  component: ActivityPage,
+});
+
 const feedRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/feed",
@@ -194,6 +201,7 @@ const routeTree = rootRoute.addChildren([
     crmRoute,
     calendlyRoute,
     formsRoute,
+    activityRoute,
     feedRoute,
     filesRoute,
     brainstormRoute,

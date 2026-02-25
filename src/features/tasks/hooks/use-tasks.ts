@@ -105,6 +105,7 @@ function normalizeState(state: any): TaskWorkflowState {
     projectId: state.projectId ?? state.project_id,
     name: state.name ?? "State",
     kind: (state.kind ?? "custom") as TaskWorkflowKind,
+    icon: state.icon ?? null,
     color: state.color ?? null,
     position: state.position ?? initialPosition(),
     createdAt: state.createdAt ?? state.created_at ?? nowIso(),
@@ -148,7 +149,13 @@ export type UseTasksState = {
   setSelectedTaskId: (taskId: string | null) => void;
   createProject: (name?: string) => Promise<string | null>;
   deleteProject: (projectId: string) => Promise<void>;
-  createWorkflowState: (projectId: string, name: string, kind?: TaskWorkflowKind) => Promise<string | null>;
+  createWorkflowState: (
+    projectId: string,
+    name: string,
+    kind?: TaskWorkflowKind,
+    color?: string | null,
+    icon?: string | null
+  ) => Promise<string | null>;
   createTask: (args?: {
     projectId?: string | null;
     parentTaskId?: string | null;
@@ -393,7 +400,13 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
   );
 
   const createWorkflowState = useCallback(
-    async (projectId: string, name: string, kind: TaskWorkflowKind = "custom") => {
+    async (
+      projectId: string,
+      name: string,
+      kind: TaskWorkflowKind = "custom",
+      color: string | null = null,
+      icon: string | null = null
+    ) => {
       if (!userId || !workspaceId || !runtime || !canEdit) return null;
 
       const projectStates = states
@@ -408,7 +421,8 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
         projectId,
         name: name.trim() || defaultWorkflowStateName(kind),
         kind,
-        color: null,
+        icon,
+        color,
         position: kind === "custom" ? `z${suffix}` : `${kind}-${suffix}`,
         createdAt: nowIso(),
         updatedAt: nowIso(),

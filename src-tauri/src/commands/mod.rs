@@ -8,3 +8,4 @@ pub mod tasks;
 pub mod workspace;
 pub mod email;
 pub mod embeddings;
+pub mod system;

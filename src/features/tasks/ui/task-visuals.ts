@@ -7,23 +7,39 @@ export function formatTaskDate(value: string | null): string | null {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function statusVisual(kind: TaskWorkflowKind): { icon: string; color: string } {
+export function statusVisual(
+  kind: TaskWorkflowKind,
+  colorOverride?: string | null,
+  iconOverride?: string | null
+): { icon: string; color: string } {
+  let visual: { icon: string; color: string };
   switch (kind) {
     case "backlog":
-      return { icon: "○", color: "#6f7682" };
+      visual = { icon: "○", color: "#6f7682" };
+      break;
     case "todo":
-      return { icon: "◉", color: "#d9dde5" };
+      visual = { icon: "◉", color: "#d9dde5" };
+      break;
     case "in_progress":
-      return { icon: "◔", color: "#f0a43d" };
+      visual = { icon: "◔", color: "#f0a43d" };
+      break;
     case "in_review":
-      return { icon: "◉", color: "#9b6dff" };
+      visual = { icon: "◉", color: "#9b6dff" };
+      break;
     case "done":
-      return { icon: "◉", color: "#2fbf71" };
+      visual = { icon: "◉", color: "#2fbf71" };
+      break;
     case "canceled":
-      return { icon: "⨯", color: "#ff6767" };
+      visual = { icon: "⨯", color: "#ff6767" };
+      break;
     default:
-      return { icon: "◉", color: "#8e8e8e" };
+      visual = { icon: "◉", color: "#8e8e8e" };
+      break;
   }
+  return {
+    icon: iconOverride?.trim() ? iconOverride : visual.icon,
+    color: colorOverride?.trim() ? colorOverride : visual.color,
+  };
 }
 
 export function priorityVisual(priority: TaskPriority): { label: string; icon: string; color: string } {

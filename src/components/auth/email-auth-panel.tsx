@@ -9,6 +9,8 @@ import type { AuthMnemonic } from "../../lib/runtime";
 
 type Flow = "entry" | "create_profile" | "create_phrase" | "create_email" | "unlock" | "pin" | "reset_confirm";
 const AVATAR_STORAGE_KEY = "moduo:auth-avatar-preview-v1";
+const AVATAR_STORE_NAMESPACE = "auth_ui";
+const AVATAR_STORE_KEY = "avatar_preview_v1";
 
 function normalizePhrase(value: string) {
   return value
@@ -78,10 +80,21 @@ export function EmailAuthPanel() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (avatarDataUrl) {
+    const persistAvatar = async () => {
+      if (!avatarDataUrl) {
+        window.localStorage.removeItem(AVATAR_STORAGE_KEY);
+        if (runtime) {
+          await runtime.localStore.remove(AVATAR_STORE_NAMESPACE, AVATAR_STORE_KEY).catch(() => {});
+        }
+        return;
+      }
       window.localStorage.setItem(AVATAR_STORAGE_KEY, avatarDataUrl);
-    }
-  }, [avatarDataUrl]);
+      if (runtime) {
+        await runtime.localStore.set(AVATAR_STORE_NAMESPACE, AVATAR_STORE_KEY, avatarDataUrl).catch(() => {});
+      }
+    };
+    void persistAvatar();
+  }, [avatarDataUrl, runtime]);
 
   const canUnlock = !!runtime && normalizePhrase(unlockPhrase).length > 0 && !busy;
   const avatarInitial = useMemo(() => profileName.trim().slice(0, 1).toUpperCase(), [profileName]);

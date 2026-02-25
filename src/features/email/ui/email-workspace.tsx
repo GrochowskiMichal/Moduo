@@ -1,22 +1,27 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected";
-type MailboxProvider = "gmail" | "outlook" | "icloud";
-type FolderType = "inbox" | "sent" | "drafts" | "trash";
+type MailboxProvider = "gmail" | "outlook" | "icloud" | "custom";
+type FolderType = "inbox" | "sent" | "drafts" | "trash" | "spam";
 
 interface Email {
   id: string;
   sender: string;
   senderEmail: string;
+  to?: string;
   subject: string;
   preview: string;
   body: string;
+  bodyHtml?: string | null;
   date: string;
   read: boolean;
+  starred?: boolean;
   folder: string;
   tags?: string[];
+  accountId?: string;
+  accountEmail?: string;
 }
 
 type AccountStatus = "active" | "reauth_required" | "error";
@@ -25,41 +30,147 @@ interface SavedAccount {
   id: string;
   provider: MailboxProvider;
   email: string;
+  imapHost?: string | null;
+  smtpHost?: string | null;
+  imapPort?: number | null;
+  smtpPort?: number | null;
   lastSyncAt: string | null;
   status: AccountStatus;
   lastError: string | null;
 }
 
-const FOLDERS: Array<{ id: FolderType; label: string; icon: "inbox" | "send" | "file" | "trash-2" }> = [
-  { id: "inbox", label: "Inbox", icon: "inbox" },
-  { id: "sent", label: "Sent", icon: "send" },
-  { id: "drafts", label: "Drafts", icon: "file" },
-  { id: "trash", label: "Trash", icon: "trash-2" },
+const FOLDERS: Array<{ id: FolderType; label: string }> = [
+  { id: "inbox", label: "Inbox" },
+  { id: "sent", label: "Sent" },
+  { id: "drafts", label: "Drafts" },
+  { id: "trash", label: "Trash" },
+  { id: "spam", label: "Spam" },
 ];
 
-const PROVIDER_LABEL: Record<MailboxProvider, string> = {
-  gmail: "Google",
-  outlook: "Outlook",
-  icloud: "iCloud",
+const EMAIL_CACHE_TTL_MS = 60_000;
+const ACCOUNTS_CACHE_TTL_MS = 30_000;
+
+type EmailListCacheEntry = {
+  emails: Email[];
+  fetchedAt: number;
 };
 
+type AccountsCacheEntry = {
+  accounts: SavedAccount[];
+  fetchedAt: number;
+};
+
+const emailListCache = new Map<string, EmailListCacheEntry>();
+const ALL_ACCOUNTS_ID = "__all_accounts__";
+let accountsCache: AccountsCacheEntry | null = null;
+let lastEmailSelection: { accountId: string | null; folder: FolderType } = {
+  accountId: null,
+  folder: "inbox",
+};
+
+function emailCacheKey(accountId: string, folder: FolderType) {
+  return `${accountId}::${folder}`;
+}
+
+function buildEmailSrcDoc(rawHtml: string) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(rawHtml, "text/html");
+
+  doc.querySelectorAll("script, iframe, object, embed").forEach((node) => {
+    node.remove();
+  });
+
+  doc.querySelectorAll("*").forEach((node) => {
+    for (const attr of [...node.attributes]) {
+      if (attr.name.toLowerCase().startsWith("on")) {
+        node.removeAttribute(attr.name);
+      }
+    }
+  });
+
+  const headHtml = doc.head?.innerHTML ?? "";
+  const bodyHtml = doc.body?.innerHTML ?? rawHtml;
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http: cid:; style-src 'unsafe-inline'; font-src data: https: http:; media-src data: https: http:;" />
+  ${headHtml}
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      color: #1f1f1f;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    body {
+      padding: 16px;
+    }
+    img, video, table {
+      max-width: 100%;
+    }
+    img, video {
+      height: auto;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    * {
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>${bodyHtml}</body>
+</html>`;
+}
+
 export function EmailWorkspace() {
-  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const cachedAccounts = accountsCache?.accounts ?? [];
+  const [isBootstrapping, setIsBootstrapping] = useState(() => cachedAccounts.length === 0);
   const [connectionStatus, setConnectionStatus] =
-    useState<ConnectionStatus>("disconnected");
+    useState<ConnectionStatus>(() => (cachedAccounts.length > 0 ? "connected" : "disconnected"));
   const [provider, setProvider] = useState<MailboxProvider | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [mailError, setMailError] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<SavedAccount[]>([]);
-  const [activeAccountId, setActiveAccountId] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<SavedAccount[]>(cachedAccounts);
+  const [activeAccountId, setActiveAccountId] = useState<string | null>(() => {
+    if (lastEmailSelection.accountId === ALL_ACCOUNTS_ID) {
+      return ALL_ACCOUNTS_ID;
+    }
+    if (lastEmailSelection.accountId && cachedAccounts.some((account) => account.id === lastEmailSelection.accountId)) {
+      return lastEmailSelection.accountId;
+    }
+    return cachedAccounts[0]?.id ?? null;
+  });
+  const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
+  const [expandedAll, setExpandedAll] = useState(true);
+  const [leftPanelMenu, setLeftPanelMenu] = useState<{ x: number; y: number } | null>(null);
 
   const [creds, setCreds] = useState({ email: "", password: "" });
-  const [activeFolder, setActiveFolder] = useState<FolderType>("inbox");
+  const [customHosts, setCustomHosts] = useState({ imapHost: "", smtpHost: "", imapPort: "993", smtpPort: "587" });
+  const [activeFolder, setActiveFolder] = useState<FolderType>(lastEmailSelection.folder);
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [isComposing, setIsComposing] = useState(false);
 
-  const [emails, setEmails] = useState<Email[]>([]);
+  const [emails, setEmails] = useState<Email[]>(() => {
+    const accountId =
+      (lastEmailSelection.accountId === ALL_ACCOUNTS_ID
+        ? ALL_ACCOUNTS_ID
+        : lastEmailSelection.accountId && cachedAccounts.some((account) => account.id === lastEmailSelection.accountId)
+        ? lastEmailSelection.accountId
+        : cachedAccounts[0]?.id) ?? null;
+    if (!accountId) return [];
+    return emailListCache.get(emailCacheKey(accountId, lastEmailSelection.folder))?.emails ?? [];
+  });
   const [isLoadingEmails, setIsLoadingEmails] = useState(false);
+  const fetchRequestSeqRef = useRef(0);
 
   // Compose state
   const [composeTo, setComposeTo] = useState("");
@@ -67,12 +178,27 @@ export function EmailWorkspace() {
   const [composeBody, setComposeBody] = useState("");
   const [isSending, setIsSending] = useState(false);
   const activeAccount = accounts.find((account) => account.id === activeAccountId) ?? null;
+  const isAllAccountsView = activeAccountId === ALL_ACCOUNTS_ID;
 
   const toErrorMessage = (error: unknown): string =>
     error instanceof Error ? error.message : String(error);
 
+  const patchAccount = (
+    accountId: string,
+    patch: Partial<Pick<SavedAccount, "status" | "lastError" | "lastSyncAt">>,
+  ) => {
+    setAccounts((current) => {
+      const next = current.map((account) =>
+        account.id === accountId ? { ...account, ...patch } : account,
+      );
+      accountsCache = { accounts: next, fetchedAt: Date.now() };
+      return next;
+    });
+  };
+
   const loadAccounts = async (preferredAccountId?: string | null) => {
     const nextAccounts = (await invoke("email_accounts_list")) as SavedAccount[];
+    accountsCache = { accounts: nextAccounts, fetchedAt: Date.now() };
     setAccounts(nextAccounts);
 
     if (nextAccounts.length === 0) {
@@ -81,10 +207,17 @@ export function EmailWorkspace() {
       setEmails([]);
       setSelectedEmailId(null);
       setMailError(null);
+      emailListCache.clear();
+      lastEmailSelection = { accountId: null, folder: "inbox" };
       return;
     }
 
-    const preferredId = preferredAccountId ?? activeAccountId;
+    const preferredId = preferredAccountId ?? activeAccountId ?? lastEmailSelection.accountId;
+    if (preferredId === ALL_ACCOUNTS_ID) {
+      setActiveAccountId(ALL_ACCOUNTS_ID);
+      setConnectionStatus("connected");
+      return;
+    }
     const resolvedAccountId =
       (preferredId && nextAccounts.some((account) => account.id === preferredId)
         ? preferredId
@@ -103,6 +236,16 @@ export function EmailWorkspace() {
       setAuthError("Email and Password/App Password required.");
       return;
     }
+    if (
+      provider === "custom" &&
+      (!customHosts.imapHost.trim() ||
+        !customHosts.smtpHost.trim() ||
+        !customHosts.imapPort.trim() ||
+        !customHosts.smtpPort.trim())
+    ) {
+      setAuthError("IMAP/SMTP host and port are required for custom mailbox.");
+      return;
+    }
     setConnectionStatus("connecting");
     setAuthError(null);
 
@@ -112,9 +255,18 @@ export function EmailWorkspace() {
           provider,
           email: creds.email.trim(),
           password: creds.password,
+          ...(provider === "custom"
+            ? {
+                imapHost: customHosts.imapHost.trim(),
+                smtpHost: customHosts.smtpHost.trim(),
+                imapPort: Number(customHosts.imapPort),
+                smtpPort: Number(customHosts.smtpPort),
+              }
+            : {}),
         },
       })) as SavedAccount;
       setCreds({ email: "", password: "" });
+      setCustomHosts({ imapHost: "", smtpHost: "", imapPort: "993", smtpPort: "587" });
       setActiveFolder("inbox");
       setSelectedEmailId(null);
       setMailError(null);
@@ -126,28 +278,124 @@ export function EmailWorkspace() {
     }
   };
 
-  const fetchEmails = async (folder: FolderType, accountId = activeAccountId) => {
+  const fetchEmails = async (
+    folder: FolderType,
+    accountId = activeAccountId,
+    options?: { force?: boolean; silentRefresh?: boolean },
+  ) => {
     if (!accountId) {
       setEmails([]);
       setMailError(null);
       return;
     }
 
-    setIsLoadingEmails(true);
-    setMailError(null);
-    try {
-      const res = (await invoke("email_fetch_saved", {
-        accountId,
-        folder,
-      })) as Email[];
-      setEmails(res);
-      await loadAccounts(accountId);
-    } catch (e: any) {
-      setMailError(toErrorMessage(e));
-      setEmails([]);
-      await loadAccounts(accountId);
-    } finally {
+    const key = emailCacheKey(accountId, folder);
+    const cached = emailListCache.get(key);
+    const isStale = !cached || Date.now() - cached.fetchedAt > EMAIL_CACHE_TTL_MS;
+    const shouldFetch = options?.force || isStale;
+
+    if (cached) {
+      setEmails(cached.emails);
+      setMailError(null);
       setIsLoadingEmails(false);
+    }
+
+    if (!shouldFetch) return;
+
+    const requestSeq = ++fetchRequestSeqRef.current;
+    const showBlockingLoader = !cached && !options?.silentRefresh;
+    if (showBlockingLoader) {
+      setIsLoadingEmails(true);
+    }
+    if (!cached) {
+      setMailError(null);
+    }
+
+    try {
+      if (accountId === ALL_ACCOUNTS_ID) {
+        const merged = await Promise.allSettled(
+          accounts.map(async (account) => {
+            const accountEmails = (await invoke("email_fetch_saved", {
+              accountId: account.id,
+              folder,
+            })) as Email[];
+            patchAccount(account.id, {
+              status: "active",
+              lastError: null,
+              lastSyncAt: new Date().toISOString(),
+            });
+            return accountEmails.map((email) => ({
+              ...email,
+              id: `${account.id}::${email.id}`,
+              accountId: account.id,
+              accountEmail: account.email,
+            }));
+          }),
+        );
+
+        const next: Email[] = [];
+        let firstError: string | null = null;
+        for (const result of merged) {
+          if (result.status === "fulfilled") {
+            next.push(...result.value);
+            continue;
+          }
+          const errorMessage = toErrorMessage(result.reason);
+          if (!firstError) firstError = errorMessage;
+        }
+
+        next.sort((a, b) => {
+          const da = new Date(a.date).getTime();
+          const db = new Date(b.date).getTime();
+          if (Number.isNaN(da) || Number.isNaN(db)) return b.date.localeCompare(a.date);
+          return db - da;
+        });
+
+        if (requestSeq !== fetchRequestSeqRef.current) return;
+        emailListCache.set(key, { emails: next, fetchedAt: Date.now() });
+        setEmails(next);
+        setMailError(next.length > 0 ? null : firstError ?? null);
+      } else {
+        const res = (await invoke("email_fetch_saved", {
+          accountId,
+          folder,
+        })) as Email[];
+        const normalized = res.map((email) => ({
+          ...email,
+          id: `${accountId}::${email.id}`,
+          accountId,
+          accountEmail: accounts.find((account) => account.id === accountId)?.email,
+        }));
+        emailListCache.set(key, { emails: normalized, fetchedAt: Date.now() });
+        if (requestSeq !== fetchRequestSeqRef.current) return;
+        setEmails(normalized);
+        setMailError(null);
+        patchAccount(accountId, {
+          status: "active",
+          lastError: null,
+          lastSyncAt: new Date().toISOString(),
+        });
+      }
+    } catch (e: any) {
+      if (requestSeq !== fetchRequestSeqRef.current) return;
+      const errorMessage = toErrorMessage(e);
+      if (!cached) {
+        setMailError(errorMessage);
+        setEmails([]);
+      }
+      if (accountId !== ALL_ACCOUNTS_ID) {
+        patchAccount(accountId, {
+          status:
+            errorMessage.includes("reauth") || errorMessage.includes("missing_account_secret")
+              ? "reauth_required"
+              : "error",
+          lastError: errorMessage,
+        });
+      }
+    } finally {
+      if (requestSeq === fetchRequestSeqRef.current) {
+        setIsLoadingEmails(false);
+      }
     }
   };
 
@@ -155,7 +403,26 @@ export function EmailWorkspace() {
     let active = true;
     const bootstrap = async () => {
       try {
-        await loadAccounts();
+        if (accountsCache?.accounts.length) {
+          const cachedAccountsList = accountsCache.accounts;
+          const preferredId = lastEmailSelection.accountId;
+          const resolvedAccountId =
+            (preferredId &&
+            cachedAccountsList.some((account) => account.id === preferredId)
+              ? preferredId
+              : cachedAccountsList[0]?.id) ?? null;
+          setAccounts(cachedAccountsList);
+          setActiveAccountId(resolvedAccountId);
+          setConnectionStatus("connected");
+          setIsBootstrapping(false);
+
+          // Keep account state fresh in the background without blocking UI.
+          if (Date.now() - accountsCache.fetchedAt > ACCOUNTS_CACHE_TTL_MS) {
+            void loadAccounts(resolvedAccountId);
+          }
+          return;
+        }
+        await loadAccounts(lastEmailSelection.accountId);
       } catch (error) {
         if (!active) return;
         setConnectionStatus("disconnected");
@@ -171,7 +438,15 @@ export function EmailWorkspace() {
   }, []);
 
   useEffect(() => {
-    if (connectionStatus === "connected" && activeAccount) {
+    if (connectionStatus === "connected" && (activeAccount || activeAccountId === ALL_ACCOUNTS_ID)) {
+      if (activeAccountId === ALL_ACCOUNTS_ID) {
+        void fetchEmails(activeFolder, ALL_ACCOUNTS_ID);
+        setSelectedEmailId(null);
+        return;
+      }
+      if (!activeAccount) {
+        return;
+      }
       if (activeAccount.status === "reauth_required") {
         setMailError("Account requires reconnect. Re-enter app password.");
         setEmails([]);
@@ -182,8 +457,36 @@ export function EmailWorkspace() {
     }
   }, [activeFolder, activeAccountId, connectionStatus]);
 
+  useEffect(() => {
+    lastEmailSelection = {
+      accountId: activeAccountId,
+      folder: activeFolder,
+    };
+  }, [activeAccountId, activeFolder]);
+
+  useEffect(() => {
+    if (!leftPanelMenu) return;
+
+    const closeMenu = () => setLeftPanelMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu();
+    };
+
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [leftPanelMenu]);
+
   const handleSend = async () => {
-    if (!activeAccountId || !composeTo || !composeBody) return;
+    if (!activeAccountId || activeAccountId === ALL_ACCOUNTS_ID || !composeTo || !composeBody) {
+      if (activeAccountId === ALL_ACCOUNTS_ID) {
+        setMailError("Select a specific account to send email.");
+      }
+      return;
+    }
     setIsSending(true);
     try {
       await invoke("email_send_saved", {
@@ -198,7 +501,7 @@ export function EmailWorkspace() {
       setComposeBody("");
       await loadAccounts(activeAccountId);
       if (activeFolder === "sent") {
-        void fetchEmails("sent");
+        void fetchEmails("sent", activeAccountId, { force: true });
       }
     } catch (e: any) {
       setMailError(toErrorMessage(e));
@@ -208,12 +511,35 @@ export function EmailWorkspace() {
     }
   };
 
-  const handleDisconnectAccount = async (accountId: string) => {
-    await invoke("email_account_disconnect", { accountId });
-    await loadAccounts(activeAccountId === accountId ? null : activeAccountId);
+  const selectedEmail = emails.find((e) => e.id === selectedEmailId);
+  const formatEmailDate = (raw: string) => {
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return raw;
+
+    const day = String(parsed.getDate());
+    const month = parsed
+      .toLocaleString("en-US", { month: "short" })
+      .replace(".", "");
+    const currentYear = new Date().getFullYear();
+    if (parsed.getFullYear() === currentYear) {
+      return `${day}${month}`;
+    }
+    const year2 = String(parsed.getFullYear()).slice(-2);
+    return `${day}${month}${year2}`;
   };
 
-  const selectedEmail = emails.find((e) => e.id === selectedEmailId);
+  const formatEmailDetailDate = (raw: string) => {
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return raw;
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(parsed);
+  };
 
   if (isBootstrapping) {
     return (
@@ -231,10 +557,10 @@ export function EmailWorkspace() {
     connectionStatus === "connecting"
   ) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-[#0C0C0C] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#1a1a1a] to-[#0C0C0C]">
-        <div className="w-[480px] rounded-3xl border border-[#222] bg-[#111] p-10 shadow-2xl backdrop-blur-xl transition-all">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#2a2a2a] text-[#d0d0d0] border border-[#3a3a3a] shadow-inner">
+      <div className="flex h-full w-full flex-col items-center justify-center overflow-y-auto bg-[#0C0C0C] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#1a1a1a] to-[#0C0C0C] px-4 py-4">
+        <div className="w-full max-w-[420px] rounded-2xl border border-[#222] bg-[#111] p-6 shadow-2xl backdrop-blur-xl transition-all">
+          <div className="mb-5 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#2a2a2a] text-[#d0d0d0] border border-[#3a3a3a] shadow-inner">
               <svg
                 width="28"
                 height="28"
@@ -249,10 +575,10 @@ export function EmailWorkspace() {
                 <polyline points="22,6 12,13 2,6" />
               </svg>
             </div>
-            <h1 className="text-2xl font-black tracking-tight text-[#f3f3f3] mb-2">
+            <h1 className="text-[34px] font-black tracking-tight text-[#f3f3f3] mb-1 leading-none">
               Connect Your Mailbox
             </h1>
-            <p className="text-[14px] text-[#888] font-medium leading-relaxed">
+            <p className="text-[11px] text-[#888] font-medium leading-relaxed">
               We sync directly over IMAP/SMTP seamlessly mapping your messages.
             </p>
           </div>
@@ -265,7 +591,7 @@ export function EmailWorkspace() {
           {connectionStatus === "disconnected" && accounts.length > 0 ? (
             <button
               onClick={() => void loadAccounts(activeAccountId ?? accounts[0]?.id ?? null)}
-              className="mb-4 w-full rounded-xl border border-[#2b2b2b] bg-[#151515] px-4 py-2 text-[12px] font-bold text-[#d8d8d8] transition-colors hover:bg-[#1b1b1b]"
+              className="mb-3 w-full rounded-xl border border-[#2b2b2b] bg-[#151515] px-3 py-2 text-[11px] font-bold text-[#d8d8d8] transition-colors hover:bg-[#1b1b1b]"
             >
               Back to connected mailboxes
             </button>
@@ -279,13 +605,13 @@ export function EmailWorkspace() {
               </p>
             </div>
           ) : provider === null ? (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2.5">
               <button
                 onClick={() => handleProviderSelect("gmail")}
-                className="group relative flex w-full items-center justify-between rounded-xl border border-[#333] bg-[#161616] p-4 transition-all hover:bg-[#1a1a1a] hover:border-[#444] hover:shadow-lg"
+                className="group relative flex w-full items-center justify-between rounded-xl border border-[#333] bg-[#161616] p-3 transition-all hover:bg-[#1a1a1a] hover:border-[#444] hover:shadow-lg"
               >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                       <path
                         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -306,15 +632,15 @@ export function EmailWorkspace() {
                     </svg>
                   </div>
                   <div className="flex flex-col items-start">
-                    <span className="text-[14px] font-bold text-[#f3f3f3]">
+                    <span className="text-[13px] font-bold text-[#f3f3f3]">
                       Google Workspace
                     </span>
-                    <span className="text-[12px] font-medium text-[#777]">
+                    <span className="text-[11px] font-medium text-[#777]">
                       Connect Gmail
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center justify-center rounded-full bg-[#222] p-2 text-[#888] transition-colors group-hover:bg-[#333] group-hover:text-white">
+                <div className="flex items-center justify-center rounded-full bg-[#222] p-1.5 text-[#888] transition-colors group-hover:bg-[#333] group-hover:text-white">
                   <svg
                     width="14"
                     height="14"
@@ -329,10 +655,10 @@ export function EmailWorkspace() {
               </button>
               <button
                 onClick={() => handleProviderSelect("outlook")}
-                className="group relative flex w-full items-center justify-between rounded-xl border border-[#333] bg-[#161616] p-4 transition-all hover:bg-[#1a1a1a] hover:border-[#444] hover:shadow-lg"
+                className="group relative flex w-full items-center justify-between rounded-xl border border-[#333] bg-[#161616] p-3 transition-all hover:bg-[#1a1a1a] hover:border-[#444] hover:shadow-lg"
               >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#9a9a9a] shadow-sm text-white">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#9a9a9a] shadow-sm text-white">
                     <svg
                       width="20"
                       height="20"
@@ -343,15 +669,15 @@ export function EmailWorkspace() {
                     </svg>
                   </div>
                   <div className="flex flex-col items-start">
-                    <span className="text-[14px] font-bold text-[#f3f3f3]">
+                    <span className="text-[13px] font-bold text-[#f3f3f3]">
                       Microsoft Outlook
                     </span>
-                    <span className="text-[12px] font-medium text-[#777]">
+                    <span className="text-[11px] font-medium text-[#777]">
                       Office 365 & Outlook
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center justify-center rounded-full bg-[#222] p-2 text-[#888] transition-colors group-hover:bg-[#333] group-hover:text-white">
+                <div className="flex items-center justify-center rounded-full bg-[#222] p-1.5 text-[#888] transition-colors group-hover:bg-[#333] group-hover:text-white">
                   <svg
                     width="14"
                     height="14"
@@ -366,10 +692,10 @@ export function EmailWorkspace() {
               </button>
               <button
                 onClick={() => handleProviderSelect("icloud")}
-                className="group relative flex w-full items-center justify-between rounded-xl border border-[#333] bg-[#161616] p-4 transition-all hover:bg-[#1a1a1a] hover:border-[#444] hover:shadow-lg"
+                className="group relative flex w-full items-center justify-between rounded-xl border border-[#333] bg-[#161616] p-3 transition-all hover:bg-[#1a1a1a] hover:border-[#444] hover:shadow-lg"
               >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E5E5EA] shadow-sm text-black">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E5E5EA] shadow-sm text-black">
                     <svg
                       width="20"
                       height="20"
@@ -380,15 +706,57 @@ export function EmailWorkspace() {
                     </svg>
                   </div>
                   <div className="flex flex-col items-start">
-                    <span className="text-[14px] font-bold text-[#f3f3f3]">
+                    <span className="text-[13px] font-bold text-[#f3f3f3]">
                       Apple iCloud
                     </span>
-                    <span className="text-[12px] font-medium text-[#777]">
+                    <span className="text-[11px] font-medium text-[#777]">
                       Connect iCloud Mail
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center justify-center rounded-full bg-[#222] p-2 text-[#888] transition-colors group-hover:bg-[#333] group-hover:text-white">
+                <div className="flex items-center justify-center rounded-full bg-[#222] p-1.5 text-[#888] transition-colors group-hover:bg-[#333] group-hover:text-white">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </div>
+              </button>
+              <button
+                onClick={() => handleProviderSelect("custom")}
+                className="group relative flex w-full items-center justify-between rounded-xl border border-[#333] bg-[#161616] p-3 transition-all hover:bg-[#1a1a1a] hover:border-[#444] hover:shadow-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#2a2a2a] shadow-sm text-[#d0d0d0]">
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M4 4h16v16H4z" />
+                      <path d="M4 8h16" />
+                      <path d="M8 4v4" />
+                      <path d="M16 4v4" />
+                    </svg>
+                  </div>
+                  <div className="flex flex-col items-start">
+                    <span className="text-[13px] font-bold text-[#f3f3f3]">
+                      Other IMAP/SMTP
+                    </span>
+                    <span className="text-[11px] font-medium text-[#777]">
+                      Custom mail server
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-center rounded-full bg-[#222] p-1.5 text-[#888] transition-colors group-hover:bg-[#333] group-hover:text-white">
                   <svg
                     width="14"
                     height="14"
@@ -414,81 +782,13 @@ export function EmailWorkspace() {
                   onChange={(e) =>
                     setCreds({ ...creds, email: e.target.value })
                   }
-                  className="w-full bg-[#161616] border border-[#333] focus:border-[#555] outline-none px-4 py-3 rounded-xl text-[14px] text-[#eee]"
+                  className="w-full bg-[#161616] border border-[#333] focus:border-[#555] outline-none px-3 py-2 rounded-xl text-[13px] text-[#eee]"
                   placeholder="you@domain.com"
                 />
               </div>
               <div>
-                <label className="text-[11px] font-bold uppercase tracking-widest text-[#555] mb-2 flex items-center justify-between">
-                  <span>App Password (Not Standard Password!)</span>
-                  <div className="relative group cursor-help flex items-center">
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      className="text-[#888] hover:text-[#bbb] transition-colors"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="16" x2="12" y2="12" />
-                      <line x1="12" y1="8" x2="12.01" y2="8" />
-                    </svg>
-                    <div className="absolute bottom-full right-0 mb-3 w-[280px] bg-[#1a1a1a] border border-[#333] text-[#ccc] text-[12px] p-4 rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-2xl normal-case font-medium whitespace-pre-wrap leading-relaxed">
-                      {provider === "gmail" && (
-                        <>
-                          <span className="text-white font-bold block mb-2">
-                            Google App Password:
-                          </span>
-                          1. Go to Google Account Security
-                          <br />
-                          2. Ensure 2-Step Verification is ON
-                          <br />
-                          3. Search for "App Passwords"
-                          <br />
-                          4. Select App: "Other" (Name: Moduo)
-                          <br />
-                          5. Paste the 16-character code here
-                        </>
-                      )}
-                      {provider === "outlook" && (
-                        <>
-                          <span className="text-white font-bold block mb-2">
-                            Outlook App Password:
-                          </span>
-                          1. Go to Microsoft Account Security
-                          <br />
-                          2. Ensure 2-Step Verification is ON
-                          <br />
-                          3. Open "Advanced security options"
-                          <br />
-                          4. Click "Create a new app password"
-                          <br />
-                          5. Paste the generated code here
-                        </>
-                      )}
-                      {provider === "icloud" && (
-                        <>
-                          <span className="text-white font-bold block mb-2">
-                            iCloud App-Specific Password:
-                          </span>
-                          1. Go to appleid.apple.com
-                          <br />
-                          2. Go to "Sign-In and Security"
-                          <br />
-                          3. Select "App-Specific Passwords"
-                          <br />
-                          4. Click "Generate an app-specific password"
-                          <br />
-                          5. Paste the generated code here
-                        </>
-                      )}
-                      <div className="absolute top-full right-1 border-8 border-transparent border-t-[#333]">
-                        <div className="absolute -top-2.5 -left-2 border-[7px] border-transparent border-t-[#1a1a1a]" />
-                      </div>
-                    </div>
-                  </div>
+                <label className="text-[11px] font-bold uppercase tracking-widest text-[#555] mb-2 block">
+                  <span>{provider === "custom" ? "Mailbox Password" : "App Password (Not Standard Password!)"}</span>
                 </label>
                 <input
                   type="password"
@@ -496,20 +796,88 @@ export function EmailWorkspace() {
                   onChange={(e) =>
                     setCreds({ ...creds, password: e.target.value })
                   }
-                  className="w-full bg-[#161616] border border-[#333] focus:border-[#555] outline-none px-4 py-3 rounded-xl text-[14px] text-[#eee]"
+                  className="w-full bg-[#161616] border border-[#333] focus:border-[#555] outline-none px-3 py-2 rounded-xl text-[13px] text-[#eee]"
                   placeholder="••••••••••••"
                 />
               </div>
-              <div className="flex gap-3 mt-4">
+              {provider === "custom" ? (
+                <>
+                  <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold uppercase tracking-widest text-[#555] mb-2 block">
+                        IMAP Host
+                      </label>
+                      <input
+                        type="text"
+                        value={customHosts.imapHost}
+                        onChange={(e) =>
+                          setCustomHosts({ ...customHosts, imapHost: e.target.value })
+                        }
+                        className="w-full bg-[#161616] border border-[#333] focus:border-[#555] outline-none px-3 py-2 rounded-xl text-[13px] text-[#eee]"
+                        placeholder="imap.mail.yourdomain.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold uppercase tracking-widest text-[#555] mb-2 block">
+                        Port
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={65535}
+                        value={customHosts.imapPort}
+                        onChange={(e) =>
+                          setCustomHosts({ ...customHosts, imapPort: e.target.value })
+                        }
+                        className="w-full appearance-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-[#161616] border border-[#333] focus:border-[#555] outline-none px-3 py-2 rounded-xl text-[13px] text-[#eee]"
+                        placeholder="993"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold uppercase tracking-widest text-[#555] mb-2 block">
+                        SMTP Host
+                      </label>
+                      <input
+                        type="text"
+                        value={customHosts.smtpHost}
+                        onChange={(e) =>
+                          setCustomHosts({ ...customHosts, smtpHost: e.target.value })
+                        }
+                        className="w-full bg-[#161616] border border-[#333] focus:border-[#555] outline-none px-3 py-2 rounded-xl text-[13px] text-[#eee]"
+                        placeholder="smtp.mail.yourdomain.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold uppercase tracking-widest text-[#555] mb-2 block">
+                        Port
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={65535}
+                        value={customHosts.smtpPort}
+                        onChange={(e) =>
+                          setCustomHosts({ ...customHosts, smtpPort: e.target.value })
+                        }
+                        className="w-full appearance-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-[#161616] border border-[#333] focus:border-[#555] outline-none px-3 py-2 rounded-xl text-[13px] text-[#eee]"
+                        placeholder="587"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : null}
+              <div className="mt-3 flex gap-2.5">
                 <button
                   onClick={() => setProvider(null)}
-                  className="flex-1 py-3 text-[#f3f3f3] text-[13px] font-bold hover:bg-[#222] rounded-xl transition-colors shrink-0 max-w-24"
+                  className="h-9 flex-1 rounded-xl text-[12px] font-bold text-[#f3f3f3] transition-colors hover:bg-[#222] shrink-0 max-w-20"
                 >
                   Back
                 </button>
                 <button
                   onClick={handleConnect}
-                  className="flex-1 py-3 bg-[#2f2f2f] hover:bg-[#3a3a3a] text-white rounded-xl font-bold text-[13px] flex justify-center shadow-lg transition-colors"
+                  className="flex h-9 flex-1 items-center justify-center rounded-xl bg-[#2f2f2f] text-[12px] font-bold leading-none text-white shadow-lg transition-colors hover:bg-[#3a3a3a]"
                 >
                   Connect
                 </button>
@@ -517,8 +885,8 @@ export function EmailWorkspace() {
             </div>
           )}
 
-          <div className="mt-8 text-center border-t border-[#222] pt-6">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-[#555] flex items-center justify-center gap-2">
+          <div className="mt-5 text-center border-t border-[#222] pt-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#555] flex items-center justify-center gap-2">
               <svg
                 width="12"
                 height="12"
@@ -540,46 +908,6 @@ export function EmailWorkspace() {
     );
   }
 
-  const renderFolderIcon = (icon: (typeof FOLDERS)[number]["icon"]) => (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {icon === "inbox" && (
-        <>
-          <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
-          <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
-        </>
-      )}
-      {icon === "send" && (
-        <>
-          <line x1="22" y1="2" x2="11" y2="13" />
-          <polygon points="22 2 15 22 11 13 2 9 22 2" />
-        </>
-      )}
-      {icon === "file" && (
-        <>
-          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
-          <polyline points="13 2 13 9 20 9" />
-        </>
-      )}
-      {icon === "trash-2" && (
-        <>
-          <polyline points="3 6 5 6 21 6" />
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-          <line x1="10" y1="11" x2="10" y2="17" />
-          <line x1="14" y1="11" x2="14" y2="17" />
-        </>
-      )}
-    </svg>
-  );
-
   const selectAccountFolder = (accountId: string, folder: FolderType) => {
     setActiveAccountId(accountId);
     setActiveFolder(folder);
@@ -593,6 +921,7 @@ export function EmailWorkspace() {
     setAuthError(null);
     setMailError(null);
     setCreds({ email: "", password: "" });
+    setCustomHosts({ imapHost: "", smtpHost: "", imapPort: "993", smtpPort: "587" });
   };
 
   // Connected Mail Client View
@@ -600,59 +929,90 @@ export function EmailWorkspace() {
     <FeaturePanelsShell
       feature="email"
       left={
-        <div className="flex h-full min-h-0 flex-col">
-          <button
-            onClick={() => setIsComposing(true)}
-            className="flex items-center justify-center gap-2 rounded-xl bg-[#2f2f2f] py-2.5 text-[13px] font-bold text-white shadow transition-colors hover:bg-[#3a3a3a]"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-            </svg>
-            Compose
-          </button>
-
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
-            <p className="mb-2 px-2 text-[10px] font-black uppercase tracking-widest text-[#555]">
-              Accounts & folders
-            </p>
-            <div className="grid gap-2">
-              {accounts.map((account) => (
-                <div key={account.id} className="rounded-xl border border-[#252525] bg-[#121212] p-2">
+        <div
+          className="relative flex h-full min-h-0 flex-col"
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setLeftPanelMenu({ x: event.clientX, y: event.clientY });
+          }}
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="grid gap-1">
+              <div className="rounded-xl px-1 py-1">
+                <div className="flex items-center gap-1">
                   <button
-                    onClick={() => setActiveAccountId(account.id)}
-                    className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${activeAccountId === account.id ? "bg-[#1f1f1f] text-[#ececec]" : "text-[#b0b0b0] hover:bg-[#171717]"}`}
+                    onClick={() => setActiveAccountId(ALL_ACCOUNTS_ID)}
+                    className={`min-w-0 flex-1 truncate px-1 py-1.5 text-left text-[11px] font-medium transition-colors ${activeAccountId === ALL_ACCOUNTS_ID ? "text-[#ececec]" : "text-[#b0b0b0] hover:text-[#d0d0d0]"}`}
                   >
-                    <span className="truncate text-[12px] font-bold">{account.email}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-[#6f6f6f]">
-                      {PROVIDER_LABEL[account.provider]}
-                    </span>
+                    All
                   </button>
-
-                  <div className="mt-1 flex items-center justify-between px-2 text-[10px] font-bold uppercase tracking-widest">
-                    <span
-                      className={
-                        account.status === "active"
-                          ? "text-[#b0b0b0]"
-                          : account.status === "reauth_required"
-                            ? "text-amber-400/90"
-                            : "text-rose-400/90"
-                      }
+                  <button
+                    onClick={() => setExpandedAll((prev) => !prev)}
+                    aria-label="Toggle all categories"
+                    title="Toggle all categories"
+                    className="grid h-7 w-7 place-items-center rounded-md text-[#8a8a8a] transition-colors hover:text-[#c8c8c8]"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      className={`transition-transform ${expandedAll ? "rotate-90" : ""}`}
                     >
-                      {account.status.replace("_", " ")}
-                    </span>
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                </div>
+                {expandedAll ? (
+                  <div className="mt-1 grid gap-0.5">
+                    {FOLDERS.map((folder) => {
+                      const isActive = activeAccountId === ALL_ACCOUNTS_ID && activeFolder === folder.id;
+                      return (
+                        <button
+                          key={`all:${folder.id}`}
+                          onClick={() => selectAccountFolder(ALL_ACCOUNTS_ID, folder.id)}
+                          className={`flex items-center rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${isActive ? "text-[#ececec]" : "text-[#888] hover:text-[#d6d6d6]"}`}
+                        >
+                          <span>{folder.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+              {accounts.map((account) => (
+                <div key={account.id} className="rounded-xl px-1 py-1">
+                  <div className="flex items-center gap-1">
                     <button
-                      onClick={() => void handleDisconnectAccount(account.id)}
-                      className="text-[#7f7f7f] transition-colors hover:text-[#f4b4b4]"
+                      onClick={() => setActiveAccountId(account.id)}
+                      className={`min-w-0 flex-1 truncate px-1 py-1.5 text-left text-[11px] font-medium transition-colors ${activeAccountId === account.id ? "text-[#ececec]" : "text-[#b0b0b0] hover:text-[#d0d0d0]"}`}
                     >
-                      Disconnect
+                      {account.email}
+                    </button>
+                    <button
+                      onClick={() =>
+                        setExpandedAccounts((prev) => ({
+                          ...prev,
+                          [account.id]: !(prev[account.id] ?? (activeAccountId === account.id)),
+                        }))
+                      }
+                      aria-label="Toggle categories"
+                      title="Toggle categories"
+                      className="grid h-7 w-7 place-items-center rounded-md text-[#8a8a8a] transition-colors hover:text-[#c8c8c8]"
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        className={`transition-transform ${(expandedAccounts[account.id] ?? (activeAccountId === account.id)) ? "rotate-90" : ""}`}
+                      >
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
                     </button>
                   </div>
                   {account.status === "reauth_required" ? (
@@ -660,6 +1020,12 @@ export function EmailWorkspace() {
                       onClick={() => {
                         setProvider(account.provider);
                         setCreds({ email: account.email, password: "" });
+                        setCustomHosts({
+                          imapHost: account.imapHost ?? "",
+                          smtpHost: account.smtpHost ?? "",
+                          imapPort: account.imapPort ? String(account.imapPort) : "993",
+                          smtpPort: account.smtpPort ? String(account.smtpPort) : "587",
+                        });
                         setConnectionStatus("disconnected");
                         setAuthError("Re-enter your app password to reconnect this account.");
                       }}
@@ -674,93 +1040,121 @@ export function EmailWorkspace() {
                     </p>
                   ) : null}
 
-                  <div className="mt-2 grid gap-1">
-                    {FOLDERS.map((folder) => {
-                      const isActive =
-                        activeAccountId === account.id && activeFolder === folder.id;
-                      return (
-                        <button
-                          key={`${account.id}:${folder.id}`}
-                          onClick={() => selectAccountFolder(account.id, folder.id)}
-                          disabled={account.status === "reauth_required"}
-                          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[12px] font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${isActive ? "bg-[#222] text-[#d0d0d0]" : "text-[#888] hover:bg-[#181818] hover:text-[#d6d6d6]"}`}
-                        >
-                          {renderFolderIcon(folder.icon)}
-                          <span>{folder.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {(expandedAccounts[account.id] ?? (activeAccountId === account.id)) ? (
+                    <div className="mt-1 grid gap-0.5">
+                      {FOLDERS.map((folder) => {
+                        const isActive =
+                          activeAccountId === account.id && activeFolder === folder.id;
+                        return (
+                          <button
+                            key={`${account.id}:${folder.id}`}
+                            onClick={() => selectAccountFolder(account.id, folder.id)}
+                            disabled={account.status === "reauth_required"}
+                            className={`flex items-center rounded-lg px-2 py-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isActive ? "text-[#ececec]" : "text-[#888] hover:text-[#d6d6d6]"}`}
+                          >
+                            <span>{folder.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
           </div>
-
-          <button
-            onClick={beginAddAccount}
-            className="mt-4 rounded-xl border border-dashed border-[#333] px-3 py-2 text-[12px] font-bold text-[#bbbbbb] transition-colors hover:border-[#4a4a4a] hover:bg-[#151515]"
-          >
-            + Add new account
-          </button>
+          {leftPanelMenu ? (
+            <div
+              className="fixed z-[60] min-w-[148px] rounded-lg border border-[#2b2b2b] bg-[#141414] p-1 shadow-xl"
+              style={{ left: leftPanelMenu.x, top: leftPanelMenu.y }}
+            >
+              <button
+                onClick={() => {
+                  setIsComposing(true);
+                  setLeftPanelMenu(null);
+                }}
+                className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[11px] font-medium text-[#d8d8d8] transition-colors hover:bg-[#1f1f1f]"
+              >
+                Compose
+              </button>
+              <button
+                onClick={() => {
+                  beginAddAccount();
+                  setLeftPanelMenu(null);
+                }}
+                className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[11px] font-medium text-[#d8d8d8] transition-colors hover:bg-[#1f1f1f]"
+              >
+                Add account
+              </button>
+            </div>
+          ) : null}
         </div>
       }
       center={
         <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
           {selectedEmail ? (
             <>
-              <div className="h-12 shrink-0 border-b border-[#222] px-3 flex items-center justify-between">
-                <button
-                  onClick={() => setSelectedEmailId(null)}
-                  className="text-[11px] font-bold text-[#777] transition-colors hover:text-[#bbb]"
-                >
-                  Back to list
-                </button>
-                <div className="text-[11px] font-bold text-[#666]">{selectedEmail.date}</div>
+              <div className="shrink-0 border-b border-[#222] px-3 py-2">
+                <div className="flex items-start gap-2">
+                  <button
+                    onClick={() => setSelectedEmailId(null)}
+                    aria-label="Back to list"
+                    title="Back to list"
+                    className="self-center shrink-0 text-[#777] transition-colors hover:text-[#bbb]"
+                  >
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <h1 className="min-w-0 truncate text-[14px] font-semibold text-[#e8e8e8]">
+                        {selectedEmail.subject}
+                      </h1>
+                      <div className="shrink-0 pl-2 text-[11px] font-medium text-[#666]">
+                        {formatEmailDetailDate(selectedEmail.date)}
+                      </div>
+                    </div>
+                    <p className="truncate text-[12px] text-[#bdbdbd]">
+                      <span className="text-[#8f8f8f]">From:</span>{" "}
+                      {selectedEmail.senderEmail
+                        ? `${selectedEmail.sender} <${selectedEmail.senderEmail}>`
+                        : selectedEmail.sender}
+                    </p>
+                    <p className="truncate text-[12px] text-[#7c7c7c]">
+                      <span className="text-[#8f8f8f]">To:</span>{" "}
+                      {selectedEmail.to?.trim() || selectedEmail.accountEmail || activeAccount?.email || "—"}
+                    </p>
+                  </div>
+                </div>
               </div>
               <div className="custom-scrollbar flex-1 overflow-y-auto p-4">
-                <h1 className="mb-4 text-[18px] font-black tracking-tight text-[#f3f3f3]">
-                  {selectedEmail.subject}
-                </h1>
-                <div className="mb-4 text-[12px] text-[#888]">
-                  <div className="font-bold text-[#ddd]">{selectedEmail.sender}</div>
-                  <div>{selectedEmail.senderEmail}</div>
-                </div>
-                <div className="whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-[#ccc]">
-                  {selectedEmail.body}
-                </div>
+                {selectedEmail.bodyHtml && selectedEmail.bodyHtml.trim().length > 0 ? (
+                  <div className="overflow-hidden rounded-xl border border-[#2a2a2a] bg-white">
+                    <iframe
+                      title={`Email content: ${selectedEmail.subject}`}
+                      sandbox=""
+                      srcDoc={buildEmailSrcDoc(selectedEmail.bodyHtml)}
+                      className="h-[68vh] w-full bg-white"
+                    />
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-[#ccc]">
+                    {selectedEmail.body}
+                  </div>
+                )}
               </div>
             </>
           ) : (
             <>
-              <div className="flex h-16 items-center justify-between border-b border-[#222] px-1">
-                <div className="min-w-0">
-                  <h2 className="truncate text-[15px] font-black tracking-tight text-[#f3f3f3] capitalize">
-                    {activeFolder}
-                  </h2>
-                  <p className="truncate text-[11px] font-medium text-[#666]">
-                    {activeAccount?.email ?? "No account selected"}
-                  </p>
-                </div>
-                <button
-                  onClick={() => void fetchEmails(activeFolder)}
-                  disabled={!activeAccount}
-                  className="text-[#666] transition-colors hover:text-[#aaa] disabled:opacity-40"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                </button>
-              </div>
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
-                {!activeAccount ? (
+                {!activeAccount && !isAllAccountsView ? (
                   <div className="p-8 text-center text-[13px] font-medium text-[#666]">
                     Select or add an account.
                   </div>
@@ -771,7 +1165,7 @@ export function EmailWorkspace() {
                     </p>
                     <p className="mt-2 text-[12px] text-red-200/90">{mailError}</p>
                     <button
-                      onClick={() => void fetchEmails(activeFolder)}
+                      onClick={() => void fetchEmails(activeFolder, activeAccountId, { force: true })}
                       className="mt-3 rounded-lg border border-red-400/30 bg-[#291515] px-3 py-1.5 text-[12px] font-bold text-red-200 transition-colors hover:bg-[#321818]"
                     >
                       Retry
@@ -790,30 +1184,61 @@ export function EmailWorkspace() {
                   emails.map((email) => (
                     <button
                       key={email.id}
-                      onClick={() => setSelectedEmailId(email.id)}
-                      className={`group relative w-full border-b border-[#1a1a1a] p-4 text-left transition-all hover:bg-[#111] ${selectedEmailId === email.id ? "border-l-2 border-l-[#6a6a6a] bg-[#161616]" : "border-l-2 border-l-transparent"}`}
+                      onClick={() => {
+                        setSelectedEmailId(email.id);
+                        if (!email.read) {
+                          setEmails((current) =>
+                            current.map((item) =>
+                              item.id === email.id ? { ...item, read: true } : item,
+                            ),
+                          );
+                        }
+                      }}
+                      className={`group relative w-full p-[10px] text-left transition-all hover:bg-[#111] ${selectedEmailId === email.id ? "border-l-2 border-l-[#6a6a6a] bg-[#161616]" : "border-l-2 border-l-transparent"}`}
                     >
-                      {!email.read && (
-                        <div className="absolute left-2 top-4 h-2 w-2 rounded-full bg-[#8a8a8a]" />
-                      )}
-                      <div className="mb-1 flex items-baseline justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1 truncate">
+                          {email.starred ? (
+                            <span
+                              className="mail-flag-wave mr-2 inline-flex align-middle text-[#7a7a7a]"
+                              aria-label="Flagged message"
+                              title="Flagged"
+                            >
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M5 22V3" />
+                                <path className="mail-flag-wave__cloth" d="M5 3h12l-1.8 4L17 11H5z" />
+                              </svg>
+                            </span>
+                          ) : null}
+                          <span
+                            className={`text-[14px] font-normal ${email.read ? "text-[#777777]" : "text-[#B2B2B2]"}`}
+                            style={{ fontFamily: "Inter, Inter_400Regular, system-ui, sans-serif" }}
+                          >
+                            {email.sender}
+                          </span>
+                          <span
+                            className="ml-3 text-[14px] font-normal text-[#626262]"
+                            style={{ fontFamily: "Inter, Inter_400Regular, system-ui, sans-serif" }}
+                          >
+                            {email.subject}
+                          </span>
+                        </div>
                         <span
-                          className={`truncate pr-2 text-[13px] ${!email.read ? "font-black text-[#fff]" : "font-bold text-[#bbb]"}`}
+                          className="shrink-0 whitespace-nowrap text-[14px] font-normal text-[#626262]"
+                          style={{ fontFamily: "Inter, Inter_400Regular, system-ui, sans-serif" }}
                         >
-                          {email.sender}
-                        </span>
-                        <span className="whitespace-nowrap text-[11px] font-medium text-[#666]">
-                          {email.date}
+                          {formatEmailDate(email.date)}
                         </span>
                       </div>
-                      <h4
-                        className={`mb-1 truncate text-[13px] ${!email.read ? "font-bold text-[#eee]" : "font-medium text-[#999]"}`}
-                      >
-                        {email.subject}
-                      </h4>
-                      <p className="line-clamp-2 text-[12px] leading-relaxed text-[#666]">
-                        {email.preview}
-                      </p>
                     </button>
                   ))
                 )}

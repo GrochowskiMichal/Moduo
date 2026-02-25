@@ -1,4 +1,35 @@
-export type WidgetType = "notes" | "tasks" | "clock" | "weather" | "stock" | "crypto" | "pomodoro" | "hydration" | "countdown";
+export type WidgetType = "notes" | "tasks" | "clock" | "weather" | "stock" | "crypto" | "pomodoro" | "hydration" | "countdown" | "todolist" | "job-tracker";
+
+export type TodoListItem = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
+export type JobSalaryUnit = "hour" | "day" | "week" | "month" | "year";
+
+export type JobApplicationStage =
+  | "applied"
+  | "rejected"
+  | "replied"
+  | "preinterview"
+  | "interview"
+  | "technical"
+  | "behavioral"
+  | "staff"
+  | "decision"
+  | "hired";
+
+export type JobApplicationEntry = {
+  id: string;
+  applicationDate: string;
+  offerLink: string;
+  positionName: string;
+  companyName: string;
+  salaryAmount: string;
+  salaryUnit: JobSalaryUnit;
+  stage: JobApplicationStage;
+};
 
 export type StockEntry = {
   symbol: string;
@@ -28,6 +59,9 @@ export type WidgetConfig = {
   countdownTitle?: string;
   countdownTargetIso?: string;
   countdownActive?: boolean;
+  todoListTitle?: string;
+  todoListItems?: TodoListItem[];
+  jobApplications?: JobApplicationEntry[];
 };
 
 export type WidgetInstance = {

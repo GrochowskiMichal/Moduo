@@ -155,9 +155,15 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
 
   const createNote = useCallback(async (parentId: string | null = null, kind: NoteKind = "note") => {
     if (!runtime || !userId || !workspaceId || !canEdit) return null;
+    const effectiveParentId = kind === "category" ? null : parentId;
 
     const siblings = notes
-      .filter((note) => note.parentId === parentId && !note.deletedAt)
+      .filter(
+        (note) =>
+          note.parentId === effectiveParentId &&
+          !note.deletedAt &&
+          (kind === "category" ? note.kind === "category" : note.kind !== "category")
+      )
       .sort((a, b) => a.position.localeCompare(b.position));
 
     const position = siblings.length
@@ -170,7 +176,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
       id: safeId(),
       workspaceId,
       ownerId: userId,
-      parentId,
+      parentId: effectiveParentId,
       title: defaultTitle,
       icon: null,
       kind,
@@ -212,9 +218,20 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
 
   const computePositionForMove = useCallback(
-    (noteId: string, targetParentId: string | null, beforeId: string | null) => {
+    (
+      noteId: string,
+      targetParentId: string | null,
+      beforeId: string | null,
+      movingKind: NoteKind
+    ) => {
       const siblings = notes
-        .filter((note) => note.parentId === targetParentId && note.id !== noteId && !note.deletedAt)
+        .filter(
+          (note) =>
+            note.parentId === targetParentId &&
+            note.id !== noteId &&
+            !note.deletedAt &&
+            (movingKind === "category" ? note.kind === "category" : note.kind !== "category")
+        )
         .sort((a, b) => a.position.localeCompare(b.position));
 
       if (!beforeId) {
@@ -237,10 +254,31 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
     if (!runtime || !workspaceId || !canEdit) return;
     const current = notes.find((note) => note.id === noteId);
     if (!current) return;
-    const position = computePositionForMove(noteId, newParentId, beforeId);
+    const effectiveParentId = current.kind === "category" ? null : newParentId;
+    if (effectiveParentId === noteId) return;
+
+    const notesById = new Map(
+      notes
+        .filter((note) => !note.deletedAt)
+        .map((note) => [note.id, note] as const)
+    );
+    if (effectiveParentId) {
+      const targetParent = notesById.get(effectiveParentId);
+      if (!targetParent) return;
+
+      const visited = new Set<string>();
+      let cursor: string | null = effectiveParentId;
+      while (cursor && !visited.has(cursor)) {
+        if (cursor === noteId) return;
+        visited.add(cursor);
+        cursor = notesById.get(cursor)?.parentId ?? null;
+      }
+    }
+
+    const position = computePositionForMove(noteId, effectiveParentId, beforeId, current.kind);
     const optimistic: NoteMeta = {
       ...current,
-      parentId: newParentId,
+      parentId: effectiveParentId,
       position,
       updatedAt: nowIso(),
     };
@@ -251,7 +289,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
       const saved = normalizeNote(await runtime.notes.move({
         workspaceId,
         noteId,
-        newParentId,
+        newParentId: effectiveParentId,
         newPosition: position,
       }));
       upsertNoteInState(saved);

@@ -1,7 +1,15 @@
 import { useDraggable } from "@dnd-kit/core";
+import { Lock, LockOpen } from "lucide-react";
 import type { WidgetType } from "../types";
 
-function WidgetSource({ type, label, description, disabled }: { type: WidgetType; label: string; description: string; disabled: boolean }) {
+type WidgetSourceType =
+  | WidgetType
+  | "feed"
+  | "world-clock"
+  | "server-api-status"
+  | "signal";
+
+function WidgetSource({ type, label, description, disabled }: { type: WidgetSourceType; label: string; description: string; disabled: boolean }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: `dashboard-source-${type}`,
     data: { isSource: true, type, label },
@@ -28,14 +36,16 @@ function WidgetSource({ type, label, description, disabled }: { type: WidgetType
 
 export function WidgetsPanel({ isLocked, onToggleLock }: { isLocked: boolean; onToggleLock: () => void }) {
   return (
-    <div className="h-full">
+    <div className="h-full overflow-y-auto pr-1">
       <div className="mb-4 flex items-center justify-between">
         <p className="text-[12px] uppercase tracking-[0.08em] text-[#7f7f7f]">Widgets</p>
         <button
           onClick={onToggleLock}
-          className={`rounded-md px-2 py-1 text-[11px] ${isLocked ? "bg-[#191919] text-[#a2a2a2]" : "bg-[#f2f2f2] text-[#101010]"}`}
+          aria-label={isLocked ? "Unlock widgets" : "Lock widgets"}
+          title={isLocked ? "Unlock widgets" : "Lock widgets"}
+          className={`grid h-7 w-7 place-items-center rounded-md ${isLocked ? "text-[#a2a2a2]" : "text-[#f2f2f2]"}`}
         >
-          {isLocked ? "Locked" : "Unlocked"}
+          {isLocked ? <Lock size={13} /> : <LockOpen size={13} />}
         </button>
       </div>
 
@@ -48,10 +58,12 @@ export function WidgetsPanel({ isLocked, onToggleLock }: { isLocked: boolean; on
       <WidgetSource type="pomodoro" label="Pomodoro Tracker" description="Focus and break session timer" disabled={isLocked} />
       <WidgetSource type="hydration" label="Hydration Tracker" description="Track daily water intake" disabled={isLocked} />
       <WidgetSource type="countdown" label="Countdown" description="Live countdown to a target date & time" disabled={isLocked} />
-
-      <p className="mt-4 text-[11px] text-[#707070]">
-        {isLocked ? "Unlock to drag, resize, or add widgets." : "Drag widgets onto the board to customize your layout."}
-      </p>
+      <WidgetSource type="todolist" label="To-do List" description="Checklist with title and actionable items" disabled={isLocked} />
+      <WidgetSource type="job-tracker" label="Job Application Tracker" description="Track applications, stages, salary, and offer links" disabled={isLocked} />
+      <WidgetSource type="feed" label="Feed" description="Activity stream from your workspace" disabled />
+      <WidgetSource type="world-clock" label="World Clock" description="Multi-city world clock view" disabled />
+      <WidgetSource type="server-api-status" label="Live Status (Servers & APIs)" description="Monitor uptime and incidents for selected services" disabled />
+      <WidgetSource type="signal" label="Signal" description="Track changes of selected internet events and sources" disabled />
     </div>
   );
 }

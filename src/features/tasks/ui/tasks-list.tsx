@@ -54,7 +54,7 @@ function ListRow({
   onSelect,
 }: RowProps) {
   const sortable = useSortable({ id: `task:${task.id}` });
-  const status = statusVisual(state?.kind ?? "custom");
+  const status = statusVisual(state?.kind ?? "custom", state?.color ?? null, state?.icon ?? null);
   const priority = priorityVisual(task.priority);
   const assigneeInitial = task.assigneeId ? task.assigneeId.trim().charAt(0).toUpperCase() : "—";
   const isCurrentUserAssignee =

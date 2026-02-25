@@ -162,6 +162,13 @@ body,
   color: #9a9a9a;
 }
 
+/* Lexical indent can create a parent placeholder list item (no own text) that wraps
+   a nested list. Hide only that placeholder marker; keep real parent markers. */
+.notes-list-item:has(> .notes-list-ul):not(:has(> .notes-p > span[data-lexical-text]:not(:empty))),
+.notes-list-item:has(> .notes-list-ol):not(:has(> .notes-p > span[data-lexical-text]:not(:empty))) {
+  list-style: none;
+}
+
 .notes-list-ul .notes-list-ul {
   list-style-type: circle;
 }
@@ -387,4 +394,29 @@ body,
 
 .react-flow__node {
   animation: mindmapNodeAppear 200ms ease-out;
+}
+
+@keyframes mailFlagWave {
+  0% { transform: scaleX(1) skewY(0deg); }
+  25% { transform: scaleX(1.06) skewY(-3deg); }
+  50% { transform: scaleX(0.96) skewY(2deg); }
+  75% { transform: scaleX(1.05) skewY(-2deg); }
+  100% { transform: scaleX(1) skewY(0deg); }
+}
+
+.mail-flag-wave {
+  display: inline-flex;
+}
+
+.mail-flag-wave__cloth {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: mailFlagWave 1.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mail-flag-wave__cloth {
+    animation: none;
+  }
 }

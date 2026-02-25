@@ -83,20 +83,6 @@ function toDateTimeLocalValue(iso?: string): string {
   return `${y}-${m}-${d}T${hh}:${mm}:${ss}`;
 }
 
-function formatTarget(iso?: string): string {
-  if (!iso) return "No target date selected";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "Invalid target date";
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(date);
-}
-
 function parseLocalDateTime(value: string): Date | null {
   const raw = value.trim();
   if (!raw) return null;
@@ -160,6 +146,13 @@ export function CountdownWidget({ config, isLocked, onUpdateConfig }: Props) {
     () => (target ? computeCountdown(now, target) : { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0, totalSeconds: 0, isComplete: false }),
     [now, target]
   );
+  const footerMessage = target
+    ? !isActive
+      ? "Press Start to begin countdown."
+      : countdown.isComplete
+      ? "Countdown complete."
+      : null
+    : "Set a date and time to start the countdown.";
   const units = useMemo(() => {
     const ordered = [
       { label: "Years", value: countdown.years },
@@ -230,7 +223,7 @@ export function CountdownWidget({ config, isLocked, onUpdateConfig }: Props) {
         </div>
       ) : (
         <div className="flex h-full min-h-0 flex-col px-3 py-3">
-          <p className="truncate text-[11px] text-[#8f8f8f]">Target: {formatTarget(config.countdownTargetIso)}</p>
+          <p className="truncate text-[11px] text-[#8f8f8f]">{displayTitle}</p>
           <div
             className="mt-3 grid gap-2"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))" }}
@@ -239,15 +232,7 @@ export function CountdownWidget({ config, isLocked, onUpdateConfig }: Props) {
               <Unit key={unit.label} label={unit.label} value={unit.value} />
             ))}
           </div>
-          <p className="mt-3 text-[11px] text-[#777777]">
-            {target
-              ? !isActive
-                ? "Press Start to begin countdown."
-                : countdown.isComplete
-                ? "Countdown complete."
-                : `${countdown.totalSeconds.toLocaleString()} total seconds remaining`
-              : "Set a date and time to start the countdown."}
-          </p>
+          {footerMessage ? <p className="mt-3 text-[11px] text-[#777777]">{footerMessage}</p> : null}
         </div>
       )}
     </WidgetShell>

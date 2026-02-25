@@ -18,11 +18,14 @@ pub struct EmailMessage {
     pub id: String,
     pub sender: String,
     pub sender_email: String,
+    pub to: String,
     pub subject: String,
     pub preview: String,
     pub body: String,
+    pub body_html: Option<String>,
     pub date: String,
     pub read: bool,
+    pub starred: bool,
     pub folder: String,
 }
 
@@ -31,6 +34,10 @@ pub struct EmailConfig {
     pub provider: String,
     pub email: String,
     pub password: String,
+    pub imap_host: Option<String>,
+    pub smtp_host: Option<String>,
+    pub imap_port: Option<u16>,
+    pub smtp_port: Option<u16>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -39,6 +46,10 @@ pub struct EmailAccountConnectInput {
     pub provider: String,
     pub email: String,
     pub password: String,
+    pub imap_host: Option<String>,
+    pub smtp_host: Option<String>,
+    pub imap_port: Option<u16>,
+    pub smtp_port: Option<u16>,
 }
 
 #[derive(Serialize, Clone)]
@@ -47,6 +58,10 @@ pub struct EmailAccountPublic {
     pub id: String,
     pub provider: String,
     pub email: String,
+    pub imap_host: Option<String>,
+    pub smtp_host: Option<String>,
+    pub imap_port: Option<u16>,
+    pub smtp_port: Option<u16>,
     pub last_sync_at: Option<String>,
     pub status: String,
     pub last_error: Option<String>,
@@ -58,6 +73,14 @@ struct StoredEmailAccount {
     id: String,
     provider: String,
     email: String,
+    #[serde(default)]
+    imap_host: Option<String>,
+    #[serde(default)]
+    smtp_host: Option<String>,
+    #[serde(default)]
+    imap_port: Option<u16>,
+    #[serde(default)]
+    smtp_port: Option<u16>,
     last_sync_at: Option<String>,
     status: String,
     last_error: Option<String>,
@@ -69,6 +92,10 @@ impl StoredEmailAccount {
             id: self.id.clone(),
             provider: self.provider.clone(),
             email: self.email.clone(),
+            imap_host: self.imap_host.clone(),
+            smtp_host: self.smtp_host.clone(),
+            imap_port: self.imap_port,
+            smtp_port: self.smtp_port,
             last_sync_at: self.last_sync_at.clone(),
             status: self.status.clone(),
             last_error: self.last_error.clone(),
@@ -78,6 +105,9 @@ impl StoredEmailAccount {
 
 impl EmailConfig {
     fn imap_host(&self) -> &str {
+        if let Some(custom) = self.imap_host.as_deref() {
+            return custom;
+        }
         match self.provider.as_str() {
             "gmail" => "imap.gmail.com",
             "outlook" => "outlook.office365.com",
@@ -87,12 +117,23 @@ impl EmailConfig {
     }
 
     fn smtp_host(&self) -> &str {
+        if let Some(custom) = self.smtp_host.as_deref() {
+            return custom;
+        }
         match self.provider.as_str() {
             "gmail" => "smtp.gmail.com",
             "outlook" => "smtp.office365.com",
             "icloud" => "smtp.mail.me.com",
             _ => "smtp.gmail.com",
         }
+    }
+
+    fn imap_port(&self) -> u16 {
+        self.imap_port.unwrap_or(993)
+    }
+
+    fn smtp_port(&self) -> u16 {
+        self.smtp_port.unwrap_or(587)
     }
 }
 
@@ -103,7 +144,7 @@ fn now_iso() -> String {
 fn normalize_provider(provider: &str) -> Result<String, String> {
     let normalized = provider.trim().to_lowercase();
     match normalized.as_str() {
-        "gmail" | "outlook" | "icloud" => Ok(normalized),
+        "gmail" | "outlook" | "icloud" | "custom" => Ok(normalized),
         _ => Err(format!("unsupported_provider:{}", provider)),
     }
 }
@@ -116,7 +157,20 @@ fn normalize_email(email: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
-fn account_id(provider: &str, email: &str) -> String {
+fn normalize_optional_host(raw: &Option<String>) -> Option<String> {
+    raw.as_ref()
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty())
+}
+
+fn normalize_optional_port(raw: Option<u16>) -> Option<u16> {
+    raw.filter(|port| *port > 0)
+}
+
+fn account_id(provider: &str, email: &str, imap_host: Option<&str>) -> String {
+    if provider == "custom" {
+        return format!("{}:{}:{}", provider, email, imap_host.unwrap_or("imap"));
+    }
     format!("{}:{}", provider, email)
 }
 
@@ -202,6 +256,18 @@ fn mailbox_candidates(provider: &str, folder: &str) -> Vec<String> {
             ],
             "outlook" => vec!["Sent Items".to_string(), "Sent".to_string()],
             "icloud" => vec!["Sent Messages".to_string(), "Sent".to_string()],
+            "custom" => vec![
+                "Sent".to_string(),
+                "Sent Items".to_string(),
+                "Sent Messages".to_string(),
+                "INBOX.Sent".to_string(),
+                "INBOX/Sent".to_string(),
+                "INBOX.Sent Items".to_string(),
+                "INBOX/Sent Items".to_string(),
+                "INBOX.Sent Messages".to_string(),
+                "INBOX/Sent Messages".to_string(),
+                "sent".to_string(),
+            ],
             _ => vec!["Sent".to_string()],
         },
         "drafts" => match provider {
@@ -211,6 +277,12 @@ fn mailbox_candidates(provider: &str, folder: &str) -> Vec<String> {
             ],
             "outlook" => vec!["Drafts".to_string()],
             "icloud" => vec!["Drafts".to_string()],
+            "custom" => vec![
+                "Drafts".to_string(),
+                "INBOX.Drafts".to_string(),
+                "INBOX/Drafts".to_string(),
+                "drafts".to_string(),
+            ],
             _ => vec!["Drafts".to_string()],
         },
         "trash" => match provider {
@@ -220,7 +292,41 @@ fn mailbox_candidates(provider: &str, folder: &str) -> Vec<String> {
             ],
             "outlook" => vec!["Deleted Items".to_string(), "Trash".to_string()],
             "icloud" => vec!["Deleted Messages".to_string(), "Trash".to_string()],
+            "custom" => vec![
+                "Trash".to_string(),
+                "Deleted".to_string(),
+                "Deleted Items".to_string(),
+                "Deleted Messages".to_string(),
+                "INBOX.Trash".to_string(),
+                "INBOX/Trash".to_string(),
+                "INBOX.Deleted".to_string(),
+                "INBOX/Deleted".to_string(),
+                "INBOX.Deleted Items".to_string(),
+                "INBOX/Deleted Items".to_string(),
+                "trash".to_string(),
+            ],
             _ => vec!["Trash".to_string()],
+        },
+        "spam" => match provider {
+            "gmail" => vec![
+                "[Gmail]/Spam".to_string(),
+                "Spam".to_string(),
+            ],
+            "outlook" => vec!["Junk Email".to_string(), "Junk".to_string(), "Spam".to_string()],
+            "icloud" => vec!["Junk".to_string(), "Spam".to_string()],
+            "custom" => vec![
+                "Spam".to_string(),
+                "Junk".to_string(),
+                "Junk Email".to_string(),
+                "INBOX.Spam".to_string(),
+                "INBOX/Spam".to_string(),
+                "INBOX.Junk".to_string(),
+                "INBOX/Junk".to_string(),
+                "INBOX.Junk Email".to_string(),
+                "INBOX/Junk Email".to_string(),
+                "spam".to_string(),
+            ],
+            _ => vec!["Spam".to_string(), "Junk".to_string()],
         },
         _ => vec![folder.to_string()],
     }
@@ -228,6 +334,10 @@ fn mailbox_candidates(provider: &str, folder: &str) -> Vec<String> {
 
 fn normalize_body_text(text: &str) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n").trim().to_string()
+}
+
+fn normalize_body_html(html: &str) -> String {
+    html.replace("\r\n", "\n").replace('\r', "\n").trim().to_string()
 }
 
 fn html_to_text(html: &str) -> String {
@@ -281,8 +391,14 @@ fn build_preview(body: &str) -> String {
     truncate_with_ellipsis(&flattened, 120)
 }
 
-fn extract_best_body(parsed: &mailparse::ParsedMail<'_>) -> String {
-    let mut html_fallback: Option<String> = None;
+struct ExtractedBody {
+    text: String,
+    html: Option<String>,
+}
+
+fn extract_best_body(parsed: &mailparse::ParsedMail<'_>) -> ExtractedBody {
+    let mut text_body: Option<String> = None;
+    let mut html_body: Option<String> = None;
 
     for part in parsed.parts() {
         if matches!(
@@ -293,36 +409,43 @@ fn extract_best_body(parsed: &mailparse::ParsedMail<'_>) -> String {
         }
 
         let mime = part.ctype.mimetype.as_str();
-        if mime.eq_ignore_ascii_case("text/plain") {
+        if mime.eq_ignore_ascii_case("text/plain") && text_body.is_none() {
             if let Ok(body) = part.get_body() {
                 let clean = normalize_body_text(&body);
                 if !clean.is_empty() {
-                    return clean;
+                    text_body = Some(clean);
                 }
             }
-        } else if mime.eq_ignore_ascii_case("text/html") && html_fallback.is_none() {
+        } else if mime.eq_ignore_ascii_case("text/html") && html_body.is_none() {
             if let Ok(body) = part.get_body() {
-                let clean = html_to_text(&body);
+                let clean = normalize_body_html(&body);
                 if !clean.is_empty() {
-                    html_fallback = Some(clean);
+                    html_body = Some(clean);
                 }
             }
         }
     }
 
-    if let Some(html) = html_fallback {
-        return html;
+    if text_body.is_none() {
+        text_body = html_body.as_deref().map(html_to_text);
+    }
+    if text_body.is_none() {
+        text_body = parsed
+            .get_body()
+            .map(|body| normalize_body_text(&body))
+            .ok()
+            .filter(|body| !body.is_empty());
     }
 
-    parsed
-        .get_body()
-        .map(|body| normalize_body_text(&body))
-        .unwrap_or_default()
+    ExtractedBody {
+        text: text_body.unwrap_or_default(),
+        html: html_body,
+    }
 }
 
 fn validate_connection(config: &EmailConfig) -> Result<bool, String> {
     let tls = TlsConnector::builder().build().map_err(|e| e.to_string())?;
-    let client = imap::connect((config.imap_host(), 993), config.imap_host(), &tls)
+    let client = imap::connect((config.imap_host(), config.imap_port()), config.imap_host(), &tls)
         .map_err(|e| e.to_string())?;
     let mut session = client
         .login(&config.email, &config.password)
@@ -333,7 +456,7 @@ fn validate_connection(config: &EmailConfig) -> Result<bool, String> {
 
 fn fetch_messages(config: &EmailConfig, folder: &str) -> Result<Vec<EmailMessage>, String> {
     let tls = TlsConnector::builder().build().map_err(|e| e.to_string())?;
-    let client = imap::connect((config.imap_host(), 993), config.imap_host(), &tls)
+    let client = imap::connect((config.imap_host(), config.imap_port()), config.imap_host(), &tls)
         .map_err(|e| e.to_string())?;
     let mut session = client
         .login(&config.email, &config.password)
@@ -382,15 +505,18 @@ fn fetch_messages(config: &EmailConfig, folder: &str) -> Result<Vec<EmailMessage
         let envelope = msg.envelope();
 
         let mut body = String::new();
+        let mut body_html: Option<String> = None;
         let mut subject = String::new();
         let mut sender_email = String::new();
         let mut sender_name = String::new();
+        let mut to = String::new();
         let mut date = String::new();
 
         if let Some(raw) = msg.body() {
             if let Ok(parsed) = mailparse::parse_mail(raw) {
                 subject = parsed.headers.get_first_value("Subject").unwrap_or_default();
                 date = parsed.headers.get_first_value("Date").unwrap_or_default();
+                to = parsed.headers.get_first_value("To").unwrap_or_default();
 
                 if let Some(from_header) = parsed.headers.get_first_header("From") {
                     if let Ok(parsed_from) = mailparse::addrparse_header(from_header) {
@@ -404,7 +530,9 @@ fn fetch_messages(config: &EmailConfig, folder: &str) -> Result<Vec<EmailMessage
                     }
                 }
 
-                body = extract_best_body(&parsed);
+                let extracted = extract_best_body(&parsed);
+                body = extracted.text;
+                body_html = extracted.html;
             }
         }
 
@@ -441,6 +569,14 @@ fn fetch_messages(config: &EmailConfig, folder: &str) -> Result<Vec<EmailMessage
                     }
                 }
             }
+            if to.is_empty() {
+                if let Some(to_addr) = env.to.as_ref().and_then(|h| h.first()) {
+                    let user = String::from_utf8_lossy(to_addr.mailbox.as_deref().unwrap_or(b""));
+                    let host = String::from_utf8_lossy(to_addr.host.as_deref().unwrap_or(b""));
+                    let addr = format!("{}@{}", user, host);
+                    to = addr.trim_matches('@').to_string();
+                }
+            }
         }
 
         if sender_name.is_empty() {
@@ -457,10 +593,13 @@ fn fetch_messages(config: &EmailConfig, folder: &str) -> Result<Vec<EmailMessage
         let preview = build_preview(&body);
 
         let mut is_read = false;
+        let mut is_starred = false;
         for flag in msg.flags() {
             if matches!(flag, imap::types::Flag::Seen) {
                 is_read = true;
-                break;
+            }
+            if matches!(flag, imap::types::Flag::Flagged) {
+                is_starred = true;
             }
         }
 
@@ -468,11 +607,14 @@ fn fetch_messages(config: &EmailConfig, folder: &str) -> Result<Vec<EmailMessage
             id: msg.message.to_string(),
             sender: sender_name,
             sender_email,
+            to,
             subject,
             preview,
             body,
+            body_html,
             date,
             read: is_read,
+            starred: is_starred,
             folder: folder.to_string(),
         });
     }
@@ -497,8 +639,8 @@ fn send_message(config: &EmailConfig, to: &str, subject: &str, body: &str) -> Re
         .map_err(|e| e.to_string())?;
 
     let creds = Credentials::new(config.email.clone(), config.password.clone());
-    let mailer = SmtpTransport::relay(config.smtp_host())
-        .map_err(|e| e.to_string())?
+    let mailer = SmtpTransport::builder_dangerous(config.smtp_host())
+        .port(config.smtp_port())
         .credentials(creds)
         .build();
 
@@ -548,15 +690,26 @@ pub async fn email_account_connect_and_save(
     if input.password.is_empty() {
         return Err("missing_password".to_string());
     }
+    let imap_host = normalize_optional_host(&input.imap_host);
+    let smtp_host = normalize_optional_host(&input.smtp_host);
+    let imap_port = normalize_optional_port(input.imap_port);
+    let smtp_port = normalize_optional_port(input.smtp_port);
+    if provider == "custom" && (imap_host.is_none() || smtp_host.is_none() || imap_port.is_none() || smtp_port.is_none()) {
+        return Err("missing_custom_mail_hosts".to_string());
+    }
 
     let config = EmailConfig {
         provider: provider.clone(),
         email: email.clone(),
         password: input.password.clone(),
+        imap_host: imap_host.clone(),
+        smtp_host: smtp_host.clone(),
+        imap_port,
+        smtp_port,
     };
     validate_connection(&config)?;
 
-    let id = account_id(&provider, &email);
+    let id = account_id(&provider, &email, imap_host.as_deref());
     let keychain_write = keychain::set_secret(
         &state.config.keychain_service,
         &keychain_account_key(&id),
@@ -578,6 +731,10 @@ pub async fn email_account_connect_and_save(
     if let Some(existing) = accounts.iter_mut().find(|account| account.id == id) {
         existing.provider = provider;
         existing.email = email;
+        existing.imap_host = imap_host;
+        existing.smtp_host = smtp_host;
+        existing.imap_port = imap_port;
+        existing.smtp_port = smtp_port;
         existing.status = "active".to_string();
         existing.last_error = None;
     } else {
@@ -585,6 +742,10 @@ pub async fn email_account_connect_and_save(
             id: id.clone(),
             provider,
             email,
+            imap_host,
+            smtp_host,
+            imap_port,
+            smtp_port,
             last_sync_at: None,
             status: "active".to_string(),
             last_error: None,
@@ -640,6 +801,10 @@ pub async fn email_fetch_saved(
         provider: account.provider,
         email: account.email,
         password,
+        imap_host: account.imap_host,
+        smtp_host: account.smtp_host,
+        imap_port: account.imap_port,
+        smtp_port: account.smtp_port,
     };
 
     match fetch_messages(&config, &folder) {
@@ -684,6 +849,10 @@ pub async fn email_send_saved(
         provider: account.provider,
         email: account.email,
         password,
+        imap_host: account.imap_host,
+        smtp_host: account.smtp_host,
+        imap_port: account.imap_port,
+        smtp_port: account.smtp_port,
     };
 
     match send_message(&config, &to, &subject, &body) {

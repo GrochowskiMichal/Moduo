@@ -73,6 +73,8 @@ type TaskProjectOption = {
 type MenuAnchor = { left: number; top: number };
 
 const AVATAR_STORAGE_KEY = "moduo:auth-avatar-preview-v1";
+const AVATAR_STORE_NAMESPACE = "auth_ui";
+const AVATAR_STORE_KEY = "avatar_preview_v1";
 
 function safeId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -108,6 +110,7 @@ const baseTabs: TabItem[] = [
   { label: "CRM", iconName: "folder", href: "/crm" },
   { label: "Calendly", iconName: "calendar", href: "/calendly" },
   { label: "Forms", iconName: "edit-2", href: "/forms" },
+  { label: "Activity", iconName: "bar-chart-2", href: "/activity" },
   { label: "Feed", iconName: "bar-chart-2", href: "/feed" },
   { label: "Files", iconName: "folder", href: "/files" },
   { label: "Brainstorm", iconName: "pen-tool", href: "/brainstorm" },
@@ -254,11 +257,32 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const readAvatar = () => setAvatarDataUrl(window.localStorage.getItem(AVATAR_STORAGE_KEY));
-    readAvatar();
-    window.addEventListener("storage", readAvatar);
-    return () => window.removeEventListener("storage", readAvatar);
-  }, []);
+    let active = true;
+    const readAvatar = async () => {
+      const fromLocal = window.localStorage.getItem(AVATAR_STORAGE_KEY);
+      if (fromLocal) {
+        if (active) setAvatarDataUrl(fromLocal);
+        return;
+      }
+      if (!runtime) {
+        if (active) setAvatarDataUrl(null);
+        return;
+      }
+      const fromStore = await runtime.localStore.get(AVATAR_STORE_NAMESPACE, AVATAR_STORE_KEY).catch(() => null);
+      const next = typeof fromStore === "string" && fromStore ? fromStore : null;
+      if (next) window.localStorage.setItem(AVATAR_STORAGE_KEY, next);
+      if (active) setAvatarDataUrl(next);
+    };
+    void readAvatar();
+    const onStorage = () => {
+      void readAvatar();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      active = false;
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [runtime]);
 
   useEffect(() => {
     if (!runtime) return;
@@ -515,6 +539,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     await loadTaskProjects(project.id);
     closeTasksMenu();
     dispatchTasksSelectProject(project.id);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("moduo:data-refresh"));
+    }
   }, [canEditTasks, closeTasksMenu, loadTaskProjects, newTaskProjectName, runtime, selectedWorkspaceId, userId]);
 
   const removeTaskProject = useCallback(
@@ -530,6 +557,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         await runtime.tasks.upsertProject({ ...current, deletedAt: nowIso(), updatedAt: nowIso() });
         await loadTaskProjects(selectedTaskProjectId === projectId ? null : selectedTaskProjectId);
         closeTasksMenu();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("moduo:data-refresh"));
+        }
       } finally {
         setDeleteSubmittingTaskProjectId((currentSubmittingId) =>
           currentSubmittingId === projectId ? null : currentSubmittingId

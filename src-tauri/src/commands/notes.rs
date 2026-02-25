@@ -115,6 +115,47 @@ pub async fn notes_move(state: State<'_, AppState>, input: NotesMoveInput) -> Re
         return Err("Workspace mismatch".to_string());
     }
 
+    if input
+        .new_parent_id
+        .as_ref()
+        .is_some_and(|parent_id| parent_id == &note.id)
+    {
+        return Err("Cannot move note into itself".to_string());
+    }
+
+    if note.kind == "category" && input.new_parent_id.is_some() {
+        return Err("Sections can only exist at root".to_string());
+    }
+
+    if let Some(parent_id) = input.new_parent_id.as_ref() {
+        let parent = state
+            .store
+            .get_note(parent_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Parent note not found".to_string())?;
+        if parent.workspace_id != input.workspace_id {
+            return Err("Workspace mismatch".to_string());
+        }
+        if parent.deleted_at.is_some() {
+            return Err("Cannot move under deleted note".to_string());
+        }
+
+        let mut cursor = Some(parent.id.clone());
+        let mut visited: HashSet<String> = HashSet::from([note.id.clone()]);
+        while let Some(current_id) = cursor {
+            if !visited.insert(current_id.clone()) {
+                return Err("Cannot move note into its descendant".to_string());
+            }
+            let Some(current) = state.store.get_note(&current_id).map_err(|e| e.to_string())? else {
+                break;
+            };
+            if current.workspace_id != input.workspace_id {
+                return Err("Workspace mismatch".to_string());
+            }
+            cursor = current.parent_id;
+        }
+    }
+
     note.parent_id = input.new_parent_id;
     note.position = input.new_position;
     note.updated_at = now_iso();

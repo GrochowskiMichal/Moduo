@@ -44,6 +44,14 @@ type ContextMenuState =
   | { type: "note"; noteId: string; top: number; left: number }
   | { type: "sidebar"; top: number; left: number };
 
+const contextMenuPanelClass =
+  "notes-context-menu fixed z-[1100] min-w-[148px] rounded-lg border border-[#2b2b2b] bg-[#141414] p-1 shadow-xl";
+const contextMenuItemClass =
+  "notes-context-item flex w-full items-center rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-[11px] font-medium text-[#d8d8d8] transition-colors hover:bg-[#1f1f1f]";
+const contextMenuDeleteItemClass =
+  "notes-context-item flex w-full items-center rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-[11px] font-medium text-[#d8d8d8] transition-colors hover:bg-[#1f1f1f]";
+const NEST_THRESHOLD_PX = 12;
+
 function kindIcon(kind: NoteKind): string {
   if (kind === "category") return "▣";
   if (kind === "folder") return "▢";
@@ -101,9 +109,6 @@ function TreeRow({
           if (event.key === "Enter") onSelect();
         }}
       >
-        {dragHint === "reorder" ? (
-          <div className="pointer-events-none absolute left-1 right-1 top-0 h-[2px] rounded-full bg-[#7b8598]" />
-        ) : null}
         <span className="text-[12px] text-[#303030]">{kindIcon(note.kind)}</span>
 
         <div
@@ -200,9 +205,6 @@ function CategorySectionHeader({
         className="notes-section-header flex w-full items-center justify-between border-0 bg-transparent px-[6px] py-[2px] text-[12px] tracking-[0.03em] text-[#8e8e8e]"
         onClick={onToggle}
       >
-        {dragHint === "reorder" ? (
-          <div className="pointer-events-none absolute left-1 right-1 top-0 h-[2px] rounded-full bg-[#7b8598]" />
-        ) : null}
         <span
           ref={sortable.setActivatorNodeRef}
           {...sortable.attributes}
@@ -244,6 +246,7 @@ export function NotesSplitView({
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const tagInputRef = useRef<HTMLInputElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const rootDrop = useDroppable({ id: "inside:root" });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -311,10 +314,9 @@ export function NotesSplitView({
   const categorySections = useMemo(
     () =>
       listNotes
-        .filter((note) => note.kind === "category")
+        .filter((note) => note.kind === "category" && !note.parentId)
         .sort(
           (a, b) =>
-            (a.parentId ?? "").localeCompare(b.parentId ?? "") ||
             a.position.localeCompare(b.position) ||
             a.title.localeCompare(b.title)
         ),
@@ -414,6 +416,39 @@ export function NotesSplitView({
     };
   }, [contextMenu]);
 
+  const isDescendantOf = (ancestorId: string, maybeDescendantId: string): boolean => {
+    const queue = [...(byParent.get(ancestorId) ?? []).map((note) => note.id)];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+      if (current === maybeDescendantId) return true;
+      for (const child of byParent.get(current) ?? []) queue.push(child.id);
+    }
+    return false;
+  };
+
+  const canMoveUnderParent = (moving: NoteMeta, targetParentId: string | null): boolean => {
+    if (moving.kind === "category") return targetParentId === null;
+    if (!targetParentId) return true;
+    if (targetParentId === moving.id) return false;
+    if (isDescendantOf(moving.id, targetParentId)) return false;
+    const targetParent = notesById.get(targetParentId);
+    if (!targetParent || targetParent.deletedAt || targetParent.isArchived) return false;
+    return true;
+  };
+
+  const expandParent = (parentId: string | null) => {
+    if (!parentId) return;
+    setExpanded((current) => ({ ...current, [parentId]: true }));
+    setCategoryExpanded((current) => ({ ...current, [parentId]: true }));
+  };
+
+  const resetDragState = () => {
+    setDragActiveId(null);
+    setDragOverId(null);
+    setDragDeltaX(0);
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
     if (readOnly) return;
     const activeId = String(event.active.id);
@@ -426,19 +461,18 @@ export function NotesSplitView({
     if (!moving) return;
     if (overId === activeId) return;
 
-    if (overId.startsWith("inside:")) {
-      const targetParentId = overId.replace("inside:", "");
-      if (targetParentId === movingNoteId) return;
-      const queue = [...(byParent.get(movingNoteId) ?? []).map((note) => note.id)];
-      while (queue.length > 0) {
-        const current = queue.shift();
-        if (!current) continue;
-        if (current === targetParentId) return;
-        for (const child of byParent.get(current) ?? []) queue.push(child.id);
+    if (overId === "inside:root" || overId.startsWith("inside:")) {
+      const targetParentId = overId === "inside:root" ? null : overId.replace("inside:", "");
+      if (moving.kind === "category" && targetParentId) {
+        const target = notesById.get(targetParentId);
+        if (target?.kind === "category") {
+          await onMoveNote(movingNoteId, null, target.id);
+        }
+        return;
       }
+      if (!canMoveUnderParent(moving, targetParentId)) return;
       await onMoveNote(movingNoteId, targetParentId, null);
-      setExpanded((current) => ({ ...current, [targetParentId]: true }));
-      setCategoryExpanded((current) => ({ ...current, [targetParentId]: true }));
+      expandParent(targetParentId);
       return;
     }
 
@@ -447,44 +481,52 @@ export function NotesSplitView({
       const target = listNotes.find((note) => note.id === targetNoteId);
       if (!target) return;
       if (target.id === moving.id) return;
+      const finalRect = event.active.rect.current.translated ?? event.active.rect.current.initial;
+      const overRect = event.over?.rect;
+      const dropAfter = !!(
+        finalRect &&
+        overRect &&
+        finalRect.top + finalRect.height / 2 > overRect.top + overRect.height / 2
+      );
+      const getBeforeIdAfterTarget = (siblings: NoteMeta[], targetId: string): string | null => {
+        const index = siblings.findIndex((note) => note.id === targetId);
+        if (index === -1) return null;
+        return siblings[index + 1]?.id ?? null;
+      };
 
-      // Dropping a note on a section header should always move it into that section.
+      // Dropping on a section row always attaches non-section entries to that section.
       if (target.kind === "category" && moving.kind !== "category") {
-        const queue = [...(byParent.get(movingNoteId) ?? []).map((note) => note.id)];
-        while (queue.length > 0) {
-          const current = queue.shift();
-          if (!current) continue;
-          if (current === target.id) return;
-          for (const child of byParent.get(current) ?? []) queue.push(child.id);
-        }
+        if (!canMoveUnderParent(moving, target.id)) return;
         await onMoveNote(movingNoteId, target.id, null);
-        setExpanded((current) => ({ ...current, [target.id]: true }));
-        setCategoryExpanded((current) => ({ ...current, [target.id]: true }));
+        expandParent(target.id);
         return;
       }
 
-      // Dragging to the right nests into target row (including section headers).
-      if ((event.delta?.x ?? 0) > 12) {
-        const queue = [...(byParent.get(movingNoteId) ?? []).map((note) => note.id)];
-        while (queue.length > 0) {
-          const current = queue.shift();
-          if (!current) continue;
-          if (current === target.id) return;
-          for (const child of byParent.get(current) ?? []) queue.push(child.id);
-        }
+      // Sections are root-only and reorder only against sections.
+      if (moving.kind === "category") {
+        if (target.kind !== "category") return;
+        const categorySiblings = categorySections.filter((entry) => entry.id !== moving.id);
+        const beforeId = dropAfter
+          ? getBeforeIdAfterTarget(categorySiblings, target.id)
+          : target.id;
+        await onMoveNote(movingNoteId, null, beforeId);
+        return;
+      }
+
+      const nestIntent = (event.delta?.x ?? 0) > NEST_THRESHOLD_PX;
+      if (nestIntent) {
+        if (!canMoveUnderParent(moving, target.id)) return;
         await onMoveNote(movingNoteId, target.id, null);
-        setExpanded((current) => ({ ...current, [target.id]: true }));
-        setCategoryExpanded((current) => ({ ...current, [target.id]: true }));
+        expandParent(target.id);
         return;
       }
 
-      // Categories are only reorderable (not nestable).
-      if (moving.kind === "category" || target.kind === "category") {
-        await onMoveNote(movingNoteId, target.parentId, target.id);
-        return;
-      }
-
-      await onMoveNote(movingNoteId, target.parentId, target.id);
+      if (!canMoveUnderParent(moving, target.parentId)) return;
+      const siblingCandidates = (byParent.get(target.parentId) ?? []).filter((entry) => entry.id !== moving.id);
+      const beforeId = dropAfter
+        ? getBeforeIdAfterTarget(siblingCandidates, target.id)
+        : target.id;
+      await onMoveNote(movingNoteId, target.parentId, beforeId);
     }
   };
 
@@ -498,9 +540,10 @@ export function NotesSplitView({
     const moving = listNotes.find((note) => note.id === movingId);
     const target = listNotes.find((note) => note.id === targetNoteId);
     if (!moving || !target) return "none";
-    if (target.kind === "category" && moving.kind !== "category") return "nest";
-    if ((moving.kind === "category" || target.kind === "category") && dragDeltaX <= 12) return "reorder";
-    return dragDeltaX > 12 ? "nest" : "reorder";
+    if (moving.kind === "category") return target.kind === "category" ? "reorder" : "none";
+    if (target.kind === "category") return "nest";
+    if (dragDeltaX > NEST_THRESHOLD_PX) return "nest";
+    return "reorder";
   };
 
   const toggleExpanded = (noteId: string) => {
@@ -525,7 +568,7 @@ export function NotesSplitView({
   const openContextMenu = (noteId: string, event: ReactMouseEvent<HTMLDivElement>) => {
     if (readOnly) return;
     event.preventDefault();
-    const position = getMenuPosition(event, 280, 270);
+    const position = getMenuPosition(event, 190, 250);
     setContextMenu({ type: "note", noteId, ...position });
   };
 
@@ -534,7 +577,7 @@ export function NotesSplitView({
     event.preventDefault();
     const target = event.target as HTMLElement;
     if (target.closest(".notes-tree-row, .notes-section-header, .notes-context-menu")) return;
-    const position = getMenuPosition(event, 240, 170);
+    const position = getMenuPosition(event, 170, 130);
     setContextMenu({ type: "sidebar", ...position });
   };
 
@@ -621,7 +664,16 @@ export function NotesSplitView({
             sensors={sensors}
             collisionDetection={(args) => {
               const byPointer = pointerWithin(args);
-              return byPointer.length > 0 ? byPointer : closestCenter(args);
+              if (byPointer.length > 0) {
+                const nonRoot = byPointer.filter((entry) => String(entry.id) !== "inside:root");
+                return nonRoot.length > 0 ? nonRoot : byPointer;
+              }
+              const byCenter = closestCenter(args);
+              if (byCenter.length > 0) {
+                const nonRoot = byCenter.filter((entry) => String(entry.id) !== "inside:root");
+                return nonRoot.length > 0 ? nonRoot : byCenter;
+              }
+              return byCenter;
             }}
             onDragStart={(event) => {
               setDragActiveId(String(event.active.id));
@@ -632,12 +684,10 @@ export function NotesSplitView({
               setDragOverId(event.over ? String(event.over.id) : null);
               setDragDeltaX(event.delta?.x ?? 0);
             }}
-            onDragCancel={() => {
-              setDragActiveId(null);
-              setDragOverId(null);
-              setDragDeltaX(0);
+            onDragCancel={resetDragState}
+            onDragEnd={(event) => {
+              void handleDragEnd(event).finally(resetDragState);
             }}
-            onDragEnd={handleDragEnd}
           >
             <SortableContext
               items={categorySections.map((entry) => `note:${entry.id}`)}
@@ -670,7 +720,14 @@ export function NotesSplitView({
                 <span>{sectionsExpanded.notes ? "▾" : "▸"}</span>
               </button>
 
-              {sectionsExpanded.notes ? <div className="grid gap-[3px]">{renderBranch(null, 0)}</div> : null}
+              {sectionsExpanded.notes ? (
+                <div
+                  ref={rootDrop.setNodeRef}
+                  className={`grid min-h-6 gap-[3px] rounded-[10px] ${rootDrop.isOver ? "bg-[#1c1c1c]" : ""}`}
+                >
+                  {renderBranch(null, 0) ?? <div className="h-6" />}
+                </div>
+              ) : null}
             </div>
           </DndContext>
         </aside>
@@ -792,13 +849,13 @@ export function NotesSplitView({
       {contextMenu?.type === "note" && contextTarget ? (
         <div
           ref={contextMenuRef}
-          className="notes-context-menu fixed z-[1100] grid min-w-[260px] gap-[2px] rounded-[12px] border border-[#2a2a2a] bg-[#141414] p-[6px] shadow-[0_14px_30px_#00000066]"
+          className={contextMenuPanelClass}
           style={{ top: contextMenu.top, left: contextMenu.left }}
         >
           {!contextTargetIsSection ? (
             <button
               type="button"
-              className="notes-context-item flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-[9px] text-[#d8d8d8] hover:bg-[#202020]"
+              className={contextMenuItemClass}
               onClick={() => {
                 runContextAction(async () => {
                   await onTogglePin(contextTarget.id, !contextTarget.isPinned);
@@ -810,7 +867,7 @@ export function NotesSplitView({
           ) : null}
           <button
             type="button"
-            className="notes-context-item flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-[9px] text-[#d8d8d8] hover:bg-[#202020]"
+            className={contextMenuItemClass}
             onClick={() => {
               runContextAction(async () => {
                 const created = await onCreateNote(contextTarget.id, "note");
@@ -826,7 +883,7 @@ export function NotesSplitView({
           </button>
           <button
             type="button"
-            className="notes-context-item flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-[9px] text-[#d8d8d8] hover:bg-[#202020]"
+            className={contextMenuItemClass}
             onClick={() => {
               runContextAction(async () => {
                 const created = await onCreateNote(contextTarget.id, "folder");
@@ -842,7 +899,7 @@ export function NotesSplitView({
           </button>
           <button
             type="button"
-            className="notes-context-item flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-[9px] text-[#d8d8d8] hover:bg-[#202020]"
+            className={contextMenuItemClass}
             onClick={() => {
               const currentTitle = contextTarget.title || "Untitled";
               const next = window.prompt("Rename", currentTitle);
@@ -859,7 +916,7 @@ export function NotesSplitView({
           {!contextTargetIsSection ? (
             <button
               type="button"
-              className="notes-context-item flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-[9px] text-[#d8d8d8] hover:bg-[#202020]"
+              className={contextMenuItemClass}
               onClick={() => {
                 runContextAction(async () => {
                   const created = await onDuplicateNote(contextTarget.id);
@@ -872,7 +929,7 @@ export function NotesSplitView({
           ) : null}
           <button
             type="button"
-            className="notes-context-item flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-[9px] text-[#ffb4b4] hover:bg-[#341c27]"
+            className={contextMenuDeleteItemClass}
             onClick={() => {
               runContextAction(async () => {
                 await onDeleteNote(contextTarget.id);
@@ -881,21 +938,18 @@ export function NotesSplitView({
           >
             <span>Delete</span>
           </button>
-          <span className="px-[10px] pb-[2px] pt-1 text-[12px] text-[#888888]">
-            {contextTarget.kind === "category" ? "Section" : contextTarget.kind === "folder" ? "Folder" : "Note"}
-          </span>
         </div>
       ) : null}
 
       {contextMenu?.type === "sidebar" ? (
         <div
           ref={contextMenuRef}
-          className="notes-context-menu fixed z-[1100] grid min-w-[260px] gap-[2px] rounded-[12px] border border-[#2a2a2a] bg-[#141414] p-[6px] shadow-[0_14px_30px_#00000066]"
+          className={contextMenuPanelClass}
           style={{ top: contextMenu.top, left: contextMenu.left }}
         >
           <button
             type="button"
-            className="notes-context-item flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-[9px] text-[#d8d8d8] hover:bg-[#202020]"
+            className={contextMenuItemClass}
             onClick={() => {
               runContextAction(async () => {
                 await onCreateNote(null, "category");
@@ -906,7 +960,7 @@ export function NotesSplitView({
           </button>
           <button
             type="button"
-            className="notes-context-item flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-[9px] text-[#d8d8d8] hover:bg-[#202020]"
+            className={contextMenuItemClass}
             onClick={() => {
               runContextAction(async () => {
                 const created = await onCreateNote(null, "folder");
@@ -918,7 +972,7 @@ export function NotesSplitView({
           </button>
           <button
             type="button"
-            className="notes-context-item flex w-full items-center justify-between rounded-[8px] border-0 bg-transparent px-[10px] py-[9px] text-[#d8d8d8] hover:bg-[#202020]"
+            className={contextMenuItemClass}
             onClick={() => {
               runContextAction(async () => {
                 const created = await onCreateNote(null, "note");

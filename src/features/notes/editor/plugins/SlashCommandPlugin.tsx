@@ -284,7 +284,7 @@ export function SlashCommandPlugin() {
 
   return createPortal(
     <div
-      className="fixed z-[999] max-h-[360px] min-w-[260px] overflow-y-auto rounded-[12px] border border-[#2a2a2a] bg-[#141414] p-[6px] shadow-[0_14px_30px_#00000057] custom-scrollbar"
+      className="fixed z-[999] max-h-[360px] min-w-[260px] overflow-y-auto rounded-[12px] border border-[#2a2a2a] bg-[#161616] p-[6px] shadow-[0_14px_30px_#00000057] custom-scrollbar"
       style={{ top: menu.top, left: menu.left }}
       role="listbox"
       aria-label="Slash Commands"
@@ -296,10 +296,10 @@ export function SlashCommandPlugin() {
           role="option"
           aria-selected={selectedIndex === index}
           data-slashcmd-index={index}
-          className={`group flex w-full cursor-pointer items-center justify-between rounded-[10px] border px-[10px] py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/10 ${
+          className={`group flex w-full cursor-pointer items-center rounded-[10px] px-[10px] py-2 text-left text-[14px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/10 ${
             selectedIndex === index
-              ? "border-[#3a3a3a] bg-[#202020] text-[#f1f1f1]"
-              : "border-transparent bg-transparent text-[#d8d8d8] hover:border-[#2f2f2f] hover:bg-[#1c1c1c]"
+              ? "bg-[#202020] text-[#f1f1f1]"
+              : "bg-transparent text-[#d8d8d8] hover:bg-[#1c1c1c]"
           }`}
           onMouseEnter={() => setSelectedIndex(index)}
           onMouseDown={(event) => {
@@ -311,9 +311,6 @@ export function SlashCommandPlugin() {
           }}
         >
           <span className="min-w-0 truncate">{command.title}</span>
-          <span className={`text-[11px] ${selectedIndex === index ? "text-[#b0b0b0]" : "text-[#8a8a8a]"}`}>
-            {command.group}
-          </span>
         </button>
       ))}
     </div>,

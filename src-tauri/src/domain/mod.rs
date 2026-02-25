@@ -129,6 +129,7 @@ pub struct TaskWorkflowState {
     pub project_id: String,
     pub name: String,
     pub kind: String,
+    pub icon: Option<String>,
     pub color: Option<String>,
     pub position: String,
     pub created_at: String,

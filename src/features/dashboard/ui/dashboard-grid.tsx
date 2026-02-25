@@ -8,10 +8,12 @@ import { ClockWidget } from "./widgets/clock-widget";
 import { CountdownWidget } from "./widgets/countdown-widget";
 import { CryptoWidget } from "./widgets/crypto-widget";
 import { HydrationWidget } from "./widgets/hydration-widget";
+import { JobTrackerWidget } from "./widgets/job-tracker-widget";
 import { NotesWidget } from "./widgets/notes-widget";
 import { PomodoroWidget } from "./widgets/pomodoro-widget";
 import { StockWidget } from "./widgets/stock-widget";
 import { TasksWidget } from "./widgets/tasks-widget";
+import { TodoListWidget } from "./widgets/todo-list-widget";
 import { WeatherWidget } from "./widgets/weather-widget";
 
 type Props = {
@@ -103,6 +105,12 @@ export function DashboardGrid({
           ) : null}
           {widget.type === "countdown" ? (
             <CountdownWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
+          ) : null}
+          {widget.type === "todolist" ? (
+            <TodoListWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
+          ) : null}
+          {widget.type === "job-tracker" ? (
+            <JobTrackerWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
           ) : null}
         </WidgetContainer>
       ))}

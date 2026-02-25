@@ -32,6 +32,7 @@ export type TaskWorkflowState = {
   projectId: string;
   name: string;
   kind: TaskWorkflowKind;
+  icon: string | null;
   color: string | null;
   position: string;
   createdAt: string;

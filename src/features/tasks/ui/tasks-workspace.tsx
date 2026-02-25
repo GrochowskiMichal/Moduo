@@ -11,7 +11,7 @@ import {
 import { TasksBoard } from "./tasks-board";
 import { TasksList } from "./tasks-list";
 import { TasksGantt } from "./tasks-gantt";
-import type { Task, TaskPriority } from "../types";
+import type { Task, TaskPriority, TaskWorkflowKind } from "../types";
 import { TagInput } from "../../../components/ui/tag-input";
 import { List as ListIcon, SquareChartGantt, SquareKanban } from "lucide-react";
 import {
@@ -19,11 +19,25 @@ import {
   readFeaturePanelState,
   type LayoutPanelsApplyDetail,
 } from "../../layout/panel-events";
+import { runtime } from "../../../lib/runtime";
 
 type Props = UseTasksState;
 
 type FilterMode = "all" | "overdue" | "no_due" | "high_priority";
 const AVATAR_STORAGE_KEY = "moduo:auth-avatar-preview-v1";
+const AVATAR_STORE_NAMESPACE = "auth_ui";
+const AVATAR_STORE_KEY = "avatar_preview_v1";
+const DEFAULT_COLUMN_COLOR = "#8e8e8e";
+const COLUMN_ICON_OPTIONS = ["◉", "○", "◔", "⨯", "◆", "◇", "▲", "■", "●", "✦", "✳", "⬢"] as const;
+const WORKFLOW_KIND_RANK: Record<TaskWorkflowKind, number> = {
+  backlog: 0,
+  todo: 1,
+  in_progress: 2,
+  in_review: 3,
+  done: 4,
+  canceled: 5,
+  custom: 6,
+};
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -85,11 +99,17 @@ export function TasksWorkspace({
   const [createTags, setCreateTags] = useState<string[]>([]);
   const [createMore, setCreateMore] = useState(false);
   const [currentUserAvatarUrl, setCurrentUserAvatarUrl] = useState<string | null>(null);
+  const [createColumnModalOpen, setCreateColumnModalOpen] = useState(false);
+  const [createColumnSubmitting, setCreateColumnSubmitting] = useState(false);
+  const [createColumnName, setCreateColumnName] = useState("");
+  const [createColumnIcon, setCreateColumnIcon] = useState<string>(COLUMN_ICON_OPTIONS[0]);
+  const [createColumnColor, setCreateColumnColor] = useState<string>(DEFAULT_COLUMN_COLOR);
 
   const visibleProjects = useMemo(
     () => projects.filter((project) => !project.deletedAt).sort((a, b) => a.position.localeCompare(b.position)),
     [projects]
   );
+  const hasProjects = visibleProjects.length > 0;
   const visibleProjectIds = useMemo(() => new Set(visibleProjects.map((project) => project.id)), [visibleProjects]);
 
   const activeProjectId = selectedProjectId;
@@ -108,7 +128,12 @@ export function TasksWorkspace({
             visibleProjectIds.has(state.projectId) &&
             (allProjectsMode || state.projectId === activeProjectId)
         )
-        .sort((a, b) => a.position.localeCompare(b.position) || a.name.localeCompare(b.name)),
+        .sort(
+          (a, b) =>
+            (WORKFLOW_KIND_RANK[a.kind] ?? 99) - (WORKFLOW_KIND_RANK[b.kind] ?? 99) ||
+            a.position.localeCompare(b.position) ||
+            a.name.localeCompare(b.name)
+        ),
     [activeProjectId, allProjectsMode, states, visibleProjectIds]
   );
 
@@ -168,10 +193,31 @@ export function TasksWorkspace({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const readAvatar = () => setCurrentUserAvatarUrl(window.localStorage.getItem(AVATAR_STORAGE_KEY));
-    readAvatar();
-    window.addEventListener("storage", readAvatar);
-    return () => window.removeEventListener("storage", readAvatar);
+    let active = true;
+    const readAvatar = async () => {
+      const fromLocal = window.localStorage.getItem(AVATAR_STORAGE_KEY);
+      if (fromLocal) {
+        if (active) setCurrentUserAvatarUrl(fromLocal);
+        return;
+      }
+      if (!runtime) {
+        if (active) setCurrentUserAvatarUrl(null);
+        return;
+      }
+      const fromStore = await runtime.localStore.get(AVATAR_STORE_NAMESPACE, AVATAR_STORE_KEY).catch(() => null);
+      const next = typeof fromStore === "string" && fromStore ? fromStore : null;
+      if (next) window.localStorage.setItem(AVATAR_STORAGE_KEY, next);
+      if (active) setCurrentUserAvatarUrl(next);
+    };
+    void readAvatar();
+    const onStorage = () => {
+      void readAvatar();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      active = false;
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   useEffect(() => {
@@ -200,7 +246,7 @@ export function TasksWorkspace({
   }, [createModalOpen, createStateId, visibleStates]);
 
   const openCreateTaskModal = (stateId: string | null = null) => {
-    if (!canEdit) return;
+    if (!canEdit || !hasProjects) return;
     setCreateStateId(stateId ?? visibleStates[0]?.id ?? null);
     setCreateTitle("");
     setCreateDescription("");
@@ -393,7 +439,7 @@ export function TasksWorkspace({
   }, [canEdit, createModalOpen, moveTask, selectedTask, setViewMode, visibleStates]);
 
   const createStatusFromBoard = async () => {
-    if (!activeProjectId || !canEdit) return;
+    if (!activeProjectId || !canEdit || !hasProjects) return;
     const baseName = "New Status";
     const existingNames = new Set(visibleStates.map((state) => state.name.trim().toLowerCase()));
     let nextName = baseName;
@@ -402,7 +448,28 @@ export function TasksWorkspace({
       nextName = `${baseName} ${i}`;
       i += 1;
     }
-    await createWorkflowState(activeProjectId, nextName, "custom");
+    setCreateColumnName(nextName);
+    setCreateColumnIcon(COLUMN_ICON_OPTIONS[0]);
+    setCreateColumnColor(DEFAULT_COLUMN_COLOR);
+    setCreateColumnSubmitting(false);
+    setCreateColumnModalOpen(true);
+  };
+
+  const submitCreateColumn = async () => {
+    if (!activeProjectId || !canEdit || createColumnSubmitting) return;
+    setCreateColumnSubmitting(true);
+    try {
+      await createWorkflowState(
+        activeProjectId,
+        createColumnName.trim() || "New Status",
+        "custom",
+        createColumnColor.trim() || null,
+        createColumnIcon
+      );
+      setCreateColumnModalOpen(false);
+    } finally {
+      setCreateColumnSubmitting(false);
+    }
   };
 
   const layoutColumns = panelState.left
@@ -430,7 +497,16 @@ export function TasksWorkspace({
       ) : null}
 
       <main className="min-h-0 h-full min-w-0 overflow-hidden rounded-2xl bg-[#111111] p-4 flex flex-col">
-        {showTaskEditor ? (
+        {!hasProjects ? (
+          <div className="grid h-full place-items-center rounded-2xl border border-dashed border-[#2a2a2a] bg-[#101010] px-6 text-center">
+            <div className="max-w-md">
+              <h2 className="text-[20px] font-semibold text-[#e8e8e8]">No project yet</h2>
+              <p className="mt-3 text-[13px] leading-relaxed text-[#9ca3af]">
+                Add your first project to start using tasks.
+              </p>
+            </div>
+          </div>
+        ) : showTaskEditor ? (
           <div className="h-full min-h-0 overflow-y-auto custom-scrollbar px-2 md:px-6 pb-12">
             <div className="sticky top-0 z-20 mb-8 flex items-center justify-between bg-[#111111]/80 backdrop-blur-xl border-b border-[#222] px-4 py-3 -mx-2 md:-mx-6 shadow-sm">
               <div className="flex items-center gap-4">
@@ -945,6 +1021,99 @@ export function TasksWorkspace({
                 }}
               >
                 {createSubmitting ? "Creating..." : "Create task"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {createColumnModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+          onClick={() => setCreateColumnModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-[#111111]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="text-[24px] font-semibold text-[#ececec]">New column</div>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-[18px] text-[#bdbdbd] hover:bg-[#1b1b1b]"
+                onClick={() => setCreateColumnModalOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid gap-4 px-5 py-5">
+              <label className="grid gap-1 text-[12px] text-[#a4a4a4]">
+                <span>Name</span>
+                <input
+                  autoFocus
+                  value={createColumnName}
+                  onChange={(event) => setCreateColumnName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void submitCreateColumn();
+                    }
+                  }}
+                  className="w-full rounded-lg bg-[#151515] px-3 py-2 text-[14px] text-[#e6e6e6] outline-none"
+                  placeholder="Column name"
+                />
+              </label>
+
+              <div className="grid gap-2 text-[12px] text-[#a4a4a4]">
+                <span>Icon</span>
+                <div className="flex flex-wrap gap-2">
+                  {COLUMN_ICON_OPTIONS.map((icon) => (
+                    <button
+                      key={icon}
+                      type="button"
+                      aria-label={`Select icon ${icon}`}
+                      className={`grid h-9 w-9 place-items-center rounded-md border text-[16px] transition-all ${
+                        createColumnIcon === icon
+                          ? "border-[#c7cfde] bg-[#1f1f1f] text-[#f2f2f2]"
+                          : "border-[#2f2f2f] bg-[#151515] text-[#8f96a3] hover:text-[#d6dbe5]"
+                      }`}
+                      onClick={() => setCreateColumnIcon(icon)}
+                    >
+                      {icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <label className="grid gap-1 text-[12px] text-[#a4a4a4]">
+                <span>Color (hex)</span>
+                <input
+                  value={createColumnColor}
+                  onChange={(event) => setCreateColumnColor(event.target.value)}
+                  className="w-full rounded-lg bg-[#151515] px-3 py-2 text-[14px] text-[#e6e6e6] outline-none"
+                  placeholder="#8e8e8e"
+                />
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-5 py-4">
+              <button
+                type="button"
+                className="rounded-xl bg-[#1d1d1d] px-4 py-2 text-[14px] text-[#bfbfbf]"
+                onClick={() => setCreateColumnModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={createColumnSubmitting}
+                className="rounded-xl bg-[#2a2a2a] px-4 py-2 text-[14px] text-[#f0f0f0] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => {
+                  void submitCreateColumn();
+                }}
+              >
+                {createColumnSubmitting ? "Creating..." : "Create column"}
               </button>
             </div>
           </div>
