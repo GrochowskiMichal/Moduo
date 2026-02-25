@@ -1,79 +1,121 @@
-import React from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { WidgetConfig, WidgetInstance } from "../types";
+import type { ModuoRuntime } from "../../../lib/runtime";
+import type { Task, TaskProject, TaskWorkflowState } from "../../tasks/types";
+import type { NoteMeta } from "../../notes/types";
+import type { WidgetConfig, WidgetInstance } from "../types";
 import { WidgetContainer } from "./widget-container";
-import { NotesWidget } from "./widgets/notes-widget";
-import { TasksWidget } from "./widgets/tasks-widget";
 import { ClockWidget } from "./widgets/clock-widget";
+import { CountdownWidget } from "./widgets/countdown-widget";
+import { CryptoWidget } from "./widgets/crypto-widget";
+import { HydrationWidget } from "./widgets/hydration-widget";
+import { NotesWidget } from "./widgets/notes-widget";
+import { PomodoroWidget } from "./widgets/pomodoro-widget";
+import { StockWidget } from "./widgets/stock-widget";
+import { TasksWidget } from "./widgets/tasks-widget";
+import { WeatherWidget } from "./widgets/weather-widget";
 
-interface DashboardGridProps {
+type Props = {
   widgets: WidgetInstance[];
   gridSize: number;
-  onResize?: (id: string, w: number, h: number) => void;
-  onRemove?: (id: string) => void;
-  onUpdateConfig?: (id: string, config: Partial<WidgetConfig>) => void;
   isLocked: boolean;
-}
+  runtime: ModuoRuntime | null;
+  workspaceId: string;
+  notes: NoteMeta[];
+  tasks: Task[];
+  projects: TaskProject[];
+  states: TaskWorkflowState[];
+  onResize: (id: string, w: number, h: number) => void;
+  onRemove: (id: string) => void;
+  onUpdateConfig: (id: string, patch: Partial<WidgetConfig>) => void;
+};
 
-export function DashboardGrid({ widgets, gridSize, onResize, onRemove, onUpdateConfig, isLocked }: DashboardGridProps) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: "dashboard-grid",
-    disabled: isLocked,
-  });
+export function DashboardGrid({
+  widgets,
+  gridSize,
+  isLocked,
+  runtime,
+  workspaceId,
+  notes,
+  tasks,
+  projects,
+  states,
+  onResize,
+  onRemove,
+  onUpdateConfig,
+}: Props) {
+  const { isOver, setNodeRef } = useDroppable({ id: "dashboard-grid", disabled: isLocked });
 
   return (
     <div
       ref={setNodeRef}
-      className={`relative w-full h-full bg-transparent transition-colors ${
-        isOver && !isLocked ? "bg-[#111111]/50" : ""
-      }`}
+      className={`relative h-full w-full transition-colors ${isOver && !isLocked ? "bg-[#111111]/70" : "bg-transparent"}`}
       style={{
-        backgroundImage: !isLocked ? `radial-gradient(#2a2a2a 1px, transparent 1px)` : 'none',
+        backgroundImage: isLocked ? "none" : "radial-gradient(#2a2a2a 1px, transparent 1px)",
         backgroundSize: `${gridSize}px ${gridSize}px`,
       }}
     >
       {widgets.map((widget) => (
-        <WidgetContainer 
-          key={widget.id} 
-          widget={widget} 
-          gridSize={gridSize} 
-          onResize={onResize}
+        <WidgetContainer
+          key={widget.id}
+          widget={widget}
+          gridSize={gridSize}
           isLocked={isLocked}
+          onResize={onResize}
+          onRemove={onRemove}
         >
-          {widget.type === "notes" && (
-            <NotesWidget 
-              config={widget.config} 
-              onUpdateConfig={(config) => onUpdateConfig?.(widget.id, config)}
-              isLocked={isLocked}
-            />
-          )}
-          {widget.type === "tasks" && (
-            <TasksWidget 
+          {widget.type === "notes" ? (
+            <NotesWidget
+              notes={notes}
+              workspaceId={workspaceId}
+              runtime={runtime}
               config={widget.config}
-              onUpdateConfig={(config) => onUpdateConfig?.(widget.id, config)}
               isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
             />
-          )}
-          {widget.type === "clock" && (
-            <ClockWidget 
+          ) : null}
+          {widget.type === "tasks" ? (
+            <TasksWidget
+              tasks={tasks}
+              projects={projects}
+              states={states}
               config={widget.config}
-              onUpdateConfig={(config) => onUpdateConfig?.(widget.id, config)}
               isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
             />
-          )}
+          ) : null}
+          {widget.type === "clock" ? (
+            <ClockWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
+          ) : null}
+          {widget.type === "weather" ? (
+            <WeatherWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
+          ) : null}
+          {widget.type === "stock" ? (
+            <StockWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
+          ) : null}
+          {widget.type === "crypto" ? (
+            <CryptoWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
+          ) : null}
+          {widget.type === "pomodoro" ? (
+            <PomodoroWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
+          ) : null}
+          {widget.type === "hydration" ? (
+            <HydrationWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
+          ) : null}
+          {widget.type === "countdown" ? (
+            <CountdownWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
+          ) : null}
         </WidgetContainer>
       ))}
-      {widgets.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center text-[#2a3041] pointer-events-none">
+
+      {widgets.length === 0 ? (
+        <div className="pointer-events-none absolute inset-0 grid place-items-center">
           <div className="text-center">
-            <div className="text-4xl mb-2">👋</div>
-            <div className="text-sm font-medium">Your board is empty</div>
-            <div className="text-xs mt-1 text-[#5f6c87]">
-              {isLocked ? "Unlock the dashboard to add widgets." : "Drag widgets from the left panel"}
-            </div>
+            <p className="text-[26px] text-[#404040]">+</p>
+            <p className="text-[13px] text-[#8b8b8b]">Board is empty</p>
+            <p className="mt-1 text-[11px] text-[#676767]">{isLocked ? "Unlock to add widgets." : "Drag widgets from the left panel."}</p>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

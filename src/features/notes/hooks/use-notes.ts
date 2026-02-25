@@ -1,54 +1,18 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { notesLocalDB, getLocalPinMap, getMetaValue, setLocalPin, setMetaValue } from "../db/local-db";
+import type { ModuoRuntime } from "../../../lib/runtime";
 import { NotesSyncEngine } from "../sync/sync-engine";
-import { extractMentionedUserIds } from "../../workspaces/utils/mentions";
-import type { NoteKind, NoteMeta, NotesSyncStatus } from "../types";
+import type { NoteKind, NoteMeta } from "../types";
 import { generatePosition, initialPosition } from "../utils/position";
 
-type RemoteNote = {
-  id: string;
-  workspace_id: string;
-  owner_id: string;
-  parent_id: string | null;
-  title: string;
-  icon: string | null;
-  kind?: NoteKind;
-  tags?: string[];
-  is_pinned?: boolean;
-  position: string;
-  is_archived: boolean;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-};
-
-const BOOTSTRAP_LIMIT = 1000;
-
-function mapRemoteNote(note: RemoteNote): NoteMeta {
-  return {
-    id: note.id,
-    workspaceId: note.workspace_id,
-    ownerId: note.owner_id,
-    parentId: note.parent_id,
-    title: note.title,
-    icon: note.icon,
-    kind: note.kind ?? "note",
-    tags: Array.isArray(note.tags) ? note.tags : [],
-    isPinned: note.is_pinned ?? false,
-    position: note.position,
-    isArchived: note.is_archived,
-    createdAt: note.created_at,
-    updatedAt: note.updated_at,
-    deletedAt: note.deleted_at,
-  };
+function safeId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function normalizeNoteMeta(note: NoteMeta): NoteMeta {
-  return {
-    ...note,
-    tags: Array.isArray(note.tags) ? note.tags : [],
-  };
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 function sortNotes(a: NoteMeta, b: NoteMeta): number {
@@ -56,8 +20,23 @@ function sortNotes(a: NoteMeta, b: NoteMeta): number {
   return a.position.localeCompare(b.position);
 }
 
-function metaKey(scopeKey: string): string {
-  return `notes_last_bootstrap_at:${scopeKey}`;
+function normalizeNote(note: any): NoteMeta {
+  return {
+    id: note.id,
+    workspaceId: note.workspaceId ?? note.workspace_id,
+    ownerId: note.ownerId ?? note.owner_id,
+    parentId: note.parentId ?? note.parent_id ?? null,
+    title: note.title ?? "Untitled",
+    icon: note.icon ?? null,
+    kind: (note.kind ?? "note") as NoteKind,
+    tags: Array.isArray(note.tags) ? note.tags : [],
+    isPinned: !!(note.isPinned ?? note.is_pinned),
+    position: note.position ?? initialPosition(),
+    isArchived: !!(note.isArchived ?? note.is_archived),
+    createdAt: note.createdAt ?? note.created_at ?? nowIso(),
+    updatedAt: note.updatedAt ?? note.updated_at ?? nowIso(),
+    deletedAt: note.deletedAt ?? note.deleted_at ?? null,
+  };
 }
 
 type UseNotesParams = {
@@ -66,42 +45,19 @@ type UseNotesParams = {
   modulePermission?: "none" | "view" | "edit" | "admin";
 };
 
-export function useNotes(supabase: SupabaseClient | null, params: UseNotesParams) {
+export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   const { userId, workspaceId, modulePermission = "none" } = params;
-  const scopeKey = userId && workspaceId ? `${userId}:${workspaceId}` : null;
   const canRead = modulePermission !== "none";
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
 
   const [notes, setNotes] = useState<NoteMeta[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<NotesSyncStatus>("synced");
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
   const syncEngine = useMemo(() => {
-    if (!supabase || !userId || !workspaceId || !canRead) return null;
-    return new NotesSyncEngine(supabase, userId, workspaceId);
-  }, [canRead, supabase, userId, workspaceId]);
-
-  const mergeLocalPins = useCallback(async (source: NoteMeta[]): Promise<NoteMeta[]> => {
-    if (!scopeKey) return source;
-    const pins = await getLocalPinMap(scopeKey);
-    if (pins.size === 0) return source;
-    return source.map((note) =>
-      pins.has(note.id) ? { ...note, isPinned: pins.get(note.id) ?? note.isPinned } : note
-    );
-  }, [scopeKey]);
-
-  const loadLocal = useCallback(async () => {
-    if (!workspaceId) return;
-    const localNotes = await notesLocalDB.notes.where("workspaceId").equals(workspaceId).toArray();
-    const normalizedNotes = localNotes.map((note) => normalizeNoteMeta(note as NoteMeta));
-    if (normalizedNotes.some((note, index) => !Array.isArray((localNotes[index] as NoteMeta).tags))) {
-      await notesLocalDB.notes.bulkPut(normalizedNotes);
-    }
-    const merged = await mergeLocalPins(normalizedNotes);
-    merged.sort(sortNotes);
-    setNotes(merged);
-  }, [mergeLocalPins, workspaceId]);
+    if (!runtime || !userId || !workspaceId) return null;
+    return new NotesSyncEngine(runtime, userId, workspaceId);
+  }, [runtime, userId, workspaceId]);
 
   const ensureSelectedNote = useCallback((current: NoteMeta[], preferredId?: string | null) => {
     const existingId = preferredId ?? selectedNoteId;
@@ -121,45 +77,42 @@ export function useNotes(supabase: SupabaseClient | null, params: UseNotesParams
     setSelectedNoteId(visible[0].id);
   }, [selectedNoteId]);
 
-  const bootstrapFromRemote = useCallback(async () => {
-    if (!supabase || !workspaceId || !scopeKey || !canRead) return;
+  const loadNotes = useCallback(async () => {
+    if (!runtime || !workspaceId) return;
+    const rows = await runtime.notes.list(workspaceId);
+    const mapped = rows.map(normalizeNote).sort(sortNotes);
+    setNotes(mapped);
+    ensureSelectedNote(mapped);
+  }, [ensureSelectedNote, runtime, workspaceId]);
 
-    let after = await getMetaValue(metaKey(scopeKey));
-
-    for (let page = 0; page < 10; page += 1) {
-      const { data, error } = await supabase.rpc("notes_bootstrap", {
-        p_workspace_id: workspaceId,
-        p_after_updated_at: after,
-        p_limit: BOOTSTRAP_LIMIT,
+  const updateNotesState = useCallback(
+    (updater: (current: NoteMeta[]) => NoteMeta[]) => {
+      let nextSnapshot: NoteMeta[] | null = null;
+      setNotes((current) => {
+        const next = updater(current).sort(sortNotes);
+        nextSnapshot = next;
+        return next;
       });
+      if (nextSnapshot) ensureSelectedNote(nextSnapshot);
+    },
+    [ensureSelectedNote]
+  );
 
-      if (error) throw error;
-
-      const rows = (Array.isArray(data) ? data : []) as RemoteNote[];
-      if (rows.length === 0) break;
-
-      const mapped = rows.map(mapRemoteNote);
-      await notesLocalDB.notes.bulkPut(mapped);
-
-      const latest = rows[rows.length - 1]?.updated_at;
-      if (latest) {
-        after = latest;
-        await setMetaValue(metaKey(scopeKey), latest);
-      }
-
-      if (rows.length < BOOTSTRAP_LIMIT) break;
-    }
-
-    await loadLocal();
-  }, [canRead, loadLocal, scopeKey, supabase, workspaceId]);
+  const upsertNoteInState = useCallback(
+    (note: NoteMeta) => {
+      updateNotesState((current) => {
+        const index = current.findIndex((entry) => entry.id === note.id);
+        if (index === -1) return [...current, note];
+        const next = [...current];
+        next[index] = note;
+        return next;
+      });
+    },
+    [updateNotesState]
+  );
 
   useEffect(() => {
-    if (!syncEngine) return;
-    return syncEngine.onStatus(setSyncStatus);
-  }, [syncEngine]);
-
-  useEffect(() => {
-    if (!supabase || !workspaceId || !canRead) {
+    if (!runtime || !workspaceId || !canRead) {
       setNotes([]);
       setSelectedNoteId(null);
       setLoading(false);
@@ -167,77 +120,41 @@ export function useNotes(supabase: SupabaseClient | null, params: UseNotesParams
     }
 
     let active = true;
-
     const run = async () => {
       setLoading(true);
       try {
-        await loadLocal();
-        await bootstrapFromRemote();
-        if (!active) return;
-
-        const latestNotes = await notesLocalDB.notes.where("workspaceId").equals(workspaceId).toArray();
-        const mergedNotes = await mergeLocalPins(latestNotes);
-        mergedNotes.sort(sortNotes);
-        setNotes(mergedNotes);
-        ensureSelectedNote(mergedNotes, null);
-
-        const channel = supabase
-          .channel(`notes-meta-${workspaceId}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "notes",
-              filter: `workspace_id=eq.${workspaceId}`,
-            },
-            async (payload) => {
-              if (!active) return;
-              if (payload.eventType === "DELETE") {
-                const oldRow = payload.old as { id?: string };
-                if (oldRow.id) await notesLocalDB.notes.delete(oldRow.id);
-              } else {
-                const row = payload.new as RemoteNote;
-                if (row.workspace_id !== workspaceId) return;
-                await notesLocalDB.notes.put(mapRemoteNote(row));
-              }
-
-              const localNotes = await notesLocalDB.notes.where("workspaceId").equals(workspaceId).toArray();
-              const mergedNotes = await mergeLocalPins(localNotes);
-              mergedNotes.sort(sortNotes);
-              if (!active) return;
-              setNotes(mergedNotes);
-              ensureSelectedNote(mergedNotes);
-            }
-          )
-          .subscribe();
-
-        return () => {
-          void supabase.removeChannel(channel);
-        };
+        await loadNotes();
       } finally {
         if (active) setLoading(false);
       }
     };
 
-    let cleanup: (() => void) | undefined;
-    void run().then((fn) => {
-      cleanup = fn;
-    });
-
+    void run();
     return () => {
       active = false;
-      if (cleanup) cleanup();
     };
-  }, [bootstrapFromRemote, canRead, ensureSelectedNote, loadLocal, mergeLocalPins, supabase, workspaceId]);
+  }, [canRead, loadNotes, runtime, workspaceId]);
 
   useEffect(() => {
     if (!syncEngine) return;
-    return () => syncEngine.destroy();
+    return () => {
+      void syncEngine.destroy();
+    };
   }, [syncEngine]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onRefresh = () => {
+      void loadNotes();
+    };
+    window.addEventListener("moduo:data-refresh", onRefresh);
+    return () => {
+      window.removeEventListener("moduo:data-refresh", onRefresh);
+    };
+  }, [loadNotes]);
+
   const createNote = useCallback(async (parentId: string | null = null, kind: NoteKind = "note") => {
-    if (!supabase || !userId || !workspaceId || !canEdit) return null;
+    if (!runtime || !userId || !workspaceId || !canEdit) return null;
 
     const siblings = notes
       .filter((note) => note.parentId === parentId && !note.deletedAt)
@@ -247,86 +164,52 @@ export function useNotes(supabase: SupabaseClient | null, params: UseNotesParams
       ? generatePosition(siblings[siblings.length - 1]?.position, null)
       : initialPosition();
 
-    const defaultTitle =
-      kind === "category" ? "New Section" : kind === "folder" ? "New Note Folder" : "New Note";
+    const defaultTitle = kind === "category" ? "New Section" : kind === "folder" ? "New Note Folder" : "New Note";
 
-    const { data, error } = await supabase
-      .from("notes")
-      .insert({
-        workspace_id: workspaceId,
-        owner_id: userId,
-        parent_id: parentId,
-        title: defaultTitle,
-        kind,
-        position,
-      })
-      .select("*")
-      .single<RemoteNote>();
+    const note: NoteMeta = {
+      id: safeId(),
+      workspaceId,
+      ownerId: userId,
+      parentId,
+      title: defaultTitle,
+      icon: null,
+      kind,
+      tags: [],
+      isPinned: false,
+      position,
+      isArchived: false,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      deletedAt: null,
+    };
 
-    if (error) throw error;
-
-    const mapped = mapRemoteNote(data);
-    await notesLocalDB.notes.put(mapped);
-    setNotes((current) => [...current, mapped].sort(sortNotes));
-    if (mapped.kind !== "category") setSelectedNoteId(mapped.id);
-
-    if (mapped.kind !== "category") {
-      const { error: docError } = await supabase.from("note_documents").upsert(
-        {
-          workspace_id: workspaceId,
-          note_id: mapped.id,
-          owner_id: userId,
-          snapshot_b64: "",
-          last_compacted_update_id: 0,
-        },
-        { onConflict: "note_id" }
-      );
-
-      if (docError) {
-        console.error("Failed to seed note document:", docError);
-        throw docError;
-      }
+    try {
+      const saved = normalizeNote(await runtime.notes.upsert(note));
+      upsertNoteInState(saved);
+      if (saved.kind !== "category") setSelectedNoteId(saved.id);
+      return saved.id;
+    } catch (e) {
+      console.error(`[useNotes] createNote upsert ERROR:`, e);
+      await loadNotes();
+      return null;
     }
-
-    return mapped.id;
-  }, [canEdit, notes, supabase, userId, workspaceId]);
+  }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, userId, workspaceId]);
 
   const updateNoteTitle = useCallback(async (noteId: string, title: string) => {
-    if (!supabase || !workspaceId || !canEdit) return;
+    if (!runtime || !workspaceId || !canEdit) return;
+    const current = notes.find((note) => note.id === noteId);
+    if (!current) return;
 
-    setNotes((current) =>
-      current.map((note) =>
-        note.id === noteId ? { ...note, title, updatedAt: new Date().toISOString() } : note
-      )
-    );
-
-    const { data, error } = await supabase
-      .from("notes")
-      .update({ title })
-      .eq("id", noteId)
-      .eq("workspace_id", workspaceId)
-      .select("*")
-      .single<RemoteNote>();
-
-    if (error) throw error;
-
-    const mapped = mapRemoteNote(data);
-    await notesLocalDB.notes.put(mapped);
-    setNotes((current) => current.map((note) => (note.id === noteId ? mapped : note)).sort(sortNotes));
-
-    const mentionedUserIds = extractMentionedUserIds(title);
-    if (mentionedUserIds.length > 0) {
-      void supabase.rpc("workspace_emit_mentions", {
-        p_workspace_id: workspaceId,
-        p_module: "notes",
-        p_resource_type: "note",
-        p_resource_id: noteId,
-        p_mentioned_user_ids: mentionedUserIds,
-        p_payload: { context: "note_title" },
-        p_dedupe_seed: `${noteId}:note_title:${Date.now()}`,
-      });
+    const optimistic: NoteMeta = { ...current, title, updatedAt: nowIso() };
+    upsertNoteInState(optimistic);
+    try {
+      const saved = normalizeNote(await runtime.notes.upsert(optimistic));
+      upsertNoteInState(saved);
+    } catch {
+      upsertNoteInState(current);
+      await loadNotes();
     }
-  }, [canEdit, supabase, workspaceId]);
+  }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
 
   const computePositionForMove = useCallback(
     (noteId: string, targetParentId: string | null, beforeId: string | null) => {
@@ -350,145 +233,118 @@ export function useNotes(supabase: SupabaseClient | null, params: UseNotesParams
     [notes]
   );
 
-  const moveNote = useCallback(
-    async (noteId: string, newParentId: string | null, beforeId: string | null = null) => {
-      if (!supabase || !workspaceId || !userId || !canEdit) return;
-      const position = computePositionForMove(noteId, newParentId, beforeId);
+  const moveNote = useCallback(async (noteId: string, newParentId: string | null, beforeId: string | null = null) => {
+    if (!runtime || !workspaceId || !canEdit) return;
+    const current = notes.find((note) => note.id === noteId);
+    if (!current) return;
+    const position = computePositionForMove(noteId, newParentId, beforeId);
+    const optimistic: NoteMeta = {
+      ...current,
+      parentId: newParentId,
+      position,
+      updatedAt: nowIso(),
+    };
 
-      const { data, error } = await supabase.rpc("notes_move", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-        p_new_parent_id: newParentId,
-        p_new_position: position,
-      });
+    upsertNoteInState(optimistic);
 
-      if (error) throw error;
-
-      const mapped = mapRemoteNote((data as RemoteNote) ?? {
-        id: noteId,
-        workspace_id: workspaceId,
-        owner_id: userId,
-        parent_id: newParentId,
-        title: notes.find((n) => n.id === noteId)?.title ?? "Untitled",
-        icon: null,
-        kind: notes.find((n) => n.id === noteId)?.kind ?? "note",
-        tags: notes.find((n) => n.id === noteId)?.tags ?? [],
-        is_pinned: notes.find((n) => n.id === noteId)?.isPinned ?? false,
-        position,
-        is_archived: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted_at: null,
-      });
-
-      await notesLocalDB.notes.put(mapped);
-      setNotes((current) => current.map((note) => (note.id === noteId ? mapped : note)).sort(sortNotes));
-    },
-    [canEdit, computePositionForMove, notes, supabase, userId, workspaceId]
-  );
+    try {
+      const saved = normalizeNote(await runtime.notes.move({
+        workspaceId,
+        noteId,
+        newParentId,
+        newPosition: position,
+      }));
+      upsertNoteInState(saved);
+    } catch {
+      upsertNoteInState(current);
+      await loadNotes();
+    }
+  }, [canEdit, computePositionForMove, loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
 
   const archiveNote = useCallback(async (noteId: string, isArchived: boolean) => {
-    if (!supabase || !workspaceId || !canEdit) return;
+    if (!runtime || !workspaceId || !canEdit) return;
+    const current = notes.find((note) => note.id === noteId);
+    if (!current) return;
 
-    const { data, error } = await supabase
-      .from("notes")
-      .update({ is_archived: isArchived })
-      .eq("id", noteId)
-      .eq("workspace_id", workspaceId)
-      .select("*")
-      .single<RemoteNote>();
-
-    if (error) throw error;
-
-    const mapped = mapRemoteNote(data);
-    await notesLocalDB.notes.put(mapped);
-    setNotes((current) => current.map((note) => (note.id === noteId ? mapped : note)).sort(sortNotes));
-  }, [canEdit, supabase, workspaceId]);
+    const optimistic: NoteMeta = { ...current, isArchived, updatedAt: nowIso() };
+    upsertNoteInState(optimistic);
+    try {
+      const saved = normalizeNote(await runtime.notes.upsert(optimistic));
+      upsertNoteInState(saved);
+    } catch {
+      upsertNoteInState(current);
+      await loadNotes();
+    }
+  }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
 
   const updateNoteTags = useCallback(async (noteId: string, tags: string[]) => {
-    if (!supabase || !workspaceId || !canEdit) return;
+    if (!runtime || !workspaceId || !canEdit) return;
+    const current = notes.find((note) => note.id === noteId);
+    if (!current) return;
+
     const cleanTags = [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))];
-
-    setNotes((current) =>
-      current.map((note) =>
-        note.id === noteId ? { ...note, tags: cleanTags, updatedAt: new Date().toISOString() } : note
-      )
-    );
-
-    const { data, error } = await supabase
-      .from("notes")
-      .update({ tags: cleanTags })
-      .eq("id", noteId)
-      .eq("workspace_id", workspaceId)
-      .select("*")
-      .single<RemoteNote>();
-
-    if (error) throw error;
-
-    const mapped = mapRemoteNote(data);
-    await notesLocalDB.notes.put(mapped);
-    setNotes((current) => current.map((note) => (note.id === noteId ? mapped : note)).sort(sortNotes));
-  }, [canEdit, supabase, workspaceId]);
+    const optimistic: NoteMeta = {
+      ...current,
+      tags: cleanTags,
+      updatedAt: nowIso(),
+    };
+    upsertNoteInState(optimistic);
+    try {
+      const saved = normalizeNote(await runtime.notes.upsert(optimistic));
+      upsertNoteInState(saved);
+    } catch {
+      upsertNoteInState(current);
+      await loadNotes();
+    }
+  }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
 
   const togglePin = useCallback(async (noteId: string, isPinned: boolean) => {
-    if (!scopeKey) return;
+    if (!runtime || !workspaceId) return;
+    const current = notes.find((note) => note.id === noteId);
+    if (!current) return;
 
-    setNotes((current) =>
-      current.map((note) => (note.id === noteId ? { ...note, isPinned, updatedAt: new Date().toISOString() } : note))
-    );
-    await setLocalPin(scopeKey, noteId, isPinned);
-
-    if (!supabase || !workspaceId || !canEdit) return;
-
-    const { data, error } = await supabase
-      .from("notes")
-      .update({ is_pinned: isPinned })
-      .eq("id", noteId)
-      .eq("workspace_id", workspaceId)
-      .select("*")
-      .single<RemoteNote>();
-
-    if (error) {
-      const message = (error.message ?? "").toLowerCase();
-      const isSchemaGap = error.code === "42703" || message.includes("is_pinned");
-      if (!isSchemaGap) {
-        console.warn("Pin sync failed; keeping local pin state.", error);
-      }
-      return;
+    const optimistic: NoteMeta = {
+      ...current,
+      isPinned,
+      updatedAt: nowIso(),
+    };
+    upsertNoteInState(optimistic);
+    try {
+      const saved = normalizeNote(await runtime.notes.upsert(optimistic));
+      upsertNoteInState(saved);
+    } catch {
+      upsertNoteInState(current);
+      await loadNotes();
     }
-
-    const mapped = { ...mapRemoteNote(data), isPinned };
-    await notesLocalDB.notes.put(mapped);
-    setNotes((current) => current.map((note) => (note.id === noteId ? mapped : note)).sort(sortNotes));
-  }, [canEdit, scopeKey, supabase, workspaceId]);
+  }, [loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
 
   const deleteNote = useCallback(async (noteId: string) => {
-    if (!supabase || !workspaceId || !canEdit) return;
+    if (!runtime || !workspaceId || !canEdit) return;
+    const deletedAt = nowIso();
+    const current = notes.find((note) => note.id === noteId);
+    if (!current) return;
+    const optimistic: NoteMeta = {
+      ...current,
+      deletedAt,
+      updatedAt: deletedAt,
+    };
 
-    const deletedAt = new Date().toISOString();
-
-    const { data, error } = await supabase
-      .from("notes")
-      .update({ deleted_at: deletedAt })
-      .eq("id", noteId)
-      .eq("workspace_id", workspaceId)
-      .select("*")
-      .single<RemoteNote>();
-
-    if (error) throw error;
-
-    const mapped = mapRemoteNote(data);
-    await notesLocalDB.notes.put(mapped);
-
-    const next = notes
-      .filter((note) => note.id !== noteId && !note.deletedAt && !note.isArchived && note.kind !== "category")
-      .sort(sortNotes);
-    setSelectedNoteId(next[0]?.id ?? null);
-    setNotes((current) => current.map((note) => (note.id === noteId ? mapped : note)).sort(sortNotes));
-  }, [canEdit, notes, supabase, workspaceId]);
+    upsertNoteInState(optimistic);
+    try {
+      const saved = normalizeNote(await runtime.notes.remove({
+        workspaceId,
+        noteId,
+        deletedAt,
+      }));
+      upsertNoteInState(saved);
+    } catch {
+      upsertNoteInState(current);
+      await loadNotes();
+    }
+  }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
 
   const duplicateNote = useCallback(async (noteId: string) => {
-    if (!supabase || !userId || !workspaceId || !canEdit) return null;
+    if (!runtime || !userId || !workspaceId || !canEdit) return null;
     const source = notes.find((note) => note.id === noteId && !note.deletedAt);
     if (!source) return null;
 
@@ -498,64 +354,34 @@ export function useNotes(supabase: SupabaseClient | null, params: UseNotesParams
 
     const nextSibling = siblings.find((note) => source.position.localeCompare(note.position) < 0) ?? null;
     const position = generatePosition(source.position, nextSibling?.position ?? null);
-    const copyTitle = `${source.title || "Untitled"} (Copy)`;
 
-    const { data, error } = await supabase
-      .from("notes")
-      .insert({
-        workspace_id: workspaceId,
-        owner_id: userId,
-        parent_id: source.parentId,
-        title: copyTitle,
-        kind: source.kind,
-        tags: source.tags,
-        is_pinned: false,
-        position,
-      })
-      .select("*")
-      .single<RemoteNote>();
+    const copy: NoteMeta = {
+      ...source,
+      id: safeId(),
+      ownerId: userId,
+      title: `${source.title || "Untitled"} (Copy)`,
+      position,
+      isPinned: false,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      deletedAt: null,
+    };
 
-    if (error) throw error;
-
-    const mapped = mapRemoteNote(data);
-    await notesLocalDB.notes.put(mapped);
-    setNotes((current) => [...current, mapped].sort(sortNotes));
-
-    if (mapped.kind !== "category") {
-      const { data: sourceDoc } = await supabase
-        .from("note_documents")
-        .select("snapshot_b64,last_compacted_update_id")
-        .eq("note_id", source.id)
-        .eq("workspace_id", workspaceId)
-        .maybeSingle<{ snapshot_b64: string; last_compacted_update_id: number }>();
-
-      const { error: docError } = await supabase.from("note_documents").upsert(
-        {
-          workspace_id: workspaceId,
-          note_id: mapped.id,
-          owner_id: userId,
-          snapshot_b64: sourceDoc?.snapshot_b64 ?? "",
-          last_compacted_update_id: sourceDoc?.last_compacted_update_id ?? 0,
-        },
-        { onConflict: "note_id" }
-      );
-
-      if (docError) {
-        console.error("Failed to seed duplicated note document:", docError);
-        throw docError;
-      }
-      
-      setSelectedNoteId(mapped.id);
+    try {
+      const saved = normalizeNote(await runtime.notes.upsert(copy));
+      upsertNoteInState(saved);
+      if (saved.kind !== "category") setSelectedNoteId(saved.id);
+      return saved.id;
+    } catch {
+      await loadNotes();
+      return null;
     }
-
-    return mapped.id;
-  }, [canEdit, notes, supabase, userId, workspaceId]);
+  }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, userId, workspaceId]);
 
   return {
     notes,
     loading,
     canEdit,
-    syncStatus,
     selectedNoteId,
     setSelectedNoteId,
     createNote,

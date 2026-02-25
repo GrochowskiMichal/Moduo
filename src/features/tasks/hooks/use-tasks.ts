@@ -1,14 +1,10 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { tasksLocalDB } from "../db/local-db";
-import { TasksSyncEngine } from "../sync/sync-engine";
-import { extractMentionedUserIds } from "../../workspaces/utils/mentions";
+import type { ModuoRuntime } from "../../../lib/runtime";
 import type {
   Task,
   TaskComment,
   TaskPriority,
   TaskProject,
-  TasksSyncStatus,
   TaskViewMode,
   TaskWorkflowKind,
   TaskWorkflowState,
@@ -62,15 +58,72 @@ function sortTasks(tasks: Task[]): Task[] {
   );
 }
 
-function normalizeTask(task: Task): Task {
+function sortComments(comments: TaskComment[]): TaskComment[] {
+  return [...comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+function normalizeTask(task: any): Task {
   return {
-    ...task,
+    id: task.id,
+    workspaceId: task.workspaceId ?? task.workspace_id,
+    ownerId: task.ownerId ?? task.owner_id,
+    projectId: task.projectId ?? task.project_id,
+    parentTaskId: task.parentTaskId ?? task.parent_task_id ?? null,
+    stateId: task.stateId ?? task.state_id,
+    assigneeId: task.assigneeId ?? task.assignee_id ?? null,
+    title: task.title ?? "New Task",
+    description: task.description ?? "",
     tags: Array.isArray(task.tags) ? task.tags : [],
+    priority: Math.max(0, Math.min(4, Number(task.priority ?? 2))) as TaskPriority,
+    dueDate: task.dueDate ?? task.due_date ?? null,
+    position: task.position ?? initialPosition(),
+    createdAt: task.createdAt ?? task.created_at ?? nowIso(),
+    updatedAt: task.updatedAt ?? task.updated_at ?? nowIso(),
+    deletedAt: task.deletedAt ?? task.deleted_at ?? null,
   };
 }
 
-function sortComments(comments: TaskComment[]): TaskComment[] {
-  return [...comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+function normalizeProject(project: any): TaskProject {
+  return {
+    id: project.id,
+    workspaceId: project.workspaceId ?? project.workspace_id,
+    ownerId: project.ownerId ?? project.owner_id,
+    name: project.name ?? "New Project",
+    description: project.description ?? "",
+    position: project.position ?? initialPosition(),
+    createdAt: project.createdAt ?? project.created_at ?? nowIso(),
+    updatedAt: project.updatedAt ?? project.updated_at ?? nowIso(),
+    deletedAt: project.deletedAt ?? project.deleted_at ?? null,
+  };
+}
+
+function normalizeState(state: any): TaskWorkflowState {
+  return {
+    id: state.id,
+    workspaceId: state.workspaceId ?? state.workspace_id,
+    ownerId: state.ownerId ?? state.owner_id,
+    projectId: state.projectId ?? state.project_id,
+    name: state.name ?? "State",
+    kind: (state.kind ?? "custom") as TaskWorkflowKind,
+    color: state.color ?? null,
+    position: state.position ?? initialPosition(),
+    createdAt: state.createdAt ?? state.created_at ?? nowIso(),
+    updatedAt: state.updatedAt ?? state.updated_at ?? nowIso(),
+    deletedAt: state.deletedAt ?? state.deleted_at ?? null,
+  };
+}
+
+function normalizeComment(comment: any): TaskComment {
+  return {
+    id: comment.id,
+    workspaceId: comment.workspaceId ?? comment.workspace_id,
+    ownerId: comment.ownerId ?? comment.owner_id,
+    taskId: comment.taskId ?? comment.task_id,
+    body: comment.body ?? "",
+    createdAt: comment.createdAt ?? comment.created_at ?? nowIso(),
+    updatedAt: comment.updatedAt ?? comment.updated_at ?? nowIso(),
+    deletedAt: comment.deletedAt ?? comment.deleted_at ?? null,
+  };
 }
 
 function defaultWorkflowStateName(kind: TaskWorkflowKind): string {
@@ -90,11 +143,11 @@ export type UseTasksState = {
   viewMode: TaskViewMode;
   loading: boolean;
   canEdit: boolean;
-  syncStatus: TasksSyncStatus;
   setViewMode: (mode: TaskViewMode) => void;
   setSelectedProjectId: (projectId: string | null) => void;
   setSelectedTaskId: (taskId: string | null) => void;
   createProject: (name?: string) => Promise<string | null>;
+  deleteProject: (projectId: string) => Promise<void>;
   createWorkflowState: (projectId: string, name: string, kind?: TaskWorkflowKind) => Promise<string | null>;
   createTask: (args?: {
     projectId?: string | null;
@@ -107,6 +160,8 @@ export type UseTasksState = {
     dueDate?: string | null;
     assigneeId?: string | null;
   }) => Promise<string | null>;
+  updateWorkflowState: (stateId: string, patch: Partial<TaskWorkflowState>) => Promise<void>;
+  deleteWorkflowState: (stateId: string) => Promise<void>;
   updateTask: (taskId: string, patch: Partial<Pick<Task, "title" | "description" | "tags" | "priority" | "dueDate" | "stateId" | "parentTaskId" | "assigneeId">>) => Promise<void>;
   moveTask: (
     taskId: string,
@@ -117,7 +172,7 @@ export type UseTasksState = {
   deleteTask: (taskId: string) => Promise<void>;
   addComment: (taskId: string, body: string) => Promise<string | null>;
   deleteComment: (commentId: string) => Promise<void>;
-  syncEngine: TasksSyncEngine | null;
+  syncEngine: null;
 };
 
 type UseTasksParams = {
@@ -126,7 +181,7 @@ type UseTasksParams = {
   modulePermission?: "none" | "view" | "edit" | "admin";
 };
 
-export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams): UseTasksState {
+export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): UseTasksState {
   const { userId, workspaceId, modulePermission = "none" } = params;
   const canRead = modulePermission !== "none";
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
@@ -139,32 +194,15 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<TaskViewMode>("board");
   const [loading, setLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<TasksSyncStatus>("synced");
 
-  const syncEngine = useMemo(() => {
-    if (!supabase || !userId || !workspaceId || !canRead) return null;
-    return new TasksSyncEngine(supabase, userId, workspaceId);
-  }, [canRead, supabase, userId, workspaceId]);
+  const loadBundle = useCallback(async () => {
+    if (!runtime || !workspaceId) return;
+    const bundle = await runtime.tasks.list(workspaceId);
 
-  const loadLocal = useCallback(async () => {
-    if (!workspaceId) return;
-
-    const [projectRows, stateRows, taskRows, commentRows] = await Promise.all([
-      tasksLocalDB.projects.where("workspaceId").equals(workspaceId).toArray(),
-      tasksLocalDB.states.where("workspaceId").equals(workspaceId).toArray(),
-      tasksLocalDB.tasks.where("workspaceId").equals(workspaceId).toArray(),
-      tasksLocalDB.comments.where("workspaceId").equals(workspaceId).toArray(),
-    ]);
-
-    const nextProjects = sortProjects(projectRows);
-    const nextStates = sortStates(stateRows);
-    const normalizedTaskRows = taskRows.map((task) => normalizeTask(task as Task));
-    const nextTasks = sortTasks(normalizedTaskRows);
-    const nextComments = sortComments(commentRows);
-
-    if (normalizedTaskRows.some((task, index) => !Array.isArray((taskRows[index] as Task).tags))) {
-      await tasksLocalDB.tasks.bulkPut(normalizedTaskRows);
-    }
+    const nextProjects = sortProjects((bundle.projects ?? []).map(normalizeProject));
+    const nextStates = sortStates((bundle.states ?? []).map(normalizeState));
+    const nextTasks = sortTasks((bundle.tasks ?? []).map(normalizeTask));
+    const nextComments = sortComments((bundle.comments ?? []).map(normalizeComment));
 
     setProjects(nextProjects);
     setStates(nextStates);
@@ -184,10 +222,10 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
       if (current && activeTasks.some((task) => task.id === current)) return current;
       return activeTasks[0].id;
     });
-  }, [workspaceId]);
+  }, [runtime, workspaceId]);
 
   useEffect(() => {
-    if (!syncEngine || !workspaceId || !canRead) {
+    if (!runtime || !workspaceId || !canRead) {
       setProjects([]);
       setStates([]);
       setTasks([]);
@@ -199,18 +237,10 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
     }
 
     let active = true;
-
-    const stopStatus = syncEngine.onStatus(setSyncStatus);
-    const stopChange = syncEngine.onChange(() => {
-      void loadLocal();
-    });
-
     const run = async () => {
       setLoading(true);
       try {
-        await loadLocal();
-        await syncEngine.start();
-        await loadLocal();
+        await loadBundle();
       } finally {
         if (active) setLoading(false);
       }
@@ -220,15 +250,23 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
 
     return () => {
       active = false;
-      stopStatus();
-      stopChange();
-      syncEngine.destroy();
     };
-  }, [canRead, loadLocal, syncEngine, workspaceId]);
+  }, [canRead, loadBundle, runtime, workspaceId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onRefresh = () => {
+      void loadBundle();
+    };
+    window.addEventListener("moduo:data-refresh", onRefresh);
+    return () => {
+      window.removeEventListener("moduo:data-refresh", onRefresh);
+    };
+  }, [loadBundle]);
 
   const createProject = useCallback(
     async (name = "New Project") => {
-      if (!userId || !workspaceId || !syncEngine || !canEdit) return null;
+      if (!userId || !workspaceId || !runtime || !canEdit) return null;
 
       const visibleProjects = projects.filter((project) => !project.deletedAt).sort(sortByPosition);
       const position = visibleProjects.length
@@ -248,18 +286,115 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
         deletedAt: null,
       };
 
-      setProjects((current) => sortProjects([...current, project]));
-      setSelectedProjectId(project.id);
-      await tasksLocalDB.projects.put(project);
-      await syncEngine.enqueue("upsert_project", project);
-      return project.id;
+      const saved = normalizeProject(await runtime.tasks.upsertProject(project));
+      const stateBase = {
+        workspaceId,
+        ownerId: userId,
+        projectId: saved.id,
+        color: null as string | null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        deletedAt: null as string | null,
+      };
+      await Promise.all([
+        runtime.tasks.upsertState({
+          ...stateBase,
+          id: safeId(),
+          name: "ToDo",
+          kind: "todo",
+          position: "todo-01",
+        }),
+        runtime.tasks.upsertState({
+          ...stateBase,
+          id: safeId(),
+          name: "InProgress",
+          kind: "in_progress",
+          position: "in_progress-02",
+        }),
+        runtime.tasks.upsertState({
+          ...stateBase,
+          id: safeId(),
+          name: "Done",
+          kind: "done",
+          position: "done-03",
+        }),
+      ]);
+      setSelectedProjectId(saved.id);
+      await loadBundle();
+      return saved.id;
     },
-    [canEdit, projects, syncEngine, userId, workspaceId]
+    [canEdit, loadBundle, projects, runtime, userId, workspaceId]
+  );
+
+  const deleteProject = useCallback(
+    async (projectId: string) => {
+      if (!runtime || !canEdit || !workspaceId) return;
+      const current = projects.find((project) => project.id === projectId && !project.deletedAt);
+      if (!current) return;
+
+      const deletedAt = nowIso();
+      const relatedStates = states.filter((state) => state.projectId === projectId && !state.deletedAt);
+      const relatedTasks = tasks.filter((task) => task.projectId === projectId && !task.deletedAt);
+      const relatedTaskIds = new Set(relatedTasks.map((task) => task.id));
+      const relatedComments = comments.filter(
+        (comment) => relatedTaskIds.has(comment.taskId) && !comment.deletedAt
+      );
+
+      await runtime.tasks.upsertProject({
+        ...current,
+        updatedAt: deletedAt,
+        deletedAt,
+      });
+
+      await Promise.all([
+        ...relatedStates.map((state) =>
+          runtime.tasks.upsertState({
+            ...state,
+            updatedAt: deletedAt,
+            deletedAt,
+          })
+        ),
+        ...relatedTasks.map((task) =>
+          runtime.tasks.deleteItem({
+            workspaceId,
+            taskId: task.id,
+            deletedAt,
+          })
+        ),
+        ...relatedComments.map((comment) =>
+          runtime.tasks.upsertComment({
+            ...comment,
+            updatedAt: deletedAt,
+            deletedAt,
+          })
+        ),
+      ]);
+
+      if (selectedProjectId === projectId) {
+        setSelectedProjectId(null);
+      }
+      if (selectedTaskId && relatedTaskIds.has(selectedTaskId)) {
+        setSelectedTaskId(null);
+      }
+      await loadBundle();
+    },
+    [
+      canEdit,
+      comments,
+      loadBundle,
+      projects,
+      runtime,
+      selectedProjectId,
+      selectedTaskId,
+      states,
+      tasks,
+      workspaceId,
+    ]
   );
 
   const createWorkflowState = useCallback(
     async (projectId: string, name: string, kind: TaskWorkflowKind = "custom") => {
-      if (!userId || !workspaceId || !syncEngine || !canEdit) return null;
+      if (!userId || !workspaceId || !runtime || !canEdit) return null;
 
       const projectStates = states
         .filter((state) => state.projectId === projectId && !state.deletedAt)
@@ -280,12 +415,35 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
         deletedAt: null,
       };
 
-      setStates((current) => sortStates([...current, state]));
-      await tasksLocalDB.states.put(state);
-      await syncEngine.enqueue("upsert_state", state);
-      return state.id;
+      const saved = normalizeState(await runtime.tasks.upsertState(state));
+      await loadBundle();
+      return saved.id;
     },
-    [canEdit, states, syncEngine, userId, workspaceId]
+    [canEdit, loadBundle, runtime, states, userId, workspaceId]
+  );
+
+  const updateWorkflowState = useCallback(
+    async (stateId: string, patch: Partial<TaskWorkflowState>) => {
+      if (!runtime || !canEdit) return;
+      const current = states.find((s) => s.id === stateId);
+      if (!current) return;
+      const updated = { ...current, ...patch, updatedAt: nowIso() };
+      await runtime.tasks.upsertState(updated);
+      await loadBundle();
+    },
+    [canEdit, loadBundle, runtime, states]
+  );
+
+  const deleteWorkflowState = useCallback(
+    async (stateId: string) => {
+      if (!runtime || !canEdit || !workspaceId) return;
+      const current = states.find((s) => s.id === stateId);
+      if (!current) return;
+      const updated = { ...current, deletedAt: nowIso() };
+      await runtime.tasks.upsertState(updated);
+      await loadBundle();
+    },
+    [canEdit, loadBundle, runtime, states, workspaceId]
   );
 
   const createTask = useCallback(
@@ -300,7 +458,7 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
       dueDate?: string | null;
       assigneeId?: string | null;
     }) => {
-      if (!userId || !workspaceId || !syncEngine || !canEdit) return null;
+      if (!userId || !workspaceId || !runtime || !canEdit) return null;
 
       const projectId = args?.projectId ?? selectedProjectId;
       if (!projectId) return null;
@@ -310,7 +468,6 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
       if (!stateId) return null;
 
       const parentTaskId = args?.parentTaskId ?? null;
-
       const siblings = tasks
         .filter(
           (task) =>
@@ -344,25 +501,12 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
         deletedAt: null,
       };
 
-      setTasks((current) => sortTasks([...current, task]));
-      setSelectedTaskId(task.id);
-      await tasksLocalDB.tasks.put(task);
-      await syncEngine.enqueue("upsert_task", task);
-      const mentionedUserIds = extractMentionedUserIds(task.title);
-      if (mentionedUserIds.length > 0 && supabase && workspaceId) {
-        void supabase.rpc("workspace_emit_mentions", {
-          p_workspace_id: workspaceId,
-          p_module: "tasks",
-          p_resource_type: "task",
-          p_resource_id: task.id,
-          p_mentioned_user_ids: mentionedUserIds,
-          p_payload: { context: "task_title" },
-          p_dedupe_seed: `${task.id}:task_title:${Date.now()}`,
-        });
-      }
-      return task.id;
+      const saved = normalizeTask(await runtime.tasks.upsertItem(task));
+      setSelectedTaskId(saved.id);
+      await loadBundle();
+      return saved.id;
     },
-    [canEdit, selectedProjectId, states, supabase, syncEngine, tasks, userId, workspaceId]
+    [canEdit, loadBundle, runtime, selectedProjectId, states, tasks, userId, workspaceId]
   );
 
   const updateTask = useCallback(
@@ -370,40 +514,26 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
       taskId: string,
       patch: Partial<Pick<Task, "title" | "description" | "tags" | "priority" | "dueDate" | "stateId" | "parentTaskId" | "assigneeId">>
     ) => {
-      if (!syncEngine || !canEdit) return;
+      if (!runtime || !canEdit) return;
       const current = tasks.find((task) => task.id === taskId);
       if (!current) return;
 
-      const updated: Task = normalizeTask({
+      const updated: Task = {
         ...current,
         ...patch,
+        tags: Array.isArray(patch.tags) ? patch.tags : current.tags,
         updatedAt: nowIso(),
-      });
+      };
 
-      setTasks((list) => sortTasks(list.map((task) => (task.id === taskId ? updated : normalizeTask(task)))));
-      await tasksLocalDB.tasks.put(updated);
-      await syncEngine.enqueue("upsert_task", updated);
-
-      const mentionSource = `${updated.title}\\n${updated.description}`;
-      const mentionedUserIds = extractMentionedUserIds(mentionSource);
-      if (mentionedUserIds.length > 0 && supabase && workspaceId) {
-        void supabase.rpc("workspace_emit_mentions", {
-          p_workspace_id: workspaceId,
-          p_module: "tasks",
-          p_resource_type: "task",
-          p_resource_id: updated.id,
-          p_mentioned_user_ids: mentionedUserIds,
-          p_payload: { context: "task_update" },
-          p_dedupe_seed: `${updated.id}:task_update:${Date.now()}`,
-        });
-      }
+      await runtime.tasks.upsertItem(updated);
+      await loadBundle();
     },
-    [canEdit, supabase, syncEngine, tasks, workspaceId]
+    [canEdit, loadBundle, runtime, tasks]
   );
 
   const moveTask = useCallback(
     async (taskId: string, newParentTaskId: string | null, newStateId: string, beforeTaskId: string | null = null) => {
-      if (!syncEngine || !canEdit) return;
+      if (!runtime || !canEdit || !workspaceId) return;
       const task = tasks.find((entry) => entry.id === taskId);
       if (!task) return;
 
@@ -430,45 +560,35 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
         }
       }
 
-      const updated: Task = {
-        ...task,
-        parentTaskId: newParentTaskId,
-        stateId: newStateId,
-        position,
-        updatedAt: nowIso(),
-      };
-
-      setTasks((list) => sortTasks(list.map((entry) => (entry.id === taskId ? updated : entry))));
-      await tasksLocalDB.tasks.put(updated);
-      await syncEngine.enqueue("move_task", {
+      await runtime.tasks.move({
+        workspaceId,
         taskId,
         newParentTaskId,
         newStateId,
         newPosition: position,
       });
+      await loadBundle();
     },
-    [canEdit, syncEngine, tasks]
+    [canEdit, loadBundle, runtime, tasks, workspaceId]
   );
 
   const deleteTask = useCallback(
     async (taskId: string) => {
-      if (!syncEngine || !canEdit) return;
-      const task = tasks.find((entry) => entry.id === taskId);
-      if (!task) return;
-
-      const deletedAt = nowIso();
-      const updated = { ...task, deletedAt, updatedAt: deletedAt };
-      setTasks((list) => sortTasks(list.map((entry) => (entry.id === taskId ? updated : entry))));
+      if (!runtime || !canEdit || !workspaceId) return;
+      await runtime.tasks.deleteItem({
+        workspaceId,
+        taskId,
+        deletedAt: nowIso(),
+      });
       if (selectedTaskId === taskId) setSelectedTaskId(null);
-      await tasksLocalDB.tasks.put(updated);
-      await syncEngine.enqueue("delete_task", { taskId, deletedAt });
+      await loadBundle();
     },
-    [canEdit, selectedTaskId, syncEngine, tasks]
+    [canEdit, loadBundle, runtime, selectedTaskId, workspaceId]
   );
 
   const addComment = useCallback(
     async (taskId: string, body: string) => {
-      if (!userId || !workspaceId || !syncEngine || !canEdit) return null;
+      if (!userId || !workspaceId || !runtime || !canEdit) return null;
       const trimmed = body.trim();
       if (!trimmed) return null;
 
@@ -484,39 +604,20 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
         deletedAt: null,
       };
 
-      setComments((current) => sortComments([...current, comment]));
-      await tasksLocalDB.comments.put(comment);
-      await syncEngine.enqueue("upsert_comment", comment);
-      const mentionedUserIds = extractMentionedUserIds(trimmed);
-      if (mentionedUserIds.length > 0 && supabase && workspaceId) {
-        void supabase.rpc("workspace_emit_mentions", {
-          p_workspace_id: workspaceId,
-          p_module: "tasks",
-          p_resource_type: "task",
-          p_resource_id: taskId,
-          p_mentioned_user_ids: mentionedUserIds,
-          p_payload: { context: "task_comment", comment_id: comment.id },
-          p_dedupe_seed: `${taskId}:task_comment:${comment.id}`,
-        });
-      }
-      return comment.id;
+      const saved = normalizeComment(await runtime.tasks.upsertComment(comment));
+      await loadBundle();
+      return saved.id;
     },
-    [canEdit, supabase, syncEngine, userId, workspaceId]
+    [canEdit, loadBundle, runtime, userId, workspaceId]
   );
 
   const deleteComment = useCallback(
     async (commentId: string) => {
-      if (!syncEngine || !canEdit) return;
-      const comment = comments.find((entry) => entry.id === commentId);
-      if (!comment) return;
-
-      const deletedAt = nowIso();
-      const updated = { ...comment, deletedAt, updatedAt: deletedAt };
-      setComments((list) => sortComments(list.map((entry) => (entry.id === commentId ? updated : entry))));
-      await tasksLocalDB.comments.put(updated);
-      await syncEngine.enqueue("delete_comment", { commentId, deletedAt });
+      if (!runtime || !canEdit) return;
+      await runtime.tasks.deleteComment(commentId);
+      await loadBundle();
     },
-    [canEdit, comments, syncEngine]
+    [canEdit, loadBundle, runtime]
   );
 
   return {
@@ -530,18 +631,20 @@ export function useTasks(supabase: SupabaseClient | null, params: UseTasksParams
     viewMode,
     loading,
     canEdit,
-    syncStatus,
     setViewMode,
     setSelectedProjectId,
     setSelectedTaskId,
     createProject,
+    deleteProject,
     createWorkflowState,
+    updateWorkflowState,
+    deleteWorkflowState,
     createTask,
     updateTask,
     moveTask,
     deleteTask,
     addComment,
     deleteComment,
-    syncEngine,
+    syncEngine: null,
   };
 }

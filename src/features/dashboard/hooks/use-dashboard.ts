@@ -1,326 +1,194 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { SupabaseClient } from "@supabase/supabase-js";
-import { dashboardLocalDB, DashboardViewRow, DashboardWidgetRow } from "../db/local-db";
-import { DashboardSyncEngine } from "../sync/sync-engine";
-import { WidgetConfig, WidgetInstance, WidgetType } from "../types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ModuoRuntime } from "../../../lib/runtime";
+import type { DashboardLayout, WidgetConfig, WidgetInstance, WidgetType } from "../types";
+
+const VALID_WIDGET_TYPES = new Set<WidgetType>(["notes", "tasks", "clock", "weather", "stock", "crypto", "pomodoro", "hydration", "countdown"]);
+
+// redb namespace for all dashboard layouts.
+const STORE_NS = "dashboard-layout";
 
 function safeId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function nowIso(): string {
-  return new Date().toISOString();
+// Key used inside the redb kv namespace.
+function redbKey(workspaceId: string | null, viewId: string | null): string {
+  return `${workspaceId ?? "global"}:${viewId ?? "main"}`;
 }
 
-export type UseDashboardState = {
-  views: DashboardViewRow[];
-  widgets: Record<string, WidgetInstance[]>; // key is viewId
-  activeViewId: string | null;
-  loading: boolean;
-  syncStatus: "syncing" | "synced" | "offline" | "error";
-  setActiveViewId: (viewId: string) => void;
-  createView: (name: string) => Promise<string | null>;
-  updateView: (viewId: string, patch: Partial<DashboardViewRow>) => Promise<void>;
-  deleteView: (viewId: string) => Promise<void>;
-  addWidget: (viewId: string, type: WidgetType, x: number, y: number) => Promise<string | null>;
-  updateWidget: (widgetId: string, patch: Partial<DashboardWidgetRow>) => Promise<void>;
-  deleteWidget: (widgetId: string) => Promise<void>;
+// Legacy localStorage key for one-time migration.
+function legacyLocalStorageKey(workspaceId: string | null, viewId: string | null): string {
+  return `moduo:dashboard-layout:v1:${workspaceId ?? "global"}:${viewId ?? "main"}`;
+}
+
+// Accepts either a raw JSON string (legacy localStorage) or an already-parsed
+// object (from redb via Tauri invoke).
+function parseLayout(raw: unknown): DashboardLayout | null {
+  if (!raw) return null;
+  try {
+    const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw) as Partial<DashboardLayout>;
+    if (!Array.isArray(parsed.widgets)) return null;
+    const widgets = parsed.widgets
+      .filter(
+        (entry): entry is WidgetInstance =>
+          !!entry &&
+          typeof entry.id === "string" &&
+          typeof entry.type === "string" &&
+          VALID_WIDGET_TYPES.has(entry.type as WidgetType)
+      )
+      .map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        x: Math.max(0, Number(entry.x ?? 0)),
+        y: Math.max(0, Number(entry.y ?? 0)),
+        w: Math.max(2, Number(entry.w ?? 6)),
+        h: Math.max(2, Number(entry.h ?? 4)),
+        config: entry.config ?? {},
+      }));
+    return { isLocked: parsed.isLocked ?? false, widgets };
+  } catch {
+    return null;
+  }
+}
+
+type UseDashboardState = {
+  layout: DashboardLayout;
+  widgets: WidgetInstance[];
+  isLocked: boolean;
+  isLoading: boolean;
+  toggleLock: () => void;
+  addWidget: (type: WidgetType, x: number, y: number) => void;
+  moveWidget: (id: string, nextX: number, nextY: number) => void;
+  resizeWidget: (id: string, nextW: number, nextH: number) => void;
+  removeWidget: (id: string) => void;
+  updateWidgetConfig: (id: string, patch: Partial<WidgetConfig>) => void;
 };
 
-type UseDashboardParams = {
-  supabase: SupabaseClient | null;
-  userId: string | null;
-  workspaceId: string | null;
-};
+export function useDashboard(
+  workspaceId: string | null,
+  viewId: string | null,
+  runtime: ModuoRuntime | null
+): UseDashboardState {
+  const [layout, setLayout] = useState<DashboardLayout>({ isLocked: false, widgets: [] });
+  const [isLoading, setIsLoading] = useState(true);
 
-export function useDashboard(params: UseDashboardParams): UseDashboardState {
-  const { supabase, userId, workspaceId } = params;
+  // Guards the save effect: only true AFTER the async load for the current
+  // key has resolved. Prevents the empty initial state from overwriting the
+  // saved layout during the async gap.
+  const isLoadedRef = useRef(false);
 
-  const [views, setViews] = useState<DashboardViewRow[]>([]);
-  const [widgets, setWidgets] = useState<Record<string, WidgetInstance[]>>({});
-  const [activeViewId, setActiveViewId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<"syncing" | "synced" | "offline" | "error">("synced");
-
-  const syncEngine = useMemo(() => {
-    if (!supabase || !userId || !workspaceId) return null;
-    return new DashboardSyncEngine(supabase, userId, workspaceId);
-  }, [supabase, userId, workspaceId]);
-
-  const loadLocal = useCallback(async () => {
-    if (!workspaceId) return;
-
-    const [viewRows, widgetRows] = await Promise.all([
-      dashboardLocalDB.views.where("workspaceId").equals(workspaceId).toArray(),
-      dashboardLocalDB.widgets.where("workspaceId").equals(workspaceId).toArray(),
-    ]);
-
-    const activeViews = viewRows
-      .filter((v) => !v.deletedAt)
-      .sort((a, b) => a.position.localeCompare(b.position));
-
-    // Create default view if none exists
-    if (activeViews.length === 0 && userId) {
-       const timestamp = nowIso();
-       const defaultView: DashboardViewRow = {
-         id: safeId(),
-         workspaceId,
-         ownerId: userId,
-         name: "Main Dashboard",
-         position: "z0",
-         isLocked: false,
-         createdAt: timestamp,
-         updatedAt: timestamp,
-         deletedAt: null,
-       };
-       
-       await dashboardLocalDB.views.put(defaultView);
-       
-       // Queue for sync
-       const clientId = crypto.randomUUID();
-       await dashboardLocalDB.outbox.put({
-          id: `${clientId}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
-          scopeKey: `${userId}:${workspaceId}`,
-          workspaceId,
-          ownerId: userId,
-          op: "upsert_view",
-          payload: defaultView,
-          createdAt: timestamp,
-       });
-
-       activeViews.push(defaultView);
-    }
-
-    const activeWidgets = widgetRows.filter((w) => !w.deletedAt);
-    
-    const widgetsByView: Record<string, WidgetInstance[]> = {};
-    activeWidgets.forEach((w) => {
-      if (!widgetsByView[w.viewId]) {
-        widgetsByView[w.viewId] = [];
-      }
-      widgetsByView[w.viewId].push({
-        id: w.id,
-        type: w.type as WidgetType,
-        x: w.x,
-        y: w.y,
-        w: w.w,
-        h: w.h,
-        config: w.config,
-      });
-    });
-
-    setViews(activeViews);
-    setWidgets(widgetsByView);
-
-    // Set initial active view if none selected
-    setActiveViewId((current) => {
-      if (current && activeViews.some((v) => v.id === current)) return current;
-      return activeViews[0]?.id ?? null;
-    });
-  }, [workspaceId, userId]);
-
+  // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!syncEngine || !workspaceId) {
-      setViews([]);
-      setWidgets({});
-      setLoading(false);
+    if (!runtime || !workspaceId) {
+      setLayout({ isLocked: false, widgets: [] });
+      isLoadedRef.current = true;
+      setIsLoading(false);
       return;
     }
 
-    let active = true;
+    // Reset guard synchronously before starting the async fetch so the save
+    // effect (which runs in the same render pass) cannot fire with stale data.
+    isLoadedRef.current = false;
+    setIsLoading(true);
 
-    const stopStatus = syncEngine.onStatus(setSyncStatus);
-    const stopChange = syncEngine.onChange(() => {
-      void loadLocal();
-    });
+    const key = redbKey(workspaceId, viewId);
 
-    const run = async () => {
-      setLoading(true);
-      try {
-        await loadLocal();
-        await syncEngine.start();
-        // Load again after sync start to catch any immediate updates or bootstrap results
-        await loadLocal();
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
+    runtime.localStore
+      .get(STORE_NS, key)
+      .then((raw) => {
+        let parsed = parseLayout(raw);
 
-    void run();
+        // One-time migration from the old localStorage-based storage.
+        if (!parsed && typeof window !== "undefined") {
+          const legacyRaw = window.localStorage.getItem(legacyLocalStorageKey(workspaceId, viewId));
+          parsed = parseLayout(legacyRaw);
+          if (parsed) {
+            // Persist to redb and clean up localStorage.
+            runtime.localStore.set(STORE_NS, key, parsed).catch(console.error);
+            window.localStorage.removeItem(legacyLocalStorageKey(workspaceId, viewId));
+          }
+        }
 
-    return () => {
-      active = false;
-      stopStatus();
-      stopChange();
-      syncEngine.destroy();
-    };
-  }, [loadLocal, syncEngine, workspaceId]);
+        setLayout(parsed ?? { isLocked: false, widgets: [] });
+        isLoadedRef.current = true;
+        setIsLoading(false);
+      })
+      .catch(() => {
+        setLayout({ isLocked: false, widgets: [] });
+        isLoadedRef.current = true;
+        setIsLoading(false);
+      });
+  }, [viewId, workspaceId, runtime]);
 
-  const createView = useCallback(async (name: string) => {
-    if (!userId || !workspaceId || !syncEngine) return null;
+  // ── Save ────────────────────────────────────────────────────────────────────
+  // Skipped until isLoadedRef is true so we never overwrite a saved layout
+  // with the empty initial state during async load.
+  useEffect(() => {
+    if (!runtime || !workspaceId || !isLoadedRef.current) return;
+    runtime.localStore
+      .set(STORE_NS, redbKey(workspaceId, viewId), layout)
+      .catch(console.error);
+  }, [layout, viewId, workspaceId, runtime]);
 
-    const position = `z${Date.now()}`; 
-    const timestamp = nowIso();
+  const toggleLock = useCallback(() => {
+    setLayout((current) => ({ ...current, isLocked: !current.isLocked }));
+  }, []);
 
-    const view: DashboardViewRow = {
-      id: safeId(),
-      workspaceId,
-      ownerId: userId,
-      name,
-      position,
-      isLocked: false,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      deletedAt: null,
-    };
-
-    setViews((prev) => [...prev, view]);
-    setActiveViewId(view.id);
-    
-    await dashboardLocalDB.views.put(view);
-    await syncEngine.enqueue("upsert_view", view);
-    
-    return view.id;
-  }, [syncEngine, userId, workspaceId]);
-
-  const updateView = useCallback(async (viewId: string, patch: Partial<DashboardViewRow>) => {
-    if (!syncEngine || !workspaceId) return;
-
-    const current = views.find((v) => v.id === viewId);
-    if (!current) return;
-
-    const updated: DashboardViewRow = {
+  const addWidget = useCallback((type: WidgetType, x: number, y: number) => {
+    setLayout((current) => ({
       ...current,
-      ...patch,
-      updatedAt: nowIso(),
-    };
-
-    setViews((prev) => prev.map((v) => (v.id === viewId ? updated : v)));
-    
-    await dashboardLocalDB.views.put(updated);
-    await syncEngine.enqueue("upsert_view", updated);
-  }, [syncEngine, views, workspaceId]);
-
-  const deleteView = useCallback(async (viewId: string) => {
-    if (!syncEngine || !workspaceId) return;
-
-    const deletedAt = nowIso();
-    const current = views.find((v) => v.id === viewId);
-    if (!current) return;
-
-    const updated = { ...current, deletedAt, updatedAt: deletedAt };
-
-    setViews((prev) => prev.filter((v) => v.id !== viewId));
-    if (activeViewId === viewId) setActiveViewId(null);
-
-    await dashboardLocalDB.views.put(updated);
-    await syncEngine.enqueue("delete_view", { viewId, deletedAt });
-  }, [activeViewId, syncEngine, views, workspaceId]);
-
-  const addWidget = useCallback(async (viewId: string, type: WidgetType, x: number, y: number) => {
-    if (!userId || !workspaceId || !syncEngine) return null;
-
-    const timestamp = nowIso();
-    const widget: DashboardWidgetRow = {
-      id: safeId(),
-      workspaceId,
-      ownerId: userId,
-      viewId,
-      type,
-      x,
-      y,
-      w: 6,
-      h: 4,
-      config: {},
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      deletedAt: null,
-    };
-
-    setWidgets((prev) => ({
-      ...prev,
-      [viewId]: [...(prev[viewId] || []), {
-        id: widget.id,
-        type: widget.type as WidgetType,
-        x: widget.x,
-        y: widget.y,
-        w: widget.w,
-        h: widget.h,
-        config: widget.config,
-      }],
+      widgets: [
+        ...current.widgets,
+        { id: safeId(), type, x: Math.max(0, x), y: Math.max(0, y), w: 6, h: 5, config: {} },
+      ],
     }));
+  }, []);
 
-    await dashboardLocalDB.widgets.put(widget);
-    await syncEngine.enqueue("upsert_widget", widget);
-    
-    return widget.id;
-  }, [syncEngine, userId, workspaceId]);
+  const moveWidget = useCallback((id: string, nextX: number, nextY: number) => {
+    setLayout((current) => ({
+      ...current,
+      widgets: current.widgets.map((widget) =>
+        widget.id === id ? { ...widget, x: Math.max(0, nextX), y: Math.max(0, nextY) } : widget
+      ),
+    }));
+  }, []);
 
-  const updateWidget = useCallback(async (widgetId: string, patch: Partial<DashboardWidgetRow>) => {
-    if (!syncEngine || !workspaceId) return;
+  const resizeWidget = useCallback((id: string, nextW: number, nextH: number) => {
+    setLayout((current) => ({
+      ...current,
+      widgets: current.widgets.map((widget) =>
+        widget.id === id ? { ...widget, w: Math.max(2, nextW), h: Math.max(2, nextH) } : widget
+      ),
+    }));
+  }, []);
 
-    // Need to find which view this widget belongs to
-    const widgetRow = await dashboardLocalDB.widgets.get(widgetId);
-    if (!widgetRow) return;
+  const removeWidget = useCallback((id: string) => {
+    setLayout((current) => ({ ...current, widgets: current.widgets.filter((widget) => widget.id !== id) }));
+  }, []);
 
-    const updated: DashboardWidgetRow = {
-      ...widgetRow,
-      ...patch,
-      updatedAt: nowIso(),
-    };
+  const updateWidgetConfig = useCallback((id: string, patch: Partial<WidgetConfig>) => {
+    setLayout((current) => ({
+      ...current,
+      widgets: current.widgets.map((widget) =>
+        widget.id === id ? { ...widget, config: { ...widget.config, ...patch } } : widget
+      ),
+    }));
+  }, []);
 
-    setWidgets((prev) => {
-      const viewWidgets = prev[widgetRow.viewId] || [];
-      return {
-        ...prev,
-        [widgetRow.viewId]: viewWidgets.map((w) => 
-          w.id === widgetId 
-            ? { ...w, ...patch } as WidgetInstance 
-            : w
-        ),
-      };
-    });
-
-    await dashboardLocalDB.widgets.put(updated);
-    await syncEngine.enqueue("upsert_widget", updated);
-  }, [syncEngine, workspaceId]);
-
-  const deleteWidget = useCallback(async (widgetId: string) => {
-    if (!syncEngine || !workspaceId) return;
-
-    const widgetRow = await dashboardLocalDB.widgets.get(widgetId);
-    if (!widgetRow) return;
-
-    const deletedAt = nowIso();
-    const updated = { ...widgetRow, deletedAt, updatedAt: deletedAt };
-
-    setWidgets((prev) => {
-      const viewWidgets = prev[widgetRow.viewId] || [];
-      return {
-        ...prev,
-        [widgetRow.viewId]: viewWidgets.filter((w) => w.id !== widgetId),
-      };
-    });
-
-    await dashboardLocalDB.widgets.put(updated);
-    await syncEngine.enqueue("delete_widget", { widgetId, deletedAt });
-  }, [syncEngine, workspaceId]);
-
-  return {
-    views,
-    widgets,
-    activeViewId,
-    loading,
-    syncStatus,
-    setActiveViewId,
-    createView,
-    updateView,
-    deleteView,
-    addWidget,
-    updateWidget,
-    deleteWidget,
-  };
+  return useMemo(
+    () => ({
+      layout,
+      widgets: layout.widgets,
+      isLocked: layout.isLocked,
+      isLoading,
+      toggleLock,
+      addWidget,
+      moveWidget,
+      resizeWidget,
+      removeWidget,
+      updateWidgetConfig,
+    }),
+    [addWidget, isLoading, layout, moveWidget, removeWidget, resizeWidget, toggleLock, updateWidgetConfig]
+  );
 }

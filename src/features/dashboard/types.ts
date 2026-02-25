@@ -1,20 +1,36 @@
+export type WidgetType = "notes" | "tasks" | "clock" | "weather" | "stock" | "crypto" | "pomodoro" | "hydration" | "countdown";
 
-export type WidgetType = "notes" | "tasks" | "clock";
+export type StockEntry = {
+  symbol: string;
+  name: string;
+};
 
-export interface WidgetConfig {
-  // Notes specific
+export type CryptoEntry = {
+  id: string;
+  symbol: string;
+  name: string;
+};
+
+export type WidgetConfig = {
   noteId?: string;
+  projectIds?: string[];
+  timezones?: string[];
+  weatherCity?: string;
+  weatherLat?: number;
+  weatherLon?: number;
+  stocks?: StockEntry[];
+  cryptos?: CryptoEntry[];
+  pomodoroWorkMinutes?: number;
+  pomodoroBreakMinutes?: number;
+  hydrationGoalMl?: number;
+  hydrationConsumedMl?: number;
+  hydrationLastDate?: string;
+  countdownTitle?: string;
+  countdownTargetIso?: string;
+  countdownActive?: boolean;
+};
 
-  // Tasks specific
-  projectIds?: string[]; // If empty, all projects
-  tags?: string[]; // Filter by tags
-  viewMode?: "list" | "board";
-
-  // Clock specific
-  timezones?: string[]; // Array of timezone strings (e.g., "America/New_York")
-}
-
-export interface WidgetInstance {
+export type WidgetInstance = {
   id: string;
   type: WidgetType;
   x: number;
@@ -22,10 +38,9 @@ export interface WidgetInstance {
   w: number;
   h: number;
   config: WidgetConfig;
-}
+};
 
-export interface DashboardView {
-  id: string;
-  name: string;
+export type DashboardLayout = {
+  isLocked: boolean;
   widgets: WidgetInstance[];
-}
+};

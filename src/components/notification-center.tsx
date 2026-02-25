@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
-import { Modal } from "react-native";
-import { Feather } from "@expo/vector-icons";
-import { Pressable, Text, View } from "../tw";
+import { Modal, Pressable, Text, View } from "../tw";
 import { useWorkspace } from "../providers/workspace-provider";
+import { Icon } from "./ui/icon";
 
 export function NotificationCenter() {
   const {
@@ -25,16 +24,16 @@ export function NotificationCenter() {
   );
 
   return (
-    <View className="relative">
+    <View className="relative shrink-0">
       <Pressable
-        className="h-10 w-10 items-center justify-center bg-transparent border-0 rounded-none"
+        className="flex h-10 w-10 shrink-0 items-center justify-center bg-transparent border-0 rounded-none"
         style={topBarPressableStyle}
         onPress={async () => {
           setOpen(true);
           await refreshNotifications();
         }}
       >
-        <Feather name="bell" size={14} color="#9a9a9a" />
+        <Icon name="bell" size={16} color="#9a9a9a" />
         {activeUnread > 0 ? (
           <View className="absolute -right-1 -top-1 min-w-[18px] h-[18px] rounded-full bg-[#f08f42] items-center justify-center px-1">
             <Text className="text-[#121212] text-[10px] font-semibold">{Math.min(activeUnread, 99)}</Text>
@@ -43,8 +42,8 @@ export function NotificationCenter() {
       </Pressable>
 
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable className="flex-1" onPress={() => setOpen(false)} />
-        <View className="absolute right-8 top-16 w-[420px] max-h-[580px] rounded-xl bg-[#171717] p-3 z-[999]">
+        <Pressable className="fixed inset-0" onPress={() => setOpen(false)} />
+        <View className="fixed right-8 top-16 w-[420px] max-h-[580px] rounded-xl bg-[#171717] p-3 z-[999]">
           <View className="flex-row items-center justify-between pb-2">
             <Text className="text-[#e5e5e5] text-[16px] font-semibold">Notifications</Text>
             <Pressable onPress={() => void markAllNotificationsRead()}>
@@ -67,7 +66,7 @@ export function NotificationCenter() {
             </Pressable>
           </View>
 
-          <View className="mt-3 max-h-[460px]">
+          <View className="mt-3 max-h-[460px] overflow-y-auto">
             {notificationsLoading ? (
               <Text className="text-[#a0a0a0] text-[13px]">Loading notifications...</Text>
             ) : notifications.length === 0 ? (

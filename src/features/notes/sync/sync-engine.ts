@@ -1,56 +1,20 @@
-import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import type { Provider } from "@lexical/yjs";
 import { Awareness } from "y-protocols/awareness";
-import { IndexeddbPersistence } from "y-indexeddb";
+
 import * as Y from "yjs";
-import { notesLocalDB } from "../db/local-db";
-import type { NotesSyncStatus, SyncCursor, SyncUpdate } from "../types";
+import { runtime, type ModuoRuntime } from "../../../lib/runtime";
+import type { NotesSyncStatus } from "../types";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
-
-const RECONCILE_INTERVAL_MS = 20_000;
-const FLUSH_DEBOUNCE_MS = 700;
-const MAX_PUSH_BATCH_SIZE = 16;
-const COMPACTION_THRESHOLD = 1;
-const NOTES_DEBUG = true;
-
-function notesDebug(event: string, payload?: Record<string, unknown>): void {
-  if (!NOTES_DEBUG) return;
-  const stamp = new Date().toISOString();
-  if (payload) {
-    console.log(`[notes-sync][${stamp}] ${event}`, payload);
-    return;
-  }
-  console.log(`[notes-sync][${stamp}] ${event}`);
-}
 
 type StatusListener = (status: NotesSyncStatus) => void;
 
-type RemotePullRow = {
-  id: number;
-  workspace_id: string;
-  note_id: string;
-  client_id: string;
-  client_seq: number;
-  update_b64: string;
-  created_at: string;
-};
-
-type RemoteDocSnapshot = {
-  snapshot_b64: string;
-  last_compacted_update_id: number;
-};
-
 type NoteSession = {
-  noteId: string;
   doc: Y.Doc;
   provider: NotesRealtimeProvider;
-  persistence: IndexeddbPersistence;
-  realtimeChannel: RealtimeChannel | null;
-  flushTimer: ReturnType<typeof setTimeout> | null;
-  reconcileTimer: ReturnType<typeof setInterval> | null;
-  destroyDocListener: () => void;
-  destroyed: boolean;
+  persistence: RedbPersistence;
 };
+
+const NOTES_DRAFT_NAMESPACE = "notes:crdt-draft:v1";
 
 class NotesRealtimeProvider implements Provider {
   awareness: Provider["awareness"];
@@ -61,14 +25,10 @@ class NotesRealtimeProvider implements Provider {
     sync: new Set<(isSynced: boolean) => void>(),
     update: new Set<(arg: unknown) => void>(),
   };
-  private _synced = false;
   private connected = false;
+  private synced = false;
 
-  constructor(
-    private readonly doc: Y.Doc,
-    private readonly onConnect?: () => void,
-    private readonly onDisconnect?: () => void
-  ) {
+  constructor(private readonly doc: Y.Doc) {
     this.rawAwareness = new Awareness(doc);
     this.awareness = {
       getLocalState: () => this.rawAwareness.getLocalState() as any,
@@ -81,31 +41,21 @@ class NotesRealtimeProvider implements Provider {
   }
 
   connect(): void {
-    if (!this.connected) {
-      this.connected = true;
-      this.onConnect?.();
-      notesDebug("provider.connect");
-    }
+    this.connected = true;
     this.emit("status", { status: "connected" });
-    if (this._synced) {
-      this.emit("sync", true);
-    }
+    if (this.synced) this.emit("sync", true);
   }
 
   disconnect(): void {
-    if (this.connected) {
-      this.connected = false;
-      this.onDisconnect?.();
-      notesDebug("provider.disconnect");
-    }
+    this.connected = false;
     this.emit("sync", false);
     this.emit("status", { status: "disconnected" });
     this.rawAwareness.setLocalState(null);
   }
 
   setSynced(isSynced: boolean): void {
-    this._synced = isSynced;
-    this.emit("sync", isSynced);
+    this.synced = isSynced;
+    if (this.connected) this.emit("sync", isSynced);
   }
 
   on(type: "reload", cb: (doc: Y.Doc) => void): void;
@@ -124,29 +74,15 @@ class NotesRealtimeProvider implements Provider {
     this.listeners[type].delete(cb);
   }
 
-  emit(type: "reload", payload: Y.Doc): void;
-  emit(type: "status", payload: { status: string }): void;
-  emit(type: "sync", payload: boolean): void;
-  emit(type: "update", payload: unknown): void;
-  emit(type: keyof NotesRealtimeProvider["listeners"], payload: unknown): void {
+  private emit(type: "reload", payload: Y.Doc): void;
+  private emit(type: "status", payload: { status: string }): void;
+  private emit(type: "sync", payload: boolean): void;
+  private emit(type: "update", payload: unknown): void;
+  private emit(type: keyof NotesRealtimeProvider["listeners"], payload: unknown): void {
     for (const listener of this.listeners[type]) {
       listener(payload as never);
     }
   }
-}
-
-function emptyCursor(workspaceId: string, noteId: string): SyncCursor {
-  return {
-    workspaceId,
-    noteId,
-    lastPulledUpdateId: 0,
-    clientSeq: 0,
-    lastCompactedUpdateId: 0,
-  };
-}
-
-function nowIso(): string {
-  return new Date().toISOString();
 }
 
 function safeId(): string {
@@ -156,438 +92,472 @@ function safeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// Maximum number of init attempts before giving up and switching to offline-queue mode.
+const MAX_INIT_RETRIES = 5;
+// Base delay in ms for exponential backoff (doubles each attempt: 500, 1000, 2000, 4000, 8000).
+const INIT_RETRY_BASE_MS = 500;
+
+export class RedbPersistence {
+  /** True once remote state has been loaded and applied (or after a final init failure). */
+  public synced = false;
+  /** Resolves when init completes (success or exhausted retries). */
+  public whenSynced: Promise<void>;
+
+  // Pending Y.Doc state-as-update bytes captured before init finished.
+  // Stored as raw incremental Yjs updates received from doc.on("update").
+  private pendingFlush = false;
+  private pendingUpdates: Uint8Array[] = [];
+  private timeoutId: ReturnType<typeof setTimeout> | null = null;
+  private draftTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private destroyed = false;
+  private initAttempt = 0;
+  private draftWasApplied = false;
+  private onShutdown?: () => void;
+
+  // Resolvers so we can imperatively settle whenSynced after retries.
+  private resolveWhenSynced!: () => void;
+  private rejectWhenSynced!: (reason?: unknown) => void;
+
+  constructor(
+    private runtime: ModuoRuntime | null,
+    private workspaceId: string,
+    private noteId: string,
+    private clientId: string,
+    private doc: Y.Doc,
+    private onStatus: (status: NotesSyncStatus) => void,
+    private setMaxSeq: (seq: number) => void,
+    private getNextSeq: () => number
+  ) {
+    this.whenSynced = new Promise<void>((resolve, reject) => {
+      this.resolveWhenSynced = resolve;
+      this.rejectWhenSynced = reject;
+    });
+    this.doc.on("update", this.onUpdate);
+    this.onShutdown = () => {
+      if (!this.destroyed) void this.flush();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("beforeunload", this.onShutdown);
+      window.addEventListener("pagehide", this.onShutdown);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") this.onShutdown?.();
+      });
+    }
+    void this.tryInit();
+  }
+
+  private draftStorageKey(): string {
+    return `draft:${this.workspaceId}:${this.noteId}`;
+  }
+
+  private draftLocalStorageKey(): string {
+    return `moduo:notes-crdt-draft:v1:${this.workspaceId}:${this.noteId}`;
+  }
+
+  private async readDraftB64(): Promise<string | null> {
+    if (typeof window === "undefined") return null;
+    try {
+      const value = window.localStorage.getItem(this.draftLocalStorageKey());
+      return value && value.length ? value : null;
+    } catch {
+      // fall through
+    }
+    try {
+      if (this.runtime?.localStore) {
+        const raw = await this.runtime.localStore.get(NOTES_DRAFT_NAMESPACE, this.draftStorageKey());
+        return typeof raw === "string" && raw ? raw : null;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  private async writeDraftB64(b64: string): Promise<void> {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(this.draftLocalStorageKey(), b64);
+    } catch {
+      // ignore
+    }
+    try {
+      if (this.runtime?.localStore) {
+        await this.runtime.localStore.set(NOTES_DRAFT_NAMESPACE, this.draftStorageKey(), b64);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  private async clearDraftB64(): Promise<void> {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.removeItem(this.draftLocalStorageKey());
+    } catch {
+      // ignore
+    }
+    try {
+      if (this.runtime?.localStore) {
+        await this.runtime.localStore.remove(NOTES_DRAFT_NAMESPACE, this.draftStorageKey());
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  private scheduleDraftSave(): void {
+    if (this.destroyed) return;
+    if (this.draftTimeoutId) clearTimeout(this.draftTimeoutId);
+    this.draftTimeoutId = setTimeout(() => {
+      this.draftTimeoutId = null;
+      try {
+        const b64 = encodeUint8ToBase64(Y.encodeStateAsUpdate(this.doc));
+        void this.writeDraftB64(b64);
+      } catch {
+        // ignore
+      }
+    }, 250);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Init with exponential-backoff retry
+  // ---------------------------------------------------------------------------
+
+  private async tryInit(): Promise<void> {
+    if (this.destroyed) return;
+
+    const draftB64 = await this.readDraftB64();
+    if (draftB64) {
+      try {
+        Y.applyUpdate(this.doc, decodeBase64ToUint8(draftB64), "bootstrap");
+        this.draftWasApplied = true;
+      } catch (e) {
+        console.error(`[RedbPersistence] Failed to apply local draft for ${this.noteId}:`, e);
+      }
+    }
+
+    if (!this.runtime) {
+      // No backend available — go straight to "offline-synced" so edits can be
+      // queued locally and flushed if a runtime appears later.
+      this.synced = true;
+      this.onStatus("offline");
+      this.resolveWhenSynced();
+      return;
+    }
+
+    this.initAttempt += 1;
+
+    try {
+      const state = await this.runtime.notes.getDocState(this.workspaceId, this.noteId);
+
+      if (this.destroyed) return;
+
+      if (state?.snapshotB64) {
+        Y.applyUpdate(this.doc, decodeBase64ToUint8(state.snapshotB64), "bootstrap");
+      }
+
+      const updates = Array.isArray(state?.updates) ? state.updates : [];
+      let maxSeq = 0;
+      for (const row of updates) {
+        if (row?.updateB64) {
+          try {
+            Y.applyUpdate(this.doc, decodeBase64ToUint8(row.updateB64), "remote");
+          } catch (e) {
+            console.error(
+              `[RedbPersistence] Failed to apply update for ${this.noteId} at seq ${row.clientSeq}:`,
+              e
+            );
+          }
+        }
+        maxSeq = Math.max(maxSeq, Number(row?.clientSeq ?? 0));
+      }
+      this.setMaxSeq(maxSeq);
+
+      this.synced = true;
+      this.onStatus("synced");
+      this.resolveWhenSynced();
+
+      // Drain any edits the user made while we were loading.
+      if (this.pendingFlush) {
+        this.pendingFlush = false;
+        void this.flush();
+      }
+
+      // If we recovered a local draft (e.g. crash/force-quit), ensure we persist it remotely.
+      if (this.draftWasApplied) {
+        this.pendingUpdates.push(Y.encodeStateAsUpdate(this.doc));
+        void this.flush();
+      }
+    } catch (e) {
+      if (this.destroyed) return;
+
+      console.error(`[RedbPersistence] init attempt ${this.initAttempt} failed:`, e);
+
+      if (this.initAttempt < MAX_INIT_RETRIES) {
+        // Schedule next attempt with exponential backoff.
+        const delay = INIT_RETRY_BASE_MS * Math.pow(2, this.initAttempt - 1);
+        this.onStatus("error");
+        this.retryTimeoutId = setTimeout(() => {
+          this.retryTimeoutId = null;
+          void this.tryInit();
+        }, delay);
+      } else {
+        // All retries exhausted — switch to offline-queue mode so edits aren't lost.
+        // The next successful flush will persist everything via encodeStateAsUpdate.
+        console.error(
+          `[RedbPersistence] giving up after ${MAX_INIT_RETRIES} attempts — enabling offline-queue mode for ${this.noteId}`
+        );
+        this.synced = true; // Allow onUpdate/flush to proceed.
+        this.onStatus("error");
+        // Resolve (not reject) so callers that `await whenSynced` are unblocked.
+        this.resolveWhenSynced();
+
+        // If the user has already made edits, schedule an immediate flush attempt.
+        if (this.pendingFlush) {
+          this.pendingFlush = false;
+          void this.flush();
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Update listener — called by Y.Doc on every local change
+  // ---------------------------------------------------------------------------
+
+  private onUpdate = (update: Uint8Array, origin: any) => {
+    if (origin === "remote" || origin === "bootstrap" || this.destroyed) {
+      return;
+    }
+    this.pendingUpdates.push(update);
+    this.scheduleDraftSave();
+
+    if (!this.synced) {
+      this.pendingFlush = true;
+      return;
+    }
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+    }
+    this.timeoutId = setTimeout(() => {
+      void this.flush();
+    }, 200);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Flush — encode current doc state and send to backend
+  // ---------------------------------------------------------------------------
+
+  async flush(): Promise<void> {
+    if (this.destroyed || !this.runtime) {
+      return;
+    }
+
+    // If init hasn't finished yet, wait for it before attempting a flush so we
+    // don't race against the remote-state apply step.
+    if (!this.synced) {
+      await this.whenSynced;
+      if (this.destroyed) {
+        return;
+      }
+    }
+
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
+    }
+
+    if (this.pendingUpdates.length === 0) {
+      return;
+    }
+
+    const queued = this.pendingUpdates;
+    this.pendingUpdates = [];
+    const update = queued.length === 1 ? queued[0] : Y.mergeUpdates(queued);
+    if (!update.byteLength) {
+      return;
+    }
+
+    this.onStatus("syncing");
+    const currentSeq = this.getNextSeq();
+    try {
+      const b64 = encodeUint8ToBase64(update);
+      await this.runtime.notes.applyCrdtUpdates(this.workspaceId, this.noteId, this.clientId, [
+        {
+          idempotencyKey: `${this.workspaceId}:${this.noteId}:${this.clientId}:${currentSeq}`,
+          clientSeq: currentSeq,
+          updateB64: b64,
+        },
+      ]);
+      this.onStatus("synced");
+      void this.clearDraftB64();
+    } catch (e) {
+      // Requeue unsent updates so the next flush can retry without data loss.
+      this.pendingUpdates = [...queued, ...this.pendingUpdates];
+      console.error(`[RedbPersistence] applyCrdtUpdates ERROR:`, e);
+      this.onStatus("error");
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Teardown
+  // ---------------------------------------------------------------------------
+
+  disconnect() {
+    this.destroyed = true;
+    this.doc.off("update", this.onUpdate);
+    if (this.timeoutId) clearTimeout(this.timeoutId);
+    if (this.draftTimeoutId) clearTimeout(this.draftTimeoutId);
+    if (this.retryTimeoutId) clearTimeout(this.retryTimeoutId);
+    if (this.onShutdown && typeof window !== "undefined") {
+      window.removeEventListener("beforeunload", this.onShutdown);
+      window.removeEventListener("pagehide", this.onShutdown);
+    }
+    // Settle the promise so anything still awaiting `whenSynced` is unblocked.
+    this.resolveWhenSynced();
+  }
+}
+
 export class NotesSyncEngine {
   private readonly clientId = safeId();
   private readonly sessions = new Map<string, NoteSession>();
   private readonly statusListeners = new Set<StatusListener>();
-  private isOnline = typeof navigator === "undefined" ? true : navigator.onLine;
+  private readonly seqByNote = new Map<string, number>();
+  private readonly runtime: ModuoRuntime | null;
   private destroyed = false;
-  private handleOnline?: () => void;
-  private handleOffline?: () => void;
 
   constructor(
-    private readonly supabase: SupabaseClient,
-    private readonly userId: string,
+    runtimeClient: ModuoRuntime | null,
+    _userId: string,
     private readonly workspaceId: string
   ) {
-    if (typeof window !== "undefined") {
-      this.handleOnline = () => {
-        this.isOnline = true;
-        this.broadcastStatus("syncing");
-        for (const session of this.sessions.values()) {
-          void this.flushAndPull(session);
-        }
-      };
-      this.handleOffline = () => {
-        this.isOnline = false;
-        this.broadcastStatus("offline");
-      };
-      window.addEventListener("online", this.handleOnline);
-      window.addEventListener("offline", this.handleOffline);
-    }
+    this.runtime = runtimeClient ?? runtime;
   }
 
   onStatus(listener: StatusListener): () => void {
     this.statusListeners.add(listener);
+    listener(this.runtime ? "synced" : "offline");
     return () => {
       this.statusListeners.delete(listener);
     };
   }
 
-  private broadcastStatus(status: NotesSyncStatus): void {
-    for (const listener of this.statusListeners) {
-      listener(status);
+  private broadcastStatus = (status: NotesSyncStatus) => {
+    for (const listener of this.statusListeners) listener(status);
+  };
+
+  async checkNeedsBootstrap(noteId: string): Promise<boolean> {
+    this.providerFactory(noteId, new Map());
+    const session = this.sessions.get(noteId)!;
+    await session.persistence.whenSynced;
+    const needsBootstrap = session.doc.store.clients.size === 0;
+    return needsBootstrap;
+  }
+
+  async flushNote(noteId: string): Promise<void> {
+    if (this.destroyed) return;
+    const session = this.sessions.get(noteId);
+    if (session) {
+      await session.persistence.flush();
     }
   }
 
-  private persistenceKey(noteId: string): string {
-    return `moduo-note-v3-${this.userId}-${this.workspaceId}-${noteId}`;
+  async closeNote(noteId: string, flushFirst = true): Promise<void> {
+    if (this.destroyed) return;
+    const session = this.sessions.get(noteId);
+    if (!session) return;
+
+    if (flushFirst) {
+      await session.persistence.flush();
+    }
+    session.provider.disconnect();
+    session.persistence.disconnect();
+    session.doc.destroy();
+    this.sessions.delete(noteId);
+    this.seqByNote.delete(noteId);
   }
 
-  private get scopeKey(): string {
-    return `${this.userId}:${this.workspaceId}`;
+  getOrCreateSession(noteId: string): NoteSession {
+    this.providerFactory(noteId, new Map());
+    const session = this.sessions.get(noteId);
+    if (!session) {
+      throw new Error(`Notes session missing for noteId=${noteId}`);
+    }
+    return session;
   }
 
-  async ensureCursor(noteId: string): Promise<SyncCursor> {
-    const existing = await notesLocalDB.syncCursors
-      .where("[workspaceId+noteId]")
-      .equals([this.workspaceId, noteId])
-      .first();
-    if (existing) return existing;
-    const created = emptyCursor(this.workspaceId, noteId);
-    await notesLocalDB.syncCursors.put(created);
-    return created;
-  }
-
-  private async saveCursor(cursor: SyncCursor): Promise<void> {
-    await notesLocalDB.syncCursors.put(cursor);
+  pokeNoteDoc(noteId: string): void {
+    const session = this.sessions.get(noteId);
+    if (!session) return;
+    const rootV2 = session.doc.share.get("root-v2");
+    if (!(rootV2 instanceof Y.XmlElement)) return;
+    const marker = `poke-${Date.now()}`;
+    session.doc.transact(() => {
+      rootV2.setAttribute("__moduo_poke__", marker);
+      rootV2.removeAttribute("__moduo_poke__");
+    }, "bootstrap");
   }
 
   providerFactory = (noteId: string, yjsDocMap: Map<string, Y.Doc>): Provider => {
     const existing = this.sessions.get(noteId);
-    if (existing && !existing.destroyed) {
+    if (existing) {
       yjsDocMap.set(noteId, existing.doc);
-      notesDebug("provider.reuse-session", { noteId });
       return existing.provider;
     }
-
     let doc = yjsDocMap.get(noteId);
     if (!doc) {
       doc = new Y.Doc();
       yjsDocMap.set(noteId, doc);
     }
 
-    let connectedEditors = 0;
-    const provider = new NotesRealtimeProvider(
+    const provider = new NotesRealtimeProvider(doc);
+    const persistence = new RedbPersistence(
+      this.runtime,
+      this.workspaceId,
+      noteId,
+      this.clientId,
       doc,
+      this.broadcastStatus,
+      (maxSeq: number) => this.seqByNote.set(noteId, maxSeq),
       () => {
-        connectedEditors += 1;
-        notesDebug("editor.connected", { noteId, connectedEditors });
-      },
-      () => {
-        connectedEditors = Math.max(0, connectedEditors - 1);
-        notesDebug("editor.disconnected", { noteId, connectedEditors });
+        const seq = (this.seqByNote.get(noteId) ?? 0) + 1;
+        this.seqByNote.set(noteId, seq);
+        return seq;
       }
     );
-    const persistence = new IndexeddbPersistence(this.persistenceKey(noteId), doc);
-
-    const onUpdate = (update: Uint8Array, origin: unknown) => {
-      notesDebug("doc.update", {
-        noteId,
-        origin: String(origin ?? "unknown"),
-        bytes: update.byteLength,
-        connectedEditors,
-      });
-      if (origin === "remote" || origin === "bootstrap" || origin === "pull") return;
-      // Ignore teardown updates emitted while no editor is bound to this note.
-      if (connectedEditors === 0) {
-        notesDebug("doc.update.ignored-no-editor", { noteId, bytes: update.byteLength });
-        return;
-      }
-      void this.enqueueLocalUpdate(noteId, update);
-    };
-
-    doc.on("update", onUpdate);
 
     const session: NoteSession = {
-      noteId,
       doc,
       provider,
       persistence,
-      realtimeChannel: null,
-      flushTimer: null,
-      reconcileTimer: null,
-      destroyDocListener: () => doc.off("update", onUpdate),
-      destroyed: false,
     };
 
-    session.reconcileTimer = setInterval(() => {
-      if (this.isOnline && !session.destroyed) {
-        void this.flushAndPull(session);
-      }
-    }, RECONCILE_INTERVAL_MS);
-
     this.sessions.set(noteId, session);
-    notesDebug("session.created", { noteId });
-    // provider.connect() is removed here to let the consumer (CollaborationPlugin) call it.
-    // This ensures listeners are attached before the 'sync' event is emitted.
 
-    void this.bootstrapSession(session);
+    // Wire up provider connection status when loaded
+    persistence.whenSynced.then(() => {
+      const current = this.sessions.get(noteId);
+      if (current?.provider === provider) {
+        provider.setSynced(true);
+      }
+    }).catch(() => { });
 
     return provider;
   };
 
-  private async bootstrapSession(session: NoteSession): Promise<void> {
-    if (this.destroyed || session.destroyed) return;
+  async destroy(): Promise<void> {
+    this.destroyed = true;
 
-    this.broadcastStatus(this.isOnline ? "syncing" : "offline");
-
-    try {
-      // Wait for local IndexedDB to load
-      await session.persistence.whenSynced;
-      notesDebug("bootstrap.persistence-synced", { noteId: session.noteId });
-
-      const hasLocalState = session.doc.store.clients.size > 0;
-      notesDebug("bootstrap.local-state", { noteId: session.noteId, hasLocalState });
-
-      // If offline, we stop here (but we already emitted sync)
-      if (!this.isOnline) {
-        if (hasLocalState && session.provider instanceof NotesRealtimeProvider) {
-          session.provider.setSynced(true);
-        }
-        this.broadcastStatus("offline");
-        return;
-      }
-
-      const { data: snapshot } = await this.supabase
-        .from("note_documents")
-        .select("snapshot_b64,last_compacted_update_id")
-        .eq("workspace_id", this.workspaceId)
-        .eq("note_id", session.noteId)
-        .maybeSingle<RemoteDocSnapshot>();
-
-      const cursor = await this.ensureCursor(session.noteId);
-      notesDebug("bootstrap.state", {
-        noteId: session.noteId,
-        hasLocalState,
-        hasSnapshot: Boolean(snapshot?.snapshot_b64),
-        lastCompactedUpdateId: Number(snapshot?.last_compacted_update_id || 0),
-      });
-
-      if (snapshot?.snapshot_b64 && !hasLocalState) {
-        Y.applyUpdate(session.doc, decodeBase64ToUint8(snapshot.snapshot_b64), "bootstrap");
-        notesDebug("bootstrap.snapshot-applied", { noteId: session.noteId });
-        cursor.lastCompactedUpdateId = Math.max(
-          cursor.lastCompactedUpdateId,
-          Number(snapshot.last_compacted_update_id || 0)
-        );
-        cursor.lastPulledUpdateId = Math.max(
-          cursor.lastPulledUpdateId,
-          Number(snapshot.last_compacted_update_id || 0)
-        );
-        await this.saveCursor(cursor);
-      } else if (snapshot?.snapshot_b64 && hasLocalState) {
-        notesDebug("bootstrap.snapshot-skipped-local-present", { noteId: session.noteId });
-      }
-
-      session.realtimeChannel = this.supabase
-        .channel(`notes-updates-${session.noteId}-${this.clientId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "note_updates",
-            filter: `note_id=eq.${session.noteId}`,
-          },
-          (payload) => {
-            void this.handleRealtimeUpdate(session, payload.new as RemotePullRow);
-          }
-        )
-        .subscribe();
-
-      await this.flushAndPull(session);
-      if (session.provider instanceof NotesRealtimeProvider) {
-        session.provider.setSynced(true);
-      }
-    } catch {
-      notesDebug("bootstrap.error", { noteId: session.noteId });
-      this.broadcastStatus("error");
-    }
-  }
-
-  private async handleRealtimeUpdate(session: NoteSession, update: RemotePullRow): Promise<void> {
-    if (session.destroyed) return;
-    if (update.workspace_id !== this.workspaceId) return;
-
-    const cursor = await this.ensureCursor(session.noteId);
-    cursor.lastPulledUpdateId = Math.max(cursor.lastPulledUpdateId, Number(update.id));
-    await this.saveCursor(cursor);
-
-    if (update.client_id === this.clientId) return;
-
-    try {
-      Y.applyUpdate(session.doc, decodeBase64ToUint8(update.update_b64), "remote");
-      notesDebug("realtime.applied", { noteId: session.noteId, updateId: update.id, clientId: update.client_id });
-      this.broadcastStatus(this.isOnline ? "synced" : "offline");
-    } catch {
-      notesDebug("realtime.apply-error", { noteId: session.noteId, updateId: update.id });
-      this.broadcastStatus("error");
-    }
-  }
-
-  private scheduleFlush(session: NoteSession): void {
-    if (session.flushTimer) clearTimeout(session.flushTimer);
-    session.flushTimer = setTimeout(() => {
-      void this.flushAndPull(session);
-    }, FLUSH_DEBOUNCE_MS);
-  }
-
-  private async enqueueLocalUpdate(noteId: string, update: Uint8Array): Promise<void> {
-    const cursor = await this.ensureCursor(noteId);
-    const nextSeq = cursor.clientSeq + 1;
-    cursor.clientSeq = nextSeq;
-    await this.saveCursor(cursor);
-
-    await notesLocalDB.outbox.put({
-      id: `${this.clientId}:${noteId}:${nextSeq}`,
-      scopeKey: this.scopeKey,
-      workspaceId: this.workspaceId,
-      noteId,
-      ownerId: this.userId,
-      clientId: this.clientId,
-      clientSeq: nextSeq,
-      updateB64: encodeUint8ToBase64(update),
-      createdAt: nowIso(),
-    });
-    notesDebug("outbox.enqueued", { noteId, clientSeq: nextSeq, bytes: update.byteLength });
-
-    const session = this.sessions.get(noteId);
-    if (session && !session.destroyed) {
-      this.broadcastStatus(this.isOnline ? "syncing" : "offline");
-      this.scheduleFlush(session);
-    }
-  }
-
-  private async flushOutbox(session: NoteSession): Promise<void> {
-    const pending = await notesLocalDB.outbox
-      .where("scopeKey")
-      .equals(this.scopeKey)
-      .and((entry) => entry.noteId === session.noteId)
-      .sortBy("clientSeq");
-    if (pending.length === 0) return;
-
-    const batch = pending.slice(0, MAX_PUSH_BATCH_SIZE);
-    notesDebug("outbox.flush", { noteId: session.noteId, pending: pending.length, batch: batch.length });
-
-    const { data, error } = await this.supabase.rpc("note_push_updates", {
-      p_workspace_id: this.workspaceId,
-      p_note_id: session.noteId,
-      p_client_id: this.clientId,
-      p_updates: batch.map((entry) => ({ client_seq: entry.clientSeq, update_b64: entry.updateB64 })),
-    });
-
-    if (error) throw error;
-
-    await notesLocalDB.outbox.bulkDelete(batch.map((entry) => entry.id));
-
-    const row = Array.isArray(data) ? data[0] : null;
-    if (row && typeof row.last_update_id === "number") {
-      const cursor = await this.ensureCursor(session.noteId);
-      cursor.lastPulledUpdateId = Math.max(cursor.lastPulledUpdateId, row.last_update_id);
-      await this.saveCursor(cursor);
-    }
-
-    if (pending.length > MAX_PUSH_BATCH_SIZE) {
-      await this.flushOutbox(session);
-    }
-  }
-
-  private async pullUpdates(session: NoteSession): Promise<SyncUpdate[]> {
-    const cursor = await this.ensureCursor(session.noteId);
-
-    const { data, error } = await this.supabase.rpc("note_pull_updates", {
-      p_workspace_id: this.workspaceId,
-      p_note_id: session.noteId,
-      p_after_id: cursor.lastPulledUpdateId,
-      p_limit: 500,
-    });
-
-    if (error) throw error;
-
-    const rows = (Array.isArray(data) ? data : []) as RemotePullRow[];
-    notesDebug("pull.received", { noteId: session.noteId, count: rows.length });
-    if (rows.length === 0) return [];
-
-    for (const row of rows) {
-      cursor.lastPulledUpdateId = Math.max(cursor.lastPulledUpdateId, Number(row.id));
-      if (row.client_id !== this.clientId) {
-        Y.applyUpdate(session.doc, decodeBase64ToUint8(row.update_b64), "pull");
-      }
-    }
-
-    await this.saveCursor(cursor);
-
-    return rows.map((row) => ({
-      id: row.id,
-      noteId: row.note_id,
-      clientId: row.client_id,
-      clientSeq: row.client_seq,
-      updateB64: row.update_b64,
-      createdAt: row.created_at,
-    }));
-  }
-
-  private async maybeCompact(session: NoteSession): Promise<void> {
-    const cursor = await this.ensureCursor(session.noteId);
-    const pending = cursor.lastPulledUpdateId - cursor.lastCompactedUpdateId;
-    notesDebug("compact.check", {
-      noteId: session.noteId,
-      pending,
-      lastPulledUpdateId: cursor.lastPulledUpdateId,
-      lastCompactedUpdateId: cursor.lastCompactedUpdateId,
-    });
-    if (pending < COMPACTION_THRESHOLD) return;
-
-    const snapshotB64 = encodeUint8ToBase64(Y.encodeStateAsUpdate(session.doc));
-
-    const { error } = await this.supabase.from("note_documents").upsert(
-      {
-        workspace_id: this.workspaceId,
-        note_id: session.noteId,
-        owner_id: this.userId,
-        snapshot_b64: snapshotB64,
-        last_compacted_update_id: cursor.lastPulledUpdateId,
-      },
-      { onConflict: "note_id" }
+    await Promise.allSettled(
+      [...this.sessions.values()].map(s => s.persistence.flush())
     );
 
-    if (error) throw error;
-
-    cursor.lastCompactedUpdateId = cursor.lastPulledUpdateId;
-    await this.saveCursor(cursor);
-    notesDebug("compact.saved", {
-      noteId: session.noteId,
-      lastCompactedUpdateId: cursor.lastCompactedUpdateId,
-    });
-  }
-
-  async flushAndPull(session: NoteSession): Promise<void> {
-    if (this.destroyed || session.destroyed || !this.isOnline) {
-      this.broadcastStatus("offline");
-      return;
+    for (const session of this.sessions.values()) {
+      session.provider.disconnect();
+      session.persistence.disconnect();
+      session.doc.destroy();
     }
-
-    this.broadcastStatus("syncing");
-
-    try {
-      notesDebug("sync.cycle.start", { noteId: session.noteId });
-      await this.flushOutbox(session);
-      await this.pullUpdates(session);
-      await this.maybeCompact(session);
-      notesDebug("sync.cycle.end", { noteId: session.noteId, status: "synced" });
-      this.broadcastStatus("synced");
-    } catch {
-      notesDebug("sync.cycle.error", { noteId: session.noteId });
-      this.broadcastStatus("error");
-    }
-  }
-
-  closeNote(noteId: string): void {
-    const session = this.sessions.get(noteId);
-    if (!session) return;
-    notesDebug("session.close", { noteId });
-
-    // Mark as destroyed so async loops stop
-    session.destroyed = true;
-
-    // Clear timers
-    if (session.flushTimer) clearTimeout(session.flushTimer);
-    if (session.reconcileTimer) clearInterval(session.reconcileTimer);
-
-    // Detach Yjs listeners
-    session.destroyDocListener();
-    session.provider.disconnect();
-
-    // Disconnect Supabase Realtime
-    if (session.realtimeChannel) {
-      void this.supabase.removeChannel(session.realtimeChannel);
-    }
-
-    // Do NOT destroy the persistence. We want to keep local changes in IndexedDB.
-    // session.persistence.destroy();
-
-    this.sessions.delete(noteId);
-  }
-
-  destroy(): void {
-    this.destroyed = true;
-    if (typeof window !== "undefined") {
-      if (this.handleOnline) window.removeEventListener("online", this.handleOnline);
-      if (this.handleOffline) window.removeEventListener("offline", this.handleOffline);
-    }
-    for (const noteId of [...this.sessions.keys()]) {
-      this.closeNote(noteId);
-    }
+    this.sessions.clear();
   }
 }

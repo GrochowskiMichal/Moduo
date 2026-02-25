@@ -8,7 +8,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "bun run web",
+    command: "bun run dev:web",
     url: "http://localhost:8081",
     reuseExistingServer: true,
     timeout: 120_000,

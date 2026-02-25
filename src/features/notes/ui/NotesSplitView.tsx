@@ -11,7 +11,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { NoteKind, NoteMeta, NotesSyncStatus } from "../types";
+import type { NoteKind, NoteMeta } from "../types";
 import type { NotesSyncEngine } from "../sync/sync-engine";
 import { LexicalNoteEditor } from "../editor/LexicalNoteEditor";
 import {
@@ -37,33 +37,12 @@ type Props = {
   onDuplicateNote: (noteId: string) => Promise<string | null>;
   onTogglePin: (noteId: string, isPinned: boolean) => Promise<void>;
   readOnly?: boolean;
-  syncStatus: NotesSyncStatus;
   syncEngine: NotesSyncEngine | null;
 };
 
 type ContextMenuState =
   | { type: "note"; noteId: string; top: number; left: number }
   | { type: "sidebar"; top: number; left: number };
-
-function statusLabel(status: NotesSyncStatus): string {
-  switch (status) {
-    case "offline":
-      return "Offline";
-    case "syncing":
-      return "Syncing";
-    case "error":
-      return "Sync Error";
-    default:
-      return "Synced";
-  }
-}
-
-function syncPillClass(status: NotesSyncStatus): string {
-  if (status === "syncing") return "text-[#a3a3a3]";
-  if (status === "error") return "text-[#ffc5c5]";
-  if (status === "offline") return "text-[#9a9a9a]";
-  return "text-[#8f8f8f]";
-}
 
 function kindIcon(kind: NoteKind): string {
   if (kind === "category") return "▣";
@@ -250,7 +229,6 @@ export function NotesSplitView({
   onDuplicateNote,
   onTogglePin,
   readOnly = false,
-  syncStatus,
   syncEngine,
 }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -386,7 +364,10 @@ export function NotesSplitView({
     }
   }
 
-  function selectNoteWithPrewarm(noteId: string) {
+  async function selectNoteWithPrewarm(noteId: string) {
+    if (syncEngine && selectedEditorNote?.id && selectedEditorNote.id !== noteId) {
+      await syncEngine.flushNote(selectedEditorNote.id);
+    }
     prewarmNoteSession(noteId);
     onSelectNote(noteId);
   }
@@ -607,96 +588,96 @@ export function NotesSplitView({
     >
       {panelState.left ? (
         <aside className="min-h-0 overflow-x-hidden overflow-y-auto rounded-[14px] bg-[#111111] p-3" onContextMenu={openSidebarContextMenu}>
-        <div className="mb-[10px] grid gap-[6px]">
-          <button
-            type="button"
-            className="notes-section-header flex w-full items-center justify-between border-0 bg-transparent px-[6px] py-[2px] text-[12px] tracking-[0.03em] text-[#8e8e8e]"
-            onClick={() => toggleSection("pinned")}
-          >
-            <span>Pinned</span>
-            <span>{sectionsExpanded.pinned ? "▾" : "▸"}</span>
-          </button>
-
-          {sectionsExpanded.pinned ? (
-            pinnedNotes.length > 0 ? (
-              <div className="grid gap-[3px] mb-2">
-                {pinnedNotes.map((note) => (
-                  <ShortcutRow
-                    key={`pinned:${note.id}`}
-                    note={note}
-                    isSelected={selectedNoteId === note.id}
-                    onSelect={() => selectNoteWithPrewarm(note.id)}
-                    onContextMenu={(event) => openContextMenu(note.id, event)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="px-2 pb-[6px] pt-[2px] text-[13px] text-[#7a7a7a]">No pinned notes</div>
-            )
-          ) : null}
-        </div>
-
-        <DndContext
-          sensors={sensors}
-          collisionDetection={(args) => {
-            const byPointer = pointerWithin(args);
-            return byPointer.length > 0 ? byPointer : closestCenter(args);
-          }}
-          onDragStart={(event) => {
-            setDragActiveId(String(event.active.id));
-            setDragOverId(null);
-            setDragDeltaX(0);
-          }}
-          onDragMove={(event) => {
-            setDragOverId(event.over ? String(event.over.id) : null);
-            setDragDeltaX(event.delta?.x ?? 0);
-          }}
-          onDragCancel={() => {
-            setDragActiveId(null);
-            setDragOverId(null);
-            setDragDeltaX(0);
-          }}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={categorySections.map((entry) => `note:${entry.id}`)}
-            strategy={verticalListSortingStrategy}
-          >
-            {categorySections.map((category) => {
-              const isOpen = categoryExpanded[category.id] ?? true;
-              return (
-                <div key={category.id} className="mb-[10px] grid gap-[6px]">
-                  <CategorySectionHeader
-                    category={category}
-                    isExpanded={isOpen}
-                    onToggle={() => toggleCategorySection(category.id)}
-                    onContextMenu={(event) => openContextMenu(category.id, event)}
-                    dragHint={resolveDragHint(category.id)}
-                  />
-                  {isOpen ? <div className="grid gap-[3px]">{renderBranch(category.id, 1)}</div> : null}
-                </div>
-              );
-            })}
-          </SortableContext>
-
           <div className="mb-[10px] grid gap-[6px]">
             <button
               type="button"
               className="notes-section-header flex w-full items-center justify-between border-0 bg-transparent px-[6px] py-[2px] text-[12px] tracking-[0.03em] text-[#8e8e8e]"
-              onClick={() => toggleSection("notes")}
+              onClick={() => toggleSection("pinned")}
             >
-              <span>Notes</span>
-              <span>{sectionsExpanded.notes ? "▾" : "▸"}</span>
+              <span>Pinned</span>
+              <span>{sectionsExpanded.pinned ? "▾" : "▸"}</span>
             </button>
 
-            {sectionsExpanded.notes ? <div className="grid gap-[3px]">{renderBranch(null, 0)}</div> : null}
+            {sectionsExpanded.pinned ? (
+              pinnedNotes.length > 0 ? (
+                <div className="grid gap-[3px] mb-2">
+                  {pinnedNotes.map((note) => (
+                    <ShortcutRow
+                      key={`pinned:${note.id}`}
+                      note={note}
+                      isSelected={selectedNoteId === note.id}
+                      onSelect={() => selectNoteWithPrewarm(note.id)}
+                      onContextMenu={(event) => openContextMenu(note.id, event)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="px-2 pb-[6px] pt-[2px] text-[13px] text-[#7a7a7a]">No pinned notes</div>
+              )
+            ) : null}
           </div>
-        </DndContext>
+
+          <DndContext
+            sensors={sensors}
+            collisionDetection={(args) => {
+              const byPointer = pointerWithin(args);
+              return byPointer.length > 0 ? byPointer : closestCenter(args);
+            }}
+            onDragStart={(event) => {
+              setDragActiveId(String(event.active.id));
+              setDragOverId(null);
+              setDragDeltaX(0);
+            }}
+            onDragMove={(event) => {
+              setDragOverId(event.over ? String(event.over.id) : null);
+              setDragDeltaX(event.delta?.x ?? 0);
+            }}
+            onDragCancel={() => {
+              setDragActiveId(null);
+              setDragOverId(null);
+              setDragDeltaX(0);
+            }}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={categorySections.map((entry) => `note:${entry.id}`)}
+              strategy={verticalListSortingStrategy}
+            >
+              {categorySections.map((category) => {
+                const isOpen = categoryExpanded[category.id] ?? true;
+                return (
+                  <div key={category.id} className="mb-[10px] grid gap-[6px]">
+                    <CategorySectionHeader
+                      category={category}
+                      isExpanded={isOpen}
+                      onToggle={() => toggleCategorySection(category.id)}
+                      onContextMenu={(event) => openContextMenu(category.id, event)}
+                      dragHint={resolveDragHint(category.id)}
+                    />
+                    {isOpen ? <div className="grid gap-[3px]">{renderBranch(category.id, 1)}</div> : null}
+                  </div>
+                );
+              })}
+            </SortableContext>
+
+            <div className="mb-[10px] grid gap-[6px]">
+              <button
+                type="button"
+                className="notes-section-header flex w-full items-center justify-between border-0 bg-transparent px-[6px] py-[2px] text-[12px] tracking-[0.03em] text-[#8e8e8e]"
+                onClick={() => toggleSection("notes")}
+              >
+                <span>Notes</span>
+                <span>{sectionsExpanded.notes ? "▾" : "▸"}</span>
+              </button>
+
+              {sectionsExpanded.notes ? <div className="grid gap-[3px]">{renderBranch(null, 0)}</div> : null}
+            </div>
+          </DndContext>
         </aside>
       ) : null}
 
       <main className="grid min-h-0 min-w-0 grid-rows-[48px_1fr] overflow-hidden rounded-[14px] bg-[#111111]">
-        <div className="flex items-center justify-between gap-[14px] px-[14px]">
+        <div className="flex items-center gap-[14px] px-[14px]">
           <div className="flex min-w-0 items-center gap-2 overflow-hidden">
             <div className="truncate whitespace-nowrap text-[13px] text-[#7a7a7a]" title={breadcrumb}>
               {breadcrumb}
@@ -776,9 +757,6 @@ export function NotesSplitView({
               </div>
             ) : null}
           </div>
-          <span className={`inline-flex rounded-full px-[10px] py-1 text-[12px] ${syncPillClass(syncStatus)}`}>
-            {statusLabel(syncStatus)}
-          </span>
         </div>
 
         {selectedEditorNote && syncEngine ? (

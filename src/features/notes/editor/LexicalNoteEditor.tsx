@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { CodeHighlightNode, CodeNode, registerCodeHighlighting } from "@lexical/code";
 import { LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
@@ -11,10 +11,20 @@ import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
-import { CollaborationPlugin } from "@lexical/react/LexicalCollaborationPlugin";
+import { CollaborationPlugin, CollaborationPluginV2__EXPERIMENTAL } from "@lexical/react/LexicalCollaborationPlugin";
 import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
+import { TabIndentationPlugin } from "@lexical/react/LexicalTabIndentationPlugin";
 import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
+import {
+  $getSelection,
+  $isRangeSelection,
+  COMMAND_PRIORITY_HIGH,
+  INDENT_CONTENT_COMMAND,
+  KEY_TAB_COMMAND,
+  OUTDENT_CONTENT_COMMAND,
+} from "lexical";
+import { $isListItemNode } from "@lexical/list";
 import type { NotesSyncEngine } from "../sync/sync-engine";
 import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
 
@@ -33,19 +43,82 @@ function NotesCodeHighlightPlugin() {
   return null;
 }
 
+function NotesListTabIndentationPlugin() {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    return editor.registerCommand(
+      KEY_TAB_COMMAND,
+      (event) => {
+        if (!event) return false;
+        const inListItem = editor.getEditorState().read(() => {
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection)) return false;
+          let node = selection.anchor.getNode();
+          while (node && !$isListItemNode(node)) {
+            const parent = node.getParent();
+            if (!parent) break;
+            node = parent;
+          }
+          return $isListItemNode(node);
+        });
+        if (!inListItem) return false;
+
+        event.preventDefault();
+        editor.dispatchCommand(event.shiftKey ? OUTDENT_CONTENT_COMMAND : INDENT_CONTENT_COMMAND, undefined);
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH
+    );
+  }, [editor]);
+
+  return null;
+}
+
 export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChange, syncEngine }: Props) {
   const [draftTitle, setDraftTitle] = useState(title);
-
+  const [bootstrapInfo, setBootstrapInfo] = useState<{ noteId: string, ready: boolean }>({
+    noteId,
+    ready: false,
+  });
+  const collabReady = bootstrapInfo.noteId === noteId && bootstrapInfo.ready;
+  const collabSession = useMemo(
+    () => (collabReady ? syncEngine.getOrCreateSession(noteId) : null),
+    [collabReady, noteId, syncEngine]
+  );
+  const collabMode = useMemo(() => {
+    if (!collabSession) return "v1";
+    if (collabSession.doc.share.has("root-v2")) return "v2";
+    if (collabSession.doc.store.clients.size === 0) return "v2";
+    return "v1";
+  }, [collabSession]);
   useEffect(() => {
-    console.log("[notes-editor] mounted", { noteId, editable });
+    let active = true;
+    setBootstrapInfo({ noteId, ready: false });
+
+    const session = syncEngine.getOrCreateSession(noteId);
+    session.persistence.whenSynced.then(() => {
+      if (active) {
+        setBootstrapInfo({ noteId, ready: true });
+      }
+    }).catch(err => {
+      console.error(`[LexicalNoteEditor] session.whenSynced ERROR: noteId=${noteId}, error=${err}`);
+    });
+
     return () => {
-      console.log("[notes-editor] unmounted", { noteId });
+      active = false;
     };
-  }, [editable, noteId]);
+  }, [noteId, syncEngine]);
 
-  useEffect(() => {
-    console.log("[notes-editor] note-changed", { noteId, titleLength: title.length });
-  }, [noteId, title]);
+  // Keep a ref to the most-recent in-flight flush promise so we can kick it off
+  // from the synchronous effect cleanup (React cleanups cannot be async) without
+  // losing the Promise. NotesSyncEngine.destroy() awaits all pending flushes
+  // before tearing down docs, so this just ensures the flush is *started*.
+  const flushingRef = useRef<Promise<void> | null>(null);
+
+  useEffect(() => () => {
+    flushingRef.current = syncEngine.flushNote(noteId);
+  }, [noteId, syncEngine]);
 
   useEffect(() => {
     setDraftTitle(title);
@@ -58,6 +131,12 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
     }, 350);
     return () => clearTimeout(timer);
   }, [draftTitle, onTitleChange, title]);
+
+  useEffect(() => {
+    if (collabReady && collabMode === "v2") {
+      setTimeout(() => syncEngine.pokeNoteDoc(noteId), 0);
+    }
+  }, [collabReady, collabMode, noteId, syncEngine]);
 
   const initialConfig = useMemo(() => ({
     namespace: `moduo-note-${noteId}`,
@@ -101,32 +180,49 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
       />
 
       <div className="relative h-full min-h-0 overflow-auto bg-[#111111]">
-        <LexicalCollaboration key={`collab-${noteId}`}>
-          <LexicalComposer initialConfig={initialConfig} key={noteId}>
-            <RichTextPlugin
-              contentEditable={
-                <ContentEditable className="min-h-full px-[22px] pb-[90px] pt-[6px] text-[16px] leading-[1.7] text-[#cfcfcf] outline-none" />
-              }
-              placeholder={
-                <div className="pointer-events-none absolute left-[22px] top-3 text-[#7a7a7a]">
-                  Type '/' for commands...
-                </div>
-              }
-              ErrorBoundary={LexicalErrorBoundary}
-            />
-            <HistoryPlugin />
-            <ListPlugin />
-            <CheckListPlugin />
-            <NotesCodeHighlightPlugin />
-            <LinkPlugin />
-            <SlashCommandPlugin />
-            <CollaborationPlugin
-              id={noteId}
-              providerFactory={syncEngine.providerFactory}
-              shouldBootstrap={true}
-            />
-          </LexicalComposer>
-        </LexicalCollaboration>
+        {collabReady ? (
+          <LexicalCollaboration key={`collab-${noteId}`}>
+            <LexicalComposer initialConfig={initialConfig} key={noteId}>
+              <RichTextPlugin
+                contentEditable={
+                  <ContentEditable className="min-h-full px-[22px] pb-[90px] pt-[6px] text-[16px] leading-[1.7] text-[#cfcfcf] outline-none" />
+                }
+                placeholder={
+                  <div className="pointer-events-none absolute left-[22px] top-3 text-[#7a7a7a]">
+                    Type '/' for commands...
+                  </div>
+                }
+                ErrorBoundary={LexicalErrorBoundary}
+              />
+              <HistoryPlugin />
+              <ListPlugin />
+              <CheckListPlugin />
+              <TabIndentationPlugin maxIndent={8} />
+              <NotesListTabIndentationPlugin />
+              <NotesCodeHighlightPlugin />
+              <LinkPlugin />
+              <SlashCommandPlugin />
+              {collabMode === "v2" && collabSession ? (
+                <CollaborationPluginV2__EXPERIMENTAL
+                  id={noteId}
+                  doc={collabSession.doc}
+                  provider={collabSession.provider}
+                  __shouldBootstrapUnsafe={true}
+                />
+              ) : (
+                <CollaborationPlugin
+                  id={noteId}
+                  providerFactory={syncEngine.providerFactory}
+                  shouldBootstrap={true}
+                />
+              )}
+            </LexicalComposer>
+          </LexicalCollaboration>
+        ) : (
+          <div className="grid h-full place-content-center text-[13px] text-[#7a7a7a]">
+            Preparing note...
+          </div>
+        )}
       </div>
     </div>
   );

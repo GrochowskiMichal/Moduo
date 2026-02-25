@@ -1,215 +1,198 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Modal, ScrollView } from "react-native";
-import { usePathname, useRouter, Slot } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
-import { useDashboardContext } from "../../features/dashboard/providers/dashboard-provider";
+import {
+  dispatchDashboardViewChange,
+  readStoredDashboardActiveView,
+  writeStoredDashboardActiveView,
+} from "../../features/dashboard/ui/layout-events";
+import {
+  DEFAULT_DASHBOARD_VIEW,
+  deleteDashboardLayout,
+  ensureDashboardLayout,
+  listDashboardViews,
+  readPersistedDashboardActiveView,
+  saveDashboardViews,
+  writePersistedDashboardActiveView,
+  type DashboardViewOption,
+} from "../../features/dashboard/storage/dashboard-view-storage";
 import { NotificationCenter } from "../notification-center";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { WorkspaceSettingsModal } from "../workspace-settings-modal";
-import { Image, Pressable, Text, View } from "../../tw";
-import {
-  dispatchNotesCreateKind,
-  dispatchNotesFocusSearch,
-} from "../../features/notes/ui/layout-events";
-import { dispatchDashboardViewChange } from "../../features/dashboard/ui/layout-events";
-import {
-  dispatchTasksCreateEntity,
-  dispatchTasksFocusSearch,
-  dispatchTasksSelectProject,
-} from "../../features/tasks/ui/layout-events";
+import { Image, Modal, Pressable, Text, TextInput, View } from "../../tw";
 import {
   dispatchLayoutPanelsApply,
+  LAYOUT_PANELS_SET_EVENT,
   readPanelsMap,
   routeToFeatureLayout,
   writePanelsMap,
   type FeatureLayoutKey,
+  type LayoutPanelsApplyDetail,
 } from "../../features/layout/panel-events";
-import type { NoteKind } from "../../features/notes/types";
+import {
+  dispatchTasksSelectProject,
+  TASKS_SELECT_PROJECT_EVENT,
+  type TasksSelectProjectDetail,
+} from "../../features/tasks/ui/layout-events";
+import {
+  createMindmap,
+  deleteMindmap,
+  listMindmaps,
+  readStoredActiveMindmap,
+  writeStoredActiveMindmap,
+  type MindmapOption,
+} from "../../features/mindmap/ui/mindmap-storage";
+import { dispatchMindmapSelectMap } from "../../features/mindmap/ui/layout-events";
+import {
+  createBrainstorm,
+  deleteBrainstorm,
+  listBrainstorms,
+  readStoredActiveBrainstorm,
+  writeStoredActiveBrainstorm,
+  type BrainstormOption,
+} from "../../features/brainstorm/storage/brainstorm-storage";
+import { dispatchBrainstormSelectView } from "../../features/brainstorm/ui/layout-events";
+import { Icon, type IconName } from "../ui/icon";
+import moduoFavicon from "../../../assets/moduo_favicon.png";
+import { UserMenu } from "../user-menu";
 
-type TabItem = { label: string; iconName: string; href: string; module?: "notes" | "tasks" };
-type TaskProjectOption = { id: string; name: string };
+type TabItem = { label: string; iconName: IconName; href: string; module?: "notes" | "tasks" | "mindmap" | "templates" | "email" };
+type TaskProjectOption = {
+  id: string;
+  workspaceId: string;
+  ownerId: string;
+  name: string;
+  description: string;
+  position: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
+type MenuAnchor = { left: number; top: number };
+
+const AVATAR_STORAGE_KEY = "moduo:auth-avatar-preview-v1";
+
+function safeId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function normalizeTaskProject(raw: any): TaskProjectOption {
+  return {
+    id: raw.id,
+    workspaceId: raw.workspaceId ?? raw.workspace_id,
+    ownerId: raw.ownerId ?? raw.owner_id,
+    name: raw.name ?? "New Project",
+    description: raw.description ?? "",
+    position: raw.position ?? `m${Date.now().toString(36)}`,
+    createdAt: raw.createdAt ?? raw.created_at ?? nowIso(),
+    updatedAt: raw.updatedAt ?? raw.updated_at ?? nowIso(),
+    deletedAt: raw.deletedAt ?? raw.deleted_at ?? null,
+  };
+}
 
 const baseTabs: TabItem[] = [
-  { label: "Dashboard", iconName: "grid", href: "/" },
-  { label: "Calendar", iconName: "calendar", href: "/calendar" },
+  { label: "Dashboard", iconName: "grid", href: "/dashboard" },
   { label: "Notes", iconName: "file-text", href: "/notes", module: "notes" },
-  { label: "Email", iconName: "mail", href: "/email" },
   { label: "Tasks", iconName: "check-square", href: "/tasks", module: "tasks" },
-  { label: "Tags", iconName: "tag", href: "/tags" },
-  { label: "Form", iconName: "edit-3", href: "/form" },
-  { label: "Timesheet", iconName: "clock", href: "/timesheet" },
-  { label: "Whiteboard", iconName: "pen-tool", href: "/whiteboard" },
-  { label: "Mindmap", iconName: "git-branch", href: "/mindmap" },
+  { label: "Mindmap", iconName: "git-branch", href: "/mindmap", module: "mindmap" },
+  { label: "Templates", iconName: "edit-3", href: "/templates", module: "templates" },
+  { label: "Email", iconName: "mail", href: "/email", module: "email" },
+  { label: "Calendar", iconName: "calendar", href: "/calendar" },
+  { label: "CRM", iconName: "folder", href: "/crm" },
+  { label: "Calendly", iconName: "calendar", href: "/calendly" },
+  { label: "Forms", iconName: "edit-2", href: "/forms" },
+  { label: "Feed", iconName: "bar-chart-2", href: "/feed" },
   { label: "Files", iconName: "folder", href: "/files" },
+  { label: "Brainstorm", iconName: "pen-tool", href: "/brainstorm" },
+  { label: "Expanses", iconName: "dollar-sign", href: "/expanses" },
+  { label: "Revenue", iconName: "dollar-sign", href: "/revenue" },
+  { label: "KPI/OKR", iconName: "tag", href: "/kpi-okr" },
   { label: "Stats", iconName: "bar-chart-2", href: "/stats" },
-  { label: "Budget", iconName: "dollar-sign", href: "/budget" },
-];
-
-const notesCreateActions: Array<{ label: string; kind: NoteKind; icon: string }> = [
-  { label: "New Section", kind: "category", icon: "▣" },
-  { label: "New Note Folder", kind: "folder", icon: "▢" },
-  { label: "New Note", kind: "note", icon: "☰" },
-];
-
-const tasksCreateActions: Array<{ label: string; entity: "task" | "project"; icon: string }> = [
-  { label: "New Task", entity: "task", icon: "☑" },
-  { label: "New Project", entity: "project", icon: "◫" },
+  { label: "Analytics", iconName: "search", href: "/analytics" },
+  { label: "Recordings", iconName: "file-text", href: "/recordings" },
+  { label: "Timetracking", iconName: "clock", href: "/timetracking" },
+  { label: "Roadmap", iconName: "git-branch", href: "/roadmap" },
 ];
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const { signOut, supabase, userId } = useAuth();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const navigate = useNavigate();
+  const { runtime, userEmail, userId } = useAuth();
   const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
-  const { 
-    views: dashboardViews, 
-    activeViewId: activeDashboardViewId, 
-    setActiveViewId: setActiveDashboardViewId,
-    createView: createDashboardView,
-    updateView: updateDashboardView,
-    deleteView: deleteDashboardView
-  } = useDashboardContext();
-
-  const isDashboardRoute = pathname === "/";
-  const isNotesRoute = pathname === "/notes";
-  const isTasksRoute = pathname === "/tasks";
   const currentFeature = routeToFeatureLayout(pathname);
+  const isDashboardRoute = pathname === "/" || pathname.startsWith("/dashboard");
+  const isTasksRoute = pathname.startsWith("/tasks");
+  const isMindmapRoute = pathname.startsWith("/mindmap");
+  const isBrainstormRoute = pathname.startsWith("/brainstorm");
+  const canEditTasks = modulePermissions.tasks === "edit" || modulePermissions.tasks === "admin";
 
-  const [notesCreateMenuOpen, setNotesCreateMenuOpen] = useState(false);
-  const [tasksCreateMenuOpen, setTasksCreateMenuOpen] = useState(false);
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [taskProjectMenuOpen, setTaskProjectMenuOpen] = useState(false);
-  const [dashboardViewMenuOpen, setDashboardViewMenuOpen] = useState(false);
-  const [taskProjects, setTaskProjects] = useState<TaskProjectOption[]>([]);
-  const [taskProjectsLoaded, setTaskProjectsLoaded] = useState(false);
-  const [selectedTaskProjectId, setSelectedTaskProjectId] = useState<string | null>(null);
-
-  const [hoveredDashboardViewId, setHoveredDashboardViewId] = useState<string | null>(null);
-  const [hoveredTaskProjectId, setHoveredTaskProjectId] = useState<string | null>(null);
-  const [showDashboardTabControls, setShowDashboardTabControls] = useState(isDashboardRoute);
-  const [showTasksTabControls, setShowTasksTabControls] = useState(isTasksRoute);
   const [featurePanels, setFeaturePanels] = useState(() => readPanelsMap());
-  const dashboardTabControlsAnim = useRef(new Animated.Value(isDashboardRoute ? 1 : 0)).current;
-  const tasksTabControlsAnim = useRef(new Animated.Value(isTasksRoute ? 1 : 0)).current;
-
-  useEffect(() => {
-    if (!isNotesRoute) setNotesCreateMenuOpen(false);
-  }, [isNotesRoute]);
-
-  useEffect(() => {
-    if (!isDashboardRoute) setDashboardViewMenuOpen(false);
-  }, [isDashboardRoute]);
-
-  useEffect(() => {
-    if (!isTasksRoute) {
-      setTasksCreateMenuOpen(false);
-      setTaskProjectMenuOpen(false);
-    }
-  }, [isTasksRoute]);
-
-  useEffect(() => {
-    if (isDashboardRoute) {
-      setShowDashboardTabControls(true);
-      Animated.timing(dashboardTabControlsAnim, {
-        toValue: 1,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-      return;
-    }
-
-    Animated.timing(dashboardTabControlsAnim, {
-      toValue: 0,
-      duration: 180,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-      
-    }).start(({ finished }) => {
-      if (finished) setShowDashboardTabControls(false);
-    });
-  }, [dashboardTabControlsAnim, isDashboardRoute]);
-
-  useEffect(() => {
-    if (isTasksRoute) {
-      setShowTasksTabControls(true);
-      Animated.timing(tasksTabControlsAnim, {
-        toValue: 1,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-      return;
-    }
-
-    Animated.timing(tasksTabControlsAnim, {
-      toValue: 0,
-      duration: 180,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) setShowTasksTabControls(false);
-    });
-  }, [isTasksRoute, tasksTabControlsAnim]);
-
-  // Dispatch event when active dashboard view changes
-  useEffect(() => {
-    if (activeDashboardViewId) {
-      const view = dashboardViews.find(v => v.id === activeDashboardViewId);
-      if (view) {
-        dispatchDashboardViewChange(activeDashboardViewId, view.name);
-      }
-    }
-  }, [activeDashboardViewId, dashboardViews]);
-
-  const refreshTaskProjects = useCallback(async () => {
-    if (!selectedWorkspaceId || !supabase || !isTasksRoute) {
-      setTaskProjects([]);
-      setSelectedTaskProjectId(null);
-      setTaskProjectsLoaded(false);
-      return;
-    }
-    setTaskProjectsLoaded(false);
-
-    const { data } = await supabase
-      .from("task_projects")
-      .select("id,name")
-      .eq("workspace_id", selectedWorkspaceId)
-      .is("deleted_at", null)
-      .order("position", { ascending: true });
-
-    const next = ((data ?? []) as TaskProjectOption[]).filter((project) => !!project.id);
-    setTaskProjects(next);
-    setSelectedTaskProjectId((current) =>
-      current === null ? null : next.find((project) => project.id === current)?.id ?? next[0]?.id ?? null
-    );
-    setTaskProjectsLoaded(true);
-  }, [isTasksRoute, selectedWorkspaceId, supabase]);
-
-  useEffect(() => {
-    void refreshTaskProjects();
-  }, [refreshTaskProjects]);
-
-  useEffect(() => {
-    if (!isTasksRoute) return;
-    dispatchTasksSelectProject(selectedTaskProjectId);
-  }, [isTasksRoute, selectedTaskProjectId]);
-
-  useEffect(() => {
-    writePanelsMap(featurePanels);
-  }, [featurePanels]);
-
-  useEffect(() => {
-    const current = featurePanels[currentFeature];
-    dispatchLayoutPanelsApply({
-      feature: currentFeature,
-      left: current.left,
-      right: current.right,
-    });
-  }, [currentFeature, featurePanels]);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
+  const [dashboardViews, setDashboardViews] = useState<DashboardViewOption[]>([DEFAULT_DASHBOARD_VIEW]);
+  const [activeDashboardViewId, setActiveDashboardViewId] = useState<string>(DEFAULT_DASHBOARD_VIEW.id);
+  const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false);
+  const [isCreatingDashboardView, setIsCreatingDashboardView] = useState(false);
+  const [newDashboardViewName, setNewDashboardViewName] = useState("New Dashboard View");
+  const [deleteCandidateDashboardViewId, setDeleteCandidateDashboardViewId] = useState<string | null>(null);
+  const [deleteDashboardViewInput, setDeleteDashboardViewInput] = useState("");
+  const [deleteSubmittingDashboardViewId, setDeleteSubmittingDashboardViewId] = useState<string | null>(null);
+  const [taskProjects, setTaskProjects] = useState<TaskProjectOption[]>([]);
+  const [selectedTaskProjectId, setSelectedTaskProjectId] = useState<string | null>(null);
+  const [tasksMenuOpen, setTasksMenuOpen] = useState(false);
+  const [isCreatingTaskProject, setIsCreatingTaskProject] = useState(false);
+  const [newTaskProjectName, setNewTaskProjectName] = useState("New Project");
+  const [deleteCandidateTaskProjectId, setDeleteCandidateTaskProjectId] = useState<string | null>(null);
+  const [deleteTaskProjectInput, setDeleteTaskProjectInput] = useState("");
+  const [deleteSubmittingTaskProjectId, setDeleteSubmittingTaskProjectId] = useState<string | null>(null);
+  const [mindmaps, setMindmaps] = useState<MindmapOption[]>([]);
+  const [selectedMindmapId, setSelectedMindmapId] = useState<string | null>(null);
+  const [mindmapMenuOpen, setMindmapMenuOpen] = useState(false);
+  const [isCreatingMindmap, setIsCreatingMindmap] = useState(false);
+  const [newMindmapName, setNewMindmapName] = useState("New Mindmap");
+  const [deleteCandidateMindmapId, setDeleteCandidateMindmapId] = useState<string | null>(null);
+  const [deleteMindmapInput, setDeleteMindmapInput] = useState("");
+  const [deleteSubmittingMindmapId, setDeleteSubmittingMindmapId] = useState<string | null>(null);
+  const [dashboardMenuAnchor, setDashboardMenuAnchor] = useState<MenuAnchor | null>(null);
+  const [tasksMenuAnchor, setTasksMenuAnchor] = useState<MenuAnchor | null>(null);
+  const [mindmapMenuAnchor, setMindmapMenuAnchor] = useState<MenuAnchor | null>(null);
+  const [brainstorms, setBrainstorms] = useState<BrainstormOption[]>([]);
+  const [selectedBrainstormId, setSelectedBrainstormId] = useState<string | null>(null);
+  const [brainstormMenuOpen, setBrainstormMenuOpen] = useState(false);
+  const [isCreatingBrainstorm, setIsCreatingBrainstorm] = useState(false);
+  const [newBrainstormName, setNewBrainstormName] = useState("New Brainstorm");
+  const [deleteCandidateBrainstormId, setDeleteCandidateBrainstormId] = useState<string | null>(null);
+  const [deleteBrainstormInput, setDeleteBrainstormInput] = useState("");
+  const [deleteSubmittingBrainstormId, setDeleteSubmittingBrainstormId] = useState<string | null>(null);
+  const [brainstormMenuAnchor, setBrainstormMenuAnchor] = useState<MenuAnchor | null>(null);
+  const dashboardControlRef = useRef<HTMLDivElement | null>(null);
+  const tasksControlRef = useRef<HTMLDivElement | null>(null);
+  const mindmapControlRef = useRef<HTMLDivElement | null>(null);
+  const brainstormControlRef = useRef<HTMLDivElement | null>(null);
+  const rowStyle = { display: "flex", flexDirection: "row" as const, alignItems: "center" };
+  const itemRowStyle = {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    alignItems: "center",
+    columnGap: 8,
+    minHeight: 32,
+  } as const;
+  const itemNameWrapStyle = { minWidth: 0, display: "flex", alignItems: "center", height: 28 } as const;
+  const itemActionsStyle = { display: "flex", alignItems: "center", gap: 4, height: 28 } as const;
+  const iconButtonStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28 } as const;
+  const plusButtonStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24 } as const;
+  const deleteRevealBaseStyle = {
+    overflow: "hidden",
+    transition: "max-height 220ms ease, opacity 180ms ease, transform 180ms ease, margin-top 180ms ease",
+  } as const;
 
   const tabs = useMemo(
     () =>
@@ -221,125 +204,623 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     [modulePermissions.notes, modulePermissions.tasks]
   );
 
-  const noModuleAccess = modulePermissions.notes === "none" && modulePermissions.tasks === "none";
-  const canEditNotes = modulePermissions.notes === "edit" || modulePermissions.notes === "admin";
-  const canEditTasks = modulePermissions.tasks === "edit" || modulePermissions.tasks === "admin";
-
-  useEffect(() => {
-    if (!tabs.some((tab) => tab.href === pathname)) {
-      router.replace("/" as any);
-    }
-  }, [pathname, router, tabs]);
-
-  const supportsLeftPanelToggle = true;
-  const supportsRightPanelToggle = true;
-
+  const activeDashboardViewName =
+    dashboardViews.find((view) => view.id === activeDashboardViewId)?.name ?? DEFAULT_DASHBOARD_VIEW.name;
   const selectedTaskProjectLabel =
     selectedTaskProjectId === null
       ? "All projects"
-      : taskProjects.find((project) => project.id === selectedTaskProjectId)?.name ?? "No projects";
-  const activeDashboardViewName =
-    dashboardViews.find((view) => view.id === activeDashboardViewId)?.name ?? "No views";
-  const topBarPressableStyle = { backgroundColor: "transparent", borderWidth: 0 };
+      : taskProjects.find((project) => project.id === selectedTaskProjectId)?.name ?? "All projects";
+  const selectedMindmapLabel =
+    selectedMindmapId === null
+      ? "No mindmap selected"
+      : mindmaps.find((mindmap) => mindmap.id === selectedMindmapId)?.name ?? "No mindmap selected";
+  const selectedBrainstormLabel =
+    selectedBrainstormId === null
+      ? "No session selected"
+      : brainstorms.find((b) => b.id === selectedBrainstormId)?.name ?? "No session selected";
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.href === pathname)) {
+      void navigate({ to: tabs[0]?.href ?? "/dashboard", replace: true });
+    }
+  }, [navigate, pathname, tabs]);
+
+  useEffect(() => {
+    writePanelsMap(featurePanels);
+  }, [featurePanels]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onSetPanels = (event: Event) => {
+      const detail = (event as CustomEvent<LayoutPanelsApplyDetail>).detail;
+      if (!detail?.feature) return;
+      setFeaturePanels((current) => ({
+        ...current,
+        [detail.feature]: { left: detail.left, right: detail.right },
+      }));
+    };
+    window.addEventListener(LAYOUT_PANELS_SET_EVENT, onSetPanels);
+    return () => window.removeEventListener(LAYOUT_PANELS_SET_EVENT, onSetPanels);
+  }, []);
+
+  useEffect(() => {
+    const current = featurePanels[currentFeature];
+    dispatchLayoutPanelsApply({
+      feature: currentFeature,
+      left: current.left,
+      right: current.right,
+    });
+  }, [currentFeature, featurePanels]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const readAvatar = () => setAvatarDataUrl(window.localStorage.getItem(AVATAR_STORAGE_KEY));
+    readAvatar();
+    window.addEventListener("storage", readAvatar);
+    return () => window.removeEventListener("storage", readAvatar);
+  }, []);
+
+  useEffect(() => {
+    if (!runtime) return;
+    let active = true;
+    const load = async () => {
+      const { data } = await runtime.auth.getLocalAuthState();
+      if (!active) return;
+      setDisplayName(data.displayName);
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [runtime]);
+
+  useEffect(() => {
+    setDashboardMenuOpen(false);
+    setTasksMenuOpen(false);
+    setMindmapMenuOpen(false);
+    setIsCreatingDashboardView(false);
+    setIsCreatingTaskProject(false);
+    setIsCreatingMindmap(false);
+    setDeleteCandidateDashboardViewId(null);
+    setDeleteDashboardViewInput("");
+    setDeleteSubmittingDashboardViewId(null);
+    setDeleteCandidateMindmapId(null);
+    setDeleteMindmapInput("");
+    setDeleteSubmittingMindmapId(null);
+    setBrainstormMenuOpen(false);
+    setIsCreatingBrainstorm(false);
+    setDeleteCandidateBrainstormId(null);
+    setDeleteBrainstormInput("");
+    setDeleteSubmittingBrainstormId(null);
+  }, [pathname, selectedWorkspaceId]);
+
+  const loadDashboardViews = useCallback(
+    async (preferredViewId?: string | null) => {
+      if (!runtime || !selectedWorkspaceId) {
+        setDashboardViews([DEFAULT_DASHBOARD_VIEW]);
+        setActiveDashboardViewId(DEFAULT_DASHBOARD_VIEW.id);
+        return;
+      }
+
+      try {
+        const views = await listDashboardViews(runtime, selectedWorkspaceId);
+        const storedActive = await readPersistedDashboardActiveView(runtime, selectedWorkspaceId);
+        setDashboardViews(views);
+        setActiveDashboardViewId((current) => {
+          const preferred = preferredViewId ?? storedActive ?? readStoredDashboardActiveView(selectedWorkspaceId) ?? current;
+          const resolved =
+            (preferred && views.some((view) => view.id === preferred) ? preferred : null) ?? views[0]?.id ?? DEFAULT_DASHBOARD_VIEW.id;
+          writeStoredDashboardActiveView(selectedWorkspaceId, resolved);
+          dispatchDashboardViewChange(resolved, views.find((view) => view.id === resolved)?.name);
+          void writePersistedDashboardActiveView(runtime, selectedWorkspaceId, resolved).catch(console.error);
+          return resolved;
+        });
+      } catch (error) {
+        console.error(error);
+        setDashboardViews([DEFAULT_DASHBOARD_VIEW]);
+        setActiveDashboardViewId(DEFAULT_DASHBOARD_VIEW.id);
+      }
+    },
+    [runtime, selectedWorkspaceId]
+  );
+
+  useEffect(() => {
+    void loadDashboardViews();
+  }, [loadDashboardViews]);
+
+  const setActiveDashboardView = useCallback(
+    (viewId: string) => {
+      const view = dashboardViews.find((entry) => entry.id === viewId);
+      if (!view || !runtime || !selectedWorkspaceId) return;
+      setActiveDashboardViewId(viewId);
+      writeStoredDashboardActiveView(selectedWorkspaceId, viewId);
+      dispatchDashboardViewChange(viewId, view.name);
+      void writePersistedDashboardActiveView(runtime, selectedWorkspaceId, viewId).catch(console.error);
+    },
+    [dashboardViews, runtime, selectedWorkspaceId]
+  );
+
+  const closeDashboardMenu = useCallback(() => {
+    setDashboardMenuOpen(false);
+    setIsCreatingDashboardView(false);
+    setNewDashboardViewName("New Dashboard View");
+    setDeleteCandidateDashboardViewId(null);
+    setDeleteDashboardViewInput("");
+    setDeleteSubmittingDashboardViewId(null);
+  }, []);
+
+  const cancelTaskProjectDeleteIntent = useCallback(() => {
+    setDeleteCandidateTaskProjectId(null);
+    setDeleteTaskProjectInput("");
+    setDeleteSubmittingTaskProjectId(null);
+  }, []);
+
+  const closeTasksMenu = useCallback(() => {
+    setTasksMenuOpen(false);
+    setIsCreatingTaskProject(false);
+    setNewTaskProjectName("New Project");
+    cancelTaskProjectDeleteIntent();
+  }, [cancelTaskProjectDeleteIntent]);
+
+  const submitCreateDashboardView = useCallback(async () => {
+    if (!runtime || !selectedWorkspaceId) return;
+    const name = newDashboardViewName.trim() || "New Dashboard View";
+    const nextView = { id: safeId(), name };
+    const nextViews = [...dashboardViews, nextView];
+    try {
+      await saveDashboardViews(runtime, selectedWorkspaceId, nextViews);
+      await ensureDashboardLayout(runtime, selectedWorkspaceId, nextView.id);
+      await writePersistedDashboardActiveView(runtime, selectedWorkspaceId, nextView.id);
+      setDashboardViews(nextViews);
+      setActiveDashboardViewId(nextView.id);
+      writeStoredDashboardActiveView(selectedWorkspaceId, nextView.id);
+      dispatchDashboardViewChange(nextView.id, nextView.name);
+      closeDashboardMenu();
+    } catch (error) {
+      console.error(error);
+    }
+  }, [closeDashboardMenu, dashboardViews, newDashboardViewName, runtime, selectedWorkspaceId]);
+
+  const removeDashboardView = useCallback(
+    async (viewId: string) => {
+      if (!runtime || !selectedWorkspaceId) return;
+      if (dashboardViews.length <= 1) return;
+      const target = dashboardViews.find((view) => view.id === viewId);
+      if (!target) return;
+      if (deleteCandidateDashboardViewId !== viewId) return;
+      if (deleteDashboardViewInput.trim() !== target.name.trim()) return;
+      if (deleteSubmittingDashboardViewId === viewId) return;
+      setDeleteSubmittingDashboardViewId(viewId);
+      try {
+        const nextViews = dashboardViews.filter((view) => view.id !== viewId);
+        await saveDashboardViews(runtime, selectedWorkspaceId, nextViews);
+        await deleteDashboardLayout(runtime, selectedWorkspaceId, viewId);
+        setDashboardViews(nextViews);
+        if (activeDashboardViewId === viewId) {
+          const fallback = nextViews[0]?.id ?? DEFAULT_DASHBOARD_VIEW.id;
+          setActiveDashboardView(fallback);
+        }
+        closeDashboardMenu();
+      } finally {
+        setDeleteSubmittingDashboardViewId(null);
+      }
+    },
+    [
+      activeDashboardViewId,
+      closeDashboardMenu,
+      dashboardViews,
+      deleteCandidateDashboardViewId,
+      deleteDashboardViewInput,
+      deleteSubmittingDashboardViewId,
+      runtime,
+      selectedWorkspaceId,
+      setActiveDashboardView,
+    ]
+  );
+
+  const loadTaskProjects = useCallback(
+    async (preferredProjectId?: string | null) => {
+      if (!runtime || !selectedWorkspaceId) {
+        setTaskProjects([]);
+        setSelectedTaskProjectId(null);
+        return;
+      }
+
+      const bundle = await runtime.tasks.list(selectedWorkspaceId);
+      const nextProjects: TaskProjectOption[] = (bundle.projects ?? [])
+        .map((project: any) => normalizeTaskProject(project))
+        .filter((project: TaskProjectOption) => !project.deletedAt)
+        .sort((a: TaskProjectOption, b: TaskProjectOption) => a.position.localeCompare(b.position) || a.name.localeCompare(b.name));
+
+      setTaskProjects(nextProjects);
+      setSelectedTaskProjectId((current) => {
+        const preferred = preferredProjectId ?? current;
+        if (preferred !== null && nextProjects.some((project) => project.id === preferred)) return preferred;
+        return nextProjects[0]?.id ?? null;
+      });
+    },
+    [runtime, selectedWorkspaceId]
+  );
+
+  useEffect(() => {
+    if (!isTasksRoute) return;
+    void loadTaskProjects();
+  }, [isTasksRoute, loadTaskProjects]);
+
+  useEffect(() => {
+    if (!isTasksRoute) return;
+    dispatchTasksSelectProject(selectedTaskProjectId);
+  }, [isTasksRoute, selectedTaskProjectId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onProjectSelect = (event: Event) => {
+      const detail = (event as CustomEvent<TasksSelectProjectDetail>).detail;
+      const nextId = detail?.projectId ?? null;
+      setSelectedTaskProjectId(nextId);
+    };
+    window.addEventListener(TASKS_SELECT_PROJECT_EVENT, onProjectSelect);
+    return () => window.removeEventListener(TASKS_SELECT_PROJECT_EVENT, onProjectSelect);
+  }, []);
+
+  const submitCreateTaskProject = useCallback(async () => {
+    if (!runtime || !selectedWorkspaceId || !userId || !canEditTasks) return;
+    const name = newTaskProjectName.trim() || "New Project";
+    const timestamp = nowIso();
+    const project: TaskProjectOption = {
+      id: safeId(),
+      workspaceId: selectedWorkspaceId,
+      ownerId: userId,
+      name,
+      description: "",
+      position: `m${Date.now().toString(36)}`,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      deletedAt: null,
+    };
+
+    await runtime.tasks.upsertProject(project);
+    const stateBase = {
+      workspaceId: selectedWorkspaceId,
+      ownerId: userId,
+      projectId: project.id,
+      color: null as string | null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      deletedAt: null as string | null,
+    };
+    await Promise.all([
+      runtime.tasks.upsertState({
+        ...stateBase,
+        id: safeId(),
+        name: "ToDo",
+        kind: "todo",
+        position: "todo-01",
+      }),
+      runtime.tasks.upsertState({
+        ...stateBase,
+        id: safeId(),
+        name: "InProgress",
+        kind: "in_progress",
+        position: "in_progress-02",
+      }),
+      runtime.tasks.upsertState({
+        ...stateBase,
+        id: safeId(),
+        name: "Done",
+        kind: "done",
+        position: "done-03",
+      }),
+    ]);
+    await loadTaskProjects(project.id);
+    closeTasksMenu();
+    dispatchTasksSelectProject(project.id);
+  }, [canEditTasks, closeTasksMenu, loadTaskProjects, newTaskProjectName, runtime, selectedWorkspaceId, userId]);
+
+  const removeTaskProject = useCallback(
+    async (projectId: string) => {
+      if (!runtime || !canEditTasks) return;
+      const current = taskProjects.find((project) => project.id === projectId);
+      if (!current) return;
+      if (deleteCandidateTaskProjectId !== projectId) return;
+      if (deleteTaskProjectInput.trim() !== current.name.trim()) return;
+      if (deleteSubmittingTaskProjectId === projectId) return;
+      setDeleteSubmittingTaskProjectId(projectId);
+      try {
+        await runtime.tasks.upsertProject({ ...current, deletedAt: nowIso(), updatedAt: nowIso() });
+        await loadTaskProjects(selectedTaskProjectId === projectId ? null : selectedTaskProjectId);
+        closeTasksMenu();
+      } finally {
+        setDeleteSubmittingTaskProjectId((currentSubmittingId) =>
+          currentSubmittingId === projectId ? null : currentSubmittingId
+        );
+      }
+    },
+    [
+      canEditTasks,
+      closeTasksMenu,
+      deleteCandidateTaskProjectId,
+      deleteSubmittingTaskProjectId,
+      deleteTaskProjectInput,
+      loadTaskProjects,
+      runtime,
+      selectedTaskProjectId,
+      taskProjects,
+    ]
+  );
+
+  const cancelMindmapDeleteIntent = useCallback(() => {
+    setDeleteCandidateMindmapId(null);
+    setDeleteMindmapInput("");
+    setDeleteSubmittingMindmapId(null);
+  }, []);
+
+  const closeMindmapMenu = useCallback(() => {
+    setMindmapMenuOpen(false);
+    setIsCreatingMindmap(false);
+    setNewMindmapName("New Mindmap");
+    cancelMindmapDeleteIntent();
+  }, [cancelMindmapDeleteIntent]);
+
+  const loadMindmaps = useCallback(
+    async (preferredMindmapId?: string | null) => {
+      if (!runtime || !selectedWorkspaceId) {
+        setMindmaps([]);
+        setSelectedMindmapId(null);
+        writeStoredActiveMindmap(selectedWorkspaceId ?? null, null);
+        dispatchMindmapSelectMap(null);
+        return;
+      }
+      const nextMindmaps = await listMindmaps(runtime, selectedWorkspaceId);
+      setMindmaps(nextMindmaps);
+      setSelectedMindmapId((current) => {
+        const preferred = preferredMindmapId ?? readStoredActiveMindmap(selectedWorkspaceId) ?? current;
+        const resolved = preferred && nextMindmaps.some((mindmap) => mindmap.id === preferred) ? preferred : nextMindmaps[0]?.id ?? null;
+        writeStoredActiveMindmap(selectedWorkspaceId, resolved);
+        dispatchMindmapSelectMap(resolved, nextMindmaps.find((mindmap) => mindmap.id === resolved)?.name);
+        return resolved;
+      });
+    },
+    [runtime, selectedWorkspaceId]
+  );
+
+  const submitCreateMindmap = useCallback(async () => {
+    if (!runtime || !selectedWorkspaceId || !userId) return;
+    const map = await createMindmap(runtime, {
+      workspaceId: selectedWorkspaceId,
+      ownerId: userId,
+      name: newMindmapName,
+    });
+    await loadMindmaps(map.id);
+    closeMindmapMenu();
+  }, [closeMindmapMenu, loadMindmaps, newMindmapName, runtime, selectedWorkspaceId, userId]);
+
+  const removeMindmap = useCallback(
+    async (mindmapId: string) => {
+      if (!runtime || !selectedWorkspaceId) return;
+      const current = mindmaps.find((mindmap) => mindmap.id === mindmapId);
+      if (!current) return;
+      if (deleteCandidateMindmapId !== mindmapId) return;
+      if (deleteMindmapInput.trim() !== current.name.trim()) return;
+      if (deleteSubmittingMindmapId === mindmapId) return;
+      setDeleteSubmittingMindmapId(mindmapId);
+      try {
+        await deleteMindmap(runtime, selectedWorkspaceId, mindmapId);
+        await loadMindmaps(selectedMindmapId === mindmapId ? null : selectedMindmapId);
+        cancelMindmapDeleteIntent();
+      } finally {
+        setDeleteSubmittingMindmapId(null);
+      }
+    },
+    [
+      cancelMindmapDeleteIntent,
+      deleteCandidateMindmapId,
+      deleteMindmapInput,
+      deleteSubmittingMindmapId,
+      loadMindmaps,
+      mindmaps,
+      runtime,
+      selectedMindmapId,
+      selectedWorkspaceId,
+    ]
+  );
+
+  useEffect(() => {
+    void loadMindmaps();
+  }, [loadMindmaps]);
+
+  useEffect(() => {
+    if (!isMindmapRoute) return;
+    dispatchMindmapSelectMap(selectedMindmapId, mindmaps.find((mindmap) => mindmap.id === selectedMindmapId)?.name);
+  }, [isMindmapRoute, mindmaps, selectedMindmapId]);
+
+  const cancelBrainstormDeleteIntent = useCallback(() => {
+    setDeleteCandidateBrainstormId(null);
+    setDeleteBrainstormInput("");
+    setDeleteSubmittingBrainstormId(null);
+  }, []);
+
+  const closeBrainstormMenu = useCallback(() => {
+    setBrainstormMenuOpen(false);
+    setIsCreatingBrainstorm(false);
+    setNewBrainstormName("New Brainstorm");
+    cancelBrainstormDeleteIntent();
+  }, [cancelBrainstormDeleteIntent]);
+
+  const loadBrainstorms = useCallback(
+    async (preferredId?: string | null) => {
+      if (!runtime || !selectedWorkspaceId) {
+        setBrainstorms([]);
+        setSelectedBrainstormId(null);
+        writeStoredActiveBrainstorm(selectedWorkspaceId ?? null, null);
+        dispatchBrainstormSelectView(null);
+        return;
+      }
+      const next = await listBrainstorms(runtime, selectedWorkspaceId);
+      setBrainstorms(next);
+      setSelectedBrainstormId((current) => {
+        const preferred = preferredId ?? readStoredActiveBrainstorm(selectedWorkspaceId) ?? current;
+        const resolved = preferred && next.some((b) => b.id === preferred) ? preferred : next[0]?.id ?? null;
+        writeStoredActiveBrainstorm(selectedWorkspaceId, resolved);
+        dispatchBrainstormSelectView(resolved, next.find((b) => b.id === resolved)?.name);
+        return resolved;
+      });
+    },
+    [runtime, selectedWorkspaceId]
+  );
+
+  const submitCreateBrainstorm = useCallback(async () => {
+    if (!runtime || !selectedWorkspaceId || !userId) return;
+    const created = await createBrainstorm(runtime, {
+      workspaceId: selectedWorkspaceId,
+      ownerId: userId,
+      name: newBrainstormName,
+    });
+    await loadBrainstorms(created.id);
+    closeBrainstormMenu();
+  }, [closeBrainstormMenu, loadBrainstorms, newBrainstormName, runtime, selectedWorkspaceId, userId]);
+
+  const removeBrainstorm = useCallback(
+    async (brainstormId: string) => {
+      if (!runtime || !selectedWorkspaceId) return;
+      const current = brainstorms.find((b) => b.id === brainstormId);
+      if (!current) return;
+      if (deleteCandidateBrainstormId !== brainstormId) return;
+      if (deleteBrainstormInput.trim() !== current.name.trim()) return;
+      if (deleteSubmittingBrainstormId === brainstormId) return;
+      setDeleteSubmittingBrainstormId(brainstormId);
+      try {
+        await deleteBrainstorm(runtime, selectedWorkspaceId, brainstormId);
+        await loadBrainstorms(selectedBrainstormId === brainstormId ? null : selectedBrainstormId);
+        cancelBrainstormDeleteIntent();
+      } finally {
+        setDeleteSubmittingBrainstormId(null);
+      }
+    },
+    [
+      cancelBrainstormDeleteIntent,
+      deleteCandidateBrainstormId,
+      deleteBrainstormInput,
+      deleteSubmittingBrainstormId,
+      loadBrainstorms,
+      brainstorms,
+      runtime,
+      selectedBrainstormId,
+      selectedWorkspaceId,
+    ]
+  );
+
+  useEffect(() => {
+    void loadBrainstorms();
+  }, [loadBrainstorms]);
+
+  useEffect(() => {
+    if (!isBrainstormRoute) return;
+    dispatchBrainstormSelectView(selectedBrainstormId, brainstorms.find((b) => b.id === selectedBrainstormId)?.name);
+  }, [isBrainstormRoute, brainstorms, selectedBrainstormId]);
+
+  const updateDashboardMenuAnchor = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const rect = dashboardControlRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - 372));
+    setDashboardMenuAnchor({ left, top: rect.bottom + 8 });
+  }, []);
+
+  const updateTasksMenuAnchor = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const rect = tasksControlRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - 372));
+    setTasksMenuAnchor({ left, top: rect.bottom + 8 });
+  }, []);
+
+  const updateMindmapMenuAnchor = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const rect = mindmapControlRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - 372));
+    setMindmapMenuAnchor({ left, top: rect.bottom + 8 });
+  }, []);
+
+  const updateBrainstormMenuAnchor = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const rect = brainstormControlRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - 372));
+    setBrainstormMenuAnchor({ left, top: rect.bottom + 8 });
+  }, []);
+
+  const toggleDashboardMenu = useCallback(() => {
+    closeTasksMenu();
+    closeMindmapMenu();
+    closeBrainstormMenu();
+    if (dashboardMenuOpen) {
+      closeDashboardMenu();
+      return;
+    }
+    updateDashboardMenuAnchor();
+    setDashboardMenuOpen(true);
+  }, [closeBrainstormMenu, closeDashboardMenu, closeMindmapMenu, closeTasksMenu, dashboardMenuOpen, updateDashboardMenuAnchor]);
+
+  const toggleTasksMenu = useCallback(() => {
+    closeDashboardMenu();
+    closeMindmapMenu();
+    closeBrainstormMenu();
+    if (tasksMenuOpen) {
+      closeTasksMenu();
+      return;
+    }
+    updateTasksMenuAnchor();
+    setTasksMenuOpen(true);
+  }, [closeBrainstormMenu, closeDashboardMenu, closeMindmapMenu, closeTasksMenu, tasksMenuOpen, updateTasksMenuAnchor]);
+
+  const toggleMindmapMenu = useCallback(() => {
+    closeDashboardMenu();
+    closeTasksMenu();
+    closeBrainstormMenu();
+    if (mindmapMenuOpen) {
+      closeMindmapMenu();
+      return;
+    }
+    updateMindmapMenuAnchor();
+    setMindmapMenuOpen(true);
+  }, [closeBrainstormMenu, closeDashboardMenu, closeMindmapMenu, closeTasksMenu, mindmapMenuOpen, updateMindmapMenuAnchor]);
+
+  const toggleBrainstormMenu = useCallback(() => {
+    closeDashboardMenu();
+    closeTasksMenu();
+    closeMindmapMenu();
+    if (brainstormMenuOpen) {
+      closeBrainstormMenu();
+      return;
+    }
+    updateBrainstormMenuAnchor();
+    setBrainstormMenuOpen(true);
+  }, [closeBrainstormMenu, closeDashboardMenu, closeMindmapMenu, closeTasksMenu, brainstormMenuOpen, updateBrainstormMenuAnchor]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || (!dashboardMenuOpen && !tasksMenuOpen && !mindmapMenuOpen && !brainstormMenuOpen)) return;
+    const onReposition = () => {
+      if (dashboardMenuOpen) updateDashboardMenuAnchor();
+      if (tasksMenuOpen) updateTasksMenuAnchor();
+      if (mindmapMenuOpen) updateMindmapMenuAnchor();
+      if (brainstormMenuOpen) updateBrainstormMenuAnchor();
+    };
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    return () => {
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
+  }, [brainstormMenuOpen, dashboardMenuOpen, mindmapMenuOpen, tasksMenuOpen, updateBrainstormMenuAnchor, updateDashboardMenuAnchor, updateMindmapMenuAnchor, updateTasksMenuAnchor]);
+
   const setPanelsForFeature = useCallback((feature: FeatureLayoutKey, left: boolean, right: boolean) => {
     setFeaturePanels((current) => ({
       ...current,
       [feature]: { left, right },
     }));
   }, []);
-
-  const setActiveDashboardView = (viewId: string) => {
-    setActiveDashboardViewId(viewId);
-    // Event dispatch is handled by useEffect
-  };
-
-  const setActiveTaskProject = (projectId: string | null) => {
-    setSelectedTaskProjectId(projectId);
-    dispatchTasksSelectProject(projectId);
-  };
-
-  const addTaskProject = async () => {
-    if (!supabase || !selectedWorkspaceId || !userId || !canEditTasks) return;
-    const inputName = typeof window === "undefined" ? "New Project" : window.prompt("Project name", "New Project");
-    if (!inputName || !inputName.trim()) return;
-    const name = inputName.trim();
-    const position = `m${Date.now().toString(36)}`;
-
-    const { data, error } = await supabase
-      .from("task_projects")
-      .insert({
-        workspace_id: selectedWorkspaceId,
-        owner_id: userId,
-        name,
-        description: "",
-        position,
-      })
-      .select("id,name")
-      .single();
-    if (error || !data?.id) return;
-
-    const nextProject = { id: data.id as string, name: (data.name as string) ?? name };
-    setTaskProjects((current) => [...current, nextProject]);
-    setActiveTaskProject(nextProject.id);
-    setTaskProjectMenuOpen(false);
-  };
-
-  const renameTaskProject = async (projectId: string) => {
-    if (!supabase || !selectedWorkspaceId || !canEditTasks) return;
-    const current = taskProjects.find((project) => project.id === projectId);
-    if (!current) return;
-    const nextName =
-      typeof window === "undefined" ? current.name : window.prompt("Rename project", current.name);
-    if (!nextName || !nextName.trim() || nextName.trim() === current.name) return;
-    const name = nextName.trim();
-
-    const { error } = await supabase
-      .from("task_projects")
-      .update({ name })
-      .eq("workspace_id", selectedWorkspaceId)
-      .eq("id", projectId);
-    if (error) return;
-
-    setTaskProjects((items) => items.map((project) => (project.id === projectId ? { ...project, name } : project)));
-  };
-
-  const removeTaskProject = async (projectId: string) => {
-    if (!supabase || !selectedWorkspaceId || !canEditTasks) return;
-    const { error } = await supabase
-      .from("task_projects")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("workspace_id", selectedWorkspaceId)
-      .eq("id", projectId);
-    if (error) return;
-
-    const next = taskProjects.filter((project) => project.id !== projectId);
-    setTaskProjects(next);
-    if (selectedTaskProjectId === projectId) {
-      const fallback = next[0]?.id ?? null;
-      setActiveTaskProject(fallback);
-    }
-  };
-
-  const addDashboardView = async () => {
-    const inputName = typeof window === "undefined" ? "New View" : window.prompt("Dashboard view name", "New View");
-    if (!inputName || !inputName.trim()) return;
-    await createDashboardView(inputName.trim());
-    setDashboardViewMenuOpen(false);
-  };
-
-  const renameDashboardView = async (viewId: string) => {
-    const existing = dashboardViews.find((view) => view.id === viewId);
-    if (!existing) return;
-    const nextName =
-      typeof window === "undefined" ? existing.name : window.prompt("Rename dashboard view", existing.name);
-    if (!nextName || !nextName.trim() || nextName.trim() === existing.name) return;
-    await updateDashboardView(viewId, { name: nextName.trim() });
-  };
-
-  const removeDashboardView = async (viewId: string) => {
-    if (dashboardViews.length <= 1) return;
-    await deleteDashboardView(viewId);
-  };
 
   if (loading) {
     return (
@@ -349,424 +830,846 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     );
   }
 
+  const currentPanels = featurePanels[currentFeature];
+  const derivedInitial =
+    displayName?.trim().slice(0, 1).toUpperCase() ||
+    userEmail?.trim().slice(0, 1).toUpperCase() ||
+    profileInitial;
+  const toggleLeftPanel = () => setPanelsForFeature(currentFeature, !currentPanels.left, currentPanels.right);
+  const toggleRightPanel = () => setPanelsForFeature(currentFeature, currentPanels.left, !currentPanels.right);
+
   return (
-    <View className="flex-1 bg-[#0C0C0C]">
-      <View className="px-5 pt-4 pb-2 bg-[#0C0C0C]">
-        <View className="flex-row items-center gap-3">
-          <View className="flex-row items-center gap-3 min-w-[330px]">
-            <Image source={require("../../../assets/moduo_favicon.png")} className="w-8 h-8" contentFit="contain" />
+    <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-[#0C0C0C]">
+      <View className="relative z-[400] px-5 pt-4 pb-2 bg-[#0C0C0C]">
+        <View className="relative z-[410] flex flex-row items-center justify-between gap-3">
+          <View className="min-w-[260px] flex flex-row items-center gap-3">
+            <Image source={moduoFavicon} className="h-8 w-8 shrink-0" contentFit="contain" />
             <WorkspaceSwitcher onOpenSettings={() => setWorkspaceSettingsOpen(true)} />
           </View>
 
-          <View className="flex-1">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", gap: 8, paddingRight: 12 }}>
+          <View className="min-w-0 flex-1 overflow-x-auto overflow-y-visible">
+            <View className="flex min-w-max flex-row items-center gap-2 pr-2">
               {tabs.map((tab) => {
-                const active =
-                  pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
-                const isDashboardTab = tab.href === "/";
+                const active = pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
+                const isDashboardTab = tab.href === "/dashboard";
                 const isTasksTab = tab.href === "/tasks";
+                const isMindmapTab = tab.href === "/mindmap";
+                const isBrainstormTab = tab.href === "/brainstorm";
                 return (
-                  <View key={tab.label} className="flex-row items-center gap-2">
-                    {isDashboardTab ? (
-                      <View className="relative">
-                        <View className="flex-row items-center">
-                          <Pressable
-                            className="px-3 py-2.5 flex-row items-center gap-2 bg-transparent border-0 rounded-none"
-                            style={topBarPressableStyle}
-                            onPress={() => router.replace(tab.href as any)}
-                          >
-                            <Feather name={tab.iconName as any} size={14} color={active ? "#f2f2f2" : "#9a9a9a"} />
-                            <Text className={`${active ? "text-[#f5f5f5]" : "text-[#a3a3a3]"} text-[14px]`}>
-                              {tab.label}
-                            </Text>
-                          </Pressable>
+                  <View key={tab.href} className="relative flex flex-row items-center">
+                    <Pressable
+                      className="flex flex-row items-center gap-2 bg-transparent border-0 rounded-none px-3 py-2"
+                      onPress={() => void navigate({ to: tab.href })}
+                    >
+                      <Icon name={tab.iconName} size={14} color={active ? "#f2f2f2" : "#9a9a9a"} />
+                      <Text className={`${active ? "text-[#f5f5f5]" : "text-[#a3a3a3]"} text-[14px]`}>{tab.label}</Text>
+                    </Pressable>
 
-                          {showDashboardTabControls ? (
-                            <Animated.View
-                              style={{
-                                opacity: dashboardTabControlsAnim,
-                                transform: [
-                                  {
-                                    translateX: dashboardTabControlsAnim.interpolate({
-                                      inputRange: [0, 1],
-                                      outputRange: [-8, 0],
-                                    }),
-                                  },
-                                ],
-                              }}
-                            >
-                              <View className="pl-1 pr-2 py-1.5 flex-row items-center gap-2">
-                                <Pressable
-                                  className="h-6 flex-row items-center gap-1 bg-transparent border-0 rounded-none"
-                                  style={topBarPressableStyle}
-                                  onPress={() => setDashboardViewMenuOpen((current) => !current)}
-                                >
-                                  <Text className="text-[#a3a3a3] text-[12px] max-w-[140px]" numberOfLines={1}>
-                                    {activeDashboardViewName}
-                                  </Text>
-                                  <Text
-                                    className="text-[#b7b7b7] text-[11px]"
-                                    style={{ transform: [{ rotate: dashboardViewMenuOpen ? "180deg" : "0deg" }] }}
-                                  >
-                                    ▾
-                                  </Text>
-                                </Pressable>
-                              </View>
-                            </Animated.View>
-                          ) : null}
-                        </View>
-
+                    {isDashboardTab && isDashboardRoute ? (
+                      <View ref={dashboardControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
+                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleDashboardMenu}>
+                          <Text className="text-[13px] text-[#d7d7d7]">{activeDashboardViewName}</Text>
+                          <Text className="text-[11px] text-[#8f8f8f]">▾</Text>
+                        </Pressable>
                       </View>
-                    ) : (
-                      <Pressable
-                        className="px-3 py-2.5 flex-row items-center gap-2 bg-transparent border-0 rounded-none"
-                        style={topBarPressableStyle}
-                        onPress={() => router.replace(tab.href as any)}
-                      >
-                        <Feather name={tab.iconName as any} size={14} color={active ? "#f2f2f2" : "#9a9a9a"} />
-                        <Text className={`${active ? "text-[#f5f5f5]" : "text-[#a3a3a3]"} text-[14px]`}>
-                          {tab.label}
-                        </Text>
-                      </Pressable>
-                    )}
+                    ) : null}
 
-                    {isTasksTab && showTasksTabControls ? (
-                      <Animated.View
-                        style={{
-                          opacity: tasksTabControlsAnim,
-                          transform: [
-                            {
-                              translateX: tasksTabControlsAnim.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [-8, 0],
-                                }),
-                            },
-                          ],
-                        }}
-                      >
-                        <View className="pl-1 pr-2 py-1.5 flex-row items-center gap-2">
-                          {!taskProjectsLoaded ? (
-                            <>
-                              <Text className="text-[#8b8b8b] text-[12px]">...</Text>
-                            </>
-                          ) : (
-                            <>
-                              <Pressable
-                                className="h-6 flex-row items-center gap-1 bg-transparent border-0 rounded-none"
-                                style={topBarPressableStyle}
-                                onPress={() => setTaskProjectMenuOpen((current) => !current)}
-                              >
-                                <Text className="text-[#a3a3a3] text-[12px] max-w-[140px]" numberOfLines={1}>
-                                  {selectedTaskProjectLabel}
-                                </Text>
-                                <Text
-                                  className="text-[#b7b7b7] text-[11px]"
-                                  style={{ transform: [{ rotate: taskProjectMenuOpen ? "180deg" : "0deg" }] }}
-                                >
-                                  ▾
-                                </Text>
-                              </Pressable>
-                            </>
-                          )}
-                        </View>
-                      </Animated.View>
+                    {isTasksTab && isTasksRoute ? (
+                      <View ref={tasksControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
+                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleTasksMenu}>
+                          <Text className="text-[13px] text-[#d7d7d7]">{selectedTaskProjectLabel}</Text>
+                          <Text className="text-[11px] text-[#8f8f8f]">▾</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+
+                    {isMindmapTab && isMindmapRoute ? (
+                      <View ref={mindmapControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
+                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleMindmapMenu}>
+                          <Text className="text-[13px] text-[#d7d7d7]">{selectedMindmapLabel}</Text>
+                          <Text className="text-[11px] text-[#8f8f8f]">▾</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+
+                    {isBrainstormTab && isBrainstormRoute ? (
+                      <View ref={brainstormControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
+                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleBrainstormMenu}>
+                          <Text className="text-[13px] text-[#d7d7d7]">{selectedBrainstormLabel}</Text>
+                          <Text className="text-[11px] text-[#8f8f8f]">▾</Text>
+                        </Pressable>
+                      </View>
                     ) : null}
                   </View>
                 );
               })}
-            </ScrollView>
+            </View>
           </View>
 
-          <View className="flex-row items-center gap-2">
-            <Pressable
-              className="h-10 w-10 items-center justify-center bg-transparent border-0 rounded-none"
-              style={topBarPressableStyle}
-              onPress={() => {
-                const currentPanels = featurePanels[currentFeature];
-                if (!currentPanels.left) {
-                  setPanelsForFeature(currentFeature, true, currentPanels.right);
-                }
-                if (isNotesRoute) {
-                  dispatchNotesFocusSearch();
-                  return;
-                }
-                if (isTasksRoute) dispatchTasksFocusSearch();
-              }}
-            >
-              <Feather name="search" size={14} color="#9a9a9a" />
-            </Pressable>
+          {dashboardMenuOpen && dashboardMenuAnchor ? (
+            <Modal transparent visible={dashboardMenuOpen} animationType="fade" onRequestClose={closeDashboardMenu}>
+              <Pressable className="fixed inset-0 z-[998]" onPress={closeDashboardMenu} />
+              <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: dashboardMenuAnchor.left, top: dashboardMenuAnchor.top }}>
+                <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
+                  <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
+                    <Text className="text-[#a0a0a0] text-xs">All views</Text>
+                    <Pressable
+                      className="rounded-md"
+                      style={plusButtonStyle}
+                      onPress={(event: any) => {
+                        event?.stopPropagation?.();
+                        setIsCreatingDashboardView(true);
+                        setNewDashboardViewName("New Dashboard View");
+                      }}
+                    >
+                      <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
+                    </Pressable>
+                  </View>
+                </View>
+                <View className="max-h-[260px] overflow-y-auto">
+                  {isCreatingDashboardView ? (
+                    <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
+                      <TextInput
+                        autoFocus
+                        value={newDashboardViewName}
+                        onChangeText={setNewDashboardViewName}
+                        onKeyDown={(event: any) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            submitCreateDashboardView();
+                          }
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            setIsCreatingDashboardView(false);
+                          }
+                        }}
+                        className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
+                      />
+                      <View className="ml-1" style={rowStyle}>
+                        <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={submitCreateDashboardView}>
+                          <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
+                        </Pressable>
+                        <Pressable
+                          className="rounded-md hover:bg-[#2b2b2b]"
+                          style={iconButtonStyle}
+                          onPress={() => {
+                            setIsCreatingDashboardView(false);
+                            setNewDashboardViewName("New Dashboard View");
+                          }}
+                        >
+                          <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : null}
 
-            <Pressable
-              className="h-10 w-10 items-center justify-center bg-transparent border-0 rounded-none"
-              style={topBarPressableStyle}
-              onPress={() => {
-                if (typeof window !== "undefined") window.alert("AI tools panel is next in queue.");
-              }}
-            >
-              <Image source={require("../../../assets/brightness_1.svg")} className="w-[28px] h-[28px]" contentFit="contain" />
-            </Pressable>
+                  {dashboardViews.map((view) => {
+                    const isActiveView = view.id === activeDashboardViewId;
+                    const isDeleteOpen = deleteCandidateDashboardViewId === view.id;
+                    const deleteMatches = deleteDashboardViewInput.trim() === view.name.trim();
+                    return (
+                      <View
+                        key={view.id}
+                        className={`rounded-lg px-3 py-2 ${isActiveView ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}
+                      >
+                        <Pressable
+                          onPress={() => {
+                            setActiveDashboardView(view.id);
+                            closeDashboardMenu();
+                          }}
+                        >
+                          <View style={itemRowStyle}>
+                            <View style={itemNameWrapStyle}>
+                              <Text
+                                as="div"
+                                className={`${isActiveView ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                                style={{ lineHeight: "28px" }}
+                                numberOfLines={1}
+                              >
+                                {view.name}
+                              </Text>
+                            </View>
+                            <View className="shrink-0" style={itemActionsStyle}>
+                              <Pressable
+                                className="rounded-md hover:bg-[#2b2b2b]"
+                                style={iconButtonStyle}
+                                onPress={(event: any) => {
+                                  event?.stopPropagation?.();
+                                }}
+                              >
+                                <Icon name="settings" size={13} color="#d8d8d8" />
+                              </Pressable>
+                              <Pressable
+                                className="rounded-md hover:bg-[#2b2b2b]"
+                                style={iconButtonStyle}
+                                onPress={(event: any) => {
+                                  event?.stopPropagation?.();
+                                  if (isDeleteOpen) {
+                                    setDeleteCandidateDashboardViewId(null);
+                                    setDeleteDashboardViewInput("");
+                                    setDeleteSubmittingDashboardViewId(null);
+                                  } else {
+                                    setDeleteCandidateDashboardViewId(view.id);
+                                    setDeleteDashboardViewInput("");
+                                  }
+                                }}
+                                disabled={dashboardViews.length <= 1}
+                              >
+                                <Icon name="trash-2" size={13} color={dashboardViews.length > 1 ? "#ffb0b0" : "#6a6a6a"} />
+                              </Pressable>
+                            </View>
+                          </View>
+                        </Pressable>
 
+                        <View
+                          style={{
+                            ...deleteRevealBaseStyle,
+                            maxHeight: isDeleteOpen ? 116 : 0,
+                            opacity: isDeleteOpen ? 1 : 0,
+                            transform: isDeleteOpen ? "translateY(0)" : "translateY(-4px)",
+                            marginTop: isDeleteOpen ? 8 : 0,
+                          }}
+                        >
+                          <Text className="text-[11px] text-[#9a9a9a]">
+                            Retype <Text className="font-semibold text-[#d9d9d9]">{view.name}</Text> to delete this view.
+                          </Text>
+                          <View className="mt-2" style={rowStyle}>
+                            <TextInput
+                              value={deleteDashboardViewInput}
+                              onChangeText={setDeleteDashboardViewInput}
+                              onKeyDown={(event: any) => {
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  setDeleteCandidateDashboardViewId(null);
+                                  setDeleteDashboardViewInput("");
+                                  setDeleteSubmittingDashboardViewId(null);
+                                }
+                                if (event.key === "Enter" && deleteMatches && deleteSubmittingDashboardViewId !== view.id) {
+                                  event.preventDefault();
+                                  removeDashboardView(view.id);
+                                }
+                              }}
+                              placeholder={view.name}
+                              className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
+                            />
+                            <Pressable
+                              className="ml-1 rounded-md hover:bg-[#2b2b2b]"
+                              style={iconButtonStyle}
+                              onPress={() => {
+                                setDeleteCandidateDashboardViewId(null);
+                                setDeleteDashboardViewInput("");
+                                setDeleteSubmittingDashboardViewId(null);
+                              }}
+                            >
+                              <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
+                            </Pressable>
+                            <Pressable
+                              className="ml-1 rounded-md"
+                              style={iconButtonStyle}
+                              onPress={() => removeDashboardView(view.id)}
+                              aria-disabled={!deleteMatches || deleteSubmittingDashboardViewId === view.id}
+                            >
+                              <Text
+                                className={`text-[11px] font-semibold leading-none ${
+                                  deleteMatches && deleteSubmittingDashboardViewId !== view.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
+                                }`}
+                              >
+                                Del
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            </Modal>
+          ) : null}
+
+          {tasksMenuOpen && tasksMenuAnchor ? (
+            <Modal transparent visible={tasksMenuOpen} animationType="fade" onRequestClose={closeTasksMenu}>
+              <Pressable className="fixed inset-0 z-[998]" onPress={closeTasksMenu} />
+              <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: tasksMenuAnchor.left, top: tasksMenuAnchor.top }}>
+                <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
+                  <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
+                    <Text className="text-[#a0a0a0] text-xs">All projects</Text>
+                    <Pressable
+                      className="rounded-md"
+                      style={plusButtonStyle}
+                      onPress={(event: any) => {
+                        event?.stopPropagation?.();
+                        if (!canEditTasks) return;
+                        setIsCreatingTaskProject(true);
+                        setNewTaskProjectName("New Project");
+                      }}
+                      disabled={!canEditTasks}
+                    >
+                      <Text className={`text-[16px] leading-none ${canEditTasks ? "text-[#d8d8d8]" : "text-[#6a6a6a]"}`}>+</Text>
+                    </Pressable>
+                  </View>
+                </View>
+                <View className="max-h-[260px] overflow-y-auto">
+                  {isCreatingTaskProject && canEditTasks ? (
+                    <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
+                      <TextInput
+                        autoFocus
+                        value={newTaskProjectName}
+                        onChangeText={setNewTaskProjectName}
+                        onKeyDown={(event: any) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            void submitCreateTaskProject();
+                          }
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            setIsCreatingTaskProject(false);
+                          }
+                        }}
+                        className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
+                      />
+                      <View className="ml-1" style={rowStyle}>
+                        <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={() => void submitCreateTaskProject()}>
+                          <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
+                        </Pressable>
+                        <Pressable
+                          className="rounded-md hover:bg-[#2b2b2b]"
+                          style={iconButtonStyle}
+                          onPress={() => {
+                            setIsCreatingTaskProject(false);
+                            setNewTaskProjectName("New Project");
+                          }}
+                        >
+                          <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  <View className={`rounded-lg px-3 py-2 ${selectedTaskProjectId === null ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}>
+                    <Pressable
+                      onPress={() => {
+                        setSelectedTaskProjectId(null);
+                        closeTasksMenu();
+                      }}
+                    >
+                      <View style={itemRowStyle}>
+                        <View style={itemNameWrapStyle}>
+                          <Text
+                            as="div"
+                            className={`${selectedTaskProjectId === null ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                            style={{ lineHeight: "28px" }}
+                            numberOfLines={1}
+                          >
+                            All projects
+                          </Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  </View>
+
+                  {taskProjects.map((project) => {
+                    const isActiveProject = selectedTaskProjectId === project.id;
+                    const isDeleteOpen = deleteCandidateTaskProjectId === project.id;
+                    const deleteMatches = deleteTaskProjectInput.trim() === project.name.trim();
+                    return (
+                      <View
+                        key={project.id}
+                        className={`rounded-lg px-3 py-2 ${isActiveProject ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}
+                      >
+                        <Pressable
+                          onPress={() => {
+                            setSelectedTaskProjectId(project.id);
+                            closeTasksMenu();
+                          }}
+                        >
+                          <View style={itemRowStyle}>
+                            <View style={itemNameWrapStyle}>
+                              <Text
+                                as="div"
+                                className={`${isActiveProject ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                                style={{ lineHeight: "28px" }}
+                                numberOfLines={1}
+                              >
+                                {project.name}
+                              </Text>
+                            </View>
+                            <View className="shrink-0" style={itemActionsStyle}>
+                              <Pressable
+                                className="rounded-md hover:bg-[#2b2b2b]"
+                                style={iconButtonStyle}
+                                onPress={(event: any) => {
+                                  event?.stopPropagation?.();
+                                }}
+                                disabled={!canEditTasks}
+                              >
+                                <Icon name="settings" size={13} color={canEditTasks ? "#d8d8d8" : "#6a6a6a"} />
+                              </Pressable>
+                              <Pressable
+                                className="rounded-md hover:bg-[#2b2b2b]"
+                                style={iconButtonStyle}
+                                onPress={(event: any) => {
+                                  event?.stopPropagation?.();
+                                  if (isDeleteOpen) {
+                                    cancelTaskProjectDeleteIntent();
+                                  } else {
+                                    setDeleteCandidateTaskProjectId(project.id);
+                                    setDeleteTaskProjectInput("");
+                                  }
+                                }}
+                                disabled={!canEditTasks}
+                              >
+                                <Icon name="trash-2" size={13} color={canEditTasks ? "#ffb0b0" : "#6a6a6a"} />
+                              </Pressable>
+                            </View>
+                          </View>
+                        </Pressable>
+
+                        <View
+                          style={{
+                            ...deleteRevealBaseStyle,
+                            maxHeight: isDeleteOpen ? 116 : 0,
+                            opacity: isDeleteOpen ? 1 : 0,
+                            transform: isDeleteOpen ? "translateY(0)" : "translateY(-4px)",
+                            marginTop: isDeleteOpen ? 8 : 0,
+                          }}
+                        >
+                          <Text className="text-[11px] text-[#9a9a9a]">
+                            Retype <Text className="font-semibold text-[#d9d9d9]">{project.name}</Text> to delete this project.
+                          </Text>
+                          <View className="mt-2" style={rowStyle}>
+                            <TextInput
+                              value={deleteTaskProjectInput}
+                              onChangeText={setDeleteTaskProjectInput}
+                              onKeyDown={(event: any) => {
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  cancelTaskProjectDeleteIntent();
+                                }
+                                if (event.key === "Enter" && deleteMatches && deleteSubmittingTaskProjectId !== project.id) {
+                                  event.preventDefault();
+                                  void removeTaskProject(project.id);
+                                }
+                              }}
+                              placeholder={project.name}
+                              className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
+                            />
+                            <Pressable className="ml-1 rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={cancelTaskProjectDeleteIntent}>
+                              <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
+                            </Pressable>
+                            <Pressable
+                              className="ml-1 rounded-md"
+                              style={iconButtonStyle}
+                              onPress={() => void removeTaskProject(project.id)}
+                              aria-disabled={!deleteMatches || deleteSubmittingTaskProjectId === project.id}
+                            >
+                              <Text
+                                className={`text-[11px] font-semibold leading-none ${
+                                  deleteMatches && deleteSubmittingTaskProjectId !== project.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
+                                }`}
+                              >
+                                Del
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            </Modal>
+          ) : null}
+
+          {mindmapMenuOpen && mindmapMenuAnchor ? (
+            <Modal transparent visible={mindmapMenuOpen} animationType="fade" onRequestClose={closeMindmapMenu}>
+              <Pressable className="fixed inset-0 z-[998]" onPress={closeMindmapMenu} />
+              <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: mindmapMenuAnchor.left, top: mindmapMenuAnchor.top }}>
+                <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
+                  <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
+                    <Text className="text-[#a0a0a0] text-xs">All mindmaps</Text>
+                    <Pressable
+                      className="rounded-md"
+                      style={plusButtonStyle}
+                      onPress={(event: any) => {
+                        event?.stopPropagation?.();
+                        setIsCreatingMindmap(true);
+                        setNewMindmapName("New Mindmap");
+                      }}
+                    >
+                      <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
+                    </Pressable>
+                  </View>
+                </View>
+                <View className="max-h-[260px] overflow-y-auto">
+                  {isCreatingMindmap ? (
+                    <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
+                      <TextInput
+                        autoFocus
+                        value={newMindmapName}
+                        onChangeText={setNewMindmapName}
+                        onKeyDown={(event: any) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            void submitCreateMindmap();
+                          }
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            setIsCreatingMindmap(false);
+                          }
+                        }}
+                        className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
+                      />
+                      <View className="ml-1" style={rowStyle}>
+                        <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={() => void submitCreateMindmap()}>
+                          <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
+                        </Pressable>
+                        <Pressable
+                          className="rounded-md hover:bg-[#2b2b2b]"
+                          style={iconButtonStyle}
+                          onPress={() => {
+                            setIsCreatingMindmap(false);
+                            setNewMindmapName("New Mindmap");
+                          }}
+                        >
+                          <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {mindmaps.length === 0 ? (
+                    <View className="px-3 py-2">
+                      <Text className="text-[13px] text-[#8f8f8f]">No mindmaps yet.</Text>
+                    </View>
+                  ) : null}
+
+                  {mindmaps.map((mindmap) => {
+                    const isActiveMindmap = selectedMindmapId === mindmap.id;
+                    const isDeleteOpen = deleteCandidateMindmapId === mindmap.id;
+                    const deleteMatches = deleteMindmapInput.trim() === mindmap.name.trim();
+                    return (
+                      <View
+                        key={mindmap.id}
+                        className={`rounded-lg px-3 py-2 ${isActiveMindmap ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}
+                      >
+                        <Pressable
+                          onPress={() => {
+                            setSelectedMindmapId(mindmap.id);
+                            writeStoredActiveMindmap(selectedWorkspaceId, mindmap.id);
+                            dispatchMindmapSelectMap(mindmap.id, mindmap.name);
+                            closeMindmapMenu();
+                          }}
+                        >
+                          <View style={itemRowStyle}>
+                            <View style={itemNameWrapStyle}>
+                              <Text
+                                as="div"
+                                className={`${isActiveMindmap ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                                style={{ lineHeight: "28px" }}
+                                numberOfLines={1}
+                              >
+                                {mindmap.name}
+                              </Text>
+                            </View>
+                            <View className="shrink-0" style={itemActionsStyle}>
+                              <Pressable
+                                className="rounded-md hover:bg-[#2b2b2b]"
+                                style={iconButtonStyle}
+                                onPress={(event: any) => {
+                                  event?.stopPropagation?.();
+                                }}
+                              >
+                                <Icon name="settings" size={13} color="#d8d8d8" />
+                              </Pressable>
+                              <Pressable
+                                className="rounded-md hover:bg-[#2b2b2b]"
+                                style={iconButtonStyle}
+                                onPress={(event: any) => {
+                                  event?.stopPropagation?.();
+                                  if (isDeleteOpen) {
+                                    cancelMindmapDeleteIntent();
+                                  } else {
+                                    setDeleteCandidateMindmapId(mindmap.id);
+                                    setDeleteMindmapInput("");
+                                  }
+                                }}
+                              >
+                                <Icon name="trash-2" size={13} color="#ffb0b0" />
+                              </Pressable>
+                            </View>
+                          </View>
+                        </Pressable>
+
+                        <View
+                          style={{
+                            ...deleteRevealBaseStyle,
+                            maxHeight: isDeleteOpen ? 116 : 0,
+                            opacity: isDeleteOpen ? 1 : 0,
+                            transform: isDeleteOpen ? "translateY(0)" : "translateY(-4px)",
+                            marginTop: isDeleteOpen ? 8 : 0,
+                          }}
+                        >
+                          <Text className="text-[11px] text-[#9a9a9a]">
+                            Retype <Text className="font-semibold text-[#d9d9d9]">{mindmap.name}</Text> to delete this mindmap.
+                          </Text>
+                          <View className="mt-2" style={rowStyle}>
+                            <TextInput
+                              value={deleteMindmapInput}
+                              onChangeText={setDeleteMindmapInput}
+                              onKeyDown={(event: any) => {
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  cancelMindmapDeleteIntent();
+                                }
+                                if (event.key === "Enter" && deleteMatches && deleteSubmittingMindmapId !== mindmap.id) {
+                                  event.preventDefault();
+                                  void removeMindmap(mindmap.id);
+                                }
+                              }}
+                              placeholder={mindmap.name}
+                              className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
+                            />
+                            <Pressable className="ml-1 rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={cancelMindmapDeleteIntent}>
+                              <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
+                            </Pressable>
+                            <Pressable
+                              className="ml-1 rounded-md"
+                              style={iconButtonStyle}
+                              onPress={() => void removeMindmap(mindmap.id)}
+                              aria-disabled={!deleteMatches || deleteSubmittingMindmapId === mindmap.id}
+                            >
+                              <Text
+                                className={`text-[11px] font-semibold leading-none ${
+                                  deleteMatches && deleteSubmittingMindmapId !== mindmap.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
+                                }`}
+                              >
+                                Del
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            </Modal>
+          ) : null}
+
+          {brainstormMenuOpen && brainstormMenuAnchor ? (
+            <Modal transparent visible={brainstormMenuOpen} animationType="fade" onRequestClose={closeBrainstormMenu}>
+              <Pressable className="fixed inset-0 z-[998]" onPress={closeBrainstormMenu} />
+              <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: brainstormMenuAnchor.left, top: brainstormMenuAnchor.top }}>
+                <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
+                  <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
+                    <Text className="text-[#a0a0a0] text-xs">All sessions</Text>
+                    <Pressable
+                      className="rounded-md"
+                      style={plusButtonStyle}
+                      onPress={(event: any) => {
+                        event?.stopPropagation?.();
+                        setIsCreatingBrainstorm(true);
+                        setNewBrainstormName("New Brainstorm");
+                      }}
+                    >
+                      <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
+                    </Pressable>
+                  </View>
+                </View>
+                <View className="max-h-[260px] overflow-y-auto">
+                  {isCreatingBrainstorm ? (
+                    <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
+                      <TextInput
+                        autoFocus
+                        value={newBrainstormName}
+                        onChangeText={setNewBrainstormName}
+                        onKeyDown={(event: any) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            void submitCreateBrainstorm();
+                          }
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            setIsCreatingBrainstorm(false);
+                          }
+                        }}
+                        className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
+                      />
+                      <View className="ml-1" style={rowStyle}>
+                        <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={() => void submitCreateBrainstorm()}>
+                          <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
+                        </Pressable>
+                        <Pressable
+                          className="rounded-md hover:bg-[#2b2b2b]"
+                          style={iconButtonStyle}
+                          onPress={() => {
+                            setIsCreatingBrainstorm(false);
+                            setNewBrainstormName("New Brainstorm");
+                          }}
+                        >
+                          <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {brainstorms.length === 0 ? (
+                    <View className="px-3 py-2">
+                      <Text className="text-[13px] text-[#8f8f8f]">No brainstorm sessions yet.</Text>
+                    </View>
+                  ) : null}
+
+                  {brainstorms.map((bs) => {
+                    const isActive = selectedBrainstormId === bs.id;
+                    const isDeleteOpen = deleteCandidateBrainstormId === bs.id;
+                    const deleteMatches = deleteBrainstormInput.trim() === bs.name.trim();
+                    return (
+                      <View
+                        key={bs.id}
+                        className={`rounded-lg px-3 py-2 ${isActive ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}
+                      >
+                        <Pressable
+                          onPress={() => {
+                            setSelectedBrainstormId(bs.id);
+                            writeStoredActiveBrainstorm(selectedWorkspaceId, bs.id);
+                            dispatchBrainstormSelectView(bs.id, bs.name);
+                            closeBrainstormMenu();
+                          }}
+                        >
+                          <View style={itemRowStyle}>
+                            <View style={itemNameWrapStyle}>
+                              <Text
+                                as="div"
+                                className={`${isActive ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                                style={{ lineHeight: "28px" }}
+                                numberOfLines={1}
+                              >
+                                {bs.name}
+                              </Text>
+                            </View>
+                            <View className="shrink-0" style={itemActionsStyle}>
+                              <Pressable
+                                className="rounded-md hover:bg-[#2b2b2b]"
+                                style={iconButtonStyle}
+                                onPress={(event: any) => {
+                                  event?.stopPropagation?.();
+                                }}
+                              >
+                                <Icon name="settings" size={13} color="#d8d8d8" />
+                              </Pressable>
+                              <Pressable
+                                className="rounded-md hover:bg-[#2b2b2b]"
+                                style={iconButtonStyle}
+                                onPress={(event: any) => {
+                                  event?.stopPropagation?.();
+                                  if (isDeleteOpen) {
+                                    cancelBrainstormDeleteIntent();
+                                  } else {
+                                    setDeleteCandidateBrainstormId(bs.id);
+                                    setDeleteBrainstormInput("");
+                                  }
+                                }}
+                              >
+                                <Icon name="trash-2" size={13} color="#ffb0b0" />
+                              </Pressable>
+                            </View>
+                          </View>
+                        </Pressable>
+
+                        <View
+                          style={{
+                            ...deleteRevealBaseStyle,
+                            maxHeight: isDeleteOpen ? 116 : 0,
+                            opacity: isDeleteOpen ? 1 : 0,
+                            transform: isDeleteOpen ? "translateY(0)" : "translateY(-4px)",
+                            marginTop: isDeleteOpen ? 8 : 0,
+                          }}
+                        >
+                          <Text className="text-[11px] text-[#9a9a9a]">
+                            Retype <Text className="font-semibold text-[#d9d9d9]">{bs.name}</Text> to delete this session.
+                          </Text>
+                          <View className="mt-2" style={rowStyle}>
+                            <TextInput
+                              value={deleteBrainstormInput}
+                              onChangeText={setDeleteBrainstormInput}
+                              onKeyDown={(event: any) => {
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  cancelBrainstormDeleteIntent();
+                                }
+                                if (event.key === "Enter" && deleteMatches && deleteSubmittingBrainstormId !== bs.id) {
+                                  event.preventDefault();
+                                  void removeBrainstorm(bs.id);
+                                }
+                              }}
+                              placeholder={bs.name}
+                              className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
+                            />
+                            <Pressable className="ml-1 rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={cancelBrainstormDeleteIntent}>
+                              <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
+                            </Pressable>
+                            <Pressable
+                              className="ml-1 rounded-md"
+                              style={iconButtonStyle}
+                              onPress={() => void removeBrainstorm(bs.id)}
+                              aria-disabled={!deleteMatches || deleteSubmittingBrainstormId === bs.id}
+                            >
+                              <Text
+                                className={`text-[11px] font-semibold leading-none ${
+                                  deleteMatches && deleteSubmittingBrainstormId !== bs.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
+                                }`}
+                              >
+                                Del
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            </Modal>
+          ) : null}
+
+          <View className="min-w-[120px] flex flex-row items-center justify-end gap-2">
+            <Pressable className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent hover:bg-[#151515]" onPress={() => {}}>
+              <Icon name="search" size={14} color="#9a9a9a" />
+            </Pressable>
+            <Pressable className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent hover:bg-[#151515]" onPress={() => {}}>
+              <Icon name="clock" size={14} color="#9a9a9a" />
+            </Pressable>
             <NotificationCenter />
-
-            <Pressable
-              className="h-10 w-10 rounded-full border border-[#2f2f2f] items-center justify-center bg-transparent"
-              onPress={() => setProfileMenuOpen((current) => !current)}
-            >
-              <Text className="text-[#ededed] text-[14px] font-semibold">{profileInitial}</Text>
-            </Pressable>
+            <UserMenu avatarDataUrl={avatarDataUrl} profileInitial={derivedInitial} />
           </View>
         </View>
       </View>
 
-      {profileMenuOpen ? (
-        <Modal transparent visible animationType="fade" onRequestClose={() => setProfileMenuOpen(false)}>
-          <Pressable className="flex-1" onPress={() => setProfileMenuOpen(false)} />
-          <View className="absolute top-16 right-5 bg-[#181818] rounded-xl py-1 min-w-[190px] z-[999]">
-            <Pressable
-              className="px-4 py-3"
-              onPress={() => {
-                setProfileMenuOpen(false);
-                setWorkspaceSettingsOpen(true);
-              }}
-            >
-              <Text className="text-[#e6e6e6]">Settings</Text>
-            </Pressable>
-            <Pressable
-              className="px-4 py-3"
-              onPress={async () => {
-                setProfileMenuOpen(false);
-                try {
-                  await signOut();
-                } finally {
-                  router.replace("/(auth)");
-                }
-              }}
-            >
-              <Text className="text-[#ffb0b0]">Logout</Text>
-            </Pressable>
-          </View>
-        </Modal>
-      ) : null}
+      <View className="flex-1 min-h-0 overflow-hidden">
+        <Outlet />
+      </View>
 
-      {dashboardViewMenuOpen ? (
-        <Modal transparent visible animationType="fade" onRequestClose={() => setDashboardViewMenuOpen(false)}>
-          <Pressable className="flex-1" onPress={() => setDashboardViewMenuOpen(false)} />
-          <View className="absolute top-16 left-[360px] w-[280px] rounded-xl bg-[#171717] p-2 z-[999]">
-            <View className="flex-row items-center justify-between px-2 pb-2 pt-1 border-b border-[#262626] mb-2">
-              <Text className="text-[#a0a0a0] text-xs">Dashboard Views</Text>
-              <Pressable className="h-5 w-5 items-center justify-center" onPress={addDashboardView}>
-                <Text className="text-[#d8d8d8] text-[14px]">+</Text>
-              </Pressable>
-            </View>
-            {dashboardViews.length === 0 ? (
-              <Text className="text-[#878787] text-[12px] px-2 pb-2">No views yet.</Text>
+      <View className="px-5 py-2 bg-[#0C0C0C]">
+        <View className="flex flex-row items-center justify-between">
+          <Pressable className="flex h-9 w-9 items-center justify-center rounded-none border-0 bg-transparent" onPress={toggleLeftPanel}>
+            {currentPanels.left ? (
+              <ChevronsLeft size={16} className="text-[#9a9a9a]" />
             ) : (
-              dashboardViews.map((view) => {
-                const dashboardViewActive = view.id === activeDashboardViewId;
-                const showActions = hoveredDashboardViewId === view.id || dashboardViewActive;
-                return (
-                  <Pressable
-                    key={view.id}
-                    className={`rounded-lg px-3 py-2 flex-row items-center justify-between ${
-                      dashboardViewActive ? "bg-[#2f2f2f]" : "bg-transparent"
-                    }`}
-                    onPress={() => {
-                      setActiveDashboardView(view.id);
-                      setDashboardViewMenuOpen(false);
-                    }}
-                    onHoverIn={() => setHoveredDashboardViewId(view.id)}
-                    onHoverOut={() => setHoveredDashboardViewId((current) => (current === view.id ? null : current))}
-                  >
-                    <Text
-                      className={`${dashboardViewActive ? "text-[#f1f1f1]" : "text-[#cfcfcf]"} text-[13px] flex-1 pr-2`}
-                      numberOfLines={1}
-                    >
-                      {view.name}
-                    </Text>
-                    <View className={`w-[44px] flex-row items-center justify-end gap-1 ${showActions ? "opacity-100" : "opacity-0"}`}>
-                      <Pressable
-                        className="h-4 w-4 items-center justify-center"
-                        disabled={!showActions}
-                        onPress={() => renameDashboardView(view.id)}
-                      >
-                        <Text className="text-[#bdbdbd] text-[11px]">✎</Text>
-                      </Pressable>
-                      <Pressable
-                        className="w-4 h-4 items-center justify-center"
-                        disabled={dashboardViews.length <= 1 || !showActions}
-                        onPress={() => removeDashboardView(view.id)}
-                      >
-                        <Text className={`${dashboardViews.length > 1 ? "text-[#c8c8c8]" : "text-[#6c6c6c]"} text-[11px]`}>×</Text>
-                      </Pressable>
-                    </View>
-                  </Pressable>
-                );
-              })
+              <ChevronsRight size={16} className="text-[#9a9a9a]" />
             )}
-          </View>
-        </Modal>
-      ) : null}
-
-      {taskProjectMenuOpen ? (
-        <Modal transparent visible animationType="fade" onRequestClose={() => setTaskProjectMenuOpen(false)}>
-          <Pressable className="flex-1" onPress={() => setTaskProjectMenuOpen(false)} />
-          <View className="absolute top-16 left-[640px] w-[280px] rounded-xl bg-[#171717] p-2 z-[999]">
-            <View className="flex-row items-center justify-between px-2 pb-2 pt-1 border-b border-[#262626] mb-2">
-              <Text className="text-[#a0a0a0] text-xs">Projects</Text>
-              <Pressable className="h-5 w-5 items-center justify-center" onPress={addTaskProject}>
-                <Text className="text-[#d8d8d8] text-[14px]">+</Text>
-              </Pressable>
-            </View>
-            <Pressable
-              className={`rounded-lg px-3 py-2 flex-row items-center justify-between ${
-                selectedTaskProjectId === null ? "bg-[#2f2f2f]" : "bg-transparent"
-              }`}
-              onPress={() => {
-                setActiveTaskProject(null);
-                setTaskProjectMenuOpen(false);
-              }}
-            >
-              <Text
-                className={`${selectedTaskProjectId === null ? "text-[#f1f1f1]" : "text-[#cfcfcf]"} text-[13px] flex-1 pr-2`}
-                numberOfLines={1}
-              >
-                All projects
-              </Text>
-            </Pressable>
-            {taskProjects.length === 0 ? (
-              <Text className="text-[#878787] text-[12px] px-2 pb-2">No projects yet.</Text>
+          </Pressable>
+          <Pressable className="flex h-9 w-9 items-center justify-center rounded-none border-0 bg-transparent" onPress={toggleRightPanel}>
+            {currentPanels.right ? (
+              <ChevronsRight size={16} className="text-[#9a9a9a]" />
             ) : (
-              taskProjects.map((project) => {
-                const projectActive = project.id === selectedTaskProjectId;
-                const showActions = hoveredTaskProjectId === project.id || projectActive;
-                return (
-                  <Pressable
-                    key={project.id}
-                    className={`rounded-lg px-3 py-2 flex-row items-center justify-between ${
-                      projectActive ? "bg-[#2f2f2f]" : "bg-transparent"
-                    }`}
-                    onPress={() => {
-                      setActiveTaskProject(project.id);
-                      setTaskProjectMenuOpen(false);
-                    }}
-                    onHoverIn={() => setHoveredTaskProjectId(project.id)}
-                    onHoverOut={() => setHoveredTaskProjectId((current) => (current === project.id ? null : current))}
-                  >
-                    <Text
-                      className={`${projectActive ? "text-[#f1f1f1]" : "text-[#cfcfcf]"} text-[13px] flex-1 pr-2`}
-                      numberOfLines={1}
-                    >
-                      {project.name}
-                    </Text>
-                    <View className={`w-[44px] flex-row items-center justify-end gap-1 ${showActions ? "opacity-100" : "opacity-0"}`}>
-                      <Pressable
-                        className="h-4 w-4 items-center justify-center"
-                        disabled={!showActions}
-                        onPress={() => renameTaskProject(project.id)}
-                      >
-                        <Text className="text-[#bdbdbd] text-[11px]">✎</Text>
-                      </Pressable>
-                      <Pressable
-                        className="w-4 h-4 items-center justify-center"
-                        disabled={!showActions}
-                        onPress={() => removeTaskProject(project.id)}
-                      >
-                        <Text className="text-[#c8c8c8] text-[11px]">×</Text>
-                      </Pressable>
-                    </View>
-                  </Pressable>
-                );
-              })
+              <ChevronsLeft size={16} className="text-[#9a9a9a]" />
             )}
-          </View>
-        </Modal>
-      ) : null}
-
-      {noModuleAccess ? (
-        <View className="px-8 pt-2">
-          <View className="rounded-lg bg-[#1a1a1a] px-3 py-2">
-            <Text className="text-[#cfcfcf] text-[13px]">
-              You currently have no Notes/Tasks module access in this workspace. Ask an owner/admin to grant permissions.
-            </Text>
-          </View>
+          </Pressable>
         </View>
-      ) : null}
-
-      <View className="flex-1">
-        <Slot />
       </View>
 
       <WorkspaceSettingsModal visible={workspaceSettingsOpen} onClose={() => setWorkspaceSettingsOpen(false)} />
-
-      <View className="items-center pb-5 bg-[#0C0C0C]">
-        {isNotesRoute && notesCreateMenuOpen && canEditNotes ? (
-          <View className="absolute bottom-[72px] rounded-2xl bg-[#171717] px-2 py-2 min-w-[320px]">
-            {notesCreateActions.map((entry) => (
-              <Pressable
-                key={entry.kind}
-                className="flex-row items-center justify-between px-3 py-3 rounded-lg"
-                onPress={() => {
-                  dispatchNotesCreateKind(entry.kind);
-                  setNotesCreateMenuOpen(false);
-                }}
-              >
-                <View className="flex-row items-center gap-3">
-                  <Text className="text-[#f08f42] text-base">{entry.icon}</Text>
-                  <Text className="text-[#d8d8d8] text-[18px]">{entry.label}</Text>
-                </View>
-                <Text className="text-[#a8a8a8] text-2xl">+</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
-        {isTasksRoute && tasksCreateMenuOpen && canEditTasks ? (
-          <View className="absolute bottom-[72px] rounded-2xl bg-[#171717] px-2 py-2 min-w-[320px]">
-            {tasksCreateActions.map((entry) => (
-              <Pressable
-                key={entry.entity}
-                className="flex-row items-center justify-between px-3 py-3 rounded-lg"
-                onPress={() => {
-                  dispatchTasksCreateEntity(entry.entity);
-                  setTasksCreateMenuOpen(false);
-                }}
-              >
-                <View className="flex-row items-center gap-3">
-                  <Text className="text-[#f08f42] text-base">{entry.icon}</Text>
-                  <Text className="text-[#d8d8d8] text-[18px]">{entry.label}</Text>
-                </View>
-                <Text className="text-[#a8a8a8] text-2xl">+</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
-        <View className="w-full flex-row items-center justify-between px-4 py-2">
-          <Pressable
-            className="w-10 h-10 items-center justify-center"
-            disabled={!supportsLeftPanelToggle}
-            onPress={() => {
-              const next = featurePanels[currentFeature];
-              setPanelsForFeature(currentFeature, !next.left, next.right);
-            }}
-          >
-            <Text className={`text-2xl ${supportsLeftPanelToggle ? "text-[#9a9a9a]" : "text-[#4b4b4b]"}`}>«</Text>
-          </Pressable>
-
-          <View />
-
-          <Pressable
-            className="w-10 h-10 items-center justify-center"
-            disabled={!supportsRightPanelToggle}
-            onPress={() => {
-              const next = featurePanels[currentFeature];
-              setPanelsForFeature(currentFeature, next.left, !next.right);
-            }}
-          >
-            <Text className={`text-2xl ${supportsRightPanelToggle ? "text-[#9a9a9a]" : "text-[#4b4b4b]"}`}>»</Text>
-          </Pressable>
-        </View>
-      </View>
     </View>
   );
 }

@@ -30,6 +30,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# IDE
+.vscode/
+
 # local env files
 .env*.local
 
@@ -39,3 +42,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# tauri build/state
+src-tauri/target/
+src-tauri/gen/
+src-tauri/*.sqlite3
+src-tauri/*.redb
+src-tauri/*.redb.lock
