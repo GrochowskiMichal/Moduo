@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MindmapNode, MindmapEdge } from "../types";
-import { ArrowRight, Check, ChevronDown, ChevronRight, Copy, Layers } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronRight, Copy, Layers, Lock, Unlock } from "lucide-react";
 import { resolveNodeIcon } from "../node-icons";
 
 type Props = {
@@ -8,6 +8,7 @@ type Props = {
     edges: MindmapEdge[];
     selectedNodeId: string | null;
     onSelectNode: (id: string) => void;
+    onImportMermaid: (source: string) => { ok: true } | { ok: false; error: string };
 };
 
 type TreeItem = {
@@ -125,8 +126,12 @@ function TreeNode({
     );
 }
 
-export function MindmapRelations({ nodes, edges, selectedNodeId, onSelectNode }: Props) {
+export function MindmapRelations({ nodes, edges, selectedNodeId, onSelectNode, onImportMermaid }: Props) {
     const [viewMode, setViewMode] = useState<"tree" | "mermaid">("tree");
+    const [mermaidLocked, setMermaidLocked] = useState(true);
+    const [mermaidDraft, setMermaidDraft] = useState("");
+    const [importError, setImportError] = useState<string | null>(null);
+    const [importSuccess, setImportSuccess] = useState(false);
     const [copied, setCopied] = useState(false);
     const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
     const contentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -180,6 +185,13 @@ export function MindmapRelations({ nodes, edges, selectedNodeId, onSelectNode }:
         return lines.join("\n");
     }, [nodes, edges]);
 
+    useEffect(() => {
+        if (mermaidLocked) {
+            setMermaidDraft(mermaidNotation);
+            setImportError(null);
+        }
+    }, [mermaidNotation, mermaidLocked]);
+
     // Connection info for selected node
     const selectedConnections = selectedNodeId
         ? {
@@ -218,6 +230,17 @@ export function MindmapRelations({ nodes, edges, selectedNodeId, onSelectNode }:
             else next.add(id);
             return next;
         });
+    };
+    const handleApplyMermaid = () => {
+        const result = onImportMermaid(mermaidDraft);
+        if (!result.ok) {
+            setImportError(result.error);
+            setImportSuccess(false);
+            return;
+        }
+        setImportError(null);
+        setImportSuccess(true);
+        window.setTimeout(() => setImportSuccess(false), 900);
     };
 
     useEffect(() => {
@@ -267,6 +290,18 @@ export function MindmapRelations({ nodes, edges, selectedNodeId, onSelectNode }:
                             <div className="text-[9px] font-semibold uppercase tracking-widest text-[#7d7d7d]">Mermaid</div>
                             <button
                                 type="button"
+                                onClick={() => {
+                                    setMermaidLocked((current) => !current);
+                                    setImportError(null);
+                                }}
+                                className="grid h-5 w-5 place-items-center text-[#8a8a8a] hover:text-[#d0d0d0]"
+                                aria-label={mermaidLocked ? "Unlock Mermaid editor" : "Lock Mermaid editor"}
+                                title={mermaidLocked ? "Unlock Mermaid editor" : "Lock Mermaid editor"}
+                            >
+                                {mermaidLocked ? <Lock size={11} /> : <Unlock size={11} />}
+                            </button>
+                            <button
+                                type="button"
                                 onClick={() => void handleCopyMermaid()}
                                 className={`grid h-5 w-5 place-items-center transition-all duration-200 ${
                                     copied ? "scale-110 text-[#f1f1f1]" : "text-[#8a8a8a] hover:text-[#d0d0d0]"
@@ -276,10 +311,40 @@ export function MindmapRelations({ nodes, edges, selectedNodeId, onSelectNode }:
                             >
                                 {copied ? <Check size={11} /> : <Copy size={11} />}
                             </button>
+                            {!mermaidLocked ? (
+                                <button
+                                    type="button"
+                                    onClick={handleApplyMermaid}
+                                    className={`ml-auto rounded-md px-2 py-1 text-[9px] font-semibold uppercase tracking-wider ${
+                                        importSuccess
+                                            ? "bg-[#1f3f2a] text-[#8af0a9]"
+                                            : "bg-[#1f1f1f] text-[#d0d0d0] hover:bg-[#292929]"
+                                    }`}
+                                    aria-label="Apply Mermaid to mindmap"
+                                    title="Apply Mermaid to mindmap"
+                                >
+                                    {importSuccess ? "Applied" : "Apply"}
+                                </button>
+                            ) : null}
                         </div>
-                        <pre className="w-full min-w-0 overflow-x-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-[1.75] text-[#c8c8c8]">
-                            {mermaidNotation}
-                        </pre>
+                        {mermaidLocked ? (
+                            <pre className="w-full min-w-0 overflow-x-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-[1.75] text-[#c8c8c8]">
+                                {mermaidNotation}
+                            </pre>
+                        ) : (
+                            <textarea
+                                value={mermaidDraft}
+                                onChange={(event) => setMermaidDraft(event.target.value)}
+                                className="h-[380px] w-full min-w-0 resize-y rounded-md border border-[#2a2a2a] bg-[#101010] p-2 font-mono text-[10px] leading-[1.55] text-[#d6d6d6] outline-none focus:border-[#4a4a4a]"
+                                aria-label="Editable Mermaid source"
+                                spellCheck={false}
+                            />
+                        )}
+                        {importError ? (
+                            <div className="mt-2 rounded-md border border-[#522] bg-[#2a1616] px-2 py-1 text-[10px] text-[#ffb5b5]">
+                                {importError}
+                            </div>
+                        ) : null}
                     </div>
                 ) : tree.length === 0 ? (
                     <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">

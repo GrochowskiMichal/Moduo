@@ -82,6 +82,18 @@ pub struct UnlockMnemonicInput {
     pub invite_token: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateDisplayNameInput {
+    pub display_name: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateDisplayNameResponse {
+    pub display_name: String,
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -528,6 +540,47 @@ pub async fn auth_remove_pin(state: State<'_, AppState>) -> Result<(), String> {
     profile.pin_hash = None;
     profile.updated_at = now_iso();
     save_local_profile(&state, &profile)
+}
+
+#[tauri::command]
+pub async fn auth_update_display_name(
+    state: State<'_, AppState>,
+    input: UpdateDisplayNameInput,
+) -> Result<UpdateDisplayNameResponse, String> {
+    require_session(&state)?;
+
+    let Some(mut profile) = load_local_profile(&state)? else {
+        return Err("no_profile".to_string());
+    };
+
+    let next_name = input.display_name.trim().to_string();
+    if next_name.is_empty() {
+        return Err("display_name_required".to_string());
+    }
+
+    profile.display_name = next_name.clone();
+    profile.updated_at = now_iso();
+    save_local_profile(&state, &profile)?;
+
+    let session_snapshot = {
+        let guard = state.session.lock().map_err(|e| e.to_string())?;
+        guard.clone()
+    };
+
+    if let Some(session) = session_snapshot {
+        persist_active_session(&state, &session, Some(&next_name))?;
+    }
+
+    Ok(UpdateDisplayNameResponse {
+        display_name: next_name,
+    })
+}
+
+#[tauri::command]
+pub async fn auth_get_stored_mnemonic(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    require_session(&state)?;
+    keychain::get_secret(&state.config.keychain_service, KEYCHAIN_MNEMONIC_ACCOUNT)
+        .map_err(|e| e.to_string())
 }
 
 /// Wipes the local DB and all keychain secrets.  After this the user must

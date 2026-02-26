@@ -127,6 +127,8 @@ pub fn run() {
             commands::auth::auth_set_pin,
             commands::auth::auth_unlock_with_pin,
             commands::auth::auth_remove_pin,
+            commands::auth::auth_update_display_name,
+            commands::auth::auth_get_stored_mnemonic,
             commands::workspace::workspace_list_local,
             commands::workspace::workspace_create_local,
             commands::workspace::workspace_rename_local,

@@ -6,11 +6,9 @@ import moduoLogoWhite from "../../../assets/moduo_logo_white.svg";
 import defaultProfilePic from "../../../assets/icon.png";
 import { useAuth } from "../../providers/auth-provider";
 import type { AuthMnemonic } from "../../lib/runtime";
+import { notifyProfileUpdated, writeStoredAvatar } from "../../features/profile/profile-storage";
 
 type Flow = "entry" | "create_profile" | "create_phrase" | "create_email" | "unlock" | "pin" | "reset_confirm";
-const AVATAR_STORAGE_KEY = "moduo:auth-avatar-preview-v1";
-const AVATAR_STORE_NAMESPACE = "auth_ui";
-const AVATAR_STORE_KEY = "avatar_preview_v1";
 
 function normalizePhrase(value: string) {
   return value
@@ -81,17 +79,8 @@ export function EmailAuthPanel() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const persistAvatar = async () => {
-      if (!avatarDataUrl) {
-        window.localStorage.removeItem(AVATAR_STORAGE_KEY);
-        if (runtime) {
-          await runtime.localStore.remove(AVATAR_STORE_NAMESPACE, AVATAR_STORE_KEY).catch(() => {});
-        }
-        return;
-      }
-      window.localStorage.setItem(AVATAR_STORAGE_KEY, avatarDataUrl);
-      if (runtime) {
-        await runtime.localStore.set(AVATAR_STORE_NAMESPACE, AVATAR_STORE_KEY, avatarDataUrl).catch(() => {});
-      }
+      await writeStoredAvatar(runtime, avatarDataUrl);
+      notifyProfileUpdated();
     };
     void persistAvatar();
   }, [avatarDataUrl, runtime]);

@@ -78,6 +78,8 @@ export type ModuoRuntime = {
     setPin(pin: string): Promise<{ error: { message: string } | null }>;
     unlockWithPin(pin: string): RuntimeResult<{ session: RuntimeSession | null }>;
     removePin(): Promise<{ error: { message: string } | null }>;
+    updateDisplayName(displayName: string): RuntimeResult<{ displayName: string }>;
+    getStoredMnemonic(): RuntimeResult<{ phrase: string | null }>;
     getSession(): RuntimeResult<{ session: RuntimeSession | null }>;
     refreshSession(): RuntimeResult<{ user: RuntimeSession["user"] | null; session: RuntimeSession | null }>;
     onAuthStateChange(cb: AuthListener): { data: { subscription: { unsubscribe(): void } } };
@@ -338,6 +340,22 @@ const runtimeClient: ModuoRuntime = {
         return { error: null };
       } catch (error) {
         return { error: toError(error) };
+      }
+    },
+    async updateDisplayName(displayName: string) {
+      try {
+        const raw = await invoke<any>("auth_update_display_name", { input: { displayName } });
+        return { data: { displayName: raw?.displayName ?? raw?.display_name ?? displayName }, error: null };
+      } catch (error) {
+        return { data: { displayName }, error: toError(error) };
+      }
+    },
+    async getStoredMnemonic() {
+      try {
+        const phrase = await invoke<string | null>("auth_get_stored_mnemonic");
+        return { data: { phrase: typeof phrase === "string" ? phrase : null }, error: null };
+      } catch (error) {
+        return { data: { phrase: null }, error: toError(error) };
       }
     },
     async getSession() {

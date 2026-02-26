@@ -20,7 +20,8 @@ export type FeatureLayoutKey =
   | "analytics"
   | "recordings"
   | "timetracking"
-  | "roadmap";
+  | "roadmap"
+  | "settings";
 
 export type FeaturePanelState = {
   left: boolean;
@@ -59,6 +60,7 @@ function cloneDefaultMap(): FeaturePanelsMap {
     recordings: { ...defaultState },
     timetracking: { ...defaultState },
     roadmap: { ...defaultState },
+    settings: { left: true, right: false },
   };
 }
 
@@ -84,6 +86,7 @@ export function routeToFeatureLayout(pathname: string): FeatureLayoutKey {
   if (pathname === "/recordings") return "recordings";
   if (pathname === "/timetracking") return "timetracking";
   if (pathname === "/roadmap") return "roadmap";
+  if (pathname === "/settings") return "settings";
   return "notes";
 }
 

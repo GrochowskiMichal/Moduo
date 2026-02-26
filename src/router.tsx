@@ -24,6 +24,7 @@ import { AnalyticsPage } from "./routes/pages/analytics-page";
 import { RecordingsPage } from "./routes/pages/recordings-page";
 import { TimetrackingPage } from "./routes/pages/timetracking-page";
 import { RoadmapPage } from "./routes/pages/roadmap-page";
+import { SettingsPage } from "./routes/pages/settings-page";
 
 function RootLayout() {
   return (
@@ -187,6 +188,12 @@ const roadmapRoute = createRoute({
   component: RoadmapPage,
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => appGateRoute,
+  path: "/settings",
+  component: SettingsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   authRoute,
   appGateRoute.addChildren([
@@ -213,6 +220,7 @@ const routeTree = rootRoute.addChildren([
     recordingsRoute,
     timetrackingRoute,
     roadmapRoute,
+    settingsRoute,
   ]),
 ]);
 

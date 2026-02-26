@@ -262,14 +262,30 @@ function resolveSlashMenuState(editor: LexicalEditor): SlashMenuState | null {
     const range = domSelection.getRangeAt(0).cloneRange();
     range.collapse(true);
     const rect = range.getBoundingClientRect();
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+    const menuMinWidth = 280;
+    const menuMaxHeight = 420;
+    const margin = 12;
+
+    let top = rect.bottom + 8;
+    // If opening downward would clip, flip above caret.
+    if (top + menuMaxHeight > viewportH - margin) {
+      top = Math.max(margin, rect.top - 8 - menuMaxHeight);
+    }
+    // Final clamp for safety.
+    top = Math.min(top, Math.max(margin, viewportH - margin - menuMaxHeight));
+
+    const maxLeft = Math.max(margin, viewportW - menuMinWidth - margin);
+    const left = Math.max(margin, Math.min(rect.left, maxLeft));
 
     return {
       query,
       nodeKey: node.getKey(),
       startOffset,
       endOffset: anchor.offset,
-      top: rect.bottom + 8,
-      left: rect.left,
+      top,
+      left,
     };
   });
 }

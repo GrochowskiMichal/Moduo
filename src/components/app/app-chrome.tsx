@@ -57,6 +57,10 @@ import { dispatchBrainstormSelectView } from "../../features/brainstorm/ui/layou
 import { Icon, type IconName } from "../ui/icon";
 import moduoFavicon from "../../../assets/moduo_favicon.png";
 import { UserMenu } from "../user-menu";
+import {
+  PROFILE_UPDATED_EVENT,
+  readStoredAvatar,
+} from "../../features/profile/profile-storage";
 
 type TabItem = { label: string; iconName: IconName; href: string; module?: "notes" | "tasks" | "mindmap" | "templates" | "email" };
 type TaskProjectOption = {
@@ -71,10 +75,6 @@ type TaskProjectOption = {
   deletedAt: string | null;
 };
 type MenuAnchor = { left: number; top: number };
-
-const AVATAR_STORAGE_KEY = "moduo:auth-avatar-preview-v1";
-const AVATAR_STORE_NAMESPACE = "auth_ui";
-const AVATAR_STORE_KEY = "avatar_preview_v1";
 
 function safeId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -135,6 +135,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const isMindmapRoute = pathname.startsWith("/mindmap");
   const isBrainstormRoute = pathname.startsWith("/brainstorm");
   const isEmailRoute = pathname.startsWith("/email");
+  const isSettingsRoute = pathname.startsWith("/settings");
   const canEditTasks = modulePermissions.tasks === "edit" || modulePermissions.tasks === "admin";
 
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
@@ -224,10 +225,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       : brainstorms.find((b) => b.id === selectedBrainstormId)?.name ?? "No session selected";
 
   useEffect(() => {
-    if (!tabs.some((tab) => tab.href === pathname)) {
+    if (!isSettingsRoute && !tabs.some((tab) => tab.href === pathname)) {
       void navigate({ to: tabs[0]?.href ?? "/dashboard", replace: true });
     }
-  }, [navigate, pathname, tabs]);
+  }, [isSettingsRoute, navigate, pathname, tabs]);
 
   useEffect(() => {
     writePanelsMap(featurePanels);
@@ -299,28 +300,22 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     if (typeof window === "undefined") return;
     let active = true;
     const readAvatar = async () => {
-      const fromLocal = window.localStorage.getItem(AVATAR_STORAGE_KEY);
-      if (fromLocal) {
-        if (active) setAvatarDataUrl(fromLocal);
-        return;
-      }
-      if (!runtime) {
-        if (active) setAvatarDataUrl(null);
-        return;
-      }
-      const fromStore = await runtime.localStore.get(AVATAR_STORE_NAMESPACE, AVATAR_STORE_KEY).catch(() => null);
-      const next = typeof fromStore === "string" && fromStore ? fromStore : null;
-      if (next) window.localStorage.setItem(AVATAR_STORAGE_KEY, next);
+      const next = await readStoredAvatar(runtime);
       if (active) setAvatarDataUrl(next);
     };
     void readAvatar();
     const onStorage = () => {
       void readAvatar();
     };
+    const onProfileUpdated = () => {
+      void readAvatar();
+    };
     window.addEventListener("storage", onStorage);
+    window.addEventListener(PROFILE_UPDATED_EVENT, onProfileUpdated);
     return () => {
       active = false;
       window.removeEventListener("storage", onStorage);
+      window.removeEventListener(PROFILE_UPDATED_EVENT, onProfileUpdated);
     };
   }, [runtime]);
 
@@ -333,8 +328,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       setDisplayName(data.displayName);
     };
     void load();
+    const onProfileUpdated = () => {
+      void load();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener(PROFILE_UPDATED_EVENT, onProfileUpdated);
+    }
     return () => {
       active = false;
+      if (typeof window !== "undefined") {
+        window.removeEventListener(PROFILE_UPDATED_EVENT, onProfileUpdated);
+      }
     };
   }, [runtime]);
 
@@ -892,6 +896,11 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     }));
   }, []);
 
+  useEffect(() => {
+    if (currentFeature !== "settings") return;
+    setPanelsForFeature("settings", true, false);
+  }, [currentFeature, setPanelsForFeature]);
+
   if (loading) {
     return (
       <View className="flex-1 bg-[#0C0C0C] items-center justify-center">
@@ -905,8 +914,14 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     displayName?.trim().slice(0, 1).toUpperCase() ||
     userEmail?.trim().slice(0, 1).toUpperCase() ||
     profileInitial;
-  const toggleLeftPanel = () => setPanelsForFeature(currentFeature, !currentPanels.left, currentPanels.right);
-  const toggleRightPanel = () => setPanelsForFeature(currentFeature, currentPanels.left, !currentPanels.right);
+  const toggleLeftPanel = () => {
+    if (isSettingsRoute) return;
+    setPanelsForFeature(currentFeature, !currentPanels.left, currentPanels.right);
+  };
+  const toggleRightPanel = () => {
+    if (isSettingsRoute) return;
+    setPanelsForFeature(currentFeature, currentPanels.left, !currentPanels.right);
+  };
 
   return (
     <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-[#0C0C0C]">
@@ -1711,7 +1726,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               <Icon name="clock" size={14} color="#9a9a9a" />
             </Pressable>
             <NotificationCenter />
-            <UserMenu avatarDataUrl={avatarDataUrl} profileInitial={derivedInitial} />
+            <UserMenu
+              avatarDataUrl={avatarDataUrl}
+              profileInitial={derivedInitial}
+              onOpenSettings={() => {
+                void navigate({ to: "/settings" });
+              }}
+            />
           </View>
         </View>
       </View>
@@ -1729,13 +1750,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               <ChevronsRight size={16} className="text-[#9a9a9a]" />
             )}
           </Pressable>
-          <Pressable className="flex h-9 w-9 items-center justify-center rounded-none border-0 bg-transparent" onPress={toggleRightPanel}>
-            {currentPanels.right ? (
-              <ChevronsRight size={16} className="text-[#9a9a9a]" />
-            ) : (
-              <ChevronsLeft size={16} className="text-[#9a9a9a]" />
-            )}
-          </Pressable>
+          {!isSettingsRoute ? (
+            <Pressable className="flex h-9 w-9 items-center justify-center rounded-none border-0 bg-transparent" onPress={toggleRightPanel}>
+              {currentPanels.right ? (
+                <ChevronsRight size={16} className="text-[#9a9a9a]" />
+              ) : (
+                <ChevronsLeft size={16} className="text-[#9a9a9a]" />
+              )}
+            </Pressable>
+          ) : (
+            <View className="h-9 w-9" />
+          )}
         </View>
       </View>
 

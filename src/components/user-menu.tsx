@@ -6,9 +6,10 @@ import { useAuth } from "../providers/auth-provider";
 type Props = {
   avatarDataUrl?: string | null;
   profileInitial?: string;
+  onOpenSettings?: () => void;
 };
 
-export function UserMenu({ avatarDataUrl, profileInitial = "U" }: Props) {
+export function UserMenu({ avatarDataUrl, profileInitial = "U", onOpenSettings }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { signOut } = useAuth();
   const navigate = useNavigate();
@@ -29,12 +30,21 @@ export function UserMenu({ avatarDataUrl, profileInitial = "U" }: Props) {
       </Pressable>
       <Modal transparent visible={menuOpen} animationType="fade" onRequestClose={() => setMenuOpen(false)}>
         <Pressable className="fixed inset-0" onPress={() => setMenuOpen(false)} />
-        <View className="fixed top-16 right-5 bg-[#101318] border border-[#1e2430] rounded-xl py-1 min-w-[170px] z-[999]">
-          <Pressable className="px-4 py-3" onPress={() => setMenuOpen(false)}>
-            <Text className="text-[#d4d8e1]">Settings</Text>
+        <View className="fixed right-5 top-16 z-[999] w-[240px] rounded-xl bg-[#171717] p-2">
+          <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1">
+            <Text className="text-xs text-[#a0a0a0]">Account</Text>
+          </View>
+          <Pressable
+            className="rounded-lg px-3 py-2 hover:bg-[#1f1f1f]"
+            onPress={() => {
+              setMenuOpen(false);
+              onOpenSettings?.();
+            }}
+          >
+            <Text className="text-[14px] text-[#d9d9d9]">Settings</Text>
           </Pressable>
           <Pressable
-            className="px-4 py-3"
+            className="rounded-lg px-3 py-2 hover:bg-[#1f1f1f]"
             onPress={async () => {
               setMenuOpen(false);
               try {
@@ -44,7 +54,7 @@ export function UserMenu({ avatarDataUrl, profileInitial = "U" }: Props) {
               }
             }}
           >
-            <Text className="text-[#d4d8e1]">Logout</Text>
+            <Text className="text-[14px] text-[#d9d9d9]">Logout</Text>
           </Pressable>
         </View>
       </Modal>

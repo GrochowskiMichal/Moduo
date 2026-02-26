@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { createPortal } from "react-dom";
 import {
   DndContext,
   PointerSensor,
@@ -50,6 +52,24 @@ function fallbackCopy(text: string): void {
   ta.select();
   try { document.execCommand("copy"); } catch { /* ignore */ }
   document.body.removeChild(ta);
+}
+
+async function openExternalUrl(url: string): Promise<void> {
+  const target = url.trim();
+  if (!target) return;
+
+  try {
+    if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
+      await invoke("open_external_url", { url: target });
+      return;
+    }
+  } catch {
+    // Fall back to browser open below.
+  }
+
+  if (typeof window !== "undefined") {
+    window.open(target, "_blank", "noopener,noreferrer");
+  }
 }
 
 
@@ -613,6 +633,7 @@ export function NotesSplitView({
   const handleExposeNote = async (note: NoteMeta) => {
     if (!syncEngine || exposeLoading) return;
     setExposeLoading(true);
+    setContextMenu(null);
 
     // Safari/WebKit/Tauri drops clipboard permissions after the first `await`.
     // We must generate the slug and execute the copy synchronously right here,
@@ -654,7 +675,6 @@ export function NotesSplitView({
       alert("Failed to expose note due to an unexpected error.");
     } finally {
       setExposeLoading(false);
-      setContextMenu(null);
     }
   };
 
@@ -1127,33 +1147,37 @@ export function NotesSplitView({
       ) : null}
 
       {/* ── Expose Toast ── */}
-      {exposeToast?.visible ? (
-        <div
-          className="fixed bottom-6 left-1/2 z-[2000] -translate-x-1/2 flex items-center gap-3 rounded-[14px] border border-[#2a2a2a] bg-[#161616] px-5 py-3 shadow-[0_16px_40px_#00000080] text-[13px] text-[#d0d0d0]"
-          style={{ animation: "fadeSlideUp 0.25s ease" }}
-        >
-          <span className="text-[#a3c4f3]">✦</span>
-          <span>
-            Note live at{" "}
-            <a
-              href={exposeToast.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline text-[#a3c4f3] hover:text-[#c5d9f7]"
+      {typeof document !== "undefined" && exposeToast?.visible
+        ? createPortal(
+            <div
+              className="fixed bottom-6 z-[3500] flex items-center gap-3 rounded-[14px] border border-[#2a2a2a] bg-[#161616] px-5 py-3 shadow-[0_16px_40px_#00000080] text-[13px] text-[#d0d0d0] pointer-events-auto"
+              style={{ left: "50%", transform: "translateX(-50%)", animation: "fadeSlideUp 0.25s ease" }}
             >
-              {exposeToast.url.replace("https://", "")}
-            </a>
-          </span>
-          <span className="ml-1 text-[11px] text-[#555]">— URL copied!</span>
-          <button
-            type="button"
-            className="ml-2 text-[#555] hover:text-[#aaa]"
-            onClick={() => setExposeToast(null)}
-          >
-            ✕
-          </button>
-        </div>
-      ) : null}
+              <span className="text-[#a3c4f3]">✦</span>
+              <span>
+                Note live at{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void openExternalUrl(exposeToast.url);
+                  }}
+                  className="cursor-pointer border-0 bg-transparent p-0 underline text-[#a3c4f3] hover:text-[#c5d9f7]"
+                >
+                  {exposeToast.url.replace("https://", "")}
+                </button>
+              </span>
+              <span className="ml-1 text-[11px] text-[#555]">— URL copied!</span>
+              <button
+                type="button"
+                className="ml-2 text-[#555] hover:text-[#aaa]"
+                onClick={() => setExposeToast(null)}
+              >
+                ✕
+              </button>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }
