@@ -13,6 +13,54 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_RfaTM1fcomIzU191dDS5kw_7TDtK_Kd
 
 type SupabaseResponse = { data?: unknown; error?: { message: string; code?: string } | null };
 
+type EmbedRef = {
+    kind: "mindmap" | "task";
+    itemId: string;
+};
+
+type ExposedEmbed =
+    | {
+        kind: "task";
+        itemId: string;
+        task: {
+            title: string;
+            description: string;
+            priority: number;
+            dueDate: string | null;
+            tags: string[];
+            updatedAt: string;
+        };
+    }
+    | {
+        kind: "mindmap";
+        itemId: string;
+        mindmap: {
+            name: string;
+            updatedAt: string;
+            nodeCount: number;
+            edgeCount: number;
+            previewNodes: string[];
+            nodes: Array<{
+                id: string;
+                type: string;
+                position: { x: number; y: number };
+                sourcePosition?: string;
+                targetPosition?: string;
+                data: Record<string, unknown>;
+            }>;
+            edges: Array<{
+                id: string;
+                source: string;
+                target: string;
+                type?: string;
+                animated?: boolean;
+                className?: string;
+                style?: Record<string, unknown>;
+                data?: Record<string, unknown>;
+            }>;
+        };
+    };
+
 async function supabaseFetch(
     path: string,
     options: RequestInit = {}
@@ -171,6 +219,181 @@ export function extractPlainTextFromYjsB64(b64: string): string {
     }
 }
 
+export function extractEmbedsFromYjsB64(b64: string): EmbedRef[] {
+    if (!b64) return [];
+    try {
+        const doc = new Y.Doc();
+        Y.applyUpdate(doc, decodeBase64ToUint8(b64));
+
+        const out: EmbedRef[] = [];
+        const seen = new Set<string>();
+
+        const walk = (node: Y.XmlElement) => {
+            if (node.nodeName === "embed") {
+                const rawKind = node.getAttribute("kind") ?? node.getAttribute("__kind");
+                const rawItemId = node.getAttribute("itemId") ?? node.getAttribute("__itemId");
+                const kind = rawKind === "mindmap" || rawKind === "task" ? rawKind : null;
+                const itemId = typeof rawItemId === "string" ? rawItemId.trim() : "";
+                if (kind && itemId) {
+                    const key = `${kind}:${itemId}`;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        out.push({ kind, itemId });
+                    }
+                }
+            }
+
+            for (const child of node.toArray()) {
+                if (child instanceof Y.XmlElement) walk(child);
+            }
+        };
+
+        const rootV2 = doc.getXmlElement("root-v2");
+        if (rootV2.toArray().length > 0) {
+            walk(rootV2);
+            return out;
+        }
+
+        const rootV1 = doc.getXmlElement("root");
+        if (rootV1.toArray().length > 0) {
+            walk(rootV1);
+        }
+
+        return out;
+    } catch {
+        return [];
+    }
+}
+
+async function buildEmbedsPayload(
+    workspaceId: string,
+    embedRefs: EmbedRef[]
+): Promise<ExposedEmbed[]> {
+    if (!embedRefs.length) return [];
+
+    try {
+        const { runtime } = await import("../../../lib/runtime");
+        if (!runtime) return [];
+
+        const payload: ExposedEmbed[] = [];
+
+        const taskRefs = embedRefs.filter((embed) => embed.kind === "task");
+        if (taskRefs.length) {
+            try {
+                const raw = await runtime.tasks.list(workspaceId);
+                const tasks: any[] = Array.isArray(raw?.tasks) ? raw.tasks : Array.isArray(raw) ? raw : [];
+                for (const ref of taskRefs) {
+                    const task = tasks.find((item) => item?.id === ref.itemId && !item?.deletedAt);
+                    if (!task) continue;
+                    payload.push({
+                        kind: "task",
+                        itemId: ref.itemId,
+                        task: {
+                            title: String(task.title ?? "Untitled"),
+                            description: String(task.description ?? ""),
+                            priority: Number(task.priority ?? 0),
+                            dueDate: task.dueDate ? String(task.dueDate) : null,
+                            tags: Array.isArray(task.tags)
+                                ? task.tags.map((tag: unknown) => String(tag)).slice(0, 8)
+                                : [],
+                            updatedAt: String(task.updatedAt ?? new Date().toISOString()),
+                        },
+                    });
+                }
+            } catch {
+                // ignore embed hydration failures
+            }
+        }
+
+        const mindmapRefs = embedRefs.filter((embed) => embed.kind === "mindmap");
+        if (mindmapRefs.length) {
+            try {
+                const { listMindmaps, loadMindmapDocument } = await import("../../mindmap/ui/mindmap-storage");
+                const maps = await listMindmaps(runtime, workspaceId);
+
+                for (const ref of mindmapRefs) {
+                    const mapMeta = maps.find((map: { id: string }) => map.id === ref.itemId);
+                    if (!mapMeta) continue;
+                    const doc = await loadMindmapDocument(runtime, workspaceId, ref.itemId);
+                    if (!doc) continue;
+                    const previewNodes = (Array.isArray(doc.nodes) ? doc.nodes : [])
+                        .map((node: any) => String(node?.data?.label ?? node?.data?.title ?? "").trim())
+                        .filter(Boolean)
+                        .slice(0, 6);
+                    const graphNodes = (Array.isArray(doc.nodes) ? doc.nodes : [])
+                        .map((node: any, index: number) => {
+                            const id = String(node?.id ?? `node-${index}`);
+                            const x = Number(node?.position?.x ?? 0);
+                            const y = Number(node?.position?.y ?? 0);
+                            if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+                            return {
+                                id,
+                                type: String(node?.type ?? "mindmap"),
+                                position: { x, y },
+                                sourcePosition:
+                                    typeof node?.sourcePosition === "string" ? node.sourcePosition : undefined,
+                                targetPosition:
+                                    typeof node?.targetPosition === "string" ? node.targetPosition : undefined,
+                                data:
+                                    node?.data && typeof node.data === "object"
+                                        ? (node.data as Record<string, unknown>)
+                                        : {},
+                            };
+                        })
+                        .filter((node): node is NonNullable<typeof node> => !!node)
+                        .slice(0, 120);
+                    const nodeIdSet = new Set(graphNodes.map((node) => node.id));
+                    const graphEdges = (Array.isArray(doc.edges) ? doc.edges : [])
+                        .map((edge: any, index: number) => {
+                            const source = String(edge?.source ?? "");
+                            const target = String(edge?.target ?? "");
+                            if (!source || !target) return null;
+                            return {
+                                id: String(edge?.id ?? `edge-${index}`),
+                                source,
+                                target,
+                                type: typeof edge?.type === "string" ? edge.type : undefined,
+                                animated: typeof edge?.animated === "boolean" ? edge.animated : undefined,
+                                className: typeof edge?.className === "string" ? edge.className : undefined,
+                                style:
+                                    edge?.style && typeof edge.style === "object"
+                                        ? (edge.style as Record<string, unknown>)
+                                        : undefined,
+                                data:
+                                    edge?.data && typeof edge.data === "object"
+                                        ? (edge.data as Record<string, unknown>)
+                                        : undefined,
+                            };
+                        })
+                        .filter((edge): edge is NonNullable<typeof edge> => !!edge)
+                        .filter((edge) => edge.source && edge.target && nodeIdSet.has(edge.source) && nodeIdSet.has(edge.target))
+                        .slice(0, 220);
+
+                    payload.push({
+                        kind: "mindmap",
+                        itemId: ref.itemId,
+                        mindmap: {
+                            name: mapMeta.name || "Untitled Mindmap",
+                            updatedAt: mapMeta.updatedAt,
+                            nodeCount: Array.isArray(doc.nodes) ? doc.nodes.length : 0,
+                            edgeCount: Array.isArray(doc.edges) ? doc.edges.length : 0,
+                            previewNodes,
+                            nodes: graphNodes,
+                            edges: graphEdges,
+                        },
+                    });
+                }
+            } catch {
+                // ignore embed hydration failures
+            }
+        }
+
+        return payload;
+    } catch {
+        return [];
+    }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export type ExposeResult =
@@ -191,6 +414,8 @@ export async function exposeNote(payload: {
     try {
         // Extract plain text now, in the Moduo app (yjs is available here)
         const contentText = extractPlainTextFromYjsB64(payload.contentB64);
+        const embeds = extractEmbedsFromYjsB64(payload.contentB64);
+        const embedsPayload = await buildEmbedsPayload(payload.workspaceId, embeds);
 
         // Check if already exposed
         const existingRes = await supabaseFetch(
@@ -216,6 +441,7 @@ export async function exposeNote(payload: {
                         title: payload.title,
                         content_b64: payload.contentB64,
                         content_text: contentText,
+                        embeds_json: embedsPayload,
                         workspace_id: payload.workspaceId,
                         updated_at: new Date().toISOString(),
                     }),
@@ -233,6 +459,7 @@ export async function exposeNote(payload: {
                     title: payload.title,
                     content_b64: payload.contentB64,
                     content_text: contentText,
+                    embeds_json: embedsPayload,
                     slug,
                     exposed_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
