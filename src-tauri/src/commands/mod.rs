@@ -1,11 +1,11 @@
 pub mod auth;
+pub mod email;
+pub mod embeddings;
 pub mod graph;
 pub mod local_store;
 pub mod migration;
 pub mod notes;
 pub mod p2p;
+pub mod system;
 pub mod tasks;
 pub mod workspace;
-pub mod email;
-pub mod embeddings;
-pub mod system;

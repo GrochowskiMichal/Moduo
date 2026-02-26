@@ -19,9 +19,19 @@ impl EmbeddingEngine {
 
 #[derive(Clone, Debug)]
 pub enum IndexJob {
-    Note { workspace_id: String, note_id: String },
-    Task { workspace_id: String, task_id: String },
-    Email { workspace_id: String, email_account_id: String, email_id: String },
+    Note {
+        workspace_id: String,
+        note_id: String,
+    },
+    Task {
+        workspace_id: String,
+        task_id: String,
+    },
+    Email {
+        workspace_id: String,
+        email_account_id: String,
+        email_id: String,
+    },
 }
 
 pub struct BackgroundIndexer {
@@ -32,22 +42,32 @@ impl BackgroundIndexer {
     pub fn new(
         store: std::sync::Arc<crate::store_redb::RedbStore>,
         graph: std::sync::Arc<crate::graph_helix::GraphManager>,
-        embeddings: std::sync::Arc<EmbeddingEngine>
+        embeddings: std::sync::Arc<EmbeddingEngine>,
     ) -> Self {
         let (tx, rx) = channel::<IndexJob>();
-        
+
         thread::spawn(move || {
             let mut pending = std::collections::HashMap::new();
             loop {
                 match rx.recv_timeout(std::time::Duration::from_secs(2)) {
                     Ok(job) => {
                         let key = match &job {
-                            IndexJob::Note { workspace_id, note_id } => format!("note:{}:{}", workspace_id, note_id),
-                            IndexJob::Task { workspace_id, task_id } => format!("task:{}:{}", workspace_id, task_id),
-                            IndexJob::Email { workspace_id, email_id, .. } => format!("email:{}:{}", workspace_id, email_id),
+                            IndexJob::Note {
+                                workspace_id,
+                                note_id,
+                            } => format!("note:{}:{}", workspace_id, note_id),
+                            IndexJob::Task {
+                                workspace_id,
+                                task_id,
+                            } => format!("task:{}:{}", workspace_id, task_id),
+                            IndexJob::Email {
+                                workspace_id,
+                                email_id,
+                                ..
+                            } => format!("email:{}:{}", workspace_id, email_id),
                         };
                         pending.insert(key, job);
-                    },
+                    }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         if !pending.is_empty() {
                             let jobs: Vec<_> = pending.drain().map(|(_, v)| v).collect();
@@ -55,7 +75,7 @@ impl BackgroundIndexer {
                                 let _ = Self::process_job(&job, &store, &graph, &embeddings);
                             }
                         }
-                    },
+                    }
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                 }
             }
@@ -67,28 +87,29 @@ impl BackgroundIndexer {
     pub fn queue(&self, job: IndexJob) {
         let _ = self.tx.send(job);
     }
-    
+
     fn process_job(
         job: &IndexJob,
         store: &std::sync::Arc<crate::store_redb::RedbStore>,
         graph: &std::sync::Arc<crate::graph_helix::GraphManager>,
-        embeddings: &std::sync::Arc<EmbeddingEngine>
+        embeddings: &std::sync::Arc<EmbeddingEngine>,
     ) -> anyhow::Result<()> {
         let text = match job {
             IndexJob::Note { note_id, .. } => format!("Extracted text for note {}", note_id),
             IndexJob::Task { task_id, .. } => format!("Extracted text for task {}", task_id),
             IndexJob::Email { email_id, .. } => format!("Extracted text for email {}", email_id),
         };
-        
+
         let _vec = embeddings.embed_text(&text);
-        
+
         // Construct basic HelixDB request here... Auto-linking heuristics match existing nodes
         let req = crate::graph_helix::GraphUpsertRequest {
             workspace_id: match job {
                 IndexJob::Note { workspace_id, .. } => workspace_id,
                 IndexJob::Task { workspace_id, .. } => workspace_id,
                 IndexJob::Email { workspace_id, .. } => workspace_id,
-            }.to_string(),
+            }
+            .to_string(),
             nodes: vec![],
             edges: vec![],
         };

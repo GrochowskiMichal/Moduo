@@ -15,6 +15,8 @@ import { CollaborationPlugin, CollaborationPluginV2__EXPERIMENTAL } from "@lexic
 import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
 import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
+import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
+import { TableNode, TableCellNode, TableRowNode } from "@lexical/table";
 import {
   $getSelection,
   $isRangeSelection,
@@ -26,6 +28,7 @@ import {
 import { $isListItemNode } from "@lexical/list";
 import type { NotesSyncEngine } from "../sync/sync-engine";
 import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
+import { EmbedNode } from "./nodes/EmbedNode";
 
 type Props = {
   noteId: string;
@@ -33,6 +36,7 @@ type Props = {
   editable?: boolean;
   onTitleChange: (nextTitle: string) => void;
   syncEngine: NotesSyncEngine;
+  workspaceId?: string;
 };
 
 function NotesCodeHighlightPlugin() {
@@ -86,7 +90,7 @@ function NotesListTabIndentationPlugin() {
   return null;
 }
 
-export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChange, syncEngine }: Props) {
+export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChange, syncEngine, workspaceId }: Props) {
   const [draftTitle, setDraftTitle] = useState(title);
   const collabSession = useMemo(() => syncEngine.getOrCreateSession(noteId), [noteId, syncEngine]);
   const [collabReady, setCollabReady] = useState(() => collabSession.persistence.synced);
@@ -148,7 +152,7 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
     onError: (error: Error) => {
       console.error("Lexical editor error:", error);
     },
-    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode, LinkNode, HorizontalRuleNode],
+    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode, LinkNode, HorizontalRuleNode, TableNode, TableCellNode, TableRowNode, EmbedNode],
     theme: {
       paragraph: "notes-p",
       heading: {
@@ -170,6 +174,10 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
       },
       code: "notes-code-block",
       link: "notes-link",
+      table: "notes-table",
+      tableRow: "notes-table-row",
+      tableCell: "notes-table-cell",
+      tableCellHeader: "notes-table-cell-header",
     },
   }), [noteId, editable]);
 
@@ -204,7 +212,8 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
               <NotesListTabIndentationPlugin />
               <NotesCodeHighlightPlugin />
               <LinkPlugin />
-              <SlashCommandPlugin />
+              <TablePlugin />
+              <SlashCommandPlugin workspaceId={workspaceId} />
               {collabMode === "v2" && collabSession ? (
                 <CollaborationPluginV2__EXPERIMENTAL
                   id={noteId}

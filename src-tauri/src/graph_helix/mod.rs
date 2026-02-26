@@ -1,4 +1,8 @@
-use std::{path::PathBuf, process::{Child, Command}, sync::Mutex};
+use std::{
+    path::PathBuf,
+    process::{Child, Command},
+    sync::Mutex,
+};
 
 use helix_rs::{HelixDB, HelixDBClient};
 use serde::{Deserialize, Serialize};
@@ -39,7 +43,10 @@ impl GraphManager {
             return Ok(());
         };
 
-        let mut guard = self.sidecar.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let mut guard = self
+            .sidecar
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         if guard.is_some() {
             return Ok(());
         }
@@ -56,20 +63,33 @@ impl GraphManager {
             cmd.arg("--data-dir").arg(data_dir.join("helixdb"));
             cmd.arg("--schema").arg("schema.hx");
         }
-        
+
         let child = cmd.spawn()?;
         *guard = Some(child);
         Ok(())
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.sidecar_path
+            .as_ref()
+            .map(|path| path.exists())
+            .unwrap_or(false)
     }
 
     fn client(&self) -> HelixDB {
         HelixDB::new(Some("http://localhost"), Some(8000), None)
     }
 
-    pub async fn upsert_nodes_edges(&self, _store: &RedbStore, request: GraphUpsertRequest) -> anyhow::Result<()> {
+    pub async fn upsert_nodes_edges(
+        &self,
+        _store: &RedbStore,
+        request: GraphUpsertRequest,
+    ) -> anyhow::Result<()> {
         self.ensure_sidecar_started()?;
         let client = self.client();
-        let _res: serde_json::Value = client.query("upsert", &request).await
+        let _res: serde_json::Value = client
+            .query("upsert", &request)
+            .await
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(())
     }
@@ -84,11 +104,16 @@ impl GraphManager {
         self.ensure_sidecar_started()?;
 
         let query = HqlQuery {
-            query: format!("MATCH (n)-[e]->(m) WHERE n.id = '{}' RETURN n, e, m LIMIT {}", node_id, limit),
+            query: format!(
+                "MATCH (n)-[e]->(m) WHERE n.id = '{}' RETURN n, e, m LIMIT {}",
+                node_id, limit
+            ),
         };
 
         let client = self.client();
-        let res: serde_json::Value = client.query("query", &query).await
+        let res: serde_json::Value = client
+            .query("query", &query)
+            .await
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
         Ok(res)
@@ -105,7 +130,9 @@ impl GraphManager {
         let type_filter = if query.node_types.is_empty() {
             "".to_string()
         } else {
-            let types = query.node_types.iter()
+            let types = query
+                .node_types
+                .iter()
                 .map(|t| format!("'{}'", t))
                 .collect::<Vec<_>>()
                 .join(", ");
@@ -113,10 +140,15 @@ impl GraphManager {
         };
 
         let hql = HqlQuery {
-            query: format!("HYBRID SEARCH '{}' {} LIMIT {}", query.query, type_filter, query.limit),
+            query: format!(
+                "HYBRID SEARCH '{}' {} LIMIT {}",
+                query.query, type_filter, query.limit
+            ),
         };
 
-        let res: serde_json::Value = client.query("query", &hql).await
+        let res: serde_json::Value = client
+            .query("query", &hql)
+            .await
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
         let mut results = Vec::new();
@@ -136,10 +168,15 @@ impl GraphManager {
     pub async fn get_full_graph(&self, workspace_id: &str) -> anyhow::Result<serde_json::Value> {
         self.ensure_sidecar_started()?;
         let query = HqlQuery {
-            query: format!("MATCH (n)-[e]->(m) WHERE n.workspace_id = '{}' RETURN n, e, m", workspace_id),
+            query: format!(
+                "MATCH (n)-[e]->(m) WHERE n.workspace_id = '{}' RETURN n, e, m",
+                workspace_id
+            ),
         };
         let client = self.client();
-        let res: serde_json::Value = client.query("query", &query).await
+        let res: serde_json::Value = client
+            .query("query", &query)
+            .await
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok(res)
     }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
+import { useWorkspace } from "../../../providers/workspace-provider";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected";
 type MailboxProvider = "gmail" | "outlook" | "icloud" | "custom";
@@ -8,13 +9,16 @@ type FolderType = "inbox" | "sent" | "drafts" | "trash" | "spam";
 
 interface Email {
   id: string;
+  messageKey: string;
+  uid: number;
   sender: string;
   senderEmail: string;
   to?: string;
   subject: string;
   preview: string;
-  body: string;
+  body?: string;
   bodyHtml?: string | null;
+  hasCachedBody?: boolean;
   date: string;
   read: boolean;
   starred?: boolean;
@@ -28,6 +32,7 @@ type AccountStatus = "active" | "reauth_required" | "error";
 
 interface SavedAccount {
   id: string;
+  workspaceId?: string | null;
   provider: MailboxProvider;
   email: string;
   imapHost?: string | null;
@@ -47,7 +52,7 @@ const FOLDERS: Array<{ id: FolderType; label: string }> = [
   { id: "spam", label: "Spam" },
 ];
 
-const EMAIL_CACHE_TTL_MS = 60_000;
+const EMAIL_CACHE_TTL_MS = 15_000;
 const ACCOUNTS_CACHE_TTL_MS = 30_000;
 
 type EmailListCacheEntry = {
@@ -132,6 +137,7 @@ function buildEmailSrcDoc(rawHtml: string) {
 }
 
 export function EmailWorkspace() {
+  const { selectedWorkspaceId } = useWorkspace();
   const cachedAccounts = accountsCache?.accounts ?? [];
   const [isBootstrapping, setIsBootstrapping] = useState(() => cachedAccounts.length === 0);
   const [connectionStatus, setConnectionStatus] =
@@ -170,6 +176,9 @@ export function EmailWorkspace() {
     return emailListCache.get(emailCacheKey(accountId, lastEmailSelection.folder))?.emails ?? [];
   });
   const [isLoadingEmails, setIsLoadingEmails] = useState(false);
+  const [isRefreshingEmails, setIsRefreshingEmails] = useState(false);
+  const [loadingBodyEmailId, setLoadingBodyEmailId] = useState<string | null>(null);
+  const [selectedBodyError, setSelectedBodyError] = useState<string | null>(null);
   const fetchRequestSeqRef = useRef(0);
 
   // Compose state
@@ -255,6 +264,7 @@ export function EmailWorkspace() {
           provider,
           email: creds.email.trim(),
           password: creds.password,
+          workspaceId: selectedWorkspaceId,
           ...(provider === "custom"
             ? {
                 imapHost: customHosts.imapHost.trim(),
@@ -281,7 +291,7 @@ export function EmailWorkspace() {
   const fetchEmails = async (
     folder: FolderType,
     accountId = activeAccountId,
-    options?: { force?: boolean; silentRefresh?: boolean },
+    options?: { force?: boolean; silentRefresh?: boolean; sync?: boolean },
   ) => {
     if (!accountId) {
       setEmails([]);
@@ -291,91 +301,62 @@ export function EmailWorkspace() {
 
     const key = emailCacheKey(accountId, folder);
     const cached = emailListCache.get(key);
-    const isStale = !cached || Date.now() - cached.fetchedAt > EMAIL_CACHE_TTL_MS;
-    const shouldFetch = options?.force || isStale;
+    const requestSeq = ++fetchRequestSeqRef.current;
+    const accountEmailMap = new Map(accounts.map((account) => [account.id, account.email] as const));
+    const mapEnvelopes = (envelopes: any[], previousRows: Email[]): Email[] => {
+      const previousMap = new Map(previousRows.map((row) => [row.id, row] as const));
+      return envelopes.map((envelope: any) => {
+        const nextAccountId = envelope.accountId ?? accountId;
+        const previous = previousMap.get(envelope.id);
+        return {
+          id: envelope.id,
+          messageKey: envelope.messageKey ?? envelope.message_key ?? envelope.id,
+          uid: Number(envelope.uid ?? 0),
+          sender: envelope.sender ?? "Unknown sender",
+          senderEmail: envelope.senderEmail ?? envelope.sender_email ?? "",
+          to: envelope.to ?? "",
+          subject: envelope.subject ?? "(No subject)",
+          preview: envelope.preview ?? "",
+          body: previous?.body,
+          bodyHtml: previous?.bodyHtml,
+          hasCachedBody: !!(envelope.hasCachedBody ?? envelope.has_cached_body),
+          date: envelope.date ?? new Date().toISOString(),
+          read: !!envelope.read,
+          starred: !!envelope.starred,
+          folder: envelope.folder ?? folder,
+          accountId: nextAccountId,
+          accountEmail: accountEmailMap.get(nextAccountId),
+        };
+      });
+    };
+    const readLocalEnvelopes = async (previousRows: Email[]) => {
+      const localResult = (await invoke("email_list_envelopes", {
+        input: {
+          accountId: accountId === ALL_ACCOUNTS_ID ? ALL_ACCOUNTS_ID : accountId,
+          folder,
+          limit: 50,
+          forceSync: false,
+        },
+      })) as { envelopes: any[] };
+      return mapEnvelopes(localResult.envelopes ?? [], previousRows);
+    };
+
+    let latestRows = cached?.emails ?? [];
 
     if (cached) {
       setEmails(cached.emails);
       setMailError(null);
-      setIsLoadingEmails(false);
     }
-
-    if (!shouldFetch) return;
-
-    const requestSeq = ++fetchRequestSeqRef.current;
-    const showBlockingLoader = !cached && !options?.silentRefresh;
-    if (showBlockingLoader) {
-      setIsLoadingEmails(true);
-    }
-    if (!cached) {
-      setMailError(null);
-    }
+    setIsLoadingEmails(!cached);
+    setIsRefreshingEmails(false);
+    if (!cached) setMailError(null);
 
     try {
-      if (accountId === ALL_ACCOUNTS_ID) {
-        const merged = await Promise.allSettled(
-          accounts.map(async (account) => {
-            const accountEmails = (await invoke("email_fetch_saved", {
-              accountId: account.id,
-              folder,
-            })) as Email[];
-            patchAccount(account.id, {
-              status: "active",
-              lastError: null,
-              lastSyncAt: new Date().toISOString(),
-            });
-            return accountEmails.map((email) => ({
-              ...email,
-              id: `${account.id}::${email.id}`,
-              accountId: account.id,
-              accountEmail: account.email,
-            }));
-          }),
-        );
-
-        const next: Email[] = [];
-        let firstError: string | null = null;
-        for (const result of merged) {
-          if (result.status === "fulfilled") {
-            next.push(...result.value);
-            continue;
-          }
-          const errorMessage = toErrorMessage(result.reason);
-          if (!firstError) firstError = errorMessage;
-        }
-
-        next.sort((a, b) => {
-          const da = new Date(a.date).getTime();
-          const db = new Date(b.date).getTime();
-          if (Number.isNaN(da) || Number.isNaN(db)) return b.date.localeCompare(a.date);
-          return db - da;
-        });
-
-        if (requestSeq !== fetchRequestSeqRef.current) return;
-        emailListCache.set(key, { emails: next, fetchedAt: Date.now() });
-        setEmails(next);
-        setMailError(next.length > 0 ? null : firstError ?? null);
-      } else {
-        const res = (await invoke("email_fetch_saved", {
-          accountId,
-          folder,
-        })) as Email[];
-        const normalized = res.map((email) => ({
-          ...email,
-          id: `${accountId}::${email.id}`,
-          accountId,
-          accountEmail: accounts.find((account) => account.id === accountId)?.email,
-        }));
-        emailListCache.set(key, { emails: normalized, fetchedAt: Date.now() });
-        if (requestSeq !== fetchRequestSeqRef.current) return;
-        setEmails(normalized);
-        setMailError(null);
-        patchAccount(accountId, {
-          status: "active",
-          lastError: null,
-          lastSyncAt: new Date().toISOString(),
-        });
-      }
+      latestRows = await readLocalEnvelopes(latestRows);
+      if (requestSeq !== fetchRequestSeqRef.current) return;
+      emailListCache.set(key, { emails: latestRows, fetchedAt: Date.now() });
+      setEmails(latestRows);
+      setMailError(null);
     } catch (e: any) {
       if (requestSeq !== fetchRequestSeqRef.current) return;
       const errorMessage = toErrorMessage(e);
@@ -392,9 +373,73 @@ export function EmailWorkspace() {
           lastError: errorMessage,
         });
       }
+      return;
     } finally {
       if (requestSeq === fetchRequestSeqRef.current) {
         setIsLoadingEmails(false);
+      }
+    }
+
+    const shouldSync = options?.sync ?? true;
+    if (!shouldSync) return;
+    const isCacheFresh = cached && Date.now() - cached.fetchedAt <= EMAIL_CACHE_TTL_MS;
+    if (!options?.force && isCacheFresh && latestRows.length > 0) return;
+
+    if (requestSeq === fetchRequestSeqRef.current) {
+      setIsRefreshingEmails(true);
+    }
+
+    try {
+      await invoke("email_sync_now", {
+        input: {
+          accountId: accountId === ALL_ACCOUNTS_ID ? null : accountId,
+          folder,
+        },
+      });
+      latestRows = await readLocalEnvelopes(latestRows);
+      if (requestSeq !== fetchRequestSeqRef.current) return;
+      emailListCache.set(key, { emails: latestRows, fetchedAt: Date.now() });
+      setEmails(latestRows);
+
+      if (accountId !== ALL_ACCOUNTS_ID) {
+        const uids = latestRows
+          .slice(0, 5)
+          .map((row) => row.uid)
+          .filter((uid) => uid > 0);
+        if (uids.length > 0) {
+          void invoke("email_prefetch_bodies", {
+            input: {
+              accountId,
+              folder,
+              uids,
+              limit: 5,
+            },
+          });
+        }
+        patchAccount(accountId, {
+          status: "active",
+          lastError: null,
+          lastSyncAt: new Date().toISOString(),
+        });
+      }
+    } catch (e: any) {
+      if (requestSeq !== fetchRequestSeqRef.current) return;
+      const errorMessage = toErrorMessage(e);
+      if (latestRows.length === 0) {
+        setMailError(errorMessage);
+      }
+      if (accountId !== ALL_ACCOUNTS_ID) {
+        patchAccount(accountId, {
+          status:
+            errorMessage.includes("reauth") || errorMessage.includes("missing_account_secret")
+              ? "reauth_required"
+              : "error",
+          lastError: errorMessage,
+        });
+      }
+    } finally {
+      if (requestSeq === fetchRequestSeqRef.current) {
+        setIsRefreshingEmails(false);
       }
     }
   };
@@ -440,7 +485,7 @@ export function EmailWorkspace() {
   useEffect(() => {
     if (connectionStatus === "connected" && (activeAccount || activeAccountId === ALL_ACCOUNTS_ID)) {
       if (activeAccountId === ALL_ACCOUNTS_ID) {
-        void fetchEmails(activeFolder, ALL_ACCOUNTS_ID);
+        void fetchEmails(activeFolder, ALL_ACCOUNTS_ID, { force: true, sync: true });
         setSelectedEmailId(null);
         return;
       }
@@ -452,10 +497,39 @@ export function EmailWorkspace() {
         setEmails([]);
         return;
       }
-      void fetchEmails(activeFolder, activeAccount.id);
+      void fetchEmails(activeFolder, activeAccount.id, { force: true, sync: true });
       setSelectedEmailId(null);
     }
   }, [activeFolder, activeAccountId, connectionStatus]);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") return;
+    if (!activeAccountId) return;
+    const timer = window.setInterval(() => {
+      void invoke("email_set_activity_state", {
+        input: {
+          mode: "mailForeground",
+          activeAccountId,
+          activeFolder,
+        },
+      }).catch(() => undefined);
+      // IDLE is the primary live-sync path; this tick only refreshes local Redb snapshots.
+      void fetchEmails(activeFolder, activeAccountId, { force: false, silentRefresh: true, sync: false });
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [activeFolder, activeAccountId, connectionStatus]);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") return;
+    if (!activeAccountId) return;
+    void invoke("email_set_activity_state", {
+      input: {
+        mode: "mailForeground",
+        activeAccountId,
+        activeFolder,
+      },
+    }).catch(() => undefined);
+  }, [activeAccountId, activeFolder, connectionStatus]);
 
   useEffect(() => {
     lastEmailSelection = {
@@ -512,6 +586,61 @@ export function EmailWorkspace() {
   };
 
   const selectedEmail = emails.find((e) => e.id === selectedEmailId);
+  const loadSelectedBody = async (email: Email) => {
+    if (!email.accountId || email.accountId === ALL_ACCOUNTS_ID) return;
+    if (email.body || loadingBodyEmailId === email.id) return;
+    setSelectedBodyError(null);
+    setLoadingBodyEmailId(email.id);
+    try {
+      const bodyResult = (await invoke("email_get_message_body", {
+        input: {
+          accountId: email.accountId,
+          folder: email.folder,
+          uid: email.uid,
+        },
+      })) as { body: string; bodyHtml?: string | null };
+      setEmails((current) =>
+        current.map((item) =>
+          item.id === email.id
+            ? {
+                ...item,
+                body: bodyResult.body ?? "",
+                bodyHtml: bodyResult.bodyHtml ?? null,
+                hasCachedBody: true,
+              }
+            : item,
+        ),
+      );
+      emailListCache.set(emailCacheKey(activeAccountId ?? email.accountId, activeFolder), {
+        emails: emails.map((item) =>
+          item.id === email.id
+            ? {
+                ...item,
+                body: bodyResult.body ?? "",
+                bodyHtml: bodyResult.bodyHtml ?? null,
+                hasCachedBody: true,
+              }
+            : item,
+        ),
+        fetchedAt: Date.now(),
+      });
+    } catch (error) {
+      setSelectedBodyError(toErrorMessage(error));
+    } finally {
+      setLoadingBodyEmailId((current) => (current === email.id ? null : current));
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedEmail) {
+      setSelectedBodyError(null);
+      return;
+    }
+    if (!selectedEmail.body && selectedEmail.accountId) {
+      void loadSelectedBody(selectedEmail);
+    }
+  }, [selectedEmailId, selectedEmail?.body, selectedEmail?.accountId]);
+
   const formatEmailDate = (raw: string) => {
     const parsed = new Date(raw);
     if (Number.isNaN(parsed.getTime())) return raw;
@@ -1135,7 +1264,27 @@ export function EmailWorkspace() {
                 </div>
               </div>
               <div className="custom-scrollbar flex-1 overflow-y-auto p-4">
-                {selectedEmail.bodyHtml && selectedEmail.bodyHtml.trim().length > 0 ? (
+                {loadingBodyEmailId === selectedEmail.id ? (
+                  <div className="grid gap-3">
+                    <div className="h-4 w-1/3 animate-pulse rounded bg-[#262626]" />
+                    <div className="h-4 w-full animate-pulse rounded bg-[#262626]" />
+                    <div className="h-4 w-5/6 animate-pulse rounded bg-[#262626]" />
+                    <div className="h-4 w-4/6 animate-pulse rounded bg-[#262626]" />
+                  </div>
+                ) : selectedBodyError ? (
+                  <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+                    <p className="text-[12px] font-semibold text-red-300">
+                      Failed to load message body
+                    </p>
+                    <p className="mt-1 text-[12px] text-red-200/80">{selectedBodyError}</p>
+                    <button
+                      onClick={() => void loadSelectedBody(selectedEmail)}
+                      className="mt-3 rounded-lg border border-red-400/30 bg-[#291515] px-3 py-1.5 text-[12px] font-bold text-red-200 transition-colors hover:bg-[#321818]"
+                    >
+                      Retry body load
+                    </button>
+                  </div>
+                ) : selectedEmail.bodyHtml && selectedEmail.bodyHtml.trim().length > 0 ? (
                   <div className="overflow-hidden rounded-xl border border-[#2a2a2a] bg-white">
                     <iframe
                       title={`Email content: ${selectedEmail.subject}`}
@@ -1146,7 +1295,7 @@ export function EmailWorkspace() {
                   </div>
                 ) : (
                   <div className="whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-[#ccc]">
-                    {selectedEmail.body}
+                    {selectedEmail.body?.trim() ? selectedEmail.body : "No message content."}
                   </div>
                 )}
               </div>
@@ -1154,6 +1303,11 @@ export function EmailWorkspace() {
           ) : (
             <>
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+                {isRefreshingEmails ? (
+                  <div className="px-4 pt-3 text-[10px] font-semibold uppercase tracking-widest text-[#666]">
+                    Updating...
+                  </div>
+                ) : null}
                 {!activeAccount && !isAllAccountsView ? (
                   <div className="p-8 text-center text-[13px] font-medium text-[#666]">
                     Select or add an account.
@@ -1172,9 +1326,13 @@ export function EmailWorkspace() {
                     </button>
                   </div>
                 ) : isLoadingEmails ? (
-                  <div className="mt-[100px] flex flex-col items-center justify-center p-8 text-[#555]">
-                    <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-[#333] border-t-[#6a6a6a]" />
-                    <p className="text-[12px] font-bold uppercase tracking-widest">Fetching Envelope...</p>
+                  <div className="grid gap-2 p-4">
+                    {Array.from({ length: 8 }).map((_, idx) => (
+                      <div key={idx} className="grid gap-2 rounded-lg border border-[#1d1d1d] bg-[#121212] p-3">
+                        <div className="h-3 w-1/3 animate-pulse rounded bg-[#2a2a2a]" />
+                        <div className="h-3 w-4/5 animate-pulse rounded bg-[#252525]" />
+                      </div>
+                    ))}
                   </div>
                 ) : emails.length === 0 ? (
                   <div className="p-8 text-center text-[13px] font-medium text-[#666]">
@@ -1186,12 +1344,27 @@ export function EmailWorkspace() {
                       key={email.id}
                       onClick={() => {
                         setSelectedEmailId(email.id);
+                        setSelectedBodyError(null);
                         if (!email.read) {
                           setEmails((current) =>
                             current.map((item) =>
                               item.id === email.id ? { ...item, read: true } : item,
                             ),
                           );
+                          if (email.accountId) {
+                            void invoke("email_apply_flag", {
+                              input: {
+                                accountId: email.accountId,
+                                folder: email.folder,
+                                uid: email.uid,
+                                flag: "seen",
+                                value: true,
+                              },
+                            });
+                          }
+                        }
+                        if (!email.body) {
+                          void loadSelectedBody(email);
                         }
                       }}
                       className={`group relative w-full p-[10px] text-left transition-all hover:bg-[#111] ${selectedEmailId === email.id ? "border-l-2 border-l-[#6a6a6a] bg-[#161616]" : "border-l-2 border-l-transparent"}`}

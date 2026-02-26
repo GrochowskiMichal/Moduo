@@ -1,8 +1,17 @@
-use tauri::State;
 use crate::AppState;
+use tauri::State;
 
-fn require_embeddings_access(state: &AppState, workspace_id: &str, action: &str) -> Result<(), String> {
-    let session = state.session.lock().map_err(|e| e.to_string())?.clone().ok_or_else(|| "Not authenticated".to_string())?;
+fn require_embeddings_access(
+    state: &AppState,
+    workspace_id: &str,
+    action: &str,
+) -> Result<(), String> {
+    let session = state
+        .session
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone()
+        .ok_or_else(|| "Not authenticated".to_string())?;
     // Default allowed for authenticated users
     Ok(())
 }

@@ -43,20 +43,23 @@ export type NotesSyncStatus = "offline" | "syncing" | "synced" | "error";
 
 export type SlashCommand = {
   id:
-    | "paragraph"
-    | "h1"
-    | "h2"
-    | "h3"
-    | "bullet"
-    | "number"
-    | "todo"
-    | "quote"
-    | "code"
-    | "divider"
-    | "toggle";
+  | "paragraph"
+  | "h1"
+  | "h2"
+  | "h3"
+  | "bullet"
+  | "number"
+  | "todo"
+  | "quote"
+  | "code"
+  | "divider"
+  | "toggle"
+  | "table"
+  | "embed-mindmap"
+  | "embed-task";
   title: string;
   keywords: string[];
-  group: "Basic" | "Lists" | "Blocks";
+  group: "Basic" | "Lists" | "Blocks" | "Media" | "Embeds";
 };
 
 export type LocalOutboxEntry = {

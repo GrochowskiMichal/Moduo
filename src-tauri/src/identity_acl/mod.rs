@@ -32,14 +32,22 @@ impl AclManager {
     }
 
     pub fn get_or_create_identity(&self, store: &RedbStore) -> anyhow::Result<LocalIdentity> {
-        if let Some(cached) = self.cache.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?.clone() {
+        if let Some(cached) = self
+            .cache
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?
+            .clone()
+        {
             return Ok(cached);
         }
 
         let existing = store.get_device_identity("current")?;
         if let Some(payload) = existing {
             let parsed: LocalIdentity = serde_json::from_value(payload)?;
-            *self.cache.lock().map_err(|e| anyhow::anyhow!(e.to_string()))? = Some(parsed.clone());
+            *self
+                .cache
+                .lock()
+                .map_err(|e| anyhow::anyhow!(e.to_string()))? = Some(parsed.clone());
             return Ok(parsed);
         }
 
@@ -122,7 +130,10 @@ impl AclManager {
         .context("persist private key")?;
 
         store.put_device_identity("current", &serde_json::to_value(&identity)?)?;
-        *self.cache.lock().map_err(|e| anyhow::anyhow!(e.to_string()))? = Some(identity.clone());
+        *self
+            .cache
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))? = Some(identity.clone());
         Ok(identity)
     }
 

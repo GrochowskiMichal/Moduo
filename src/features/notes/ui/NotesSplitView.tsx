@@ -19,11 +19,39 @@ import {
   NOTES_FOCUS_SEARCH_EVENT,
   type NotesCreateKindEventDetail,
 } from "./layout-events";
+import { exposeNote, unexposeNote, getExposedSlug, buildSlug } from "../utils/expose";
+import { encodeUint8ToBase64 } from "../utils/base64";
+import * as Y from "yjs";
 import {
   LAYOUT_PANELS_APPLY_EVENT,
   readFeaturePanelState,
   type LayoutPanelsApplyDetail,
 } from "../../layout/panel-events";
+
+/**
+ * Clipboard write that works in Tauri webviews.
+ * navigator.clipboard.writeText requires a secure context that Tauri
+ * doesn't always provide. Fall back to the textarea/execCommand trick.
+ */
+function copyToClipboard(text: string): void {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+}
+
+function fallbackCopy(text: string): void {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try { document.execCommand("copy"); } catch { /* ignore */ }
+  document.body.removeChild(ta);
+}
+
 
 type Props = {
   notes: NoteMeta[];
@@ -243,6 +271,10 @@ export function NotesSplitView({
   const [dragActiveId, setDragActiveId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragDeltaX, setDragDeltaX] = useState(0);
+  // Expose feature
+  const [exposedSlugs, setExposedSlugs] = useState<Record<string, string | null>>({});
+  const [exposeLoading, setExposeLoading] = useState(false);
+  const [exposeToast, setExposeToast] = useState<{ url: string; visible: boolean } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const tagInputRef = useRef<HTMLInputElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -568,8 +600,74 @@ export function NotesSplitView({
   const openContextMenu = (noteId: string, event: ReactMouseEvent<HTMLDivElement>) => {
     if (readOnly) return;
     event.preventDefault();
-    const position = getMenuPosition(event, 190, 250);
+    const position = getMenuPosition(event, 200, 280);
     setContextMenu({ type: "note", noteId, ...position });
+    // Preload expose status
+    if (exposedSlugs[noteId] === undefined) {
+      void getExposedSlug(noteId).then((slug) =>
+        setExposedSlugs((prev) => ({ ...prev, [noteId]: slug }))
+      );
+    }
+  };
+
+  const handleExposeNote = async (note: NoteMeta) => {
+    if (!syncEngine || exposeLoading) return;
+    setExposeLoading(true);
+
+    // Safari/WebKit/Tauri drops clipboard permissions after the first `await`.
+    // We must generate the slug and execute the copy synchronously right here,
+    // while we are still inside the original mouse click event handler.
+    const assignedSlug = exposedSlugs[note.id] || buildSlug(note.title || "Untitled");
+    const optimisticUrl = `https://moduo.app/notes/${assignedSlug}`;
+    copyToClipboard(optimisticUrl);
+
+    // Show optimistic toast immediately
+    setExposeToast({ url: optimisticUrl, visible: true });
+
+    try {
+      // Flush latest edits first
+      await syncEngine.flushNote(note.id);
+      // Get the current Y.Doc snapshot
+      const session = syncEngine.getOrCreateSession(note.id);
+      await session.persistence.whenSynced;
+      const snapshot = Y.encodeStateAsUpdate(session.doc);
+      const contentB64 = encodeUint8ToBase64(snapshot);
+
+      const result = await exposeNote({
+        noteId: note.id,
+        workspaceId: note.workspaceId,
+        title: note.title || "Untitled",
+        contentB64,
+        assignedSlug,
+      });
+
+      if (result.success) {
+        setExposedSlugs((prev) => ({ ...prev, [note.id]: result.slug }));
+        setExposeToast({ url: result.url, visible: true });
+        setTimeout(() => setExposeToast(null), 6000);
+      } else {
+        setExposeToast(null); // Clear optimistic toast on failure
+        alert(`Failed to expose note: ${result.error}`);
+      }
+    } catch {
+      setExposeToast(null);
+      alert("Failed to expose note due to an unexpected error.");
+    } finally {
+      setExposeLoading(false);
+      setContextMenu(null);
+    }
+  };
+
+  const handleUnexposeNote = async (noteId: string) => {
+    if (exposeLoading) return;
+    setExposeLoading(true);
+    try {
+      await unexposeNote(noteId);
+      setExposedSlugs((prev) => ({ ...prev, [noteId]: null }));
+    } finally {
+      setExposeLoading(false);
+      setContextMenu(null);
+    }
   };
 
   const openSidebarContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
@@ -826,6 +924,7 @@ export function NotesSplitView({
                 void onUpdateTitle(selectedEditorNote.id, value);
               }}
               syncEngine={syncEngine}
+              workspaceId={selectedEditorNote.workspaceId}
             />
           </div>
         ) : selectedEditorNote ? (
@@ -927,6 +1026,48 @@ export function NotesSplitView({
               <span>Duplicate</span>
             </button>
           ) : null}
+
+          {/* ── Expose ── */}
+          {!contextTargetIsSection && contextTarget.kind === "note" ? (
+            exposedSlugs[contextTarget.id] ? (
+              <>
+                <button
+                  type="button"
+                  className={contextMenuItemClass}
+                  onClick={() => {
+                    const url = `https://moduo.app/notes/${exposedSlugs[contextTarget.id]}`;
+                    copyToClipboard(url);
+                    setExposeToast({ url, visible: true });
+                    setTimeout(() => setExposeToast(null), 4000);
+                    setContextMenu(null);
+                  }}
+                >
+                  <span>Copy Public URL</span>
+                </button>
+                <button
+                  type="button"
+                  className={contextMenuDeleteItemClass}
+                  disabled={exposeLoading}
+                  onClick={() => void handleUnexposeNote(contextTarget.id)}
+                >
+                  <span>{exposeLoading ? "Removing…" : "Unexpose"}</span>
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className={contextMenuItemClass}
+                style={{ color: "#a3c4f3" }}
+                disabled={exposeLoading || !syncEngine}
+                onClick={() => void handleExposeNote(contextTarget)}
+              >
+                <span>{exposeLoading ? "Exposing…" : "✦ Expose to web"}</span>
+              </button>
+            )
+          ) : null}
+
+          <div style={{ height: 1, background: "#222", margin: "4px 0" }} />
+
           <button
             type="button"
             className={contextMenuDeleteItemClass}
@@ -981,6 +1122,35 @@ export function NotesSplitView({
             }}
           >
             <span>New Note</span>
+          </button>
+        </div>
+      ) : null}
+
+      {/* ── Expose Toast ── */}
+      {exposeToast?.visible ? (
+        <div
+          className="fixed bottom-6 left-1/2 z-[2000] -translate-x-1/2 flex items-center gap-3 rounded-[14px] border border-[#2a2a2a] bg-[#161616] px-5 py-3 shadow-[0_16px_40px_#00000080] text-[13px] text-[#d0d0d0]"
+          style={{ animation: "fadeSlideUp 0.25s ease" }}
+        >
+          <span className="text-[#a3c4f3]">✦</span>
+          <span>
+            Note live at{" "}
+            <a
+              href={exposeToast.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline text-[#a3c4f3] hover:text-[#c5d9f7]"
+            >
+              {exposeToast.url.replace("https://", "")}
+            </a>
+          </span>
+          <span className="ml-1 text-[11px] text-[#555]">— URL copied!</span>
+          <button
+            type="button"
+            className="ml-2 text-[#555] hover:text-[#aaa]"
+            onClick={() => setExposeToast(null)}
+          >
+            ✕
           </button>
         </div>
       ) : null}

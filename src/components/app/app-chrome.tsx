@@ -134,6 +134,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const isTasksRoute = pathname.startsWith("/tasks");
   const isMindmapRoute = pathname.startsWith("/mindmap");
   const isBrainstormRoute = pathname.startsWith("/brainstorm");
+  const isEmailRoute = pathname.startsWith("/email");
   const canEditTasks = modulePermissions.tasks === "edit" || modulePermissions.tasks === "admin";
 
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
@@ -254,6 +255,45 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       right: current.right,
     });
   }, [currentFeature, featurePanels]);
+
+  useEffect(() => {
+    if (!runtime || typeof document === "undefined") return;
+    const publishActivity = async () => {
+      if (document.visibilityState !== "hidden" && isEmailRoute) {
+        // Email workspace publishes account/folder-specific foreground state.
+        return;
+      }
+      const mode = document.visibilityState === "hidden" ? "appBackground" : "appForegroundNonMail";
+      try {
+        await runtime.email.setActivityState({
+          mode,
+          activeAccountId: null,
+          activeFolder: null,
+        });
+      } catch {
+        // best-effort signal only
+      }
+    };
+
+    void publishActivity();
+    const onVisibilityChange = () => {
+      void publishActivity();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [isEmailRoute, runtime]);
+
+  useEffect(() => {
+    if (!runtime || typeof document === "undefined" || typeof window === "undefined") return;
+    const timer = window.setInterval(() => {
+      const shouldRefreshInboxes = document.visibilityState === "hidden" || !isEmailRoute;
+      if (!shouldRefreshInboxes) return;
+      void runtime.email.syncNow({ folder: "inbox" });
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [isEmailRoute, runtime]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

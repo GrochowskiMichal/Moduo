@@ -6,7 +6,9 @@ use bip39::{Language, Mnemonic};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::{auth, commands::workspace::join_invite_for_user, domain::ModulePermissions, keychain, AppState};
+use crate::{
+    auth, commands::workspace::join_invite_for_user, domain::ModulePermissions, keychain, AppState,
+};
 
 // ── Keychain keys ─────────────────────────────────────────────────────────────
 const KEYCHAIN_MNEMONIC_ACCOUNT: &str = "local_mnemonic_phrase";
@@ -112,8 +114,8 @@ fn parse_mnemonic(phrase: &str) -> Result<(Mnemonic, String), String> {
         .collect::<Vec<_>>()
         .join(" ");
 
-    let mnemonic = Mnemonic::parse_normalized(&normalized)
-        .map_err(|e| format!("invalid_mnemonic: {}", e))?;
+    let mnemonic =
+        Mnemonic::parse_normalized(&normalized).map_err(|e| format!("invalid_mnemonic: {}", e))?;
 
     // to_string() on a Mnemonic returns the canonical space-separated phrase.
     Ok((mnemonic.clone(), mnemonic.to_string()))
@@ -260,9 +262,8 @@ fn maybe_join_invite(
 /// fresh session.  Returns `None` when no mnemonic is in the keychain so
 /// the caller can fall back to manual entry.
 fn try_unlock_from_keychain(state: &AppState) -> Result<Option<auth::AuthSession>, String> {
-    let Some(raw) =
-        keychain::get_secret(&state.config.keychain_service, KEYCHAIN_MNEMONIC_ACCOUNT)
-            .map_err(|e| e.to_string())?
+    let Some(raw) = keychain::get_secret(&state.config.keychain_service, KEYCHAIN_MNEMONIC_ACCOUNT)
+        .map_err(|e| e.to_string())?
     else {
         return Ok(None);
     };
@@ -276,10 +277,7 @@ fn try_unlock_from_keychain(state: &AppState) -> Result<Option<auth::AuthSession
     // Validate the stored mnemonic still matches the profile hash.
     if !verify_secret(&canonical, &profile.mnemonic_hash)? {
         // Stale / wrong mnemonic in keychain — clear it.
-        let _ = keychain::delete_secret(
-            &state.config.keychain_service,
-            KEYCHAIN_MNEMONIC_ACCOUNT,
-        );
+        let _ = keychain::delete_secret(&state.config.keychain_service, KEYCHAIN_MNEMONIC_ACCOUNT);
         return Ok(None);
     }
 
@@ -296,12 +294,7 @@ fn try_unlock_from_keychain(state: &AppState) -> Result<Option<auth::AuthSession
 }
 
 fn require_session(state: &AppState) -> Result<(), String> {
-    if state
-        .session
-        .lock()
-        .map_err(|e| e.to_string())?
-        .is_none()
-    {
+    if state.session.lock().map_err(|e| e.to_string())?.is_none() {
         return Err("not_authenticated".to_string());
     }
     Ok(())
@@ -344,9 +337,8 @@ pub async fn auth_get_local_auth_state(
 /// 128 bits of entropy).
 #[tauri::command]
 pub async fn auth_generate_mnemonic() -> Result<AuthMnemonicResponse, String> {
-    let mnemonic =
-        Mnemonic::generate_in_with(&mut rand::thread_rng(), Language::English, 12)
-            .map_err(|e| format!("mnemonic_generation_failed: {}", e))?;
+    let mnemonic = Mnemonic::generate_in_with(&mut rand::thread_rng(), Language::English, 12)
+        .map_err(|e| format!("mnemonic_generation_failed: {}", e))?;
 
     let words: Vec<String> = mnemonic.words().map(|w| w.to_string()).collect();
     let phrase = mnemonic.to_string();
@@ -365,9 +357,7 @@ pub async fn auth_register_local_mnemonic(
     input: RegisterMnemonicInput,
 ) -> Result<AuthRegisterResponse, String> {
     if load_local_profile(&state)?.is_some() {
-        return Err(
-            "Local profile already exists. Unlock with your mnemonic phrase.".to_string(),
-        );
+        return Err("Local profile already exists. Unlock with your mnemonic phrase.".to_string());
     }
 
     let display_name = input.display_name.trim().to_string();
@@ -585,6 +575,7 @@ pub async fn auth_get_session(
 pub async fn auth_sign_out(state: State<'_, AppState>) -> Result<(), String> {
     let _ = state.store.kv_remove("auth", LOCAL_SESSION_CACHE_KEY);
     let _ = state.store.kv_remove("auth", "current-profile");
+    crate::commands::email::stop_all_idle_workers();
     *state.session.lock().map_err(|e| e.to_string())? = None;
     Ok(())
 }

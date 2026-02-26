@@ -21,8 +21,5 @@ pub async fn p2p_sync_now(
     state: State<'_, AppState>,
     workspace_id: String,
 ) -> Result<serde_json::Value, String> {
-    state
-        .p2p
-        .sync_now(&workspace_id)
-        .map_err(|e| e.to_string())
+    state.p2p.sync_now(&workspace_id).map_err(|e| e.to_string())
 }

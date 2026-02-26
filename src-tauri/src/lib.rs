@@ -6,13 +6,14 @@ pub mod auth;
 pub mod commands;
 pub mod config;
 pub mod domain;
+pub mod email_sync;
+pub mod embeddings;
 pub mod graph_helix;
 pub mod identity_acl;
 pub mod keychain;
 pub mod migration_legacy;
 pub mod replication_iroh;
 pub mod store_redb;
-pub mod embeddings;
 
 pub struct AppState {
     pub config: config::AppConfig,
@@ -47,9 +48,13 @@ impl AppState {
             .and_then(|value| serde_json::from_value::<auth::AuthSession>(value).ok());
 
         let store = std::sync::Arc::new(store);
-        let graph = std::sync::Arc::new(graph_helix::GraphManager::new(sidecar_path, db_path.parent().map(|p| p.to_path_buf())));
+        let graph = std::sync::Arc::new(graph_helix::GraphManager::new(
+            sidecar_path,
+            db_path.parent().map(|p| p.to_path_buf()),
+        ));
         let embeddings = std::sync::Arc::new(embeddings::EmbeddingEngine::new(None)?);
-        let indexer = embeddings::BackgroundIndexer::new(store.clone(), graph.clone(), embeddings.clone());
+        let indexer =
+            embeddings::BackgroundIndexer::new(store.clone(), graph.clone(), embeddings.clone());
 
         Ok(Self {
             config,
@@ -64,8 +69,14 @@ impl AppState {
     }
 }
 
-fn perform_one_time_auth_v3_reset(app: &tauri::AppHandle, config: &config::AppConfig) -> anyhow::Result<PathBuf> {
-    let app_data_root = app.path().app_data_dir().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+fn perform_one_time_auth_v3_reset(
+    app: &tauri::AppHandle,
+    config: &config::AppConfig,
+) -> anyhow::Result<PathBuf> {
+    let app_data_root = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let data_root = app_data_root.join("moduo");
     let marker = data_root.join("migrations").join("auth_v3_full_reset.done");
     let db_path = data_root.join("moduo_desktop.redb");
@@ -94,10 +105,11 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let config = config::AppConfig::from_env();
-            let db_path = perform_one_time_auth_v3_reset(app.handle(), &config)
-                .map_err(|e| e.to_string())?;
+            let db_path =
+                perform_one_time_auth_v3_reset(app.handle(), &config).map_err(|e| e.to_string())?;
             let state = AppState::new(db_path).map_err(|e| e.to_string())?;
             app.manage(state);
+            commands::email::bootstrap_idle_workers(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -165,6 +177,13 @@ pub fn run() {
             commands::email::email_accounts_list,
             commands::email::email_account_connect_and_save,
             commands::email::email_account_disconnect,
+            commands::email::email_list_envelopes,
+            commands::email::email_get_message_body,
+            commands::email::email_prefetch_bodies,
+            commands::email::email_sync_now,
+            commands::email::email_set_activity_state,
+            commands::email::email_apply_flag,
+            commands::email::email_get_mailbox_status,
             commands::email::email_fetch_saved,
             commands::email::email_send_saved,
             commands::email::email_connect,
@@ -172,6 +191,14 @@ pub fn run() {
             commands::email::email_send,
             commands::system::open_external_url,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running moduo desktop application");
+        .build(tauri::generate_context!())
+        .expect("error while building moduo desktop application")
+        .run(|_app, event| {
+            if matches!(
+                event,
+                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+            ) {
+                commands::email::stop_all_idle_workers();
+            }
+        });
 }

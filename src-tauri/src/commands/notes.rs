@@ -78,9 +78,15 @@ pub struct CrdtUpdateInput {
 }
 
 #[tauri::command]
-pub async fn notes_list(state: State<'_, AppState>, workspace_id: String) -> Result<Vec<NoteMeta>, String> {
+pub async fn notes_list(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<Vec<NoteMeta>, String> {
     let _ = require_notes_permission(&state, &workspace_id, "view", "list")?;
-    state.store.list_notes(&workspace_id).map_err(|e| e.to_string())
+    state
+        .store
+        .list_notes(&workspace_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -92,19 +98,17 @@ pub async fn notes_upsert(state: State<'_, AppState>, note: NoteMeta) -> Result<
 
     state
         .store
-        .apply_note_update_atomic(
-            &normalized,
-            None,
-            None,
-            None,
-        )
+        .apply_note_update_atomic(&normalized, None, None, None)
         .map_err(|e| e.to_string())?;
 
     Ok(normalized)
 }
 
 #[tauri::command]
-pub async fn notes_move(state: State<'_, AppState>, input: NotesMoveInput) -> Result<NoteMeta, String> {
+pub async fn notes_move(
+    state: State<'_, AppState>,
+    input: NotesMoveInput,
+) -> Result<NoteMeta, String> {
     let _ = require_notes_permission(&state, &input.workspace_id, "edit", "move")?;
     let mut note = state
         .store
@@ -146,7 +150,11 @@ pub async fn notes_move(state: State<'_, AppState>, input: NotesMoveInput) -> Re
             if !visited.insert(current_id.clone()) {
                 return Err("Cannot move note into its descendant".to_string());
             }
-            let Some(current) = state.store.get_note(&current_id).map_err(|e| e.to_string())? else {
+            let Some(current) = state
+                .store
+                .get_note(&current_id)
+                .map_err(|e| e.to_string())?
+            else {
                 break;
             };
             if current.workspace_id != input.workspace_id {
@@ -162,19 +170,17 @@ pub async fn notes_move(state: State<'_, AppState>, input: NotesMoveInput) -> Re
 
     state
         .store
-        .apply_note_update_atomic(
-            &note,
-            None,
-            None,
-            None,
-        )
+        .apply_note_update_atomic(&note, None, None, None)
         .map_err(|e| e.to_string())?;
 
     Ok(note)
 }
 
 #[tauri::command]
-pub async fn notes_delete(state: State<'_, AppState>, input: NotesDeleteInput) -> Result<NoteMeta, String> {
+pub async fn notes_delete(
+    state: State<'_, AppState>,
+    input: NotesDeleteInput,
+) -> Result<NoteMeta, String> {
     let _ = require_notes_permission(&state, &input.workspace_id, "edit", "delete")?;
     let mut note = state
         .store
@@ -191,12 +197,7 @@ pub async fn notes_delete(state: State<'_, AppState>, input: NotesDeleteInput) -
 
     state
         .store
-        .apply_note_update_atomic(
-            &note,
-            None,
-            None,
-            None,
-        )
+        .apply_note_update_atomic(&note, None, None, None)
         .map_err(|e| e.to_string())?;
 
     Ok(note)
@@ -232,9 +233,7 @@ pub async fn notes_apply_crdt_updates(
         .store
         .get_note(&note_id)
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| {
-            "Note not found".to_string()
-        })?;
+        .ok_or_else(|| "Note not found".to_string())?;
 
     let mut inserted = 0_i64;
     let mut max_seq = 0_i64;
@@ -245,10 +244,7 @@ pub async fn notes_apply_crdt_updates(
         }
         let default_key = format!(
             "{}:{}:{}:{}",
-            workspace_id,
-            note_id,
-            client_id,
-            item.client_seq
+            workspace_id, note_id, client_id, item.client_seq
         );
         let key = item.idempotency_key.unwrap_or(default_key);
         if seen.contains(&key) {
@@ -276,10 +272,7 @@ pub async fn notes_apply_crdt_updates(
     }
 
     note.updated_at = now_iso();
-    state
-        .store
-        .put_note(&note)
-        .map_err(|e| e.to_string())?;
+    state.store.put_note(&note).map_err(|e| e.to_string())?;
     Ok(serde_json::json!({
         "inserted": inserted,
         "lastClientSeq": max_seq,

@@ -79,9 +79,11 @@ body,
   0% {
     transform: scale(1.02) translate3d(0, 0, 0);
   }
+
   50% {
     transform: scale(1.035) translate3d(-10px, -8px, 0);
   }
+
   100% {
     transform: scale(1.02) translate3d(0, 0, 0);
   }
@@ -149,8 +151,8 @@ body,
   margin: 3px 0;
 }
 
-.notes-list-item > .notes-list-ul,
-.notes-list-item > .notes-list-ol {
+.notes-list-item>.notes-list-ul,
+.notes-list-item>.notes-list-ol {
   margin-top: 4px;
 }
 
@@ -260,6 +262,85 @@ body,
   color: #a3a3a3;
 }
 
+/* ═══ Notes: Table ═══ */
+
+.notes-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+  table-layout: fixed;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #252525;
+}
+
+
+.notes-table-cell {
+  border: 1px solid #252525;
+  padding: 8px 12px;
+  vertical-align: top;
+  min-width: 80px;
+  font-size: 14px;
+  color: #cfcfcf;
+  line-height: 1.6;
+  background: #141414;
+  outline: none;
+  position: relative;
+}
+
+.notes-table-cell:focus-within {
+  background: #181818;
+  box-shadow: inset 0 0 0 2px #2e2e2e;
+}
+
+.notes-table-cell-header {
+  border: 1px solid #252525;
+  padding: 8px 12px;
+  vertical-align: top;
+  min-width: 80px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e8e8e8;
+  background: #1a1a1a;
+  outline: none;
+  text-align: left;
+  position: relative;
+}
+
+.notes-table-cell-header:focus-within {
+  background: #1e1e1e;
+  box-shadow: inset 0 0 0 2px #3a3a3a;
+}
+
+/* Lexical table selection highlight */
+.notes-table-cell.selected,
+.notes-table-cell-header.selected {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.14);
+}
+
+/* ═══ Slash menu: Table size picker ═══ */
+
+.notes-table-picker {
+  border-top: 1px solid #202020;
+  margin-top: 4px;
+}
+
+.notes-table-picker-cell {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid #2a2a2a;
+  background: #1a1a1a;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+
+.notes-table-picker-cell[data-active="true"] {
+  background: #2c2c2c;
+  border-color: #444;
+}
+
 /* ═══ Mindmap UI ═══ */
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -294,23 +375,47 @@ body,
 }
 
 @keyframes mindmapSolidEdgePulse {
-  0%, 100% { stroke-opacity: 0.7; }
-  50% { stroke-opacity: 1; }
+
+  0%,
+  100% {
+    stroke-opacity: 0.7;
+  }
+
+  50% {
+    stroke-opacity: 1;
+  }
 }
 
 @keyframes mindmapDashedFlow {
-  from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: -13; }
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -13;
+  }
 }
 
 @keyframes mindmapDottedFlow {
-  from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: -11; }
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -11;
+  }
 }
 
 @keyframes mindmapDottedFlicker {
-  0%, 100% { stroke-opacity: 0.55; }
-  50% { stroke-opacity: 0.95; }
+
+  0%,
+  100% {
+    stroke-opacity: 0.55;
+  }
+
+  50% {
+    stroke-opacity: 0.95;
+  }
 }
 
 .react-flow__edge.mindmap-edge-solid-animated .react-flow__edge-path {
@@ -338,8 +443,15 @@ body,
 }
 
 @keyframes mindmapEdgeSelectPulse {
-  0%, 100% { stroke-opacity: 0.62; }
-  50% { stroke-opacity: 1; }
+
+  0%,
+  100% {
+    stroke-opacity: 0.62;
+  }
+
+  50% {
+    stroke-opacity: 1;
+  }
 }
 
 .react-flow__handle {
@@ -386,6 +498,7 @@ body,
     opacity: 0;
     transform: scale(0.9);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -397,11 +510,25 @@ body,
 }
 
 @keyframes mailFlagWave {
-  0% { transform: scaleX(1) skewY(0deg); }
-  25% { transform: scaleX(1.06) skewY(-3deg); }
-  50% { transform: scaleX(0.96) skewY(2deg); }
-  75% { transform: scaleX(1.05) skewY(-2deg); }
-  100% { transform: scaleX(1) skewY(0deg); }
+  0% {
+    transform: scaleX(1) skewY(0deg);
+  }
+
+  25% {
+    transform: scaleX(1.06) skewY(-3deg);
+  }
+
+  50% {
+    transform: scaleX(0.96) skewY(2deg);
+  }
+
+  75% {
+    transform: scaleX(1.05) skewY(-2deg);
+  }
+
+  100% {
+    transform: scaleX(1) skewY(0deg);
+  }
 }
 
 .mail-flag-wave {
@@ -418,5 +545,18 @@ body,
 @media (prefers-reduced-motion: reduce) {
   .mail-flag-wave__cloth {
     animation: none;
+  }
+}
+
+/* Expose toast slide-up animation */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
   }
 }

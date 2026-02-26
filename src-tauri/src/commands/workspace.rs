@@ -4,8 +4,97 @@ use tauri::State;
 
 use crate::{domain::*, AppState};
 
+const MODUO_MAIL_ARCHITECTURE_SEED_TITLE: &str = "Moduo mail architecture";
+const MODUO_MAIL_ARCHITECTURE_SEED_KIND: &str = "note";
+const MODUO_MAIL_ARCHITECTURE_SEED_POSITION: &str = "5000000000000000";
+const MODUO_MAIL_ARCHITECTURE_SEED_MARKER_PREFIX: &str = "seed:moduo_mail_architecture:v1:";
+const MODUO_MAIL_ARCHITECTURE_SEED_GLOBAL_MARKER: &str =
+    "seed:moduo_mail_architecture:v1:workspace-name:mike:done";
+const MODUO_MAIL_ARCHITECTURE_TARGET_WORKSPACE_NAME: &str = "mike";
+const MODUO_MAIL_ARCHITECTURE_SEED_SNAPSHOT_B64: &str =
+    include_str!("../seeds/moduo_mail_architecture.snapshot.b64");
+
 fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339()
+}
+
+fn seed_marker_key(workspace_id: &str) -> String {
+    format!(
+        "{}{}",
+        MODUO_MAIL_ARCHITECTURE_SEED_MARKER_PREFIX, workspace_id
+    )
+}
+
+fn ensure_moduo_mail_architecture_seed_note(
+    state: &AppState,
+    workspace_id: &str,
+    owner_id: &str,
+) -> Result<(), String> {
+    let marker_key = seed_marker_key(workspace_id);
+    if state
+        .store
+        .get_migration_marker(&marker_key)
+        .map_err(|e| e.to_string())?
+        .is_some()
+    {
+        return Ok(());
+    }
+
+    let notes = state
+        .store
+        .list_notes(workspace_id)
+        .map_err(|e| e.to_string())?;
+
+    if notes.iter().any(|note| {
+        note.deleted_at.is_none()
+            && note
+                .title
+                .eq_ignore_ascii_case(MODUO_MAIL_ARCHITECTURE_SEED_TITLE)
+    }) {
+        state
+            .store
+            .set_migration_marker(&marker_key, &now_iso())
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    let now = now_iso();
+    let note = NoteMeta {
+        id: uuid::Uuid::new_v4().to_string(),
+        workspace_id: workspace_id.to_string(),
+        owner_id: owner_id.to_string(),
+        parent_id: None,
+        title: MODUO_MAIL_ARCHITECTURE_SEED_TITLE.to_string(),
+        icon: None,
+        kind: MODUO_MAIL_ARCHITECTURE_SEED_KIND.to_string(),
+        tags: Vec::new(),
+        is_pinned: false,
+        position: MODUO_MAIL_ARCHITECTURE_SEED_POSITION.to_string(),
+        is_archived: false,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+        deleted_at: None,
+    };
+
+    state
+        .store
+        .apply_note_update_atomic(&note, None, None, None)
+        .map_err(|e| e.to_string())?;
+
+    let doc_state = NoteDocState {
+        snapshot_b64: MODUO_MAIL_ARCHITECTURE_SEED_SNAPSHOT_B64.trim().to_string(),
+        last_compacted_update_id: 0,
+        updates: Vec::new(),
+    };
+    state
+        .store
+        .put_note_doc_state(&note.id, &doc_state)
+        .map_err(|e| e.to_string())?;
+
+    state
+        .store
+        .set_migration_marker(&marker_key, &now)
+        .map_err(|e| e.to_string())
 }
 
 fn require_user_id(state: &AppState) -> Result<String, String> {
@@ -34,22 +123,28 @@ fn deny_with_audit(
     Err("Forbidden".to_string())
 }
 
-fn require_workspace_member(state: &AppState, workspace_id: &str, action: &str) -> Result<String, String> {
+fn require_workspace_member(
+    state: &AppState,
+    workspace_id: &str,
+    action: &str,
+) -> Result<String, String> {
     let user_id = require_user_id(state)?;
     let members = state
         .store
         .list_workspace_members(workspace_id)
         .map_err(|e| e.to_string())?;
-    let is_member = members
-        .iter()
-        .any(|m| m.user_id == user_id && m.is_active);
+    let is_member = members.iter().any(|m| m.user_id == user_id && m.is_active);
     if !is_member {
         deny_with_audit(state, Some(&user_id), workspace_id, action)?;
     }
     Ok(user_id)
 }
 
-fn require_workspace_manager(state: &AppState, workspace_id: &str, action: &str) -> Result<String, String> {
+fn require_workspace_manager(
+    state: &AppState,
+    workspace_id: &str,
+    action: &str,
+) -> Result<String, String> {
     let user_id = require_workspace_member(state, workspace_id, action)?;
     let members = state
         .store
@@ -130,8 +225,10 @@ pub(crate) fn join_invite_for_user(
         .map_err(|e| e.to_string())?;
 
     let workspaces = state.store.list_workspaces().map_err(|e| e.to_string())?;
-    let mut workspace = workspaces.into_iter().find(|w| w.id == workspace_id).unwrap_or(
-        WorkspaceSummary {
+    let mut workspace = workspaces
+        .into_iter()
+        .find(|w| w.id == workspace_id)
+        .unwrap_or(WorkspaceSummary {
             id: workspace_id.clone(),
             name: "Shared Workspace".to_string(),
             role: role.clone(),
@@ -139,13 +236,15 @@ pub(crate) fn join_invite_for_user(
             is_deleted: false,
             created_at: now.clone(),
             updated_at: now.clone(),
-        },
-    );
+        });
 
     workspace.role = role;
     workspace.permissions = permissions;
     workspace.updated_at = now.clone();
-    state.store.put_workspace(&workspace).map_err(|e| e.to_string())?;
+    state
+        .store
+        .put_workspace(&workspace)
+        .map_err(|e| e.to_string())?;
 
     if let Some(invite_id) = invite_id {
         let invites = state
@@ -166,7 +265,9 @@ pub(crate) fn join_invite_for_user(
 }
 
 #[tauri::command]
-pub async fn workspace_list_local(state: State<'_, AppState>) -> Result<Vec<WorkspaceSummary>, String> {
+pub async fn workspace_list_local(
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkspaceSummary>, String> {
     let user_id = require_user_id(&state)?;
     let mut workspaces = state.store.list_workspaces().map_err(|e| e.to_string())?;
     let all_members = state
@@ -194,26 +295,46 @@ pub async fn workspace_list_local(state: State<'_, AppState>) -> Result<Vec<Work
                 notes: "admin".to_string(),
                 tasks: "admin".to_string(),
             };
-            let _ = state
+            let _ =
+                state
+                    .store
+                    .upsert_workspace_acl(&workspace.id, &user_id, &workspace.permissions);
+        } else {
+            if let Some(acl) = state
                 .store
-                .upsert_workspace_acl(&workspace.id, &user_id, &workspace.permissions);
-            continue;
+                .get_workspace_acl(&workspace.id, &user_id)
+                .map_err(|e| e.to_string())?
+            {
+                workspace.permissions = acl;
+            } else {
+                workspace.permissions = ModulePermissions {
+                    notes: "view".to_string(),
+                    tasks: "view".to_string(),
+                };
+                let _ =
+                    state
+                        .store
+                        .upsert_workspace_acl(&workspace.id, &user_id, &workspace.permissions);
+            }
         }
 
-        if let Some(acl) = state
+        // Seed note is read-only content and should be available in every workspace membership.
+        let global_seed_done = state
             .store
-            .get_workspace_acl(&workspace.id, &user_id)
+            .get_migration_marker(MODUO_MAIL_ARCHITECTURE_SEED_GLOBAL_MARKER)
             .map_err(|e| e.to_string())?
+            .is_some();
+        if !global_seed_done
+            && workspace
+                .name
+                .trim()
+                .eq_ignore_ascii_case(MODUO_MAIL_ARCHITECTURE_TARGET_WORKSPACE_NAME)
         {
-            workspace.permissions = acl;
-        } else {
-            workspace.permissions = ModulePermissions {
-                notes: "view".to_string(),
-                tasks: "view".to_string(),
-            };
-            let _ = state
+            ensure_moduo_mail_architecture_seed_note(&state, &workspace.id, &user_id)?;
+            state
                 .store
-                .upsert_workspace_acl(&workspace.id, &user_id, &workspace.permissions);
+                .set_migration_marker(MODUO_MAIL_ARCHITECTURE_SEED_GLOBAL_MARKER, &now_iso())
+                .map_err(|e| e.to_string())?;
         }
     }
     workspaces.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
@@ -221,7 +342,10 @@ pub async fn workspace_list_local(state: State<'_, AppState>) -> Result<Vec<Work
 }
 
 #[tauri::command]
-pub async fn workspace_create_local(state: State<'_, AppState>, name: String) -> Result<WorkspaceSummary, String> {
+pub async fn workspace_create_local(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<WorkspaceSummary, String> {
     let user_id = require_user_id(&state)?;
     let now = now_iso();
     let workspace = WorkspaceSummary {
@@ -276,12 +400,18 @@ pub async fn workspace_rename_local(
     current.name = name.trim().to_string();
     current.updated_at = now_iso();
 
-    state.store.put_workspace(current).map_err(|e| e.to_string())?;
+    state
+        .store
+        .put_workspace(current)
+        .map_err(|e| e.to_string())?;
     Ok(current.clone())
 }
 
 #[tauri::command]
-pub async fn workspace_leave_local(state: State<'_, AppState>, workspace_id: String) -> Result<(), String> {
+pub async fn workspace_leave_local(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<(), String> {
     let user_id = require_user_id(&state)?;
     let _ = require_workspace_member(&state, &workspace_id, "leave_local")?;
     let mut members = state
@@ -304,7 +434,10 @@ pub async fn workspace_leave_local(state: State<'_, AppState>, workspace_id: Str
 }
 
 #[tauri::command]
-pub async fn workspace_soft_delete_local(state: State<'_, AppState>, workspace_id: String) -> Result<(), String> {
+pub async fn workspace_soft_delete_local(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<(), String> {
     let _ = require_workspace_manager(&state, &workspace_id, "soft_delete_local")?;
     let mut workspaces = state.store.list_workspaces().map_err(|e| e.to_string())?;
     let Some(current) = workspaces.iter_mut().find(|w| w.id == workspace_id) else {
@@ -313,7 +446,10 @@ pub async fn workspace_soft_delete_local(state: State<'_, AppState>, workspace_i
 
     current.is_deleted = true;
     current.updated_at = now_iso();
-    state.store.put_workspace(current).map_err(|e| e.to_string())?;
+    state
+        .store
+        .put_workspace(current)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -458,7 +594,10 @@ pub async fn workspace_update_invite(
         .store
         .list_all_workspace_invites()
         .map_err(|e| e.to_string())?;
-    let Some(mut target) = invites.into_iter().find(|invite| invite.id == input.invite_id) else {
+    let Some(mut target) = invites
+        .into_iter()
+        .find(|invite| invite.id == input.invite_id)
+    else {
         return Ok(());
     };
 
@@ -471,7 +610,10 @@ pub async fn workspace_update_invite(
 }
 
 #[tauri::command]
-pub async fn workspace_revoke_invite(state: State<'_, AppState>, invite_id: String) -> Result<(), String> {
+pub async fn workspace_revoke_invite(
+    state: State<'_, AppState>,
+    invite_id: String,
+) -> Result<(), String> {
     let invites = state
         .store
         .list_all_workspace_invites()
@@ -516,17 +658,16 @@ pub async fn workspace_update_member_permissions(
     let Some(existing) = members.iter().find(|member| member.id == input.member_id) else {
         return Ok(());
     };
-    let _ = require_workspace_manager(
-        &state,
-        &existing.workspace_id,
-        "update_member_permissions",
-    )?;
+    let _ = require_workspace_manager(&state, &existing.workspace_id, "update_member_permissions")?;
 
     let members = state
         .store
         .list_all_workspace_members()
         .map_err(|e| e.to_string())?;
-    let Some(mut target) = members.into_iter().find(|member| member.id == input.member_id) else {
+    let Some(mut target) = members
+        .into_iter()
+        .find(|member| member.id == input.member_id)
+    else {
         return Ok(());
     };
 
@@ -559,7 +700,10 @@ pub async fn workspace_mark_notification_read(
     state: State<'_, AppState>,
     notification_id: String,
 ) -> Result<(), String> {
-    let mut notifications = state.store.list_notifications().map_err(|e| e.to_string())?;
+    let mut notifications = state
+        .store
+        .list_notifications()
+        .map_err(|e| e.to_string())?;
     let Some(target) = notifications.iter_mut().find(|n| n.id == notification_id) else {
         return Ok(());
     };
@@ -574,11 +718,17 @@ pub async fn workspace_mark_notification_read(
 pub async fn workspace_mark_all_notifications_read(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut notifications = state.store.list_notifications().map_err(|e| e.to_string())?;
+    let mut notifications = state
+        .store
+        .list_notifications()
+        .map_err(|e| e.to_string())?;
     let now = now_iso();
     for item in &mut notifications {
         item.read_at = Some(now.clone());
-        state.store.put_notification(item).map_err(|e| e.to_string())?;
+        state
+            .store
+            .put_notification(item)
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }

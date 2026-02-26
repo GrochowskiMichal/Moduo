@@ -33,12 +33,14 @@ pub const WORKSPACE_MEMBERSHIP: TableDefinition<&str, &str> =
     TableDefinition::new("workspace_membership");
 pub const WORKSPACE_ACL: TableDefinition<&str, &str> = TableDefinition::new("workspace_acl");
 pub const WORKSPACES: TableDefinition<&str, &str> = TableDefinition::new("workspaces");
-pub const WORKSPACE_INVITES: TableDefinition<&str, &str> = TableDefinition::new("workspace_invites");
+pub const WORKSPACE_INVITES: TableDefinition<&str, &str> =
+    TableDefinition::new("workspace_invites");
 pub const WORKSPACE_NOTIFICATIONS: TableDefinition<&str, &str> =
     TableDefinition::new("workspace_notifications");
 
 pub const DEVICE_IDENTITY: TableDefinition<&str, &str> = TableDefinition::new("device_identity");
-pub const MIGRATION_MARKERS: TableDefinition<&str, &str> = TableDefinition::new("migration_markers");
+pub const MIGRATION_MARKERS: TableDefinition<&str, &str> =
+    TableDefinition::new("migration_markers");
 
 pub const GRAPH_NODES: TableDefinition<&str, &str> = TableDefinition::new("graph_nodes");
 pub const GRAPH_EDGES: TableDefinition<&str, &str> = TableDefinition::new("graph_edges");
@@ -47,6 +49,21 @@ pub const GRAPH_VECTORS: TableDefinition<&str, &str> = TableDefinition::new("gra
 pub const OP_IDEMPOTENCY: TableDefinition<&str, &str> = TableDefinition::new("op_idempotency");
 pub const DEVICE_SEQ: TableDefinition<&str, &str> = TableDefinition::new("device_seq");
 pub const AUDIT_LOG: TableDefinition<&str, &str> = TableDefinition::new("audit_log");
+
+pub const EMAIL_ACCOUNTS_V2: TableDefinition<&str, &str> =
+    TableDefinition::new("email_accounts_v2");
+pub const EMAIL_FOLDER_STATE: TableDefinition<&str, &str> =
+    TableDefinition::new("email_folder_state");
+pub const EMAIL_ENVELOPES: TableDefinition<&str, &str> = TableDefinition::new("email_envelopes");
+pub const EMAIL_ENVELOPE_ORDER: TableDefinition<&str, &str> =
+    TableDefinition::new("email_envelope_order");
+pub const EMAIL_BODIES: TableDefinition<&str, &str> = TableDefinition::new("email_bodies");
+pub const EMAIL_BODY_LRU: TableDefinition<&str, &str> = TableDefinition::new("email_body_lru");
+pub const EMAIL_FLAG_OUTBOX: TableDefinition<&str, &str> =
+    TableDefinition::new("email_flag_outbox");
+pub const EMAIL_GRAPH_OUTBOX: TableDefinition<&str, &str> =
+    TableDefinition::new("email_graph_outbox");
+pub const EMAIL_UI_STATE: TableDefinition<&str, &str> = TableDefinition::new("email_ui_state");
 
 pub struct RedbStore {
     db: Database,
@@ -85,6 +102,16 @@ impl RedbStore {
         let _ = write_txn.open_table(OP_IDEMPOTENCY)?;
         let _ = write_txn.open_table(DEVICE_SEQ)?;
         let _ = write_txn.open_table(AUDIT_LOG)?;
+
+        let _ = write_txn.open_table(EMAIL_ACCOUNTS_V2)?;
+        let _ = write_txn.open_table(EMAIL_FOLDER_STATE)?;
+        let _ = write_txn.open_table(EMAIL_ENVELOPES)?;
+        let _ = write_txn.open_table(EMAIL_ENVELOPE_ORDER)?;
+        let _ = write_txn.open_table(EMAIL_BODIES)?;
+        let _ = write_txn.open_table(EMAIL_BODY_LRU)?;
+        let _ = write_txn.open_table(EMAIL_FLAG_OUTBOX)?;
+        let _ = write_txn.open_table(EMAIL_GRAPH_OUTBOX)?;
+        let _ = write_txn.open_table(EMAIL_UI_STATE)?;
         write_txn.commit()?;
         Ok(())
     }
@@ -139,7 +166,8 @@ impl RedbStore {
                 path, err, backup_path
             );
             let _ = fs::rename(path, &backup_path);
-            let fresh = Database::create(path).context("create redb database after schema recovery")?;
+            let fresh =
+                Database::create(path).context("create redb database after schema recovery")?;
             Self::ensure_schema(&fresh)?;
             return Ok(Self {
                 db: fresh,
@@ -154,7 +182,10 @@ impl RedbStore {
     }
 
     pub fn wipe_all(&self) -> anyhow::Result<()> {
-        let _lock = self.write_guard.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let write_txn = self.db.begin_write()?;
         let tables = [
             NOTES_META,
@@ -181,6 +212,15 @@ impl RedbStore {
             OP_IDEMPOTENCY,
             DEVICE_SEQ,
             AUDIT_LOG,
+            EMAIL_ACCOUNTS_V2,
+            EMAIL_FOLDER_STATE,
+            EMAIL_ENVELOPES,
+            EMAIL_ENVELOPE_ORDER,
+            EMAIL_BODIES,
+            EMAIL_BODY_LRU,
+            EMAIL_FLAG_OUTBOX,
+            EMAIL_GRAPH_OUTBOX,
+            EMAIL_UI_STATE,
         ];
 
         for table_def in tables {
@@ -205,7 +245,10 @@ impl RedbStore {
         key: &str,
         value: &T,
     ) -> anyhow::Result<()> {
-        let _lock = self.write_guard.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let write_txn = self.db.begin_write()?;
         {
             let mut table = write_txn.open_table(table_def)?;
@@ -217,7 +260,10 @@ impl RedbStore {
     }
 
     fn remove_key(&self, table_def: TableDefinition<&str, &str>, key: &str) -> anyhow::Result<()> {
-        let _lock = self.write_guard.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let write_txn = self.db.begin_write()?;
         {
             let mut table = write_txn.open_table(table_def)?;
@@ -241,7 +287,10 @@ impl RedbStore {
         Ok(Some(parsed))
     }
 
-    fn list_json<T: DeserializeOwned>(&self, table_def: TableDefinition<&str, &str>) -> anyhow::Result<Vec<T>> {
+    fn list_json<T: DeserializeOwned>(
+        &self,
+        table_def: TableDefinition<&str, &str>,
+    ) -> anyhow::Result<Vec<T>> {
         let read_txn = self.db.begin_read()?;
         let table = read_txn.open_table(table_def)?;
         let mut items = Vec::new();
@@ -255,7 +304,10 @@ impl RedbStore {
 
     pub fn next_device_seq(&self, device_id: &str) -> anyhow::Result<i64> {
         let key = format!("device:{}", device_id);
-        let _lock = self.write_guard.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let write_txn = self.db.begin_write()?;
         let next = {
             let mut table = write_txn.open_table(DEVICE_SEQ)?;
@@ -273,7 +325,10 @@ impl RedbStore {
     }
 
     pub fn try_register_op(&self, idempotency_key: &str) -> anyhow::Result<bool> {
-        let _lock = self.write_guard.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let write_txn = self.db.begin_write()?;
         let inserted = {
             let mut table = write_txn.open_table(OP_IDEMPOTENCY)?;
@@ -300,7 +355,10 @@ impl RedbStore {
         self.put_json(WORKSPACE_MEMBERSHIP, &member.id, member)
     }
 
-    pub fn list_workspace_members(&self, workspace_id: &str) -> anyhow::Result<Vec<WorkspaceMember>> {
+    pub fn list_workspace_members(
+        &self,
+        workspace_id: &str,
+    ) -> anyhow::Result<Vec<WorkspaceMember>> {
         Ok(self
             .list_json::<WorkspaceMember>(WORKSPACE_MEMBERSHIP)?
             .into_iter()
@@ -316,7 +374,10 @@ impl RedbStore {
         self.put_json(WORKSPACE_INVITES, &invite.id, invite)
     }
 
-    pub fn list_workspace_invites(&self, workspace_id: &str) -> anyhow::Result<Vec<WorkspaceInvite>> {
+    pub fn list_workspace_invites(
+        &self,
+        workspace_id: &str,
+    ) -> anyhow::Result<Vec<WorkspaceInvite>> {
         Ok(self
             .list_json::<WorkspaceInvite>(WORKSPACE_INVITES)?
             .into_iter()
@@ -426,16 +487,26 @@ impl RedbStore {
         })
     }
 
-    pub fn put_device_identity(&self, device_id: &str, payload: &serde_json::Value) -> anyhow::Result<()> {
+    pub fn put_device_identity(
+        &self,
+        device_id: &str,
+        payload: &serde_json::Value,
+    ) -> anyhow::Result<()> {
         self.put_json(DEVICE_IDENTITY, device_id, payload)
     }
 
-    pub fn get_device_identity(&self, device_id: &str) -> anyhow::Result<Option<serde_json::Value>> {
+    pub fn get_device_identity(
+        &self,
+        device_id: &str,
+    ) -> anyhow::Result<Option<serde_json::Value>> {
         self.get_json(DEVICE_IDENTITY, device_id)
     }
 
     pub fn set_migration_marker(&self, key: &str, value: &str) -> anyhow::Result<()> {
-        let _lock = self.write_guard.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let write_txn = self.db.begin_write()?;
         {
             let mut table = write_txn.open_table(MIGRATION_MARKERS)?;
@@ -494,7 +565,148 @@ impl RedbStore {
         self.get_json(WORKSPACE_ACL, key.as_str())
     }
 
-    pub fn kv_set(&self, namespace: &str, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+    pub fn put_email_account_v2(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+        self.put_json(EMAIL_ACCOUNTS_V2, key, value)
+    }
+
+    pub fn get_email_account_v2(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
+        self.get_json(EMAIL_ACCOUNTS_V2, key)
+    }
+
+    pub fn list_email_accounts_v2(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_ACCOUNTS_V2)
+    }
+
+    pub fn remove_email_account_v2(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_ACCOUNTS_V2, key)
+    }
+
+    pub fn put_email_folder_state(
+        &self,
+        key: &str,
+        value: &serde_json::Value,
+    ) -> anyhow::Result<()> {
+        self.put_json(EMAIL_FOLDER_STATE, key, value)
+    }
+
+    pub fn get_email_folder_state(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
+        self.get_json(EMAIL_FOLDER_STATE, key)
+    }
+
+    pub fn list_email_folder_states(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_FOLDER_STATE)
+    }
+
+    pub fn remove_email_folder_state(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_FOLDER_STATE, key)
+    }
+
+    pub fn put_email_envelope(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+        self.put_json(EMAIL_ENVELOPES, key, value)
+    }
+
+    pub fn get_email_envelope(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
+        self.get_json(EMAIL_ENVELOPES, key)
+    }
+
+    pub fn list_email_envelopes(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_ENVELOPES)
+    }
+
+    pub fn remove_email_envelope(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_ENVELOPES, key)
+    }
+
+    pub fn put_email_envelope_order(
+        &self,
+        key: &str,
+        value: &serde_json::Value,
+    ) -> anyhow::Result<()> {
+        self.put_json(EMAIL_ENVELOPE_ORDER, key, value)
+    }
+
+    pub fn list_email_envelope_order(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_ENVELOPE_ORDER)
+    }
+
+    pub fn remove_email_envelope_order(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_ENVELOPE_ORDER, key)
+    }
+
+    pub fn put_email_body(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+        self.put_json(EMAIL_BODIES, key, value)
+    }
+
+    pub fn get_email_body(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
+        self.get_json(EMAIL_BODIES, key)
+    }
+
+    pub fn list_email_bodies(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_BODIES)
+    }
+
+    pub fn remove_email_body(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_BODIES, key)
+    }
+
+    pub fn put_email_body_lru(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+        self.put_json(EMAIL_BODY_LRU, key, value)
+    }
+
+    pub fn list_email_body_lru(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_BODY_LRU)
+    }
+
+    pub fn remove_email_body_lru(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_BODY_LRU, key)
+    }
+
+    pub fn put_email_flag_outbox(
+        &self,
+        key: &str,
+        value: &serde_json::Value,
+    ) -> anyhow::Result<()> {
+        self.put_json(EMAIL_FLAG_OUTBOX, key, value)
+    }
+
+    pub fn list_email_flag_outbox(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_FLAG_OUTBOX)
+    }
+
+    pub fn remove_email_flag_outbox(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_FLAG_OUTBOX, key)
+    }
+
+    pub fn put_email_graph_outbox(
+        &self,
+        key: &str,
+        value: &serde_json::Value,
+    ) -> anyhow::Result<()> {
+        self.put_json(EMAIL_GRAPH_OUTBOX, key, value)
+    }
+
+    pub fn list_email_graph_outbox(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_GRAPH_OUTBOX)
+    }
+
+    pub fn remove_email_graph_outbox(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_GRAPH_OUTBOX, key)
+    }
+
+    pub fn put_email_ui_state(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+        self.put_json(EMAIL_UI_STATE, key, value)
+    }
+
+    pub fn get_email_ui_state(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
+        self.get_json(EMAIL_UI_STATE, key)
+    }
+
+    pub fn kv_set(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: &serde_json::Value,
+    ) -> anyhow::Result<()> {
         let namespaced = format!("{}:{}", namespace, key);
         self.put_json(NOTES_META, namespaced.as_str(), value)
     }
@@ -509,7 +721,11 @@ impl RedbStore {
         self.remove_key(NOTES_META, namespaced.as_str())
     }
 
-    pub fn append_audit_log(&self, event_type: &str, payload: &serde_json::Value) -> anyhow::Result<()> {
+    pub fn append_audit_log(
+        &self,
+        event_type: &str,
+        payload: &serde_json::Value,
+    ) -> anyhow::Result<()> {
         let key = format!(
             "{}:{}:{}",
             chrono::Utc::now().timestamp_millis(),
@@ -531,7 +747,10 @@ impl RedbStore {
         idempotency_key: Option<&str>,
         device_id: Option<&str>,
     ) -> anyhow::Result<Option<i64>> {
-        let _lock = self.write_guard.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let write_txn = self.db.begin_write()?;
         let mut next_seq = None;
 
@@ -594,7 +813,10 @@ impl RedbStore {
         Ok(next_seq)
     }
 
-    pub fn dump_workspace_hashes(&self, workspace_id: &str) -> anyhow::Result<HashMap<String, String>> {
+    pub fn dump_workspace_hashes(
+        &self,
+        workspace_id: &str,
+    ) -> anyhow::Result<HashMap<String, String>> {
         let notes = self.list_notes(workspace_id)?;
         let tasks = self.list_tasks_bundle(workspace_id)?;
         let notes_hash = format!("{}:{}", notes.len(), stable_hash(&notes)?);

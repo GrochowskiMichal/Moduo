@@ -170,6 +170,44 @@ export type ModuoRuntime = {
     set(namespace: string, key: string, value: unknown): Promise<void>;
     remove(namespace: string, key: string): Promise<void>;
   };
+  email: {
+    listAccounts(): Promise<any[]>;
+    connectAndSave(input: any): Promise<any>;
+    disconnect(accountId: string): Promise<void>;
+    listEnvelopes(input: {
+      accountId?: string | null;
+      folder: string;
+      limit?: number;
+      forceSync?: boolean;
+    }): Promise<any>;
+    getMessageBody(input: { accountId: string; folder: string; uid: number }): Promise<any>;
+    prefetchBodies(input: {
+      accountId: string;
+      folder: string;
+      uids: number[];
+      limit?: number;
+    }): Promise<any>;
+    syncNow(input: { accountId?: string | null; folder?: string | null }): Promise<any>;
+    setActivityState(input: {
+      mode: "mailForeground" | "appForegroundNonMail" | "appBackground";
+      activeAccountId?: string | null;
+      activeFolder?: string | null;
+    }): Promise<void>;
+    applyFlag(input: {
+      accountId: string;
+      folder: string;
+      uid: number;
+      flag: "seen" | "starred";
+      value: boolean;
+    }): Promise<any>;
+    getMailboxStatus(input?: { accountId?: string | null }): Promise<any[]>;
+    sendSaved(input: {
+      accountId: string;
+      to: string;
+      subject: string;
+      body: string;
+    }): Promise<boolean>;
+  };
 };
 
 const runtimeClient: ModuoRuntime = {
@@ -510,6 +548,41 @@ const runtimeClient: ModuoRuntime = {
     },
     remove(namespace, key) {
       return invoke("local_store_remove", { namespace, key });
+    },
+  },
+  email: {
+    listAccounts() {
+      return invoke<any[]>("email_accounts_list");
+    },
+    connectAndSave(input) {
+      return invoke<any>("email_account_connect_and_save", { input });
+    },
+    disconnect(accountId) {
+      return invoke<void>("email_account_disconnect", { accountId });
+    },
+    listEnvelopes(input) {
+      return invoke<any>("email_list_envelopes", { input });
+    },
+    getMessageBody(input) {
+      return invoke<any>("email_get_message_body", { input });
+    },
+    prefetchBodies(input) {
+      return invoke<any>("email_prefetch_bodies", { input });
+    },
+    syncNow(input) {
+      return invoke<any>("email_sync_now", { input });
+    },
+    setActivityState(input) {
+      return invoke<void>("email_set_activity_state", { input });
+    },
+    applyFlag(input) {
+      return invoke<any>("email_apply_flag", { input });
+    },
+    getMailboxStatus(input) {
+      return invoke<any[]>("email_get_mailbox_status", { input: input ?? {} });
+    },
+    sendSaved(input) {
+      return invoke<boolean>("email_send_saved", input);
     },
   },
 };

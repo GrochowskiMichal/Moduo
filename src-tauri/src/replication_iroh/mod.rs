@@ -29,7 +29,10 @@ impl P2pManager {
     }
 
     pub fn start(&self) -> anyhow::Result<()> {
-        let mut state = self.state.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         state.started = true;
         if state.peers.is_empty() {
             state.peers.push(PeerStatus {
@@ -43,12 +46,18 @@ impl P2pManager {
     }
 
     pub fn status(&self) -> anyhow::Result<(bool, Vec<PeerStatus>)> {
-        let state = self.state.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         Ok((state.started, state.peers.clone()))
     }
 
     pub fn sync_now(&self, workspace_id: &str) -> anyhow::Result<serde_json::Value> {
-        let mut state = self.state.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         for peer in &mut state.peers {
             peer.last_seen_at = Some(chrono::Utc::now().to_rfc3339());
             peer.last_sync_seq += 1;

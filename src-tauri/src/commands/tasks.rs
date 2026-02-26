@@ -77,7 +77,10 @@ pub struct TasksUpsertInput {
 }
 
 #[tauri::command]
-pub async fn tasks_list(state: State<'_, AppState>, workspace_id: String) -> Result<TasksBundle, String> {
+pub async fn tasks_list(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<TasksBundle, String> {
     let _ = require_tasks_permission(&state, &workspace_id, "view", "list")?;
     state
         .store
@@ -102,7 +105,8 @@ pub async fn tasks_upsert(
         return Ok(serde_json::json!({ "project": saved }));
     }
     if let Some(workflow_state) = input.workflow_state {
-        let _ = require_tasks_permission(&state, &workflow_state.workspace_id, "edit", "upsert_state")?;
+        let _ =
+            require_tasks_permission(&state, &workflow_state.workspace_id, "edit", "upsert_state")?;
         let mut next = workflow_state;
         next.updated_at = now_iso();
         state
@@ -157,7 +161,10 @@ pub async fn tasks_upsert_state(
 }
 
 #[tauri::command]
-pub async fn tasks_upsert_item(state: State<'_, AppState>, task: TaskItem) -> Result<TaskItem, String> {
+pub async fn tasks_upsert_item(
+    state: State<'_, AppState>,
+    task: TaskItem,
+) -> Result<TaskItem, String> {
     let _ = require_tasks_permission(&state, &task.workspace_id, "edit", "upsert_item")?;
     let mut next = task;
     next.updated_at = now_iso();
@@ -169,7 +176,10 @@ pub async fn tasks_upsert_item(state: State<'_, AppState>, task: TaskItem) -> Re
 }
 
 #[tauri::command]
-pub async fn tasks_move(state: State<'_, AppState>, input: TaskMoveInput) -> Result<TaskItem, String> {
+pub async fn tasks_move(
+    state: State<'_, AppState>,
+    input: TaskMoveInput,
+) -> Result<TaskItem, String> {
     let _ = require_tasks_permission(&state, &input.workspace_id, "edit", "move")?;
     let mut task = state
         .store
@@ -185,12 +195,18 @@ pub async fn tasks_move(state: State<'_, AppState>, input: TaskMoveInput) -> Res
     task.position = input.new_position;
     task.updated_at = now_iso();
 
-    state.store.put_task_item(&task).map_err(|e| e.to_string())?;
+    state
+        .store
+        .put_task_item(&task)
+        .map_err(|e| e.to_string())?;
     Ok(task)
 }
 
 #[tauri::command]
-pub async fn tasks_delete_item(state: State<'_, AppState>, input: TaskDeleteInput) -> Result<TaskItem, String> {
+pub async fn tasks_delete_item(
+    state: State<'_, AppState>,
+    input: TaskDeleteInput,
+) -> Result<TaskItem, String> {
     let _ = require_tasks_permission(&state, &input.workspace_id, "edit", "delete_item")?;
     let mut task = state
         .store
@@ -205,7 +221,10 @@ pub async fn tasks_delete_item(state: State<'_, AppState>, input: TaskDeleteInpu
     task.deleted_at = Some(deleted_at.clone());
     task.updated_at = deleted_at;
 
-    state.store.put_task_item(&task).map_err(|e| e.to_string())?;
+    state
+        .store
+        .put_task_item(&task)
+        .map_err(|e| e.to_string())?;
     Ok(task)
 }
 

@@ -28,7 +28,10 @@ pub struct MigrationReport {
     pub checksums: std::collections::HashMap<String, String>,
 }
 
-pub fn import_legacy_payload(store: &RedbStore, payload: LegacyPayload) -> anyhow::Result<MigrationReport> {
+pub fn import_legacy_payload(
+    store: &RedbStore,
+    payload: LegacyPayload,
+) -> anyhow::Result<MigrationReport> {
     if store.get_migration_marker(MIGRATION_KEY)?.is_some() {
         return Ok(MigrationReport {
             already_migrated: true,
@@ -68,7 +71,12 @@ pub fn import_legacy_payload(store: &RedbStore, payload: LegacyPayload) -> anyho
         .notes
         .first()
         .map(|n| n.workspace_id.clone())
-        .or_else(|| payload.task_projects.first().map(|p| p.workspace_id.clone()))
+        .or_else(|| {
+            payload
+                .task_projects
+                .first()
+                .map(|p| p.workspace_id.clone())
+        })
         .unwrap_or_else(|| "default-workspace".to_string());
 
     let checksums = store.dump_workspace_hashes(&workspace_id)?;
