@@ -472,6 +472,16 @@ export function TasksWorkspace({
     }
   };
 
+  const handleDeleteSelectedTask = async () => {
+    if (!selectedTask || !canEdit) return;
+    try {
+      await deleteTask(selectedTask.id);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      window.alert(`Failed to delete task. ${detail}`);
+    }
+  };
+
   const layoutColumns = panelState.left
     ? panelState.right
       ? "grid-cols-[20fr_50fr_30fr]"
@@ -526,13 +536,11 @@ export function TasksWorkspace({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="rounded-xl px-4 py-2 text-[12px] font-bold text-[#ef4444] bg-[#ef4444]/10 hover:bg-[#ef4444]/20 transition-all border border-[#ef4444]/20"
+                  className="rounded-xl px-4 py-2 text-[12px] font-bold border transition-all disabled:cursor-not-allowed disabled:opacity-50 text-[#ef4444] bg-[#ef4444]/10 hover:bg-[#ef4444]/20 border-[#ef4444]/20"
                   onClick={() => {
-                    if (!selectedTask) return;
-                    if (window.confirm("Are you sure you want to delete this task?")) {
-                      void deleteTask(selectedTask.id);
-                    }
+                    void handleDeleteSelectedTask();
                   }}
+                  disabled={!canEdit || !selectedTask}
                 >
                   Delete Task
                 </button>

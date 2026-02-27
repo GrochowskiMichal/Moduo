@@ -29,6 +29,8 @@ import {
   readFeaturePanelState,
   type LayoutPanelsApplyDetail,
 } from "../../layout/panel-events";
+import { useAuth } from "../../../providers/auth-provider";
+import { NotesAiChatPanel } from "./notes-ai-chat-panel";
 
 /**
  * Clipboard write that works in Tauri webviews.
@@ -281,6 +283,7 @@ export function NotesSplitView({
   readOnly = false,
   syncEngine,
 }: Props) {
+  const { runtime, userId } = useAuth();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [categoryExpanded, setCategoryExpanded] = useState<Record<string, boolean>>({});
   const [sectionsExpanded, setSectionsExpanded] = useState({ pinned: true, notes: true });
@@ -960,9 +963,15 @@ export function NotesSplitView({
       </main>
 
       {panelState.right ? (
-        <aside className="min-h-0 rounded-[14px] bg-[#111111] p-4">
-          <div className="text-[#9a9a9a] text-[13px]">Graph relations tree, feature coming soon.</div>
-        </aside>
+        <NotesAiChatPanel
+          runtime={runtime}
+          workspaceId={selectedEditorNote?.workspaceId ?? notes[0]?.workspaceId ?? null}
+          userId={userId}
+          notes={activeNotes}
+          syncEngine={syncEngine}
+          onCreateNote={onCreateNote}
+          onUpdateTitle={onUpdateTitle}
+        />
       ) : null}
 
       {contextMenu?.type === "note" && contextTarget ? (

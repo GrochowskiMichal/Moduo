@@ -1,29 +1,47 @@
 use std::collections::{HashMap, HashSet};
-use std::net::{TcpStream, ToSocketAddrs};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
-use mailparse::{MailAddr, MailHeaderMap};
-use native_tls::TlsConnector;
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 use uuid::Uuid;
 
 use crate::domain::{GraphEdge, GraphNode};
 use crate::email_sync::{
-    now_iso as email_now_iso, EmailActivityMode, EmailActivityStateRecord, EmailSyncCursorRecord,
+    now_iso, EmailActivityMode, EmailActivityStateRecord,
     EMAIL_BODY_MAX_BYTES_PER_ACCOUNT, EMAIL_BODY_MAX_ITEMS_PER_ACCOUNT, EMAIL_DEFAULT_LIST_LIMIT,
     EMAIL_PREFETCH_DEFAULT_LIMIT,
 };
 use crate::{keychain, AppState};
+use self::connection::{open_idle_imap_session, open_imap_session, ImapSession};
+use self::flags::{flush_flag_outbox_for_account, queue_flag_outbox, update_envelope_flag_optimistic};
+use self::parsing::{
+    decode_maybe_mime_header, extract_best_body, extract_domain, normalize_body_text,
+    recipients_for_graph,
+};
+use self::storage::{
+    body_key, envelope_key, get_body_cache, get_body_cache_from_store, list_envelopes_filtered,
+    load_folder_cursor, parse_json_value, patch_account_sync_state, persist_body_cache, read_accounts,
+    remove_account_v2, resolve_accounts_for_target, save_folder_cursor, touch_body_cache,
+    update_idle_runtime_state, upsert_account_v2, upsert_envelope, write_accounts,
+};
+use self::sync::{
+    collect_uid_range, fetch_envelopes_for_uids, resolve_uid_next, sync_account_folder_envelopes,
+    uid_window_start,
+};
+
+mod connection;
+mod flags;
+mod parsing;
+mod storage;
+mod sync;
 
 const EMAIL_NAMESPACE: &str = "email";
 const EMAIL_ACCOUNTS_KEY: &str = "accounts_v1";
 const EMAIL_KEYCHAIN_PREFIX: &str = "email_account::";
-const EMAIL_SECRET_FALLBACK_PREFIX: &str = "email_secret_fallback::";
 const EMAIL_ACTIVITY_UI_STATE_KEY: &str = "activity_state_v2";
 const EMAIL_FOLDER_UI_STATE_PREFIX: &str = "folder_state::";
 const DEFAULT_WORKSPACE_ID: &str = "__global__";
@@ -43,15 +61,44 @@ const IDLE_DEAD_CONNECTION_SILENCE_SECS: u64 = 4 * 60;
 const IMAP_TCP_KEEPALIVE_SECS: u64 = 60;
 const IMAP_CONNECT_TIMEOUT_SECS: u64 = 15;
 const IMAP_SYNC_IO_TIMEOUT_SECS: u64 = 30;
+const IDLE_SUPERVISOR_MAX_WORKERS: usize = 24;
+const IDLE_SUPERVISOR_DEBOUNCE_MS: u64 = 250;
 
 static GRAPH_FLUSH_RUNNING: AtomicBool = AtomicBool::new(false);
+static WORKER_SUPERVISOR_TICKET: AtomicU64 = AtomicU64::new(0);
+static SYNC_INFLIGHT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 struct IdleWorkerControl {
     stop: Arc<AtomicBool>,
     handle: tauri::async_runtime::JoinHandle<()>,
+    generation_id: u64,
 }
 
 static IDLE_WORKERS: OnceLock<Mutex<HashMap<String, IdleWorkerControl>>> = OnceLock::new();
+
+struct SyncPermit {
+    key: String,
+}
+
+impl Drop for SyncPermit {
+    fn drop(&mut self) {
+        let mut inflight = sync_inflight().lock().unwrap_or_else(|e| e.into_inner());
+        inflight.remove(&self.key);
+    }
+}
+
+fn sync_inflight() -> &'static Mutex<HashSet<String>> {
+    SYNC_INFLIGHT.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn try_acquire_sync_permit(key: String) -> Option<SyncPermit> {
+    let mut inflight = sync_inflight().lock().unwrap_or_else(|e| e.into_inner());
+    if inflight.contains(&key) {
+        return None;
+    }
+    inflight.insert(key.clone());
+    Some(SyncPermit { key })
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -414,10 +461,6 @@ impl EmailConfig {
     }
 }
 
-fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339()
-}
-
 fn normalize_provider(provider: &str) -> Result<String, String> {
     let normalized = provider.trim().to_lowercase();
     match normalized.as_str() {
@@ -455,581 +498,12 @@ fn keychain_account_key(account_id: &str) -> String {
     format!("{}{}", EMAIL_KEYCHAIN_PREFIX, account_id)
 }
 
-fn secret_fallback_key(account_id: &str) -> String {
-    format!("{}{}", EMAIL_SECRET_FALLBACK_PREFIX, account_id)
-}
-
-fn read_accounts(state: &AppState) -> Result<Vec<StoredEmailAccount>, String> {
-    let raw = state
-        .store
-        .kv_get(EMAIL_NAMESPACE, EMAIL_ACCOUNTS_KEY)
-        .map_err(|e| e.to_string())?;
-
-    match raw {
-        None => Ok(vec![]),
-        Some(value) => {
-            Ok(serde_json::from_value::<Vec<StoredEmailAccount>>(value).unwrap_or_else(|_| vec![]))
-        }
-    }
-}
-
-fn write_accounts(state: &AppState, accounts: &[StoredEmailAccount]) -> Result<(), String> {
-    state
-        .store
-        .kv_set(
-            EMAIL_NAMESPACE,
-            EMAIL_ACCOUNTS_KEY,
-            &serde_json::to_value(accounts).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())
-}
-
-fn resolve_accounts_for_target(
-    state: &AppState,
-    account_id: Option<&str>,
-) -> Result<Vec<StoredEmailAccount>, String> {
-    let accounts = read_accounts(state)?;
-    if accounts.is_empty() {
-        return Ok(vec![]);
-    }
-
-    if let Some(id) = account_id {
-        if id == ALL_ACCOUNTS_ID {
-            return Ok(accounts);
-        }
-        let matched = accounts
-            .into_iter()
-            .find(|account| account.id == id)
-            .map(|account| vec![account])
-            .ok_or_else(|| "account_not_found".to_string())?;
-        return Ok(matched);
-    }
-
-    Ok(accounts)
-}
-
-fn patch_account_sync_state(
-    state: &AppState,
-    account_id: &str,
-    status: &str,
-    last_error: Option<String>,
-) -> Result<(), String> {
-    let mut accounts = read_accounts(state)?;
-    if let Some(account) = accounts.iter_mut().find(|item| item.id == account_id) {
-        account.status = status.to_string();
-        account.last_error = last_error;
-        account.last_sync_at = Some(now_iso());
-    }
-    write_accounts(state, &accounts)
-}
-
-fn read_password_fallback(state: &AppState, account_id: &str) -> Result<Option<String>, String> {
-    let key = secret_fallback_key(account_id);
-    let raw = state
-        .store
-        .kv_get(EMAIL_NAMESPACE, &key)
-        .map_err(|e| e.to_string())?;
-    match raw {
-        None => Ok(None),
-        Some(value) => serde_json::from_value::<String>(value)
-            .map(Some)
-            .map_err(|e| e.to_string()),
-    }
-}
-
-fn write_password_fallback(
-    state: &AppState,
-    account_id: &str,
-    password: &str,
-) -> Result<(), String> {
-    let key = secret_fallback_key(account_id);
-    state
-        .store
-        .kv_set(
-            EMAIL_NAMESPACE,
-            &key,
-            &serde_json::to_value(password).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())
-}
-
-fn clear_password_fallback(state: &AppState, account_id: &str) {
-    let _ = state
-        .store
-        .kv_remove(EMAIL_NAMESPACE, &secret_fallback_key(account_id));
-}
-
 fn get_password_for_account(state: &AppState, account_id: &str) -> Result<Option<String>, String> {
-    match keychain::get_secret_strict(
+    keychain::get_secret_strict(
         &state.config.keychain_service,
         &keychain_account_key(account_id),
-    ) {
-        Ok(Some(secret)) => Ok(Some(secret)),
-        Ok(None) => read_password_fallback(state, account_id),
-        Err(_) => read_password_fallback(state, account_id),
-    }
-}
-
-fn folder_state_key(account_id: &str, folder: &str) -> String {
-    format!("{}::{}", account_id, folder)
-}
-
-fn envelope_key(account_id: &str, folder: &str, uid: u32) -> String {
-    format!("{}::{}::{}", account_id, folder, uid)
-}
-
-fn body_key(account_id: &str, folder: &str, uid: u32) -> String {
-    format!("{}::{}::{}", account_id, folder, uid)
-}
-
-fn message_key(account_id: &str, uid_validity: Option<u32>, uid: u32) -> String {
-    format!(
-        "{}::{}::{}",
-        account_id,
-        uid_validity.unwrap_or_default(),
-        uid
     )
-}
-
-fn envelope_order_key(account_id: &str, folder: &str, timestamp_ms: i64, uid: u32) -> String {
-    let reverse_ts = i64::MAX - timestamp_ms.max(0);
-    format!("{}::{}::{:020}::{}", account_id, folder, reverse_ts, uid)
-}
-
-fn parse_json_value<T: for<'de> Deserialize<'de>>(value: serde_json::Value) -> Option<T> {
-    serde_json::from_value(value).ok()
-}
-
-fn workspace_id_or_default(raw: Option<&str>) -> String {
-    raw.map(|v| v.trim())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(DEFAULT_WORKSPACE_ID)
-        .to_string()
-}
-
-fn to_millis_from_date(raw: &str) -> i64 {
-    if let Ok(dt) = chrono::DateTime::parse_from_rfc2822(raw) {
-        return dt.timestamp_millis();
-    }
-    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw) {
-        return dt.timestamp_millis();
-    }
-    chrono::Utc::now().timestamp_millis()
-}
-
-fn normalize_subject_for_thread(subject: &str) -> String {
-    let lowered = subject.trim().to_lowercase();
-    let mut stripped = lowered.as_str();
-    for prefix in ["re:", "fwd:", "fw:"] {
-        if stripped.starts_with(prefix) {
-            stripped = stripped.trim_start_matches(prefix).trim_start();
-        }
-    }
-    if stripped.is_empty() {
-        "(no subject)".to_string()
-    } else {
-        stripped.to_string()
-    }
-}
-
-fn decode_header_value_bytes(raw: &[u8]) -> String {
-    let mut header = Vec::with_capacity(raw.len() + 8);
-    header.extend_from_slice(b"X: ");
-    header.extend_from_slice(raw);
-    header.extend_from_slice(b"\r\n");
-    if let Ok((parsed, _)) = mailparse::parse_header(&header) {
-        let decoded = parsed.get_value().trim().to_string();
-        if !decoded.is_empty() {
-            return decoded;
-        }
-    }
-    String::from_utf8_lossy(raw).trim().to_string()
-}
-
-fn decode_maybe_mime_header(raw: &str) -> String {
-    if raw.contains("=?") && raw.contains("?=") {
-        let decoded = decode_header_value_bytes(raw.as_bytes());
-        if !decoded.is_empty() {
-            return decoded;
-        }
-    }
-    raw.to_string()
-}
-
-fn thread_id_from(subject: &str, in_reply_to: Option<&str>, message_id: Option<&str>) -> String {
-    if let Some(reply) = in_reply_to.filter(|v| !v.trim().is_empty()) {
-        return format!(
-            "thread:{}",
-            Uuid::new_v5(&Uuid::NAMESPACE_OID, reply.as_bytes())
-        );
-    }
-    if let Some(msg_id) = message_id.filter(|v| !v.trim().is_empty()) {
-        return format!(
-            "thread:{}",
-            Uuid::new_v5(&Uuid::NAMESPACE_OID, msg_id.as_bytes())
-        );
-    }
-    let normalized = normalize_subject_for_thread(subject);
-    format!(
-        "thread:{}",
-        Uuid::new_v5(&Uuid::NAMESPACE_OID, normalized.as_bytes())
-    )
-}
-
-fn upsert_account_v2(
-    state: &AppState,
-    account: &StoredEmailAccount,
-    capabilities: Option<Vec<String>>,
-    idle_supported: Option<bool>,
-    resolved_mailbox: Option<(&str, &str)>,
-) -> Result<(), String> {
-    let existing = state
-        .store
-        .get_email_account_v2(&account.id)
-        .map_err(|e| e.to_string())?
-        .and_then(parse_json_value::<StoredEmailAccountV2>);
-
-    let mut resolved_mailboxes = existing
-        .as_ref()
-        .map(|item| item.resolved_mailboxes.clone())
-        .unwrap_or_default();
-    if let Some((folder, mailbox)) = resolved_mailbox {
-        resolved_mailboxes.insert(folder.to_string(), mailbox.to_string());
-    }
-
-    let next = StoredEmailAccountV2 {
-        id: account.id.clone(),
-        workspace_id: workspace_id_or_default(account.workspace_id.as_deref()),
-        provider: account.provider.clone(),
-        email: account.email.clone(),
-        imap_host: account.imap_host.clone(),
-        smtp_host: account.smtp_host.clone(),
-        imap_port: account.imap_port,
-        smtp_port: account.smtp_port,
-        capabilities: capabilities
-            .or_else(|| existing.as_ref().map(|item| item.capabilities.clone()))
-            .unwrap_or_default(),
-        idle_supported: idle_supported
-            .or_else(|| existing.as_ref().map(|item| item.idle_supported))
-            .unwrap_or(false),
-        resolved_mailboxes,
-        last_sync_at: Some(now_iso()),
-        status: account.status.clone(),
-        last_error: account.last_error.clone(),
-        updated_at: now_iso(),
-    };
-
-    state
-        .store
-        .put_email_account_v2(
-            &account.id,
-            &serde_json::to_value(next).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())
-}
-
-fn remove_account_v2(state: &AppState, account_id: &str) {
-    let _ = state.store.remove_email_account_v2(account_id);
-}
-
-fn load_folder_cursor(
-    state: &AppState,
-    account_id: &str,
-    folder: &str,
-) -> Option<EmailSyncCursorRecord> {
-    state
-        .store
-        .get_email_folder_state(&folder_state_key(account_id, folder))
-        .ok()
-        .flatten()
-        .and_then(parse_json_value::<EmailSyncCursorRecord>)
-}
-
-fn save_folder_cursor(state: &AppState, cursor: &EmailSyncCursorRecord) -> Result<(), String> {
-    state
-        .store
-        .put_email_folder_state(
-            &folder_state_key(&cursor.account_id, &cursor.folder),
-            &serde_json::to_value(cursor).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())
-}
-
-fn update_idle_runtime_state(
-    state: &AppState,
-    account_id: &str,
-    folder: &str,
-    strategy: &str,
-    failed_attempts: u32,
-    touch_event_at: bool,
-) {
-    let key = folder_state_key(account_id, folder);
-    let mut cursor = state
-        .store
-        .get_email_folder_state(&key)
-        .ok()
-        .flatten()
-        .and_then(parse_json_value::<EmailSyncCursorRecord>)
-        .unwrap_or(EmailSyncCursorRecord {
-            account_id: account_id.to_string(),
-            folder: folder.to_string(),
-            uid_validity: None,
-            uid_next: None,
-            last_seen_uid: None,
-            exists: 0,
-            idle_supported: strategy == "idle",
-            idle_strategy: Some(strategy.to_string()),
-            idle_failed_attempts: failed_attempts,
-            last_idle_event_at: None,
-            updated_at: email_now_iso(),
-        });
-    cursor.idle_strategy = Some(strategy.to_string());
-    cursor.idle_failed_attempts = failed_attempts;
-    cursor.idle_supported = strategy == "idle";
-    if touch_event_at {
-        cursor.last_idle_event_at = Some(email_now_iso());
-    }
-    cursor.updated_at = email_now_iso();
-    let _ = save_folder_cursor(state, &cursor);
-}
-
-fn upsert_envelope(state: &AppState, envelope: &StoredEnvelope) -> Result<(), String> {
-    let key = envelope_key(&envelope.account_id, &envelope.folder, envelope.uid);
-    state
-        .store
-        .put_email_envelope(
-            &key,
-            &serde_json::to_value(envelope).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-
-    let order = serde_json::json!({
-        "accountId": envelope.account_id,
-        "folder": envelope.folder,
-        "uid": envelope.uid,
-        "timestampMs": envelope.timestamp_ms,
-    });
-    state
-        .store
-        .put_email_envelope_order(
-            &envelope_order_key(
-                &envelope.account_id,
-                &envelope.folder,
-                envelope.timestamp_ms,
-                envelope.uid,
-            ),
-            &order,
-        )
-        .map_err(|e| e.to_string())
-}
-
-fn remove_envelope(
-    state: &AppState,
-    account_id: &str,
-    folder: &str,
-    uid: u32,
-) -> Result<(), String> {
-    state
-        .store
-        .remove_email_envelope(&envelope_key(account_id, folder, uid))
-        .map_err(|e| e.to_string())?;
-
-    let rows = state
-        .store
-        .list_email_envelope_order()
-        .map_err(|e| e.to_string())?;
-    for row in rows {
-        let Some(v) = parse_json_value::<serde_json::Value>(row) else {
-            continue;
-        };
-        if v.get("accountId").and_then(|x| x.as_str()) == Some(account_id)
-            && v.get("folder").and_then(|x| x.as_str()) == Some(folder)
-            && v.get("uid").and_then(|x| x.as_u64()) == Some(uid as u64)
-        {
-            let timestamp_ms = v
-                .get("timestampMs")
-                .and_then(|x| x.as_i64())
-                .unwrap_or_default();
-            let _ = state.store.remove_email_envelope_order(&envelope_order_key(
-                account_id,
-                folder,
-                timestamp_ms,
-                uid,
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn list_envelopes_filtered(
-    state: &AppState,
-    account_id: Option<&str>,
-    folder: &str,
-) -> Result<Vec<StoredEnvelope>, String> {
-    let mut rows = state
-        .store
-        .list_email_envelopes()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .filter_map(parse_json_value::<StoredEnvelope>)
-        .filter(|item| item.folder == folder)
-        .filter(|item| {
-            if let Some(acc) = account_id {
-                return item.account_id == acc;
-            }
-            true
-        })
-        .collect::<Vec<_>>();
-
-    rows.sort_by(|a, b| {
-        b.timestamp_ms
-            .cmp(&a.timestamp_ms)
-            .then_with(|| b.uid.cmp(&a.uid))
-    });
-    Ok(rows)
-}
-
-fn get_body_cache_from_store(
-    store: &crate::store_redb::RedbStore,
-    account_id: &str,
-    folder: &str,
-    uid: u32,
-) -> Option<StoredBodyCache> {
-    store
-        .get_email_body(&body_key(account_id, folder, uid))
-        .ok()
-        .flatten()
-        .and_then(parse_json_value::<StoredBodyCache>)
-}
-
-fn get_body_cache(
-    state: &AppState,
-    account_id: &str,
-    folder: &str,
-    uid: u32,
-) -> Option<StoredBodyCache> {
-    get_body_cache_from_store(&state.store, account_id, folder, uid)
-}
-
-fn remove_body_cache(
-    state: &AppState,
-    account_id: &str,
-    folder: &str,
-    uid: u32,
-) -> Result<(), String> {
-    state
-        .store
-        .remove_email_body(&body_key(account_id, folder, uid))
-        .map_err(|e| e.to_string())?;
-    let lru_rows = state
-        .store
-        .list_email_body_lru()
-        .map_err(|e| e.to_string())?;
-    for row in lru_rows {
-        let Some(item) = parse_json_value::<StoredBodyLru>(row) else {
-            continue;
-        };
-        if item.account_id == account_id && item.folder == folder && item.uid == uid {
-            let _ = state.store.remove_email_body_lru(&item.key);
-        }
-    }
-    Ok(())
-}
-
-fn prune_body_cache_lru(state: &AppState, account_id: &str) -> Result<(), String> {
-    let mut entries = state
-        .store
-        .list_email_bodies()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .filter_map(parse_json_value::<StoredBodyCache>)
-        .filter(|item| item.account_id == account_id)
-        .collect::<Vec<_>>();
-
-    let mut total_bytes = entries.iter().map(|item| item.byte_size).sum::<usize>();
-    if entries.len() <= EMAIL_BODY_MAX_ITEMS_PER_ACCOUNT
-        && total_bytes <= EMAIL_BODY_MAX_BYTES_PER_ACCOUNT
-    {
-        return Ok(());
-    }
-
-    entries.sort_by(|a, b| a.last_accessed_at.cmp(&b.last_accessed_at));
-    for entry in entries {
-        if total_bytes <= EMAIL_BODY_MAX_BYTES_PER_ACCOUNT
-            && state
-                .store
-                .list_email_bodies()
-                .map_err(|e| e.to_string())?
-                .into_iter()
-                .filter_map(parse_json_value::<StoredBodyCache>)
-                .filter(|item| item.account_id == account_id)
-                .count()
-                <= EMAIL_BODY_MAX_ITEMS_PER_ACCOUNT
-        {
-            break;
-        }
-        total_bytes = total_bytes.saturating_sub(entry.byte_size);
-        let _ = remove_body_cache(state, &entry.account_id, &entry.folder, entry.uid);
-    }
-    Ok(())
-}
-
-fn touch_body_cache(state: &AppState, body: &StoredBodyCache) -> Result<(), String> {
-    let mut next = body.clone();
-    next.last_accessed_at = now_iso();
-    state
-        .store
-        .put_email_body(
-            &next.key,
-            &serde_json::to_value(&next).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-
-    let lru = StoredBodyLru {
-        key: format!(
-            "{}::{}::{}::{}",
-            next.account_id, next.last_accessed_at, next.folder, next.uid
-        ),
-        account_id: next.account_id.clone(),
-        folder: next.folder.clone(),
-        uid: next.uid,
-        last_accessed_at: next.last_accessed_at.clone(),
-    };
-    state
-        .store
-        .put_email_body_lru(
-            &lru.key,
-            &serde_json::to_value(&lru).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())
-}
-
-fn persist_body_cache(state: &AppState, body: &StoredBodyCache) -> Result<(), String> {
-    state
-        .store
-        .put_email_body(
-            &body.key,
-            &serde_json::to_value(body).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-    let lru = StoredBodyLru {
-        key: format!(
-            "{}::{}::{}::{}",
-            body.account_id, body.last_accessed_at, body.folder, body.uid
-        ),
-        account_id: body.account_id.clone(),
-        folder: body.folder.clone(),
-        uid: body.uid,
-        last_accessed_at: body.last_accessed_at.clone(),
-    };
-    state
-        .store
-        .put_email_body_lru(
-            &lru.key,
-            &serde_json::to_value(&lru).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-    prune_body_cache_lru(state, &body.account_id)
+    .map_err(|e| e.to_string())
 }
 
 fn mailbox_candidates(provider: &str, folder: &str) -> Vec<String> {
@@ -1111,179 +585,6 @@ fn mailbox_candidates(provider: &str, folder: &str) -> Vec<String> {
             _ => vec!["Spam".to_string(), "Junk".to_string()],
         },
         _ => vec![folder.to_string()],
-    }
-}
-
-fn normalize_body_text(text: &str) -> String {
-    text.replace("\r\n", "\n")
-        .replace('\r', "\n")
-        .trim()
-        .to_string()
-}
-
-fn normalize_body_html(html: &str) -> String {
-    html.replace("\r\n", "\n")
-        .replace('\r', "\n")
-        .trim()
-        .to_string()
-}
-
-fn html_to_text(html: &str) -> String {
-    let mut output = String::with_capacity(html.len());
-    let mut tag = String::new();
-    let mut in_tag = false;
-
-    for ch in html.chars() {
-        if in_tag {
-            if ch == '>' {
-                let tag_name = tag
-                    .trim_start_matches('/')
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_ascii_lowercase();
-                if matches!(tag_name.as_str(), "br" | "p" | "div" | "li" | "tr" | "hr") {
-                    output.push('\n');
-                }
-                tag.clear();
-                in_tag = false;
-            } else {
-                tag.push(ch);
-            }
-            continue;
-        }
-
-        if ch == '<' {
-            in_tag = true;
-            continue;
-        }
-
-        output.push(ch);
-    }
-
-    let decoded = output
-        .replace("&nbsp;", " ")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'");
-
-    normalize_body_text(&decoded)
-}
-
-fn truncate_with_ellipsis(input: &str, max_chars: usize) -> String {
-    if input.chars().count() <= max_chars {
-        return input.to_string();
-    }
-    input.chars().take(max_chars).collect::<String>() + "..."
-}
-
-fn build_preview(body: &str) -> String {
-    let flattened = body.split_whitespace().collect::<Vec<_>>().join(" ");
-    truncate_with_ellipsis(&flattened, 120)
-}
-
-struct ExtractedBody {
-    text: String,
-    html: Option<String>,
-}
-
-fn extract_best_body(parsed: &mailparse::ParsedMail<'_>) -> ExtractedBody {
-    let mut text_body: Option<String> = None;
-    let mut html_body: Option<String> = None;
-
-    for part in parsed.parts() {
-        if matches!(
-            part.get_content_disposition().disposition,
-            mailparse::DispositionType::Attachment
-        ) {
-            continue;
-        }
-
-        let mime = part.ctype.mimetype.as_str();
-        if mime.eq_ignore_ascii_case("text/plain") && text_body.is_none() {
-            if let Ok(body) = part.get_body() {
-                let clean = normalize_body_text(&body);
-                if !clean.is_empty() {
-                    text_body = Some(clean);
-                }
-            }
-        } else if mime.eq_ignore_ascii_case("text/html") && html_body.is_none() {
-            if let Ok(body) = part.get_body() {
-                let clean = normalize_body_html(&body);
-                if !clean.is_empty() {
-                    html_body = Some(clean);
-                }
-            }
-        }
-    }
-
-    if text_body.is_none() {
-        text_body = html_body.as_deref().map(html_to_text);
-    }
-    if text_body.is_none() {
-        text_body = parsed
-            .get_body()
-            .map(|body| normalize_body_text(&body))
-            .ok()
-            .filter(|body| !body.is_empty());
-    }
-
-    ExtractedBody {
-        text: text_body.unwrap_or_default(),
-        html: html_body,
-    }
-}
-
-fn parse_address(
-    mailbox: Option<&[u8]>,
-    host: Option<&[u8]>,
-    name: Option<&[u8]>,
-) -> (String, String) {
-    let user = mailbox
-        .map(|v| String::from_utf8_lossy(v).trim().to_string())
-        .unwrap_or_default();
-    let domain = host
-        .map(|v| String::from_utf8_lossy(v).trim().to_string())
-        .unwrap_or_default();
-    let email = if user.is_empty() && domain.is_empty() {
-        String::new()
-    } else {
-        format!("{}@{}", user, domain).trim_matches('@').to_string()
-    };
-    let display_name = name
-        .map(decode_header_value_bytes)
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| email.clone());
-    (display_name, email)
-}
-
-fn recipients_for_graph(raw_to: &str) -> Vec<String> {
-    raw_to
-        .split(',')
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty())
-        .map(|candidate| {
-            let trimmed = candidate.trim();
-            if let Some(start) = trimmed.find('<') {
-                if let Some(end) = trimmed[start + 1..].find('>') {
-                    return trimmed[start + 1..start + 1 + end].trim().to_lowercase();
-                }
-            }
-            trimmed.to_lowercase()
-        })
-        .filter(|email| email.contains('@'))
-        .collect()
-}
-
-fn extract_domain(email: &str) -> Option<String> {
-    let (_, domain) = email.split_once('@')?;
-    let normalized = domain.trim().to_lowercase();
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
     }
 }
 
@@ -1587,18 +888,103 @@ fn idle_worker_key(account_id: &str, folder: &str) -> String {
     format!("{}::{}", account_id, folder)
 }
 
-fn stop_idle_workers_for_account(account_id: &str) {
-    let mut workers = idle_workers().lock().unwrap_or_else(|e| e.into_inner());
-    let keys = workers
-        .keys()
-        .filter(|key| key.starts_with(&format!("{}::", account_id)))
-        .cloned()
-        .collect::<Vec<_>>();
-    for key in keys {
-        if let Some(control) = workers.remove(&key) {
-            control.stop.store(true, Ordering::SeqCst);
-            control.handle.abort();
+fn worker_generation_is_current(key: &str, generation_id: u64) -> bool {
+    let workers = idle_workers().lock().unwrap_or_else(|e| e.into_inner());
+    workers
+        .get(key)
+        .map(|control| control.generation_id == generation_id)
+        .unwrap_or(false)
+}
+
+#[derive(Clone)]
+struct DesiredWorkerSpec {
+    account_id: String,
+    folder: String,
+    stagger: Duration,
+}
+
+impl DesiredWorkerSpec {
+    fn key(&self) -> String {
+        idle_worker_key(&self.account_id, &self.folder)
+    }
+}
+
+struct EmailWorkerSupervisor;
+
+impl EmailWorkerSupervisor {
+    fn account_realtime_eligible(account: &StoredEmailAccount) -> bool {
+        account.status != "reauth_required"
+    }
+
+    fn read_activity_state(state: &AppState) -> Option<EmailActivityStateRecord> {
+        state
+            .store
+            .get_email_ui_state(EMAIL_ACTIVITY_UI_STATE_KEY)
+            .ok()
+            .flatten()
+            .and_then(parse_json_value::<EmailActivityStateRecord>)
+    }
+
+    fn desired_topology(state: &AppState, accounts: &[StoredEmailAccount]) -> Vec<DesiredWorkerSpec> {
+        let eligible_accounts = accounts
+            .iter()
+            .filter(|account| Self::account_realtime_eligible(account))
+            .cloned()
+            .collect::<Vec<_>>();
+        if eligible_accounts.is_empty() {
+            return Vec::new();
         }
+
+        let activity = Self::read_activity_state(state);
+        let mut desired = Vec::<DesiredWorkerSpec>::new();
+
+        if let Some(activity) = activity {
+            if matches!(activity.mode, EmailActivityMode::MailForeground) {
+                let active_account = activity
+                    .active_account_id
+                    .as_deref()
+                    .filter(|account_id| *account_id != ALL_ACCOUNTS_ID)
+                    .filter(|account_id| eligible_accounts.iter().any(|account| account.id == *account_id));
+
+                if let Some(active_account_id) = active_account {
+                    let active_folder = activity
+                        .active_folder
+                        .as_deref()
+                        .map(|value| value.trim().to_lowercase())
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or_else(|| "inbox".to_string());
+                    desired.push(DesiredWorkerSpec {
+                        account_id: active_account_id.to_string(),
+                        folder: active_folder,
+                        stagger: Duration::ZERO,
+                    });
+                    let mut warm_index = 1u64;
+                    for account in &eligible_accounts {
+                        if account.id == active_account_id {
+                            continue;
+                        }
+                        desired.push(DesiredWorkerSpec {
+                            account_id: account.id.clone(),
+                            folder: "inbox".to_string(),
+                            stagger: Duration::from_secs(warm_index * IDLE_STAGGER_SECS),
+                        });
+                        warm_index = warm_index.saturating_add(1);
+                    }
+                    desired.truncate(IDLE_SUPERVISOR_MAX_WORKERS);
+                    return desired;
+                }
+            }
+        }
+
+        for (index, account) in eligible_accounts.iter().enumerate() {
+            desired.push(DesiredWorkerSpec {
+                account_id: account.id.clone(),
+                folder: "inbox".to_string(),
+                stagger: Duration::from_secs((index as u64) * IDLE_STAGGER_SECS),
+            });
+        }
+        desired.truncate(IDLE_SUPERVISOR_MAX_WORKERS);
+        desired
     }
 }
 
@@ -1611,6 +997,24 @@ pub fn stop_all_idle_workers() {
             control.handle.abort();
         }
     }
+}
+
+fn schedule_idle_worker_reconcile(app: &tauri::AppHandle, debounce: bool) {
+    let ticket = WORKER_SUPERVISOR_TICKET
+        .fetch_add(1, Ordering::SeqCst)
+        .saturating_add(1);
+    let app_handle = app.clone();
+    if !debounce {
+        reconcile_idle_workers_now(&app_handle);
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(IDLE_SUPERVISOR_DEBOUNCE_MS)).await;
+        if WORKER_SUPERVISOR_TICKET.load(Ordering::SeqCst) != ticket {
+            return;
+        }
+        reconcile_idle_workers_now(&app_handle);
+    });
 }
 
 fn idle_poll_interval_for_account(state: &AppState, account_id: &str) -> Duration {
@@ -1634,108 +1038,236 @@ enum IdleCycleOutcome {
     MailboxChanged,
     RenewTimeout,
     NoIdleSupport,
-    AuthFailed,
-    NetworkError,
-    ServerError,
-    OtherError,
+    IdleStartError,
+    IdleWaitError,
+    CmdProbeError,
 }
 
-fn classify_idle_error(error: &str) -> IdleCycleOutcome {
-    let normalized = error.to_lowercase();
-    if normalized.contains("auth")
-        || normalized.contains("invalid credentials")
-        || normalized.contains("reauth")
-        || normalized.contains("login failed")
-    {
-        return IdleCycleOutcome::AuthFailed;
+enum IdleCycleError {
+    AccountNotFound,
+    AuthFailed,
+    ConnectionFailed(String),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MailboxRealtimeState {
+    Connecting,
+    Idling,
+    Renewing,
+    Recovering,
+    PollingFallback,
+    AuthRequired,
+    Stopped,
+}
+
+enum MailboxRealtimeEvent {
+    Connected,
+    MailboxChanged,
+    RenewalElapsed,
+    RecoverableError,
+    IdleUnsupported,
+    AuthFailed,
+    StopRequested,
+}
+
+struct MailboxRealtimeEngine {
+    state: MailboxRealtimeState,
+    fallback_no_idle: bool,
+}
+
+impl MailboxRealtimeEngine {
+    fn new(initial_strategy: &str) -> Self {
+        Self {
+            state: if initial_strategy == "polling_fallback_no_idle" {
+                MailboxRealtimeState::PollingFallback
+            } else {
+                MailboxRealtimeState::Connecting
+            },
+            fallback_no_idle: initial_strategy == "polling_fallback_no_idle",
+        }
     }
-    if normalized.contains("network")
-        || normalized.contains("timed out")
-        || normalized.contains("broken pipe")
-        || normalized.contains("connection reset")
-        || normalized.contains("no route")
-        || normalized.contains("dns")
-    {
-        return IdleCycleOutcome::NetworkError;
+
+    fn transition(&mut self, event: MailboxRealtimeEvent) {
+        self.state = match (self.state, event) {
+            (_, MailboxRealtimeEvent::StopRequested) => MailboxRealtimeState::Stopped,
+            (_, MailboxRealtimeEvent::AuthFailed) => MailboxRealtimeState::AuthRequired,
+            (_, MailboxRealtimeEvent::IdleUnsupported) => {
+                self.fallback_no_idle = true;
+                MailboxRealtimeState::PollingFallback
+            }
+            (
+                MailboxRealtimeState::Connecting
+                | MailboxRealtimeState::Recovering
+                | MailboxRealtimeState::Renewing,
+                MailboxRealtimeEvent::Connected,
+            ) => MailboxRealtimeState::Idling,
+            (
+                MailboxRealtimeState::Connecting
+                | MailboxRealtimeState::Idling
+                | MailboxRealtimeState::Recovering
+                | MailboxRealtimeState::Renewing,
+                MailboxRealtimeEvent::MailboxChanged,
+            ) => MailboxRealtimeState::Idling,
+            (MailboxRealtimeState::Idling, MailboxRealtimeEvent::RenewalElapsed) => {
+                MailboxRealtimeState::Renewing
+            }
+            (_, MailboxRealtimeEvent::RecoverableError) => MailboxRealtimeState::Recovering,
+            (MailboxRealtimeState::PollingFallback, _) => MailboxRealtimeState::PollingFallback,
+            (current, _) => current,
+        };
     }
-    if normalized.contains("bye")
-        || normalized.contains("server")
-        || normalized.contains("overloaded")
-        || normalized.contains("unavailable")
-    {
-        return IdleCycleOutcome::ServerError;
+
+    fn idle_strategy_label(&self) -> &'static str {
+        if self.fallback_no_idle {
+            "polling_fallback_no_idle"
+        } else {
+            "polling_fallback"
+        }
     }
-    IdleCycleOutcome::OtherError
 }
 
 fn run_idle_cycle_blocking(
     app: &tauri::AppHandle,
     account_id: &str,
     folder: &str,
-) -> Result<IdleCycleOutcome, String> {
+) -> Result<IdleCycleOutcome, IdleCycleError> {
     let state = app.state::<AppState>();
-    let accounts = read_accounts(&state)?;
+    let accounts = read_accounts(&state).map_err(IdleCycleError::ConnectionFailed)?;
     let Some(account) = accounts.into_iter().find(|item| item.id == account_id) else {
-        return Err("account_not_found".to_string());
+        return Err(IdleCycleError::AccountNotFound);
     };
-    let config = ensure_account_config(&state, &account)?;
-    let mut session = open_idle_imap_session(&config)?;
+    let config = ensure_account_config(&state, &account).map_err(|error| {
+        if error.contains("reauth") || error.contains("auth") {
+            IdleCycleError::AuthFailed
+        } else {
+            IdleCycleError::ConnectionFailed(error)
+        }
+    })?;
 
-    let idle_supported = session
+    // idle_conn: exclusively for IDLE mode. Never issue commands here.
+    let mut idle_session = open_idle_imap_session(&config).map_err(IdleCycleError::ConnectionFailed)?;
+
+    let idle_supported = idle_session
         .capabilities()
         .map(|caps| caps.has_str("IDLE"))
         .unwrap_or(false);
     if !idle_supported {
-        let _ = session.logout();
+        let _ = idle_session.logout();
         return Ok(IdleCycleOutcome::NoIdleSupport);
     }
 
-    let _ = select_mailbox_for_folder(&mut session, account.provider.as_str(), folder)?;
+    let _ = select_mailbox_for_folder(&mut idle_session, account.provider.as_str(), folder)
+        .map_err(IdleCycleError::ConnectionFailed)?;
+
+    // cmd_conn: persistent command connection — used for NOOP probes and post-EXISTS fetches.
+    // Opened once per 29-min cycle, not per-tick.
+    let mut cmd_session = open_imap_session(&config).map_err(IdleCycleError::ConnectionFailed)?;
+    let _ = select_mailbox_for_folder(&mut cmd_session, account.provider.as_str(), folder);
 
     let dead_silence = Duration::from_secs(IDLE_DEAD_CONNECTION_SILENCE_SECS);
     let mut renewal_left = Duration::from_secs(IDLE_RENEWAL_SECS);
-    loop {
+
+    let outcome = loop {
         let wait_slice = renewal_left.min(dead_silence);
-        let wait_result = if let Ok(handle) = session.idle() {
+        let wait_result = if let Ok(handle) = idle_session.idle() {
             handle.wait_with_timeout(wait_slice)
         } else {
-            return Err("idle_start_failed".to_string());
+            break Ok(IdleCycleOutcome::IdleStartError);
         };
 
         match wait_result {
             Ok(imap::extensions::idle::WaitOutcome::MailboxChanged) => {
-                let _ = session.logout();
-                sync_account_folder_envelopes(&state, &account, folder, false)?;
+                // Micro-fetch: only the new UIDs via cmd_conn, not a full sync.
+                // Read last_exists from cursor to calculate how many are new.
+                let last_exists = load_folder_cursor(&state, &account.id, folder)
+                    .map(|c| c.exists)
+                    .unwrap_or(0);
+
+                // Re-select mailbox on cmd_conn to get fresh EXISTS count.
+                if let Ok((_, mailbox_info)) =
+                    select_mailbox_for_folder(&mut cmd_session, account.provider.as_str(), folder)
+                {
+                    let server_exists = mailbox_info.exists;
+                    let uid_validity = mailbox_info.uid_validity;
+
+                    if server_exists > last_exists {
+                        // Calculate new UIDs: from uid_next to uid_next + delta.
+                        if let Ok(uid_next) =
+                            resolve_uid_next(&mut cmd_session, mailbox_info.uid_next)
+                        {
+                            let latest_uid = uid_next.saturating_sub(1);
+                            // Only fetch the delta window — at most (new_count) UIDs.
+                            let new_count = (server_exists - last_exists).min(50);
+                            let delta_start =
+                                uid_window_start(latest_uid, new_count);
+                            let new_uids = collect_uid_range(delta_start, latest_uid);
+
+                            if !new_uids.is_empty() {
+                                for chunk in new_uids.chunks(50) {
+                                    if let Ok(rows) = fetch_envelopes_for_uids(
+                                        &mut cmd_session,
+                                        &account,
+                                        folder,
+                                        uid_validity,
+                                        chunk,
+                                    ) {
+                                        for row in rows {
+                                            let _ = upsert_envelope(&state, &row);
+                                            let _ = queue_graph_upsert_for_envelope(&state, &row);
+                                        }
+                                    }
+                                }
+
+                                // Update exists count in cursor.
+                                if let Some(mut cursor) =
+                                    load_folder_cursor(&state, &account.id, folder)
+                                {
+                                    cursor.exists = server_exists;
+                                    cursor.last_seen_uid = Some(latest_uid);
+                                    cursor.last_idle_event_at = Some(now_iso());
+                                    cursor.updated_at = now_iso();
+                                    let _ = save_folder_cursor(&state, &cursor);
+                                }
+                            }
+                        }
+                    } else {
+                        // Counts match or decreased — could be expunge; do lightweight delta sync.
+                        let _ = sync_account_folder_envelopes(&state, &account, folder, false);
+                    }
+                } else {
+                    // cmd_conn select failed — fall back to full sync.
+                    let _ = sync_account_folder_envelopes(&state, &account, folder, false);
+                }
+
                 let _ = flush_flag_outbox_for_account(&state, &account);
                 let _ = patch_account_sync_state(&state, &account.id, "active", None);
                 schedule_graph_outbox_flush(&state, Some(account.id.clone()));
-                return Ok(IdleCycleOutcome::MailboxChanged);
+                break Ok(IdleCycleOutcome::MailboxChanged);
             }
             Ok(imap::extensions::idle::WaitOutcome::TimedOut) => {
                 renewal_left = renewal_left.saturating_sub(wait_slice);
                 if renewal_left.is_zero() {
-                    let _ = session.logout();
-                    return Ok(IdleCycleOutcome::RenewTimeout);
+                    // 29-min renewal: DONE + close both connections.
+                    break Ok(IdleCycleOutcome::RenewTimeout);
                 }
 
-                // Dedicated command connection liveness probe while idle loop is active.
-                // If this fails, treat the idle channel as dead and reconnect.
-                let mut cmd_session = open_imap_session(&config)?;
-                let _ =
-                    select_mailbox_for_folder(&mut cmd_session, account.provider.as_str(), folder)?;
+                // Liveness probe on cmd_conn (persistent — no open/close per tick).
                 if let Err(error) = cmd_session.noop() {
-                    let _ = cmd_session.logout();
-                    let _ = session.logout();
-                    return Ok(classify_idle_error(&error.to_string()));
+                    let _ = error;
+                    break Ok(IdleCycleOutcome::CmdProbeError);
                 }
-                let _ = cmd_session.logout();
             }
             Err(error) => {
-                let _ = session.logout();
-                return Ok(classify_idle_error(&error.to_string()));
+                let _ = error;
+                break Ok(IdleCycleOutcome::IdleWaitError);
             }
         }
-    }
+    };
+
+    // Always close both connections before returning.
+    let _ = idle_session.logout();
+    let _ = cmd_session.logout();
+    outcome
 }
 
 fn run_poll_sync_blocking(
@@ -1755,26 +1287,19 @@ fn run_poll_sync_blocking(
     Ok(())
 }
 
-fn ensure_idle_worker(
+fn start_idle_worker(
     app: &tauri::AppHandle,
-    account_id: String,
-    folder: String,
-    stagger: Duration,
+    spec: DesiredWorkerSpec,
+    generation_id: u64,
 ) {
-    let key = idle_worker_key(&account_id, &folder);
-    {
-        let workers = idle_workers().lock().unwrap_or_else(|e| e.into_inner());
-        if workers.contains_key(&key) {
-            return;
-        }
-    }
-
+    let key = spec.key();
     let stop = Arc::new(AtomicBool::new(false));
     let stop_flag = stop.clone();
     let app_handle = app.clone();
-    let key_for_remove = key.clone();
-    let account_for_task = account_id.clone();
-    let folder_for_task = folder.clone();
+    let key_for_task = key.clone();
+    let account_for_task = spec.account_id.clone();
+    let folder_for_task = spec.folder.clone();
+    let stagger = spec.stagger;
     let initial_strategy = {
         let state = app_handle.state::<AppState>();
         load_folder_cursor(&state, &account_for_task, &folder_for_task)
@@ -1788,288 +1313,266 @@ fn ensure_idle_worker(
         }
 
         let mut attempts = 0usize;
-        let mut polling_fallback = initial_strategy == "polling_fallback_no_idle";
+        let mut engine = MailboxRealtimeEngine::new(&initial_strategy);
 
         loop {
+            if !worker_generation_is_current(&key_for_task, generation_id) {
+                engine.transition(MailboxRealtimeEvent::StopRequested);
+                break;
+            }
             if stop_flag.load(Ordering::SeqCst) {
+                engine.transition(MailboxRealtimeEvent::StopRequested);
                 break;
             }
 
-            if polling_fallback {
-                let app_for_sync = app_handle.clone();
-                let account_for_sync = account_for_task.clone();
-                let folder_for_sync = folder_for_task.clone();
-                let _ = tauri::async_runtime::spawn_blocking(move || {
-                    run_poll_sync_blocking(&app_for_sync, &account_for_sync, &folder_for_sync)
-                })
-                .await;
-                {
-                    let state = app_handle.state::<AppState>();
-                    update_idle_runtime_state(
-                        &state,
-                        &account_for_task,
-                        &folder_for_task,
-                        if initial_strategy == "polling_fallback_no_idle" {
-                            "polling_fallback_no_idle"
-                        } else {
-                            "polling_fallback"
-                        },
-                        attempts as u32,
-                        false,
-                    );
-                }
-
-                let interval = {
-                    let state = app_handle.state::<AppState>();
-                    idle_poll_interval_for_account(&state, &account_for_task)
-                };
-                tokio::time::sleep(interval).await;
-                continue;
-            }
-
-            let app_for_idle = app_handle.clone();
-            let account_for_idle = account_for_task.clone();
-            let folder_for_idle = folder_for_task.clone();
-            let cycle_started_at = std::time::Instant::now();
-            let outcome = tauri::async_runtime::spawn_blocking(move || {
-                run_idle_cycle_blocking(&app_for_idle, &account_for_idle, &folder_for_idle)
-            })
-            .await;
-            let cycle_elapsed = cycle_started_at.elapsed();
-
-            match outcome {
-                Ok(Ok(IdleCycleOutcome::MailboxChanged | IdleCycleOutcome::RenewTimeout)) => {
-                    if cycle_elapsed >= Duration::from_secs(IDLE_STABLE_SESSION_RESET_SECS) {
-                        attempts = 0;
-                    } else {
-                        attempts = attempts.saturating_sub(1);
-                    }
-                    let state = app_handle.state::<AppState>();
-                    update_idle_runtime_state(
-                        &state,
-                        &account_for_task,
-                        &folder_for_task,
-                        "idle",
-                        0,
-                        true,
-                    );
-                }
-                Ok(Ok(IdleCycleOutcome::NoIdleSupport)) => {
-                    polling_fallback = true;
-                    let state = app_handle.state::<AppState>();
-                    update_idle_runtime_state(
-                        &state,
-                        &account_for_task,
-                        &folder_for_task,
-                        "polling_fallback_no_idle",
-                        attempts as u32,
-                        false,
-                    );
-                }
-                Ok(Ok(IdleCycleOutcome::AuthFailed)) => {
-                    let state = app_handle.state::<AppState>();
-                    update_idle_runtime_state(
-                        &state,
-                        &account_for_task,
-                        &folder_for_task,
-                        "stopped_auth_failed",
-                        attempts as u32,
-                        false,
-                    );
-                    break;
-                }
-                Ok(Ok(
-                    IdleCycleOutcome::NetworkError
-                    | IdleCycleOutcome::ServerError
-                    | IdleCycleOutcome::OtherError,
-                ))
-                | Ok(Err(_))
-                | Err(_) => {
-                    attempts = attempts.saturating_add(1);
-                    if attempts >= IDLE_MAX_ATTEMPTS_BEFORE_FALLBACK {
-                        polling_fallback = true;
-                        let state = app_handle.state::<AppState>();
-                        update_idle_runtime_state(
-                            &state,
-                            &account_for_task,
-                            &folder_for_task,
-                            "polling_fallback",
-                            attempts as u32,
-                            false,
-                        );
-                        continue;
-                    }
+            match engine.state {
+                MailboxRealtimeState::PollingFallback => {
+                    let app_for_sync = app_handle.clone();
+                    let account_for_sync = account_for_task.clone();
+                    let folder_for_sync = folder_for_task.clone();
+                    let _ = tauri::async_runtime::spawn_blocking(move || {
+                        run_poll_sync_blocking(&app_for_sync, &account_for_sync, &folder_for_sync)
+                    })
+                    .await;
                     {
                         let state = app_handle.state::<AppState>();
                         update_idle_runtime_state(
                             &state,
                             &account_for_task,
                             &folder_for_task,
-                            "idle_reconnecting",
+                            engine.idle_strategy_label(),
                             attempts as u32,
                             false,
                         );
                     }
-                    let delay = IDLE_RECONNECT_DELAYS_SECS
-                        .get(attempts.saturating_sub(1))
-                        .copied()
-                        .unwrap_or(*IDLE_RECONNECT_DELAYS_SECS.last().unwrap_or(&300));
-                    tokio::time::sleep(Duration::from_secs(delay)).await;
+
+                    let interval = {
+                        let state = app_handle.state::<AppState>();
+                        idle_poll_interval_for_account(&state, &account_for_task)
+                    };
+                    tokio::time::sleep(interval).await;
                 }
+                MailboxRealtimeState::Connecting
+                | MailboxRealtimeState::Idling
+                | MailboxRealtimeState::Renewing
+                | MailboxRealtimeState::Recovering => {
+                    if matches!(engine.state, MailboxRealtimeState::Recovering) {
+                        let delay = IDLE_RECONNECT_DELAYS_SECS
+                            .get(attempts.saturating_sub(1))
+                            .copied()
+                            .unwrap_or(*IDLE_RECONNECT_DELAYS_SECS.last().unwrap_or(&300));
+                        tokio::time::sleep(Duration::from_secs(delay)).await;
+                    }
+
+                    let app_for_idle = app_handle.clone();
+                    let account_for_idle = account_for_task.clone();
+                    let folder_for_idle = folder_for_task.clone();
+                    let cycle_started_at = std::time::Instant::now();
+                    let outcome = tauri::async_runtime::spawn_blocking(move || {
+                        run_idle_cycle_blocking(&app_for_idle, &account_for_idle, &folder_for_idle)
+                    })
+                    .await;
+                    let cycle_elapsed = cycle_started_at.elapsed();
+
+                    match outcome {
+                        Ok(Ok(IdleCycleOutcome::MailboxChanged)) => {
+                            attempts = if cycle_elapsed >= Duration::from_secs(IDLE_STABLE_SESSION_RESET_SECS) {
+                                0
+                            } else {
+                                attempts.saturating_sub(1)
+                            };
+                            engine.transition(MailboxRealtimeEvent::MailboxChanged);
+                            let state = app_handle.state::<AppState>();
+                            update_idle_runtime_state(
+                                &state,
+                                &account_for_task,
+                                &folder_for_task,
+                                "idle",
+                                0,
+                                true,
+                            );
+                        }
+                        Ok(Ok(IdleCycleOutcome::RenewTimeout)) => {
+                            attempts = if cycle_elapsed >= Duration::from_secs(IDLE_STABLE_SESSION_RESET_SECS) {
+                                0
+                            } else {
+                                attempts.saturating_sub(1)
+                            };
+                            engine.transition(MailboxRealtimeEvent::RenewalElapsed);
+                            {
+                                let state = app_handle.state::<AppState>();
+                                update_idle_runtime_state(
+                                    &state,
+                                    &account_for_task,
+                                    &folder_for_task,
+                                    "idle_renewing",
+                                    attempts as u32,
+                                    true,
+                                );
+                            }
+                            // Explicit renewal transition: Idling -> Renewing -> Idling.
+                            engine.transition(MailboxRealtimeEvent::Connected);
+                        }
+                        Ok(Ok(IdleCycleOutcome::NoIdleSupport)) => {
+                            engine.transition(MailboxRealtimeEvent::IdleUnsupported);
+                            let state = app_handle.state::<AppState>();
+                            update_idle_runtime_state(
+                                &state,
+                                &account_for_task,
+                                &folder_for_task,
+                                "polling_fallback_no_idle",
+                                attempts as u32,
+                                false,
+                            );
+                        }
+                        Ok(Ok(
+                            IdleCycleOutcome::IdleStartError
+                            | IdleCycleOutcome::IdleWaitError
+                            | IdleCycleOutcome::CmdProbeError,
+                        ))
+                        | Err(_) => {
+                            attempts = attempts.saturating_add(1);
+                            if attempts >= IDLE_MAX_ATTEMPTS_BEFORE_FALLBACK {
+                                engine.transition(MailboxRealtimeEvent::IdleUnsupported);
+                                let state = app_handle.state::<AppState>();
+                                update_idle_runtime_state(
+                                    &state,
+                                    &account_for_task,
+                                    &folder_for_task,
+                                    engine.idle_strategy_label(),
+                                    attempts as u32,
+                                    false,
+                                );
+                                continue;
+                            }
+                            engine.transition(MailboxRealtimeEvent::RecoverableError);
+                            let state = app_handle.state::<AppState>();
+                            update_idle_runtime_state(
+                                &state,
+                                &account_for_task,
+                                &folder_for_task,
+                                "idle_reconnecting",
+                                attempts as u32,
+                                false,
+                            );
+                        }
+                        Ok(Err(IdleCycleError::AuthFailed)) => {
+                            engine.transition(MailboxRealtimeEvent::AuthFailed);
+                            let state = app_handle.state::<AppState>();
+                            update_idle_runtime_state(
+                                &state,
+                                &account_for_task,
+                                &folder_for_task,
+                                "stopped_auth_failed",
+                                attempts as u32,
+                                false,
+                            );
+                        }
+                        Ok(Err(IdleCycleError::AccountNotFound)) => {
+                            engine.transition(MailboxRealtimeEvent::StopRequested);
+                        }
+                        Ok(Err(IdleCycleError::ConnectionFailed(error))) => {
+                            let _ = error;
+                            attempts = attempts.saturating_add(1);
+                            if attempts >= IDLE_MAX_ATTEMPTS_BEFORE_FALLBACK {
+                                engine.transition(MailboxRealtimeEvent::IdleUnsupported);
+                                let state = app_handle.state::<AppState>();
+                                update_idle_runtime_state(
+                                    &state,
+                                    &account_for_task,
+                                    &folder_for_task,
+                                    engine.idle_strategy_label(),
+                                    attempts as u32,
+                                    false,
+                                );
+                                continue;
+                            }
+                            engine.transition(MailboxRealtimeEvent::RecoverableError);
+                            let state = app_handle.state::<AppState>();
+                            update_idle_runtime_state(
+                                &state,
+                                &account_for_task,
+                                &folder_for_task,
+                                "idle_reconnecting",
+                                attempts as u32,
+                                false,
+                            );
+                        }
+                    }
+                }
+                MailboxRealtimeState::AuthRequired | MailboxRealtimeState::Stopped => break,
             }
         }
 
         let mut workers = idle_workers().lock().unwrap_or_else(|e| e.into_inner());
-        let _ = workers.remove(&key_for_remove);
+        let should_remove = workers
+            .get(&key_for_task)
+            .map(|control| control.generation_id == generation_id)
+            .unwrap_or(false);
+        if should_remove {
+            let _ = workers.remove(&key_for_task);
+        }
     });
 
     let mut workers = idle_workers().lock().unwrap_or_else(|e| e.into_inner());
-    workers.insert(key, IdleWorkerControl { stop, handle });
+    if let Some(existing) = workers.insert(
+        key,
+        IdleWorkerControl {
+            stop: stop.clone(),
+            handle,
+            generation_id,
+        },
+    ) {
+        existing.stop.store(true, Ordering::SeqCst);
+        existing.handle.abort();
+    }
 }
 
-fn bootstrap_idle_workers_for_state(app: &tauri::AppHandle, state: &AppState) {
-    let activity = state
-        .store
-        .get_email_ui_state(EMAIL_ACTIVITY_UI_STATE_KEY)
-        .ok()
-        .flatten()
-        .and_then(parse_json_value::<EmailActivityStateRecord>);
-    let Ok(accounts) = read_accounts(state) else {
+fn reconcile_idle_workers_now(app: &tauri::AppHandle) {
+    let state = app.state::<AppState>();
+    let Ok(accounts) = read_accounts(&state) else {
         return;
     };
-    if accounts.is_empty() {
-        return;
-    }
+    let desired = EmailWorkerSupervisor::desired_topology(&state, &accounts);
+    let desired_keys = desired.iter().map(DesiredWorkerSpec::key).collect::<HashSet<_>>();
+    let generation_id = WORKER_SUPERVISOR_TICKET.load(Ordering::SeqCst);
 
-    if let Some(activity) = activity {
-        if matches!(activity.mode, EmailActivityMode::MailForeground) {
-            if let Some(active_account_id) = activity.active_account_id.as_deref() {
-                if active_account_id != ALL_ACCOUNTS_ID {
-                    let folder = activity
-                        .active_folder
-                        .clone()
-                        .unwrap_or_else(|| "inbox".to_string());
-                    ensure_idle_worker(app, active_account_id.to_string(), folder, Duration::ZERO);
-                }
+    let (keys_to_stop, running_keys) = {
+        let workers = idle_workers().lock().unwrap_or_else(|e| e.into_inner());
+        let keys_to_stop = workers
+            .keys()
+            .filter(|key| !desired_keys.contains(*key))
+            .cloned()
+            .collect::<Vec<_>>();
+        let running_keys = workers.keys().cloned().collect::<HashSet<_>>();
+        (keys_to_stop, running_keys)
+    };
+    if !keys_to_stop.is_empty() {
+        let mut workers = idle_workers().lock().unwrap_or_else(|e| e.into_inner());
+        for key in keys_to_stop {
+            if let Some(control) = workers.remove(&key) {
+                control.stop.store(true, Ordering::SeqCst);
+                control.handle.abort();
             }
-            let mut index = 1u64;
-            for account in accounts {
-                if activity.active_account_id.as_deref() == Some(account.id.as_str()) {
-                    continue;
-                }
-                ensure_idle_worker(
-                    app,
-                    account.id,
-                    "inbox".to_string(),
-                    Duration::from_secs(index * IDLE_STAGGER_SECS),
-                );
-                index = index.saturating_add(1);
-            }
-            return;
         }
     }
 
-    // App foreground non-mail and app background are both inbox-only refresh modes.
-    for (index, account) in accounts.into_iter().enumerate() {
-        ensure_idle_worker(
-            app,
-            account.id,
-            "inbox".to_string(),
-            Duration::from_secs((index as u64) * IDLE_STAGGER_SECS),
-        );
+    for spec in desired {
+        if running_keys.contains(&spec.key()) {
+            continue;
+        }
+        start_idle_worker(app, spec, generation_id);
     }
 }
 
 pub fn bootstrap_idle_workers(app: &tauri::AppHandle) {
-    let state = app.state::<AppState>();
-    bootstrap_idle_workers_for_state(app, &state);
+    schedule_idle_worker_reconcile(app, false);
 }
 
 fn validate_connection(config: &EmailConfig) -> Result<bool, String> {
     let mut session = open_imap_session(config)?;
     let _ = session.logout();
     Ok(true)
-}
-
-type ImapSession = imap::Session<native_tls::TlsStream<TcpStream>>;
-
-fn open_tuned_tcp_stream(
-    host: &str,
-    port: u16,
-    read_timeout: Option<Duration>,
-    write_timeout: Option<Duration>,
-) -> Result<TcpStream, String> {
-    let mut addrs = (host, port)
-        .to_socket_addrs()
-        .map_err(|e| format!("imap_resolve_failed:{e}"))?;
-    let addr = addrs
-        .next()
-        .ok_or_else(|| format!("imap_resolve_empty:{host}:{port}"))?;
-    let domain = if addr.is_ipv4() {
-        socket2::Domain::IPV4
-    } else {
-        socket2::Domain::IPV6
-    };
-    let socket = socket2::Socket::new(domain, socket2::Type::STREAM, Some(socket2::Protocol::TCP))
-        .map_err(|e| format!("imap_socket_open_failed:{e}"))?;
-    let keepalive = socket2::TcpKeepalive::new()
-        .with_time(Duration::from_secs(IMAP_TCP_KEEPALIVE_SECS))
-        .with_interval(Duration::from_secs(IMAP_TCP_KEEPALIVE_SECS));
-    let _ = socket.set_tcp_keepalive(&keepalive);
-    socket
-        .connect_timeout(
-            &socket2::SockAddr::from(addr),
-            Duration::from_secs(IMAP_CONNECT_TIMEOUT_SECS),
-        )
-        .map_err(|e| format!("imap_connect_failed:{e}"))?;
-    let stream: TcpStream = socket.into();
-    stream
-        .set_read_timeout(read_timeout)
-        .map_err(|e| format!("imap_set_read_timeout_failed:{e}"))?;
-    stream
-        .set_write_timeout(write_timeout)
-        .map_err(|e| format!("imap_set_write_timeout_failed:{e}"))?;
-    Ok(stream)
-}
-
-fn open_imap_session_with_timeouts(
-    config: &EmailConfig,
-    read_timeout: Option<Duration>,
-    write_timeout: Option<Duration>,
-) -> Result<ImapSession, String> {
-    let tls = TlsConnector::builder().build().map_err(|e| e.to_string())?;
-    let stream = open_tuned_tcp_stream(
-        config.imap_host(),
-        config.imap_port(),
-        read_timeout,
-        write_timeout,
-    )?;
-    let tls_stream = tls
-        .connect(config.imap_host(), stream)
-        .map_err(|e| format!("imap_tls_failed:{e}"))?;
-    let mut client = imap::Client::new(tls_stream);
-    client
-        .read_greeting()
-        .map_err(|e| format!("imap_greeting_failed:{e}"))?;
-    client
-        .login(&config.email, &config.password)
-        .map_err(|e| e.0.to_string())
-}
-
-fn open_imap_session(config: &EmailConfig) -> Result<ImapSession, String> {
-    open_imap_session_with_timeouts(
-        config,
-        Some(Duration::from_secs(IMAP_SYNC_IO_TIMEOUT_SECS)),
-        Some(Duration::from_secs(IMAP_SYNC_IO_TIMEOUT_SECS)),
-    )
-}
-
-fn open_idle_imap_session(config: &EmailConfig) -> Result<ImapSession, String> {
-    open_imap_session_with_timeouts(
-        config,
-        Some(Duration::from_secs(IDLE_GREETING_TIMEOUT_SECS)),
-        Some(Duration::from_secs(IDLE_GREETING_TIMEOUT_SECS)),
-    )
 }
 
 fn select_mailbox_for_folder(
@@ -2101,381 +1604,6 @@ fn ensure_account_config(
         imap_port: account.imap_port,
         smtp_port: account.smtp_port,
     })
-}
-
-fn fetch_envelopes_for_uids(
-    session: &mut ImapSession,
-    account: &StoredEmailAccount,
-    folder: &str,
-    uid_validity: Option<u32>,
-    uids: &[u32],
-) -> Result<Vec<StoredEnvelope>, String> {
-    if uids.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let query = uids
-        .iter()
-        .map(u32::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
-
-    let fetches = session
-        .uid_fetch(
-            query,
-            "(UID ENVELOPE FLAGS RFC822.SIZE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID IN-REPLY-TO)])",
-        )
-        .map_err(|e| format!("uid_fetch_failed:{}", e))?;
-
-    let workspace_id = workspace_id_or_default(account.workspace_id.as_deref());
-    let mut rows = Vec::new();
-
-    for item in fetches.iter() {
-        let uid = item.uid.unwrap_or_default();
-        if uid == 0 {
-            continue;
-        }
-
-        let Some(env) = item.envelope() else {
-            continue;
-        };
-
-        let subject = env
-            .subject
-            .as_ref()
-            .map(|v| decode_header_value_bytes(v))
-            .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| "(No subject)".to_string());
-        let date = env
-            .date
-            .as_ref()
-            .map(|v| decode_header_value_bytes(v))
-            .unwrap_or_else(now_iso);
-        let (sender, sender_email) =
-            if let Some(addr) = env.from.as_ref().and_then(|list| list.first()) {
-                parse_address(
-                    addr.mailbox.as_deref(),
-                    addr.host.as_deref(),
-                    addr.name.as_deref(),
-                )
-            } else {
-                ("Unknown sender".to_string(), String::new())
-            };
-        let to = if let Some(to_list) = &env.to {
-            to_list
-                .iter()
-                .filter_map(|addr| {
-                    let (_, email) = parse_address(
-                        addr.mailbox.as_deref(),
-                        addr.host.as_deref(),
-                        addr.name.as_deref(),
-                    );
-                    if email.is_empty() {
-                        None
-                    } else {
-                        Some(email)
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(", ")
-        } else {
-            String::new()
-        };
-        let message_id = env
-            .message_id
-            .as_ref()
-            .map(|v| decode_header_value_bytes(v))
-            .filter(|v| !v.is_empty());
-        let in_reply_to = env
-            .in_reply_to
-            .as_ref()
-            .map(|v| decode_header_value_bytes(v))
-            .filter(|v| !v.is_empty());
-        let preview = truncate_with_ellipsis(&subject, 120);
-        let timestamp_ms = to_millis_from_date(&date);
-        let mut read = false;
-        let mut starred = false;
-        for flag in item.flags() {
-            if matches!(flag, imap::types::Flag::Seen) {
-                read = true;
-            }
-            if matches!(flag, imap::types::Flag::Flagged) {
-                starred = true;
-            }
-        }
-
-        let thread_id = thread_id_from(&subject, in_reply_to.as_deref(), message_id.as_deref());
-        let message_key = message_key(&account.id, uid_validity, uid);
-        rows.push(StoredEnvelope {
-            id: format!("{}::{}::{}", account.id, folder, uid),
-            message_key: message_key.clone(),
-            account_id: account.id.clone(),
-            workspace_id: workspace_id.clone(),
-            folder: folder.to_string(),
-            uid,
-            uid_validity,
-            sender,
-            sender_email,
-            to,
-            subject,
-            preview,
-            date,
-            timestamp_ms,
-            read,
-            starred,
-            size: item.size,
-            message_id,
-            in_reply_to,
-            thread_id,
-            updated_at: now_iso(),
-        });
-    }
-
-    Ok(rows)
-}
-
-fn uid_window_start(end_uid: u32, window: u32) -> u32 {
-    if end_uid == 0 {
-        return 0;
-    }
-    end_uid.saturating_sub(window.saturating_sub(1)).max(1)
-}
-
-fn collect_uid_range(start_uid: u32, end_uid: u32) -> Vec<u32> {
-    if start_uid == 0 || end_uid == 0 || start_uid > end_uid {
-        return Vec::new();
-    }
-    (start_uid..=end_uid).collect::<Vec<_>>()
-}
-
-fn resolve_uid_next(
-    session: &mut ImapSession,
-    mailbox_uid_next: Option<u32>,
-) -> Result<u32, String> {
-    if let Some(uid_next) = mailbox_uid_next {
-        return Ok(uid_next);
-    }
-    let all_uid_set = session
-        .uid_search("ALL")
-        .map_err(|e| format!("uid_search_failed:{}", e))?;
-    let max_uid = all_uid_set.iter().copied().max().unwrap_or(0);
-    Ok(max_uid.saturating_add(1))
-}
-
-fn search_uid_window(
-    session: &mut ImapSession,
-    start_uid: u32,
-    end_uid: u32,
-) -> Result<HashSet<u32>, String> {
-    if start_uid == 0 || end_uid == 0 || start_uid > end_uid {
-        return Ok(HashSet::new());
-    }
-    let query = format!("{}:{}", start_uid, end_uid);
-    let result = session
-        .uid_search(query)
-        .map_err(|e| format!("uid_search_failed:{}", e))?;
-    Ok(result.iter().copied().collect::<HashSet<_>>())
-}
-
-fn sync_account_folder_envelopes(
-    state: &AppState,
-    account: &StoredEmailAccount,
-    folder: &str,
-    force_sync: bool,
-) -> Result<(), String> {
-    let config = ensure_account_config(state, account)?;
-    let mut session = open_imap_session(&config)?;
-    let (capabilities, idle_supported, condstore_supported) = session
-        .capabilities()
-        .map(|caps| {
-            let values = caps
-                .iter()
-                .map(|cap| format!("{:?}", cap))
-                .collect::<Vec<_>>();
-            let idle = caps.has_str("IDLE");
-            let condstore = caps.has_str("CONDSTORE");
-            (values, idle, condstore)
-        })
-        .unwrap_or((vec![], false, false));
-
-    let (resolved_mailbox, mailbox_info) =
-        select_mailbox_for_folder(&mut session, account.provider.as_str(), folder)?;
-    let uid_validity = mailbox_info.uid_validity;
-    let uid_next = resolve_uid_next(&mut session, mailbox_info.uid_next)?;
-    let exists = mailbox_info.exists;
-    let latest_uid = uid_next.saturating_sub(1);
-
-    let current_cursor = load_folder_cursor(state, &account.id, folder);
-    let current_local = list_envelopes_filtered(state, Some(&account.id), folder)?;
-    let should_full_reset = current_cursor.is_none()
-        || current_cursor
-            .as_ref()
-            .map(|cursor| cursor.uid_validity != uid_validity)
-            .unwrap_or(true);
-
-    let uids_to_fetch = if should_full_reset {
-        let start_uid = uid_window_start(latest_uid, DEFAULT_MAILBOX_LIMIT as u32);
-        collect_uid_range(start_uid, latest_uid)
-    } else {
-        let last_seen = current_cursor
-            .as_ref()
-            .and_then(|cursor| cursor.last_seen_uid)
-            .unwrap_or_default();
-        let mut delta = collect_uid_range(last_seen.saturating_add(1), latest_uid);
-        if delta.is_empty() && (current_local.is_empty() || force_sync) {
-            let start_uid = uid_window_start(latest_uid, DEFAULT_MAILBOX_LIMIT as u32);
-            delta = collect_uid_range(start_uid, latest_uid);
-        }
-        delta
-    };
-
-    for chunk in uids_to_fetch.chunks(50) {
-        let rows = fetch_envelopes_for_uids(&mut session, account, folder, uid_validity, chunk)?;
-        for row in rows {
-            upsert_envelope(state, &row)?;
-            let _ = queue_graph_upsert_for_envelope(state, &row);
-        }
-    }
-
-    if should_full_reset {
-        let fetched_set = uids_to_fetch.iter().copied().collect::<HashSet<u32>>();
-        for row in current_local {
-            if !fetched_set.contains(&row.uid) {
-                let _ = remove_envelope(state, &row.account_id, &row.folder, row.uid);
-                let _ = remove_body_cache(state, &row.account_id, &row.folder, row.uid);
-            }
-        }
-    }
-
-    let reconcile_window = if force_sync {
-        FLAG_RECONCILE_WINDOW
-    } else {
-        FLAG_RECONCILE_WINDOW_LIGHT
-    };
-    let reconcile_start = uid_window_start(latest_uid, reconcile_window);
-    let reconcile_uids = collect_uid_range(reconcile_start, latest_uid);
-    let mut reconciled_with_condstore = false;
-    if condstore_supported && !reconcile_uids.is_empty() {
-        let uid_set = format!("{}:{}", reconcile_start, latest_uid);
-        // We currently do not persist MODSEQ from fetch responses with this IMAP crate,
-        // so we use CHANGEDSINCE 1 to let compliant servers optimize flags-only deltas.
-        let condstore_query = "(UID FLAGS) (CHANGEDSINCE 1)";
-        if let Ok(fetches) = session.uid_fetch(uid_set, condstore_query) {
-            let mut missing_uids = Vec::<u32>::new();
-            for item in fetches.iter() {
-                let uid = item.uid.unwrap_or_default();
-                if uid == 0 {
-                    continue;
-                }
-                let existing = state
-                    .store
-                    .get_email_envelope(&envelope_key(&account.id, folder, uid))
-                    .map_err(|e| e.to_string())?
-                    .and_then(parse_json_value::<StoredEnvelope>);
-                if let Some(mut envelope) = existing {
-                    let mut read = false;
-                    let mut starred = false;
-                    for flag in item.flags() {
-                        if matches!(flag, imap::types::Flag::Seen) {
-                            read = true;
-                        }
-                        if matches!(flag, imap::types::Flag::Flagged) {
-                            starred = true;
-                        }
-                    }
-                    envelope.read = read;
-                    envelope.starred = starred;
-                    envelope.updated_at = now_iso();
-                    upsert_envelope(state, &envelope)?;
-                } else {
-                    missing_uids.push(uid);
-                }
-            }
-            for chunk in missing_uids.chunks(50) {
-                let rows =
-                    fetch_envelopes_for_uids(&mut session, account, folder, uid_validity, chunk)?;
-                for row in rows {
-                    upsert_envelope(state, &row)?;
-                }
-            }
-            reconciled_with_condstore = true;
-        }
-    }
-    if !reconciled_with_condstore {
-        for chunk in reconcile_uids.chunks(50) {
-            let rows =
-                fetch_envelopes_for_uids(&mut session, account, folder, uid_validity, chunk)?;
-            for row in rows {
-                upsert_envelope(state, &row)?;
-            }
-        }
-    }
-
-    let recent_server_uids = search_uid_window(&mut session, reconcile_start, latest_uid)?;
-    let local_rows = list_envelopes_filtered(state, Some(&account.id), folder)?;
-    for row in local_rows {
-        if row.uid >= reconcile_start
-            && row.uid <= latest_uid
-            && !recent_server_uids.contains(&row.uid)
-        {
-            let _ = remove_envelope(state, &row.account_id, &row.folder, row.uid);
-            let _ = remove_body_cache(state, &row.account_id, &row.folder, row.uid);
-        }
-    }
-
-    // Safety net: if server reports messages but local index is empty, rebuild latest window.
-    let post_reconcile_count = list_envelopes_filtered(state, Some(&account.id), folder)?.len();
-    if post_reconcile_count == 0 && exists > 0 && latest_uid > 0 {
-        let recovery_start = uid_window_start(latest_uid, DEFAULT_MAILBOX_LIMIT as u32);
-        let recovery_uids = collect_uid_range(recovery_start, latest_uid);
-        for chunk in recovery_uids.chunks(50) {
-            let rows =
-                fetch_envelopes_for_uids(&mut session, account, folder, uid_validity, chunk)?;
-            for row in rows {
-                upsert_envelope(state, &row)?;
-                let _ = queue_graph_upsert_for_envelope(state, &row);
-            }
-        }
-    }
-
-    let previous_seen = current_cursor
-        .as_ref()
-        .and_then(|cursor| cursor.last_seen_uid)
-        .unwrap_or_default();
-    let next_last_seen = previous_seen.max(latest_uid);
-
-    let cursor = EmailSyncCursorRecord {
-        account_id: account.id.clone(),
-        folder: folder.to_string(),
-        uid_validity,
-        uid_next: Some(uid_next),
-        last_seen_uid: if next_last_seen == 0 {
-            None
-        } else {
-            Some(next_last_seen)
-        },
-        exists,
-        idle_supported,
-        idle_strategy: Some(if idle_supported {
-            "idle".to_string()
-        } else {
-            "polling".to_string()
-        }),
-        idle_failed_attempts: 0,
-        last_idle_event_at: Some(email_now_iso()),
-        updated_at: email_now_iso(),
-    };
-    save_folder_cursor(state, &cursor)?;
-    upsert_account_v2(
-        state,
-        account,
-        Some(capabilities),
-        Some(idle_supported),
-        Some((folder, &resolved_mailbox)),
-    )?;
-
-    let _ = session.logout();
-    Ok(())
 }
 
 fn body_cache_from_fetch(
@@ -2548,322 +1676,9 @@ fn fetch_body_from_imap(
     Ok(cache)
 }
 
-fn queue_flag_outbox(
-    state: &AppState,
-    account_id: &str,
-    folder: &str,
-    uid: u32,
-    flag: &str,
-    value: bool,
-) -> Result<String, String> {
-    let id = Uuid::new_v4().to_string();
-    let entry = StoredFlagOutboxEntry {
-        id: id.clone(),
-        account_id: account_id.to_string(),
-        folder: folder.to_string(),
-        uid,
-        flag: flag.to_string(),
-        value,
-        retry_count: 0,
-        next_retry_at: now_iso(),
-        last_error: None,
-        created_at: now_iso(),
-        updated_at: now_iso(),
-    };
-    state
-        .store
-        .put_email_flag_outbox(
-            &id,
-            &serde_json::to_value(entry).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-    Ok(id)
-}
+// send_message builds and sends an SMTP message. One-shot, not cached.
+// This is the only retained send path — email_send_saved uses it.
 
-fn update_envelope_flag_optimistic(
-    state: &AppState,
-    account_id: &str,
-    folder: &str,
-    uid: u32,
-    flag: &str,
-    value: bool,
-) -> Result<(), String> {
-    let key = envelope_key(account_id, folder, uid);
-    let Some(mut envelope) = state
-        .store
-        .get_email_envelope(&key)
-        .map_err(|e| e.to_string())?
-        .and_then(parse_json_value::<StoredEnvelope>)
-    else {
-        return Ok(());
-    };
-    match flag {
-        "seen" => envelope.read = value,
-        "starred" => envelope.starred = value,
-        _ => {}
-    }
-    envelope.updated_at = now_iso();
-    upsert_envelope(state, &envelope)
-}
-
-fn flush_flag_outbox_for_account(
-    state: &AppState,
-    account: &StoredEmailAccount,
-) -> Result<bool, String> {
-    let config = ensure_account_config(state, account)?;
-    let mut session = open_imap_session(&config)?;
-    let now = chrono::Utc::now();
-    let mut any_success = false;
-
-    let entries = state
-        .store
-        .list_email_flag_outbox()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .filter_map(parse_json_value::<StoredFlagOutboxEntry>)
-        .filter(|entry| entry.account_id == account.id)
-        .collect::<Vec<_>>();
-
-    for mut entry in entries {
-        let next_retry_at = chrono::DateTime::parse_from_rfc3339(&entry.next_retry_at)
-            .map(|v| v.with_timezone(&chrono::Utc))
-            .unwrap_or(now);
-        if next_retry_at > now {
-            continue;
-        }
-
-        let _ = select_mailbox_for_folder(&mut session, account.provider.as_str(), &entry.folder)?;
-        let imap_flag = match entry.flag.as_str() {
-            "seen" => "\\Seen",
-            "starred" => "\\Flagged",
-            _ => {
-                let _ = state.store.remove_email_flag_outbox(&entry.id);
-                continue;
-            }
-        };
-        let query = if entry.value {
-            format!("+FLAGS.SILENT ({})", imap_flag)
-        } else {
-            format!("-FLAGS.SILENT ({})", imap_flag)
-        };
-        match session.uid_store(entry.uid.to_string(), query) {
-            Ok(_) => {
-                any_success = true;
-                let _ = state.store.remove_email_flag_outbox(&entry.id);
-                let _ = update_envelope_flag_optimistic(
-                    state,
-                    &entry.account_id,
-                    &entry.folder,
-                    entry.uid,
-                    &entry.flag,
-                    entry.value,
-                );
-            }
-            Err(error) => {
-                entry.retry_count = entry.retry_count.saturating_add(1);
-                if entry.retry_count > 8 {
-                    let _ = state.store.remove_email_flag_outbox(&entry.id);
-                    continue;
-                }
-                let jitter_ms = fastrand::u32(..1500) as i64;
-                let delay = (2_i64.pow(entry.retry_count.min(6))) + jitter_ms / 1000;
-                entry.next_retry_at =
-                    (chrono::Utc::now() + chrono::Duration::seconds(delay)).to_rfc3339();
-                entry.last_error = Some(error.to_string());
-                entry.updated_at = now_iso();
-                let _ = state.store.put_email_flag_outbox(
-                    &entry.id,
-                    &serde_json::to_value(&entry).map_err(|e| e.to_string())?,
-                );
-            }
-        }
-    }
-
-    let _ = session.logout();
-    Ok(any_success)
-}
-
-fn fetch_messages(config: &EmailConfig, folder: &str) -> Result<Vec<EmailMessage>, String> {
-    let tls = TlsConnector::builder().build().map_err(|e| e.to_string())?;
-    let client = imap::connect(
-        (config.imap_host(), config.imap_port()),
-        config.imap_host(),
-        &tls,
-    )
-    .map_err(|e| e.to_string())?;
-    let mut session = client
-        .login(&config.email, &config.password)
-        .map_err(|e| e.0.to_string())?;
-
-    let mut selected = false;
-    for mailbox in mailbox_candidates(config.provider.as_str(), folder) {
-        if session.select(mailbox.as_str()).is_ok() {
-            selected = true;
-            break;
-        }
-    }
-
-    if !selected {
-        let _ = session.logout();
-        return Err(format!(
-            "folder_select_failed:{}:{}",
-            config.provider.as_str(),
-            folder
-        ));
-    }
-
-    let search_res = session
-        .search("ALL")
-        .map_err(|e| format!("search_failed:{}", e))?;
-    let mut seq_ids: Vec<u32> = search_res.into_iter().collect();
-    seq_ids.sort();
-
-    let last_ids: Vec<u32> = seq_ids.into_iter().rev().take(20).collect();
-    if last_ids.is_empty() {
-        let _ = session.logout();
-        return Ok(vec![]);
-    }
-
-    let seq_str = last_ids
-        .iter()
-        .map(|id| id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-    let fetches = session
-        .fetch(&seq_str, "(ENVELOPE FLAGS BODY.PEEK[])")
-        .map_err(|e| format!("fetch_failed:{}", e))?;
-
-    let mut results = vec![];
-    for msg in fetches.iter() {
-        let envelope = msg.envelope();
-
-        let mut body = String::new();
-        let mut body_html: Option<String> = None;
-        let mut subject = String::new();
-        let mut sender_email = String::new();
-        let mut sender_name = String::new();
-        let mut to = String::new();
-        let mut date = String::new();
-
-        if let Some(raw) = msg.body() {
-            if let Ok(parsed) = mailparse::parse_mail(raw) {
-                subject = parsed
-                    .headers
-                    .get_first_value("Subject")
-                    .unwrap_or_default();
-                date = parsed.headers.get_first_value("Date").unwrap_or_default();
-                to = parsed.headers.get_first_value("To").unwrap_or_default();
-
-                if let Some(from_header) = parsed.headers.get_first_header("From") {
-                    if let Ok(parsed_from) = mailparse::addrparse_header(from_header) {
-                        for entry in parsed_from.into_inner() {
-                            if let MailAddr::Single(single) = entry {
-                                sender_email = single.addr;
-                                sender_name =
-                                    single.display_name.unwrap_or_else(|| sender_email.clone());
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                let extracted = extract_best_body(&parsed);
-                body = extracted.text;
-                body_html = extracted.html;
-            }
-        }
-
-        if body.is_empty() {
-            if let Some(text) = msg.text() {
-                body = normalize_body_text(&String::from_utf8_lossy(text));
-            }
-        }
-
-        if let Some(env) = envelope {
-            if subject.is_empty() {
-                subject = env
-                    .subject
-                    .as_ref()
-                    .map(|s| decode_header_value_bytes(s))
-                    .unwrap_or_default();
-            }
-            if date.is_empty() {
-                date = env
-                    .date
-                    .as_ref()
-                    .map(|s| decode_header_value_bytes(s))
-                    .unwrap_or_default();
-            }
-            if sender_email.is_empty() || sender_name.is_empty() {
-                if let Some(from_addr) = env.from.as_ref().and_then(|h| h.first()) {
-                    if sender_email.is_empty() {
-                        let user =
-                            String::from_utf8_lossy(from_addr.mailbox.as_deref().unwrap_or(b""));
-                        let host =
-                            String::from_utf8_lossy(from_addr.host.as_deref().unwrap_or(b""));
-                        sender_email = format!("{}@{}", user, host);
-                    }
-                    if sender_name.is_empty() {
-                        sender_name =
-                            decode_header_value_bytes(from_addr.name.as_deref().unwrap_or(b""));
-                    }
-                }
-            }
-            if to.is_empty() {
-                if let Some(to_addr) = env.to.as_ref().and_then(|h| h.first()) {
-                    let user = String::from_utf8_lossy(to_addr.mailbox.as_deref().unwrap_or(b""));
-                    let host = String::from_utf8_lossy(to_addr.host.as_deref().unwrap_or(b""));
-                    let addr = format!("{}@{}", user, host);
-                    to = addr.trim_matches('@').to_string();
-                }
-            }
-        }
-
-        if sender_name.is_empty() {
-            sender_name = if sender_email.is_empty() {
-                "Unknown sender".to_string()
-            } else {
-                sender_email.clone()
-            };
-        }
-        if subject.is_empty() {
-            subject = "(No subject)".to_string();
-        }
-
-        let preview = build_preview(&body);
-
-        let mut is_read = false;
-        let mut is_starred = false;
-        for flag in msg.flags() {
-            if matches!(flag, imap::types::Flag::Seen) {
-                is_read = true;
-            }
-            if matches!(flag, imap::types::Flag::Flagged) {
-                is_starred = true;
-            }
-        }
-
-        results.push(EmailMessage {
-            id: msg.message.to_string(),
-            sender: sender_name,
-            sender_email,
-            to,
-            subject,
-            preview,
-            body,
-            body_html,
-            date,
-            read: is_read,
-            starred: is_starred,
-            folder: folder.to_string(),
-        });
-    }
-
-    results.reverse();
-
-    let _ = session.logout();
-    Ok(results)
-}
 
 fn send_message(config: &EmailConfig, to: &str, subject: &str, body: &str) -> Result<bool, String> {
     let from_addr = format!("{} <{}>", config.email, config.email)
@@ -2957,27 +1772,18 @@ pub async fn email_account_connect_and_save(
         imap_port,
         smtp_port,
     };
-    validate_connection(&config)?;
+    // validate_connection opens a blocking TCP socket — must not run on the async executor.
+    tauri::async_runtime::spawn_blocking(move || validate_connection(&config))
+        .await
+        .map_err(|e| format!("connect_task_failed:{e}"))??;
 
     let id = account_id(&provider, &email, imap_host.as_deref());
-    let keychain_write = keychain::set_secret(
+    keychain::set_secret(
         &state.config.keychain_service,
         &keychain_account_key(&id),
         &input.password,
-    );
-    let keychain_has_secret = match keychain_write {
-        Ok(()) => {
-            keychain::get_secret_strict(&state.config.keychain_service, &keychain_account_key(&id))
-                .map_err(|e| e.to_string())?
-                .is_some()
-        }
-        Err(_) => false,
-    };
-    if !keychain_has_secret {
-        write_password_fallback(&state, &id, &input.password)?;
-    } else {
-        clear_password_fallback(&state, &id);
-    }
+    )
+    .map_err(|e| format!("keychain_store_failed:{e}"))?;
 
     let mut accounts = read_accounts(&state)?;
     if let Some(existing) = accounts.iter_mut().find(|account| account.id == id) {
@@ -3016,17 +1822,13 @@ pub async fn email_account_connect_and_save(
         .into_iter()
         .find(|account| account.id == id)
         .ok_or_else(|| "account_save_failed".to_string())?;
-    ensure_idle_worker(
-        &app,
-        saved.id.clone(),
-        "inbox".to_string(),
-        Duration::from_secs(0),
-    );
+    schedule_idle_worker_reconcile(&app, false);
     Ok(saved.to_public())
 }
 
 #[tauri::command]
 pub async fn email_account_disconnect(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     account_id: String,
 ) -> Result<(), String> {
@@ -3038,44 +1840,69 @@ pub async fn email_account_disconnect(
         &state.config.keychain_service,
         &keychain_account_key(&account_id),
     );
-    clear_password_fallback(&state, &account_id);
     remove_account_v2(&state, &account_id);
-    stop_idle_workers_for_account(&account_id);
+    schedule_idle_worker_reconcile(&app, false);
     Ok(())
 }
 
 #[tauri::command]
 pub async fn email_sync_now(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: EmailSyncNowInput,
 ) -> Result<EmailSyncNowResult, String> {
-    let folder = input.folder.unwrap_or_else(|| "inbox".to_string());
+    let folder = input
+        .folder
+        .clone()
+        .map(|value| value.trim().to_lowercase())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "inbox".to_string());
+    let target_key = input
+        .account_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(ALL_ACCOUNTS_ID);
+    let sync_key = format!("{}::{}", target_key, folder);
+    let Some(_permit) = try_acquire_sync_permit(sync_key) else {
+        return Ok(EmailSyncNowResult {
+            synced_accounts: 0,
+            synced_at: now_iso(),
+        });
+    };
     let accounts = resolve_accounts_for_target(&state, input.account_id.as_deref())?;
-    let mut synced_accounts = 0usize;
 
-    for account in accounts {
-        match sync_account_folder_envelopes(&state, &account, &folder, false) {
-            Ok(()) => {
-                synced_accounts = synced_accounts.saturating_add(1);
-                let _ = patch_account_sync_state(&state, &account.id, "active", None);
-                let _ = flush_flag_outbox_for_account(&state, &account);
-            }
-            Err(error) => {
-                let status = if error.contains("reauth_required") {
-                    "reauth_required"
-                } else {
-                    "error"
-                };
-                let _ = patch_account_sync_state(&state, &account.id, status, Some(error));
+    // IMAP I/O is blocking — must run on a blocking thread to avoid freezing the async executor.
+    let app_inner = app.clone();
+    let account_id_filter = input.account_id.clone();
+    let (synced_accounts, synced_at) = tauri::async_runtime::spawn_blocking(move || {
+        let state_inner = app_inner.state::<AppState>();
+        let mut synced = 0usize;
+        for account in accounts {
+            match sync_account_folder_envelopes(&state_inner, &account, &folder, false) {
+                Ok(()) => {
+                    synced = synced.saturating_add(1);
+                    let _ = patch_account_sync_state(&state_inner, &account.id, "active", None);
+                    let _ = flush_flag_outbox_for_account(&state_inner, &account);
+                }
+                Err(error) => {
+                    let status = if error.contains("reauth_required") {
+                        "reauth_required"
+                    } else {
+                        "error"
+                    };
+                    let _ = patch_account_sync_state(&state_inner, &account.id, status, Some(error));
+                }
             }
         }
-    }
-
-    schedule_graph_outbox_flush(&state, input.account_id.clone());
+        schedule_graph_outbox_flush(&state_inner, account_id_filter);
+        (synced, now_iso())
+    })
+    .await
+    .map_err(|e| format!("sync_task_failed:{e}"))?;
 
     Ok(EmailSyncNowResult {
         synced_accounts,
-        synced_at: now_iso(),
+        synced_at,
     })
 }
 
@@ -3169,6 +1996,7 @@ pub async fn email_list_envelopes(
 
 #[tauri::command]
 pub async fn email_get_message_body(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: EmailGetMessageBodyInput,
 ) -> Result<EmailGetMessageBodyResult, String> {
@@ -3177,6 +2005,7 @@ pub async fn email_get_message_body(
         return Err("account_not_found".to_string());
     };
 
+    // Serve from cache without touching the network.
     if let Some(cached) = get_body_cache(&state, &input.account_id, &input.folder, input.uid) {
         let _ = touch_body_cache(&state, &cached);
         return Ok(EmailGetMessageBodyResult {
@@ -3190,16 +2019,33 @@ pub async fn email_get_message_body(
         });
     }
 
-    let fresh = fetch_body_from_imap(&state, &account, &input.folder, input.uid)?;
-    if let Some(envelope) = state
-        .store
-        .get_email_envelope(&envelope_key(&input.account_id, &input.folder, input.uid))
-        .map_err(|e| e.to_string())?
-        .and_then(parse_json_value::<StoredEnvelope>)
-    {
-        let _ = queue_graph_upsert_for_envelope(&state, &envelope);
-    }
-    schedule_graph_outbox_flush(&state, Some(input.account_id.clone()));
+    // Cache miss — fetch from IMAP. Must run on a blocking thread.
+    let app_inner = app.clone();
+    let account_id = input.account_id.clone();
+    let folder = input.folder.clone();
+    let uid = input.uid;
+    let fresh = tauri::async_runtime::spawn_blocking(move || {
+        let state_inner = app_inner.state::<AppState>();
+        match fetch_body_from_imap(&state_inner, &account, &folder, uid) {
+            Ok(body_cache) => {
+                if let Some(envelope) = state_inner
+                    .store
+                    .get_email_envelope(&envelope_key(&account_id, &folder, uid))
+                    .ok()
+                    .flatten()
+                    .and_then(parse_json_value::<StoredEnvelope>)
+                {
+                    let _ = queue_graph_upsert_for_envelope(&state_inner, &envelope);
+                }
+                schedule_graph_outbox_flush(&state_inner, Some(account_id));
+                Ok(body_cache)
+            }
+            Err(e) => Err(e),
+        }
+    })
+    .await
+    .map_err(|e| format!("body_fetch_task_failed:{e}"))??
+    ;
 
     Ok(EmailGetMessageBodyResult {
         account_id: input.account_id,
@@ -3214,6 +2060,7 @@ pub async fn email_get_message_body(
 
 #[tauri::command]
 pub async fn email_prefetch_bodies(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: EmailPrefetchBodiesInput,
 ) -> Result<EmailPrefetchBodiesResult, String> {
@@ -3227,24 +2074,38 @@ pub async fn email_prefetch_bodies(
         return Err("account_not_found".to_string());
     };
 
-    let mut prefetched = 0usize;
-    for uid in input.uids.into_iter().take(limit) {
-        if get_body_cache(&state, &input.account_id, &input.folder, uid).is_some() {
-            continue;
-        }
-        if fetch_body_from_imap(&state, &account, &input.folder, uid).is_ok() {
-            if let Some(envelope) = state
-                .store
-                .get_email_envelope(&envelope_key(&input.account_id, &input.folder, uid))
-                .map_err(|e| e.to_string())?
-                .and_then(parse_json_value::<StoredEnvelope>)
-            {
-                let _ = queue_graph_upsert_for_envelope(&state, &envelope);
+    // Prefetch runs on a blocking thread — IMAP I/O must not block the async executor.
+    let app_inner = app.clone();
+    let account_id = input.account_id.clone();
+    let folder = input.folder.clone();
+    let uids = input.uids;
+
+    let prefetched = tauri::async_runtime::spawn_blocking(move || {
+        let state_inner = app_inner.state::<AppState>();
+        let mut count = 0usize;
+        for uid in uids.into_iter().take(limit) {
+            if get_body_cache(&state_inner, &account_id, &folder, uid).is_some() {
+                continue;
             }
-            prefetched = prefetched.saturating_add(1);
+            if fetch_body_from_imap(&state_inner, &account, &folder, uid).is_ok() {
+                if let Some(envelope) = state_inner
+                    .store
+                    .get_email_envelope(&envelope_key(&account_id, &folder, uid))
+                    .ok()
+                    .flatten()
+                    .and_then(parse_json_value::<StoredEnvelope>)
+                {
+                    let _ = queue_graph_upsert_for_envelope(&state_inner, &envelope);
+                }
+                count = count.saturating_add(1);
+            }
         }
-    }
-    schedule_graph_outbox_flush(&state, Some(input.account_id.clone()));
+        schedule_graph_outbox_flush(&state_inner, Some(account_id));
+        count
+    })
+    .await
+    .unwrap_or(0);
+
     Ok(EmailPrefetchBodiesResult { prefetched })
 }
 
@@ -3254,6 +2115,7 @@ pub async fn email_set_activity_state(
     state: State<'_, AppState>,
     input: EmailSetActivityStateInput,
 ) -> Result<(), String> {
+    // Persist activity state so IDLE workers can read poll intervals.
     let record = EmailActivityStateRecord {
         mode: input.mode.clone(),
         active_account_id: input.active_account_id.clone(),
@@ -3268,62 +2130,8 @@ pub async fn email_set_activity_state(
         )
         .map_err(|e| e.to_string())?;
 
-    if matches!(input.mode, EmailActivityMode::MailForeground) {
-        if let Some(active_account_id) = input.active_account_id.as_deref() {
-            if active_account_id != ALL_ACCOUNTS_ID {
-                let folder = input
-                    .active_folder
-                    .clone()
-                    .unwrap_or_else(|| "inbox".to_string());
-                let app_for_sync = app.clone();
-                let active_account_for_sync = active_account_id.to_string();
-                let folder_for_sync = folder.clone();
-                let _ = tauri::async_runtime::spawn_blocking(move || {
-                    let sync_state = app_for_sync.state::<AppState>();
-                    if let Ok(accounts) = resolve_accounts_for_target(
-                        &sync_state,
-                        Some(active_account_for_sync.as_str()),
-                    ) {
-                        if let Some(account) = accounts.first() {
-                            let _ = sync_account_folder_envelopes(
-                                &sync_state,
-                                account,
-                                &folder_for_sync,
-                                true,
-                            );
-                            let _ = flush_flag_outbox_for_account(&sync_state, account);
-                            let _ =
-                                patch_account_sync_state(&sync_state, &account.id, "active", None);
-                            schedule_graph_outbox_flush(&sync_state, Some(account.id.clone()));
-                        }
-                    }
-                })
-                .await;
-                ensure_idle_worker(
-                    &app,
-                    active_account_id.to_string(),
-                    folder,
-                    Duration::from_secs(0),
-                );
-            }
-        }
-
-        // Keep other accounts warm with staggered starts.
-        let accounts = read_accounts(&state)?;
-        let mut index = 1u64;
-        for account in accounts {
-            if input.active_account_id.as_deref() == Some(account.id.as_str()) {
-                continue;
-            }
-            ensure_idle_worker(
-                &app,
-                account.id,
-                "inbox".to_string(),
-                Duration::from_secs(index * IDLE_STAGGER_SECS),
-            );
-            index = index.saturating_add(1);
-        }
-    }
+    // Worker topology changes are supervised + debounced to prevent rapid folder-switch thrash.
+    schedule_idle_worker_reconcile(&app, true);
 
     Ok(())
 }
@@ -3415,51 +2223,22 @@ pub async fn email_get_mailbox_status(
     Ok(result)
 }
 
-#[tauri::command]
-pub async fn email_fetch_saved(
-    state: State<'_, AppState>,
-    account_id: String,
-    folder: String,
-) -> Result<Vec<EmailMessage>, String> {
-    let mut accounts = read_accounts(&state)?;
-    let Some(index) = accounts.iter().position(|account| account.id == account_id) else {
-        return Err("account_not_found".to_string());
-    };
 
-    let account = accounts[index].clone();
-    let Some(password) = get_password_for_account(&state, &account.id)? else {
-        accounts[index].status = "reauth_required".to_string();
-        accounts[index].last_error = Some("missing_account_secret".to_string());
-        write_accounts(&state, &accounts)?;
-        return Err("account_reauth_required".to_string());
-    };
-
-    let config = EmailConfig {
-        provider: account.provider,
-        email: account.email,
-        password,
-        imap_host: account.imap_host,
-        smtp_host: account.smtp_host,
-        imap_port: account.imap_port,
-        smtp_port: account.smtp_port,
-    };
-
-    match fetch_messages(&config, &folder) {
-        Ok(messages) => {
-            accounts[index].status = "active".to_string();
-            accounts[index].last_error = None;
-            accounts[index].last_sync_at = Some(now_iso());
-            write_accounts(&state, &accounts)?;
-            Ok(messages)
-        }
-        Err(error) => {
-            accounts[index].status = "error".to_string();
-            accounts[index].last_error = Some(error.clone());
-            write_accounts(&state, &accounts)?;
-            Err(error)
-        }
-    }
-}
+// ── Legacy commands removed ────────────────────────────────────────────────────
+// email_fetch_saved, email_connect, email_fetch, email_send have been removed.
+// They used the old seq-number based fetch path which:
+//   - used IMAP sequence numbers instead of UIDs
+//   - fetched bodies inline for all 20 messages
+//   - bypassed the StoredEnvelope / Redb persistence system
+//   - opened a new IMAP connection per command call
+//
+// Migration:
+//   Old                 → New
+//   email_connect       → email_account_connect_and_save
+//   email_fetch_saved   → email_list_envelopes (envelopes) + email_get_message_body (body)
+//   email_fetch         → email_list_envelopes
+//   email_send          → email_send_saved
+// ────────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn email_send_saved(
@@ -3492,7 +2271,14 @@ pub async fn email_send_saved(
         smtp_port: account.smtp_port,
     };
 
-    match send_message(&config, &to, &subject, &body) {
+    // SMTP send is blocking I/O — run on a dedicated thread.
+    let send_result = tauri::async_runtime::spawn_blocking(move || {
+        send_message(&config, &to, &subject, &body)
+    })
+    .await
+    .map_err(|e| format!("send_task_failed:{e}"))?;
+
+    match send_result {
         Ok(result) => {
             accounts[index].status = "active".to_string();
             accounts[index].last_error = None;
@@ -3507,24 +2293,4 @@ pub async fn email_send_saved(
             Err(error)
         }
     }
-}
-
-#[tauri::command]
-pub fn email_connect(config: EmailConfig) -> Result<bool, String> {
-    validate_connection(&config)
-}
-
-#[tauri::command]
-pub fn email_fetch(config: EmailConfig, folder: String) -> Result<Vec<EmailMessage>, String> {
-    fetch_messages(&config, &folder)
-}
-
-#[tauri::command]
-pub fn email_send(
-    config: EmailConfig,
-    to: String,
-    subject: String,
-    body: String,
-) -> Result<bool, String> {
-    send_message(&config, &to, &subject, &body)
 }

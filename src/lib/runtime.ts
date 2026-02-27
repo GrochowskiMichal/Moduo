@@ -28,6 +28,20 @@ export type AuthMnemonic = {
   phrase: string;
 };
 
+export type AiCredentialSummary = {
+  id: string;
+  model: string;
+  keyPreview: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AiCredentialResolved = {
+  id: string;
+  model: string;
+  apiKey: string;
+};
+
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__;
 }
@@ -171,6 +185,12 @@ export type ModuoRuntime = {
     get(namespace: string, key: string): Promise<any>;
     set(namespace: string, key: string, value: unknown): Promise<void>;
     remove(namespace: string, key: string): Promise<void>;
+  };
+  ai: {
+    listCredentials(): Promise<AiCredentialSummary[]>;
+    saveCredential(input: { apiKey: string; model: string }): Promise<AiCredentialSummary>;
+    deleteCredential(id: string): Promise<void>;
+    getCredential(id: string): Promise<AiCredentialResolved>;
   };
   email: {
     listAccounts(): Promise<any[]>;
@@ -566,6 +586,39 @@ const runtimeClient: ModuoRuntime = {
     },
     remove(namespace, key) {
       return invoke("local_store_remove", { namespace, key });
+    },
+  },
+  ai: {
+    async listCredentials() {
+      const rows = await invoke<any[]>("ai_credentials_list");
+      return (rows ?? []).map((row) => ({
+        id: row.id,
+        model: row.model,
+        keyPreview: row.keyPreview ?? row.key_preview ?? "••••",
+        createdAt: row.createdAt ?? row.created_at ?? new Date().toISOString(),
+        updatedAt: row.updatedAt ?? row.updated_at ?? new Date().toISOString(),
+      }));
+    },
+    async saveCredential(input) {
+      const row = await invoke<any>("ai_credentials_upsert", { input });
+      return {
+        id: row.id,
+        model: row.model,
+        keyPreview: row.keyPreview ?? row.key_preview ?? "••••",
+        createdAt: row.createdAt ?? row.created_at ?? new Date().toISOString(),
+        updatedAt: row.updatedAt ?? row.updated_at ?? new Date().toISOString(),
+      };
+    },
+    deleteCredential(id) {
+      return invoke<void>("ai_credentials_delete", { id });
+    },
+    async getCredential(id) {
+      const row = await invoke<any>("ai_credentials_get", { id });
+      return {
+        id: row.id,
+        model: row.model,
+        apiKey: row.apiKey ?? row.api_key ?? "",
+      };
     },
   },
   email: {

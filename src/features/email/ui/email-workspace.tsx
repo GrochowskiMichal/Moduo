@@ -52,7 +52,7 @@ const FOLDERS: Array<{ id: FolderType; label: string }> = [
   { id: "spam", label: "Spam" },
 ];
 
-const EMAIL_CACHE_TTL_MS = 15_000;
+const EMAIL_CACHE_TTL_MS = 60_000; // IDLE workers push updates; 1-min cache TTL is enough.
 const ACCOUNTS_CACHE_TTL_MS = 30_000;
 
 type EmailListCacheEntry = {
@@ -170,8 +170,8 @@ export function EmailWorkspace() {
       (lastEmailSelection.accountId === ALL_ACCOUNTS_ID
         ? ALL_ACCOUNTS_ID
         : lastEmailSelection.accountId && cachedAccounts.some((account) => account.id === lastEmailSelection.accountId)
-        ? lastEmailSelection.accountId
-        : cachedAccounts[0]?.id) ?? null;
+          ? lastEmailSelection.accountId
+          : cachedAccounts[0]?.id) ?? null;
     if (!accountId) return [];
     return emailListCache.get(emailCacheKey(accountId, lastEmailSelection.folder))?.emails ?? [];
   });
@@ -267,11 +267,11 @@ export function EmailWorkspace() {
           workspaceId: selectedWorkspaceId,
           ...(provider === "custom"
             ? {
-                imapHost: customHosts.imapHost.trim(),
-                smtpHost: customHosts.smtpHost.trim(),
-                imapPort: Number(customHosts.imapPort),
-                smtpPort: Number(customHosts.smtpPort),
-              }
+              imapHost: customHosts.imapHost.trim(),
+              smtpHost: customHosts.smtpHost.trim(),
+              imapPort: Number(customHosts.imapPort),
+              smtpPort: Number(customHosts.smtpPort),
+            }
             : {}),
         },
       })) as SavedAccount;
@@ -291,7 +291,7 @@ export function EmailWorkspace() {
   const fetchEmails = async (
     folder: FolderType,
     accountId = activeAccountId,
-    options?: { force?: boolean; silentRefresh?: boolean; sync?: boolean },
+    options?: { force?: boolean; sync?: boolean },
   ) => {
     if (!accountId) {
       setEmails([]);
@@ -385,63 +385,76 @@ export function EmailWorkspace() {
     const isCacheFresh = cached && Date.now() - cached.fetchedAt <= EMAIL_CACHE_TTL_MS;
     if (!options?.force && isCacheFresh && latestRows.length > 0) return;
 
+    // Fire email_sync_now in the background — DO NOT await it here.
+    // The UI already shows cached/local results. When the sync finishes,
+    // we re-read local Redb and update the list in the background.
+    const syncPromise = invoke("email_sync_now", {
+      input: {
+        accountId: accountId === ALL_ACCOUNTS_ID ? null : accountId,
+        folder,
+      },
+    });
+
+    // Show a non-blocking refreshing indicator.
     if (requestSeq === fetchRequestSeqRef.current) {
       setIsRefreshingEmails(true);
     }
 
-    try {
-      await invoke("email_sync_now", {
-        input: {
-          accountId: accountId === ALL_ACCOUNTS_ID ? null : accountId,
-          folder,
-        },
-      });
-      latestRows = await readLocalEnvelopes(latestRows);
-      if (requestSeq !== fetchRequestSeqRef.current) return;
-      emailListCache.set(key, { emails: latestRows, fetchedAt: Date.now() });
-      setEmails(latestRows);
+    syncPromise
+      .then(async () => {
+        if (requestSeq !== fetchRequestSeqRef.current) return;
+        try {
+          const refreshedRows = await readLocalEnvelopes(latestRows);
+          if (requestSeq !== fetchRequestSeqRef.current) return;
+          emailListCache.set(key, { emails: refreshedRows, fetchedAt: Date.now() });
+          setEmails(refreshedRows);
 
-      if (accountId !== ALL_ACCOUNTS_ID) {
-        const uids = latestRows
-          .slice(0, 5)
-          .map((row) => row.uid)
-          .filter((uid) => uid > 0);
-        if (uids.length > 0) {
-          void invoke("email_prefetch_bodies", {
-            input: {
-              accountId,
-              folder,
-              uids,
-              limit: 5,
-            },
+          if (accountId !== ALL_ACCOUNTS_ID) {
+            const uids = refreshedRows
+              .slice(0, 5)
+              .map((row) => row.uid)
+              .filter((uid) => uid > 0);
+            if (uids.length > 0) {
+              void invoke("email_prefetch_bodies", {
+                input: {
+                  accountId,
+                  folder,
+                  uids,
+                  limit: 5,
+                },
+              });
+            }
+            patchAccount(accountId, {
+              status: "active",
+              lastError: null,
+              lastSyncAt: new Date().toISOString(),
+            });
+          }
+        } catch {
+          // Background refresh failed — local results are already shown, ignore.
+        }
+      })
+      .catch((e: any) => {
+        if (requestSeq !== fetchRequestSeqRef.current) return;
+        const errorMessage = toErrorMessage(e);
+        if (latestRows.length === 0) {
+          setMailError(errorMessage);
+        }
+        if (accountId !== ALL_ACCOUNTS_ID) {
+          patchAccount(accountId, {
+            status:
+              errorMessage.includes("reauth") || errorMessage.includes("missing_account_secret")
+                ? "reauth_required"
+                : "error",
+            lastError: errorMessage,
           });
         }
-        patchAccount(accountId, {
-          status: "active",
-          lastError: null,
-          lastSyncAt: new Date().toISOString(),
-        });
-      }
-    } catch (e: any) {
-      if (requestSeq !== fetchRequestSeqRef.current) return;
-      const errorMessage = toErrorMessage(e);
-      if (latestRows.length === 0) {
-        setMailError(errorMessage);
-      }
-      if (accountId !== ALL_ACCOUNTS_ID) {
-        patchAccount(accountId, {
-          status:
-            errorMessage.includes("reauth") || errorMessage.includes("missing_account_secret")
-              ? "reauth_required"
-              : "error",
-          lastError: errorMessage,
-        });
-      }
-    } finally {
-      if (requestSeq === fetchRequestSeqRef.current) {
-        setIsRefreshingEmails(false);
-      }
-    }
+      })
+      .finally(() => {
+        if (requestSeq === fetchRequestSeqRef.current) {
+          setIsRefreshingEmails(false);
+        }
+      });
   };
 
   useEffect(() => {
@@ -453,7 +466,7 @@ export function EmailWorkspace() {
           const preferredId = lastEmailSelection.accountId;
           const resolvedAccountId =
             (preferredId &&
-            cachedAccountsList.some((account) => account.id === preferredId)
+              cachedAccountsList.some((account) => account.id === preferredId)
               ? preferredId
               : cachedAccountsList[0]?.id) ?? null;
           setAccounts(cachedAccountsList);
@@ -505,16 +518,11 @@ export function EmailWorkspace() {
   useEffect(() => {
     if (connectionStatus !== "connected") return;
     if (!activeAccountId) return;
+    // 30-second tick refreshes ONLY the local Redb snapshot.
+    // IDLE workers handle server-side freshness; email_set_activity_state is
+    // called in a separate effect whenever account/folder actually changes.
     const timer = window.setInterval(() => {
-      void invoke("email_set_activity_state", {
-        input: {
-          mode: "mailForeground",
-          activeAccountId,
-          activeFolder,
-        },
-      }).catch(() => undefined);
-      // IDLE is the primary live-sync path; this tick only refreshes local Redb snapshots.
-      void fetchEmails(activeFolder, activeAccountId, { force: false, silentRefresh: true, sync: false });
+      void fetchEmails(activeFolder, activeAccountId, { force: false, sync: false });
     }, 30_000);
     return () => window.clearInterval(timer);
   }, [activeFolder, activeAccountId, connectionStatus]);
@@ -603,11 +611,11 @@ export function EmailWorkspace() {
         current.map((item) =>
           item.id === email.id
             ? {
-                ...item,
-                body: bodyResult.body ?? "",
-                bodyHtml: bodyResult.bodyHtml ?? null,
-                hasCachedBody: true,
-              }
+              ...item,
+              body: bodyResult.body ?? "",
+              bodyHtml: bodyResult.bodyHtml ?? null,
+              hasCachedBody: true,
+            }
             : item,
         ),
       );
@@ -615,11 +623,11 @@ export function EmailWorkspace() {
         emails: emails.map((item) =>
           item.id === email.id
             ? {
-                ...item,
-                body: bodyResult.body ?? "",
-                bodyHtml: bodyResult.bodyHtml ?? null,
-                hasCachedBody: true,
-              }
+              ...item,
+              body: bodyResult.body ?? "",
+              bodyHtml: bodyResult.bodyHtml ?? null,
+              hasCachedBody: true,
+            }
             : item,
         ),
         fetchedAt: Date.now(),

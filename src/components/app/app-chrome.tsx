@@ -21,7 +21,7 @@ import {
 import { NotificationCenter } from "../notification-center";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { WorkspaceSettingsModal } from "../workspace-settings-modal";
-import { Image, Modal, Pressable, Text, TextInput, View } from "../../tw";
+import { Image, Pressable, Text, View } from "../../tw";
 import {
   dispatchLayoutPanelsApply,
   LAYOUT_PANELS_SET_EVENT,
@@ -54,75 +54,16 @@ import {
   type BrainstormOption,
 } from "../../features/brainstorm/storage/brainstorm-storage";
 import { dispatchBrainstormSelectView } from "../../features/brainstorm/ui/layout-events";
-import { Icon, type IconName } from "../ui/icon";
+import { Icon } from "../ui/icon";
 import moduoFavicon from "../../../assets/moduo_favicon.png";
 import { UserMenu } from "../user-menu";
 import {
   PROFILE_UPDATED_EVENT,
   readStoredAvatar,
 } from "../../features/profile/profile-storage";
-
-type TabItem = { label: string; iconName: IconName; href: string; module?: "notes" | "tasks" | "mindmap" | "templates" | "email" };
-type TaskProjectOption = {
-  id: string;
-  workspaceId: string;
-  ownerId: string;
-  name: string;
-  description: string;
-  position: string;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-};
-type MenuAnchor = { left: number; top: number };
-
-function safeId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-function normalizeTaskProject(raw: any): TaskProjectOption {
-  return {
-    id: raw.id,
-    workspaceId: raw.workspaceId ?? raw.workspace_id,
-    ownerId: raw.ownerId ?? raw.owner_id,
-    name: raw.name ?? "New Project",
-    description: raw.description ?? "",
-    position: raw.position ?? `m${Date.now().toString(36)}`,
-    createdAt: raw.createdAt ?? raw.created_at ?? nowIso(),
-    updatedAt: raw.updatedAt ?? raw.updated_at ?? nowIso(),
-    deletedAt: raw.deletedAt ?? raw.deleted_at ?? null,
-  };
-}
-
-const baseTabs: TabItem[] = [
-  { label: "Dashboard", iconName: "grid", href: "/dashboard" },
-  { label: "Notes", iconName: "file-text", href: "/notes", module: "notes" },
-  { label: "Tasks", iconName: "check-square", href: "/tasks", module: "tasks" },
-  { label: "Mindmap", iconName: "git-branch", href: "/mindmap", module: "mindmap" },
-  { label: "Templates", iconName: "edit-3", href: "/templates", module: "templates" },
-  { label: "Email", iconName: "mail", href: "/email", module: "email" },
-  { label: "Calendar", iconName: "calendar", href: "/calendar" },
-  { label: "CRM", iconName: "folder", href: "/crm" },
-  { label: "Calendly", iconName: "calendar", href: "/calendly" },
-  { label: "Forms", iconName: "edit-2", href: "/forms" },
-  { label: "Activity", iconName: "bar-chart-2", href: "/activity" },
-  { label: "Feed", iconName: "bar-chart-2", href: "/feed" },
-  { label: "Files", iconName: "folder", href: "/files" },
-  { label: "Brainstorm", iconName: "pen-tool", href: "/brainstorm" },
-  { label: "Expanses", iconName: "dollar-sign", href: "/expanses" },
-  { label: "Revenue", iconName: "dollar-sign", href: "/revenue" },
-  { label: "KPI/OKR", iconName: "tag", href: "/kpi-okr" },
-  { label: "Stats", iconName: "bar-chart-2", href: "/stats" },
-  { label: "Analytics", iconName: "search", href: "/analytics" },
-  { label: "Recordings", iconName: "file-text", href: "/recordings" },
-  { label: "Timetracking", iconName: "clock", href: "/timetracking" },
-  { label: "Roadmap", iconName: "git-branch", href: "/roadmap" },
-];
+import { baseTabs, normalizeTaskProject, nowIso, safeId } from "./app-chrome-constants";
+import { AppChromeMenus } from "./app-chrome-menus";
+import type { MenuAnchor, TaskProjectOption } from "./app-chrome-types";
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -182,22 +123,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const tasksControlRef = useRef<HTMLDivElement | null>(null);
   const mindmapControlRef = useRef<HTMLDivElement | null>(null);
   const brainstormControlRef = useRef<HTMLDivElement | null>(null);
-  const rowStyle = { display: "flex", flexDirection: "row" as const, alignItems: "center" };
-  const itemRowStyle = {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
-    alignItems: "center",
-    columnGap: 8,
-    minHeight: 32,
-  } as const;
-  const itemNameWrapStyle = { minWidth: 0, display: "flex", alignItems: "center", height: 28 } as const;
-  const itemActionsStyle = { display: "flex", alignItems: "center", gap: 4, height: 28 } as const;
-  const iconButtonStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28 } as const;
-  const plusButtonStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24 } as const;
-  const deleteRevealBaseStyle = {
-    overflow: "hidden",
-    transition: "max-height 220ms ease, opacity 180ms ease, transform 180ms ease, margin-top 180ms ease",
-  } as const;
 
   const tabs = useMemo(
     () =>
@@ -991,732 +916,97 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             </View>
           </View>
 
-          {dashboardMenuOpen && dashboardMenuAnchor ? (
-            <Modal transparent visible={dashboardMenuOpen} animationType="fade" onRequestClose={closeDashboardMenu}>
-              <Pressable className="fixed inset-0 z-[998]" onPress={closeDashboardMenu} />
-              <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: dashboardMenuAnchor.left, top: dashboardMenuAnchor.top }}>
-                <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
-                  <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
-                    <Text className="text-[#a0a0a0] text-xs">All views</Text>
-                    <Pressable
-                      className="rounded-md"
-                      style={plusButtonStyle}
-                      onPress={(event: any) => {
-                        event?.stopPropagation?.();
-                        setIsCreatingDashboardView(true);
-                        setNewDashboardViewName("New Dashboard View");
-                      }}
-                    >
-                      <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-                <View className="max-h-[260px] overflow-y-auto">
-                  {isCreatingDashboardView ? (
-                    <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
-                      <TextInput
-                        autoFocus
-                        value={newDashboardViewName}
-                        onChangeText={setNewDashboardViewName}
-                        onKeyDown={(event: any) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            submitCreateDashboardView();
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            setIsCreatingDashboardView(false);
-                          }
-                        }}
-                        className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
-                      />
-                      <View className="ml-1" style={rowStyle}>
-                        <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={submitCreateDashboardView}>
-                          <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
-                        </Pressable>
-                        <Pressable
-                          className="rounded-md hover:bg-[#2b2b2b]"
-                          style={iconButtonStyle}
-                          onPress={() => {
-                            setIsCreatingDashboardView(false);
-                            setNewDashboardViewName("New Dashboard View");
-                          }}
-                        >
-                          <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {dashboardViews.map((view) => {
-                    const isActiveView = view.id === activeDashboardViewId;
-                    const isDeleteOpen = deleteCandidateDashboardViewId === view.id;
-                    const deleteMatches = deleteDashboardViewInput.trim() === view.name.trim();
-                    return (
-                      <View
-                        key={view.id}
-                        className={`rounded-lg px-3 py-2 ${isActiveView ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}
-                      >
-                        <Pressable
-                          onPress={() => {
-                            setActiveDashboardView(view.id);
-                            closeDashboardMenu();
-                          }}
-                        >
-                          <View style={itemRowStyle}>
-                            <View style={itemNameWrapStyle}>
-                              <Text
-                                as="div"
-                                className={`${isActiveView ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
-                                style={{ lineHeight: "28px" }}
-                                numberOfLines={1}
-                              >
-                                {view.name}
-                              </Text>
-                            </View>
-                            <View className="shrink-0" style={itemActionsStyle}>
-                              <Pressable
-                                className="rounded-md hover:bg-[#2b2b2b]"
-                                style={iconButtonStyle}
-                                onPress={(event: any) => {
-                                  event?.stopPropagation?.();
-                                }}
-                              >
-                                <Icon name="settings" size={13} color="#d8d8d8" />
-                              </Pressable>
-                              <Pressable
-                                className="rounded-md hover:bg-[#2b2b2b]"
-                                style={iconButtonStyle}
-                                onPress={(event: any) => {
-                                  event?.stopPropagation?.();
-                                  if (isDeleteOpen) {
-                                    setDeleteCandidateDashboardViewId(null);
-                                    setDeleteDashboardViewInput("");
-                                    setDeleteSubmittingDashboardViewId(null);
-                                  } else {
-                                    setDeleteCandidateDashboardViewId(view.id);
-                                    setDeleteDashboardViewInput("");
-                                  }
-                                }}
-                                disabled={dashboardViews.length <= 1}
-                              >
-                                <Icon name="trash-2" size={13} color={dashboardViews.length > 1 ? "#ffb0b0" : "#6a6a6a"} />
-                              </Pressable>
-                            </View>
-                          </View>
-                        </Pressable>
-
-                        <View
-                          style={{
-                            ...deleteRevealBaseStyle,
-                            maxHeight: isDeleteOpen ? 116 : 0,
-                            opacity: isDeleteOpen ? 1 : 0,
-                            transform: isDeleteOpen ? "translateY(0)" : "translateY(-4px)",
-                            marginTop: isDeleteOpen ? 8 : 0,
-                          }}
-                        >
-                          <Text className="text-[11px] text-[#9a9a9a]">
-                            Retype <Text className="font-semibold text-[#d9d9d9]">{view.name}</Text> to delete this view.
-                          </Text>
-                          <View className="mt-2" style={rowStyle}>
-                            <TextInput
-                              value={deleteDashboardViewInput}
-                              onChangeText={setDeleteDashboardViewInput}
-                              onKeyDown={(event: any) => {
-                                if (event.key === "Escape") {
-                                  event.preventDefault();
-                                  setDeleteCandidateDashboardViewId(null);
-                                  setDeleteDashboardViewInput("");
-                                  setDeleteSubmittingDashboardViewId(null);
-                                }
-                                if (event.key === "Enter" && deleteMatches && deleteSubmittingDashboardViewId !== view.id) {
-                                  event.preventDefault();
-                                  removeDashboardView(view.id);
-                                }
-                              }}
-                              placeholder={view.name}
-                              className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
-                            />
-                            <Pressable
-                              className="ml-1 rounded-md hover:bg-[#2b2b2b]"
-                              style={iconButtonStyle}
-                              onPress={() => {
-                                setDeleteCandidateDashboardViewId(null);
-                                setDeleteDashboardViewInput("");
-                                setDeleteSubmittingDashboardViewId(null);
-                              }}
-                            >
-                              <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
-                            </Pressable>
-                            <Pressable
-                              className="ml-1 rounded-md"
-                              style={iconButtonStyle}
-                              onPress={() => removeDashboardView(view.id)}
-                              aria-disabled={!deleteMatches || deleteSubmittingDashboardViewId === view.id}
-                            >
-                              <Text
-                                className={`text-[11px] font-semibold leading-none ${
-                                  deleteMatches && deleteSubmittingDashboardViewId !== view.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
-                                }`}
-                              >
-                                Del
-                              </Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            </Modal>
-          ) : null}
-
-          {tasksMenuOpen && tasksMenuAnchor ? (
-            <Modal transparent visible={tasksMenuOpen} animationType="fade" onRequestClose={closeTasksMenu}>
-              <Pressable className="fixed inset-0 z-[998]" onPress={closeTasksMenu} />
-              <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: tasksMenuAnchor.left, top: tasksMenuAnchor.top }}>
-                <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
-                  <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
-                    <Text className="text-[#a0a0a0] text-xs">All projects</Text>
-                    <Pressable
-                      className="rounded-md"
-                      style={plusButtonStyle}
-                      onPress={(event: any) => {
-                        event?.stopPropagation?.();
-                        if (!canEditTasks) return;
-                        setIsCreatingTaskProject(true);
-                        setNewTaskProjectName("New Project");
-                      }}
-                      disabled={!canEditTasks}
-                    >
-                      <Text className={`text-[16px] leading-none ${canEditTasks ? "text-[#d8d8d8]" : "text-[#6a6a6a]"}`}>+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-                <View className="max-h-[260px] overflow-y-auto">
-                  {isCreatingTaskProject && canEditTasks ? (
-                    <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
-                      <TextInput
-                        autoFocus
-                        value={newTaskProjectName}
-                        onChangeText={setNewTaskProjectName}
-                        onKeyDown={(event: any) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            void submitCreateTaskProject();
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            setIsCreatingTaskProject(false);
-                          }
-                        }}
-                        className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
-                      />
-                      <View className="ml-1" style={rowStyle}>
-                        <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={() => void submitCreateTaskProject()}>
-                          <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
-                        </Pressable>
-                        <Pressable
-                          className="rounded-md hover:bg-[#2b2b2b]"
-                          style={iconButtonStyle}
-                          onPress={() => {
-                            setIsCreatingTaskProject(false);
-                            setNewTaskProjectName("New Project");
-                          }}
-                        >
-                          <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  <View className={`rounded-lg px-3 py-2 ${selectedTaskProjectId === null ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}>
-                    <Pressable
-                      onPress={() => {
-                        setSelectedTaskProjectId(null);
-                        closeTasksMenu();
-                      }}
-                    >
-                      <View style={itemRowStyle}>
-                        <View style={itemNameWrapStyle}>
-                          <Text
-                            as="div"
-                            className={`${selectedTaskProjectId === null ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
-                            style={{ lineHeight: "28px" }}
-                            numberOfLines={1}
-                          >
-                            All projects
-                          </Text>
-                        </View>
-                      </View>
-                    </Pressable>
-                  </View>
-
-                  {taskProjects.map((project) => {
-                    const isActiveProject = selectedTaskProjectId === project.id;
-                    const isDeleteOpen = deleteCandidateTaskProjectId === project.id;
-                    const deleteMatches = deleteTaskProjectInput.trim() === project.name.trim();
-                    return (
-                      <View
-                        key={project.id}
-                        className={`rounded-lg px-3 py-2 ${isActiveProject ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}
-                      >
-                        <Pressable
-                          onPress={() => {
-                            setSelectedTaskProjectId(project.id);
-                            closeTasksMenu();
-                          }}
-                        >
-                          <View style={itemRowStyle}>
-                            <View style={itemNameWrapStyle}>
-                              <Text
-                                as="div"
-                                className={`${isActiveProject ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
-                                style={{ lineHeight: "28px" }}
-                                numberOfLines={1}
-                              >
-                                {project.name}
-                              </Text>
-                            </View>
-                            <View className="shrink-0" style={itemActionsStyle}>
-                              <Pressable
-                                className="rounded-md hover:bg-[#2b2b2b]"
-                                style={iconButtonStyle}
-                                onPress={(event: any) => {
-                                  event?.stopPropagation?.();
-                                }}
-                                disabled={!canEditTasks}
-                              >
-                                <Icon name="settings" size={13} color={canEditTasks ? "#d8d8d8" : "#6a6a6a"} />
-                              </Pressable>
-                              <Pressable
-                                className="rounded-md hover:bg-[#2b2b2b]"
-                                style={iconButtonStyle}
-                                onPress={(event: any) => {
-                                  event?.stopPropagation?.();
-                                  if (isDeleteOpen) {
-                                    cancelTaskProjectDeleteIntent();
-                                  } else {
-                                    setDeleteCandidateTaskProjectId(project.id);
-                                    setDeleteTaskProjectInput("");
-                                  }
-                                }}
-                                disabled={!canEditTasks}
-                              >
-                                <Icon name="trash-2" size={13} color={canEditTasks ? "#ffb0b0" : "#6a6a6a"} />
-                              </Pressable>
-                            </View>
-                          </View>
-                        </Pressable>
-
-                        <View
-                          style={{
-                            ...deleteRevealBaseStyle,
-                            maxHeight: isDeleteOpen ? 116 : 0,
-                            opacity: isDeleteOpen ? 1 : 0,
-                            transform: isDeleteOpen ? "translateY(0)" : "translateY(-4px)",
-                            marginTop: isDeleteOpen ? 8 : 0,
-                          }}
-                        >
-                          <Text className="text-[11px] text-[#9a9a9a]">
-                            Retype <Text className="font-semibold text-[#d9d9d9]">{project.name}</Text> to delete this project.
-                          </Text>
-                          <View className="mt-2" style={rowStyle}>
-                            <TextInput
-                              value={deleteTaskProjectInput}
-                              onChangeText={setDeleteTaskProjectInput}
-                              onKeyDown={(event: any) => {
-                                if (event.key === "Escape") {
-                                  event.preventDefault();
-                                  cancelTaskProjectDeleteIntent();
-                                }
-                                if (event.key === "Enter" && deleteMatches && deleteSubmittingTaskProjectId !== project.id) {
-                                  event.preventDefault();
-                                  void removeTaskProject(project.id);
-                                }
-                              }}
-                              placeholder={project.name}
-                              className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
-                            />
-                            <Pressable className="ml-1 rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={cancelTaskProjectDeleteIntent}>
-                              <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
-                            </Pressable>
-                            <Pressable
-                              className="ml-1 rounded-md"
-                              style={iconButtonStyle}
-                              onPress={() => void removeTaskProject(project.id)}
-                              aria-disabled={!deleteMatches || deleteSubmittingTaskProjectId === project.id}
-                            >
-                              <Text
-                                className={`text-[11px] font-semibold leading-none ${
-                                  deleteMatches && deleteSubmittingTaskProjectId !== project.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
-                                }`}
-                              >
-                                Del
-                              </Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            </Modal>
-          ) : null}
-
-          {mindmapMenuOpen && mindmapMenuAnchor ? (
-            <Modal transparent visible={mindmapMenuOpen} animationType="fade" onRequestClose={closeMindmapMenu}>
-              <Pressable className="fixed inset-0 z-[998]" onPress={closeMindmapMenu} />
-              <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: mindmapMenuAnchor.left, top: mindmapMenuAnchor.top }}>
-                <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
-                  <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
-                    <Text className="text-[#a0a0a0] text-xs">All mindmaps</Text>
-                    <Pressable
-                      className="rounded-md"
-                      style={plusButtonStyle}
-                      onPress={(event: any) => {
-                        event?.stopPropagation?.();
-                        setIsCreatingMindmap(true);
-                        setNewMindmapName("New Mindmap");
-                      }}
-                    >
-                      <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-                <View className="max-h-[260px] overflow-y-auto">
-                  {isCreatingMindmap ? (
-                    <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
-                      <TextInput
-                        autoFocus
-                        value={newMindmapName}
-                        onChangeText={setNewMindmapName}
-                        onKeyDown={(event: any) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            void submitCreateMindmap();
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            setIsCreatingMindmap(false);
-                          }
-                        }}
-                        className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
-                      />
-                      <View className="ml-1" style={rowStyle}>
-                        <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={() => void submitCreateMindmap()}>
-                          <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
-                        </Pressable>
-                        <Pressable
-                          className="rounded-md hover:bg-[#2b2b2b]"
-                          style={iconButtonStyle}
-                          onPress={() => {
-                            setIsCreatingMindmap(false);
-                            setNewMindmapName("New Mindmap");
-                          }}
-                        >
-                          <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {mindmaps.length === 0 ? (
-                    <View className="px-3 py-2">
-                      <Text className="text-[13px] text-[#8f8f8f]">No mindmaps yet.</Text>
-                    </View>
-                  ) : null}
-
-                  {mindmaps.map((mindmap) => {
-                    const isActiveMindmap = selectedMindmapId === mindmap.id;
-                    const isDeleteOpen = deleteCandidateMindmapId === mindmap.id;
-                    const deleteMatches = deleteMindmapInput.trim() === mindmap.name.trim();
-                    return (
-                      <View
-                        key={mindmap.id}
-                        className={`rounded-lg px-3 py-2 ${isActiveMindmap ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}
-                      >
-                        <Pressable
-                          onPress={() => {
-                            setSelectedMindmapId(mindmap.id);
-                            writeStoredActiveMindmap(selectedWorkspaceId, mindmap.id);
-                            dispatchMindmapSelectMap(mindmap.id, mindmap.name);
-                            closeMindmapMenu();
-                          }}
-                        >
-                          <View style={itemRowStyle}>
-                            <View style={itemNameWrapStyle}>
-                              <Text
-                                as="div"
-                                className={`${isActiveMindmap ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
-                                style={{ lineHeight: "28px" }}
-                                numberOfLines={1}
-                              >
-                                {mindmap.name}
-                              </Text>
-                            </View>
-                            <View className="shrink-0" style={itemActionsStyle}>
-                              <Pressable
-                                className="rounded-md hover:bg-[#2b2b2b]"
-                                style={iconButtonStyle}
-                                onPress={(event: any) => {
-                                  event?.stopPropagation?.();
-                                }}
-                              >
-                                <Icon name="settings" size={13} color="#d8d8d8" />
-                              </Pressable>
-                              <Pressable
-                                className="rounded-md hover:bg-[#2b2b2b]"
-                                style={iconButtonStyle}
-                                onPress={(event: any) => {
-                                  event?.stopPropagation?.();
-                                  if (isDeleteOpen) {
-                                    cancelMindmapDeleteIntent();
-                                  } else {
-                                    setDeleteCandidateMindmapId(mindmap.id);
-                                    setDeleteMindmapInput("");
-                                  }
-                                }}
-                              >
-                                <Icon name="trash-2" size={13} color="#ffb0b0" />
-                              </Pressable>
-                            </View>
-                          </View>
-                        </Pressable>
-
-                        <View
-                          style={{
-                            ...deleteRevealBaseStyle,
-                            maxHeight: isDeleteOpen ? 116 : 0,
-                            opacity: isDeleteOpen ? 1 : 0,
-                            transform: isDeleteOpen ? "translateY(0)" : "translateY(-4px)",
-                            marginTop: isDeleteOpen ? 8 : 0,
-                          }}
-                        >
-                          <Text className="text-[11px] text-[#9a9a9a]">
-                            Retype <Text className="font-semibold text-[#d9d9d9]">{mindmap.name}</Text> to delete this mindmap.
-                          </Text>
-                          <View className="mt-2" style={rowStyle}>
-                            <TextInput
-                              value={deleteMindmapInput}
-                              onChangeText={setDeleteMindmapInput}
-                              onKeyDown={(event: any) => {
-                                if (event.key === "Escape") {
-                                  event.preventDefault();
-                                  cancelMindmapDeleteIntent();
-                                }
-                                if (event.key === "Enter" && deleteMatches && deleteSubmittingMindmapId !== mindmap.id) {
-                                  event.preventDefault();
-                                  void removeMindmap(mindmap.id);
-                                }
-                              }}
-                              placeholder={mindmap.name}
-                              className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
-                            />
-                            <Pressable className="ml-1 rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={cancelMindmapDeleteIntent}>
-                              <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
-                            </Pressable>
-                            <Pressable
-                              className="ml-1 rounded-md"
-                              style={iconButtonStyle}
-                              onPress={() => void removeMindmap(mindmap.id)}
-                              aria-disabled={!deleteMatches || deleteSubmittingMindmapId === mindmap.id}
-                            >
-                              <Text
-                                className={`text-[11px] font-semibold leading-none ${
-                                  deleteMatches && deleteSubmittingMindmapId !== mindmap.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
-                                }`}
-                              >
-                                Del
-                              </Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            </Modal>
-          ) : null}
-
-          {brainstormMenuOpen && brainstormMenuAnchor ? (
-            <Modal transparent visible={brainstormMenuOpen} animationType="fade" onRequestClose={closeBrainstormMenu}>
-              <Pressable className="fixed inset-0 z-[998]" onPress={closeBrainstormMenu} />
-              <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: brainstormMenuAnchor.left, top: brainstormMenuAnchor.top }}>
-                <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
-                  <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
-                    <Text className="text-[#a0a0a0] text-xs">All sessions</Text>
-                    <Pressable
-                      className="rounded-md"
-                      style={plusButtonStyle}
-                      onPress={(event: any) => {
-                        event?.stopPropagation?.();
-                        setIsCreatingBrainstorm(true);
-                        setNewBrainstormName("New Brainstorm");
-                      }}
-                    >
-                      <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-                <View className="max-h-[260px] overflow-y-auto">
-                  {isCreatingBrainstorm ? (
-                    <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
-                      <TextInput
-                        autoFocus
-                        value={newBrainstormName}
-                        onChangeText={setNewBrainstormName}
-                        onKeyDown={(event: any) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            void submitCreateBrainstorm();
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            setIsCreatingBrainstorm(false);
-                          }
-                        }}
-                        className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
-                      />
-                      <View className="ml-1" style={rowStyle}>
-                        <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={() => void submitCreateBrainstorm()}>
-                          <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
-                        </Pressable>
-                        <Pressable
-                          className="rounded-md hover:bg-[#2b2b2b]"
-                          style={iconButtonStyle}
-                          onPress={() => {
-                            setIsCreatingBrainstorm(false);
-                            setNewBrainstormName("New Brainstorm");
-                          }}
-                        >
-                          <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {brainstorms.length === 0 ? (
-                    <View className="px-3 py-2">
-                      <Text className="text-[13px] text-[#8f8f8f]">No brainstorm sessions yet.</Text>
-                    </View>
-                  ) : null}
-
-                  {brainstorms.map((bs) => {
-                    const isActive = selectedBrainstormId === bs.id;
-                    const isDeleteOpen = deleteCandidateBrainstormId === bs.id;
-                    const deleteMatches = deleteBrainstormInput.trim() === bs.name.trim();
-                    return (
-                      <View
-                        key={bs.id}
-                        className={`rounded-lg px-3 py-2 ${isActive ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}
-                      >
-                        <Pressable
-                          onPress={() => {
-                            setSelectedBrainstormId(bs.id);
-                            writeStoredActiveBrainstorm(selectedWorkspaceId, bs.id);
-                            dispatchBrainstormSelectView(bs.id, bs.name);
-                            closeBrainstormMenu();
-                          }}
-                        >
-                          <View style={itemRowStyle}>
-                            <View style={itemNameWrapStyle}>
-                              <Text
-                                as="div"
-                                className={`${isActive ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
-                                style={{ lineHeight: "28px" }}
-                                numberOfLines={1}
-                              >
-                                {bs.name}
-                              </Text>
-                            </View>
-                            <View className="shrink-0" style={itemActionsStyle}>
-                              <Pressable
-                                className="rounded-md hover:bg-[#2b2b2b]"
-                                style={iconButtonStyle}
-                                onPress={(event: any) => {
-                                  event?.stopPropagation?.();
-                                }}
-                              >
-                                <Icon name="settings" size={13} color="#d8d8d8" />
-                              </Pressable>
-                              <Pressable
-                                className="rounded-md hover:bg-[#2b2b2b]"
-                                style={iconButtonStyle}
-                                onPress={(event: any) => {
-                                  event?.stopPropagation?.();
-                                  if (isDeleteOpen) {
-                                    cancelBrainstormDeleteIntent();
-                                  } else {
-                                    setDeleteCandidateBrainstormId(bs.id);
-                                    setDeleteBrainstormInput("");
-                                  }
-                                }}
-                              >
-                                <Icon name="trash-2" size={13} color="#ffb0b0" />
-                              </Pressable>
-                            </View>
-                          </View>
-                        </Pressable>
-
-                        <View
-                          style={{
-                            ...deleteRevealBaseStyle,
-                            maxHeight: isDeleteOpen ? 116 : 0,
-                            opacity: isDeleteOpen ? 1 : 0,
-                            transform: isDeleteOpen ? "translateY(0)" : "translateY(-4px)",
-                            marginTop: isDeleteOpen ? 8 : 0,
-                          }}
-                        >
-                          <Text className="text-[11px] text-[#9a9a9a]">
-                            Retype <Text className="font-semibold text-[#d9d9d9]">{bs.name}</Text> to delete this session.
-                          </Text>
-                          <View className="mt-2" style={rowStyle}>
-                            <TextInput
-                              value={deleteBrainstormInput}
-                              onChangeText={setDeleteBrainstormInput}
-                              onKeyDown={(event: any) => {
-                                if (event.key === "Escape") {
-                                  event.preventDefault();
-                                  cancelBrainstormDeleteIntent();
-                                }
-                                if (event.key === "Enter" && deleteMatches && deleteSubmittingBrainstormId !== bs.id) {
-                                  event.preventDefault();
-                                  void removeBrainstorm(bs.id);
-                                }
-                              }}
-                              placeholder={bs.name}
-                              className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
-                            />
-                            <Pressable className="ml-1 rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={cancelBrainstormDeleteIntent}>
-                              <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
-                            </Pressable>
-                            <Pressable
-                              className="ml-1 rounded-md"
-                              style={iconButtonStyle}
-                              onPress={() => void removeBrainstorm(bs.id)}
-                              aria-disabled={!deleteMatches || deleteSubmittingBrainstormId === bs.id}
-                            >
-                              <Text
-                                className={`text-[11px] font-semibold leading-none ${
-                                  deleteMatches && deleteSubmittingBrainstormId !== bs.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
-                                }`}
-                              >
-                                Del
-                              </Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            </Modal>
-          ) : null}
+          <AppChromeMenus
+            dashboard={{
+              open: dashboardMenuOpen,
+              anchor: dashboardMenuAnchor,
+              views: dashboardViews,
+              activeViewId: activeDashboardViewId,
+              isCreating: isCreatingDashboardView,
+              newName: newDashboardViewName,
+              deleteCandidateId: deleteCandidateDashboardViewId,
+              deleteInput: deleteDashboardViewInput,
+              deleteSubmittingId: deleteSubmittingDashboardViewId,
+              closeMenu: closeDashboardMenu,
+              setActiveView: setActiveDashboardView,
+              setIsCreating: setIsCreatingDashboardView,
+              setNewName: setNewDashboardViewName,
+              submitCreate: submitCreateDashboardView,
+              removeView: (viewId) => {
+                void removeDashboardView(viewId);
+              },
+              setDeleteCandidateId: setDeleteCandidateDashboardViewId,
+              setDeleteInput: setDeleteDashboardViewInput,
+              setDeleteSubmittingId: setDeleteSubmittingDashboardViewId,
+            }}
+            tasks={{
+              open: tasksMenuOpen,
+              anchor: tasksMenuAnchor,
+              canEditTasks,
+              projects: taskProjects,
+              selectedProjectId: selectedTaskProjectId,
+              isCreating: isCreatingTaskProject,
+              newName: newTaskProjectName,
+              deleteCandidateId: deleteCandidateTaskProjectId,
+              deleteInput: deleteTaskProjectInput,
+              deleteSubmittingId: deleteSubmittingTaskProjectId,
+              closeMenu: closeTasksMenu,
+              setSelectedProjectId: setSelectedTaskProjectId,
+              setIsCreating: setIsCreatingTaskProject,
+              setNewName: setNewTaskProjectName,
+              submitCreate: submitCreateTaskProject,
+              removeProject: removeTaskProject,
+              cancelDeleteIntent: cancelTaskProjectDeleteIntent,
+              setDeleteCandidateId: setDeleteCandidateTaskProjectId,
+              setDeleteInput: setDeleteTaskProjectInput,
+            }}
+            mindmap={{
+              open: mindmapMenuOpen,
+              anchor: mindmapMenuAnchor,
+              mindmaps,
+              selectedMindmapId,
+              selectedWorkspaceId,
+              isCreating: isCreatingMindmap,
+              newName: newMindmapName,
+              deleteCandidateId: deleteCandidateMindmapId,
+              deleteInput: deleteMindmapInput,
+              deleteSubmittingId: deleteSubmittingMindmapId,
+              closeMenu: closeMindmapMenu,
+              setSelectedMindmapId,
+              setIsCreating: setIsCreatingMindmap,
+              setNewName: setNewMindmapName,
+              submitCreate: submitCreateMindmap,
+              removeMindmap,
+              cancelDeleteIntent: cancelMindmapDeleteIntent,
+              setDeleteCandidateId: setDeleteCandidateMindmapId,
+              setDeleteInput: setDeleteMindmapInput,
+              writeStoredActiveMindmap,
+              dispatchMindmapSelectMap,
+            }}
+            brainstorm={{
+              open: brainstormMenuOpen,
+              anchor: brainstormMenuAnchor,
+              brainstorms,
+              selectedBrainstormId,
+              selectedWorkspaceId,
+              isCreating: isCreatingBrainstorm,
+              newName: newBrainstormName,
+              deleteCandidateId: deleteCandidateBrainstormId,
+              deleteInput: deleteBrainstormInput,
+              deleteSubmittingId: deleteSubmittingBrainstormId,
+              closeMenu: closeBrainstormMenu,
+              setSelectedBrainstormId,
+              setIsCreating: setIsCreatingBrainstorm,
+              setNewName: setNewBrainstormName,
+              submitCreate: submitCreateBrainstorm,
+              removeBrainstorm,
+              cancelDeleteIntent: cancelBrainstormDeleteIntent,
+              setDeleteCandidateId: setDeleteCandidateBrainstormId,
+              setDeleteInput: setDeleteBrainstormInput,
+              writeStoredActiveBrainstorm,
+              dispatchBrainstormSelectView,
+            }}
+          />
 
           <View className="min-w-[120px] flex flex-row items-center justify-end gap-2">
             <Pressable className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent hover:bg-[#151515]" onPress={() => {}}>

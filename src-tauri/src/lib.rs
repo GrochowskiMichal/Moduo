@@ -129,6 +129,10 @@ pub fn run() {
             commands::auth::auth_remove_pin,
             commands::auth::auth_update_display_name,
             commands::auth::auth_get_stored_mnemonic,
+            commands::ai::ai_credentials_list,
+            commands::ai::ai_credentials_upsert,
+            commands::ai::ai_credentials_delete,
+            commands::ai::ai_credentials_get,
             commands::workspace::workspace_list_local,
             commands::workspace::workspace_create_local,
             commands::workspace::workspace_rename_local,
@@ -186,11 +190,7 @@ pub fn run() {
             commands::email::email_set_activity_state,
             commands::email::email_apply_flag,
             commands::email::email_get_mailbox_status,
-            commands::email::email_fetch_saved,
             commands::email::email_send_saved,
-            commands::email::email_connect,
-            commands::email::email_fetch,
-            commands::email::email_send,
             commands::system::open_external_url,
         ])
         .build(tauri::generate_context!())
