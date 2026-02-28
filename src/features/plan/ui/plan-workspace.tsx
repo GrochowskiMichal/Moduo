@@ -892,7 +892,7 @@ export function PlanWorkspace() {
                         onRequestCreateTask={stateId => handleCreateTask(stateId)} />
                 )}
                 {nav.view === "gantt" && (
-                    <GanttView tasks={filteredTasks} selectedTaskId={selectedTaskId} projectNameById={projectNameById} onSelectTask={handleSelectTask} />
+                    <GanttView tasks={filteredTasks} selectedTaskId={selectedTaskId} projectNameById={projectNameById} assigneeById={assigneeById} showProjectName={nav.projectId === null} onSelectTask={handleSelectTask} />
                 )}
                     </>
                 )}
