@@ -11,6 +11,7 @@ type Props = {
   assigneeById: Map<string, AssigneeInfo>;
   showProjectName: boolean;
   onSelectTask: (taskId: string) => void;
+  onOpenTaskContextMenu?: (taskId: string, x: number, y: number) => void;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -103,7 +104,7 @@ function buildMonthGroups(days: Date[]): MonthGroup[] {
   return groups;
 }
 
-export function TasksGantt({ tasks, selectedTaskId, projectNameById, assigneeById, showProjectName, onSelectTask }: Props) {
+export function TasksGantt({ tasks, selectedTaskId, projectNameById, assigneeById, showProjectName, onSelectTask, onOpenTaskContextMenu }: Props) {
   const today = useMemo(() => startOfDay(new Date()), []);
 
   const { rows, rangeStart, dayCount } = useMemo(() => {
@@ -291,6 +292,11 @@ export function TasksGantt({ tasks, selectedTaskId, projectNameById, assigneeByI
                   className={`px-3 text-left border-r border-[#161616] transition-colors flex flex-col justify-center gap-[3px] ${rowBg}`}
                   style={{ height: ROW_H }}
                   onClick={() => onSelectTask(row.task.id)}
+                  onContextMenu={(event) => {
+                    if (!onOpenTaskContextMenu) return;
+                    event.preventDefault();
+                    onOpenTaskContextMenu(row.task.id, event.clientX, event.clientY);
+                  }}
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span
@@ -345,6 +351,11 @@ export function TasksGantt({ tasks, selectedTaskId, projectNameById, assigneeByI
                     backgroundImage: weekendBg ? `linear-gradient(transparent, transparent), linear-gradient(to right, ${weekendBg})` : undefined,
                   }}
                   onClick={() => onSelectTask(row.task.id)}
+                  onContextMenu={(event) => {
+                    if (!onOpenTaskContextMenu) return;
+                    event.preventDefault();
+                    onOpenTaskContextMenu(row.task.id, event.clientX, event.clientY);
+                  }}
                 >
                   {/* Day grid lines */}
                   {days.map((day, index) => (

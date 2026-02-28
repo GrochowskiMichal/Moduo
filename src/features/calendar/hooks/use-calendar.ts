@@ -82,37 +82,52 @@ const DEFAULT_COLORS = [
   "#c0c0c0",
 ];
 
-function ensureLocalCalendar(
+function ensureDefaultPersonalCalendar(
   accounts: CalendarAccount[],
   sources: CalendarSource[]
 ): { accounts: CalendarAccount[]; sources: CalendarSource[] } {
-  const hasLocal = accounts.some((a) => a.provider === "local");
-  if (hasLocal) return { accounts, sources };
+  let nextAccounts = [...accounts];
+  let nextSources = [...sources];
+  let changed = false;
 
-  const accountId = safeId();
-  const nextAccounts: CalendarAccount[] = [
-    ...accounts,
-    {
-      id: accountId,
+  let localAccount = nextAccounts.find((account) => account.provider === "local");
+  if (!localAccount) {
+    localAccount = {
+      id: safeId(),
       provider: "local",
       email: "",
       displayName: "Local Calendar",
       connected: true,
       lastSyncAt: null,
-    },
-  ];
-  const nextSources: CalendarSource[] = [
-    ...sources,
-    {
-      id: safeId(),
-      accountId,
-      name: "Personal",
-      color: DEFAULT_COLORS[0],
-      visible: true,
-    },
-  ];
-  writeLocalAccounts(nextAccounts);
-  writeLocalSources(nextSources);
+    };
+    nextAccounts = [...nextAccounts, localAccount];
+    changed = true;
+  }
+
+  const hasPersonalSource = nextSources.some(
+    (source) =>
+      source.accountId === localAccount.id &&
+      source.name.trim().toLowerCase() === "personal"
+  );
+
+  if (!hasPersonalSource) {
+    nextSources = [
+      ...nextSources,
+      {
+        id: safeId(),
+        accountId: localAccount.id,
+        name: "Personal",
+        color: DEFAULT_COLORS[0],
+        visible: true,
+      },
+    ];
+    changed = true;
+  }
+
+  if (changed) {
+    writeLocalAccounts(nextAccounts);
+    writeLocalSources(nextSources);
+  }
   return { accounts: nextAccounts, sources: nextSources };
 }
 
@@ -134,7 +149,11 @@ export type UseCalendarState = {
   deleteEvent: (eventId: string) => void;
   selectEvent: (eventId: string | null) => void;
   toggleSourceVisibility: (sourceId: string) => void;
+  deleteSource: (sourceId: string) => void;
+  addInternalCalendar: () => void;
   addGoogleAccount: () => Promise<void>;
+  addOutlookAccount: () => void;
+  addAppleAccount: () => void;
   removeAccount: (accountId: string) => void;
   getVisibleEvents: () => CalendarEvent[];
 };
@@ -151,7 +170,7 @@ export function useCalendar(): UseCalendarState {
   useEffect(() => {
     const rawAccounts = readLocalAccounts();
     const rawSources = readLocalSources();
-    const { accounts: resolvedAccounts, sources: resolvedSources } = ensureLocalCalendar(rawAccounts, rawSources);
+    const { accounts: resolvedAccounts, sources: resolvedSources } = ensureDefaultPersonalCalendar(rawAccounts, rawSources);
     setAccounts(resolvedAccounts);
     setSources(resolvedSources);
     setEvents(readLocalEvents());
@@ -249,6 +268,73 @@ export function useCalendar(): UseCalendarState {
     [sources]
   );
 
+  const deleteSource = useCallback(
+    (sourceId: string) => {
+      const target = sources.find((source) => source.id === sourceId);
+      if (!target) return;
+      if (sources.length <= 1) return;
+      const nextSources = sources.filter((source) => source.id !== sourceId);
+      const nextEvents = events.filter((event) => event.calendarId !== sourceId);
+      const hasAnySourcesForAccount = nextSources.some((source) => source.accountId === target.accountId);
+      const nextAccounts = hasAnySourcesForAccount
+        ? accounts
+        : accounts.filter((account) => account.id !== target.accountId);
+
+      setSources(nextSources);
+      setEvents(nextEvents);
+      setAccounts(nextAccounts);
+      writeLocalSources(nextSources);
+      writeLocalEvents(nextEvents);
+      writeLocalAccounts(nextAccounts);
+      if (selectedEventId && nextEvents.every((event) => event.id !== selectedEventId)) {
+        setSelectedEventId(null);
+      }
+    },
+    [accounts, events, selectedEventId, sources]
+  );
+
+  const addInternalCalendar = useCallback(() => {
+    let localAccount = accounts.find((account) => account.provider === "local");
+    let nextAccounts = accounts;
+    if (!localAccount) {
+      localAccount = {
+        id: safeId(),
+        provider: "local",
+        email: "",
+        displayName: "Local Calendar",
+        connected: true,
+        lastSyncAt: null,
+      };
+      nextAccounts = [...accounts, localAccount];
+    }
+
+    const normalizedNames = new Set(
+      sources
+        .filter((source) => source.accountId === localAccount.id)
+        .map((source) => source.name.trim().toLowerCase())
+    );
+    let name = "Internal";
+    let idx = 2;
+    while (normalizedNames.has(name.toLowerCase())) {
+      name = `Internal ${idx}`;
+      idx += 1;
+    }
+
+    const nextSource: CalendarSource = {
+      id: safeId(),
+      accountId: localAccount.id,
+      name,
+      color: DEFAULT_COLORS[sources.length % DEFAULT_COLORS.length] ?? DEFAULT_COLORS[0]!,
+      visible: true,
+    };
+
+    const nextSources = [...sources, nextSource];
+    setAccounts(nextAccounts);
+    setSources(nextSources);
+    writeLocalAccounts(nextAccounts);
+    writeLocalSources(nextSources);
+  }, [accounts, sources]);
+
   const addGoogleAccount = useCallback(async () => {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -308,6 +394,49 @@ export function useCalendar(): UseCalendarState {
     }
   }, [accounts, sources]);
 
+  const addOutlookAccount = useCallback(() => {
+    const accountId = safeId();
+    const newAccount: CalendarAccount = {
+      id: accountId,
+      provider: "outlook",
+      email: "user@outlook.com",
+      displayName: "Microsoft Calendar",
+      connected: false,
+      lastSyncAt: null,
+    };
+    const newSources: CalendarSource[] = [
+      { id: safeId(), accountId, name: "Outlook", color: DEFAULT_COLORS[3], visible: true },
+      { id: safeId(), accountId, name: "Meetings", color: DEFAULT_COLORS[6], visible: true },
+    ];
+    const nextAccounts = [...accounts, newAccount];
+    const nextSources = [...sources, ...newSources];
+    setAccounts(nextAccounts);
+    setSources(nextSources);
+    writeLocalAccounts(nextAccounts);
+    writeLocalSources(nextSources);
+  }, [accounts, sources]);
+
+  const addAppleAccount = useCallback(() => {
+    const accountId = safeId();
+    const newAccount: CalendarAccount = {
+      id: accountId,
+      provider: "apple",
+      email: "user@icloud.com",
+      displayName: "Apple Calendar",
+      connected: false,
+      lastSyncAt: null,
+    };
+    const newSources: CalendarSource[] = [
+      { id: safeId(), accountId, name: "iCloud", color: DEFAULT_COLORS[4], visible: true },
+    ];
+    const nextAccounts = [...accounts, newAccount];
+    const nextSources = [...sources, ...newSources];
+    setAccounts(nextAccounts);
+    setSources(nextSources);
+    writeLocalAccounts(nextAccounts);
+    writeLocalSources(nextSources);
+  }, [accounts, sources]);
+
   const removeAccount = useCallback(
     (accountId: string) => {
       const nextAccounts = accounts.filter((a) => a.id !== accountId);
@@ -352,7 +481,11 @@ export function useCalendar(): UseCalendarState {
     deleteEvent,
     selectEvent,
     toggleSourceVisibility,
+    deleteSource,
+    addInternalCalendar,
     addGoogleAccount,
+    addOutlookAccount,
+    addAppleAccount,
     removeAccount,
     getVisibleEvents,
   };

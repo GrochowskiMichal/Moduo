@@ -854,12 +854,20 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     if (isSettingsRoute) return;
     setPanelsForFeature(currentFeature, currentPanels.left, !currentPanels.right);
   };
+  const moduleNavLeadStyle = currentPanels.left
+    ? {
+        width: currentPanels.right
+          ? "calc((100vw - 64px) * 0.2)"
+          : "calc((100vw - 48px) * 0.2)",
+        minWidth: 0,
+      }
+    : undefined;
 
   return (
     <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-[#0C0C0C]">
       <View className="relative z-[400] px-5 pt-4 pb-2 bg-[#0C0C0C]">
         <View className="relative z-[410] flex flex-row items-center justify-between gap-3">
-          <View className="min-w-[260px] flex flex-row items-center gap-3">
+          <View className={`${currentPanels.left ? "min-w-0" : "min-w-[260px]"} flex flex-row items-center gap-3`} style={moduleNavLeadStyle}>
             <Image source={moduoFavicon} className="h-8 w-8 shrink-0" contentFit="contain" />
             <WorkspaceSwitcher onOpenSettings={() => setWorkspaceSettingsOpen(true)} />
           </View>
@@ -869,7 +877,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               {modulesNavItems.map((tab) => {
                 const active = pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
                 const isGridTab = tab.href === "/grid";
-                const isTasksTab = tab.href === "/ground";
                 const isMindmapTab = tab.href === "/mindmap";
                 const isBrainstormTab = tab.href === "/brainstorm";
                 return (
@@ -886,15 +893,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                       <View ref={gridControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
                         <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleGridMenu}>
                           <Text className="text-[13px] text-[#d7d7d7]">{activeGridSceneName}</Text>
-                          <Text className="text-[11px] text-[#8f8f8f]">▾</Text>
-                        </Pressable>
-                      </View>
-                    ) : null}
-
-                    {isTasksTab && isTasksRoute ? (
-                      <View ref={tasksControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
-                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleTasksMenu}>
-                          <Text className="text-[13px] text-[#d7d7d7]">{selectedTaskProjectLabel}</Text>
                           <Text className="text-[11px] text-[#8f8f8f]">▾</Text>
                         </Pressable>
                       </View>

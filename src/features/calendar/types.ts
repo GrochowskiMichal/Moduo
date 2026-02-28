@@ -1,6 +1,6 @@
 export type CalendarViewMode = "day" | "week" | "month";
 
-export type CalendarProvider = "google" | "outlook" | "local";
+export type CalendarProvider = "google" | "outlook" | "apple" | "local";
 
 export type CalendarAccount = {
   id: string;

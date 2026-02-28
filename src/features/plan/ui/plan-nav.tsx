@@ -49,6 +49,31 @@ const Ico = {
     ChevDown: () => <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>,
     ChevL: () => <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>,
     ChevR: () => <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 6 15 12 9 18" /></svg>,
+    Google: () => (
+        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.8-5.5 3.8-3.3 0-6-2.8-6-6.2s2.7-6.2 6-6.2c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3 14.6 2 12 2 6.9 2 2.8 6.3 2.8 11.7S6.9 21.4 12 21.4c6.9 0 9.1-5 9.1-7.5 0-.5 0-.8-.1-1.2H12z" />
+            <path fill="#4285F4" d="M21.1 12.7h-9.1v3.5h5.2c-.5 1.3-1.7 2.2-3.3 2.6l2.5 2c2.3-1.4 3.9-4.1 3.9-8.1z" />
+            <path fill="#FBBC05" d="M5.8 14.3c-.2-.7-.4-1.4-.4-2.2s.1-1.5.4-2.2l-2.7-2.1C2.4 9.1 2 10.5 2 12s.4 2.9 1.1 4.1l2.7-1.8z" />
+            <path fill="#34A853" d="M12 22c2.6 0 4.8-.9 6.4-2.5l-2.5-2c-.7.5-1.8 1.1-3.9 1.1-3 0-5.5-2.1-6.4-4.9l-2.7 1.8C4.4 19.1 7.9 22 12 22z" />
+        </svg>
+    ),
+    Microsoft: () => (
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="1" y="1" width="6" height="6" fill="#F25022" />
+            <rect x="9" y="1" width="6" height="6" fill="#7FBA00" />
+            <rect x="1" y="9" width="6" height="6" fill="#00A4EF" />
+            <rect x="9" y="9" width="6" height="6" fill="#FFB900" />
+        </svg>
+    ),
+    Apple: () => (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+                d="M16.7 12.8c0-2.4 2-3.5 2.1-3.5-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9s-2-.9-3.2-.8c-1.7 0-3.2 1-4.1 2.5-1.8 3.2-.5 7.9 1.3 10.4.9 1.2 1.9 2.5 3.3 2.4 1.3 0 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.2 3.1-2.4 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1.1-2.7-4.7z"
+                fill="currentColor"
+            />
+            <path d="M14.4 5.9c.7-.9 1.2-2.1 1.1-3.4-1 .1-2.2.7-2.9 1.6-.7.8-1.3 2-1.1 3.2 1.1.1 2.2-.6 2.9-1.4z" fill="currentColor" />
+        </svg>
+    ),
 };
 
 const VIEW_ICO: Record<PlanView, React.ReactNode> = {
@@ -98,9 +123,9 @@ function DeleteConfirm({ name, label, onDelete, onCancel }: {
 }
 
 // ─── smart dropdown (fix 2: no check icon; fix 3: no red bg on trash; fix 8: gear always visible) ──
-type DropItem = { id: string; label: string; color?: string; iconUrl?: string; };
+type DropItem = { id: string; label: string; color?: string; iconUrl?: string; deletable?: boolean; };
 
-function SmartDropdown({ triggerLabel, items, selected, onSelect, onDeleteItem, onSettingsItem, onClickAdd, addLabel }: {
+function SmartDropdown({ triggerLabel, items, selected, onSelect, onDeleteItem, onSettingsItem, onClickAdd, onClickAddInternal, onClickAddExternalGoogle, onClickAddExternalMicrosoft, onClickAddExternalApple, addLabel }: {
     triggerLabel: string;
     items: DropItem[];
     selected: string | null;
@@ -108,20 +133,38 @@ function SmartDropdown({ triggerLabel, items, selected, onSelect, onDeleteItem, 
     onDeleteItem?: (id: string) => Promise<void> | void;
     onSettingsItem?: (id: string) => void;
     onClickAdd?: () => void;
+    onClickAddInternal?: () => void;
+    onClickAddExternalGoogle?: () => void;
+    onClickAddExternalMicrosoft?: () => void;
+    onClickAddExternalApple?: () => void;
     addLabel: string;
 }) {
     const [open, setOpen] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [calendarAddModeOpen, setCalendarAddModeOpen] = useState(false);
+    const [calendarExternalProvidersOpen, setCalendarExternalProvidersOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
     const cur = items.find(i => i.id === selected);
 
     useEffect(() => {
         if (!open) return;
         const h = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setDeletingId(null); }
+            if (ref.current && !ref.current.contains(e.target as Node)) {
+                setOpen(false);
+                setDeletingId(null);
+                setCalendarAddModeOpen(false);
+                setCalendarExternalProvidersOpen(false);
+            }
         };
         document.addEventListener("mousedown", h);
         return () => document.removeEventListener("mousedown", h);
+    }, [open]);
+
+    useEffect(() => {
+        if (open) return;
+        setDeletingId(null);
+        setCalendarAddModeOpen(false);
+        setCalendarExternalProvidersOpen(false);
     }, [open]);
 
     return (
@@ -179,15 +222,16 @@ function SmartDropdown({ triggerLabel, items, selected, onSelect, onDeleteItem, 
 
                                 {/* fix 8: gear + trash always visible on hover, gear is placeholder */}
                                 <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {/* gear — placeholder, no op */}
-                                    <button
-                                        onClick={e => { e.stopPropagation(); if (onSettingsItem) { onSettingsItem(item.id); setOpen(false); } }}
-                                        title="Project settings"
-                                        className="h-5 w-5 grid place-items-center rounded text-[#333] hover:text-[#777] transition-colors"
-                                    ><Ico.Gear /></button>
+                                    {onSettingsItem && (
+                                        <button
+                                            onClick={e => { e.stopPropagation(); onSettingsItem(item.id); setOpen(false); }}
+                                            title={triggerLabel.toLowerCase().includes("calendar") ? "Calendar settings" : "Project settings"}
+                                            className="h-5 w-5 grid place-items-center rounded text-[#333] hover:text-[#777] transition-colors"
+                                        ><Ico.Gear /></button>
+                                    )}
 
                                     {/* fix 3: trash — no red bg, just icon color change */}
-                                    {onDeleteItem && (
+                                    {onDeleteItem && item.deletable !== false && (
                                         <button
                                             onClick={e => { e.stopPropagation(); setDeletingId(prev => prev === item.id ? null : item.id); }}
                                             title="Delete"
@@ -198,7 +242,7 @@ function SmartDropdown({ triggerLabel, items, selected, onSelect, onDeleteItem, 
                             </div>
 
                             {/* inline delete confirm */}
-                            {deletingId === item.id && onDeleteItem && (
+                            {deletingId === item.id && onDeleteItem && item.deletable !== false && (
                                 <DeleteConfirm
                                     name={item.label}
                                     label={addLabel.toLowerCase().replace("new ", "")}
@@ -217,12 +261,65 @@ function SmartDropdown({ triggerLabel, items, selected, onSelect, onDeleteItem, 
                     {onClickAdd && (
                         <>
                             <div className="my-1 h-px bg-[#141414]" />
-                            <button
-                                onClick={() => { onClickAdd(); setOpen(false); }}
-                                className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] text-[#555] hover:text-[#aaa] hover:bg-[#111] transition-colors"
-                            >
-                                <Ico.Plus />{addLabel}
-                            </button>
+                            {!calendarAddModeOpen || !onClickAddInternal || !onClickAddExternalGoogle ? (
+                                <button
+                                    onClick={() => {
+                                        if (onClickAddInternal && onClickAddExternalGoogle) {
+                                            setCalendarAddModeOpen(true);
+                                            setCalendarExternalProvidersOpen(false);
+                                            return;
+                                        }
+                                        onClickAdd();
+                                        setOpen(false);
+                                    }}
+                                    className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] text-[#555] hover:text-[#aaa] hover:bg-[#111] transition-colors"
+                                >
+                                    <Ico.Plus />{addLabel}
+                                </button>
+                            ) : (
+                                <div className="flex items-center gap-1.5 px-3 py-1.5">
+                                    {!calendarExternalProvidersOpen ? (
+                                        <>
+                                            <button
+                                                onClick={() => { onClickAddInternal(); setOpen(false); setCalendarAddModeOpen(false); }}
+                                                className="flex-1 rounded-md border border-[#252525] px-2 py-1 text-[10px] font-semibold text-[#9a9a9a] hover:text-[#ddd] hover:bg-[#151515] transition-colors"
+                                            >
+                                                Internal
+                                            </button>
+                                            <button
+                                                onClick={() => { setCalendarExternalProvidersOpen(true); }}
+                                                className="flex-1 rounded-md border border-[#252525] px-2 py-1 text-[10px] font-semibold text-[#9a9a9a] hover:text-[#ddd] hover:bg-[#151515] transition-colors"
+                                            >
+                                                External
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                    <button
+                                        onClick={() => { onClickAddExternalGoogle?.(); setOpen(false); setCalendarAddModeOpen(false); setCalendarExternalProvidersOpen(false); }}
+                                        title="Google"
+                                        className="flex-1 rounded-md border border-[#252525] px-2 py-1 text-[10px] font-semibold text-[#9a9a9a] hover:text-[#ddd] hover:bg-[#151515] transition-colors inline-flex items-center justify-center"
+                                    >
+                                        <Ico.Google />
+                                    </button>
+                                    <button
+                                        onClick={() => { onClickAddExternalMicrosoft?.(); setOpen(false); setCalendarAddModeOpen(false); setCalendarExternalProvidersOpen(false); }}
+                                        title="Microsoft"
+                                        className="flex-1 rounded-md border border-[#252525] px-2 py-1 text-[10px] font-semibold text-[#9a9a9a] hover:text-[#ddd] hover:bg-[#151515] transition-colors inline-flex items-center justify-center"
+                                    >
+                                        <Ico.Microsoft />
+                                    </button>
+                                    <button
+                                        onClick={() => { onClickAddExternalApple?.(); setOpen(false); setCalendarAddModeOpen(false); setCalendarExternalProvidersOpen(false); }}
+                                        title="Apple"
+                                        className="flex-1 rounded-md border border-[#252525] px-2 py-1 text-[10px] font-semibold text-[#9a9a9a] hover:text-[#ddd] hover:bg-[#151515] transition-colors inline-flex items-center justify-center"
+                                    >
+                                        <Ico.Apple />
+                                    </button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </>
                     )}
                 </div>
@@ -250,14 +347,18 @@ type SectionProps = {
     projectId: string | null;
     onCalendarChange: (id: string | null) => void;
     onProjectChange: (id: string | null) => void;
+    onDeleteCalendar: (id: string) => Promise<void>;
     onDeleteProject: (id: string) => Promise<void>;
     onOpenProjectSettings: (id: string) => void;
     onAddProject: () => void;
-    onAddCalendar: () => void;
+    onAddCalendarInternal: () => void;
+    onAddCalendarExternalGoogle: () => void;
+    onAddCalendarExternalMicrosoft: () => void;
+    onAddCalendarExternalApple: () => void;
 };
 
 function SectionGroup({ current, onChange, calItems, projItems, calendarId, projectId,
-    onCalendarChange, onProjectChange, onDeleteProject, onOpenProjectSettings, onAddProject, onAddCalendar }: SectionProps) {
+    onCalendarChange, onProjectChange, onDeleteCalendar, onDeleteProject, onOpenProjectSettings, onAddProject, onAddCalendarInternal, onAddCalendarExternalGoogle, onAddCalendarExternalMicrosoft, onAddCalendarExternalApple }: SectionProps) {
     const sections: { id: PlanSection; label: string }[] = [
         { id: "all", label: "All" },
         { id: "events", label: "Events" },
@@ -287,7 +388,12 @@ function SectionGroup({ current, onChange, calItems, projItems, calendarId, proj
                                     items={calItems}
                                     selected={calendarId}
                                     onSelect={onCalendarChange}
-                                    onClickAdd={onAddCalendar}
+                                    onDeleteItem={onDeleteCalendar}
+                                    onClickAdd={onAddCalendarInternal}
+                                    onClickAddInternal={onAddCalendarInternal}
+                                    onClickAddExternalGoogle={onAddCalendarExternalGoogle}
+                                    onClickAddExternalMicrosoft={onAddCalendarExternalMicrosoft}
+                                    onClickAddExternalApple={onAddCalendarExternalApple}
                                     addLabel="New Calendar"
                                 />
                             </>
@@ -424,19 +530,28 @@ export type PlanNavProps = {
     onCreateEvent: () => void;
     onCreateTask: () => void;
     onAddProject: () => void;
+    onDeleteCalendar: (id: string) => Promise<void>;
     onDeleteProject: (id: string) => Promise<void>;
     onOpenProjectSettings: (id: string) => void;
-    onAddCalendar: () => void;
+    onAddCalendarInternal: () => void;
+    onAddCalendarExternalGoogle: () => void;
+    onAddCalendarExternalMicrosoft: () => void;
+    onAddCalendarExternalApple: () => void;
     onNavigate: (dir: -1 | 1) => void;   // fix 7
     sources: CalendarSource[];
     projects: TaskProject[];
 };
 
-export function PlanNav({ state, onChange, onCreateEvent, onCreateTask, onAddProject, onDeleteProject, onOpenProjectSettings, onAddCalendar, onNavigate, sources, projects }: PlanNavProps) {
+export function PlanNav({ state, onChange, onCreateEvent, onCreateTask, onAddProject, onDeleteCalendar, onDeleteProject, onOpenProjectSettings, onAddCalendarInternal, onAddCalendarExternalGoogle, onAddCalendarExternalMicrosoft, onAddCalendarExternalApple, onNavigate, sources, projects }: PlanNavProps) {
     const { section, view, density, calendarId, projectId } = state;
     const set = (patch: Partial<PlanNavState>) => onChange({ ...state, ...patch });
 
-    const calItems: DropItem[] = sources.map(s => ({ id: s.id, label: s.name, color: s.color }));
+    const calItems: DropItem[] = sources.map(s => ({
+        id: s.id,
+        label: s.name,
+        color: s.color,
+        deletable: !(sources.length <= 1 && s.name.trim().toLowerCase() === "personal"),
+    }));
     const projItems: DropItem[] = projects.filter(p => !p.deletedAt).map(p => ({ id: p.id, label: p.name, iconUrl: p.logoUrl ?? undefined }));
 
     return (
@@ -449,10 +564,14 @@ export function PlanNav({ state, onChange, onCreateEvent, onCreateTask, onAddPro
                 calendarId={calendarId} projectId={projectId}
                 onCalendarChange={id => set({ calendarId: id })}
                 onProjectChange={id => set({ projectId: id, view: clampView(view, section, id) })}
+                onDeleteCalendar={onDeleteCalendar}
                 onDeleteProject={onDeleteProject}
                 onOpenProjectSettings={onOpenProjectSettings}
                 onAddProject={onAddProject}
-                onAddCalendar={onAddCalendar}
+                onAddCalendarInternal={onAddCalendarInternal}
+                onAddCalendarExternalGoogle={onAddCalendarExternalGoogle}
+                onAddCalendarExternalMicrosoft={onAddCalendarExternalMicrosoft}
+                onAddCalendarExternalApple={onAddCalendarExternalApple}
             />
             <NavSep />
             <ViewGroup

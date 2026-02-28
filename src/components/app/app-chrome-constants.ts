@@ -27,7 +27,7 @@ export function normalizeTaskProject(raw: any): TaskProjectOption {
 export const baseModulesNavItems: ModuleNavItem[] = [
   { label: "Grid", iconName: "grid", href: "/grid" },
   { label: "Notes", iconName: "file-text", href: "/notes", module: "notes" },
-  { label: "Ground", iconName: "calendar", href: "/ground" },
+  { label: "Ground", iconName: "ground-roots", href: "/ground" },
   { label: "Mindmap", iconName: "git-branch", href: "/mindmap", module: "mindmap" },
   { label: "Templates", iconName: "edit-3", href: "/templates", module: "templates" },
   { label: "Email", iconName: "mail", href: "/email", module: "email" },

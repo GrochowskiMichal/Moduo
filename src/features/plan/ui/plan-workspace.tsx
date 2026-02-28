@@ -16,6 +16,7 @@ import { ListView } from "./list-view";
 import { PlanCalendarView } from "./calendar-view";
 import { LinkView } from "./link-view";
 import { GanttView } from "./gantt-view";
+import { KanbanTaskContextModal } from "./kanban-task-context-modal";
 import { priorityVisual } from "../../tasks/ui/task-visuals";
 
 // ─── constants / helpers ──────────────────────────────────────────────────────
@@ -418,6 +419,7 @@ export function PlanWorkspace() {
     const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
     const [settingsSection, setSettingsSection] = useState<"general" | "stages" | "labels">("general");
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+    const [taskContextMenu, setTaskContextMenu] = useState<{ taskId: string; x: number; y: number } | null>(null);
     const handleSelectTask = useCallback((id: string) => {
         if (nav.view === "kanban" || nav.view === "gantt") setSelectedTaskId(id);
     }, [nav.view]);
@@ -700,6 +702,70 @@ export function PlanWorkspace() {
         }
         await tsk.updateTask(source.id, { duplicateOfTaskId: null });
     }, [activeTaskById, tsk]);
+    const updateTaskQuick = useCallback(
+        async (taskId: string, patch: Partial<Pick<Task, "priority" | "assigneeId" | "tags">>) => {
+            await tsk.updateTask(taskId, patch);
+        },
+        [tsk]
+    );
+    const renameTask = useCallback(
+        async (taskId: string, title: string) => {
+            await tsk.updateTask(taskId, { title: title.trim() || "Untitled" });
+        },
+        [tsk]
+    );
+    const duplicateTask = useCallback(
+        async (task: Task) => {
+            await tsk.createTask({
+                projectId: task.projectId,
+                stateId: task.stateId,
+                parentTaskId: task.parentTaskId,
+                childOfTaskId: task.childOfTaskId,
+                blockedByTaskIds: task.blockedByTaskIds,
+                duplicateOfTaskId: task.duplicateOfTaskId,
+                title: `${task.title || "Task"} (copy)`,
+                description: task.description,
+                tags: task.tags,
+                priority: task.priority,
+                dueDate: task.dueDate,
+                assigneeId: task.assigneeId,
+            });
+        },
+        [tsk]
+    );
+    const deleteTask = useCallback(
+        async (taskId: string) => {
+            await tsk.deleteTask(taskId);
+            if (selectedTaskId === taskId) setSelectedTaskId(null);
+        },
+        [selectedTaskId, tsk]
+    );
+    const openTaskContextMenu = useCallback((taskId: string, x: number, y: number) => {
+        setTaskContextMenu({ taskId, x, y });
+    }, []);
+    const contextTask = useMemo(
+        () => (taskContextMenu ? activeTaskById.get(taskContextMenu.taskId) ?? null : null),
+        [activeTaskById, taskContextMenu]
+    );
+    const contextTaskRelationTargets = useMemo(
+        () =>
+            contextTask
+                ? activeTasks.filter(
+                    task => task.projectId === contextTask.projectId && task.id !== contextTask.id
+                )
+                : [],
+        [activeTasks, contextTask]
+    );
+    useEffect(() => {
+        if (!taskContextMenu) return;
+        if (!contextTask) {
+            setTaskContextMenu(null);
+            return;
+        }
+        if (nav.view !== "list" && nav.view !== "gantt") {
+            setTaskContextMenu(null);
+        }
+    }, [contextTask, nav.view, taskContextMenu]);
     const handleCreateEvent = () => {
         const src = cal.sources.find(s => s.visible);
         if (!src) return;
@@ -709,11 +775,18 @@ export function PlanWorkspace() {
     };
 
     const handleAddProject = async () => { await tsk.createProject("New Project"); };
+    const handleDeleteCalendar = async (id: string) => {
+        cal.deleteSource(id);
+        if (nav.calendarId === id) setNav(n => ({ ...n, calendarId: null }));
+    };
     const handleDeleteProject = async (id: string) => {
         await tsk.deleteProject(id);
         if (nav.projectId === id) setNav(n => ({ ...n, projectId: null }));
     };
-    const handleAddCalendar = () => { void cal.addGoogleAccount(); };
+    const handleAddCalendarInternal = () => { cal.addInternalCalendar(); };
+    const handleAddCalendarExternalGoogle = () => { void cal.addGoogleAccount(); };
+    const handleAddCalendarExternalMicrosoft = () => { cal.addOutlookAccount(); };
+    const handleAddCalendarExternalApple = () => { cal.addAppleAccount(); };
     const handleOpenProjectSettings = (projectId: string) => {
         setLeftPanel(null);
         setSettingsSection("general");
@@ -727,9 +800,13 @@ export function PlanWorkspace() {
         onCreateEvent: handleCreateEvent,
         onCreateTask: handleCreateTask,
         onAddProject: handleAddProject,
+        onDeleteCalendar: handleDeleteCalendar,
         onDeleteProject: handleDeleteProject,
         onOpenProjectSettings: handleOpenProjectSettings,
-        onAddCalendar: handleAddCalendar,
+        onAddCalendarInternal: handleAddCalendarInternal,
+        onAddCalendarExternalGoogle: handleAddCalendarExternalGoogle,
+        onAddCalendarExternalMicrosoft: handleAddCalendarExternalMicrosoft,
+        onAddCalendarExternalApple: handleAddCalendarExternalApple,
         onNavigate: handleNavigate,
         sources: cal.sources,
         projects: visProjects,
@@ -815,7 +892,8 @@ export function PlanWorkspace() {
                 {nav.view === "list" && (
                     <ListView events={filteredEvents} tasks={filteredTasks} taskStates={visStates}
                         sources={cal.sources} showEvents={showEvents} showTasks={showTasksOnGrid}
-                        onClickEvent={id => cal.selectEvent(id)} onSelectTask={handleSelectTask} />
+                        onClickEvent={id => cal.selectEvent(id)} onSelectTask={handleSelectTask}
+                        onOpenTaskContextMenu={openTaskContextMenu} />
                 )}
                 {nav.view === "link" && <LinkView events={filteredEvents} sources={cal.sources} />}
                 {/* fix 5: require a project for kanban */}
@@ -867,33 +945,34 @@ export function PlanWorkspace() {
                         assigneeOptions={assigneeOptions}
                         projectLabelColorsByProjectId={projectLabelColorsByProjectId}
                         projectLabelsByProjectId={projectLabelsByProjectId}
-                        onQuickUpdateTask={(taskId, patch) => tsk.updateTask(taskId, patch)}
-                        onRenameTask={(taskId, title) => tsk.updateTask(taskId, { title: title.trim() || "Untitled" })}
-                        onDuplicateTask={async (task) => {
-                            await tsk.createTask({
-                                projectId: task.projectId,
-                                stateId: task.stateId,
-                                parentTaskId: task.parentTaskId,
-                                childOfTaskId: task.childOfTaskId,
-                                blockedByTaskIds: task.blockedByTaskIds,
-                                duplicateOfTaskId: task.duplicateOfTaskId,
-                                title: `${task.title || "Task"} (copy)`,
-                                description: task.description,
-                                tags: task.tags,
-                                priority: task.priority,
-                                dueDate: task.dueDate,
-                                assigneeId: task.assigneeId,
-                            });
-                        }}
-                        onDeleteTask={(taskId) => tsk.deleteTask(taskId)}
+                        onQuickUpdateTask={updateTaskQuick}
+                        onRenameTask={renameTask}
+                        onDuplicateTask={duplicateTask}
+                        onDeleteTask={deleteTask}
                         onApplyRelation={applyTaskRelation}
                         onSelectTask={handleSelectTask}
                         onMoveTask={(taskId, stateId, beforeTaskId) => void tsk.moveTask(taskId, null, stateId, beforeTaskId ?? null)}
                         onRequestCreateTask={stateId => handleCreateTask(stateId)} />
                 )}
                 {nav.view === "gantt" && (
-                    <GanttView tasks={filteredTasks} selectedTaskId={selectedTaskId} projectNameById={projectNameById} assigneeById={assigneeById} showProjectName={nav.projectId === null} onSelectTask={handleSelectTask} />
+                    <GanttView tasks={filteredTasks} selectedTaskId={selectedTaskId} projectNameById={projectNameById} assigneeById={assigneeById} showProjectName={nav.projectId === null} onSelectTask={handleSelectTask} onOpenTaskContextMenu={openTaskContextMenu} />
                 )}
+                <KanbanTaskContextModal
+                    open={!!taskContextMenu}
+                    task={contextTask}
+                    x={taskContextMenu?.x ?? 0}
+                    y={taskContextMenu?.y ?? 0}
+                    canEdit={tsk.canEdit}
+                    assigneeOptions={assigneeOptions}
+                    projectLabels={contextTask ? (projectLabelsByProjectId.get(contextTask.projectId) ?? []) : []}
+                    relationTargets={contextTaskRelationTargets}
+                    onClose={() => setTaskContextMenu(null)}
+                    onUpdateTask={updateTaskQuick}
+                    onRenameTask={renameTask}
+                    onDuplicateTask={duplicateTask}
+                    onDeleteTask={deleteTask}
+                    onApplyRelation={applyTaskRelation}
+                />
                     </>
                 )}
             </div>

@@ -16,9 +16,10 @@ function fmtTime(d: Date) {
   return m === 0 ? `${hr} ${ap}` : `${hr}:${pad(m)} ${ap}`;
 }
 
-export function ListView({ events, tasks, taskStates, sources, showEvents, showTasks, onClickEvent, onSelectTask }: {
+export function ListView({ events, tasks, taskStates, sources, showEvents, showTasks, onClickEvent, onSelectTask, onOpenTaskContextMenu }: {
   events: CalendarEvent[]; tasks: Task[]; taskStates: TaskWorkflowState[]; sources: CalendarSource[];
   showEvents: boolean; showTasks: boolean; onClickEvent: (id: string) => void; onSelectTask: (id: string) => void;
+  onOpenTaskContextMenu?: (taskId: string, x: number, y: number) => void;
 }) {
   const grouped = useMemo(() => {
     const map = new Map<string, { events: CalendarEvent[]; tasks: Task[] }>();
@@ -62,7 +63,14 @@ export function ListView({ events, tasks, taskStates, sources, showEvents, showT
                 const c = t.priority === 0 ? "#ff5252" : t.priority === 1 ? "#f0a43d" : t.priority === 2 ? "#2f8fff" : t.priority === 3 ? "#2fbf71" : "#616978";
                 const st = taskStates.find(s => s.id === t.stateId);
                 return (
-                  <button key={t.id} onClick={() => onSelectTask(t.id)}
+                  <button
+                    key={t.id}
+                    onClick={() => onSelectTask(t.id)}
+                    onContextMenu={(event) => {
+                      if (!onOpenTaskContextMenu) return;
+                      event.preventDefault();
+                      onOpenTaskContextMenu(t.id, event.clientX, event.clientY);
+                    }}
                     className="flex items-center gap-3 px-3 py-2 rounded-xl border border-[#151515] bg-[#0e0e0e] hover:bg-[#131313] hover:border-[#1e1e1e] transition-all text-left w-full">
                     <div className="shrink-0 w-4 h-4 rounded-md border grid place-items-center" style={{ borderColor: `${c}40` }}>
                       <span className="text-[8px]" style={{ color: c }}>✓</span>

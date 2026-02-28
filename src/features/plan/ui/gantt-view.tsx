@@ -10,6 +10,7 @@ export function GanttView({
   assigneeById,
   showProjectName,
   onSelectTask,
+  onOpenTaskContextMenu,
 }: {
   tasks: Task[];
   selectedTaskId: string | null;
@@ -17,6 +18,7 @@ export function GanttView({
   assigneeById: Map<string, AssigneeInfo>;
   showProjectName: boolean;
   onSelectTask: (id: string) => void;
+  onOpenTaskContextMenu?: (taskId: string, x: number, y: number) => void;
 }) {
   return (
     <div className="flex-1 h-full min-h-0">
@@ -27,6 +29,7 @@ export function GanttView({
         assigneeById={assigneeById}
         showProjectName={showProjectName}
         onSelectTask={onSelectTask}
+        onOpenTaskContextMenu={onOpenTaskContextMenu}
       />
     </div>
   );
