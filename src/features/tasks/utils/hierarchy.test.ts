@@ -5,11 +5,12 @@ import type { Task } from "../types";
 const now = new Date().toISOString();
 
 function task(partial: Partial<Task> & Pick<Task, "id">): Task {
-  const { id, ...rest } = partial;
+  const { id, taskCode, ...rest } = partial;
   return {
     workspaceId: "workspace",
     ownerId: "owner",
     projectId: "project",
+    taskCode: taskCode ?? null,
     parentTaskId: null,
     stateId: "state",
     assigneeId: null,

@@ -4,13 +4,11 @@ import { AppGate } from "./routes/layouts/app-gate";
 import { AuthPage } from "./routes/pages/auth-page";
 import { DashboardPage } from "./routes/pages/dashboard-page";
 import { NotesPage } from "./routes/pages/notes-page";
-import { TasksPage } from "./routes/pages/tasks-page";
 import { MindmapPage } from "./routes/pages/mindmap-page";
 import { TemplatesPage } from "./routes/pages/templates-page";
 import { EmailPage } from "./routes/pages/email-page";
-import { CalendarPage } from "./routes/pages/calendar-page";
+import { PlanPage } from "./routes/pages/plan-page";
 import { CrmPage } from "./routes/pages/crm-page";
-import { CalendlyPage } from "./routes/pages/calendly-page";
 import { FormsPage } from "./routes/pages/forms-page";
 import { ActivityPage } from "./routes/pages/activity-page";
 import { FeedPage } from "./routes/pages/feed-page";
@@ -71,7 +69,7 @@ const notesRoute = createRoute({
 const tasksRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/tasks",
-  component: TasksPage,
+  component: () => <Navigate to="/plan" replace />,
 });
 
 const mindmapRoute = createRoute({
@@ -95,19 +93,19 @@ const emailRoute = createRoute({
 const calendarRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/calendar",
-  component: CalendarPage,
+  component: () => <Navigate to="/plan" replace />,
+});
+
+const planRoute = createRoute({
+  getParentRoute: () => appGateRoute,
+  path: "/plan",
+  component: PlanPage,
 });
 
 const crmRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/crm",
   component: CrmPage,
-});
-
-const calendlyRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/calendly",
-  component: CalendlyPage,
 });
 
 const formsRoute = createRoute({
@@ -201,12 +199,12 @@ const routeTree = rootRoute.addChildren([
     dashboardRoute,
     notesRoute,
     tasksRoute,
+    planRoute,
     mindmapRoute,
     templatesRoute,
     emailRoute,
     calendarRoute,
     crmRoute,
-    calendlyRoute,
     formsRoute,
     activityRoute,
     feedRoute,

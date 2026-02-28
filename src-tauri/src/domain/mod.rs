@@ -108,12 +108,22 @@ pub struct NoteDocState {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectLabel {
+    pub name: String,
+    pub color: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskProject {
     pub id: String,
     pub workspace_id: String,
     pub owner_id: String,
     pub name: String,
     pub description: String,
+    pub logo_url: Option<String>,
+    #[serde(default)]
+    pub labels: Vec<ProjectLabel>,
     pub position: String,
     pub created_at: String,
     pub updated_at: String,
@@ -144,6 +154,7 @@ pub struct TaskItem {
     pub workspace_id: String,
     pub owner_id: String,
     pub project_id: String,
+    pub task_code: Option<String>,
     pub parent_task_id: Option<String>,
     pub state_id: String,
     pub assignee_id: Option<String>,
@@ -171,6 +182,18 @@ pub struct TaskComment {
     pub deleted_at: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskActivity {
+    pub id: String,
+    pub workspace_id: String,
+    pub task_id: String,
+    pub actor_user_id: String,
+    pub action: String,
+    pub payload: serde_json::Value,
+    pub created_at: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TasksBundle {
@@ -178,6 +201,7 @@ pub struct TasksBundle {
     pub states: Vec<TaskWorkflowState>,
     pub tasks: Vec<TaskItem>,
     pub comments: Vec<TaskComment>,
+    pub activities: Vec<TaskActivity>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

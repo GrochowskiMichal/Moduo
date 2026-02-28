@@ -467,7 +467,15 @@ export function SlashCommandPlugin({
         const wId = workspaceId ?? "";
         const raw = await runtime.tasks.list(wId);
         const allTasks: any[] = Array.isArray(raw?.tasks) ? raw.tasks : Array.isArray(raw) ? raw : [];
-        const visible = allTasks.filter((t: any) => !t.deletedAt && !t.parentTaskId).slice(0, 40);
+        const projects: any[] = Array.isArray(raw?.projects) ? raw.projects : [];
+        const visibleProjectIds = new Set(
+          projects
+            .filter((p) => !(p.deletedAt ?? p.deleted_at))
+            .map((p) => p.id)
+        );
+        const visible = allTasks
+          .filter((t: any) => !t.deletedAt && !t.parentTaskId && visibleProjectIds.has(t.projectId))
+          .slice(0, 40);
         setEmbedItems(
           visible.map((t: any) => ({
             id: t.id,

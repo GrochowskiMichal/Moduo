@@ -13,12 +13,19 @@ export type TaskWorkflowKind =
   | "canceled"
   | "custom";
 
+export type ProjectLabel = {
+  name: string;
+  color: string;
+};
+
 export type TaskProject = {
   id: string;
   workspaceId: string;
   ownerId: string;
   name: string;
   description: string;
+  logoUrl: string | null;
+  labels: ProjectLabel[];
   position: string;
   createdAt: string;
   updatedAt: string;
@@ -45,6 +52,7 @@ export type Task = {
   workspaceId: string;
   ownerId: string;
   projectId: string;
+  taskCode: string | null;
   parentTaskId: string | null;
   stateId: string;
   assigneeId: string | null;
@@ -68,6 +76,16 @@ export type TaskComment = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+};
+
+export type TaskActivity = {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  actorUserId: string;
+  action: string;
+  payload: unknown;
+  createdAt: string;
 };
 
 export type TaskTreeNode = Task & {

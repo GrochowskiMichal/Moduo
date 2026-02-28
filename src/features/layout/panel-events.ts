@@ -2,12 +2,12 @@ export type FeatureLayoutKey =
   | "dashboard"
   | "notes"
   | "tasks"
+  | "plan"
   | "mindmap"
   | "templates"
   | "email"
   | "calendar"
   | "crm"
-  | "calendly"
   | "forms"
   | "activity"
   | "feed"
@@ -41,12 +41,12 @@ function cloneDefaultMap(): FeaturePanelsMap {
     dashboard: { ...defaultState },
     notes: { ...defaultState },
     tasks: { ...defaultState },
+    plan: { left: false, right: false },
     mindmap: { ...defaultState },
     templates: { ...defaultState },
     email: { ...defaultState },
     calendar: { ...defaultState },
     crm: { ...defaultState },
-    calendly: { ...defaultState },
     forms: { ...defaultState },
     activity: { ...defaultState },
     feed: { ...defaultState },
@@ -66,13 +66,13 @@ function cloneDefaultMap(): FeaturePanelsMap {
 
 export function routeToFeatureLayout(pathname: string): FeatureLayoutKey {
   if (pathname === "/dashboard" || pathname === "/") return "dashboard";
-  if (pathname === "/tasks") return "tasks";
+  if (pathname === "/tasks") return "plan";
+  if (pathname === "/plan") return "plan";
   if (pathname === "/mindmap") return "mindmap";
   if (pathname === "/templates") return "templates";
   if (pathname === "/email") return "email";
-  if (pathname === "/calendar") return "calendar";
+  if (pathname === "/calendar") return "plan";
   if (pathname === "/crm") return "crm";
-  if (pathname === "/calendly") return "calendly";
   if (pathname === "/forms") return "forms";
   if (pathname === "/activity") return "activity";
   if (pathname === "/feed") return "feed";

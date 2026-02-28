@@ -11,9 +11,9 @@ use redb::{Database, ReadableTable, TableDefinition};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::domain::{
-    GraphEdge, GraphNode, ModulePermissions, NoteCrdtUpdate, NoteDocState, NoteMeta, TaskComment,
-    TaskItem, TaskProject, TaskWorkflowState, TasksBundle, WorkspaceInvite, WorkspaceMember,
-    WorkspaceNotification, WorkspaceSummary,
+    GraphEdge, GraphNode, ModulePermissions, NoteCrdtUpdate, NoteDocState, NoteMeta, TaskActivity,
+    TaskComment, TaskItem, TaskProject, TaskWorkflowState, TasksBundle, WorkspaceInvite,
+    WorkspaceMember, WorkspaceNotification, WorkspaceSummary,
 };
 
 pub const NOTES_META: TableDefinition<&str, &str> = TableDefinition::new("notes_meta");
@@ -28,6 +28,7 @@ pub const TASKS_ITEMS: TableDefinition<&str, &str> = TableDefinition::new("tasks
 pub const TASKS_COMMENTS: TableDefinition<&str, &str> = TableDefinition::new("tasks_comments");
 pub const TASKS_OUTBOX: TableDefinition<&str, &str> = TableDefinition::new("tasks_outbox");
 pub const TASKS_OPLOG: TableDefinition<&str, &str> = TableDefinition::new("tasks_oplog");
+pub const TASKS_ACTIVITY: TableDefinition<&str, &str> = TableDefinition::new("tasks_activity");
 
 pub const WORKSPACE_MEMBERSHIP: TableDefinition<&str, &str> =
     TableDefinition::new("workspace_membership");
@@ -85,6 +86,7 @@ impl RedbStore {
         let _ = write_txn.open_table(TASKS_COMMENTS)?;
         let _ = write_txn.open_table(TASKS_OUTBOX)?;
         let _ = write_txn.open_table(TASKS_OPLOG)?;
+        let _ = write_txn.open_table(TASKS_ACTIVITY)?;
 
         let _ = write_txn.open_table(WORKSPACES)?;
         let _ = write_txn.open_table(WORKSPACE_MEMBERSHIP)?;
@@ -199,6 +201,7 @@ impl RedbStore {
             TASKS_COMMENTS,
             TASKS_OUTBOX,
             TASKS_OPLOG,
+            TASKS_ACTIVITY,
             WORKSPACES,
             WORKSPACE_MEMBERSHIP,
             WORKSPACE_ACL,
@@ -445,6 +448,10 @@ impl RedbStore {
         self.put_json(TASKS_COMMENTS, &comment.id, comment)
     }
 
+    pub fn put_task_activity(&self, activity: &TaskActivity) -> anyhow::Result<()> {
+        self.put_json(TASKS_ACTIVITY, &activity.id, activity)
+    }
+
     pub fn get_task_item(&self, task_id: &str) -> anyhow::Result<Option<TaskItem>> {
         self.get_json(TASKS_ITEMS, task_id)
     }
@@ -478,12 +485,18 @@ impl RedbStore {
             .into_iter()
             .filter(|x| x.workspace_id == workspace_id)
             .collect();
+        let activities = self
+            .list_json::<TaskActivity>(TASKS_ACTIVITY)?
+            .into_iter()
+            .filter(|x| x.workspace_id == workspace_id)
+            .collect();
 
         Ok(TasksBundle {
             projects,
             states,
             tasks,
             comments,
+            activities,
         })
     }
 

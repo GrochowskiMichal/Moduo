@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModuoRuntime } from "../../../lib/runtime";
 import type {
   Task,
+  TaskActivity,
   TaskComment,
+  ProjectLabel,
   TaskPriority,
   TaskProject,
   TaskViewMode,
@@ -30,20 +32,9 @@ function sortProjects(projects: TaskProject[]): TaskProject[] {
   return [...projects].sort((a, b) => sortByPosition(a, b) || a.name.localeCompare(b.name));
 }
 
-const workflowKindRank: Record<TaskWorkflowKind, number> = {
-  backlog: 0,
-  todo: 1,
-  in_progress: 2,
-  in_review: 3,
-  done: 4,
-  canceled: 5,
-  custom: 6,
-};
-
 function sortStates(states: TaskWorkflowState[]): TaskWorkflowState[] {
   return [...states].sort(
     (a, b) =>
-      (workflowKindRank[a.kind] ?? 99) - (workflowKindRank[b.kind] ?? 99) ||
       a.position.localeCompare(b.position) ||
       a.name.localeCompare(b.name)
   );
@@ -62,12 +53,17 @@ function sortComments(comments: TaskComment[]): TaskComment[] {
   return [...comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+function sortActivities(activities: TaskActivity[]): TaskActivity[] {
+  return [...activities].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 function normalizeTask(task: any): Task {
   return {
     id: task.id,
     workspaceId: task.workspaceId ?? task.workspace_id,
     ownerId: task.ownerId ?? task.owner_id,
     projectId: task.projectId ?? task.project_id,
+    taskCode: task.taskCode ?? task.task_code ?? null,
     parentTaskId: task.parentTaskId ?? task.parent_task_id ?? null,
     stateId: task.stateId ?? task.state_id,
     assigneeId: task.assigneeId ?? task.assignee_id ?? null,
@@ -84,12 +80,24 @@ function normalizeTask(task: any): Task {
 }
 
 function normalizeProject(project: any): TaskProject {
+  const labels = Array.isArray(project.labels)
+    ? project.labels
+        .map((label: any): ProjectLabel | null => {
+          const name = String(label?.name ?? "").trim();
+          const color = String(label?.color ?? "").trim();
+          if (!name) return null;
+          return { name, color };
+        })
+        .filter((entry: ProjectLabel | null): entry is ProjectLabel => !!entry)
+    : [];
   return {
     id: project.id,
     workspaceId: project.workspaceId ?? project.workspace_id,
     ownerId: project.ownerId ?? project.owner_id,
     name: project.name ?? "New Project",
     description: project.description ?? "",
+    logoUrl: project.logoUrl ?? project.logo_url ?? null,
+    labels,
     position: project.position ?? initialPosition(),
     createdAt: project.createdAt ?? project.created_at ?? nowIso(),
     updatedAt: project.updatedAt ?? project.updated_at ?? nowIso(),
@@ -127,6 +135,18 @@ function normalizeComment(comment: any): TaskComment {
   };
 }
 
+function normalizeActivity(activity: any): TaskActivity {
+  return {
+    id: activity.id,
+    workspaceId: activity.workspaceId ?? activity.workspace_id,
+    taskId: activity.taskId ?? activity.task_id,
+    actorUserId: activity.actorUserId ?? activity.actor_user_id,
+    action: String(activity.action ?? ""),
+    payload: activity.payload ?? {},
+    createdAt: activity.createdAt ?? activity.created_at ?? nowIso(),
+  };
+}
+
 function defaultWorkflowStateName(kind: TaskWorkflowKind): string {
   if (kind === "in_progress") return "In Progress";
   if (kind === "in_review") return "In Review";
@@ -139,6 +159,7 @@ export type UseTasksState = {
   states: TaskWorkflowState[];
   tasks: Task[];
   comments: TaskComment[];
+  activities: TaskActivity[];
   selectedProjectId: string | null;
   selectedTaskId: string | null;
   viewMode: TaskViewMode;
@@ -148,6 +169,7 @@ export type UseTasksState = {
   setSelectedProjectId: (projectId: string | null) => void;
   setSelectedTaskId: (taskId: string | null) => void;
   createProject: (name?: string) => Promise<string | null>;
+  updateProject: (projectId: string, patch: Partial<Pick<TaskProject, "name" | "description" | "logoUrl" | "labels">>) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
   createWorkflowState: (
     projectId: string,
@@ -197,6 +219,7 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
   const [states, setStates] = useState<TaskWorkflowState[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [comments, setComments] = useState<TaskComment[]>([]);
+  const [activities, setActivities] = useState<TaskActivity[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<TaskViewMode>("board");
@@ -210,11 +233,13 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
     const nextStates = sortStates((bundle.states ?? []).map(normalizeState));
     const nextTasks = sortTasks((bundle.tasks ?? []).map(normalizeTask));
     const nextComments = sortComments((bundle.comments ?? []).map(normalizeComment));
+    const nextActivities = sortActivities((bundle.activities ?? []).map(normalizeActivity));
 
     setProjects(nextProjects);
     setStates(nextStates);
     setTasks(nextTasks);
     setComments(nextComments);
+    setActivities(nextActivities);
 
     setSelectedProjectId((current) => {
       const activeProjects = nextProjects.filter((project) => !project.deletedAt);
@@ -237,6 +262,7 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
       setStates([]);
       setTasks([]);
       setComments([]);
+      setActivities([]);
       setSelectedProjectId(null);
       setSelectedTaskId(null);
       setLoading(false);
@@ -287,6 +313,8 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
         ownerId: userId,
         name,
         description: "",
+        logoUrl: null,
+        labels: [],
         position,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -309,6 +337,8 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
           id: safeId(),
           name: "ToDo",
           kind: "todo",
+          icon: "◯",
+          color: "#C9CED6",
           position: "todo-01",
         }),
         runtime.tasks.upsertState({
@@ -316,6 +346,8 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
           id: safeId(),
           name: "InProgress",
           kind: "in_progress",
+          icon: "◔",
+          color: "#F5A524",
           position: "in_progress-02",
         }),
         runtime.tasks.upsertState({
@@ -323,6 +355,8 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
           id: safeId(),
           name: "Done",
           kind: "done",
+          icon: "◉",
+          color: "#2DD4BF",
           position: "done-03",
         }),
       ]);
@@ -397,6 +431,22 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
       tasks,
       workspaceId,
     ]
+  );
+
+  const updateProject = useCallback(
+    async (projectId: string, patch: Partial<Pick<TaskProject, "name" | "description" | "logoUrl" | "labels">>) => {
+      if (!runtime || !canEdit) return;
+      const current = projects.find((project) => project.id === projectId && !project.deletedAt);
+      if (!current) return;
+      const updated = {
+        ...current,
+        ...patch,
+        updatedAt: nowIso(),
+      };
+      await runtime.tasks.upsertProject(updated);
+      await loadBundle();
+    },
+    [canEdit, loadBundle, projects, runtime]
   );
 
   const createWorkflowState = useCallback(
@@ -501,6 +551,7 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
         workspaceId,
         ownerId: userId,
         projectId,
+        taskCode: null,
         parentTaskId,
         stateId,
         assigneeId: args?.assigneeId ?? userId,
@@ -640,6 +691,7 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
     states,
     tasks,
     comments,
+    activities,
     selectedProjectId,
     selectedTaskId,
     viewMode,
@@ -649,6 +701,7 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
     setSelectedProjectId,
     setSelectedTaskId,
     createProject,
+    updateProject,
     deleteProject,
     createWorkflowState,
     updateWorkflowState,

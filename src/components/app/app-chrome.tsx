@@ -466,6 +466,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       ownerId: userId,
       name,
       description: "",
+      logoUrl: null,
       position: `m${Date.now().toString(36)}`,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -488,6 +489,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         id: safeId(),
         name: "ToDo",
         kind: "todo",
+        icon: "◯",
+        color: "#C9CED6",
         position: "todo-01",
       }),
       runtime.tasks.upsertState({
@@ -495,6 +498,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         id: safeId(),
         name: "InProgress",
         kind: "in_progress",
+        icon: "◔",
+        color: "#F5A524",
         position: "in_progress-02",
       }),
       runtime.tasks.upsertState({
@@ -502,6 +507,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         id: safeId(),
         name: "Done",
         kind: "done",
+        icon: "◉",
+        color: "#2DD4BF",
         position: "done-03",
       }),
     ]);

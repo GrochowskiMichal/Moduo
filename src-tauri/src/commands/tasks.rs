@@ -1,10 +1,187 @@
+use std::collections::BTreeSet;
+
 use serde::Deserialize;
 use tauri::State;
+use uuid::Uuid;
 
 use crate::{domain::*, AppState};
 
 fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339()
+}
+
+fn project_code_prefix(name: &str) -> String {
+    let mut prefix = name
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .take(3)
+        .collect::<String>()
+        .to_uppercase();
+    while prefix.len() < 3 {
+        prefix.push('X');
+    }
+    prefix
+}
+
+fn task_code_suffix(value: &str) -> Option<u64> {
+    let (_, tail) = value.rsplit_once('-')?;
+    tail.parse::<u64>().ok()
+}
+
+fn ensure_task_code(state: &AppState, task: &mut TaskItem) -> Result<(), String> {
+    if let Some(code) = task.task_code.as_ref() {
+        if !code.trim().is_empty() {
+            return Ok(());
+        }
+    }
+
+    let existing = state
+        .store
+        .get_task_item(&task.id)
+        .map_err(|e| e.to_string())?;
+    if let Some(existing_task) = existing {
+        if let Some(existing_code) = existing_task.task_code {
+            if !existing_code.trim().is_empty() {
+                task.task_code = Some(existing_code);
+                return Ok(());
+            }
+        }
+    }
+
+    let bundle = state
+        .store
+        .list_tasks_bundle(&task.workspace_id)
+        .map_err(|e| e.to_string())?;
+    let project_name = bundle
+        .projects
+        .iter()
+        .find(|project| project.id == task.project_id)
+        .map(|project| project.name.clone())
+        .unwrap_or_else(|| "Task".to_string());
+    let max_index = bundle
+        .tasks
+        .iter()
+        .filter(|entry| entry.project_id == task.project_id)
+        .filter_map(|entry| entry.task_code.as_deref())
+        .filter_map(task_code_suffix)
+        .max()
+        .unwrap_or(0);
+    let next_index = max_index.saturating_add(1);
+    task.task_code = Some(format!("{}-{}", project_code_prefix(&project_name), next_index));
+    Ok(())
+}
+
+fn push_task_activity(
+    state: &AppState,
+    workspace_id: &str,
+    task_id: &str,
+    actor_user_id: &str,
+    action: &str,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    let activity = TaskActivity {
+        id: Uuid::new_v4().to_string(),
+        workspace_id: workspace_id.to_string(),
+        task_id: task_id.to_string(),
+        actor_user_id: actor_user_id.to_string(),
+        action: action.to_string(),
+        payload,
+        created_at: now_iso(),
+    };
+    state
+        .store
+        .put_task_activity(&activity)
+        .map_err(|e| e.to_string())
+}
+
+fn write_task_with_activity(
+    state: &AppState,
+    mut task: TaskItem,
+    actor_user_id: &str,
+) -> Result<TaskItem, String> {
+    let previous = state
+        .store
+        .get_task_item(&task.id)
+        .map_err(|e| e.to_string())?;
+    ensure_task_code(state, &mut task)?;
+    task.updated_at = now_iso();
+    state
+        .store
+        .put_task_item(&task)
+        .map_err(|e| e.to_string())?;
+
+    if let Some(prev) = previous {
+        if prev.title != task.title {
+            let _ = push_task_activity(
+                state,
+                &task.workspace_id,
+                &task.id,
+                actor_user_id,
+                "renamed",
+                serde_json::json!({ "from": prev.title, "to": task.title }),
+            );
+        }
+        if prev.state_id != task.state_id {
+            let _ = push_task_activity(
+                state,
+                &task.workspace_id,
+                &task.id,
+                actor_user_id,
+                "stage_changed",
+                serde_json::json!({ "from": prev.state_id, "to": task.state_id }),
+            );
+        }
+        if prev.priority != task.priority {
+            let _ = push_task_activity(
+                state,
+                &task.workspace_id,
+                &task.id,
+                actor_user_id,
+                "priority_changed",
+                serde_json::json!({ "from": prev.priority, "to": task.priority }),
+            );
+        }
+        if prev.assignee_id != task.assignee_id {
+            let _ = push_task_activity(
+                state,
+                &task.workspace_id,
+                &task.id,
+                actor_user_id,
+                "assignee_changed",
+                serde_json::json!({ "from": prev.assignee_id, "to": task.assignee_id }),
+            );
+        }
+        let prev_tags: BTreeSet<String> = prev.tags.iter().cloned().collect();
+        let next_tags: BTreeSet<String> = task.tags.iter().cloned().collect();
+        if prev_tags != next_tags {
+            let added: Vec<String> = next_tags.difference(&prev_tags).cloned().collect();
+            let removed: Vec<String> = prev_tags.difference(&next_tags).cloned().collect();
+            let _ = push_task_activity(
+                state,
+                &task.workspace_id,
+                &task.id,
+                actor_user_id,
+                "tags_changed",
+                serde_json::json!({ "added": added, "removed": removed }),
+            );
+        }
+    } else {
+        let _ = push_task_activity(
+            state,
+            &task.workspace_id,
+            &task.id,
+            actor_user_id,
+            "created",
+            serde_json::json!({
+                "title": task.title,
+                "stateId": task.state_id,
+                "priority": task.priority,
+                "assigneeId": task.assignee_id,
+                "tags": task.tags,
+            }),
+        );
+    }
+    Ok(task)
 }
 
 fn require_user_id(state: &AppState) -> Result<String, String> {
@@ -117,14 +294,8 @@ pub async fn tasks_upsert(
         return Ok(serde_json::json!({ "workflowState": saved }));
     }
     if let Some(task) = input.task {
-        let _ = require_tasks_permission(&state, &task.workspace_id, "edit", "upsert_item")?;
-        let mut next = task;
-        next.updated_at = now_iso();
-        state
-            .store
-            .put_task_item(&next)
-            .map_err(|e| e.to_string())?;
-        let saved = next;
+        let user_id = require_tasks_permission(&state, &task.workspace_id, "edit", "upsert_item")?;
+        let saved = write_task_with_activity(&state, task, &user_id)?;
         return Ok(serde_json::json!({ "task": saved }));
     }
     Err("No task entity provided".to_string())
@@ -165,14 +336,8 @@ pub async fn tasks_upsert_item(
     state: State<'_, AppState>,
     task: TaskItem,
 ) -> Result<TaskItem, String> {
-    let _ = require_tasks_permission(&state, &task.workspace_id, "edit", "upsert_item")?;
-    let mut next = task;
-    next.updated_at = now_iso();
-    state
-        .store
-        .put_task_item(&next)
-        .map_err(|e| e.to_string())?;
-    Ok(next)
+    let user_id = require_tasks_permission(&state, &task.workspace_id, "edit", "upsert_item")?;
+    write_task_with_activity(&state, task, &user_id)
 }
 
 #[tauri::command]
@@ -180,7 +345,7 @@ pub async fn tasks_move(
     state: State<'_, AppState>,
     input: TaskMoveInput,
 ) -> Result<TaskItem, String> {
-    let _ = require_tasks_permission(&state, &input.workspace_id, "edit", "move")?;
+    let user_id = require_tasks_permission(&state, &input.workspace_id, "edit", "move")?;
     let mut task = state
         .store
         .get_task_item(&input.task_id)
@@ -190,6 +355,7 @@ pub async fn tasks_move(
         return Err("Workspace mismatch".to_string());
     }
 
+    let previous_state_id = task.state_id.clone();
     task.parent_task_id = input.new_parent_task_id;
     task.state_id = input.new_state_id;
     task.position = input.new_position;
@@ -199,6 +365,16 @@ pub async fn tasks_move(
         .store
         .put_task_item(&task)
         .map_err(|e| e.to_string())?;
+    if previous_state_id != task.state_id {
+        let _ = push_task_activity(
+            &state,
+            &task.workspace_id,
+            &task.id,
+            &user_id,
+            "stage_changed",
+            serde_json::json!({ "from": previous_state_id, "to": task.state_id }),
+        );
+    }
     Ok(task)
 }
 
@@ -207,7 +383,7 @@ pub async fn tasks_delete_item(
     state: State<'_, AppState>,
     input: TaskDeleteInput,
 ) -> Result<TaskItem, String> {
-    let _ = require_tasks_permission(&state, &input.workspace_id, "edit", "delete_item")?;
+    let user_id = require_tasks_permission(&state, &input.workspace_id, "edit", "delete_item")?;
     let mut task = state
         .store
         .get_task_item(&input.task_id)
@@ -225,6 +401,14 @@ pub async fn tasks_delete_item(
         .store
         .put_task_item(&task)
         .map_err(|e| e.to_string())?;
+    let _ = push_task_activity(
+        &state,
+        &task.workspace_id,
+        &task.id,
+        &user_id,
+        "deleted",
+        serde_json::json!({}),
+    );
     Ok(task)
 }
 
@@ -233,13 +417,28 @@ pub async fn tasks_upsert_comment(
     state: State<'_, AppState>,
     comment: TaskComment,
 ) -> Result<TaskComment, String> {
-    let _ = require_tasks_permission(&state, &comment.workspace_id, "edit", "upsert_comment")?;
+    let user_id = require_tasks_permission(&state, &comment.workspace_id, "edit", "upsert_comment")?;
+    let existed = state
+        .store
+        .get_task_comment(&comment.id)
+        .map_err(|e| e.to_string())?
+        .is_some();
     let mut next = comment;
     next.updated_at = now_iso();
     state
         .store
         .put_task_comment(&next)
         .map_err(|e| e.to_string())?;
+    if !existed {
+        let _ = push_task_activity(
+            &state,
+            &next.workspace_id,
+            &next.task_id,
+            &user_id,
+            "comment_added",
+            serde_json::json!({ "commentId": next.id }),
+        );
+    }
     Ok(next)
 }
 

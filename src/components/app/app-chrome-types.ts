@@ -13,6 +13,7 @@ export type TaskProjectOption = {
   ownerId: string;
   name: string;
   description: string;
+  logoUrl: string | null;
   position: string;
   createdAt: string;
   updatedAt: string;

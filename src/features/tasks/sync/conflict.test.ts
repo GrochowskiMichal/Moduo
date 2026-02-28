@@ -8,6 +8,7 @@ function makeTask(updatedAt: string): Task {
     workspaceId: "w1",
     ownerId: "o1",
     projectId: "p1",
+    taskCode: null,
     parentTaskId: null,
     stateId: "s1",
     assigneeId: null,

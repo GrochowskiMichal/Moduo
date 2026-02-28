@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import type { Task } from "../../../tasks/types";
 import { priorityVisual, formatTaskDate } from "../../../tasks/ui/task-visuals";
+import { dispatchPlanSelectTask } from "../../../plan/ui/layout-events";
+import { useAuth } from "../../../../providers/auth-provider";
+import { useWorkspace } from "../../../../providers/workspace-provider";
 
 // Since we cannot easily pass down the runtime through Lexical cleanly,
 // we just dynamically import the runtime inside the embedded component when it mounts
 export function EmbeddedTask({ taskId }: { taskId: string }) {
+    const navigate = useNavigate();
+    const { runtime } = useAuth();
+    const { selectedWorkspaceId, modulePermissions } = useWorkspace();
     const [task, setTask] = useState<Task | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -12,31 +19,23 @@ export function EmbeddedTask({ taskId }: { taskId: string }) {
         let active = true;
         const loadTask = async () => {
             try {
-                const { runtime } = await import("../../../../lib/runtime");
-                if (!runtime) return;
-
-                // Iterate locally over all workspaces to find the task, since we don't know the exact workspace upfront.
-                // Wait, realistically we might just know it from the note workspace? Let's assume the task is in the same DB.
-                // For simplicity, we can fetch all workspaces, then query. But wait, `runtime.tasks.list()` requires a workspace ID.
-                // A better approach is to provide the `workspaceId` via some Lexical context.
-                // Or we can just read the active user db tasks? Actually, all tasks are stored in exactly the same DB (Redb backend). 
-                // We can just invoke the rust command to get a single task if we had an endpoint. Or we can just read all tasks from all workspaces using `list` loop.
-
-                // Actually Moduo uses Redb in desktop for tasks.
-                // Let's check how tasks are fetched.
-                const wId = "*"; // This might not work. Let's list workspaces first.
-                const wss = await runtime.workspace.list();
-                for (const w of wss) {
-                    try {
-                        const raw = await runtime.tasks.list(w.id);
-                        const allTasks: Task[] = Array.isArray(raw?.tasks) ? raw.tasks : Array.isArray(raw) ? raw : [];
-                        const found = allTasks.find(t => t.id === taskId);
-                        if (found) {
-                            if (active) setTask(found);
-                            break;
-                        }
-                    } catch (e) { }
+                if (!runtime || !selectedWorkspaceId || modulePermissions.tasks === "none") {
+                    if (active) setTask(null);
+                    return;
                 }
+
+                const raw = await runtime.tasks.list(selectedWorkspaceId);
+                const allTasks: Task[] = Array.isArray(raw?.tasks) ? raw.tasks : Array.isArray(raw) ? raw : [];
+                const projects: any[] = Array.isArray(raw?.projects) ? raw.projects : [];
+                const visibleProjectIds = new Set(
+                    projects
+                        .filter((p) => !(p.deletedAt ?? p.deleted_at))
+                        .map((p) => p.id)
+                );
+                const found = allTasks.find(
+                    (t) => t.id === taskId && !t.deletedAt && visibleProjectIds.has(t.projectId)
+                ) ?? null;
+                if (active) setTask(found);
             } catch (err) {
                 console.error("Failed to load embedded task", err);
             } finally {
@@ -47,7 +46,7 @@ export function EmbeddedTask({ taskId }: { taskId: string }) {
         return () => {
             active = false;
         };
-    }, [taskId]);
+    }, [modulePermissions.tasks, runtime, selectedWorkspaceId, taskId]);
 
     if (loading) {
         return (
@@ -69,9 +68,19 @@ export function EmbeddedTask({ taskId }: { taskId: string }) {
     const dueDate = formatTaskDate(task.dueDate);
     const tags = Array.isArray(task.tags) ? task.tags : [];
     const initial = task.assigneeId ? task.assigneeId.trim().charAt(0).toUpperCase() : null;
+    const openInPlan = () => {
+        dispatchPlanSelectTask({ taskId: task.id, projectId: task.projectId ?? null });
+        void navigate({ to: "/plan" });
+    };
 
     return (
-        <div className="w-full max-w-[500px] block cursor-pointer select-none group rounded-2xl border px-3.5 py-3 text-left transition-all duration-300 relative overflow-hidden backdrop-blur-md shadow-sm border-[#2a2a2a] bg-[#141414]/80 hover:bg-[#1a1a1a]/90 hover:border-[#3a3a3a] hover:shadow-lg hover:-translate-y-0.5">
+        <div
+            role="button"
+            tabIndex={0}
+            onClick={openInPlan}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openInPlan(); } }}
+            className="w-full max-w-[500px] block cursor-pointer select-none group rounded-2xl border px-3.5 py-3 text-left transition-all duration-300 relative overflow-hidden backdrop-blur-md shadow-sm border-[#2a2a2a] bg-[#141414]/80 hover:bg-[#1a1a1a]/90 hover:border-[#3a3a3a] hover:shadow-lg hover:-translate-y-0.5"
+        >
             <div className="relative z-10 flex flex-col pointer-events-none">
                 <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-[14px] leading-none drop-shadow-md" style={{ color: priority.color }}>
