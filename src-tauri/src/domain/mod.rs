@@ -156,6 +156,10 @@ pub struct TaskItem {
     pub project_id: String,
     pub task_code: Option<String>,
     pub parent_task_id: Option<String>,
+    pub child_of_task_id: Option<String>,
+    #[serde(default)]
+    pub blocked_by_task_ids: Vec<String>,
+    pub duplicate_of_task_id: Option<String>,
     pub state_id: String,
     pub assignee_id: Option<String>,
     pub title: String,

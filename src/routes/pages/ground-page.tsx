@@ -1,5 +1,5 @@
 import { PlanWorkspace } from "../../features/plan/ui/plan-workspace";
 
-export function PlanPage() {
+export function GroundPage() {
     return <PlanWorkspace />;
 }

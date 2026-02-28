@@ -1,6 +1,6 @@
 import type { IconName } from "../ui/icon";
 
-export type TabItem = {
+export type ModuleNavItem = {
   label: string;
   iconName: IconName;
   href: string;

@@ -75,6 +75,11 @@ body,
   font-family: "Nunito", "Inter", "Inter_400Regular", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+.priority-roman-numeral {
+  font-family: "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
+  letter-spacing: 0.02em;
+}
+
 @keyframes authHeroFloat {
   0% {
     transform: scale(1.02) translate3d(0, 0, 0);

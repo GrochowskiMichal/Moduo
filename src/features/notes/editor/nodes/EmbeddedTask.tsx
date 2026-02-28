@@ -6,6 +6,11 @@ import { dispatchPlanSelectTask } from "../../../plan/ui/layout-events";
 import { useAuth } from "../../../../providers/auth-provider";
 import { useWorkspace } from "../../../../providers/workspace-provider";
 
+function PriorityLabel({ label }: { label: string }) {
+    if (!label.startsWith("P") || label === "Nulla") return <>{label}</>;
+    return <>P<span className="priority-roman-numeral">{label.slice(1)}</span></>;
+}
+
 // Since we cannot easily pass down the runtime through Lexical cleanly,
 // we just dynamically import the runtime inside the embedded component when it mounts
 export function EmbeddedTask({ taskId }: { taskId: string }) {
@@ -70,7 +75,7 @@ export function EmbeddedTask({ taskId }: { taskId: string }) {
     const initial = task.assigneeId ? task.assigneeId.trim().charAt(0).toUpperCase() : null;
     const openInPlan = () => {
         dispatchPlanSelectTask({ taskId: task.id, projectId: task.projectId ?? null });
-        void navigate({ to: "/plan" });
+        void navigate({ to: "/ground" });
     };
 
     return (
@@ -83,8 +88,8 @@ export function EmbeddedTask({ taskId }: { taskId: string }) {
         >
             <div className="relative z-10 flex flex-col pointer-events-none">
                 <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-[14px] leading-none drop-shadow-md" style={{ color: priority.color }}>
-                        {priority.icon}
+                    <span className="text-[12px] font-semibold leading-none drop-shadow-md" style={{ color: priority.color }}>
+                        <PriorityLabel label={priority.label} />
                     </span>
                     <div className="min-w-0 flex-1 truncate text-[14px] font-medium leading-tight text-[#f0f2f5]">
                         {task.title || "Untitled"}

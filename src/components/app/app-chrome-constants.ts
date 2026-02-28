@@ -1,4 +1,4 @@
-import type { TabItem, TaskProjectOption } from "./app-chrome-types";
+import type { ModuleNavItem, TaskProjectOption } from "./app-chrome-types";
 
 export function safeId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -24,10 +24,10 @@ export function normalizeTaskProject(raw: any): TaskProjectOption {
   };
 }
 
-export const baseTabs: TabItem[] = [
-  { label: "Dashboard", iconName: "grid", href: "/dashboard" },
+export const baseModulesNavItems: ModuleNavItem[] = [
+  { label: "Grid", iconName: "grid", href: "/grid" },
   { label: "Notes", iconName: "file-text", href: "/notes", module: "notes" },
-  { label: "Plan", iconName: "calendar", href: "/plan" },
+  { label: "Ground", iconName: "calendar", href: "/ground" },
   { label: "Mindmap", iconName: "git-branch", href: "/mindmap", module: "mindmap" },
   { label: "Templates", iconName: "edit-3", href: "/templates", module: "templates" },
   { label: "Email", iconName: "mail", href: "/email", module: "email" },

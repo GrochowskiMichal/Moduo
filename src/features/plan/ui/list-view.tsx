@@ -59,7 +59,7 @@ export function ListView({ events, tasks, taskStates, sources, showEvents, showT
                 );
               })}
               {items.tasks.map(t => {
-                const c = t.priority === 0 ? "#ff5f5f" : t.priority === 1 ? "#ffaa44" : t.priority === 2 ? "#5865f2" : "#555";
+                const c = t.priority === 0 ? "#ff5252" : t.priority === 1 ? "#f0a43d" : t.priority === 2 ? "#2f8fff" : t.priority === 3 ? "#2fbf71" : "#616978";
                 const st = taskStates.find(s => s.id === t.stateId);
                 return (
                   <button key={t.id} onClick={() => onSelectTask(t.id)}
@@ -69,7 +69,7 @@ export function ListView({ events, tasks, taskStates, sources, showEvents, showT
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[11px] font-semibold text-[#ddd] truncate">{t.title || "Task"}</div>
-                      <div className="text-[9px] mt-0.5" style={{ color: c }}>{["Urgent", "High", "Medium", "Low", "None"][t.priority]}</div>
+                      <div className="text-[9px] mt-0.5" style={{ color: c }}>{["PI", "PII", "PIII", "PIV", "Nulla"][t.priority]}</div>
                     </div>
                     {st && <span className="text-[9px] text-[#333] shrink-0">{st.name}</span>}
                   </button>

@@ -4,19 +4,19 @@ import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import {
-  dispatchDashboardViewChange,
-  readStoredDashboardActiveView,
-  writeStoredDashboardActiveView,
+  dispatchGridSceneChange,
+  readStoredGridActiveScene,
+  writeStoredGridActiveScene,
 } from "../../features/dashboard/ui/layout-events";
 import {
-  DEFAULT_DASHBOARD_VIEW,
-  deleteDashboardLayout,
-  ensureDashboardLayout,
-  listDashboardViews,
-  readPersistedDashboardActiveView,
-  saveDashboardViews,
-  writePersistedDashboardActiveView,
-  type DashboardViewOption,
+  DEFAULT_GRID_SCENE,
+  deleteGridSceneLayout,
+  ensureGridSceneLayout,
+  listGridScenes,
+  readPersistedGridActiveScene,
+  saveGridScenes,
+  writePersistedGridActiveScene,
+  type GridSceneOption,
 } from "../../features/dashboard/storage/dashboard-view-storage";
 import { NotificationCenter } from "../notification-center";
 import { WorkspaceSwitcher } from "../workspace-switcher";
@@ -61,7 +61,7 @@ import {
   PROFILE_UPDATED_EVENT,
   readStoredAvatar,
 } from "../../features/profile/profile-storage";
-import { baseTabs, normalizeTaskProject, nowIso, safeId } from "./app-chrome-constants";
+import { baseModulesNavItems, normalizeTaskProject, nowIso, safeId } from "./app-chrome-constants";
 import { AppChromeMenus } from "./app-chrome-menus";
 import type { MenuAnchor, TaskProjectOption } from "./app-chrome-types";
 
@@ -71,8 +71,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const { runtime, userEmail, userId } = useAuth();
   const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
   const currentFeature = routeToFeatureLayout(pathname);
-  const isDashboardRoute = pathname === "/" || pathname.startsWith("/dashboard");
-  const isTasksRoute = pathname.startsWith("/tasks");
+  const isGridRoute = pathname === "/" || pathname.startsWith("/grid");
+  const isTasksRoute = pathname.startsWith("/tasks") || pathname.startsWith("/ground");
   const isMindmapRoute = pathname.startsWith("/mindmap");
   const isBrainstormRoute = pathname.startsWith("/brainstorm");
   const isEmailRoute = pathname.startsWith("/email");
@@ -83,14 +83,14 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const [featurePanels, setFeaturePanels] = useState(() => readPanelsMap());
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
-  const [dashboardViews, setDashboardViews] = useState<DashboardViewOption[]>([DEFAULT_DASHBOARD_VIEW]);
-  const [activeDashboardViewId, setActiveDashboardViewId] = useState<string>(DEFAULT_DASHBOARD_VIEW.id);
-  const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false);
-  const [isCreatingDashboardView, setIsCreatingDashboardView] = useState(false);
-  const [newDashboardViewName, setNewDashboardViewName] = useState("New Dashboard View");
-  const [deleteCandidateDashboardViewId, setDeleteCandidateDashboardViewId] = useState<string | null>(null);
-  const [deleteDashboardViewInput, setDeleteDashboardViewInput] = useState("");
-  const [deleteSubmittingDashboardViewId, setDeleteSubmittingDashboardViewId] = useState<string | null>(null);
+  const [gridScenes, setGridScenes] = useState<GridSceneOption[]>([DEFAULT_GRID_SCENE]);
+  const [activeGridSceneId, setActiveGridSceneId] = useState<string>(DEFAULT_GRID_SCENE.id);
+  const [gridMenuOpen, setGridMenuOpen] = useState(false);
+  const [isCreatingGridScene, setIsCreatingGridScene] = useState(false);
+  const [newGridSceneName, setNewGridSceneName] = useState("New Scene");
+  const [deleteCandidateGridSceneId, setDeleteCandidateGridSceneId] = useState<string | null>(null);
+  const [deleteGridSceneInput, setDeleteGridSceneInput] = useState("");
+  const [deleteSubmittingGridSceneId, setDeleteSubmittingGridSceneId] = useState<string | null>(null);
   const [taskProjects, setTaskProjects] = useState<TaskProjectOption[]>([]);
   const [selectedTaskProjectId, setSelectedTaskProjectId] = useState<string | null>(null);
   const [tasksMenuOpen, setTasksMenuOpen] = useState(false);
@@ -107,7 +107,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const [deleteCandidateMindmapId, setDeleteCandidateMindmapId] = useState<string | null>(null);
   const [deleteMindmapInput, setDeleteMindmapInput] = useState("");
   const [deleteSubmittingMindmapId, setDeleteSubmittingMindmapId] = useState<string | null>(null);
-  const [dashboardMenuAnchor, setDashboardMenuAnchor] = useState<MenuAnchor | null>(null);
+  const [gridMenuAnchor, setGridMenuAnchor] = useState<MenuAnchor | null>(null);
   const [tasksMenuAnchor, setTasksMenuAnchor] = useState<MenuAnchor | null>(null);
   const [mindmapMenuAnchor, setMindmapMenuAnchor] = useState<MenuAnchor | null>(null);
   const [brainstorms, setBrainstorms] = useState<BrainstormOption[]>([]);
@@ -119,14 +119,14 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const [deleteBrainstormInput, setDeleteBrainstormInput] = useState("");
   const [deleteSubmittingBrainstormId, setDeleteSubmittingBrainstormId] = useState<string | null>(null);
   const [brainstormMenuAnchor, setBrainstormMenuAnchor] = useState<MenuAnchor | null>(null);
-  const dashboardControlRef = useRef<HTMLDivElement | null>(null);
+  const gridControlRef = useRef<HTMLDivElement | null>(null);
   const tasksControlRef = useRef<HTMLDivElement | null>(null);
   const mindmapControlRef = useRef<HTMLDivElement | null>(null);
   const brainstormControlRef = useRef<HTMLDivElement | null>(null);
 
-  const tabs = useMemo(
+  const modulesNavItems = useMemo(
     () =>
-      baseTabs.filter((tab) => {
+      baseModulesNavItems.filter((tab) => {
         if (tab.module === "notes") return modulePermissions.notes !== "none";
         if (tab.module === "tasks") return modulePermissions.tasks !== "none";
         return true;
@@ -134,8 +134,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     [modulePermissions.notes, modulePermissions.tasks]
   );
 
-  const activeDashboardViewName =
-    dashboardViews.find((view) => view.id === activeDashboardViewId)?.name ?? DEFAULT_DASHBOARD_VIEW.name;
+  const activeGridSceneName =
+    gridScenes.find((scene) => scene.id === activeGridSceneId)?.name ?? DEFAULT_GRID_SCENE.name;
   const selectedTaskProjectLabel =
     selectedTaskProjectId === null
       ? "All projects"
@@ -150,10 +150,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       : brainstorms.find((b) => b.id === selectedBrainstormId)?.name ?? "No session selected";
 
   useEffect(() => {
-    if (!isSettingsRoute && !tabs.some((tab) => tab.href === pathname)) {
-      void navigate({ to: tabs[0]?.href ?? "/dashboard", replace: true });
+    if (!isSettingsRoute && !modulesNavItems.some((tab) => tab.href === pathname)) {
+      void navigate({ to: modulesNavItems[0]?.href ?? "/grid", replace: true });
     }
-  }, [isSettingsRoute, navigate, pathname, tabs]);
+  }, [isSettingsRoute, navigate, pathname, modulesNavItems]);
 
   useEffect(() => {
     writePanelsMap(featurePanels);
@@ -268,15 +268,15 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   }, [runtime]);
 
   useEffect(() => {
-    setDashboardMenuOpen(false);
+    setGridMenuOpen(false);
     setTasksMenuOpen(false);
     setMindmapMenuOpen(false);
-    setIsCreatingDashboardView(false);
+    setIsCreatingGridScene(false);
     setIsCreatingTaskProject(false);
     setIsCreatingMindmap(false);
-    setDeleteCandidateDashboardViewId(null);
-    setDeleteDashboardViewInput("");
-    setDeleteSubmittingDashboardViewId(null);
+    setDeleteCandidateGridSceneId(null);
+    setDeleteGridSceneInput("");
+    setDeleteSubmittingGridSceneId(null);
     setDeleteCandidateMindmapId(null);
     setDeleteMindmapInput("");
     setDeleteSubmittingMindmapId(null);
@@ -287,59 +287,59 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     setDeleteSubmittingBrainstormId(null);
   }, [pathname, selectedWorkspaceId]);
 
-  const loadDashboardViews = useCallback(
-    async (preferredViewId?: string | null) => {
+  const loadGridScenes = useCallback(
+    async (preferredSceneId?: string | null) => {
       if (!runtime || !selectedWorkspaceId) {
-        setDashboardViews([DEFAULT_DASHBOARD_VIEW]);
-        setActiveDashboardViewId(DEFAULT_DASHBOARD_VIEW.id);
+        setGridScenes([DEFAULT_GRID_SCENE]);
+        setActiveGridSceneId(DEFAULT_GRID_SCENE.id);
         return;
       }
 
       try {
-        const views = await listDashboardViews(runtime, selectedWorkspaceId);
-        const storedActive = await readPersistedDashboardActiveView(runtime, selectedWorkspaceId);
-        setDashboardViews(views);
-        setActiveDashboardViewId((current) => {
-          const preferred = preferredViewId ?? storedActive ?? readStoredDashboardActiveView(selectedWorkspaceId) ?? current;
+        const scenes = await listGridScenes(runtime, selectedWorkspaceId);
+        const storedActive = await readPersistedGridActiveScene(runtime, selectedWorkspaceId);
+        setGridScenes(scenes);
+        setActiveGridSceneId((current) => {
+          const preferred = preferredSceneId ?? storedActive ?? readStoredGridActiveScene(selectedWorkspaceId) ?? current;
           const resolved =
-            (preferred && views.some((view) => view.id === preferred) ? preferred : null) ?? views[0]?.id ?? DEFAULT_DASHBOARD_VIEW.id;
-          writeStoredDashboardActiveView(selectedWorkspaceId, resolved);
-          dispatchDashboardViewChange(resolved, views.find((view) => view.id === resolved)?.name);
-          void writePersistedDashboardActiveView(runtime, selectedWorkspaceId, resolved).catch(console.error);
+            (preferred && scenes.some((scene) => scene.id === preferred) ? preferred : null) ?? scenes[0]?.id ?? DEFAULT_GRID_SCENE.id;
+          writeStoredGridActiveScene(selectedWorkspaceId, resolved);
+          dispatchGridSceneChange(resolved, scenes.find((scene) => scene.id === resolved)?.name);
+          void writePersistedGridActiveScene(runtime, selectedWorkspaceId, resolved).catch(console.error);
           return resolved;
         });
       } catch (error) {
         console.error(error);
-        setDashboardViews([DEFAULT_DASHBOARD_VIEW]);
-        setActiveDashboardViewId(DEFAULT_DASHBOARD_VIEW.id);
+        setGridScenes([DEFAULT_GRID_SCENE]);
+        setActiveGridSceneId(DEFAULT_GRID_SCENE.id);
       }
     },
     [runtime, selectedWorkspaceId]
   );
 
   useEffect(() => {
-    void loadDashboardViews();
-  }, [loadDashboardViews]);
+    void loadGridScenes();
+  }, [loadGridScenes]);
 
-  const setActiveDashboardView = useCallback(
-    (viewId: string) => {
-      const view = dashboardViews.find((entry) => entry.id === viewId);
-      if (!view || !runtime || !selectedWorkspaceId) return;
-      setActiveDashboardViewId(viewId);
-      writeStoredDashboardActiveView(selectedWorkspaceId, viewId);
-      dispatchDashboardViewChange(viewId, view.name);
-      void writePersistedDashboardActiveView(runtime, selectedWorkspaceId, viewId).catch(console.error);
+  const setActiveGridScene = useCallback(
+    (sceneId: string) => {
+      const scene = gridScenes.find((entry) => entry.id === sceneId);
+      if (!scene || !runtime || !selectedWorkspaceId) return;
+      setActiveGridSceneId(sceneId);
+      writeStoredGridActiveScene(selectedWorkspaceId, sceneId);
+      dispatchGridSceneChange(sceneId, scene.name);
+      void writePersistedGridActiveScene(runtime, selectedWorkspaceId, sceneId).catch(console.error);
     },
-    [dashboardViews, runtime, selectedWorkspaceId]
+    [gridScenes, runtime, selectedWorkspaceId]
   );
 
-  const closeDashboardMenu = useCallback(() => {
-    setDashboardMenuOpen(false);
-    setIsCreatingDashboardView(false);
-    setNewDashboardViewName("New Dashboard View");
-    setDeleteCandidateDashboardViewId(null);
-    setDeleteDashboardViewInput("");
-    setDeleteSubmittingDashboardViewId(null);
+  const closeGridMenu = useCallback(() => {
+    setGridMenuOpen(false);
+    setIsCreatingGridScene(false);
+    setNewGridSceneName("New Scene");
+    setDeleteCandidateGridSceneId(null);
+    setDeleteGridSceneInput("");
+    setDeleteSubmittingGridSceneId(null);
   }, []);
 
   const cancelTaskProjectDeleteIntent = useCallback(() => {
@@ -355,59 +355,59 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     cancelTaskProjectDeleteIntent();
   }, [cancelTaskProjectDeleteIntent]);
 
-  const submitCreateDashboardView = useCallback(async () => {
+  const submitCreateGridScene = useCallback(async () => {
     if (!runtime || !selectedWorkspaceId) return;
-    const name = newDashboardViewName.trim() || "New Dashboard View";
-    const nextView = { id: safeId(), name };
-    const nextViews = [...dashboardViews, nextView];
+    const name = newGridSceneName.trim() || "New Scene";
+    const nextScene = { id: safeId(), name };
+    const nextScenes = [...gridScenes, nextScene];
     try {
-      await saveDashboardViews(runtime, selectedWorkspaceId, nextViews);
-      await ensureDashboardLayout(runtime, selectedWorkspaceId, nextView.id);
-      await writePersistedDashboardActiveView(runtime, selectedWorkspaceId, nextView.id);
-      setDashboardViews(nextViews);
-      setActiveDashboardViewId(nextView.id);
-      writeStoredDashboardActiveView(selectedWorkspaceId, nextView.id);
-      dispatchDashboardViewChange(nextView.id, nextView.name);
-      closeDashboardMenu();
+      await saveGridScenes(runtime, selectedWorkspaceId, nextScenes);
+      await ensureGridSceneLayout(runtime, selectedWorkspaceId, nextScene.id);
+      await writePersistedGridActiveScene(runtime, selectedWorkspaceId, nextScene.id);
+      setGridScenes(nextScenes);
+      setActiveGridSceneId(nextScene.id);
+      writeStoredGridActiveScene(selectedWorkspaceId, nextScene.id);
+      dispatchGridSceneChange(nextScene.id, nextScene.name);
+      closeGridMenu();
     } catch (error) {
       console.error(error);
     }
-  }, [closeDashboardMenu, dashboardViews, newDashboardViewName, runtime, selectedWorkspaceId]);
+  }, [closeGridMenu, gridScenes, newGridSceneName, runtime, selectedWorkspaceId]);
 
-  const removeDashboardView = useCallback(
-    async (viewId: string) => {
+  const removeGridScene = useCallback(
+    async (sceneId: string) => {
       if (!runtime || !selectedWorkspaceId) return;
-      if (dashboardViews.length <= 1) return;
-      const target = dashboardViews.find((view) => view.id === viewId);
+      if (gridScenes.length <= 1) return;
+      const target = gridScenes.find((scene) => scene.id === sceneId);
       if (!target) return;
-      if (deleteCandidateDashboardViewId !== viewId) return;
-      if (deleteDashboardViewInput.trim() !== target.name.trim()) return;
-      if (deleteSubmittingDashboardViewId === viewId) return;
-      setDeleteSubmittingDashboardViewId(viewId);
+      if (deleteCandidateGridSceneId !== sceneId) return;
+      if (deleteGridSceneInput.trim() !== target.name.trim()) return;
+      if (deleteSubmittingGridSceneId === sceneId) return;
+      setDeleteSubmittingGridSceneId(sceneId);
       try {
-        const nextViews = dashboardViews.filter((view) => view.id !== viewId);
-        await saveDashboardViews(runtime, selectedWorkspaceId, nextViews);
-        await deleteDashboardLayout(runtime, selectedWorkspaceId, viewId);
-        setDashboardViews(nextViews);
-        if (activeDashboardViewId === viewId) {
-          const fallback = nextViews[0]?.id ?? DEFAULT_DASHBOARD_VIEW.id;
-          setActiveDashboardView(fallback);
+        const nextScenes = gridScenes.filter((scene) => scene.id !== sceneId);
+        await saveGridScenes(runtime, selectedWorkspaceId, nextScenes);
+        await deleteGridSceneLayout(runtime, selectedWorkspaceId, sceneId);
+        setGridScenes(nextScenes);
+        if (activeGridSceneId === sceneId) {
+          const fallback = nextScenes[0]?.id ?? DEFAULT_GRID_SCENE.id;
+          setActiveGridScene(fallback);
         }
-        closeDashboardMenu();
+        closeGridMenu();
       } finally {
-        setDeleteSubmittingDashboardViewId(null);
+        setDeleteSubmittingGridSceneId(null);
       }
     },
     [
-      activeDashboardViewId,
-      closeDashboardMenu,
-      dashboardViews,
-      deleteCandidateDashboardViewId,
-      deleteDashboardViewInput,
-      deleteSubmittingDashboardViewId,
+      activeGridSceneId,
+      closeGridMenu,
+      gridScenes,
+      deleteCandidateGridSceneId,
+      deleteGridSceneInput,
+      deleteSubmittingGridSceneId,
       runtime,
       selectedWorkspaceId,
-      setActiveDashboardView,
+      setActiveGridScene,
     ]
   );
 
@@ -725,12 +725,12 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     dispatchBrainstormSelectView(selectedBrainstormId, brainstorms.find((b) => b.id === selectedBrainstormId)?.name);
   }, [isBrainstormRoute, brainstorms, selectedBrainstormId]);
 
-  const updateDashboardMenuAnchor = useCallback(() => {
+  const updateGridMenuAnchor = useCallback(() => {
     if (typeof window === "undefined") return;
-    const rect = dashboardControlRef.current?.getBoundingClientRect();
+    const rect = gridControlRef.current?.getBoundingClientRect();
     if (!rect) return;
     const left = Math.max(12, Math.min(rect.left, window.innerWidth - 372));
-    setDashboardMenuAnchor({ left, top: rect.bottom + 8 });
+    setGridMenuAnchor({ left, top: rect.bottom + 8 });
   }, []);
 
   const updateTasksMenuAnchor = useCallback(() => {
@@ -757,20 +757,20 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     setBrainstormMenuAnchor({ left, top: rect.bottom + 8 });
   }, []);
 
-  const toggleDashboardMenu = useCallback(() => {
+  const toggleGridMenu = useCallback(() => {
     closeTasksMenu();
     closeMindmapMenu();
     closeBrainstormMenu();
-    if (dashboardMenuOpen) {
-      closeDashboardMenu();
+    if (gridMenuOpen) {
+      closeGridMenu();
       return;
     }
-    updateDashboardMenuAnchor();
-    setDashboardMenuOpen(true);
-  }, [closeBrainstormMenu, closeDashboardMenu, closeMindmapMenu, closeTasksMenu, dashboardMenuOpen, updateDashboardMenuAnchor]);
+    updateGridMenuAnchor();
+    setGridMenuOpen(true);
+  }, [closeBrainstormMenu, closeGridMenu, closeMindmapMenu, closeTasksMenu, gridMenuOpen, updateGridMenuAnchor]);
 
   const toggleTasksMenu = useCallback(() => {
-    closeDashboardMenu();
+    closeGridMenu();
     closeMindmapMenu();
     closeBrainstormMenu();
     if (tasksMenuOpen) {
@@ -779,10 +779,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     }
     updateTasksMenuAnchor();
     setTasksMenuOpen(true);
-  }, [closeBrainstormMenu, closeDashboardMenu, closeMindmapMenu, closeTasksMenu, tasksMenuOpen, updateTasksMenuAnchor]);
+  }, [closeBrainstormMenu, closeGridMenu, closeMindmapMenu, closeTasksMenu, tasksMenuOpen, updateTasksMenuAnchor]);
 
   const toggleMindmapMenu = useCallback(() => {
-    closeDashboardMenu();
+    closeGridMenu();
     closeTasksMenu();
     closeBrainstormMenu();
     if (mindmapMenuOpen) {
@@ -791,10 +791,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     }
     updateMindmapMenuAnchor();
     setMindmapMenuOpen(true);
-  }, [closeBrainstormMenu, closeDashboardMenu, closeMindmapMenu, closeTasksMenu, mindmapMenuOpen, updateMindmapMenuAnchor]);
+  }, [closeBrainstormMenu, closeGridMenu, closeMindmapMenu, closeTasksMenu, mindmapMenuOpen, updateMindmapMenuAnchor]);
 
   const toggleBrainstormMenu = useCallback(() => {
-    closeDashboardMenu();
+    closeGridMenu();
     closeTasksMenu();
     closeMindmapMenu();
     if (brainstormMenuOpen) {
@@ -803,12 +803,12 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     }
     updateBrainstormMenuAnchor();
     setBrainstormMenuOpen(true);
-  }, [closeBrainstormMenu, closeDashboardMenu, closeMindmapMenu, closeTasksMenu, brainstormMenuOpen, updateBrainstormMenuAnchor]);
+  }, [closeBrainstormMenu, closeGridMenu, closeMindmapMenu, closeTasksMenu, brainstormMenuOpen, updateBrainstormMenuAnchor]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || (!dashboardMenuOpen && !tasksMenuOpen && !mindmapMenuOpen && !brainstormMenuOpen)) return;
+    if (typeof window === "undefined" || (!gridMenuOpen && !tasksMenuOpen && !mindmapMenuOpen && !brainstormMenuOpen)) return;
     const onReposition = () => {
-      if (dashboardMenuOpen) updateDashboardMenuAnchor();
+      if (gridMenuOpen) updateGridMenuAnchor();
       if (tasksMenuOpen) updateTasksMenuAnchor();
       if (mindmapMenuOpen) updateMindmapMenuAnchor();
       if (brainstormMenuOpen) updateBrainstormMenuAnchor();
@@ -819,7 +819,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       window.removeEventListener("resize", onReposition);
       window.removeEventListener("scroll", onReposition, true);
     };
-  }, [brainstormMenuOpen, dashboardMenuOpen, mindmapMenuOpen, tasksMenuOpen, updateBrainstormMenuAnchor, updateDashboardMenuAnchor, updateMindmapMenuAnchor, updateTasksMenuAnchor]);
+  }, [brainstormMenuOpen, gridMenuOpen, mindmapMenuOpen, tasksMenuOpen, updateBrainstormMenuAnchor, updateGridMenuAnchor, updateMindmapMenuAnchor, updateTasksMenuAnchor]);
 
   const setPanelsForFeature = useCallback((feature: FeatureLayoutKey, left: boolean, right: boolean) => {
     setFeaturePanels((current) => ({
@@ -866,10 +866,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
           <View className="min-w-0 flex-1 overflow-x-auto overflow-y-visible">
             <View className="flex min-w-max flex-row items-center gap-2 pr-2">
-              {tabs.map((tab) => {
+              {modulesNavItems.map((tab) => {
                 const active = pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
-                const isDashboardTab = tab.href === "/dashboard";
-                const isTasksTab = tab.href === "/tasks";
+                const isGridTab = tab.href === "/grid";
+                const isTasksTab = tab.href === "/ground";
                 const isMindmapTab = tab.href === "/mindmap";
                 const isBrainstormTab = tab.href === "/brainstorm";
                 return (
@@ -882,10 +882,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                       <Text className={`${active ? "text-[#f5f5f5]" : "text-[#a3a3a3]"} text-[14px]`}>{tab.label}</Text>
                     </Pressable>
 
-                    {isDashboardTab && isDashboardRoute ? (
-                      <View ref={dashboardControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
-                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleDashboardMenu}>
-                          <Text className="text-[13px] text-[#d7d7d7]">{activeDashboardViewName}</Text>
+                    {isGridTab && isGridRoute ? (
+                      <View ref={gridControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
+                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleGridMenu}>
+                          <Text className="text-[13px] text-[#d7d7d7]">{activeGridSceneName}</Text>
                           <Text className="text-[11px] text-[#8f8f8f]">▾</Text>
                         </Pressable>
                       </View>
@@ -924,27 +924,27 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           </View>
 
           <AppChromeMenus
-            dashboard={{
-              open: dashboardMenuOpen,
-              anchor: dashboardMenuAnchor,
-              views: dashboardViews,
-              activeViewId: activeDashboardViewId,
-              isCreating: isCreatingDashboardView,
-              newName: newDashboardViewName,
-              deleteCandidateId: deleteCandidateDashboardViewId,
-              deleteInput: deleteDashboardViewInput,
-              deleteSubmittingId: deleteSubmittingDashboardViewId,
-              closeMenu: closeDashboardMenu,
-              setActiveView: setActiveDashboardView,
-              setIsCreating: setIsCreatingDashboardView,
-              setNewName: setNewDashboardViewName,
-              submitCreate: submitCreateDashboardView,
-              removeView: (viewId) => {
-                void removeDashboardView(viewId);
+            grid={{
+              open: gridMenuOpen,
+              anchor: gridMenuAnchor,
+              scenes: gridScenes,
+              activeSceneId: activeGridSceneId,
+              isCreating: isCreatingGridScene,
+              newName: newGridSceneName,
+              deleteCandidateId: deleteCandidateGridSceneId,
+              deleteInput: deleteGridSceneInput,
+              deleteSubmittingId: deleteSubmittingGridSceneId,
+              closeMenu: closeGridMenu,
+              setActiveScene: setActiveGridScene,
+              setIsCreating: setIsCreatingGridScene,
+              setNewName: setNewGridSceneName,
+              submitCreate: submitCreateGridScene,
+              removeScene: (sceneId) => {
+                void removeGridScene(sceneId);
               },
-              setDeleteCandidateId: setDeleteCandidateDashboardViewId,
-              setDeleteInput: setDeleteDashboardViewInput,
-              setDeleteSubmittingId: setDeleteSubmittingDashboardViewId,
+              setDeleteCandidateId: setDeleteCandidateGridSceneId,
+              setDeleteInput: setDeleteGridSceneInput,
+              setDeleteSubmittingId: setDeleteSubmittingGridSceneId,
             }}
             tasks={{
               open: tasksMenuOpen,

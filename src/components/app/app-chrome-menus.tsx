@@ -1,7 +1,7 @@
 import { Modal, Pressable, Text, TextInput, View } from "../../tw";
 import { Icon } from "../ui/icon";
 import type { BrainstormOption } from "../../features/brainstorm/storage/brainstorm-storage";
-import type { DashboardViewOption } from "../../features/dashboard/storage/dashboard-view-storage";
+import type { GridSceneOption } from "../../features/dashboard/storage/dashboard-view-storage";
 import type { MindmapOption } from "../../features/mindmap/ui/mindmap-storage";
 import type { MenuAnchor, TaskProjectOption } from "./app-chrome-types";
 import {
@@ -15,22 +15,22 @@ import {
 } from "./app-chrome-constants";
 
 type Props = {
-  dashboard: {
+  grid: {
     open: boolean;
     anchor: MenuAnchor | null;
-    views: DashboardViewOption[];
-    activeViewId: string;
+    scenes: GridSceneOption[];
+    activeSceneId: string;
     isCreating: boolean;
     newName: string;
     deleteCandidateId: string | null;
     deleteInput: string;
     deleteSubmittingId: string | null;
     closeMenu: () => void;
-    setActiveView: (viewId: string) => void;
+    setActiveScene: (sceneId: string) => void;
     setIsCreating: (value: boolean) => void;
     setNewName: (value: string) => void;
     submitCreate: () => void;
-    removeView: (viewId: string) => void;
+    removeScene: (sceneId: string) => void;
     setDeleteCandidateId: (value: string | null) => void;
     setDeleteInput: (value: string) => void;
     setDeleteSubmittingId: (value: string | null) => void;
@@ -104,23 +104,23 @@ type Props = {
   };
 };
 
-export function AppChromeMenus({ dashboard, tasks, mindmap, brainstorm }: Props) {
+export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
   return (
     <>
-      {dashboard.open && dashboard.anchor ? (
-        <Modal transparent visible={dashboard.open} animationType="fade" onRequestClose={dashboard.closeMenu}>
-          <Pressable className="fixed inset-0 z-[998]" onPress={dashboard.closeMenu} />
-          <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: dashboard.anchor.left, top: dashboard.anchor.top }}>
+      {grid.open && grid.anchor ? (
+        <Modal transparent visible={grid.open} animationType="fade" onRequestClose={grid.closeMenu}>
+          <Pressable className="fixed inset-0 z-[998]" onPress={grid.closeMenu} />
+          <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: grid.anchor.left, top: grid.anchor.top }}>
             <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
               <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
-                <Text className="text-[#a0a0a0] text-xs">All views</Text>
+                <Text className="text-[#a0a0a0] text-xs">All scenes</Text>
                 <Pressable
                   className="rounded-md"
                   style={plusButtonStyle}
                   onPress={(event: any) => {
                     event?.stopPropagation?.();
-                    dashboard.setIsCreating(true);
-                    dashboard.setNewName("New Dashboard View");
+                    grid.setIsCreating(true);
+                    grid.setNewName("New Scene");
                   }}
                 >
                   <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
@@ -128,34 +128,34 @@ export function AppChromeMenus({ dashboard, tasks, mindmap, brainstorm }: Props)
               </View>
             </View>
             <View className="max-h-[260px] overflow-y-auto">
-              {dashboard.isCreating ? (
+              {grid.isCreating ? (
                 <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
                   <TextInput
                     autoFocus
-                    value={dashboard.newName}
-                    onChangeText={dashboard.setNewName}
+                    value={grid.newName}
+                    onChangeText={grid.setNewName}
                     onKeyDown={(event: any) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
-                        dashboard.submitCreate();
+                        grid.submitCreate();
                       }
                       if (event.key === "Escape") {
                         event.preventDefault();
-                        dashboard.setIsCreating(false);
+                        grid.setIsCreating(false);
                       }
                     }}
                     className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
                   />
                   <View className="ml-1" style={rowStyle}>
-                    <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={dashboard.submitCreate}>
+                    <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={grid.submitCreate}>
                       <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
                     </Pressable>
                     <Pressable
                       className="rounded-md hover:bg-[#2b2b2b]"
                       style={iconButtonStyle}
                       onPress={() => {
-                        dashboard.setIsCreating(false);
-                        dashboard.setNewName("New Dashboard View");
+                        grid.setIsCreating(false);
+                        grid.setNewName("New Scene");
                       }}
                     >
                       <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
@@ -164,27 +164,27 @@ export function AppChromeMenus({ dashboard, tasks, mindmap, brainstorm }: Props)
                 </View>
               ) : null}
 
-              {dashboard.views.map((view) => {
-                const isActiveView = view.id === dashboard.activeViewId;
-                const isDeleteOpen = dashboard.deleteCandidateId === view.id;
-                const deleteMatches = dashboard.deleteInput.trim() === view.name.trim();
+              {grid.scenes.map((scene) => {
+                const isActiveScene = scene.id === grid.activeSceneId;
+                const isDeleteOpen = grid.deleteCandidateId === scene.id;
+                const deleteMatches = grid.deleteInput.trim() === scene.name.trim();
                 return (
-                  <View key={view.id} className={`rounded-lg px-3 py-2 ${isActiveView ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}>
+                  <View key={scene.id} className={`rounded-lg px-3 py-2 ${isActiveScene ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}>
                     <Pressable
                       onPress={() => {
-                        dashboard.setActiveView(view.id);
-                        dashboard.closeMenu();
+                        grid.setActiveScene(scene.id);
+                        grid.closeMenu();
                       }}
                     >
                       <View style={itemRowStyle}>
                         <View style={itemNameWrapStyle}>
                           <Text
                             as="div"
-                            className={`${isActiveView ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                            className={`${isActiveScene ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
                             style={{ lineHeight: "28px" }}
                             numberOfLines={1}
                           >
-                            {view.name}
+                            {scene.name}
                           </Text>
                         </View>
                         <View className="shrink-0" style={itemActionsStyle}>
@@ -203,17 +203,17 @@ export function AppChromeMenus({ dashboard, tasks, mindmap, brainstorm }: Props)
                             onPress={(event: any) => {
                               event?.stopPropagation?.();
                               if (isDeleteOpen) {
-                                dashboard.setDeleteCandidateId(null);
-                                dashboard.setDeleteInput("");
-                                dashboard.setDeleteSubmittingId(null);
+                                grid.setDeleteCandidateId(null);
+                                grid.setDeleteInput("");
+                                grid.setDeleteSubmittingId(null);
                               } else {
-                                dashboard.setDeleteCandidateId(view.id);
-                                dashboard.setDeleteInput("");
+                                grid.setDeleteCandidateId(scene.id);
+                                grid.setDeleteInput("");
                               }
                             }}
-                            disabled={dashboard.views.length <= 1}
+                            disabled={grid.scenes.length <= 1}
                           >
-                            <Icon name="trash-2" size={13} color={dashboard.views.length > 1 ? "#ffb0b0" : "#6a6a6a"} />
+                            <Icon name="trash-2" size={13} color={grid.scenes.length > 1 ? "#ffb0b0" : "#6a6a6a"} />
                           </Pressable>
                         </View>
                       </View>
@@ -229,34 +229,34 @@ export function AppChromeMenus({ dashboard, tasks, mindmap, brainstorm }: Props)
                       }}
                     >
                       <Text className="text-[11px] text-[#9a9a9a]">
-                        Retype <Text className="font-semibold text-[#d9d9d9]">{view.name}</Text> to delete this view.
+                        Retype <Text className="font-semibold text-[#d9d9d9]">{scene.name}</Text> to delete this scene.
                       </Text>
                       <View className="mt-2" style={rowStyle}>
                         <TextInput
-                          value={dashboard.deleteInput}
-                          onChangeText={dashboard.setDeleteInput}
+                          value={grid.deleteInput}
+                          onChangeText={grid.setDeleteInput}
                           onKeyDown={(event: any) => {
                             if (event.key === "Escape") {
                               event.preventDefault();
-                              dashboard.setDeleteCandidateId(null);
-                              dashboard.setDeleteInput("");
-                              dashboard.setDeleteSubmittingId(null);
+                              grid.setDeleteCandidateId(null);
+                              grid.setDeleteInput("");
+                              grid.setDeleteSubmittingId(null);
                             }
-                            if (event.key === "Enter" && deleteMatches && dashboard.deleteSubmittingId !== view.id) {
+                            if (event.key === "Enter" && deleteMatches && grid.deleteSubmittingId !== scene.id) {
                               event.preventDefault();
-                              dashboard.removeView(view.id);
+                              grid.removeScene(scene.id);
                             }
                           }}
-                          placeholder={view.name}
+                          placeholder={scene.name}
                           className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
                         />
                         <Pressable
                           className="ml-1 rounded-md hover:bg-[#2b2b2b]"
                           style={iconButtonStyle}
                           onPress={() => {
-                            dashboard.setDeleteCandidateId(null);
-                            dashboard.setDeleteInput("");
-                            dashboard.setDeleteSubmittingId(null);
+                            grid.setDeleteCandidateId(null);
+                            grid.setDeleteInput("");
+                            grid.setDeleteSubmittingId(null);
                           }}
                         >
                           <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
@@ -264,12 +264,12 @@ export function AppChromeMenus({ dashboard, tasks, mindmap, brainstorm }: Props)
                         <Pressable
                           className="ml-1 rounded-md"
                           style={iconButtonStyle}
-                          onPress={() => dashboard.removeView(view.id)}
-                          aria-disabled={!deleteMatches || dashboard.deleteSubmittingId === view.id}
+                          onPress={() => grid.removeScene(scene.id)}
+                          aria-disabled={!deleteMatches || grid.deleteSubmittingId === scene.id}
                         >
                           <Text
                             className={`text-[11px] font-semibold leading-none ${
-                              deleteMatches && dashboard.deleteSubmittingId !== view.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
+                              deleteMatches && grid.deleteSubmittingId !== scene.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
                             }`}
                           >
                             Del

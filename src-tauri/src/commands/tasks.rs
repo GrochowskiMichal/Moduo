@@ -151,6 +151,50 @@ fn write_task_with_activity(
                 serde_json::json!({ "from": prev.assignee_id, "to": task.assignee_id }),
             );
         }
+        if prev.parent_task_id != task.parent_task_id {
+            let _ = push_task_activity(
+                state,
+                &task.workspace_id,
+                &task.id,
+                actor_user_id,
+                "parent_changed",
+                serde_json::json!({ "from": prev.parent_task_id, "to": task.parent_task_id }),
+            );
+        }
+        if prev.child_of_task_id != task.child_of_task_id {
+            let _ = push_task_activity(
+                state,
+                &task.workspace_id,
+                &task.id,
+                actor_user_id,
+                "relation_child_of_changed",
+                serde_json::json!({ "from": prev.child_of_task_id, "to": task.child_of_task_id }),
+            );
+        }
+        if prev.duplicate_of_task_id != task.duplicate_of_task_id {
+            let _ = push_task_activity(
+                state,
+                &task.workspace_id,
+                &task.id,
+                actor_user_id,
+                "duplicate_changed",
+                serde_json::json!({ "from": prev.duplicate_of_task_id, "to": task.duplicate_of_task_id }),
+            );
+        }
+        let prev_blocked_by: BTreeSet<String> = prev.blocked_by_task_ids.iter().cloned().collect();
+        let next_blocked_by: BTreeSet<String> = task.blocked_by_task_ids.iter().cloned().collect();
+        if prev_blocked_by != next_blocked_by {
+            let added: Vec<String> = next_blocked_by.difference(&prev_blocked_by).cloned().collect();
+            let removed: Vec<String> = prev_blocked_by.difference(&next_blocked_by).cloned().collect();
+            let _ = push_task_activity(
+                state,
+                &task.workspace_id,
+                &task.id,
+                actor_user_id,
+                "blocked_by_changed",
+                serde_json::json!({ "added": added, "removed": removed }),
+            );
+        }
         let prev_tags: BTreeSet<String> = prev.tags.iter().cloned().collect();
         let next_tags: BTreeSet<String> = task.tags.iter().cloned().collect();
         if prev_tags != next_tags {

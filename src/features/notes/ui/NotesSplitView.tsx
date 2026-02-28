@@ -1052,7 +1052,7 @@ export function NotesSplitView({
                 });
               }}
             >
-              <span>Duplicate</span>
+              <span>Mirror</span>
             </button>
           ) : null}
 

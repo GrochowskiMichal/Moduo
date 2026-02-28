@@ -13,7 +13,7 @@ export function GanttView({
   onSelectTask: (id: string) => void;
 }) {
   return (
-    <div className="flex-1 h-full p-4">
+    <div className="flex-1 h-full min-h-0">
       <TasksGantt tasks={tasks} selectedTaskId={selectedTaskId} projectNameById={projectNameById} onSelectTask={onSelectTask} />
     </div>
   );

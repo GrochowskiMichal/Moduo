@@ -13,13 +13,13 @@ function safeId(): string {
 }
 
 // Key used inside the redb kv namespace.
-function redbKey(workspaceId: string | null, viewId: string | null): string {
-  return `${workspaceId ?? "global"}:${viewId ?? "main"}`;
+function redbKey(workspaceId: string | null, sceneId: string | null): string {
+  return `${workspaceId ?? "global"}:${sceneId ?? "main"}`;
 }
 
 // Legacy localStorage key for one-time migration.
-function legacyLocalStorageKey(workspaceId: string | null, viewId: string | null): string {
-  return `moduo:dashboard-layout:v1:${workspaceId ?? "global"}:${viewId ?? "main"}`;
+function legacyLocalStorageKey(workspaceId: string | null, sceneId: string | null): string {
+  return `moduo:dashboard-layout:v1:${workspaceId ?? "global"}:${sceneId ?? "main"}`;
 }
 
 // Accepts either a raw JSON string (legacy localStorage) or an already-parsed
@@ -67,7 +67,7 @@ type UseDashboardState = {
 
 export function useDashboard(
   workspaceId: string | null,
-  viewId: string | null,
+  sceneId: string | null,
   runtime: ModuoRuntime | null
 ): UseDashboardState {
   const [layout, setLayout] = useState<DashboardLayout>({ isLocked: false, widgets: [] });
@@ -92,7 +92,7 @@ export function useDashboard(
     isLoadedRef.current = false;
     setIsLoading(true);
 
-    const key = redbKey(workspaceId, viewId);
+    const key = redbKey(workspaceId, sceneId);
 
     runtime.localStore
       .get(STORE_NS, key)
@@ -101,12 +101,12 @@ export function useDashboard(
 
         // One-time migration from the old localStorage-based storage.
         if (!parsed && typeof window !== "undefined") {
-          const legacyRaw = window.localStorage.getItem(legacyLocalStorageKey(workspaceId, viewId));
+          const legacyRaw = window.localStorage.getItem(legacyLocalStorageKey(workspaceId, sceneId));
           parsed = parseLayout(legacyRaw);
           if (parsed) {
             // Persist to redb and clean up localStorage.
             runtime.localStore.set(STORE_NS, key, parsed).catch(console.error);
-            window.localStorage.removeItem(legacyLocalStorageKey(workspaceId, viewId));
+            window.localStorage.removeItem(legacyLocalStorageKey(workspaceId, sceneId));
           }
         }
 
@@ -119,7 +119,7 @@ export function useDashboard(
         isLoadedRef.current = true;
         setIsLoading(false);
       });
-  }, [viewId, workspaceId, runtime]);
+  }, [sceneId, workspaceId, runtime]);
 
   // ── Save ────────────────────────────────────────────────────────────────────
   // Skipped until isLoadedRef is true so we never overwrite a saved layout
@@ -127,9 +127,9 @@ export function useDashboard(
   useEffect(() => {
     if (!runtime || !workspaceId || !isLoadedRef.current) return;
     runtime.localStore
-      .set(STORE_NS, redbKey(workspaceId, viewId), layout)
+      .set(STORE_NS, redbKey(workspaceId, sceneId), layout)
       .catch(console.error);
-  }, [layout, viewId, workspaceId, runtime]);
+  }, [layout, sceneId, workspaceId, runtime]);
 
   const toggleLock = useCallback(() => {
     setLayout((current) => ({ ...current, isLocked: !current.isLocked }));

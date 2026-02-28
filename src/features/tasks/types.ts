@@ -1,4 +1,5 @@
 export type TaskPriority = 0 | 1 | 2 | 3 | 4;
+export type TaskRelationKind = "parent_of" | "child_of" | "blocked_by" | "blocking" | "duplicate_of";
 
 export type TaskViewMode = "board" | "list" | "gantt";
 
@@ -54,6 +55,9 @@ export type Task = {
   projectId: string;
   taskCode: string | null;
   parentTaskId: string | null;
+  childOfTaskId: string | null;
+  blockedByTaskIds: string[];
+  duplicateOfTaskId: string | null;
   stateId: string;
   assigneeId: string | null;
   title: string;

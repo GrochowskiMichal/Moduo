@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Task, TaskActivity, TaskComment, TaskPriority, TaskWorkflowState } from "../../tasks/types";
+import type { Task, TaskActivity, TaskComment, TaskPriority, TaskRelationKind, TaskWorkflowState } from "../../tasks/types";
+import { priorityVisual } from "../../tasks/ui/task-visuals";
+const RELATION_OPTIONS: Array<{ kind: TaskRelationKind; label: string }> = [
+  { kind: "parent_of", label: "Parent of" },
+  { kind: "child_of", label: "Child of" },
+  { kind: "blocked_by", label: "Waiting on" },
+  { kind: "blocking", label: "Holds" },
+  { kind: "duplicate_of", label: "Mirror of" },
+];
 
 function LabelsSelector({
   labels,
@@ -45,6 +53,10 @@ export function TaskDetailsView({
   assigneeById,
   currentUserId,
   canEdit,
+  relationTargets,
+  relations,
+  onApplyRelation,
+  onRemoveRelation,
   onBack,
   onSave,
   onDelete,
@@ -60,6 +72,10 @@ export function TaskDetailsView({
   assigneeById: Map<string, { label: string; avatarUrl: string | null; initial: string }>;
   currentUserId: string | null;
   canEdit: boolean;
+  relationTargets: Task[];
+  relations: Array<{ kind: TaskRelationKind; label: string; targetId: string; targetTitle: string }>;
+  onApplyRelation: (kind: TaskRelationKind, targetTaskId: string) => Promise<string | null>;
+  onRemoveRelation: (kind: TaskRelationKind, targetTaskId: string | null) => Promise<void>;
   onBack: () => void;
   onSave: (patch: Partial<Pick<Task, "title" | "description" | "tags" | "priority" | "dueDate" | "stateId" | "assigneeId">>) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -76,6 +92,10 @@ export function TaskDetailsView({
   const [deleting, setDeleting] = useState(false);
   const [commentBody, setCommentBody] = useState("");
   const [addingComment, setAddingComment] = useState(false);
+  const [relationKind, setRelationKind] = useState<TaskRelationKind>("blocked_by");
+  const [relationTargetId, setRelationTargetId] = useState("");
+  const [relationBusy, setRelationBusy] = useState(false);
+  const [relationError, setRelationError] = useState<string | null>(null);
 
   useEffect(() => {
     setTitle(task.title);
@@ -85,6 +105,8 @@ export function TaskDetailsView({
     setDueDate(task.dueDate ?? "");
     setStateId(task.stateId);
     setAssigneeId(task.assigneeId ?? "");
+    setRelationTargetId("");
+    setRelationError(null);
   }, [task]);
 
   const submit = async () => {
@@ -127,6 +149,31 @@ export function TaskDetailsView({
       setAddingComment(false);
     }
   };
+  const applyRelation = async () => {
+    if (!canEdit || relationBusy || !relationTargetId) return;
+    setRelationBusy(true);
+    setRelationError(null);
+    try {
+      const err = await onApplyRelation(relationKind, relationTargetId);
+      if (err) {
+        setRelationError(err);
+        return;
+      }
+      setRelationTargetId("");
+    } finally {
+      setRelationBusy(false);
+    }
+  };
+  const removeRelation = async (kind: TaskRelationKind, targetTaskId: string | null) => {
+    if (!canEdit || relationBusy) return;
+    setRelationBusy(true);
+    setRelationError(null);
+    try {
+      await onRemoveRelation(kind, targetTaskId);
+    } finally {
+      setRelationBusy(false);
+    }
+  };
 
   const stateNameById = useMemo(
     () => new Map(states.filter((s) => s.projectId === task.projectId).map((s) => [s.id, s.name])),
@@ -161,6 +208,9 @@ export function TaskDetailsView({
       return `updated labels (${added} added, ${removed} removed)`;
     }
     if (activity.action === "comment_added") return "added a comment";
+    if (activity.action === "parent_changed") return "updated parent relation";
+    if (activity.action === "duplicate_changed") return "updated mirror relation";
+    if (activity.action === "blocked_by_changed") return "updated waiting/holds relation";
     if (activity.action === "deleted") return "deleted this task";
     return activity.action;
   };
@@ -190,12 +240,22 @@ export function TaskDetailsView({
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-[9px] uppercase tracking-widest text-[#444] font-bold">Priority</span>
-              <select value={priority} disabled={!canEdit} onChange={(e) => setPriority(Number(e.target.value) as TaskPriority)} className="bg-[#0f0f0f] border border-[#1b1b1b] rounded-lg px-2 py-1.5 text-[11px] text-[#c7c7c7] outline-none [color-scheme:dark] disabled:opacity-70">
-                {[["Urgent", 0], ["High", 1], ["Medium", 2], ["Low", 3], ["None", 4]].map(([l, v]) => <option key={v} value={Number(v)}>{l}</option>)}
+              <select
+                value={priority}
+                disabled={!canEdit}
+                onChange={(e) => setPriority(Number(e.target.value) as TaskPriority)}
+                className="bg-[#0f0f0f] border border-[#1b1b1b] rounded-lg px-2 py-1.5 text-[11px] outline-none [color-scheme:dark] disabled:opacity-70"
+                style={{ color: priorityVisual(priority).color }}
+              >
+                {[["PI", 0], ["PII", 1], ["PIII", 2], ["PIV", 3], ["Nulla", 4]].map(([l, v]) => (
+                  <option key={v} value={Number(v)} style={{ color: priorityVisual(Number(v) as TaskPriority).color }}>
+                    {l}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-[9px] uppercase tracking-widest text-[#444] font-bold">Due date</span>
+              <span className="text-[9px] uppercase tracking-widest text-[#444] font-bold">Deadline</span>
               <input type="date" value={dueDate} disabled={!canEdit} onChange={(e) => setDueDate(e.target.value)} className="bg-[#0f0f0f] border border-[#1b1b1b] rounded-lg px-2 py-1.5 text-[11px] text-[#c7c7c7] outline-none [color-scheme:dark] disabled:opacity-70" />
             </div>
             <div className="flex flex-col gap-1">
@@ -215,6 +275,34 @@ export function TaskDetailsView({
           <div className="flex flex-col gap-1">
             <span className="text-[9px] uppercase tracking-widest text-[#444] font-bold">Labels</span>
             <LabelsSelector labels={projectLabels} selected={tags} onToggle={(name) => { if (!canEdit) return; setTags((prev) => prev.includes(name) ? prev.filter((tag) => tag !== name) : [...prev, name]); }} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <span className="text-[9px] uppercase tracking-widest text-[#444] font-bold">Relations</span>
+            <div className="grid grid-cols-[140px_1fr_auto] gap-2">
+              <select value={relationKind} disabled={!canEdit || relationBusy} onChange={(e) => setRelationKind(e.target.value as TaskRelationKind)} className="bg-[#0f0f0f] border border-[#1b1b1b] rounded-lg px-2 py-1.5 text-[11px] text-[#c7c7c7] outline-none [color-scheme:dark] disabled:opacity-70">
+                {RELATION_OPTIONS.map((option) => <option key={option.kind} value={option.kind}>{option.label}</option>)}
+              </select>
+              <select value={relationTargetId} disabled={!canEdit || relationBusy} onChange={(e) => setRelationTargetId(e.target.value)} className="bg-[#0f0f0f] border border-[#1b1b1b] rounded-lg px-2 py-1.5 text-[11px] text-[#c7c7c7] outline-none [color-scheme:dark] disabled:opacity-70">
+                <option value="">Select task</option>
+                {relationTargets.map((target) => <option key={target.id} value={target.id}>{target.title || "Untitled"}</option>)}
+              </select>
+              <button onClick={() => void applyRelation()} disabled={!canEdit || relationBusy || !relationTargetId} className="px-3 py-1.5 rounded-lg border border-[#2a2a2a] bg-[#161616] text-[11px] text-[#e1e1e1] hover:bg-[#1c1c1c] disabled:opacity-50">
+                {relationBusy ? "Saving..." : "Apply"}
+              </button>
+            </div>
+            {relationError && <div className="text-[10px] text-[#d58b8b]">{relationError}</div>}
+            <div className="flex flex-col gap-1.5">
+              {relations.length === 0 && <div className="text-[10px] text-[#666]">No relations.</div>}
+              {relations.map((relation) => (
+                <div key={`${relation.kind}:${relation.targetId}`} className="flex items-center gap-2 rounded-md border border-[#1b1b1b] bg-[#0f0f0f] px-2 py-1.5">
+                  <span className="text-[10px] text-[#8f8f8f]">{relation.label}</span>
+                  <span className="text-[11px] text-[#d3d3d3] truncate flex-1">{relation.targetTitle}</span>
+                  <button type="button" onClick={() => void removeRelation(relation.kind, relation.targetId)} disabled={!canEdit || relationBusy} className="text-[10px] text-[#b98787] hover:text-[#d5a0a0] disabled:opacity-50">
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 pt-1">

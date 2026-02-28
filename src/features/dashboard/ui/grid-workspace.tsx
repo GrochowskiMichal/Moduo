@@ -9,9 +9,9 @@ import { useDashboard } from "../hooks/use-dashboard";
 import type { WidgetType } from "../types";
 import { DashboardGrid } from "./dashboard-grid";
 import {
-  DASHBOARD_VIEW_CHANGE_EVENT,
-  readStoredDashboardActiveView,
-  type DashboardViewChangeDetail,
+  GRID_SCENE_CHANGE_EVENT,
+  readStoredGridActiveScene,
+  type GridSceneChangeDetail,
 } from "./layout-events";
 import { WidgetsPanel } from "./widgets-panel";
 
@@ -26,25 +26,25 @@ type Props = {
   states: TaskWorkflowState[];
 };
 
-export function DashboardWorkspace({ runtime, workspaceId, notes, tasks, projects, states }: Props) {
-  const [activeViewId, setActiveViewId] = useState<string | null>(() => readStoredDashboardActiveView(workspaceId));
+export function GridWorkspace({ runtime, workspaceId, notes, tasks, projects, states }: Props) {
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(() => readStoredGridActiveScene(workspaceId));
   const { widgets, isLocked, isLoading, toggleLock, addWidget, moveWidget, resizeWidget, removeWidget, updateWidgetConfig } =
-    useDashboard(workspaceId, activeViewId, runtime);
+    useDashboard(workspaceId, activeSceneId, runtime);
   const [activeDragData, setActiveDragData] = useState<any>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    setActiveViewId(readStoredDashboardActiveView(workspaceId));
+    setActiveSceneId(readStoredGridActiveScene(workspaceId));
   }, [workspaceId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onViewChange = (event: Event) => {
-      const detail = (event as CustomEvent<DashboardViewChangeDetail>).detail;
-      if (detail?.viewId) setActiveViewId(detail.viewId);
+    const onSceneChange = (event: Event) => {
+      const detail = (event as CustomEvent<GridSceneChangeDetail>).detail;
+      if (detail?.sceneId) setActiveSceneId(detail.sceneId);
     };
-    window.addEventListener(DASHBOARD_VIEW_CHANGE_EVENT, onViewChange);
-    return () => window.removeEventListener(DASHBOARD_VIEW_CHANGE_EVENT, onViewChange);
+    window.addEventListener(GRID_SCENE_CHANGE_EVENT, onSceneChange);
+    return () => window.removeEventListener(GRID_SCENE_CHANGE_EVENT, onSceneChange);
   }, []);
 
   const sensors = useSensors(
@@ -90,7 +90,7 @@ export function DashboardWorkspace({ runtime, workspaceId, notes, tasks, project
   return (
     <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <FeaturePanelsShell
-        feature="dashboard"
+        feature="grid"
         left={<WidgetsPanel isLocked={isLocked} onToggleLock={toggleLock} />}
         center={
           <div ref={gridRef} className="h-full w-full">

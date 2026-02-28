@@ -2,12 +2,12 @@ import { createRootRoute, createRoute, createRouter, Navigate, Outlet } from "@t
 import { AuthProvider } from "./providers/auth-provider";
 import { AppGate } from "./routes/layouts/app-gate";
 import { AuthPage } from "./routes/pages/auth-page";
-import { DashboardPage } from "./routes/pages/dashboard-page";
+import { GridPage } from "./routes/pages/grid-page";
 import { NotesPage } from "./routes/pages/notes-page";
 import { MindmapPage } from "./routes/pages/mindmap-page";
 import { TemplatesPage } from "./routes/pages/templates-page";
 import { EmailPage } from "./routes/pages/email-page";
-import { PlanPage } from "./routes/pages/plan-page";
+import { GroundPage } from "./routes/pages/ground-page";
 import { CrmPage } from "./routes/pages/crm-page";
 import { FormsPage } from "./routes/pages/forms-page";
 import { ActivityPage } from "./routes/pages/activity-page";
@@ -51,13 +51,13 @@ const appGateRoute = createRoute({
 const homeRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/",
-  component: () => <Navigate to="/dashboard" replace />,
+  component: () => <Navigate to="/grid" replace />,
 });
 
-const dashboardRoute = createRoute({
+const gridRoute = createRoute({
   getParentRoute: () => appGateRoute,
-  path: "/dashboard",
-  component: DashboardPage,
+  path: "/grid",
+  component: GridPage,
 });
 
 const notesRoute = createRoute({
@@ -69,7 +69,7 @@ const notesRoute = createRoute({
 const tasksRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/tasks",
-  component: () => <Navigate to="/plan" replace />,
+  component: () => <Navigate to="/ground" replace />,
 });
 
 const mindmapRoute = createRoute({
@@ -93,13 +93,13 @@ const emailRoute = createRoute({
 const calendarRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/calendar",
-  component: () => <Navigate to="/plan" replace />,
+  component: () => <Navigate to="/ground" replace />,
 });
 
-const planRoute = createRoute({
+const groundRoute = createRoute({
   getParentRoute: () => appGateRoute,
-  path: "/plan",
-  component: PlanPage,
+  path: "/ground",
+  component: GroundPage,
 });
 
 const crmRoute = createRoute({
@@ -196,10 +196,10 @@ const routeTree = rootRoute.addChildren([
   authRoute,
   appGateRoute.addChildren([
     homeRoute,
-    dashboardRoute,
+    gridRoute,
     notesRoute,
     tasksRoute,
-    planRoute,
+    groundRoute,
     mindmapRoute,
     templatesRoute,
     emailRoute,

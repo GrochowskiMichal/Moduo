@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCalendar } from "../../calendar/hooks/use-calendar";
 import { useTasks } from "../../tasks/hooks/use-tasks";
 import type { CalendarEvent } from "../../calendar/types";
-import type { Task, TaskPriority, TaskWorkflowState } from "../../tasks/types";
+import type { Task, TaskPriority, TaskRelationKind, TaskWorkflowState } from "../../tasks/types";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
@@ -16,12 +16,20 @@ import { ListView } from "./list-view";
 import { PlanCalendarView } from "./calendar-view";
 import { LinkView } from "./link-view";
 import { GanttView } from "./gantt-view";
+import { priorityVisual } from "../../tasks/ui/task-visuals";
 
 // ─── constants / helpers ──────────────────────────────────────────────────────
 const AVATAR_STORAGE_KEY = "moduo:auth-avatar-preview-v1";
 const AVATAR_STORE_NAMESPACE = "auth_ui";
 const AVATAR_STORE_KEY = "avatar_preview_v1";
 const PLAN_VIEW_STORAGE_KEY = "moduo:plan:view-v1";
+const RELATION_LABELS: Record<TaskRelationKind, string> = {
+    parent_of: "Parent of",
+    child_of: "Child of",
+    blocked_by: "Waiting on",
+    blocking: "Holds",
+    duplicate_of: "Mirror of",
+};
 
 function defaultStageVisual(kind: string): { icon: string; color: string } {
     if (kind === "todo") return { icon: "◯", color: "#C9CED6" };
@@ -319,13 +327,18 @@ function NewTaskPanel({ states, projects, defaultProjectId, defaultStateId, canE
                 <div className="flex flex-col gap-1">
                     <span className="text-[8px] font-bold uppercase tracking-widest text-[#222]">Priority</span>
                     <select value={priority} onChange={e => setPriority(Number(e.target.value) as TaskPriority)}
-                        className="bg-[#111] border border-[#181818] rounded-lg px-2 py-1.5 text-[10px] text-[#888] outline-none w-full [color-scheme:dark]">
-                        {[["Urgent", 0], ["High", 1], ["Medium", 2], ["Low", 3], ["None", 4]].map(([l, v]) => <option key={v} value={Number(v)} className="bg-[#0e0e0e]">{l}</option>)}
+                        className="bg-[#111] border border-[#181818] rounded-lg px-2 py-1.5 text-[10px] outline-none w-full [color-scheme:dark]"
+                        style={{ color: priorityVisual(priority).color }}>
+                        {[["PI", 0], ["PII", 1], ["PIII", 2], ["PIV", 3], ["Nulla", 4]].map(([l, v]) => (
+                            <option key={v} value={Number(v)} className="bg-[#0e0e0e]" style={{ color: priorityVisual(Number(v) as TaskPriority).color }}>
+                                {l}
+                            </option>
+                        ))}
                     </select>
                 </div>
 
                 <div className="flex flex-col gap-1">
-                    <span className="text-[8px] font-bold uppercase tracking-widest text-[#222]">Due date</span>
+                    <span className="text-[8px] font-bold uppercase tracking-widest text-[#222]">Deadline</span>
                     <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
                         className="bg-[#111] border border-[#181818] rounded-lg px-2 py-1.5 text-[10px] text-[#888] outline-none w-full [color-scheme:dark]" />
                 </div>
@@ -405,7 +418,9 @@ export function PlanWorkspace() {
     const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
     const [settingsSection, setSettingsSection] = useState<"general" | "stages" | "labels">("general");
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-    const handleSelectTask = (id: string) => setSelectedTaskId(id);
+    const handleSelectTask = useCallback((id: string) => {
+        if (nav.view === "kanban" || nav.view === "gantt") setSelectedTaskId(id);
+    }, [nav.view]);
 
     // fix 7: focusDate drives grid navigation
     const [focusDate, setFocusDate] = useState<Date>(() => savedView?.focusDate ?? new Date());
@@ -435,13 +450,64 @@ export function PlanWorkspace() {
         if (nav.projectId) t = t.filter(tk => tk.projectId === nav.projectId);
         return t;
     }, [tsk.tasks, nav.projectId, visibleProjectIds]);
+    const activeTasks = useMemo(
+        () => tsk.tasks.filter(task => !task.deletedAt && visibleProjectIds.has(task.projectId)),
+        [tsk.tasks, visibleProjectIds]
+    );
+    const activeTaskById = useMemo(
+        () => new Map(activeTasks.map(task => [task.id, task])),
+        [activeTasks]
+    );
     const selectedTask = useMemo(
         () => (selectedTaskId ? filteredTasks.find(t => t.id === selectedTaskId) ?? null : null),
         [filteredTasks, selectedTaskId]
     );
+    const selectedTaskRelationTargets = useMemo(
+        () => selectedTask ? activeTasks.filter(task => task.projectId === selectedTask.projectId && task.id !== selectedTask.id) : [],
+        [activeTasks, selectedTask]
+    );
+    const blockingByTaskId = useMemo(() => {
+        const map = new Map<string, string[]>();
+        for (const task of activeTasks) {
+            for (const blockedById of task.blockedByTaskIds ?? []) {
+                const list = map.get(blockedById) ?? [];
+                list.push(task.id);
+                map.set(blockedById, list);
+            }
+        }
+        return map;
+    }, [activeTasks]);
+    const selectedTaskRelations = useMemo(() => {
+        if (!selectedTask) return [];
+        const entries: Array<{ kind: TaskRelationKind; label: string; targetId: string; targetTitle: string }> = [];
+        if (selectedTask.childOfTaskId) {
+            const parent = activeTaskById.get(selectedTask.childOfTaskId);
+            if (parent) entries.push({ kind: "child_of", label: RELATION_LABELS.child_of, targetId: parent.id, targetTitle: parent.title || "Untitled" });
+        }
+        for (const child of activeTasks.filter(task => task.childOfTaskId === selectedTask.id)) {
+            entries.push({ kind: "parent_of", label: RELATION_LABELS.parent_of, targetId: child.id, targetTitle: child.title || "Untitled" });
+        }
+        for (const blockedById of selectedTask.blockedByTaskIds ?? []) {
+            const blockedByTask = activeTaskById.get(blockedById);
+            if (blockedByTask) entries.push({ kind: "blocked_by", label: RELATION_LABELS.blocked_by, targetId: blockedByTask.id, targetTitle: blockedByTask.title || "Untitled" });
+        }
+        for (const blockedTaskId of blockingByTaskId.get(selectedTask.id) ?? []) {
+            const blockedTask = activeTaskById.get(blockedTaskId);
+            if (blockedTask) entries.push({ kind: "blocking", label: RELATION_LABELS.blocking, targetId: blockedTask.id, targetTitle: blockedTask.title || "Untitled" });
+        }
+        if (selectedTask.duplicateOfTaskId) {
+            const duplicateOf = activeTaskById.get(selectedTask.duplicateOfTaskId);
+            if (duplicateOf) entries.push({ kind: "duplicate_of", label: RELATION_LABELS.duplicate_of, targetId: duplicateOf.id, targetTitle: duplicateOf.title || "Untitled" });
+        }
+        return entries;
+    }, [activeTaskById, activeTasks, blockingByTaskId, selectedTask]);
     const projectNameById = useMemo(() => new Map(visProjects.map(p => [p.id, p.name])), [visProjects]);
     const projectLabelColorsByProjectId = useMemo(
         () => new Map(visProjects.map(project => [project.id, new Map((project.labels ?? []).map(label => [label.name, label.color]))])),
+        [visProjects]
+    );
+    const projectLabelsByProjectId = useMemo(
+        () => new Map(visProjects.map(project => [project.id, project.labels ?? []])),
         [visProjects]
     );
     const activeSettingsProject = useMemo(() => visProjects.find(p => p.id === settingsProjectId) ?? null, [visProjects, settingsProjectId]);
@@ -511,6 +577,11 @@ export function PlanWorkspace() {
     useEffect(() => {
         if (selectedTaskId && !selectedTask) setSelectedTaskId(null);
     }, [selectedTaskId, selectedTask]);
+    useEffect(() => {
+        if ((nav.view === "calendar" || nav.view === "list" || nav.view === "link") && selectedTaskId) {
+            setSelectedTaskId(null);
+        }
+    }, [nav.view, selectedTaskId]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -536,7 +607,7 @@ export function PlanWorkspace() {
     }, []);
     // fix 6: open left panel even when hidden
     const hideLeftSidebar = useCallback(() => {
-        dispatchLayoutPanelsApply({ feature: "plan", left: false, right: readFeaturePanelState("plan").right });
+        dispatchLayoutPanelsApply({ feature: "ground", left: false, right: readFeaturePanelState("ground").right });
     }, []);
 
     const closeNewTaskPanel = useCallback(() => {
@@ -546,9 +617,89 @@ export function PlanWorkspace() {
 
     const handleCreateTask = (defaultStateId: string | null = null) => {
         setSettingsProjectId(null);
-        dispatchLayoutPanelsApply({ feature: "plan", left: true, right: readFeaturePanelState("plan").right });
+        dispatchLayoutPanelsApply({ feature: "ground", left: true, right: readFeaturePanelState("ground").right });
         setLeftPanel({ mode: "new-task", defaultStateId });
     };
+    const wouldCreateParentCycle = useCallback((childId: string, nextParentId: string | null): boolean => {
+        let cursor = nextParentId;
+        const seen = new Set<string>();
+        while (cursor) {
+            if (cursor === childId) return true;
+            if (seen.has(cursor)) break;
+            seen.add(cursor);
+            cursor = activeTaskById.get(cursor)?.childOfTaskId ?? null;
+        }
+        return false;
+    }, [activeTaskById]);
+    const wouldCreateDuplicateCycle = useCallback((sourceId: string, nextDuplicateOfId: string | null): boolean => {
+        let cursor = nextDuplicateOfId;
+        const seen = new Set<string>();
+        while (cursor) {
+            if (cursor === sourceId) return true;
+            if (seen.has(cursor)) break;
+            seen.add(cursor);
+            cursor = activeTaskById.get(cursor)?.duplicateOfTaskId ?? null;
+        }
+        return false;
+    }, [activeTaskById]);
+    const applyTaskRelation = useCallback(async (sourceTaskId: string, kind: TaskRelationKind, targetTaskId: string): Promise<string | null> => {
+        const source = activeTaskById.get(sourceTaskId);
+        const target = activeTaskById.get(targetTaskId);
+        if (!source || !target) return "Task not found.";
+        if (source.id === target.id) return "Task relation cannot point to itself.";
+        if (source.projectId !== target.projectId) return "Relation must reference task in the same project.";
+        if (kind === "child_of") {
+            if (wouldCreateParentCycle(source.id, target.id)) return "Cannot create parent/child cycle.";
+            await tsk.updateTask(source.id, { childOfTaskId: target.id });
+            return null;
+        }
+        if (kind === "parent_of") {
+            if (wouldCreateParentCycle(target.id, source.id)) return "Cannot create parent/child cycle.";
+            await tsk.updateTask(target.id, { childOfTaskId: source.id });
+            return null;
+        }
+        if (kind === "blocked_by") {
+            const next = [...new Set([...(source.blockedByTaskIds ?? []), target.id])];
+            await tsk.updateTask(source.id, { blockedByTaskIds: next });
+            return null;
+        }
+        if (kind === "blocking") {
+            const next = [...new Set([...(target.blockedByTaskIds ?? []), source.id])];
+            await tsk.updateTask(target.id, { blockedByTaskIds: next });
+            return null;
+        }
+        if (wouldCreateDuplicateCycle(source.id, target.id)) return "Cannot create duplicate cycle.";
+        await tsk.updateTask(source.id, { duplicateOfTaskId: target.id });
+        return null;
+    }, [activeTaskById, tsk, wouldCreateDuplicateCycle, wouldCreateParentCycle]);
+    const removeTaskRelation = useCallback(async (sourceTaskId: string, kind: TaskRelationKind, targetTaskId: string | null): Promise<void> => {
+        const source = activeTaskById.get(sourceTaskId);
+        if (!source) return;
+        if (kind === "child_of") {
+            await tsk.updateTask(source.id, { childOfTaskId: null });
+            return;
+        }
+        if (kind === "parent_of") {
+            if (!targetTaskId) return;
+            const child = activeTaskById.get(targetTaskId);
+            if (!child || child.childOfTaskId !== source.id) return;
+            await tsk.updateTask(child.id, { childOfTaskId: null });
+            return;
+        }
+        if (kind === "blocked_by") {
+            if (!targetTaskId) return;
+            await tsk.updateTask(source.id, { blockedByTaskIds: (source.blockedByTaskIds ?? []).filter(id => id !== targetTaskId) });
+            return;
+        }
+        if (kind === "blocking") {
+            if (!targetTaskId) return;
+            const blocked = activeTaskById.get(targetTaskId);
+            if (!blocked) return;
+            await tsk.updateTask(blocked.id, { blockedByTaskIds: (blocked.blockedByTaskIds ?? []).filter(id => id !== source.id) });
+            return;
+        }
+        await tsk.updateTask(source.id, { duplicateOfTaskId: null });
+    }, [activeTaskById, tsk]);
     const handleCreateEvent = () => {
         const src = cal.sources.find(s => s.visible);
         if (!src) return;
@@ -567,7 +718,7 @@ export function PlanWorkspace() {
         setLeftPanel(null);
         setSettingsSection("general");
         setSettingsProjectId(projectId);
-        dispatchLayoutPanelsApply({ feature: "plan", left: true, right: readFeaturePanelState("plan").right });
+        dispatchLayoutPanelsApply({ feature: "ground", left: true, right: readFeaturePanelState("ground").right });
     };
 
     const navProps: PlanNavProps = {
@@ -605,7 +756,6 @@ export function PlanWorkspace() {
             defaultAssigneeId={userId ?? null}
             canEdit={tsk.canEdit}
             onCancel={closeNewTaskPanel}
-            onCreated={id => setSelectedTaskId(id)}
             onSubmit={async (args) => tsk.createTask(args)}
         />
     ) : null;
@@ -700,6 +850,10 @@ export function PlanWorkspace() {
                         onSave={async patch => {
                             await tsk.updateTask(selectedTask.id, patch);
                         }}
+                        relationTargets={selectedTaskRelationTargets}
+                        relations={selectedTaskRelations}
+                        onApplyRelation={async (kind, targetTaskId) => applyTaskRelation(selectedTask.id, kind, targetTaskId)}
+                        onRemoveRelation={async (kind, targetTaskId) => { await removeTaskRelation(selectedTask.id, kind, targetTaskId); }}
                         onDelete={async () => {
                             await tsk.deleteTask(selectedTask.id);
                         }}
@@ -710,7 +864,29 @@ export function PlanWorkspace() {
                     <KanbanView states={visStates} tasks={filteredTasks} selectedTaskId={selectedTaskId}
                         projectId={nav.projectId} canEdit={tsk.canEdit}
                         assigneeById={assigneeById}
+                        assigneeOptions={assigneeOptions}
                         projectLabelColorsByProjectId={projectLabelColorsByProjectId}
+                        projectLabelsByProjectId={projectLabelsByProjectId}
+                        onQuickUpdateTask={(taskId, patch) => tsk.updateTask(taskId, patch)}
+                        onRenameTask={(taskId, title) => tsk.updateTask(taskId, { title: title.trim() || "Untitled" })}
+                        onDuplicateTask={async (task) => {
+                            await tsk.createTask({
+                                projectId: task.projectId,
+                                stateId: task.stateId,
+                                parentTaskId: task.parentTaskId,
+                                childOfTaskId: task.childOfTaskId,
+                                blockedByTaskIds: task.blockedByTaskIds,
+                                duplicateOfTaskId: task.duplicateOfTaskId,
+                                title: `${task.title || "Task"} (copy)`,
+                                description: task.description,
+                                tags: task.tags,
+                                priority: task.priority,
+                                dueDate: task.dueDate,
+                                assigneeId: task.assigneeId,
+                            });
+                        }}
+                        onDeleteTask={(taskId) => tsk.deleteTask(taskId)}
+                        onApplyRelation={applyTaskRelation}
                         onSelectTask={handleSelectTask}
                         onMoveTask={(taskId, stateId, beforeTaskId) => void tsk.moveTask(taskId, null, stateId, beforeTaskId ?? null)}
                         onRequestCreateTask={stateId => handleCreateTask(stateId)} />
@@ -726,7 +902,7 @@ export function PlanWorkspace() {
 
     return (
         <FeaturePanelsShell
-            feature="plan"
+            feature="ground"
             left={leftContent ?? undefined}
             center={center}
             right={undefined}

@@ -43,9 +43,9 @@ export function statusVisual(
 }
 
 export function priorityVisual(priority: TaskPriority): { label: string; icon: string; color: string } {
-  if (priority === 0) return { label: "Urgent", icon: "△", color: "#ff5252" };
-  if (priority === 1) return { label: "High", icon: "↑", color: "#f0a43d" };
-  if (priority === 2) return { label: "Medium", icon: "→", color: "#2f8fff" };
-  if (priority === 3) return { label: "Low", icon: "↓", color: "#7f8898" };
-  return { label: "None", icon: "—", color: "#616978" };
+  if (priority === 0) return { label: "PI", icon: "△", color: "#ff5252" };
+  if (priority === 1) return { label: "PII", icon: "↑", color: "#f0a43d" };
+  if (priority === 2) return { label: "PIII", icon: "→", color: "#2f8fff" };
+  if (priority === 3) return { label: "PIV", icon: "↓", color: "#2fbf71" };
+  return { label: "Nulla", icon: "—", color: "#616978" };
 }

@@ -1,9 +1,9 @@
 import type { ModuoRuntime } from "../../../lib/runtime";
 import type { DashboardLayout } from "../types";
 
-export type DashboardViewOption = { id: string; name: string };
+export type GridSceneOption = { id: string; name: string };
 
-export const DEFAULT_DASHBOARD_VIEW: DashboardViewOption = { id: "main", name: "Main Dashboard" };
+export const DEFAULT_GRID_SCENE: GridSceneOption = { id: "main", name: "Main Scene" };
 
 const VIEWS_NAMESPACE = "dashboard-views";
 const LAYOUT_NAMESPACE = "dashboard-layout";
@@ -32,10 +32,10 @@ function legacyLayoutStorageKey(workspaceId: string, viewId: string | null): str
   return `moduo:dashboard-layout:v1:${workspaceId}:${viewId ?? "main"}`;
 }
 
-function normalizeViews(raw: unknown): DashboardViewOption[] {
+function normalizeScenes(raw: unknown): GridSceneOption[] {
   const source = Array.isArray(raw) ? raw : [];
   const seen = new Set<string>();
-  const valid: DashboardViewOption[] = [];
+  const valid: GridSceneOption[] = [];
   for (const entry of source) {
     if (!entry || typeof entry !== "object") continue;
     const id = (entry as any).id;
@@ -45,24 +45,24 @@ function normalizeViews(raw: unknown): DashboardViewOption[] {
     seen.add(id);
     valid.push({ id, name });
   }
-  return valid.length ? valid : [DEFAULT_DASHBOARD_VIEW];
+  return valid.length ? valid : [DEFAULT_GRID_SCENE];
 }
 
-function readLegacyViews(workspaceId: string): DashboardViewOption[] | null {
+function readLegacyViews(workspaceId: string): GridSceneOption[] | null {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(legacyViewsStorageKey(workspaceId));
   if (!raw) return null;
   try {
-    return normalizeViews(JSON.parse(raw));
+    return normalizeScenes(JSON.parse(raw));
   } catch {
     return null;
   }
 }
 
-export async function listDashboardViews(runtime: ModuoRuntime, workspaceId: string): Promise<DashboardViewOption[]> {
+export async function listGridScenes(runtime: ModuoRuntime, workspaceId: string): Promise<GridSceneOption[]> {
   const storeKey = viewsStoreKey(workspaceId);
   const raw = await runtime.localStore.get(VIEWS_NAMESPACE, storeKey);
-  if (raw != null) return normalizeViews(raw);
+  if (raw != null) return normalizeScenes(raw);
 
   const legacy = readLegacyViews(workspaceId);
   if (legacy) {
@@ -71,16 +71,16 @@ export async function listDashboardViews(runtime: ModuoRuntime, workspaceId: str
     return legacy;
   }
 
-  const seed = [DEFAULT_DASHBOARD_VIEW];
+  const seed = [DEFAULT_GRID_SCENE];
   await runtime.localStore.set(VIEWS_NAMESPACE, storeKey, seed);
   return seed;
 }
 
-export async function saveDashboardViews(runtime: ModuoRuntime, workspaceId: string, views: DashboardViewOption[]) {
-  await runtime.localStore.set(VIEWS_NAMESPACE, viewsStoreKey(workspaceId), normalizeViews(views));
+export async function saveGridScenes(runtime: ModuoRuntime, workspaceId: string, scenes: GridSceneOption[]) {
+  await runtime.localStore.set(VIEWS_NAMESPACE, viewsStoreKey(workspaceId), normalizeScenes(scenes));
 }
 
-export async function readPersistedDashboardActiveView(runtime: ModuoRuntime, workspaceId: string): Promise<string | null> {
+export async function readPersistedGridActiveScene(runtime: ModuoRuntime, workspaceId: string): Promise<string | null> {
   const raw = await runtime.localStore.get(VIEWS_NAMESPACE, activeViewStoreKey(workspaceId));
   if (typeof raw === "string" && raw.trim()) return raw;
   if (typeof window === "undefined") return null;
@@ -92,26 +92,26 @@ export async function readPersistedDashboardActiveView(runtime: ModuoRuntime, wo
   return null;
 }
 
-export async function writePersistedDashboardActiveView(runtime: ModuoRuntime, workspaceId: string, viewId: string) {
-  await runtime.localStore.set(VIEWS_NAMESPACE, activeViewStoreKey(workspaceId), viewId);
+export async function writePersistedGridActiveScene(runtime: ModuoRuntime, workspaceId: string, sceneId: string) {
+  await runtime.localStore.set(VIEWS_NAMESPACE, activeViewStoreKey(workspaceId), sceneId);
 }
 
-export async function ensureDashboardLayout(
+export async function ensureGridSceneLayout(
   runtime: ModuoRuntime,
   workspaceId: string,
-  viewId: string,
+  sceneId: string,
   fallback: DashboardLayout = { isLocked: false, widgets: [] }
 ) {
-  const key = layoutStoreKey(workspaceId, viewId);
+  const key = layoutStoreKey(workspaceId, sceneId);
   const existing = await runtime.localStore.get(LAYOUT_NAMESPACE, key);
   if (existing == null) {
     await runtime.localStore.set(LAYOUT_NAMESPACE, key, fallback);
   }
 }
 
-export async function deleteDashboardLayout(runtime: ModuoRuntime, workspaceId: string, viewId: string) {
-  await runtime.localStore.remove(LAYOUT_NAMESPACE, layoutStoreKey(workspaceId, viewId));
+export async function deleteGridSceneLayout(runtime: ModuoRuntime, workspaceId: string, sceneId: string) {
+  await runtime.localStore.remove(LAYOUT_NAMESPACE, layoutStoreKey(workspaceId, sceneId));
   if (typeof window !== "undefined") {
-    window.localStorage.removeItem(legacyLayoutStorageKey(workspaceId, viewId));
+    window.localStorage.removeItem(legacyLayoutStorageKey(workspaceId, sceneId));
   }
 }

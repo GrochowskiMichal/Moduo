@@ -133,7 +133,7 @@ function TimeGrid({ days, events, tasks, taskStates, sources, showTasks, onClick
                 {dayTasks.length > 0 && (
                   <div className="absolute inset-x-1 top-1 z-10 flex flex-col gap-px">
                     {dayTasks.slice(0, 2).map(t => {
-                      const c = t.priority === 0 ? "#ff5f5f" : t.priority === 1 ? "#ffaa44" : t.priority === 2 ? "#5865f2" : "#555";
+                      const c = t.priority === 0 ? "#ff5252" : t.priority === 1 ? "#f0a43d" : t.priority === 2 ? "#2f8fff" : t.priority === 3 ? "#2fbf71" : "#616978";
                       return (
                         <button key={t.id} onClick={() => onSelectTask(t.id)} className="flex items-center gap-1 w-full px-1.5 py-0.5 rounded-md border border-[#1e1e1e] bg-[#111] hover:bg-[#1a1a1a] transition-all text-left">
                           <span className="text-[8px] shrink-0" style={{ color: c }}>✓</span>

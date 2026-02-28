@@ -65,6 +65,11 @@ function normalizeTask(task: any): Task {
     projectId: task.projectId ?? task.project_id,
     taskCode: task.taskCode ?? task.task_code ?? null,
     parentTaskId: task.parentTaskId ?? task.parent_task_id ?? null,
+    childOfTaskId: task.childOfTaskId ?? task.child_of_task_id ?? null,
+    blockedByTaskIds: Array.isArray(task.blockedByTaskIds ?? task.blocked_by_task_ids)
+      ? (task.blockedByTaskIds ?? task.blocked_by_task_ids).map((entry: unknown) => String(entry)).filter(Boolean)
+      : [],
+    duplicateOfTaskId: task.duplicateOfTaskId ?? task.duplicate_of_task_id ?? null,
     stateId: task.stateId ?? task.state_id,
     assigneeId: task.assigneeId ?? task.assignee_id ?? null,
     title: task.title ?? "New Task",
@@ -181,6 +186,9 @@ export type UseTasksState = {
   createTask: (args?: {
     projectId?: string | null;
     parentTaskId?: string | null;
+    childOfTaskId?: string | null;
+    blockedByTaskIds?: string[];
+    duplicateOfTaskId?: string | null;
     stateId?: string | null;
     title?: string;
     description?: string;
@@ -191,7 +199,7 @@ export type UseTasksState = {
   }) => Promise<string | null>;
   updateWorkflowState: (stateId: string, patch: Partial<TaskWorkflowState>) => Promise<void>;
   deleteWorkflowState: (stateId: string) => Promise<void>;
-  updateTask: (taskId: string, patch: Partial<Pick<Task, "title" | "description" | "tags" | "priority" | "dueDate" | "stateId" | "parentTaskId" | "assigneeId">>) => Promise<void>;
+  updateTask: (taskId: string, patch: Partial<Pick<Task, "title" | "description" | "tags" | "priority" | "dueDate" | "stateId" | "parentTaskId" | "childOfTaskId" | "assigneeId" | "blockedByTaskIds" | "duplicateOfTaskId">>) => Promise<void>;
   moveTask: (
     taskId: string,
     newParentTaskId: string | null,
@@ -514,6 +522,9 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
     async (args?: {
       projectId?: string | null;
       parentTaskId?: string | null;
+      childOfTaskId?: string | null;
+      blockedByTaskIds?: string[];
+      duplicateOfTaskId?: string | null;
       stateId?: string | null;
       title?: string;
       description?: string;
@@ -553,6 +564,9 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
         projectId,
         taskCode: null,
         parentTaskId,
+        childOfTaskId: args?.childOfTaskId ?? null,
+        blockedByTaskIds: Array.isArray(args?.blockedByTaskIds) ? args.blockedByTaskIds.map((entry) => String(entry)).filter(Boolean) : [],
+        duplicateOfTaskId: args?.duplicateOfTaskId ?? null,
         stateId,
         assigneeId: args?.assigneeId ?? userId,
         title: args?.title?.trim() || "New Task",
@@ -567,7 +581,6 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
       };
 
       const saved = normalizeTask(await runtime.tasks.upsertItem(task));
-      setSelectedTaskId(saved.id);
       await loadBundle();
       return saved.id;
     },
@@ -577,7 +590,7 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
   const updateTask = useCallback(
     async (
       taskId: string,
-      patch: Partial<Pick<Task, "title" | "description" | "tags" | "priority" | "dueDate" | "stateId" | "parentTaskId" | "assigneeId">>
+      patch: Partial<Pick<Task, "title" | "description" | "tags" | "priority" | "dueDate" | "stateId" | "parentTaskId" | "childOfTaskId" | "assigneeId" | "blockedByTaskIds" | "duplicateOfTaskId">>
     ) => {
       if (!runtime || !canEdit) return;
       const current = tasks.find((task) => task.id === taskId);
@@ -587,6 +600,11 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
         ...current,
         ...patch,
         tags: Array.isArray(patch.tags) ? patch.tags : current.tags,
+        childOfTaskId: patch.childOfTaskId === undefined ? current.childOfTaskId : (patch.childOfTaskId ?? null),
+        blockedByTaskIds: Array.isArray(patch.blockedByTaskIds)
+          ? patch.blockedByTaskIds.map((entry) => String(entry)).filter(Boolean)
+          : current.blockedByTaskIds,
+        duplicateOfTaskId: patch.duplicateOfTaskId === undefined ? current.duplicateOfTaskId : (patch.duplicateOfTaskId ?? null),
         updatedAt: nowIso(),
       };
 
@@ -640,6 +658,28 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
   const deleteTask = useCallback(
     async (taskId: string) => {
       if (!runtime || !canEdit || !workspaceId) return;
+      const impacted = tasks.filter(
+        (task) =>
+          !task.deletedAt &&
+          task.id !== taskId &&
+          (
+            task.parentTaskId === taskId ||
+            task.childOfTaskId === taskId ||
+            task.duplicateOfTaskId === taskId ||
+            (task.blockedByTaskIds ?? []).includes(taskId)
+          )
+      );
+      for (const task of impacted) {
+        const next: Task = {
+          ...task,
+          parentTaskId: task.parentTaskId === taskId ? null : task.parentTaskId,
+          childOfTaskId: task.childOfTaskId === taskId ? null : task.childOfTaskId,
+          duplicateOfTaskId: task.duplicateOfTaskId === taskId ? null : task.duplicateOfTaskId,
+          blockedByTaskIds: (task.blockedByTaskIds ?? []).filter((entry) => entry !== taskId),
+          updatedAt: nowIso(),
+        };
+        await runtime.tasks.upsertItem(next);
+      }
       await runtime.tasks.deleteItem({
         workspaceId,
         taskId,
@@ -648,7 +688,7 @@ export function useTasks(runtime: ModuoRuntime | null, params: UseTasksParams): 
       if (selectedTaskId === taskId) setSelectedTaskId(null);
       await loadBundle();
     },
-    [canEdit, loadBundle, runtime, selectedTaskId, workspaceId]
+    [canEdit, loadBundle, runtime, selectedTaskId, tasks, workspaceId]
   );
 
   const addComment = useCallback(

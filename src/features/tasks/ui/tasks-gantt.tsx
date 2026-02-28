@@ -45,6 +45,10 @@ type GanttRow = {
   start: Date;
   end: Date;
 };
+function PriorityLabel({ label }: { label: string }) {
+  if (!label.startsWith("P") || label === "Nulla") return <>{label}</>;
+  return <>P<span className="priority-roman-numeral">{label.slice(1)}</span></>;
+}
 
 function buildRow(task: Task, today: Date): GanttRow {
   const due = parseIsoDate(task.dueDate);
@@ -108,17 +112,17 @@ export function TasksGantt({ tasks, selectedTaskId, projectNameById, onSelectTas
 
   if (!rows.length) {
     return (
-      <div className="grid h-full place-items-center rounded-2xl border border-[#232323] bg-[#101010] text-[13px] text-[#808892]">
+      <div className="grid h-full place-items-center text-[13px] text-[#808892]">
         No tasks for timeline.
       </div>
     );
   }
 
   return (
-    <div className="h-full min-h-0 overflow-auto rounded-2xl border border-[#232323] bg-[#101010]">
+    <div className="h-full min-h-0 overflow-auto">
       <div className="min-w-max">
-        <div className="sticky top-0 z-20 grid grid-cols-[260px_auto] border-b border-[#242424] bg-[#121212]">
-          <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-[#8d96a4]">Task</div>
+        <div className="sticky top-0 z-20 grid grid-cols-[260px_auto] border-b border-[#242424] bg-[#121212]/95 backdrop-blur">
+          <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8d96a4]">Task</div>
           <div className="relative h-9" style={{ width: timelineWidth }}>
             {days.map((day, index) => (
               <div key={day.toISOString()} className="absolute top-0 h-full border-l border-white/[0.05]" style={{ left: index * DAY_WIDTH }}>
@@ -143,22 +147,24 @@ export function TasksGantt({ tasks, selectedTaskId, projectNameById, onSelectTas
             const selected = selectedTaskId === row.task.id;
 
             return (
-              <div key={row.task.id} className="grid grid-cols-[260px_auto] border-b border-[#1c1c1c] last:border-b-0">
+              <div key={row.task.id} className="grid grid-cols-[260px_auto] border-b border-[#1c1c1c]">
                 <button
                   type="button"
-                  className={`h-12 px-3 text-left transition-colors ${selected ? "bg-[#151920]" : "hover:bg-[#151515]"}`}
+                  className={`h-12 px-3 text-left transition-colors ${selected ? "bg-[#151a23]" : "hover:bg-[#141414]"}`}
                   onClick={() => onSelectTask(row.task.id)}
                 >
                   <div className="truncate text-[13px] text-[#e5eaf2]">{row.task.title || "Untitled"}</div>
                   <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[#8792a3]">
-                    <span style={{ color: priority.color }}>{priority.icon}</span>
+                    <span style={{ color: priority.color }} className="font-semibold">
+                      <PriorityLabel label={priority.label} />
+                    </span>
                     <span className="truncate">{projectNameById.get(row.task.projectId) ?? "Project"}</span>
                   </div>
                 </button>
 
                 <button
                   type="button"
-                  className={`relative h-12 text-left ${selected ? "bg-[#121822]" : "hover:bg-[#121212]"}`}
+                  className={`relative h-12 text-left ${selected ? "bg-[#111923]" : "hover:bg-[#111111]"}`}
                   style={{
                     width: timelineWidth,
                     backgroundImage: "linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px)",
@@ -167,13 +173,13 @@ export function TasksGantt({ tasks, selectedTaskId, projectNameById, onSelectTas
                   onClick={() => onSelectTask(row.task.id)}
                 >
                   <div
-                    className={`absolute top-2.5 h-7 rounded-md border px-2 text-[11px] leading-7 ${selected
-                      ? "border-[#6581b8] bg-[#22395d] text-[#dbeafe]"
-                      : "border-[#3a4a62] bg-[#1d2b42] text-[#c7d2e6]"
+                    className={`absolute top-2.5 h-7 rounded-md border px-2 text-[11px] leading-7 shadow-[0_2px_10px_rgba(0,0,0,0.22)] ${selected
+                      ? "border-[#6b8dc9] bg-[#244266] text-[#e2ecff]"
+                      : "border-[#405679] bg-[#1f3552] text-[#cfdbf1]"
                       }`}
                     style={{ left: startOffset + 3, width: barWidth }}
                   >
-                    <span className="truncate">{row.task.dueDate ?? "No due date"}</span>
+                    <span className="truncate">{row.task.dueDate ?? "No deadline"}</span>
                   </div>
                 </button>
               </div>
