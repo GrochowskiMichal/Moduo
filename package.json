@@ -7,7 +7,7 @@
     "start": "bun run dev:web",
     "dev:web": "./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8081",
     "preview:web": "./node_modules/.bin/rsbuild preview --host 127.0.0.1 --port 8081",
-    "dev:desktop": "zsh -lc './node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8081 & WEB_PID=$!; trap \"kill $WEB_PID\" EXIT INT TERM; node ./node_modules/@tauri-apps/cli/tauri.js dev'",
+    "dev:desktop": "zsh -lc 'set -a; [[ -f .env.local ]] && source .env.local; set +a; ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8081 & WEB_PID=$!; trap \"kill $WEB_PID\" EXIT INT TERM; node ./node_modules/@tauri-apps/cli/tauri.js dev'",
     "dev:desktop:signed": "bun run build:desktop:signed:debug && open ./src-tauri/target/debug/bundle/macos/moduo.app",
     "build:web": "rsbuild build",
     "build:desktop": "node ./node_modules/@tauri-apps/cli/tauri.js build",

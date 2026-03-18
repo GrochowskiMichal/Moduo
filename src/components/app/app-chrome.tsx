@@ -21,6 +21,7 @@ import {
 import { NotificationCenter } from "../notification-center";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { WorkspaceSettingsModal } from "../workspace-settings-modal";
+import { IntegrationsModal } from "../integrations-modal";
 import { Image, Pressable, Text, View } from "../../tw";
 import {
   dispatchLayoutPanelsApply,
@@ -80,6 +81,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const canEditTasks = modulePermissions.tasks === "edit" || modulePermissions.tasks === "admin";
 
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [featurePanels, setFeaturePanels] = useState(() => readPanelsMap());
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
@@ -1027,6 +1029,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               onOpenSettings={() => {
                 void navigate({ to: "/settings" });
               }}
+              onOpenIntegrations={() => { void navigate({ to: "/settings", search: { section: "integrations" } }); }}
             />
           </View>
         </View>
@@ -1060,6 +1063,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       </View>
 
       <WorkspaceSettingsModal visible={workspaceSettingsOpen} onClose={() => setWorkspaceSettingsOpen(false)} />
+      <IntegrationsModal visible={integrationsOpen} onClose={() => setIntegrationsOpen(false)} />
     </View>
   );
 }

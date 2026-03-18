@@ -3,7 +3,6 @@ import type {
   CalendarAccount,
   CalendarEvent,
   CalendarEventDraft,
-  CalendarProvider,
   CalendarSource,
   CalendarViewMode,
 } from "../types";
@@ -20,6 +19,14 @@ function nowIso(): string {
 const EVENTS_STORAGE_KEY = "moduo:calendar:events-v1";
 const SOURCES_STORAGE_KEY = "moduo:calendar:sources-v1";
 const ACCOUNTS_STORAGE_KEY = "moduo:calendar:accounts-v1";
+export const CALENDAR_ACCOUNTS_UPDATED_EVENT = "moduo:calendar:accounts-updated";
+
+type CalendarOauthStartResult = {
+  accountId: string;
+  email: string;
+  displayName: string;
+  calendars: Array<{ id: string; name: string; color: string }>;
+};
 
 function readLocalEvents(): CalendarEvent[] {
   if (typeof window === "undefined") return [];
@@ -37,7 +44,81 @@ function writeLocalEvents(events: CalendarEvent[]) {
   window.localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events));
 }
 
-function readLocalSources(): CalendarSource[] {
+async function tryListBackendEvents(): Promise<CalendarEvent[] | null> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const raw = (await invoke("calendar_events_list")) as unknown;
+    if (!Array.isArray(raw)) return [];
+    return raw as CalendarEvent[];
+  } catch {
+    return null;
+  }
+}
+
+async function tryUpsertBackendEvent(event: CalendarEvent): Promise<boolean> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("calendar_events_upsert", { event });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function tryDeleteBackendEvent(eventId: string): Promise<boolean> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("calendar_events_delete", { eventId });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isGoogleSourceId(sourceId: string): boolean {
+  return sourceId.startsWith("google:");
+}
+
+async function tryUpsertGoogleEvent(accountId: string, event: CalendarEvent): Promise<CalendarEvent | null> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const raw = (await invoke("calendar_google_event_upsert", { accountId, event })) as unknown;
+    return raw as CalendarEvent;
+  } catch {
+    return null;
+  }
+}
+
+async function tryDeleteGoogleEvent(accountId: string, calendarSourceId: string, externalId: string): Promise<boolean> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("calendar_google_event_delete", { accountId, calendarSourceId, externalId });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function trySyncGoogleEvents(accountId: string, calendarSourceIds: string[]) {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const now = new Date();
+    const timeMin = new Date(now);
+    timeMin.setDate(timeMin.getDate() - 30);
+    const timeMax = new Date(now);
+    timeMax.setDate(timeMax.getDate() + 90);
+    await invoke("calendar_google_events_sync", {
+      accountId,
+      calendarSourceIds,
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+export function readLocalSources(): CalendarSource[] {
   if (typeof window === "undefined") return [];
   const raw = window.localStorage.getItem(SOURCES_STORAGE_KEY);
   if (!raw) return [];
@@ -48,12 +129,12 @@ function readLocalSources(): CalendarSource[] {
   }
 }
 
-function writeLocalSources(sources: CalendarSource[]) {
+export function writeLocalSources(sources: CalendarSource[]) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(SOURCES_STORAGE_KEY, JSON.stringify(sources));
 }
 
-function readLocalAccounts(): CalendarAccount[] {
+export function readLocalAccounts(): CalendarAccount[] {
   if (typeof window === "undefined") return [];
   const raw = window.localStorage.getItem(ACCOUNTS_STORAGE_KEY);
   if (!raw) return [];
@@ -64,7 +145,7 @@ function readLocalAccounts(): CalendarAccount[] {
   }
 }
 
-function writeLocalAccounts(accounts: CalendarAccount[]) {
+export function writeLocalAccounts(accounts: CalendarAccount[]) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
 }
@@ -152,8 +233,8 @@ export type UseCalendarState = {
   deleteSource: (sourceId: string) => void;
   addInternalCalendar: () => void;
   addGoogleAccount: () => Promise<void>;
-  addOutlookAccount: () => void;
-  addAppleAccount: () => void;
+  addOutlookAccount: () => Promise<void>;
+  addAppleAccount: () => Promise<void>;
   removeAccount: (accountId: string) => void;
   getVisibleEvents: () => CalendarEvent[];
 };
@@ -168,13 +249,35 @@ export function useCalendar(): UseCalendarState {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const rawAccounts = readLocalAccounts();
-    const rawSources = readLocalSources();
-    const { accounts: resolvedAccounts, sources: resolvedSources } = ensureDefaultPersonalCalendar(rawAccounts, rawSources);
-    setAccounts(resolvedAccounts);
-    setSources(resolvedSources);
-    setEvents(readLocalEvents());
-    setLoading(false);
+    let cancelled = false;
+    (async () => {
+      const rawAccounts = readLocalAccounts();
+      const rawSources = readLocalSources();
+      const { accounts: resolvedAccounts, sources: resolvedSources } = ensureDefaultPersonalCalendar(rawAccounts, rawSources);
+      if (cancelled) return;
+      setAccounts(resolvedAccounts);
+      setSources(resolvedSources);
+
+      const backendEvents = await tryListBackendEvents();
+      if (cancelled) return;
+      setEvents(backendEvents ?? readLocalEvents());
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      const rawAccounts = readLocalAccounts();
+      const rawSources = readLocalSources();
+      const { accounts: resolvedAccounts, sources: resolvedSources } = ensureDefaultPersonalCalendar(rawAccounts, rawSources);
+      setAccounts(resolvedAccounts);
+      setSources(resolvedSources);
+    };
+    window.addEventListener(CALENDAR_ACCOUNTS_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(CALENDAR_ACCOUNTS_UPDATED_EVENT, handler);
   }, []);
 
   const navigateToday = useCallback(() => setCurrentDate(new Date()), []);
@@ -221,13 +324,29 @@ export function useCalendar(): UseCalendarState {
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
+        externalProvider: isGoogleSourceId(draft.calendarId) ? "google" : undefined,
       };
       const next = [...events, event];
       setEvents(next);
       writeLocalEvents(next);
+      void tryUpsertBackendEvent(event);
+      if (isGoogleSourceId(draft.calendarId)) {
+        const source = sources.find((s) => s.id === draft.calendarId);
+        const accountId = source?.accountId;
+        if (accountId) {
+          void (async () => {
+            const pushed = await tryUpsertGoogleEvent(accountId, event);
+            if (!pushed) return;
+            const merged = next.map((e) => (e.id === id ? pushed : e));
+            setEvents(merged);
+            writeLocalEvents(merged);
+            void tryUpsertBackendEvent(pushed);
+          })();
+        }
+      }
       return id;
     },
-    [events]
+    [events, sources]
   );
 
   const updateEvent = useCallback(
@@ -237,8 +356,26 @@ export function useCalendar(): UseCalendarState {
       );
       setEvents(next);
       writeLocalEvents(next);
+      const updated = next.find((e) => e.id === eventId);
+      if (updated) {
+        void tryUpsertBackendEvent(updated);
+        if (updated.externalProvider === "google" && isGoogleSourceId(updated.calendarId)) {
+          const source = sources.find((s) => s.id === updated.calendarId);
+          const accountId = source?.accountId;
+          if (accountId) {
+            void (async () => {
+              const pushed = await tryUpsertGoogleEvent(accountId, updated);
+              if (!pushed) return;
+              const merged = next.map((e) => (e.id === eventId ? pushed : e));
+              setEvents(merged);
+              writeLocalEvents(merged);
+              void tryUpsertBackendEvent(pushed);
+            })();
+          }
+        }
+      }
     },
-    [events]
+    [events, sources]
   );
 
   const deleteEvent = useCallback(
@@ -249,8 +386,20 @@ export function useCalendar(): UseCalendarState {
       setEvents(next);
       writeLocalEvents(next);
       if (selectedEventId === eventId) setSelectedEventId(null);
+      // Keep tombstone in DB for now (matches local behavior).
+      const tombstone = next.find((e) => e.id === eventId);
+      if (tombstone) {
+        void tryUpsertBackendEvent(tombstone);
+        if (tombstone.externalProvider === "google" && tombstone.externalId && isGoogleSourceId(tombstone.calendarId)) {
+          const source = sources.find((s) => s.id === tombstone.calendarId);
+          const accountId = source?.accountId;
+          if (accountId) {
+            void tryDeleteGoogleEvent(accountId, tombstone.calendarId, tombstone.externalId);
+          }
+        }
+      }
     },
-    [events, selectedEventId]
+    [events, selectedEventId, sources]
   );
 
   const selectEvent = useCallback((eventId: string | null) => {
@@ -336,101 +485,110 @@ export function useCalendar(): UseCalendarState {
   }, [accounts, sources]);
 
   const addGoogleAccount = useCallback(async () => {
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const result = (await invoke("calendar_google_oauth_start")) as {
-        accountId: string;
-        email: string;
-        displayName: string;
-        calendars: Array<{ id: string; name: string; color: string }>;
-      };
+    const { invoke } = await import("@tauri-apps/api/core");
+    const result = (await invoke("calendar_google_oauth_start")) as CalendarOauthStartResult;
 
-      const newAccount: CalendarAccount = {
-        id: result.accountId,
-        provider: "google",
-        email: result.email,
-        displayName: result.displayName,
-        connected: true,
-        lastSyncAt: nowIso(),
-      };
-
-      const newSources: CalendarSource[] = result.calendars.map((cal, i) => ({
-        id: cal.id,
-        accountId: result.accountId,
-        name: cal.name,
-        color: cal.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length],
-        visible: true,
-      }));
-
-      const nextAccounts = [...accounts, newAccount];
-      const nextSources = [...sources, ...newSources];
-      setAccounts(nextAccounts);
-      setSources(nextSources);
-      writeLocalAccounts(nextAccounts);
-      writeLocalSources(nextSources);
-    } catch {
-      // Backend command not yet available - show placeholder
-      const accountId = safeId();
-      const newAccount: CalendarAccount = {
-        id: accountId,
-        provider: "google",
-        email: "user@gmail.com",
-        displayName: "Google Calendar",
-        connected: false,
-        lastSyncAt: null,
-      };
-
-      const newSources: CalendarSource[] = [
-        { id: safeId(), accountId, name: "Primary", color: DEFAULT_COLORS[2], visible: true },
-        { id: safeId(), accountId, name: "Work", color: DEFAULT_COLORS[5], visible: true },
-      ];
-
-      const nextAccounts = [...accounts, newAccount];
-      const nextSources = [...sources, ...newSources];
-      setAccounts(nextAccounts);
-      setSources(nextSources);
-      writeLocalAccounts(nextAccounts);
-      writeLocalSources(nextSources);
-    }
-  }, [accounts, sources]);
-
-  const addOutlookAccount = useCallback(() => {
-    const accountId = safeId();
-    const newAccount: CalendarAccount = {
-      id: accountId,
-      provider: "outlook",
-      email: "user@outlook.com",
-      displayName: "Microsoft Calendar",
-      connected: false,
-      lastSyncAt: null,
+    const connectedAccount: CalendarAccount = {
+      id: result.accountId,
+      provider: "google",
+      email: result.email,
+      displayName: result.displayName,
+      connected: true,
+      lastSyncAt: nowIso(),
     };
-    const newSources: CalendarSource[] = [
-      { id: safeId(), accountId, name: "Outlook", color: DEFAULT_COLORS[3], visible: true },
-      { id: safeId(), accountId, name: "Meetings", color: DEFAULT_COLORS[6], visible: true },
-    ];
-    const nextAccounts = [...accounts, newAccount];
-    const nextSources = [...sources, ...newSources];
+    const connectedSources: CalendarSource[] = result.calendars.map((cal, i) => ({
+      id: cal.id,
+      accountId: result.accountId,
+      name: cal.name,
+      color: cal.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length] || DEFAULT_COLORS[0]!,
+      visible: true,
+    }));
+
+    const existingAccountIndex = accounts.findIndex((item) => item.id === connectedAccount.id);
+    const nextAccounts =
+      existingAccountIndex === -1
+        ? [...accounts, connectedAccount]
+        : accounts.map((item, index) => (index === existingAccountIndex ? connectedAccount : item));
+
+    const byId = new Map<string, CalendarSource>();
+    for (const source of sources) byId.set(source.id, source);
+    for (const source of connectedSources) byId.set(source.id, source);
+    const nextSources = Array.from(byId.values());
+
     setAccounts(nextAccounts);
     setSources(nextSources);
     writeLocalAccounts(nextAccounts);
     writeLocalSources(nextSources);
   }, [accounts, sources]);
 
-  const addAppleAccount = useCallback(() => {
-    const accountId = safeId();
-    const newAccount: CalendarAccount = {
-      id: accountId,
-      provider: "apple",
-      email: "user@icloud.com",
-      displayName: "Apple Calendar",
-      connected: false,
-      lastSyncAt: null,
+  const addOutlookAccount = useCallback(async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const result = (await invoke("calendar_outlook_oauth_start")) as CalendarOauthStartResult;
+
+    const connectedAccount: CalendarAccount = {
+      id: result.accountId,
+      provider: "outlook",
+      email: result.email,
+      displayName: result.displayName,
+      connected: true,
+      lastSyncAt: nowIso(),
     };
-    const newSources: CalendarSource[] = [
-      { id: safeId(), accountId, name: "iCloud", color: DEFAULT_COLORS[4], visible: true },
-    ];
-    const nextAccounts = [...accounts, newAccount];
-    const nextSources = [...sources, ...newSources];
+    const connectedSources: CalendarSource[] = result.calendars.map((cal, i) => ({
+      id: cal.id,
+      accountId: result.accountId,
+      name: cal.name,
+      color: cal.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length] || DEFAULT_COLORS[0]!,
+      visible: true,
+    }));
+
+    const existingAccountIndex = accounts.findIndex((item) => item.id === connectedAccount.id);
+    const nextAccounts =
+      existingAccountIndex === -1
+        ? [...accounts, connectedAccount]
+        : accounts.map((item, index) => (index === existingAccountIndex ? connectedAccount : item));
+
+    const byId = new Map<string, CalendarSource>();
+    for (const source of sources) byId.set(source.id, source);
+    for (const source of connectedSources) byId.set(source.id, source);
+    const nextSources = Array.from(byId.values());
+
+    setAccounts(nextAccounts);
+    setSources(nextSources);
+    writeLocalAccounts(nextAccounts);
+    writeLocalSources(nextSources);
+  }, [accounts, sources]);
+
+  const addAppleAccount = useCallback(async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const result = (await invoke("calendar_apple_oauth_start")) as CalendarOauthStartResult;
+
+    const connectedAccount: CalendarAccount = {
+      id: result.accountId,
+      provider: "apple",
+      email: result.email,
+      displayName: result.displayName,
+      connected: true,
+      lastSyncAt: nowIso(),
+    };
+    const connectedSources: CalendarSource[] = result.calendars.map((cal, i) => ({
+      id: cal.id,
+      accountId: result.accountId,
+      name: cal.name,
+      color: cal.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length] || DEFAULT_COLORS[0]!,
+      visible: true,
+    }));
+
+    const existingAccountIndex = accounts.findIndex((item) => item.id === connectedAccount.id);
+    const nextAccounts =
+      existingAccountIndex === -1
+        ? [...accounts, connectedAccount]
+        : accounts.map((item, index) => (index === existingAccountIndex ? connectedAccount : item));
+
+    const byId = new Map<string, CalendarSource>();
+    for (const source of sources) byId.set(source.id, source);
+    for (const source of connectedSources) byId.set(source.id, source);
+    const nextSources = Array.from(byId.values());
+
     setAccounts(nextAccounts);
     setSources(nextSources);
     writeLocalAccounts(nextAccounts);

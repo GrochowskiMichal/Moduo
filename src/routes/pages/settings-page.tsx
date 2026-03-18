@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import type { CalendarAccount, CalendarSource } from "../../features/calendar/types";
+import { CALENDAR_ACCOUNTS_UPDATED_EVENT, readLocalAccounts, readLocalSources, writeLocalAccounts, writeLocalSources } from "../../features/calendar/hooks/use-calendar";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { useAuth } from "../../providers/auth-provider";
 import { Image, Pressable, Text } from "../../tw";
 import defaultProfilePic from "../../../assets/icon.png";
 import { notifyProfileUpdated, readStoredAvatar, writeStoredAvatar } from "../../features/profile/profile-storage";
 
-type SettingsSection = "profile" | "login-key" | "ai";
+type SettingsSection = "profile" | "login-key" | "ai" | "integrations";
 
 function maskedPhrase(phrase: string | null) {
   if (!phrase) return "•••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• ••••••";
@@ -20,7 +23,13 @@ function maskedPhrase(phrase: string | null) {
 export function SettingsPage() {
   const { runtime, userEmail } = useAuth();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
-  const [section, setSection] = useState<SettingsSection>("profile");
+  const [section, setSection] = useState<SettingsSection>(() => {
+    if (typeof window !== "undefined") {
+      const s = new URLSearchParams(window.location.search).get("section");
+      if (s === "integrations") return "integrations";
+    }
+    return "profile";
+  });
   const [displayName, setDisplayName] = useState("");
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
@@ -37,6 +46,16 @@ export function SettingsPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  type IntegrationStatus = { provider: string; connected: boolean };
+  const [calAccounts, setCalAccounts] = useState<CalendarAccount[]>([]);
+  const [calSources, setCalSources] = useState<CalendarSource[]>([]);
+  const [calBusy, setCalBusy] = useState<string | null>(null);
+  const [calError, setCalError] = useState<string | null>(null);
+  const [videoStatuses, setVideoStatuses] = useState<IntegrationStatus[]>([]);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoBusy, setVideoBusy] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -77,6 +96,93 @@ export function SettingsPage() {
       active = false;
     };
   }, [runtime]);
+
+  useEffect(() => {
+    if (section !== "integrations") return;
+    setCalAccounts(readLocalAccounts());
+    setCalSources(readLocalSources());
+    const loadVideo = async () => {
+      setVideoLoading(true);
+      setVideoError(null);
+      try {
+        const result = await invoke<IntegrationStatus[]>("integration_get_status");
+        setVideoStatuses(result);
+      } catch (e) {
+        setVideoError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setVideoLoading(false);
+      }
+    };
+    void loadVideo();
+  }, [section]);
+
+  useEffect(() => {
+    const handler = () => { setCalAccounts(readLocalAccounts()); setCalSources(readLocalSources()); };
+    window.addEventListener(CALENDAR_ACCOUNTS_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(CALENDAR_ACCOUNTS_UPDATED_EVENT, handler);
+  }, []);
+
+  const handleConnectGoogleCalendar = async () => {
+    setCalBusy("google");
+    setCalError(null);
+    try {
+      const result = await invoke<{ accountId: string; email: string; displayName: string; calendars: { id: string; name: string; color: string }[] }>("calendar_google_oauth_start");
+      const newAccount: CalendarAccount = { id: result.accountId, provider: "google", email: result.email, displayName: result.displayName, connected: true, lastSyncAt: new Date().toISOString() };
+      const newSrcs: CalendarSource[] = result.calendars.map((c) => ({ id: c.id, accountId: result.accountId, name: c.name, color: c.color || "#4285f4", visible: true }));
+      const cur = readLocalAccounts();
+      const idx = cur.findIndex((a) => a.id === newAccount.id);
+      const nextAccounts = idx === -1 ? [...cur, newAccount] : cur.map((a, i) => (i === idx ? newAccount : a));
+      const curSrcs = readLocalSources();
+      const byId = new Map(curSrcs.map((s) => [s.id, s]));
+      for (const s of newSrcs) byId.set(s.id, s);
+      const nextSources = Array.from(byId.values());
+      writeLocalAccounts(nextAccounts);
+      writeLocalSources(nextSources);
+      setCalAccounts(nextAccounts);
+      setCalSources(nextSources);
+      window.dispatchEvent(new CustomEvent(CALENDAR_ACCOUNTS_UPDATED_EVENT));
+    } catch (e) {
+      setCalError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCalBusy(null);
+    }
+  };
+
+  const handleDisconnectCalendarAccount = (accountId: string) => {
+    const nextAccounts = readLocalAccounts().filter((a) => a.id !== accountId);
+    const nextSources = readLocalSources().filter((s) => s.accountId !== accountId);
+    writeLocalAccounts(nextAccounts);
+    writeLocalSources(nextSources);
+    setCalAccounts(nextAccounts);
+    setCalSources(nextSources);
+    window.dispatchEvent(new CustomEvent(CALENDAR_ACCOUNTS_UPDATED_EVENT));
+  };
+
+  const handleVideoConnect = async (provider: "zoom" | "google_meet") => {
+    setVideoBusy(provider);
+    setVideoError(null);
+    try {
+      await invoke(provider === "zoom" ? "integration_connect_zoom" : "integration_connect_google_meet");
+      setVideoStatuses(await invoke<IntegrationStatus[]>("integration_get_status"));
+    } catch (e) {
+      setVideoError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setVideoBusy(null);
+    }
+  };
+
+  const handleVideoDisconnect = async (provider: string) => {
+    setVideoBusy(provider);
+    setVideoError(null);
+    try {
+      await invoke("integration_disconnect", { provider });
+      setVideoStatuses(await invoke<IntegrationStatus[]>("integration_get_status"));
+    } catch (e) {
+      setVideoError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setVideoBusy(null);
+    }
+  };
 
   const saveAiCredential = async () => {
     if (!runtime) return;
@@ -213,6 +319,12 @@ export function SettingsPage() {
         onPress={() => setSection("ai")}
       >
         <Text className={`text-[14px] ${section === "ai" ? "text-[#f1f1f1]" : "text-[#adadad]"}`}>AI</Text>
+      </Pressable>
+      <Pressable
+        className={`rounded-lg px-3 py-2 text-left ${section === "integrations" ? "bg-[#242424]" : "bg-transparent hover:bg-[#1b1b1b]"}`}
+        onPress={() => setSection("integrations")}
+      >
+        <Text className={`text-[14px] ${section === "integrations" ? "text-[#f1f1f1]" : "text-[#adadad]"}`}>Integrations</Text>
       </Pressable>
     </div>
   );
@@ -375,6 +487,120 @@ export function SettingsPage() {
     </div>
   );
 
+  const centerIntegrations = (
+    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 rounded-2xl border border-[#242424] bg-[#131313] p-6">
+      <div>
+        <Text className="text-[30px] font-semibold text-[#f3f3f3]">Integrations</Text>
+        <Text className="mt-2 text-[16px] text-[#b5b5b5]">Connect your calendars and video meeting tools.</Text>
+      </div>
+
+      {/* Calendar Connections */}
+      <div className="flex flex-col gap-3">
+        <Text className="text-[13px] font-medium uppercase tracking-wider text-[#666]">Calendar</Text>
+        <div className="rounded-xl border border-[#242424] bg-[#0e0e0e] p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="6" y="6" width="36" height="36" rx="4" fill="white"/>
+                <rect x="14" y="2" width="4" height="10" rx="2" fill="#4285F4"/>
+                <rect x="30" y="2" width="4" height="10" rx="2" fill="#4285F4"/>
+                <rect x="6" y="18" width="36" height="2" fill="#e0e0e0"/>
+                <rect x="22" y="26" width="12" height="10" rx="2" fill="#4285F4"/>
+              </svg>
+              <div>
+                <Text className="text-[14px] font-medium text-[#f1f1f1]">Google Calendar</Text>
+                <Text className="text-[12px] text-[#666]">{calAccounts.filter((a) => a.provider === "google").length > 0 ? `${calAccounts.filter((a) => a.provider === "google").length} account(s) connected` : "Not connected"}</Text>
+              </div>
+            </div>
+            <Pressable
+              className="rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 hover:bg-[#242424] disabled:opacity-50"
+              onPress={handleConnectGoogleCalendar}
+              isDisabled={calBusy === "google"}
+            >
+              <Text className="text-[13px] text-[#f1f1f1]">{calBusy === "google" ? "Connecting…" : "Connect account"}</Text>
+            </Pressable>
+          </div>
+          {calAccounts.filter((a) => a.provider === "google").length > 0 && (
+            <div className="mt-3 flex flex-col gap-2 border-t border-[#1e1e1e] pt-3">
+              {calAccounts.filter((a) => a.provider === "google").map((acc) => (
+                <div key={acc.id} className="flex items-center justify-between rounded-lg bg-[#131313] px-3 py-2">
+                  <div>
+                    <Text className="text-[13px] text-[#f1f1f1]">{acc.email}</Text>
+                    {calSources.filter((s) => s.accountId === acc.id).length > 0 && (
+                      <Text className="text-[11px] text-[#666]">
+                        {calSources.filter((s) => s.accountId === acc.id).map((s) => s.name).join(", ")}
+                      </Text>
+                    )}
+                  </div>
+                  <Pressable
+                    className="rounded px-2 py-1 text-[12px] text-[#f87171] hover:bg-[#2a1a1a]"
+                    onPress={() => handleDisconnectCalendarAccount(acc.id)}
+                  >
+                    <Text className="text-[12px] text-[#f87171]">Disconnect</Text>
+                  </Pressable>
+                </div>
+              ))}
+            </div>
+          )}
+          {calError && <Text className="mt-2 text-[12px] text-[#f87171]">{calError}</Text>}
+        </div>
+      </div>
+
+      {/* Video Meetings */}
+      <div className="flex flex-col gap-3">
+        <Text className="text-[13px] font-medium uppercase tracking-wider text-[#666]">Video Meetings</Text>
+        {videoError && <Text className="text-[12px] text-[#f87171]">{videoError}</Text>}
+        {(["zoom", "google_meet"] as const).map((provider) => {
+          const status = videoStatuses.find((s) => s.provider === provider);
+          const connected = status?.connected ?? false;
+          const busy = videoBusy === provider;
+          const label = provider === "zoom" ? "Zoom" : "Google Meet";
+          const icon = provider === "zoom" ? (
+            <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="48" height="48" rx="10" fill="#2D8CFF"/>
+              <path d="M8 16h20a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-8a4 4 0 0 1 4-4z" fill="white"/>
+              <path d="M32 19l12-7v24l-12-7V19z" fill="white"/>
+            </svg>
+          ) : (
+            <svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="48" height="48" rx="10" fill="#00897B"/>
+              <path d="M12 16h16a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4v-8a4 4 0 0 1 4-4z" fill="white"/>
+              <path d="M32 19l12-7v24l-12-7V19z" fill="white"/>
+            </svg>
+          );
+          return (
+            <div key={provider} className="flex items-center justify-between rounded-xl border border-[#242424] bg-[#0e0e0e] px-4 py-3">
+              <div className="flex items-center gap-3">
+                {icon}
+                <div>
+                  <Text className="text-[14px] font-medium text-[#f1f1f1]">{label}</Text>
+                  <Text className="text-[12px] text-[#666]">{videoLoading ? "Loading…" : connected ? "Connected" : "Not connected"}</Text>
+                </div>
+              </div>
+              {connected ? (
+                <Pressable
+                  className="rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 hover:bg-[#2a1a1a] disabled:opacity-50"
+                  onPress={() => void handleVideoDisconnect(provider)}
+                  isDisabled={busy}
+                >
+                  <Text className="text-[13px] text-[#f87171]">{busy ? "Disconnecting…" : "Disconnect"}</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  className="rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 hover:bg-[#242424] disabled:opacity-50"
+                  onPress={() => void handleVideoConnect(provider)}
+                  isDisabled={busy || videoLoading}
+                >
+                  <Text className="text-[13px] text-[#f1f1f1]">{busy ? "Connecting…" : "Connect"}</Text>
+                </Pressable>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <FeaturePanelsShell
       feature="settings"
@@ -382,7 +608,7 @@ export function SettingsPage() {
       left={leftPanel}
       center={
         <div className="h-full overflow-auto py-2">
-          {section === "profile" ? centerProfile : section === "login-key" ? centerLoginKey : centerAi}
+          {section === "profile" ? centerProfile : section === "login-key" ? centerLoginKey : section === "ai" ? centerAi : centerIntegrations}
         </div>
       }
     />

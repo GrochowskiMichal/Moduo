@@ -4,6 +4,7 @@ import { runtime, runtimeConfigError, type ModuoRuntime, type RuntimeSession } f
 type AuthContextValue = {
   userId: string | null;
   userEmail: string | null;
+  accessToken: string | null;
   isSignedIn: boolean;
   loading: boolean;
   configError: string | null;
@@ -14,6 +15,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue>({
   userId: null,
   userEmail: null,
+  accessToken: null,
   isSignedIn: false,
   loading: true,
   configError: null,
@@ -84,6 +86,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       value={{
         userId: session?.user?.id ?? null,
         userEmail: session?.user?.email ?? null,
+        accessToken: session?.access_token ?? null,
         isSignedIn: !!session?.user,
         loading,
         configError: runtimeConfigError,

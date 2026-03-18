@@ -1,0 +1,35 @@
+name: Build Windows Portable EXE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ""
+
+      - name: Install frontend deps
+        run: bun install
+
+      - name: Build portable exe (no installers)
+        run: bunx tauri build --bundles none
+
+      - name: Upload portable exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: moduo-windows-portable
+          path: src-tauri/target/release/moduo.exe

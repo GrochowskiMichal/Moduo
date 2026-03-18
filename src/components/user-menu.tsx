@@ -7,9 +7,10 @@ type Props = {
   avatarDataUrl?: string | null;
   profileInitial?: string;
   onOpenSettings?: () => void;
+  onOpenIntegrations?: () => void;
 };
 
-export function UserMenu({ avatarDataUrl, profileInitial = "U", onOpenSettings }: Props) {
+export function UserMenu({ avatarDataUrl, profileInitial = "U", onOpenSettings, onOpenIntegrations }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { signOut } = useAuth();
   const navigate = useNavigate();
@@ -42,6 +43,15 @@ export function UserMenu({ avatarDataUrl, profileInitial = "U", onOpenSettings }
             }}
           >
             <Text className="text-[14px] text-[#d9d9d9]">Settings</Text>
+          </Pressable>
+          <Pressable
+            className="rounded-lg px-3 py-2 hover:bg-[#1f1f1f]"
+            onPress={() => {
+              setMenuOpen(false);
+              onOpenIntegrations?.();
+            }}
+          >
+            <Text className="text-[14px] text-[#d9d9d9]">Integrations</Text>
           </Pressable>
           <Pressable
             className="rounded-lg px-3 py-2 hover:bg-[#1f1f1f]"

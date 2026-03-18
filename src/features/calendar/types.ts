@@ -37,6 +37,9 @@ export type CalendarEvent = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  externalProvider?: CalendarProvider;
+  externalId?: string;
+  externalICalUid?: string;
 };
 
 export type CalendarAttendee = {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useCalendar } from "../../calendar/hooks/use-calendar";
 import { useTasks } from "../../tasks/hooks/use-tasks";
 import type { CalendarEvent } from "../../calendar/types";
@@ -405,17 +406,132 @@ function NewTaskPanel({ states, projects, defaultProjectId, defaultStateId, canE
     );
 }
 
+// ─── new event left panel ─────────────────────────────────────────────────────
+function NewEventPanel({
+    sources,
+    defaultCalendarId,
+    onCancel,
+    onSubmit,
+}: {
+    sources: Array<{ id: string; name: string; color: string; visible: boolean }>;
+    defaultCalendarId: string | null;
+    onCancel: () => void;
+    onSubmit: (args: {
+        title: string;
+        calendarId: string;
+        startTime: string;
+        endTime: string;
+        allDay: boolean;
+        location: string;
+        description: string;
+        color: string;
+    }) => void;
+}) {
+    const firstVisible = sources.find(s => s.visible) ?? sources[0] ?? null;
+    const now = new Date(); now.setMinutes(0, 0, 0);
+    const defaultEnd = new Date(now); defaultEnd.setHours(defaultEnd.getHours() + 1);
+
+    const [calendarId, setCalendarId] = useState<string>(defaultCalendarId ?? firstVisible?.id ?? "");
+    const [title, setTitle] = useState("New Event");
+    const [allDay, setAllDay] = useState(false);
+    const [startTime, setStartTime] = useState(now.toISOString());
+    const [endTime, setEndTime] = useState(defaultEnd.toISOString());
+    const [location, setLocation] = useState("");
+    const [description, setDescription] = useState("");
+
+    const selectedSource = sources.find(s => s.id === calendarId) ?? firstVisible;
+    const color = selectedSource?.color ?? "#3a3a3a";
+
+    const submit = () => {
+        if (!calendarId) return;
+        onSubmit({ title, calendarId, startTime, endTime, allDay, location, description, color });
+    };
+
+    return (
+        <div className="h-full flex flex-col">
+            <div className="px-3 pt-3 pb-2 border-b border-[#1e1e1e]">
+                <div className="flex items-center justify-between">
+                    <div className="text-[12px] font-bold text-[#f1f1f1]">New Event</div>
+                    <button onClick={onCancel} className="text-[12px] text-[#777] hover:text-[#bbb]">✕</button>
+                </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+                <div>
+                    <div className="text-[10px] text-[#777] mb-1">Title</div>
+                    <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-[#1e1e1e] bg-[#0f0f0f] px-2 py-2 text-[12px] text-[#f1f1f1] outline-none focus:border-[#2a2a2a]" />
+                </div>
+                <div>
+                    <div className="text-[10px] text-[#777] mb-1">Calendar</div>
+                    <select value={calendarId} onChange={(e) => setCalendarId(e.target.value)} className="w-full rounded-lg border border-[#1e1e1e] bg-[#0f0f0f] px-2 py-2 text-[12px] text-[#f1f1f1] outline-none focus:border-[#2a2a2a]">
+                        {sources.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setAllDay(v => !v)}
+                        className={`flex items-center gap-2 text-[11px] ${allDay ? "text-[#f1f1f1]" : "text-[#9a9a9a]"} hover:text-[#ddd] transition-colors`}
+                    >
+                        <span className={`relative inline-flex h-5 w-9 rounded-full border transition-colors ${allDay ? "bg-[#2a2a2a] border-[#3a3a3a]" : "bg-[#1b1b1b] border-[#2a2a2a]"}`}>
+                            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-[#e2e2e2] transition-transform ${allDay ? "translate-x-4" : "translate-x-0.5"}`} />
+                        </span>
+                        <span>All day</span>
+                    </button>
+                    <div className="ml-auto flex items-center gap-2">
+                        <div className="text-[10px] text-[#777]">Color</div>
+                        <div className="h-3 w-3 rounded-full border border-[#2a2a2a]" style={{ background: color }} />
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                    <div>
+                        <div className="text-[10px] text-[#777] mb-1">Start</div>
+                        <input value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full rounded-lg border border-[#1e1e1e] bg-[#0f0f0f] px-2 py-2 text-[11px] text-[#f1f1f1] outline-none focus:border-[#2a2a2a]" />
+                    </div>
+                    <div>
+                        <div className="text-[10px] text-[#777] mb-1">End</div>
+                        <input value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full rounded-lg border border-[#1e1e1e] bg-[#0f0f0f] px-2 py-2 text-[11px] text-[#f1f1f1] outline-none focus:border-[#2a2a2a]" />
+                    </div>
+                </div>
+                <div>
+                    <div className="text-[10px] text-[#777] mb-1">Location</div>
+                    <input value={location} onChange={(e) => setLocation(e.target.value)} className="w-full rounded-lg border border-[#1e1e1e] bg-[#0f0f0f] px-2 py-2 text-[11px] text-[#f1f1f1] outline-none focus:border-[#2a2a2a]" />
+                </div>
+                <div>
+                    <div className="text-[10px] text-[#777] mb-1">Description</div>
+                    <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="w-full rounded-lg border border-[#1e1e1e] bg-[#0f0f0f] px-2 py-2 text-[11px] text-[#f1f1f1] outline-none focus:border-[#2a2a2a] resize-none" />
+                </div>
+            </div>
+            <div className="p-3 border-t border-[#1e1e1e]">
+                <button
+                    onClick={submit}
+                    disabled={!calendarId || !title.trim()}
+                    className="w-full py-2 rounded-xl bg-[#2a2a2a] text-[#f1f1f1] text-[11px] font-bold hover:bg-[#353535] transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                >
+                    Create Event
+                </button>
+            </div>
+        </div>
+    );
+}
+
 // ─── main workspace ───────────────────────────────────────────────────────────
 export function PlanWorkspace() {
     const { runtime, userId } = useAuth();
     const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+    const navigate = useNavigate();
 
     const cal = useCalendar();
     const tsk = useTasks(runtime, { userId, workspaceId: selectedWorkspaceId, modulePermission: modulePermissions.tasks });
 
     const savedView = readSavedPlanView();
     const [nav, setNav] = useState<PlanNavState>(savedView?.nav ?? { section: "all", view: "calendar", density: "week", calendarId: null, projectId: null });
-    const [leftPanel, setLeftPanel] = useState<{ mode: "new-task"; defaultStateId: string | null } | null>(null);
+    const [leftPanel, setLeftPanel] = useState<
+        | { mode: "new-task"; defaultStateId: string | null }
+        | { mode: "new-event"; defaultCalendarId: string | null }
+        | null
+    >(null);
     const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
     const [settingsSection, setSettingsSection] = useState<"general" | "stages" | "labels">("general");
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -617,10 +733,21 @@ export function PlanWorkspace() {
         hideLeftSidebar();
     }, [hideLeftSidebar]);
 
+    const closeNewEventPanel = useCallback(() => {
+        setLeftPanel(null);
+        hideLeftSidebar();
+    }, [hideLeftSidebar]);
+
     const handleCreateTask = (defaultStateId: string | null = null) => {
         setSettingsProjectId(null);
         dispatchLayoutPanelsApply({ feature: "ground", left: true, right: readFeaturePanelState("ground").right });
         setLeftPanel({ mode: "new-task", defaultStateId });
+    };
+
+    const handleCreateEvent = (defaultCalendarId: string | null = null) => {
+        setSettingsProjectId(null);
+        dispatchLayoutPanelsApply({ feature: "ground", left: true, right: readFeaturePanelState("ground").right });
+        setLeftPanel({ mode: "new-event", defaultCalendarId });
     };
     const wouldCreateParentCycle = useCallback((childId: string, nextParentId: string | null): boolean => {
         let cursor = nextParentId;
@@ -766,13 +893,6 @@ export function PlanWorkspace() {
             setTaskContextMenu(null);
         }
     }, [contextTask, nav.view, taskContextMenu]);
-    const handleCreateEvent = () => {
-        const src = cal.sources.find(s => s.visible);
-        if (!src) return;
-        const now = new Date(); now.setMinutes(0, 0, 0);
-        const end = new Date(now); end.setHours(end.getHours() + 1);
-        cal.createEvent({ title: "New Event", description: "", location: "", startTime: now.toISOString(), endTime: end.toISOString(), allDay: false, calendarId: src.id, color: src.color ?? "#888", reminders: [] });
-    };
 
     const handleAddProject = async () => { await tsk.createProject("New Project"); };
     const handleDeleteCalendar = async (id: string) => {
@@ -784,9 +904,9 @@ export function PlanWorkspace() {
         if (nav.projectId === id) setNav(n => ({ ...n, projectId: null }));
     };
     const handleAddCalendarInternal = () => { cal.addInternalCalendar(); };
-    const handleAddCalendarExternalGoogle = () => { void cal.addGoogleAccount(); };
-    const handleAddCalendarExternalMicrosoft = () => { cal.addOutlookAccount(); };
-    const handleAddCalendarExternalApple = () => { cal.addAppleAccount(); };
+    const handleAddCalendarExternalGoogle = () => { void navigate({ to: "/settings", search: { section: "integrations" } }); };
+    const handleAddCalendarExternalMicrosoft = () => { void navigate({ to: "/settings", search: { section: "integrations" } }); };
+    const handleAddCalendarExternalApple = () => { void navigate({ to: "/settings", search: { section: "integrations" } }); };
     const handleOpenProjectSettings = (projectId: string) => {
         setLeftPanel(null);
         setSettingsSection("general");
@@ -820,6 +940,27 @@ export function PlanWorkspace() {
             section={settingsSection}
             onSelect={setSettingsSection}
             onBack={() => setSettingsProjectId(null)}
+        />
+    ) : leftPanel?.mode === "new-event" ? (
+        <NewEventPanel
+            key={`new-event:${leftPanel.defaultCalendarId ?? "auto"}`}
+            sources={cal.sources}
+            defaultCalendarId={leftPanel.defaultCalendarId}
+            onCancel={closeNewEventPanel}
+            onSubmit={(args) => {
+                cal.createEvent({
+                    title: args.title,
+                    description: args.description,
+                    location: args.location,
+                    startTime: args.startTime,
+                    endTime: args.endTime,
+                    allDay: args.allDay,
+                    calendarId: args.calendarId,
+                    color: args.color,
+                    reminders: [],
+                });
+                closeNewEventPanel();
+            }}
         />
     ) : leftPanel?.mode === "new-task" ? (
         <NewTaskPanel
@@ -895,7 +1036,7 @@ export function PlanWorkspace() {
                         onClickEvent={id => cal.selectEvent(id)} onSelectTask={handleSelectTask}
                         onOpenTaskContextMenu={openTaskContextMenu} />
                 )}
-                {nav.view === "link" && <LinkView events={filteredEvents} sources={cal.sources} />}
+                {nav.view === "link" && <LinkView events={visEvents} sources={cal.sources} />}
                 {/* fix 5: require a project for kanban */}
                 {nav.view === "kanban" && !nav.projectId && (
                     <div className="flex flex-col h-full items-center justify-center gap-3 text-center">

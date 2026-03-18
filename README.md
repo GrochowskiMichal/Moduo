@@ -42,6 +42,11 @@ Rust-first desktop app using React + Rspack (Rsbuild) + TanStack Router + Tauri 
 2. Install:
    - `bun install`
 
+### Calendar OAuth env
+- `MODUO_CALENDAR_GOOGLE_CLIENT_ID`: Google OAuth desktop client ID (must allow `http://127.0.0.1` loopback redirect).
+- `MODUO_CALENDAR_MICROSOFT_CLIENT_ID`: Microsoft Entra app client ID (public client/native; delegated permissions include `User.Read` and `Calendars.Read`).
+- Apple Calendar does not expose an OAuth API for calendar data in this flow; it requires a separate iCloud CalDAV/app-specific-password integration.
+
 ## Run
 
 - Desktop dev (Tauri + web dev server): `bun run dev:desktop`
