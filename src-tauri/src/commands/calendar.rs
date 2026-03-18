@@ -37,7 +37,7 @@ struct OAuthCallbackResult {
     redirect_uri: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OAuthTokenResponse {
     access_token: String,
     refresh_token: Option<String>,
