@@ -19,14 +19,27 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
-          targets: ""
+          workspaces: src-tauri
 
       - name: Install frontend deps
         run: bun install
 
       - name: Build portable exe (no installers)
         run: bunx tauri build --bundles none
+        env:
+          MODUO_KEYCHAIN_SERVICE: ${{ secrets.MODUO_KEYCHAIN_SERVICE }}
+          PUBLIC_ALPHA_VANTAGE_API_KEY: ${{ secrets.PUBLIC_ALPHA_VANTAGE_API_KEY }}
+          PUBLIC_FINNHUB_API_KEY: ${{ secrets.PUBLIC_FINNHUB_API_KEY }}
+          PUBLIC_MARKETSTACK_API_KEY: ${{ secrets.PUBLIC_MARKETSTACK_API_KEY }}
+          MODUO_TOKEN_ENCRYPTION_SECRET: ${{ secrets.MODUO_TOKEN_ENCRYPTION_SECRET }}
+          MODUO_GOOGLE_MEET_CLIENT_ID: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_ID }}
+          MODUO_GOOGLE_MEET_CLIENT_SECRET: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_SECRET }}
+          MODUO_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_ID }}
+          MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
 
       - name: Upload portable exe
         uses: actions/upload-artifact@v4
