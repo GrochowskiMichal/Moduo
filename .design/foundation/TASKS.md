@@ -6,9 +6,22 @@ Date: 2026-05-11
 
 > Each task is a vertical slice — structure + styling + interactions + states + a Storybook story (where applicable). Each task is small enough for a single session. Mark tasks complete with `[x]` as they ship.
 
+## Phase summary
+
+Run the work in numbered phases. Each phase = a fresh Claude Code session = one PR. Stop and verify between phases.
+
+| Phase | Section | Approx | Done when | PR title |
+| --- | --- | --- | --- | --- |
+| **Phase 1** | Foundation setup | ½ day | dev server runs; tokens wired; shadcn init'd; fonts loaded; linters in place; no visual change yet | "wire tokens + shadcn + lint" |
+| **Phase 2** | Core primitives | 1–2 days | Storybook renders every primitive using tokens; Playwright snapshots baseline | "add shadcn primitives" |
+| **Phase 3** | Migrate app shell | 1 day | AppChrome / FeaturePanelsShell / switchers / menus / modals on tokens + primitives; no functional regression | "migrate app shell to tokens" |
+| **Phase 4** | Notes page redesign | 1 day | Notes page demos the system end-to-end; `/design-review` clean | "redesign notes page" |
+| **Phase 5** | Settings page redesign | 1 day | all 7 customization axes work end-to-end; `/design-review` clean | "redesign settings page" |
+| **Phase 6** | Polish + enforcement + final review | ½ day | bottom bar + Cmd-K + shortcuts done; Stylelint at error; CI gates; final shell `/design-review` clean | "design polish + lint gates" |
+
 ---
 
-## Foundation (must come first)
+## Phase 1 — Foundation
 
 - [ ] **Wire `tokens.css` into the build**. Import [src/styles/tokens.css](../../src/styles/tokens.css) from [src/global.css](../../src/global.css) at the top of the file. Remove all hardcoded color/size declarations from `global.css` that the tokens now cover (the `#111111` body background, the notes-* color rules, the scrollbar colors). Keep the Lexical-specific `notes-table-*` rules but replace their hardcoded hex values with `var(--card)`, `var(--border)`, etc. *New file imported; existing file pruned.*
 
@@ -26,7 +39,7 @@ Date: 2026-05-11
 
 ---
 
-## Core primitives (`src/components/ui/`)
+## Phase 2 — Core primitives (`src/components/ui/`)
 
 Each task: shadcn CLI add → strip default zinc classes → swap to our token classes → add `<name>.stories.tsx` with default + variant + interactive states → add Playwright visual snapshot.
 
@@ -58,7 +71,7 @@ Each task: shadcn CLI add → strip default zinc classes → swap to our token c
 
 ---
 
-## Migrate app shell + existing bespoke components
+## Phase 3 — Migrate app shell + existing bespoke components
 
 These already exist; the task is restyle to tokens + recompose on top of shadcn primitives where applicable. No behaviour change.
 
@@ -84,7 +97,7 @@ These already exist; the task is restyle to tokens + recompose on top of shadcn 
 
 ---
 
-## Anchor page: Notes (`/notes`)
+## Phase 4 — Anchor page: Notes (`/notes`)
 
 - [ ] **Notes 3-pane layout** — compose FeaturePanelsShell with the three rail contents. URL stays `/notes`. *Modifies [src/routes/pages/notes-page.tsx](../../src/routes/pages/notes-page.tsx).*
 
@@ -96,9 +109,11 @@ These already exist; the task is restyle to tokens + recompose on top of shadcn 
 
 - [ ] **Notes right rail** — Relation Graph viewer (existing XYFlow component, restyled), Tags section (Badge primitives), Close Relations list (rows with count badges). Rail width `var(--width-rail)`, collapses to `var(--width-rail-icon)` on narrow viewports. *Modifies [src/features/notes/ui/](../../src/features/notes/ui/).*
 
+- [ ] **Run `/design-review` on Notes** — Playwright-driven visual sweep. Check contrast, focus rings, hover states, dark mode rendering, responsive collapses. Address findings before closing the phase.
+
 ---
 
-## Anchor page: Settings (`/settings`)
+## Phase 5 — Anchor page: Settings (`/settings`)
 
 - [ ] **Settings shell** — single-pane (no right rail) with a tabbed left nav: Appearance, Account, Workspace, Integrations, Preferences, Advanced, About. Tabs primitive on the left rail in vertical orientation. *Modifies [src/routes/pages/settings-page.tsx](../../src/routes/pages/settings-page.tsx).*
 
@@ -110,9 +125,11 @@ These already exist; the task is restyle to tokens + recompose on top of shadcn 
 
 - [ ] **Account / Workspace / Integrations sections** (stub) — placeholders that use Dialog-based existing modals (`workspace-settings-modal`, `integrations-modal`) when their items are clicked. Real content is feature-specific and out of scope for the foundation. *Modifies settings-page; reuses existing modals.*
 
+- [ ] **Run `/design-review` on Settings** — same. Specifically verify every appearance picker is reachable by keyboard and announces correctly to screen readers. Address findings before closing the phase.
+
 ---
 
-## Cross-cutting
+## Phase 6 — Cross-cutting + polish + final review
 
 - [ ] **Global bottom bar** — the floating pill with AI disc, search trigger, create. Uses `bg-popover border border-border shadow-overlay rounded-full`. AI disc keeps its pink — `bg-primary` with `data-accent="pink"` semantics (it's a brand moment, not the accent system). Search trigger opens the Command palette. *Modifies the existing bottom-bar component.*
 
@@ -126,15 +143,7 @@ These already exist; the task is restyle to tokens + recompose on top of shadcn 
 
 - [ ] **Custom Tailwind arbitrary-value check → CI gate**. Add `lint:tw` to the CI workflow alongside typecheck. *Modifies CI config.*
 
----
-
-## Review
-
-- [ ] **Run `/design-review` on Notes** — Playwright-driven visual sweep. Check contrast, focus rings, hover states, dark mode rendering, responsive collapses. Address findings.
-
-- [ ] **Run `/design-review` on Settings** — same. Specifically verify every appearance picker is reachable by keyboard and announces correctly to screen readers.
-
-- [ ] **Run `/design-review` on the global shell** — top bar + bottom bar + collapsed-rail behaviour at 1280 / 1024 / 900 px window widths.
+- [ ] **Run `/design-review` on the global shell** — top bar + bottom bar + collapsed-rail behaviour at 1280 / 1024 / 900 px window widths. Address findings before closing the phase.
 
 ---
 
@@ -147,3 +156,4 @@ These already exist; the task is restyle to tokens + recompose on top of shadcn 
 - Lexical editor internals beyond the theme alignment task above.
 - XYFlow mindmap node visuals (their own design problem).
 - Marketing site, Tauri installer chrome, app icon.
+- E-paper mode (parked; token structure doesn't preclude adding it later).
