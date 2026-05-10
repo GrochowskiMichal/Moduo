@@ -1,0 +1,3 @@
+import{N as o}from"./notification-center-Cp7kDxt8.js";import"./jsx-runtime-u17CrQMm.js";import"./index-B3d2A58Q.js";import"./index-B1ZUCPgF.js";import"./index-BEwfMeI6.js";import"./index-AOmQ1fUN.js";import"./workspace-provider-BUsyo879.js";import"./auth-provider-doCjk4pR.js";import"./core-DhEqZVGG.js";import"./icon-Cbxy4FOx.js";import"./createLucideIcon-CVEjH9DW.js";import"./tag-LDmvB8Ep.js";import"./calendar-BmLrHsLg.js";import"./trash-2-BqP-bbSU.js";const x={title:"Components/notification-center",component:o,tags:["autodocs"]},r={args:{}};r.parameters={...r.parameters,docs:{...r.parameters?.docs,source:{originalSource:`{
+  args: {}
+}`,...r.parameters?.docs?.source}}};const y=["Primary"];export{r as Primary,y as __namedExportsOrder,x as default};

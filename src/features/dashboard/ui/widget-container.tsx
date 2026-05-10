@@ -67,7 +67,7 @@ export function WidgetContainer({ widget, gridSize, isLocked, onResize, onRemove
           value={{
             isLocked,
             onRemove: () => onRemove(widget.id),
-            dragAttributes: attributes as Record<string, unknown>,
+            dragAttributes: attributes as unknown as Record<string, unknown>,
             dragListeners: listeners as Record<string, unknown>,
           }}
         >

@@ -154,6 +154,31 @@ fn load_calendar_tokens_from_keychain(
     serde_json::from_str::<OAuthTokenResponse>(&raw).ok()
 }
 
+fn google_calendar_events_url(calendar_id: &str) -> Result<Url, String> {
+    let mut url = Url::parse("https://www.googleapis.com/calendar/v3/calendars/")
+        .map_err(|e| format!("google_url_parse_failed:{e}"))?;
+    {
+        let mut segs = url
+            .path_segments_mut()
+            .map_err(|_| "google_url_invalid_base".to_string())?;
+        segs.pop_if_empty();
+        segs.push(calendar_id);
+        segs.push("events");
+    }
+    Ok(url)
+}
+
+fn google_calendar_event_url(calendar_id: &str, event_id: &str) -> Result<Url, String> {
+    let mut url = google_calendar_events_url(calendar_id)?;
+    {
+        let mut segs = url
+            .path_segments_mut()
+            .map_err(|_| "google_url_invalid_base".to_string())?;
+        segs.push(event_id);
+    }
+    Ok(url)
+}
+
 fn random_b64url(bytes: usize) -> String {
     let mut data = vec![0u8; bytes];
     rand::rngs::OsRng.fill_bytes(&mut data);
@@ -600,10 +625,9 @@ pub async fn calendar_google_events_sync(
 
         let mut page_token: Option<String> = None;
         loop {
+            let url = google_calendar_events_url(&cal_id)?;
             let mut req = client
-                .get(format!(
-                    "https://www.googleapis.com/calendar/v3/calendars/{cal_id}/events"
-                ))
+                .get(url)
                 .bearer_auth(&access_token)
                 .query(&[
                     ("timeMin", time_min.as_str()),
@@ -739,9 +763,7 @@ pub async fn calendar_google_event_upsert(
     let client = reqwest::Client::new();
     let resp = if let Some(ref id) = external_id {
         client
-            .put(format!(
-                "https://www.googleapis.com/calendar/v3/calendars/{cal_id}/events/{id}"
-            ))
+            .put(google_calendar_event_url(cal_id, id)?)
             .bearer_auth(&access_token)
             .json(&payload)
             .send()
@@ -749,9 +771,7 @@ pub async fn calendar_google_event_upsert(
             .map_err(|e| format!("google_event_update_request_failed:{e}"))?
     } else {
         client
-            .post(format!(
-                "https://www.googleapis.com/calendar/v3/calendars/{cal_id}/events"
-            ))
+            .post(google_calendar_events_url(cal_id)?)
             .bearer_auth(&access_token)
             .json(&payload)
             .send()
@@ -795,9 +815,7 @@ pub async fn calendar_google_event_delete(
         .ok_or_else(|| "google_event_calendar_source_invalid".to_string())?;
     let client = reqwest::Client::new();
     let resp = client
-        .delete(format!(
-            "https://www.googleapis.com/calendar/v3/calendars/{cal_id}/events/{external_id}"
-        ))
+        .delete(google_calendar_event_url(cal_id, &external_id)?)
         .bearer_auth(&access_token)
         .send()
         .await

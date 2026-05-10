@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -26,6 +26,19 @@ function parseStateId(id: string) { return id.startsWith("state:") ? id.slice(6)
 function PriorityLabel({ label }: { label: string }) {
   if (!label.startsWith("P") || label === "Nulla") return <>{label}</>;
   return <>P<span className="priority-roman-numeral">{label.slice(1)}</span></>;
+}
+
+function sameColumns(a: Record<string, string[]>, b: Record<string, string[]>) {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const k of aKeys) {
+    const av = a[k] ?? [];
+    const bv = b[k] ?? [];
+    if (av.length !== bv.length) return false;
+    for (let i = 0; i < av.length; i++) if (av[i] !== bv[i]) return false;
+  }
+  return true;
 }
 
 function KanbanCard({
@@ -236,7 +249,10 @@ export function KanbanView({
   onApplyRelation: (sourceTaskId: string, kind: TaskRelationKind, targetTaskId: string) => Promise<string | null>;
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
-  const filteredStates = states.filter((s) => !s.deletedAt && (!projectId || s.projectId === projectId));
+  const filteredStates = useMemo(
+    () => states.filter((s) => !s.deletedAt && (!projectId || s.projectId === projectId)),
+    [states, projectId]
+  );
 
   const taskById = useMemo(() => {
     const map = new Map<string, Task>();
@@ -257,12 +273,66 @@ export function KanbanView({
 
   const [columns, setColumns] = useState<Record<string, string[]>>(baseColumns);
   const [activeTaskKey, setActiveTaskKey] = useState<string | null>(null);
-  const [overStateId, setOverStateId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ taskId: string; x: number; y: number } | null>(null);
+  const [hasLocalOverride, setHasLocalOverride] = useState(false);
+
+  // Use refs to track previous values and prevent infinite loops
+  const columnsRef = useRef(columns);
+  columnsRef.current = columns;
+  const hasLocalOverrideRef = useRef(hasLocalOverride);
+  hasLocalOverrideRef.current = hasLocalOverride;
+  const baseColumnsRef = useRef(baseColumns);
+  const updateCountRef = useRef(0);
+  const MAX_UPDATES = 10; // Prevent infinite loops
+
+  // Track if we're currently syncing to prevent recursive updates
+  const isSyncingRef = useRef(false);
 
   useEffect(() => {
-    if (!activeTaskKey) setColumns(baseColumns);
-  }, [baseColumns, activeTaskKey]);
+    // Guard against infinite loops - limit number of updates
+    if (updateCountRef.current >= MAX_UPDATES) {
+      console.warn('[KanbanView] useEffect: Max updates reached, resetting counter');
+      updateCountRef.current = 0;
+      return;
+    }
+    
+    // Skip during active drag
+    if (activeTaskKey) return;
+    
+    // Skip if already syncing to prevent recursion
+    if (isSyncingRef.current) return;
+    
+    const currentColumns = columnsRef.current;
+    const currentHasLocalOverride = hasLocalOverrideRef.current;
+    
+    // If there's a local override and columns differ from base, don't sync
+    if (currentHasLocalOverride && !sameColumns(currentColumns, baseColumns)) return;
+    
+    // If columns are already the same, just clear the override flag
+    if (sameColumns(currentColumns, baseColumns)) {
+      if (currentHasLocalOverride) setHasLocalOverride(false);
+      return;
+    }
+    
+    // Only sync if baseColumns actually changed (not just re-rendered)
+    if (baseColumnsRef.current === baseColumns) return;
+    
+    // Mark as syncing and update
+    isSyncingRef.current = true;
+    updateCountRef.current += 1;
+    console.log('[KanbanView] useEffect: Syncing columns, count:', updateCountRef.current);
+    
+    setColumns(baseColumns);
+    baseColumnsRef.current = baseColumns;
+    
+    if (currentHasLocalOverride) setHasLocalOverride(false);
+    
+    // Reset sync flag after state update
+    setTimeout(() => {
+      isSyncingRef.current = false;
+    }, 0);
+  }, [activeTaskKey, baseColumns]);
   const relationMetaByTaskId = useMemo(() => {
     const childCount = new Map<string, number>();
     const blockingCount = new Map<string, number>();
@@ -334,37 +404,31 @@ export function KanbanView({
       onDragStart={(event: DragStartEvent) => {
         const activeId = String(event.active.id);
         if (parseTaskId(activeId)) setActiveTaskKey(activeId);
+        setHasLocalOverride(false);
         setContextMenu(null);
-      }}
-      onDragOver={(event: DragOverEvent) => {
-        const activeId = String(event.active.id);
-        const overId = event.over ? String(event.over.id) : null;
-        if (!overId || !parseTaskId(activeId)) {
-          setOverStateId(null);
-          return;
-        }
-        setOverStateId(findContainer(overId, columns));
-        setColumns((prev) => movePreview(prev, activeId, overId));
       }}
       onDragCancel={() => {
         setActiveTaskKey(null);
-        setOverStateId(null);
+        setOverId(null);
+        setHasLocalOverride(false);
         setColumns(baseColumns);
       }}
       onDragEnd={(event: DragEndEvent) => {
         const activeRawId = String(event.active.id);
         const overRawId = event.over ? String(event.over.id) : null;
         const activeId = parseTaskId(activeRawId);
-        setOverStateId(null);
+        setOverId(null);
 
         if (!activeId || !overRawId) {
           setActiveTaskKey(null);
+          setHasLocalOverride(false);
           setColumns(baseColumns);
           return;
         }
 
         const nextColumns = movePreview(columns, activeRawId, overRawId);
         setColumns(nextColumns);
+        setHasLocalOverride(true);
         setActiveTaskKey(null);
 
         const nextStateId = findContainer(taskKey(activeId), nextColumns);
@@ -379,6 +443,7 @@ export function KanbanView({
       <div className="flex h-full gap-3 overflow-x-auto overflow-y-hidden p-4">
         {filteredStates.map((state) => {
           const columnTaskIds = columns[state.id] ?? [];
+          const isOver = overId ? findContainer(overId, columns) === state.id : false;
           return (
             <KanbanColumn
               key={state.id}
@@ -392,7 +457,7 @@ export function KanbanView({
               onSelectTask={onSelectTask}
               onOpenTaskContextMenu={(taskId, x, y) => setContextMenu({ taskId, x, y })}
               assigneeById={assigneeById}
-              isOver={overStateId === state.id}
+              isOver={isOver}
               projectLabelColorsByProjectId={projectLabelColorsByProjectId}
               relationMetaByTaskId={relationMetaByTaskId}
             />

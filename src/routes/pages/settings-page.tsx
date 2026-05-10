@@ -9,7 +9,9 @@ import { Image, Pressable, Text } from "../../tw";
 import defaultProfilePic from "../../../assets/icon.png";
 import { notifyProfileUpdated, readStoredAvatar, writeStoredAvatar } from "../../features/profile/profile-storage";
 
-type SettingsSection = "profile" | "login-key" | "ai" | "integrations";
+type SettingsSection = "profile" | "login-key" | "integrations";
+
+type IntegrationStatus = { provider: string; connected: boolean };
 
 function maskedPhrase(phrase: string | null) {
   if (!phrase) return "•••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• ••••••";
@@ -39,15 +41,6 @@ export function SettingsPage() {
   const [mnemonicPhrase, setMnemonicPhrase] = useState<string | null>(null);
   const [phraseLoading, setPhraseLoading] = useState(false);
   const [phraseError, setPhraseError] = useState<string | null>(null);
-  const [openRouterApiKey, setOpenRouterApiKey] = useState("");
-  const [openRouterModel, setOpenRouterModel] = useState("");
-  const [aiCredentials, setAiCredentials] = useState<Array<{ id: string; model: string; keyPreview: string }>>([]);
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiMessage, setAiMessage] = useState<string | null>(null);
-  const [aiError, setAiError] = useState<string | null>(null);
-
-  type IntegrationStatus = { provider: string; connected: boolean };
   const [calAccounts, setCalAccounts] = useState<CalendarAccount[]>([]);
   const [calSources, setCalSources] = useState<CalendarSource[]>([]);
   const [calBusy, setCalBusy] = useState<string | null>(null);
@@ -70,28 +63,6 @@ export function SettingsPage() {
       setAvatarDataUrl(avatar);
     };
     void load();
-    return () => {
-      active = false;
-    };
-  }, [runtime]);
-
-  useEffect(() => {
-    let active = true;
-    const loadAi = async () => {
-      if (!runtime) return;
-      setAiLoading(true);
-      try {
-        const rows = await runtime.ai.listCredentials();
-        if (!active) return;
-        setAiCredentials(rows);
-      } catch (error) {
-        if (!active) return;
-        setAiError(error instanceof Error ? error.message : String(error));
-      } finally {
-        if (active) setAiLoading(false);
-      }
-    };
-    void loadAi();
     return () => {
       active = false;
     };
@@ -181,41 +152,6 @@ export function SettingsPage() {
       setVideoError(e instanceof Error ? e.message : String(e));
     } finally {
       setVideoBusy(null);
-    }
-  };
-
-  const saveAiCredential = async () => {
-    if (!runtime) return;
-    const apiKey = openRouterApiKey.trim();
-    const model = openRouterModel.trim();
-    if (!apiKey || !model) {
-      setAiError("OpenRouter API key and model are required.");
-      return;
-    }
-    setAiBusy(true);
-    setAiMessage(null);
-    setAiError(null);
-    try {
-      const saved = await runtime.ai.saveCredential({ apiKey, model });
-      setAiCredentials((current) => [saved, ...current.filter((entry) => entry.id !== saved.id)]);
-      setOpenRouterApiKey("");
-      setOpenRouterModel("");
-      setAiMessage("Saved.");
-    } catch (error) {
-      setAiError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setAiBusy(false);
-    }
-  };
-
-  const deleteAiCredential = async (id: string) => {
-    if (!runtime) return;
-    setAiError(null);
-    try {
-      await runtime.ai.deleteCredential(id);
-      setAiCredentials((current) => current.filter((entry) => entry.id !== id));
-    } catch (error) {
-      setAiError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -315,12 +251,6 @@ export function SettingsPage() {
         <Text className={`text-[14px] ${section === "login-key" ? "text-[#f1f1f1]" : "text-[#adadad]"}`}>Login Key</Text>
       </Pressable>
       <Pressable
-        className={`rounded-lg px-3 py-2 text-left ${section === "ai" ? "bg-[#242424]" : "bg-transparent hover:bg-[#1b1b1b]"}`}
-        onPress={() => setSection("ai")}
-      >
-        <Text className={`text-[14px] ${section === "ai" ? "text-[#f1f1f1]" : "text-[#adadad]"}`}>AI</Text>
-      </Pressable>
-      <Pressable
         className={`rounded-lg px-3 py-2 text-left ${section === "integrations" ? "bg-[#242424]" : "bg-transparent hover:bg-[#1b1b1b]"}`}
         onPress={() => setSection("integrations")}
       >
@@ -412,81 +342,6 @@ export function SettingsPage() {
     </div>
   );
 
-  const centerAi = (
-    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 rounded-2xl border border-[#242424] bg-[#131313] p-6">
-      <div>
-        <Text className="text-[30px] font-semibold text-[#f3f3f3]">AI</Text>
-        <Text className="mt-2 text-[16px] text-[#b5b5b5]">
-          Configure OpenRouter connection values. For now, values are local to this screen only.
-        </Text>
-      </div>
-
-      <div className="max-w-[760px]">
-        <Text className="mb-2 text-[12px] uppercase tracking-[0.06em] text-[#8c8c8c]">OpenRouter API key</Text>
-        <input
-          type="password"
-          value={openRouterApiKey}
-          onChange={(event) => {
-            setOpenRouterApiKey(event.target.value);
-            setAiError(null);
-            setAiMessage(null);
-          }}
-          placeholder="sk-or-v1-..."
-          className="h-11 w-full rounded-xl border border-[#2b2b2b] bg-[#0f0f0f] px-4 text-[15px] text-[#ececec] outline-none focus:border-[#3a3a3a]"
-        />
-      </div>
-
-      <div className="max-w-[760px]">
-        <Text className="mb-2 text-[12px] uppercase tracking-[0.06em] text-[#8c8c8c]">Model name</Text>
-        <input
-          type="text"
-          value={openRouterModel}
-          onChange={(event) => {
-            setOpenRouterModel(event.target.value);
-            setAiError(null);
-            setAiMessage(null);
-          }}
-          placeholder="anthropic/claude-3.5-sonnet"
-          className="h-11 w-full rounded-xl border border-[#2b2b2b] bg-[#0f0f0f] px-4 text-[15px] text-[#ececec] outline-none focus:border-[#3a3a3a]"
-        />
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Pressable
-          className={`rounded-lg px-4 py-2 ${aiBusy ? "bg-[#2e2e2e]" : "bg-[#f0f0f0] hover:bg-[#ffffff]"}`}
-          disabled={aiBusy}
-          onPress={() => void saveAiCredential()}
-        >
-          <Text className={`text-[13px] font-semibold ${aiBusy ? "text-[#9d9d9d]" : "text-[#111111]"}`}>{aiBusy ? "Saving..." : "Save"}</Text>
-        </Pressable>
-        {aiMessage ? <Text className="text-[12px] text-[#8ddc96]">{aiMessage}</Text> : null}
-        {aiError ? <Text className="text-[12px] text-[#ff9d9d]">{aiError}</Text> : null}
-      </div>
-
-      <div className="mt-2 rounded-xl border border-[#2b2b2b] bg-[#0f0f0f] p-3">
-        <Text className="mb-2 text-[12px] uppercase tracking-[0.06em] text-[#8c8c8c]">Saved credentials</Text>
-        {aiLoading ? <Text className="text-[12px] text-[#8f8f8f]">Loading...</Text> : null}
-        {!aiLoading && aiCredentials.length === 0 ? <Text className="text-[12px] text-[#8f8f8f]">No saved credentials yet.</Text> : null}
-        <div className="grid gap-2">
-          {aiCredentials.map((entry) => (
-            <div key={entry.id} className="flex items-center justify-between rounded-lg border border-[#252525] bg-[#121212] px-3 py-2">
-              <div className="min-w-0">
-                <Text className="truncate text-[13px] text-[#e5e5e5]">{entry.model}</Text>
-                <Text className="text-[11px] text-[#929292]">{entry.keyPreview}</Text>
-              </div>
-              <Pressable
-                className="rounded-md border border-[#2c2c2c] bg-[#1b1b1b] px-2 py-1 hover:bg-[#222222]"
-                onPress={() => void deleteAiCredential(entry.id)}
-              >
-                <Text className="text-[11px] text-[#d5d5d5]">Delete</Text>
-              </Pressable>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
   const centerIntegrations = (
     <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 rounded-2xl border border-[#242424] bg-[#131313] p-6">
       <div>
@@ -512,11 +367,11 @@ export function SettingsPage() {
                 <Text className="text-[12px] text-[#666]">{calAccounts.filter((a) => a.provider === "google").length > 0 ? `${calAccounts.filter((a) => a.provider === "google").length} account(s) connected` : "Not connected"}</Text>
               </div>
             </div>
-            <Pressable
-              className="rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 hover:bg-[#242424] disabled:opacity-50"
-              onPress={handleConnectGoogleCalendar}
-              isDisabled={calBusy === "google"}
-            >
+              <Pressable
+                className="rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 hover:bg-[#242424] disabled:opacity-50"
+                onPress={handleConnectGoogleCalendar}
+                disabled={calBusy === "google"}
+              >
               <Text className="text-[13px] text-[#f1f1f1]">{calBusy === "google" ? "Connecting…" : "Connect account"}</Text>
             </Pressable>
           </div>
@@ -581,7 +436,7 @@ export function SettingsPage() {
                 <Pressable
                   className="rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 hover:bg-[#2a1a1a] disabled:opacity-50"
                   onPress={() => void handleVideoDisconnect(provider)}
-                  isDisabled={busy}
+                  disabled={busy}
                 >
                   <Text className="text-[13px] text-[#f87171]">{busy ? "Disconnecting…" : "Disconnect"}</Text>
                 </Pressable>
@@ -589,7 +444,7 @@ export function SettingsPage() {
                 <Pressable
                   className="rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 hover:bg-[#242424] disabled:opacity-50"
                   onPress={() => void handleVideoConnect(provider)}
-                  isDisabled={busy || videoLoading}
+                  disabled={busy || videoLoading}
                 >
                   <Text className="text-[13px] text-[#f1f1f1]">{busy ? "Connecting…" : "Connect"}</Text>
                 </Pressable>
@@ -608,7 +463,7 @@ export function SettingsPage() {
       left={leftPanel}
       center={
         <div className="h-full overflow-auto py-2">
-          {section === "profile" ? centerProfile : section === "login-key" ? centerLoginKey : section === "ai" ? centerAi : centerIntegrations}
+          {section === "profile" ? centerProfile : section === "login-key" ? centerLoginKey : centerIntegrations}
         </div>
       }
     />

@@ -115,7 +115,7 @@ export function writePanelsMap(map: FeaturePanelsMap) {
 }
 
 export function readFeaturePanelState(feature: FeatureLayoutKey): FeaturePanelState {
-  return readPanelsMap()[feature];
+  return readPanelsMap()[feature] ?? { ...defaultState };
 }
 
 export type LayoutPanelsApplyDetail = {

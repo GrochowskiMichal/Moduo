@@ -28,20 +28,6 @@ export type AuthMnemonic = {
   phrase: string;
 };
 
-export type AiCredentialSummary = {
-  id: string;
-  model: string;
-  keyPreview: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type AiCredentialResolved = {
-  id: string;
-  model: string;
-  apiKey: string;
-};
-
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__;
 }
@@ -186,11 +172,24 @@ export type ModuoRuntime = {
     set(namespace: string, key: string, value: unknown): Promise<void>;
     remove(namespace: string, key: string): Promise<void>;
   };
-  ai: {
-    listCredentials(): Promise<AiCredentialSummary[]>;
-    saveCredential(input: { apiKey: string; model: string }): Promise<AiCredentialSummary>;
-    deleteCredential(id: string): Promise<void>;
-    getCredential(id: string): Promise<AiCredentialResolved>;
+  window: {
+    toggleFullscreen(): Promise<boolean>;
+  };
+  timetracking: {
+    list(workspaceId: string): Promise<any>;
+    upsertEntry(entry: any): Promise<any>;
+    deleteEntry(entryId: string): Promise<void>;
+    upsertCategory(category: any): Promise<any>;
+    deleteCategory(categoryId: string): Promise<void>;
+    upsertRule(rule: any): Promise<any>;
+    deleteRule(ruleId: string): Promise<void>;
+    upsertProject(project: any): Promise<any>;
+    deleteProject(projectId: string): Promise<void>;
+    upsertFocusSession(session: any): Promise<any>;
+    getActiveWindow(): Promise<any | null>;
+    startTracking(workspaceId: string): Promise<void>;
+    stopTracking(): Promise<void>;
+    getTrackingStatus(): Promise<{ isTracking: boolean }>;
   };
   email: {
     listAccounts(): Promise<any[]>;
@@ -588,37 +587,53 @@ const runtimeClient: ModuoRuntime = {
       return invoke("local_store_remove", { namespace, key });
     },
   },
-  ai: {
-    async listCredentials() {
-      const rows = await invoke<any[]>("ai_credentials_list");
-      return (rows ?? []).map((row) => ({
-        id: row.id,
-        model: row.model,
-        keyPreview: row.keyPreview ?? row.key_preview ?? "••••",
-        createdAt: row.createdAt ?? row.created_at ?? new Date().toISOString(),
-        updatedAt: row.updatedAt ?? row.updated_at ?? new Date().toISOString(),
-      }));
+  window: {
+    toggleFullscreen() {
+      return invoke<boolean>("window_toggle_fullscreen");
     },
-    async saveCredential(input) {
-      const row = await invoke<any>("ai_credentials_upsert", { input });
-      return {
-        id: row.id,
-        model: row.model,
-        keyPreview: row.keyPreview ?? row.key_preview ?? "••••",
-        createdAt: row.createdAt ?? row.created_at ?? new Date().toISOString(),
-        updatedAt: row.updatedAt ?? row.updated_at ?? new Date().toISOString(),
-      };
+  },
+  timetracking: {
+    list(workspaceId) {
+      return invoke<any>("tt_list", { workspaceId });
     },
-    deleteCredential(id) {
-      return invoke<void>("ai_credentials_delete", { id });
+    upsertEntry(entry) {
+      return invoke<any>("tt_upsert_entry", { entry });
     },
-    async getCredential(id) {
-      const row = await invoke<any>("ai_credentials_get", { id });
-      return {
-        id: row.id,
-        model: row.model,
-        apiKey: row.apiKey ?? row.api_key ?? "",
-      };
+    deleteEntry(entryId) {
+      return invoke<void>("tt_delete_entry", { entryId });
+    },
+    upsertCategory(category) {
+      return invoke<any>("tt_upsert_category", { category });
+    },
+    deleteCategory(categoryId) {
+      return invoke<void>("tt_delete_category", { categoryId });
+    },
+    upsertRule(rule) {
+      return invoke<any>("tt_upsert_rule", { rule });
+    },
+    deleteRule(ruleId) {
+      return invoke<void>("tt_delete_rule", { ruleId });
+    },
+    upsertProject(project) {
+      return invoke<any>("tt_upsert_project", { project });
+    },
+    deleteProject(projectId) {
+      return invoke<void>("tt_delete_project", { projectId });
+    },
+    upsertFocusSession(session) {
+      return invoke<any>("tt_upsert_focus_session", { session });
+    },
+    getActiveWindow() {
+      return invoke<any | null>("tt_get_active_window");
+    },
+    startTracking(workspaceId) {
+      return invoke<void>("tt_start_tracking", { workspaceId });
+    },
+    stopTracking() {
+      return invoke<void>("tt_stop_tracking");
+    },
+    getTrackingStatus() {
+      return invoke<{ isTracking: boolean }>("tt_get_tracking_status");
     },
   },
   email: {

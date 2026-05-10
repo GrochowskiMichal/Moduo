@@ -33,8 +33,8 @@ export function FeaturePanelsShell({ feature, center, left, right, hideRight = f
 
   const layoutColumns = panelState.left
     ? showRight
-      ? "grid-cols-[20fr_50fr_30fr]"
-      : "grid-cols-[20fr_80fr]"
+      ? "grid-cols-[minmax(340px,22fr)_48fr_30fr]"
+      : "grid-cols-[minmax(340px,24fr)_76fr]"
     : showRight
       ? "grid-cols-[70fr_30fr]"
       : "grid-cols-[1fr]";
@@ -42,7 +42,7 @@ export function FeaturePanelsShell({ feature, center, left, right, hideRight = f
   return (
     <div className={`grid h-full min-h-0 gap-4 bg-[#0C0C0C] px-4 pb-2 pt-2 ${layoutColumns}`}>
       {panelState.left ? (
-        <aside className="min-h-0 min-w-0 h-full rounded-2xl bg-[#111111] p-4 flex flex-col overflow-y-auto">
+        <aside className="min-h-0 min-w-0 h-full rounded-2xl border border-[#1b1b1b] bg-[#111111] p-5 flex flex-col overflow-hidden">
           {left ?? <div className="text-[#8f8f8f] text-[13px]">Feature tools panel</div>}
         </aside>
       ) : null}

@@ -1,0 +1,3 @@
+import{W as o}from"./workspace-settings-modal-A3IfBIpB.js";import"./jsx-runtime-u17CrQMm.js";import"./index-B3d2A58Q.js";import"./index-B1ZUCPgF.js";import"./index-BEwfMeI6.js";import"./index-AOmQ1fUN.js";import"./workspace-provider-BUsyo879.js";import"./auth-provider-doCjk4pR.js";import"./core-DhEqZVGG.js";const d={title:"Components/workspace-settings-modal",component:o,tags:["autodocs"]},r={args:{}};r.parameters={...r.parameters,docs:{...r.parameters?.docs,source:{originalSource:`{
+  args: {}
+}`,...r.parameters?.docs?.source}}};const g=["Primary"];export{r as Primary,g as __namedExportsOrder,d as default};

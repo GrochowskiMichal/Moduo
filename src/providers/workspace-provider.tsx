@@ -75,7 +75,8 @@ type WorkspaceContextValue = {
   markAllNotificationsRead: () => Promise<void>;
 };
 
-const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
+export type { WorkspaceContextValue };
+export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 function storageKey(userId: string): string {
   return `moduo:selected-workspace:${userId}`;

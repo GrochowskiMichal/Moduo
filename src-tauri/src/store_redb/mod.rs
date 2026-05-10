@@ -11,8 +11,9 @@ use redb::{Database, ReadableTable, TableDefinition};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::domain::{
-    GraphEdge, GraphNode, ModulePermissions, NoteCrdtUpdate, NoteDocState, NoteMeta, TaskActivity,
-    TaskComment, TaskItem, TaskProject, TaskWorkflowState, TasksBundle, WorkspaceInvite,
+    CategoryRule, FocusSession, GraphEdge, GraphNode, ModulePermissions, NoteCrdtUpdate,
+    NoteDocState, NoteMeta, TaskActivity, TaskComment, TaskItem, TaskProject, TaskWorkflowState,
+    TasksBundle, TimeCategory, TimeEntry, TimeProject, TimetrackingBundle, WorkspaceInvite,
     WorkspaceMember, WorkspaceNotification, WorkspaceSummary,
 };
 
@@ -68,6 +69,12 @@ pub const EMAIL_UI_STATE: TableDefinition<&str, &str> = TableDefinition::new("em
 
 pub const CALENDAR_EVENTS: TableDefinition<&str, &str> = TableDefinition::new("calendar_events");
 
+pub const TT_ENTRIES: TableDefinition<&str, &str> = TableDefinition::new("tt_entries");
+pub const TT_CATEGORIES: TableDefinition<&str, &str> = TableDefinition::new("tt_categories");
+pub const TT_RULES: TableDefinition<&str, &str> = TableDefinition::new("tt_rules");
+pub const TT_PROJECTS: TableDefinition<&str, &str> = TableDefinition::new("tt_projects");
+pub const TT_FOCUS: TableDefinition<&str, &str> = TableDefinition::new("tt_focus");
+
 pub struct RedbStore {
     db: Database,
     write_guard: Mutex<()>,
@@ -118,6 +125,12 @@ impl RedbStore {
         let _ = write_txn.open_table(EMAIL_UI_STATE)?;
 
         let _ = write_txn.open_table(CALENDAR_EVENTS)?;
+
+        let _ = write_txn.open_table(TT_ENTRIES)?;
+        let _ = write_txn.open_table(TT_CATEGORIES)?;
+        let _ = write_txn.open_table(TT_RULES)?;
+        let _ = write_txn.open_table(TT_PROJECTS)?;
+        let _ = write_txn.open_table(TT_FOCUS)?;
         write_txn.commit()?;
         Ok(())
     }
@@ -228,6 +241,11 @@ impl RedbStore {
             EMAIL_FLAG_OUTBOX,
             EMAIL_GRAPH_OUTBOX,
             EMAIL_UI_STATE,
+            TT_ENTRIES,
+            TT_CATEGORIES,
+            TT_RULES,
+            TT_PROJECTS,
+            TT_FOCUS,
         ];
 
         for table_def in tables {
@@ -728,6 +746,105 @@ impl RedbStore {
 
     pub fn remove_calendar_event(&self, key: &str) -> anyhow::Result<()> {
         self.remove_key(CALENDAR_EVENTS, key)
+    }
+
+    // ─── Timetracking ─────────────────────────────────────────────────────────
+
+    pub fn put_tt_entry(&self, entry: &TimeEntry) -> anyhow::Result<()> {
+        self.put_json(TT_ENTRIES, &entry.id, entry)
+    }
+
+    pub fn get_tt_entry(&self, id: &str) -> anyhow::Result<Option<TimeEntry>> {
+        self.get_json(TT_ENTRIES, id)
+    }
+
+    pub fn list_tt_entries(&self, workspace_id: &str) -> anyhow::Result<Vec<TimeEntry>> {
+        Ok(self
+            .list_json::<TimeEntry>(TT_ENTRIES)?
+            .into_iter()
+            .filter(|e| e.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn remove_tt_entry(&self, id: &str) -> anyhow::Result<()> {
+        self.remove_key(TT_ENTRIES, id)
+    }
+
+    pub fn put_tt_category(&self, category: &TimeCategory) -> anyhow::Result<()> {
+        self.put_json(TT_CATEGORIES, &category.id, category)
+    }
+
+    pub fn list_tt_categories(&self, workspace_id: &str) -> anyhow::Result<Vec<TimeCategory>> {
+        Ok(self
+            .list_json::<TimeCategory>(TT_CATEGORIES)?
+            .into_iter()
+            .filter(|c| c.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn remove_tt_category(&self, id: &str) -> anyhow::Result<()> {
+        self.remove_key(TT_CATEGORIES, id)
+    }
+
+    pub fn put_tt_rule(&self, rule: &CategoryRule) -> anyhow::Result<()> {
+        self.put_json(TT_RULES, &rule.id, rule)
+    }
+
+    pub fn list_tt_rules(&self, workspace_id: &str) -> anyhow::Result<Vec<CategoryRule>> {
+        Ok(self
+            .list_json::<CategoryRule>(TT_RULES)?
+            .into_iter()
+            .filter(|r| r.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn remove_tt_rule(&self, id: &str) -> anyhow::Result<()> {
+        self.remove_key(TT_RULES, id)
+    }
+
+    pub fn put_tt_project(&self, project: &TimeProject) -> anyhow::Result<()> {
+        self.put_json(TT_PROJECTS, &project.id, project)
+    }
+
+    pub fn list_tt_projects(&self, workspace_id: &str) -> anyhow::Result<Vec<TimeProject>> {
+        Ok(self
+            .list_json::<TimeProject>(TT_PROJECTS)?
+            .into_iter()
+            .filter(|p| p.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn remove_tt_project(&self, id: &str) -> anyhow::Result<()> {
+        self.remove_key(TT_PROJECTS, id)
+    }
+
+    pub fn put_tt_focus_session(&self, session: &FocusSession) -> anyhow::Result<()> {
+        self.put_json(TT_FOCUS, &session.id, session)
+    }
+
+    pub fn list_tt_focus_sessions(&self, workspace_id: &str) -> anyhow::Result<Vec<FocusSession>> {
+        Ok(self
+            .list_json::<FocusSession>(TT_FOCUS)?
+            .into_iter()
+            .filter(|s| s.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn remove_tt_focus_session(&self, id: &str) -> anyhow::Result<()> {
+        self.remove_key(TT_FOCUS, id)
+    }
+
+    pub fn list_timetracking_bundle(
+        &self,
+        workspace_id: &str,
+    ) -> anyhow::Result<TimetrackingBundle> {
+        Ok(TimetrackingBundle {
+            entries: self.list_tt_entries(workspace_id)?,
+            categories: self.list_tt_categories(workspace_id)?,
+            rules: self.list_tt_rules(workspace_id)?,
+            projects: self.list_tt_projects(workspace_id)?,
+            focus_sessions: self.list_tt_focus_sessions(workspace_id)?,
+        })
     }
 
     pub fn kv_set(

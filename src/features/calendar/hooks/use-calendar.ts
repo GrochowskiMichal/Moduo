@@ -44,12 +44,27 @@ function writeLocalEvents(events: CalendarEvent[]) {
   window.localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events));
 }
 
+function dedupeEvents(list: CalendarEvent[]): CalendarEvent[] {
+  const byKey = new Map<string, CalendarEvent>();
+  for (const ev of list) {
+    const key =
+      ev.externalProvider && ev.externalId
+        ? `ext:${ev.externalProvider}:${ev.calendarId}:${ev.externalId}`
+        : `local:${ev.calendarId}:${ev.id}`;
+    const prev = byKey.get(key);
+    if (!prev || new Date(prev.updatedAt).getTime() < new Date(ev.updatedAt).getTime()) {
+      byKey.set(key, ev);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
 async function tryListBackendEvents(): Promise<CalendarEvent[] | null> {
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     const raw = (await invoke("calendar_events_list")) as unknown;
     if (!Array.isArray(raw)) return [];
-    return raw as CalendarEvent[];
+    return dedupeEvents(raw as CalendarEvent[]);
   } catch {
     return null;
   }
@@ -247,6 +262,7 @@ export function useCalendar(): UseCalendarState {
   const [accounts, setAccounts] = useState<CalendarAccount[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [didInitialGoogleSync, setDidInitialGoogleSync] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -260,13 +276,31 @@ export function useCalendar(): UseCalendarState {
 
       const backendEvents = await tryListBackendEvents();
       if (cancelled) return;
-      setEvents(backendEvents ?? readLocalEvents());
+      setEvents(dedupeEvents(backendEvents ?? readLocalEvents()));
       setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (loading || didInitialGoogleSync) return;
+    const googleAccounts = accounts.filter((a) => a.provider === "google");
+    if (!googleAccounts.length) {
+      setDidInitialGoogleSync(true);
+      return;
+    }
+    void (async () => {
+      for (const acc of googleAccounts) {
+        const sourceIds = sources.filter((s) => s.accountId === acc.id).map((s) => s.id);
+        if (sourceIds.length) await trySyncGoogleEvents(acc.id, sourceIds);
+      }
+      const backendEvents = await tryListBackendEvents();
+      if (backendEvents) setEvents(dedupeEvents(backendEvents));
+      setDidInitialGoogleSync(true);
+    })();
+  }, [accounts, didInitialGoogleSync, loading, sources]);
 
   useEffect(() => {
     const handler = () => {

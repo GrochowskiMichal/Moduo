@@ -28,22 +28,8 @@ jobs:
       - name: Install frontend deps
         run: bun install
 
-      - name: Build frontend
-        run: bun run build:web
-        env:
-          MODUO_KEYCHAIN_SERVICE: ${{ secrets.MODUO_KEYCHAIN_SERVICE }}
-          PUBLIC_ALPHA_VANTAGE_API_KEY: ${{ secrets.PUBLIC_ALPHA_VANTAGE_API_KEY }}
-          PUBLIC_FINNHUB_API_KEY: ${{ secrets.PUBLIC_FINNHUB_API_KEY }}
-          PUBLIC_MARKETSTACK_API_KEY: ${{ secrets.PUBLIC_MARKETSTACK_API_KEY }}
-          MODUO_TOKEN_ENCRYPTION_SECRET: ${{ secrets.MODUO_TOKEN_ENCRYPTION_SECRET }}
-          MODUO_GOOGLE_MEET_CLIENT_ID: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_ID }}
-          MODUO_GOOGLE_MEET_CLIENT_SECRET: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_SECRET }}
-          MODUO_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_ID }}
-          MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
-
-      - name: Build portable exe (raw binary, no installer)
-        working-directory: src-tauri
-        run: cargo build --release
+      - name: Build (Tauri CLI embeds frontend + compiles binary)
+        run: bunx tauri build --bundles nsis
         env:
           MODUO_KEYCHAIN_SERVICE: ${{ secrets.MODUO_KEYCHAIN_SERVICE }}
           PUBLIC_ALPHA_VANTAGE_API_KEY: ${{ secrets.PUBLIC_ALPHA_VANTAGE_API_KEY }}

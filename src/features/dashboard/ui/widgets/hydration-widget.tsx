@@ -130,7 +130,6 @@ export function HydrationWidget({ config, isLocked, onUpdateConfig }: Props) {
                 "polygon(0% 8%, 10% 14%, 20% 10%, 32% 20%, 45% 12%, 58% 22%, 72% 14%, 84% 20%, 94% 12%, 100% 16%, 100% 100%, 0% 100%)",
               ],
             }}
-            transition={{ type: "spring", stiffness: 130, damping: 20, mass: 0.55 }}
             style={{
               background:
                 "linear-gradient(100deg, rgba(132,205,255,0.72) 0%, rgba(168,224,255,0.74) 35%, rgba(93,174,255,0.68) 60%, rgba(69,150,240,0.72) 100%)",

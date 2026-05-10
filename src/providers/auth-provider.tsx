@@ -1,7 +1,7 @@
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
 import { runtime, runtimeConfigError, type ModuoRuntime, type RuntimeSession } from "../lib/runtime";
 
-type AuthContextValue = {
+export type AuthContextValue = {
   userId: string | null;
   userEmail: string | null;
   accessToken: string | null;
@@ -12,7 +12,7 @@ type AuthContextValue = {
   signOut: () => Promise<void>;
 };
 
-const AuthContext = createContext<AuthContextValue>({
+export const AuthContext = createContext<AuthContextValue>({
   userId: null,
   userEmail: null,
   accessToken: null,

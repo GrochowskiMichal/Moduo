@@ -13,6 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
+active-win-pos-rs = "0.8"
 aes-gcm = "0.10"
 anyhow = "1"
 argon2 = "0.5"

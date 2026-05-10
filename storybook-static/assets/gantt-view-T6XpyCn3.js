@@ -1,0 +1,22 @@
+import{j as e}from"./jsx-runtime-u17CrQMm.js";import{T as l}from"./tasks-gantt-COAvwW4Z.js";function m({tasks:n,selectedTaskId:r,projectNameById:t,assigneeById:a,showProjectName:i,onSelectTask:s,onOpenTaskContextMenu:u}){return e.jsx("div",{className:"flex-1 h-full min-h-0",children:e.jsx(l,{tasks:n,selectedTaskId:r,projectNameById:t,assigneeById:a,showProjectName:i,onSelectTask:s,onOpenTaskContextMenu:u})})}m.__docgenInfo={description:"",methods:[],displayName:"GanttView",props:{tasks:{required:!0,tsType:{name:"Array",elements:[{name:"signature",type:"object",raw:`{
+  id: string;
+  workspaceId: string;
+  ownerId: string;
+  projectId: string;
+  taskCode: string | null;
+  parentTaskId: string | null;
+  childOfTaskId: string | null;
+  blockedByTaskIds: string[];
+  duplicateOfTaskId: string | null;
+  stateId: string;
+  assigneeId: string | null;
+  title: string;
+  description: string;
+  tags: string[];
+  priority: TaskPriority;
+  dueDate: string | null;
+  position: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}`,signature:{properties:[{key:"id",value:{name:"string",required:!0}},{key:"workspaceId",value:{name:"string",required:!0}},{key:"ownerId",value:{name:"string",required:!0}},{key:"projectId",value:{name:"string",required:!0}},{key:"taskCode",value:{name:"union",raw:"string | null",elements:[{name:"string"},{name:"null"}],required:!0}},{key:"parentTaskId",value:{name:"union",raw:"string | null",elements:[{name:"string"},{name:"null"}],required:!0}},{key:"childOfTaskId",value:{name:"union",raw:"string | null",elements:[{name:"string"},{name:"null"}],required:!0}},{key:"blockedByTaskIds",value:{name:"Array",elements:[{name:"string"}],raw:"string[]",required:!0}},{key:"duplicateOfTaskId",value:{name:"union",raw:"string | null",elements:[{name:"string"},{name:"null"}],required:!0}},{key:"stateId",value:{name:"string",required:!0}},{key:"assigneeId",value:{name:"union",raw:"string | null",elements:[{name:"string"},{name:"null"}],required:!0}},{key:"title",value:{name:"string",required:!0}},{key:"description",value:{name:"string",required:!0}},{key:"tags",value:{name:"Array",elements:[{name:"string"}],raw:"string[]",required:!0}},{key:"priority",value:{name:"union",raw:"0 | 1 | 2 | 3 | 4",elements:[{name:"literal",value:"0"},{name:"literal",value:"1"},{name:"literal",value:"2"},{name:"literal",value:"3"},{name:"literal",value:"4"}],required:!0}},{key:"dueDate",value:{name:"union",raw:"string | null",elements:[{name:"string"},{name:"null"}],required:!0}},{key:"position",value:{name:"string",required:!0}},{key:"createdAt",value:{name:"string",required:!0}},{key:"updatedAt",value:{name:"string",required:!0}},{key:"deletedAt",value:{name:"union",raw:"string | null",elements:[{name:"string"},{name:"null"}],required:!0}}]}}],raw:"Task[]"},description:""},selectedTaskId:{required:!0,tsType:{name:"union",raw:"string | null",elements:[{name:"string"},{name:"null"}]},description:""},projectNameById:{required:!0,tsType:{name:"Map",elements:[{name:"string"},{name:"string"}],raw:"Map<string, string>"},description:""},assigneeById:{required:!0,tsType:{name:"Map",elements:[{name:"string"},{name:"signature",type:"object",raw:"{ label: string; avatarUrl: string | null; initial: string }",signature:{properties:[{key:"label",value:{name:"string",required:!0}},{key:"avatarUrl",value:{name:"union",raw:"string | null",elements:[{name:"string"},{name:"null"}],required:!0}},{key:"initial",value:{name:"string",required:!0}}]}}],raw:"Map<string, AssigneeInfo>"},description:""},showProjectName:{required:!0,tsType:{name:"boolean"},description:""},onSelectTask:{required:!0,tsType:{name:"signature",type:"function",raw:"(id: string) => void",signature:{arguments:[{type:{name:"string"},name:"id"}],return:{name:"void"}}},description:""},onOpenTaskContextMenu:{required:!1,tsType:{name:"signature",type:"function",raw:"(taskId: string, x: number, y: number) => void",signature:{arguments:[{type:{name:"string"},name:"taskId"},{type:{name:"number"},name:"x"},{type:{name:"number"},name:"y"}],return:{name:"void"}}},description:""}}};export{m as G};

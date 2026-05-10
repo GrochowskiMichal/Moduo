@@ -126,6 +126,40 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const mindmapControlRef = useRef<HTMLDivElement | null>(null);
   const brainstormControlRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    if (!runtime || typeof window === "undefined") return;
+
+    const isMac =
+      typeof navigator !== "undefined" &&
+      (navigator.platform?.toLowerCase().includes("mac") ||
+        navigator.userAgent?.toLowerCase().includes("mac os"));
+
+    const isEditableTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      if ((el as any).isContentEditable) return true;
+      const tag = el.tagName?.toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select";
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (isEditableTarget(event.target)) return;
+
+      const key = event.key.toLowerCase();
+      const shouldToggle =
+        (isMac && event.metaKey && event.ctrlKey && key === "f") ||
+        (!isMac && key === "f11");
+
+      if (!shouldToggle) return;
+      event.preventDefault();
+      void runtime.window.toggleFullscreen();
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [runtime]);
+
   const modulesNavItems = useMemo(
     () =>
       baseModulesNavItems.filter((tab) => {
@@ -166,23 +200,27 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     const onSetPanels = (event: Event) => {
       const detail = (event as CustomEvent<LayoutPanelsApplyDetail>).detail;
       if (!detail?.feature) return;
-      setFeaturePanels((current) => ({
-        ...current,
-        [detail.feature]: { left: detail.left, right: detail.right },
-      }));
+      setFeaturePanels((current) => {
+        const existing = current[detail.feature];
+        if (existing && existing.left === detail.left && existing.right === detail.right) return current;
+        return {
+          ...current,
+          [detail.feature]: { left: detail.left, right: detail.right },
+        };
+      });
     };
     window.addEventListener(LAYOUT_PANELS_SET_EVENT, onSetPanels);
     return () => window.removeEventListener(LAYOUT_PANELS_SET_EVENT, onSetPanels);
   }, []);
 
+  const currentPanels = featurePanels[currentFeature];
   useEffect(() => {
-    const current = featurePanels[currentFeature];
     dispatchLayoutPanelsApply({
       feature: currentFeature,
-      left: current.left,
-      right: current.right,
+      left: currentPanels.left,
+      right: currentPanels.right,
     });
-  }, [currentFeature, featurePanels]);
+  }, [currentFeature, currentPanels.left, currentPanels.right]);
 
   useEffect(() => {
     if (!runtime || typeof document === "undefined") return;
@@ -824,10 +862,14 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   }, [brainstormMenuOpen, gridMenuOpen, mindmapMenuOpen, tasksMenuOpen, updateBrainstormMenuAnchor, updateGridMenuAnchor, updateMindmapMenuAnchor, updateTasksMenuAnchor]);
 
   const setPanelsForFeature = useCallback((feature: FeatureLayoutKey, left: boolean, right: boolean) => {
-    setFeaturePanels((current) => ({
-      ...current,
-      [feature]: { left, right },
-    }));
+    setFeaturePanels((current) => {
+      const existing = current[feature];
+      if (existing && existing.left === left && existing.right === right) return current;
+      return {
+        ...current,
+        [feature]: { left, right },
+      };
+    });
   }, []);
 
   useEffect(() => {
@@ -843,7 +885,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     );
   }
 
-  const currentPanels = featurePanels[currentFeature];
   const derivedInitial =
     displayName?.trim().slice(0, 1).toUpperCase() ||
     userEmail?.trim().slice(0, 1).toUpperCase() ||

@@ -1,0 +1,3 @@
+import{M as o}from"./custom-node-B2RL6MLS.js";import"./jsx-runtime-u17CrQMm.js";import"./index-B3d2A58Q.js";import"./index-BNAAxidF.js";import"./with-selector-FtjiAAQg.js";import"./index-BEwfMeI6.js";import"./index-AOmQ1fUN.js";import"./node-icons-BMRM_Bs8.js";import"./createLucideIcon-CVEjH9DW.js";import"./tag-LDmvB8Ep.js";const u={title:"features/mindmap/ui/custom-node",component:o,tags:["autodocs"]},r={args:{}};r.parameters={...r.parameters,docs:{...r.parameters?.docs,source:{originalSource:`{
+  args: {}
+}`,...r.parameters?.docs?.source}}};const g=["Primary"];export{r as Primary,g as __namedExportsOrder,u as default};

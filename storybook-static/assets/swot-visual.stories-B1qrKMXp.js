@@ -1,0 +1,3 @@
+import{S as t}from"./swot-visual-D3U13jdj.js";import"./jsx-runtime-u17CrQMm.js";import"./core.esm-P1l0hGcK.js";import"./index-B3d2A58Q.js";import"./index-BEwfMeI6.js";import"./index-AOmQ1fUN.js";import"./sortable.esm-BobJm2SG.js";import"./createLucideIcon-CVEjH9DW.js";import"./trash-2-BqP-bbSU.js";const u={title:"features/brainstorm/ui/visual-templates/swot-visual",component:t,tags:["autodocs"]},r={args:{}};r.parameters={...r.parameters,docs:{...r.parameters?.docs,source:{originalSource:`{
+  args: {}
+}`,...r.parameters?.docs?.source}}};const d=["Primary"];export{r as Primary,d as __namedExportsOrder,u as default};

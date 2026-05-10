@@ -1,0 +1,1 @@
+import"./jsx-runtime-u17CrQMm.js";import{r}from"./index-B3d2A58Q.js";import"./auth-provider-doCjk4pR.js";const e=r.createContext(null);function c(){const t=r.useContext(e);if(!t)throw new Error("useWorkspace must be used within WorkspaceProvider");return t}export{c as u};

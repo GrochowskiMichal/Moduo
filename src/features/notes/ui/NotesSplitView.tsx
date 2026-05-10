@@ -30,7 +30,7 @@ import {
   type LayoutPanelsApplyDetail,
 } from "../../layout/panel-events";
 import { useAuth } from "../../../providers/auth-provider";
-import { NotesAiChatPanel } from "./notes-ai-chat-panel";
+import { Icon } from "../../../components/ui/icon";
 
 /**
  * Clipboard write that works in Tauri webviews.
@@ -74,7 +74,6 @@ async function openExternalUrl(url: string): Promise<void> {
   }
 }
 
-
 type Props = {
   notes: NoteMeta[];
   selectedNoteId: string | null;
@@ -102,9 +101,9 @@ const contextMenuDeleteItemClass =
   "notes-context-item flex w-full items-center rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-[11px] font-medium text-[#d8d8d8] transition-colors hover:bg-[#1f1f1f]";
 const NEST_THRESHOLD_PX = 12;
 
-function kindIcon(kind: NoteKind): string {
+function kindIcon(kind: NoteKind) {
   if (kind === "category") return "▣";
-  if (kind === "folder") return "▢";
+  if (kind === "folder") return <Icon name="folder" size={12} />;
   return "☰";
 }
 
@@ -739,12 +738,8 @@ export function NotesSplitView({
   };
 
   const layoutColumns = panelState.left
-    ? panelState.right
-      ? "grid-cols-[20fr_50fr_30fr]"
-      : "grid-cols-[20fr_80fr]"
-    : panelState.right
-      ? "grid-cols-[70fr_30fr]"
-      : "grid-cols-[1fr]";
+    ? "grid-cols-[20fr_80fr]"
+    : "grid-cols-[1fr]";
 
   return (
     <div
@@ -961,18 +956,6 @@ export function NotesSplitView({
           </div>
         )}
       </main>
-
-      {panelState.right ? (
-        <NotesAiChatPanel
-          runtime={runtime}
-          workspaceId={selectedEditorNote?.workspaceId ?? notes[0]?.workspaceId ?? null}
-          userId={userId}
-          notes={activeNotes}
-          syncEngine={syncEngine}
-          onCreateNote={onCreateNote}
-          onUpdateTitle={onUpdateTitle}
-        />
-      ) : null}
 
       {contextMenu?.type === "note" && contextTarget ? (
         <div

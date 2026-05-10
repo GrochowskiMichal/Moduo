@@ -1,0 +1,1 @@
+import"./jsx-runtime-u17CrQMm.js";import{r as t}from"./index-B3d2A58Q.js";import"./core-DhEqZVGG.js";const n=t.createContext({userId:null,userEmail:null,accessToken:null,isSignedIn:!1,loading:!0,configError:null,runtime:null,signOut:async()=>{}});function o(){return t.useContext(n)}export{o as u};

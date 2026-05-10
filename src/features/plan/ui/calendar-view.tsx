@@ -19,9 +19,31 @@ function monthDays(d: Date) {
 }
 function fmtHour(h: number) { if (h === 0) return "12 AM"; if (h < 12) return `${h} AM`; if (h === 12) return "12 PM"; return `${h - 12} PM`; }
 function fmtTime(d: Date) { const h = d.getHours(), m = d.getMinutes(), ap = h >= 12 ? "PM" : "AM", hr = h % 12 || 12; return m === 0 ? `${hr} ${ap}` : `${hr}:${pad(m)} ${ap}`; }
+
+function parseDateOnlyLocal(value: string): Date | null {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  return new Date(y, mo - 1, d, 0, 0, 0, 0);
+}
+
+function eventStartEnd(ev: CalendarEvent): { start: Date; endInclusive: Date } {
+  if (!ev.allDay) return { start: new Date(ev.startTime), endInclusive: new Date(ev.endTime) };
+  const start = parseDateOnlyLocal(ev.startTime) ?? new Date(ev.startTime);
+  const endExclusive = parseDateOnlyLocal(ev.endTime) ?? new Date(ev.endTime);
+  // Google all-day end is exclusive. Convert to inclusive so overlap tests don't spill into next day.
+  const endInclusive = new Date(endExclusive.getTime() - 1);
+  return { start, endInclusive };
+}
+
 function eventsForDay(evts: CalendarEvent[], day: Date) {
   const s = sod(day), e = new Date(s); e.setHours(23, 59, 59, 999);
-  return evts.filter(ev => { const es = new Date(ev.startTime), ee = new Date(ev.endTime); return !ev.deletedAt && es <= e && ee >= s; });
+  return evts.filter(ev => {
+    if (ev.deletedAt) return false;
+    const { start: es, endInclusive: ee } = eventStartEnd(ev);
+    return es <= e && ee >= s;
+  });
 }
 function tasksForDay(tasks: Task[], states: TaskWorkflowState[], day: Date) {
   const ds = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
@@ -122,10 +144,35 @@ function TimeGrid({ days, events, tasks, taskStates, sources, showTasks, onClick
           {days.map((day, di) => {
             const tod = isToday(day);
             const dayEvts = eventsForDay(events, day);
+            const allDayEvts = dayEvts.filter(ev => ev.allDay);
+            const timedEvts = dayEvts.filter(ev => !ev.allDay);
             const dayTasks = showTasks ? tasksForDay(tasks, taskStates, day) : [];
-            const layouts = layoutOverlap(dayEvts);
+            const layouts = layoutOverlap(timedEvts);
             return (
               <div key={di} className={`relative border-l border-[#232323] ${tod ? "bg-[#ffffff]/[0.015]" : ""}`} style={{ height: 24 * HOUR_H }}>
+                {allDayEvts.length > 0 && (
+                  <div className="sticky top-0 z-40 px-1 py-1 bg-transparent border-b border-[#1a1a1a]">
+                    <div className="flex flex-col gap-0.5">
+                      {allDayEvts.slice(0, 3).map(event => {
+                        const source = sources.find(s => s.id === event.calendarId);
+                        const color = event.color || source?.color || "#3a3a3a";
+                        return (
+                          <button
+                            key={event.id}
+                            className="w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] font-bold text-[#e0e0e0] hover:brightness-125 transition-colors"
+                            style={{ backgroundColor: `${color}25`, borderLeft: `2px solid ${color}` }}
+                            onClick={e => { e.stopPropagation(); onClickEvent(event.id); }}
+                          >
+                            {event.title}
+                          </button>
+                        );
+                      })}
+                      {allDayEvts.length > 3 && (
+                        <div className="text-[9px] font-bold text-[#666] pl-1">+{allDayEvts.length - 3} more</div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {HOURS.map(h => <div key={h} className="absolute inset-x-0 border-t border-[#232323]" style={{ top: h * HOUR_H }} />)}
                 {HOURS.map(h => <div key={`h${h}`} className="absolute inset-x-0 border-t border-[#1a1a1a]" style={{ top: h * HOUR_H + HOUR_H / 2 }} />)}
                 {tod && <NowLine />}

@@ -244,3 +244,102 @@ pub struct GraphHybridResult {
     pub score: f32,
     pub payload: serde_json::Value,
 }
+
+// ─── Timetracking Domain Types ────────────────────────────────────────────────
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeEntry {
+    pub id: String,
+    pub workspace_id: String,
+    pub owner_id: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub duration_secs: i64,
+    pub app_name: Option<String>,
+    pub window_title: Option<String>,
+    pub url: Option<String>,
+    pub category_id: Option<String>,
+    pub project_id: Option<String>,
+    pub is_manual: bool,
+    pub is_meeting: bool,
+    pub description: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeCategory {
+    pub id: String,
+    pub workspace_id: String,
+    pub owner_id: String,
+    pub name: String,
+    pub color: String,
+    pub icon: String,
+    pub productivity_score: f32,
+    pub position: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryRule {
+    pub id: String,
+    pub workspace_id: String,
+    pub owner_id: String,
+    pub category_id: String,
+    pub match_type: String,
+    pub match_value: String,
+    pub is_ai_generated: bool,
+    pub confidence: f32,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeProject {
+    pub id: String,
+    pub workspace_id: String,
+    pub owner_id: String,
+    pub name: String,
+    pub color: String,
+    pub client_name: String,
+    pub budget_hours: Option<f64>,
+    pub linked_task_project_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FocusSession {
+    pub id: String,
+    pub workspace_id: String,
+    pub owner_id: String,
+    pub start_time: String,
+    pub end_time: Option<String>,
+    pub target_minutes: i32,
+    pub category_id: Option<String>,
+    pub label: String,
+    pub is_active: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TimetrackingBundle {
+    pub entries: Vec<TimeEntry>,
+    pub categories: Vec<TimeCategory>,
+    pub rules: Vec<CategoryRule>,
+    pub projects: Vec<TimeProject>,
+    pub focus_sessions: Vec<FocusSession>,
+}

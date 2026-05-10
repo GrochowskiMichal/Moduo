@@ -1,0 +1,3 @@
+import{W as o}from"./workspace-switcher-CFosIK88.js";import"./jsx-runtime-u17CrQMm.js";import"./index-B3d2A58Q.js";import"./index-B1ZUCPgF.js";import"./index-BEwfMeI6.js";import"./index-AOmQ1fUN.js";import"./workspace-provider-BUsyo879.js";import"./auth-provider-doCjk4pR.js";import"./core-DhEqZVGG.js";import"./icon-Cbxy4FOx.js";import"./createLucideIcon-CVEjH9DW.js";import"./tag-LDmvB8Ep.js";import"./calendar-BmLrHsLg.js";import"./trash-2-BqP-bbSU.js";const f={title:"Components/workspace-switcher",component:o,tags:["autodocs"]},r={args:{}};r.parameters={...r.parameters,docs:{...r.parameters?.docs,source:{originalSource:`{
+  args: {}
+}`,...r.parameters?.docs?.source}}};const h=["Primary"];export{r as Primary,h as __namedExportsOrder,f as default};

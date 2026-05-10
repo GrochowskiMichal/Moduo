@@ -1,0 +1,3 @@
+import{W as t}from"./widget-container-aWgJwJ5K.js";import"./jsx-runtime-u17CrQMm.js";import"./core.esm-P1l0hGcK.js";import"./index-B3d2A58Q.js";import"./index-BEwfMeI6.js";import"./index-AOmQ1fUN.js";import"./widget-shell-D7048ePO.js";import"./createLucideIcon-CVEjH9DW.js";import"./x-mvR0woP4.js";const d={title:"features/dashboard/ui/widget-container",component:t,tags:["autodocs"]},r={args:{}};r.parameters={...r.parameters,docs:{...r.parameters?.docs,source:{originalSource:`{
+  args: {}
+}`,...r.parameters?.docs?.source}}};const u=["Primary"];export{r as Primary,u as __namedExportsOrder,d as default};

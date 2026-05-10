@@ -1,0 +1,3 @@
+import{A as o}from"./app-chrome-menus-Dh2NiHh_.js";import"./jsx-runtime-u17CrQMm.js";import"./index-B1ZUCPgF.js";import"./index-B3d2A58Q.js";import"./index-BEwfMeI6.js";import"./index-AOmQ1fUN.js";import"./icon-Cbxy4FOx.js";import"./createLucideIcon-CVEjH9DW.js";import"./tag-LDmvB8Ep.js";import"./calendar-BmLrHsLg.js";import"./trash-2-BqP-bbSU.js";const g={title:"Components/app/app-chrome-menus",component:o,tags:["autodocs"]},r={args:{}};r.parameters={...r.parameters,docs:{...r.parameters?.docs,source:{originalSource:`{
+  args: {}
+}`,...r.parameters?.docs?.source}}};const l=["Primary"];export{r as Primary,l as __namedExportsOrder,g as default};

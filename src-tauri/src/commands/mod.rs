@@ -1,4 +1,3 @@
-pub mod ai;
 pub mod auth;
 pub mod calendar;
 pub mod email;
@@ -11,4 +10,6 @@ pub mod notes;
 pub mod p2p;
 pub mod system;
 pub mod tasks;
+pub mod timetracking;
+pub mod window;
 pub mod workspace;

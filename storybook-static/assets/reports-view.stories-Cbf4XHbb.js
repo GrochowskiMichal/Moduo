@@ -1,0 +1,3 @@
+import{R as t}from"./dashboard-view-ChblOO5g.js";import"./jsx-runtime-u17CrQMm.js";import"./index-B3d2A58Q.js";import"./feature-panels-shell-BdfMhs37.js";import"./panel-events-BeJSmLTW.js";import"./auth-provider-doCjk4pR.js";import"./core-DhEqZVGG.js";import"./workspace-provider-BUsyo879.js";import"./timetracking-nav-B8N9aZGk.js";import"./categories-view-CgRzAFBb.js";import"./focus-timer-CvI5r51J.js";const g={title:"features/timetracking/ui/reports-view",component:t,tags:["autodocs"]},r={args:{}};r.parameters={...r.parameters,docs:{...r.parameters?.docs,source:{originalSource:`{
+  args: {}
+}`,...r.parameters?.docs?.source}}};const f=["Primary"];export{r as Primary,f as __namedExportsOrder,g as default};
