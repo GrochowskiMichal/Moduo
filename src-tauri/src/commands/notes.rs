@@ -9,6 +9,46 @@ fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
+fn safe_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
+const POSITION_PAD: usize = 16;
+const POSITION_STEP: i64 = 1024;
+const POSITION_MIN: i64 = 0;
+const POSITION_MAX: i64 = 9_999_999_999_999_999;
+
+fn parse_position(value: Option<&str>) -> Option<i64> {
+    let parsed = value?.parse::<i64>().ok()?;
+    if (POSITION_MIN..=POSITION_MAX).contains(&parsed) {
+        Some(parsed)
+    } else {
+        None
+    }
+}
+
+fn format_position(value: i64) -> String {
+    format!("{value:0POSITION_PAD$}")
+}
+
+fn generate_position(prev: Option<&str>, next: Option<&str>) -> String {
+    let prev_value = parse_position(prev);
+    let next_value = parse_position(next);
+
+    match (prev_value, next_value) {
+        (None, None) => format_position(5_000_000_000_000_000),
+        (Some(prev), Some(next)) => {
+            if next - prev > 1 {
+                format_position((prev + next) / 2)
+            } else {
+                format_position((prev + 1).min(POSITION_MAX))
+            }
+        }
+        (Some(prev), None) => format_position((prev + POSITION_STEP).min(POSITION_MAX)),
+        (None, Some(next)) => format_position((next - POSITION_STEP).max(POSITION_MIN)),
+    }
+}
+
 fn require_user_id(state: &AppState) -> Result<String, String> {
     let session = state
         .session
@@ -67,6 +107,13 @@ pub struct NotesDeleteInput {
     pub workspace_id: String,
     pub note_id: String,
     pub deleted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotesDuplicateInput {
+    pub workspace_id: String,
+    pub source_note_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -201,6 +248,80 @@ pub async fn notes_delete(
         .map_err(|e| e.to_string())?;
 
     Ok(note)
+}
+
+#[tauri::command]
+pub async fn notes_duplicate(
+    state: State<'_, AppState>,
+    input: NotesDuplicateInput,
+) -> Result<NoteMeta, String> {
+    let user_id = require_notes_permission(&state, &input.workspace_id, "edit", "duplicate")?;
+    let source = state
+        .store
+        .get_note(&input.source_note_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Note not found".to_string())?;
+    if source.workspace_id != input.workspace_id {
+        return Err("Workspace mismatch".to_string());
+    }
+
+    let doc_state = state
+        .store
+        .get_note_doc_state(&source.id)
+        .map_err(|e| e.to_string())?;
+    let siblings = state
+        .store
+        .list_notes(&input.workspace_id)
+        .map_err(|e| e.to_string())?;
+    let next_sibling = siblings
+        .into_iter()
+        .filter(|note| {
+            note.id != source.id
+                && note.deleted_at.is_none()
+                && note.parent_id == source.parent_id
+                && note.position > source.position
+        })
+        .min_by(|a, b| a.position.cmp(&b.position));
+
+    let copy_id = safe_id();
+    let timestamp = now_iso();
+    let mut copy = source.clone();
+    copy.id = copy_id.clone();
+    copy.owner_id = user_id;
+    copy.title = format!(
+        "{} (Copy)",
+        if source.title.is_empty() {
+            "Untitled"
+        } else {
+            &source.title
+        }
+    );
+    copy.is_pinned = false;
+    copy.position = generate_position(
+        Some(source.position.as_str()),
+        next_sibling.as_ref().map(|note| note.position.as_str()),
+    );
+    copy.created_at = timestamp.clone();
+    copy.updated_at = timestamp;
+    copy.deleted_at = None;
+
+    state
+        .store
+        .apply_note_update_atomic(&copy, None, None, None)
+        .map_err(|e| e.to_string())?;
+
+    if !doc_state.snapshot_b64.is_empty() || !doc_state.updates.is_empty() {
+        let mut copied_doc_state = doc_state;
+        for update in &mut copied_doc_state.updates {
+            update.note_id = copy_id.clone();
+        }
+        state
+            .store
+            .put_note_doc_state(&copy_id, &copied_doc_state)
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(copy)
 }
 
 #[tauri::command]

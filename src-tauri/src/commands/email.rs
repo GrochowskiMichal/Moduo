@@ -9,29 +9,31 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 use uuid::Uuid;
 
-use crate::domain::{GraphEdge, GraphNode};
-use crate::email_sync::{
-    now_iso, EmailActivityMode, EmailActivityStateRecord,
-    EMAIL_BODY_MAX_BYTES_PER_ACCOUNT, EMAIL_BODY_MAX_ITEMS_PER_ACCOUNT, EMAIL_DEFAULT_LIST_LIMIT,
-    EMAIL_PREFETCH_DEFAULT_LIMIT,
-};
-use crate::{keychain, AppState};
 use self::connection::{open_idle_imap_session, open_imap_session, ImapSession};
-use self::flags::{flush_flag_outbox_for_account, queue_flag_outbox, update_envelope_flag_optimistic};
+use self::flags::{
+    flush_flag_outbox_for_account, queue_flag_outbox, update_envelope_flag_optimistic,
+};
 use self::parsing::{
     decode_maybe_mime_header, extract_best_body, extract_domain, normalize_body_text,
     recipients_for_graph,
 };
 use self::storage::{
     body_key, envelope_key, get_body_cache, get_body_cache_from_store, list_envelopes_filtered,
-    load_folder_cursor, parse_json_value, patch_account_sync_state, persist_body_cache, read_accounts,
-    remove_account_v2, resolve_accounts_for_target, save_folder_cursor, touch_body_cache,
-    update_idle_runtime_state, upsert_account_v2, upsert_envelope, write_accounts,
+    load_folder_cursor, parse_json_value, patch_account_sync_state, persist_body_cache,
+    read_accounts, remove_account_v2, resolve_accounts_for_target, save_folder_cursor,
+    touch_body_cache, update_idle_runtime_state, upsert_account_v2, upsert_envelope,
+    write_accounts,
 };
 use self::sync::{
     collect_uid_range, fetch_envelopes_for_uids, resolve_uid_next, sync_account_folder_envelopes,
     uid_window_start,
 };
+use crate::domain::{GraphEdge, GraphNode};
+use crate::email_sync::{
+    now_iso, EmailActivityMode, EmailActivityStateRecord, EMAIL_BODY_MAX_BYTES_PER_ACCOUNT,
+    EMAIL_BODY_MAX_ITEMS_PER_ACCOUNT, EMAIL_DEFAULT_LIST_LIMIT, EMAIL_PREFETCH_DEFAULT_LIMIT,
+};
+use crate::{keychain, AppState};
 
 mod connection;
 mod flags;
@@ -925,7 +927,10 @@ impl EmailWorkerSupervisor {
             .and_then(parse_json_value::<EmailActivityStateRecord>)
     }
 
-    fn desired_topology(state: &AppState, accounts: &[StoredEmailAccount]) -> Vec<DesiredWorkerSpec> {
+    fn desired_topology(
+        state: &AppState,
+        accounts: &[StoredEmailAccount],
+    ) -> Vec<DesiredWorkerSpec> {
         let eligible_accounts = accounts
             .iter()
             .filter(|account| Self::account_realtime_eligible(account))
@@ -944,7 +949,11 @@ impl EmailWorkerSupervisor {
                     .active_account_id
                     .as_deref()
                     .filter(|account_id| *account_id != ALL_ACCOUNTS_ID)
-                    .filter(|account_id| eligible_accounts.iter().any(|account| account.id == *account_id));
+                    .filter(|account_id| {
+                        eligible_accounts
+                            .iter()
+                            .any(|account| account.id == *account_id)
+                    });
 
                 if let Some(active_account_id) = active_account {
                     let active_folder = activity
@@ -1145,7 +1154,8 @@ fn run_idle_cycle_blocking(
     })?;
 
     // idle_conn: exclusively for IDLE mode. Never issue commands here.
-    let mut idle_session = open_idle_imap_session(&config).map_err(IdleCycleError::ConnectionFailed)?;
+    let mut idle_session =
+        open_idle_imap_session(&config).map_err(IdleCycleError::ConnectionFailed)?;
 
     let idle_supported = idle_session
         .capabilities()
@@ -1198,8 +1208,7 @@ fn run_idle_cycle_blocking(
                             let latest_uid = uid_next.saturating_sub(1);
                             // Only fetch the delta window — at most (new_count) UIDs.
                             let new_count = (server_exists - last_exists).min(50);
-                            let delta_start =
-                                uid_window_start(latest_uid, new_count);
+                            let delta_start = uid_window_start(latest_uid, new_count);
                             let new_uids = collect_uid_range(delta_start, latest_uid);
 
                             if !new_uids.is_empty() {
@@ -1287,11 +1296,7 @@ fn run_poll_sync_blocking(
     Ok(())
 }
 
-fn start_idle_worker(
-    app: &tauri::AppHandle,
-    spec: DesiredWorkerSpec,
-    generation_id: u64,
-) {
+fn start_idle_worker(app: &tauri::AppHandle, spec: DesiredWorkerSpec, generation_id: u64) {
     let key = spec.key();
     let stop = Arc::new(AtomicBool::new(false));
     let stop_flag = stop.clone();
@@ -1376,7 +1381,9 @@ fn start_idle_worker(
 
                     match outcome {
                         Ok(Ok(IdleCycleOutcome::MailboxChanged)) => {
-                            attempts = if cycle_elapsed >= Duration::from_secs(IDLE_STABLE_SESSION_RESET_SECS) {
+                            attempts = if cycle_elapsed
+                                >= Duration::from_secs(IDLE_STABLE_SESSION_RESET_SECS)
+                            {
                                 0
                             } else {
                                 attempts.saturating_sub(1)
@@ -1393,7 +1400,9 @@ fn start_idle_worker(
                             );
                         }
                         Ok(Ok(IdleCycleOutcome::RenewTimeout)) => {
-                            attempts = if cycle_elapsed >= Duration::from_secs(IDLE_STABLE_SESSION_RESET_SECS) {
+                            attempts = if cycle_elapsed
+                                >= Duration::from_secs(IDLE_STABLE_SESSION_RESET_SECS)
+                            {
                                 0
                             } else {
                                 attempts.saturating_sub(1)
@@ -1534,7 +1543,10 @@ fn reconcile_idle_workers_now(app: &tauri::AppHandle) {
         return;
     };
     let desired = EmailWorkerSupervisor::desired_topology(&state, &accounts);
-    let desired_keys = desired.iter().map(DesiredWorkerSpec::key).collect::<HashSet<_>>();
+    let desired_keys = desired
+        .iter()
+        .map(DesiredWorkerSpec::key)
+        .collect::<HashSet<_>>();
     let generation_id = WORKER_SUPERVISOR_TICKET.load(Ordering::SeqCst);
 
     let (keys_to_stop, running_keys) = {
@@ -1678,7 +1690,6 @@ fn fetch_body_from_imap(
 
 // send_message builds and sends an SMTP message. One-shot, not cached.
 // This is the only retained send path — email_send_saved uses it.
-
 
 fn send_message(config: &EmailConfig, to: &str, subject: &str, body: &str) -> Result<bool, String> {
     let from_addr = format!("{} <{}>", config.email, config.email)
@@ -1890,7 +1901,8 @@ pub async fn email_sync_now(
                     } else {
                         "error"
                     };
-                    let _ = patch_account_sync_state(&state_inner, &account.id, status, Some(error));
+                    let _ =
+                        patch_account_sync_state(&state_inner, &account.id, status, Some(error));
                 }
             }
         }
@@ -2044,8 +2056,7 @@ pub async fn email_get_message_body(
         }
     })
     .await
-    .map_err(|e| format!("body_fetch_task_failed:{e}"))??
-    ;
+    .map_err(|e| format!("body_fetch_task_failed:{e}"))??;
 
     Ok(EmailGetMessageBodyResult {
         account_id: input.account_id,
@@ -2223,7 +2234,6 @@ pub async fn email_get_mailbox_status(
     Ok(result)
 }
 
-
 // ── Legacy commands removed ────────────────────────────────────────────────────
 // email_fetch_saved, email_connect, email_fetch, email_send have been removed.
 // They used the old seq-number based fetch path which:
@@ -2272,11 +2282,10 @@ pub async fn email_send_saved(
     };
 
     // SMTP send is blocking I/O — run on a dedicated thread.
-    let send_result = tauri::async_runtime::spawn_blocking(move || {
-        send_message(&config, &to, &subject, &body)
-    })
-    .await
-    .map_err(|e| format!("send_task_failed:{e}"))?;
+    let send_result =
+        tauri::async_runtime::spawn_blocking(move || send_message(&config, &to, &subject, &body))
+            .await
+            .map_err(|e| format!("send_task_failed:{e}"))?;
 
     match send_result {
         Ok(result) => {

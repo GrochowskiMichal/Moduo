@@ -67,7 +67,11 @@ fn ensure_task_code(state: &AppState, task: &mut TaskItem) -> Result<(), String>
         .max()
         .unwrap_or(0);
     let next_index = max_index.saturating_add(1);
-    task.task_code = Some(format!("{}-{}", project_code_prefix(&project_name), next_index));
+    task.task_code = Some(format!(
+        "{}-{}",
+        project_code_prefix(&project_name),
+        next_index
+    ));
     Ok(())
 }
 
@@ -184,8 +188,14 @@ fn write_task_with_activity(
         let prev_blocked_by: BTreeSet<String> = prev.blocked_by_task_ids.iter().cloned().collect();
         let next_blocked_by: BTreeSet<String> = task.blocked_by_task_ids.iter().cloned().collect();
         if prev_blocked_by != next_blocked_by {
-            let added: Vec<String> = next_blocked_by.difference(&prev_blocked_by).cloned().collect();
-            let removed: Vec<String> = prev_blocked_by.difference(&next_blocked_by).cloned().collect();
+            let added: Vec<String> = next_blocked_by
+                .difference(&prev_blocked_by)
+                .cloned()
+                .collect();
+            let removed: Vec<String> = prev_blocked_by
+                .difference(&next_blocked_by)
+                .cloned()
+                .collect();
             let _ = push_task_activity(
                 state,
                 &task.workspace_id,
@@ -461,7 +471,8 @@ pub async fn tasks_upsert_comment(
     state: State<'_, AppState>,
     comment: TaskComment,
 ) -> Result<TaskComment, String> {
-    let user_id = require_tasks_permission(&state, &comment.workspace_id, "edit", "upsert_comment")?;
+    let user_id =
+        require_tasks_permission(&state, &comment.workspace_id, "edit", "upsert_comment")?;
     let existed = state
         .store
         .get_task_comment(&comment.id)

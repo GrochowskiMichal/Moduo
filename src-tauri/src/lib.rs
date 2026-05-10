@@ -148,6 +148,7 @@ pub fn run() {
             commands::notes::notes_upsert,
             commands::notes::notes_move,
             commands::notes::notes_delete,
+            commands::notes::notes_duplicate,
             commands::notes::notes_get_doc_state,
             commands::notes::notes_apply_crdt_updates,
             commands::notes::notes_subscribe_local,

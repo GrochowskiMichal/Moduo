@@ -15,8 +15,8 @@ use super::storage::{
 };
 use super::{
     ensure_account_config, now_iso, queue_graph_upsert_for_envelope, select_mailbox_for_folder,
-    DEFAULT_MAILBOX_LIMIT, FLAG_RECONCILE_WINDOW, FLAG_RECONCILE_WINDOW_LIGHT,
-    StoredEmailAccount, StoredEnvelope,
+    StoredEmailAccount, StoredEnvelope, DEFAULT_MAILBOX_LIMIT, FLAG_RECONCILE_WINDOW,
+    FLAG_RECONCILE_WINDOW_LIGHT,
 };
 
 pub(super) fn fetch_envelopes_for_uids(
@@ -67,15 +67,16 @@ pub(super) fn fetch_envelopes_for_uids(
             .as_ref()
             .map(|v| decode_header_value_bytes(v))
             .unwrap_or_else(now_iso);
-        let (sender, sender_email) = if let Some(addr) = env.from.as_ref().and_then(|list| list.first()) {
-            parse_address(
-                addr.mailbox.as_deref(),
-                addr.host.as_deref(),
-                addr.name.as_deref(),
-            )
-        } else {
-            ("Unknown sender".to_string(), String::new())
-        };
+        let (sender, sender_email) =
+            if let Some(addr) = env.from.as_ref().and_then(|list| list.first()) {
+                parse_address(
+                    addr.mailbox.as_deref(),
+                    addr.host.as_deref(),
+                    addr.name.as_deref(),
+                )
+            } else {
+                ("Unknown sender".to_string(), String::new())
+            };
         let to = if let Some(to_list) = &env.to {
             to_list
                 .iter()

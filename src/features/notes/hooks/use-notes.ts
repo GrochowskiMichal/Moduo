@@ -382,31 +382,15 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
 
   const duplicateNote = useCallback(async (noteId: string) => {
-    if (!runtime || !userId || !workspaceId || !canEdit) return null;
+    if (!runtime || !workspaceId || !canEdit) return null;
     const source = notes.find((note) => note.id === noteId && !note.deletedAt);
     if (!source) return null;
 
-    const siblings = notes
-      .filter((note) => note.parentId === source.parentId && note.id !== source.id && !note.deletedAt)
-      .sort((a, b) => a.position.localeCompare(b.position));
-
-    const nextSibling = siblings.find((note) => source.position.localeCompare(note.position) < 0) ?? null;
-    const position = generatePosition(source.position, nextSibling?.position ?? null);
-
-    const copy: NoteMeta = {
-      ...source,
-      id: safeId(),
-      ownerId: userId,
-      title: `${source.title || "Untitled"} (Copy)`,
-      position,
-      isPinned: false,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      deletedAt: null,
-    };
-
     try {
-      const saved = normalizeNote(await runtime.notes.upsert(copy));
+      const saved = normalizeNote(await runtime.notes.duplicate({
+        workspaceId,
+        sourceNoteId: source.id,
+      }));
       upsertNoteInState(saved);
       if (saved.kind !== "category") setSelectedNoteId(saved.id);
       return saved.id;
@@ -414,7 +398,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
       await loadNotes();
       return null;
     }
-  }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, userId, workspaceId]);
+  }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
 
   return {
     notes,

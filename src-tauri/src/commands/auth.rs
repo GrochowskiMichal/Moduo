@@ -577,7 +577,9 @@ pub async fn auth_update_display_name(
 }
 
 #[tauri::command]
-pub async fn auth_get_stored_mnemonic(state: State<'_, AppState>) -> Result<Option<String>, String> {
+pub async fn auth_get_stored_mnemonic(
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
     require_session(&state)?;
     keychain::get_secret(&state.config.keychain_service, KEYCHAIN_MNEMONIC_ACCOUNT)
         .map_err(|e| e.to_string())
