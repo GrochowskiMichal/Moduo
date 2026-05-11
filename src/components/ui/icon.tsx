@@ -63,6 +63,20 @@ export type IconName =
   | "search"
   | "ground-roots";
 
+export type IconSize = "sm" | "md" | "lg";
+
+const SIZE_MAP: Record<IconSize, number> = {
+  sm: 16,
+  md: 20,
+  lg: 24,
+};
+
+function resolveSize(size: IconSize | number | undefined): number {
+  if (size === undefined) return SIZE_MAP.sm;
+  if (typeof size === "number") return size;
+  return SIZE_MAP[size];
+}
+
 const ICONS: Record<IconName, any> = {
   bell: Bell,
   "edit-2": Edit2,
@@ -86,7 +100,25 @@ const ICONS: Record<IconName, any> = {
   "ground-roots": GroundRootsIcon,
 };
 
-export function Icon({ name, size = 16, color = "currentColor", className, style }: { name: IconName; size?: number; color?: string; className?: string; style?: CSSProperties; }) {
+export function Icon({
+  name,
+  size,
+  color = "currentColor",
+  className,
+  style,
+}: {
+  name: IconName;
+  /**
+   * Token-driven enum: "sm" (16px), "md" (20px), "lg" (24px). A raw
+   * number is accepted for legacy call sites; prefer the enum so the
+   * scale stays consistent across the app.
+   */
+  size?: IconSize | number;
+  color?: string;
+  className?: string;
+  style?: CSSProperties;
+}) {
   const Component = ICONS[name];
-  return <Component size={size} color={color} className={className} style={style} />;
+  const resolved = resolveSize(size);
+  return <Component size={resolved} color={color} className={className} style={style} />;
 }
