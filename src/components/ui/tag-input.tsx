@@ -1,4 +1,5 @@
 import { useMemo, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { Badge } from "./badge";
 
 type Props = {
   tags: string[];
@@ -71,21 +72,28 @@ export function TagInput({
   };
 
   return (
-    <div className={`rounded-lg bg-[#151515] px-2 py-2 ${className}`}>
+    <div
+      className={`rounded-md border border-border bg-muted px-2 py-2 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-card ${className}`}
+    >
       <div className="flex flex-wrap items-center gap-2">
         {safeTags.map((tag, index) => (
-          <span key={`${tag}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-[#1c1c1c] px-2 py-1 text-[12px] text-[#c8ced8]">
+          <Badge
+            key={`${tag}-${index}`}
+            variant="secondary"
+            className="gap-1 pl-2 pr-1 py-0.5"
+          >
             <span>#{tag}</span>
             {!disabled ? (
               <button
                 type="button"
-                className="border-0 bg-transparent p-0 text-[12px] leading-none text-[#8f97a6]"
+                aria-label={`Remove ${tag}`}
+                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => removeTag(index)}
               >
                 ×
               </button>
             ) : null}
-          </span>
+          </Badge>
         ))}
         <input
           value={draft}
@@ -95,7 +103,7 @@ export function TagInput({
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           placeholder={safeTags.length ? "Add tag" : placeholder}
-          className="min-w-[120px] flex-1 bg-transparent text-[13px] text-[#e0e0e0] outline-none placeholder:text-[#707682] disabled:opacity-70"
+          className="min-w-[120px] flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-70"
         />
       </div>
     </div>
