@@ -56,6 +56,7 @@ import {
 } from "../../features/brainstorm/storage/brainstorm-storage";
 import { dispatchBrainstormSelectView } from "../../features/brainstorm/ui/layout-events";
 import { Icon } from "../ui/icon";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import moduoFavicon from "../../../assets/moduo_favicon.png";
 import { UserMenu } from "../user-menu";
 import {
@@ -879,8 +880,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
   if (loading) {
     return (
-      <View className="flex-1 bg-[#0C0C0C] items-center justify-center">
-        <Text className="text-[#a0a0a0] text-[14px]">Loading workspace...</Text>
+      <View className="flex-1 bg-background items-center justify-center">
+        <Text className="text-muted-foreground text-sm">Loading workspace...</Text>
       </View>
     );
   }
@@ -907,9 +908,12 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     : undefined;
 
   return (
-    <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-[#0C0C0C]">
-      <View className="relative z-[400] px-5 pt-4 pb-2 bg-[#0C0C0C]">
-        <View className="relative z-[410] flex flex-row items-center justify-between gap-3">
+    <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
+      <View
+        className="relative px-5 pt-4 pb-2 bg-card border-b border-border"
+        style={{ zIndex: "var(--z-header)" }}
+      >
+        <View className="relative z-[1] flex flex-row items-center justify-between gap-3">
           <View className={`${currentPanels.left ? "min-w-0" : "min-w-[260px]"} flex flex-row items-center gap-3`} style={moduleNavLeadStyle}>
             <Image source={moduoFavicon} className="h-8 w-8 shrink-0" contentFit="contain" />
             <WorkspaceSwitcher onOpenSettings={() => setWorkspaceSettingsOpen(true)} />
@@ -925,36 +929,36 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                 return (
                   <View key={tab.href} className="relative flex flex-row items-center">
                     <Pressable
-                      className="flex flex-row items-center gap-2 bg-transparent border-0 rounded-none px-3 py-2"
+                      className={`flex flex-row items-center gap-2 rounded-md px-3 py-2 ${active ? "bg-accent text-foreground" : "bg-transparent text-muted-foreground hover:bg-accent/60"}`}
                       onPress={() => void navigate({ to: tab.href })}
                     >
-                      <Icon name={tab.iconName} size={14} color={active ? "#f2f2f2" : "#9a9a9a"} />
-                      <Text className={`${active ? "text-[#f5f5f5]" : "text-[#a3a3a3]"} text-[14px]`}>{tab.label}</Text>
+                      <Icon name={tab.iconName} size={14} />
+                      <Text className="text-sm">{tab.label}</Text>
                     </Pressable>
 
                     {isGridTab && isGridRoute ? (
-                      <View ref={gridControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
-                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleGridMenu}>
-                          <Text className="text-[13px] text-[#d7d7d7]">{activeGridSceneName}</Text>
-                          <Text className="text-[11px] text-[#8f8f8f]">▾</Text>
+                      <View ref={gridControlRef} className="relative ml-1 overflow-visible shrink-0" style={{ zIndex: "var(--z-sticky)" }}>
+                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-popover px-3 hover:bg-accent" onPress={toggleGridMenu}>
+                          <Text className="text-sm text-foreground">{activeGridSceneName}</Text>
+                          <Text className="text-xs text-muted-foreground">▾</Text>
                         </Pressable>
                       </View>
                     ) : null}
 
                     {isMindmapTab && isMindmapRoute ? (
-                      <View ref={mindmapControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
-                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleMindmapMenu}>
-                          <Text className="text-[13px] text-[#d7d7d7]">{selectedMindmapLabel}</Text>
-                          <Text className="text-[11px] text-[#8f8f8f]">▾</Text>
+                      <View ref={mindmapControlRef} className="relative ml-1 overflow-visible shrink-0" style={{ zIndex: "var(--z-sticky)" }}>
+                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-popover px-3 hover:bg-accent" onPress={toggleMindmapMenu}>
+                          <Text className="text-sm text-foreground">{selectedMindmapLabel}</Text>
+                          <Text className="text-xs text-muted-foreground">▾</Text>
                         </Pressable>
                       </View>
                     ) : null}
 
                     {isBrainstormTab && isBrainstormRoute ? (
-                      <View ref={brainstormControlRef} className="relative ml-1 overflow-visible z-[600] shrink-0">
-                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-[#111111] px-3" onPress={toggleBrainstormMenu}>
-                          <Text className="text-[13px] text-[#d7d7d7]">{selectedBrainstormLabel}</Text>
-                          <Text className="text-[11px] text-[#8f8f8f]">▾</Text>
+                      <View ref={brainstormControlRef} className="relative ml-1 overflow-visible shrink-0" style={{ zIndex: "var(--z-sticky)" }}>
+                        <Pressable className="flex h-8 flex-row items-center gap-2 rounded-md bg-popover px-3 hover:bg-accent" onPress={toggleBrainstormMenu}>
+                          <Text className="text-sm text-foreground">{selectedBrainstormLabel}</Text>
+                          <Text className="text-xs text-muted-foreground">▾</Text>
                         </Pressable>
                       </View>
                     ) : null}
@@ -1057,12 +1061,24 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           />
 
           <View className="min-w-[120px] flex flex-row items-center justify-end gap-2">
-            <Pressable className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent hover:bg-[#151515]" onPress={() => {}}>
-              <Icon name="search" size={14} color="#9a9a9a" />
-            </Pressable>
-            <Pressable className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent hover:bg-[#151515]" onPress={() => {}}>
-              <Icon name="clock" size={14} color="#9a9a9a" />
-            </Pressable>
+            <Tooltip>
+              <TooltipTrigger
+                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                aria-label="Search"
+              >
+                <Icon name="search" size={14} />
+              </TooltipTrigger>
+              <TooltipContent>Search</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                aria-label="Recent activity"
+              >
+                <Icon name="clock" size={14} />
+              </TooltipTrigger>
+              <TooltipContent>Recent activity</TooltipContent>
+            </Tooltip>
             <NotificationCenter />
             <UserMenu
               avatarDataUrl={avatarDataUrl}
@@ -1080,23 +1096,29 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         <Outlet />
       </View>
 
-      <View className="px-5 py-2 bg-[#0C0C0C]">
+      <View className="px-5 py-2 bg-background">
         <View className="flex flex-row items-center justify-between">
-          <Pressable className="flex h-9 w-9 items-center justify-center rounded-none border-0 bg-transparent" onPress={toggleLeftPanel}>
-            {currentPanels.left ? (
-              <ChevronsLeft size={16} className="text-[#9a9a9a]" />
-            ) : (
-              <ChevronsRight size={16} className="text-[#9a9a9a]" />
-            )}
-          </Pressable>
+          <Tooltip>
+            <TooltipTrigger
+              className="flex h-9 w-9 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                onClick={toggleLeftPanel}
+              aria-label={currentPanels.left ? "Collapse left panel" : "Expand left panel"}
+            >
+              {currentPanels.left ? <ChevronsLeft size={16} /> : <ChevronsRight size={16} />}
+            </TooltipTrigger>
+            <TooltipContent>{currentPanels.left ? "Collapse left panel" : "Expand left panel"}</TooltipContent>
+          </Tooltip>
           {!isSettingsRoute ? (
-            <Pressable className="flex h-9 w-9 items-center justify-center rounded-none border-0 bg-transparent" onPress={toggleRightPanel}>
-              {currentPanels.right ? (
-                <ChevronsRight size={16} className="text-[#9a9a9a]" />
-              ) : (
-                <ChevronsLeft size={16} className="text-[#9a9a9a]" />
-              )}
-            </Pressable>
+            <Tooltip>
+              <TooltipTrigger
+                className="flex h-9 w-9 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                onClick={toggleRightPanel}
+                aria-label={currentPanels.right ? "Collapse right panel" : "Expand right panel"}
+              >
+                {currentPanels.right ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+              </TooltipTrigger>
+              <TooltipContent>{currentPanels.right ? "Collapse right panel" : "Expand right panel"}</TooltipContent>
+            </Tooltip>
           ) : (
             <View className="h-9 w-9" />
           )}
