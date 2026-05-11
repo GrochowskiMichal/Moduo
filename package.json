@@ -52,6 +52,7 @@
     "framer-motion": "^12.34.3",
     "lexical": "^0.40.0",
     "lucide-react": "^0.552.0",
+    "radix-ui": "^1.4.3",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "tailwind-merge": "^3.6.0",
