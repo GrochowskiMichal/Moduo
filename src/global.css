@@ -3,6 +3,26 @@
 @import "tailwindcss/utilities.css";
 @import "./styles/tokens.css";
 
+/* Body + display fonts.
+   Token strings reference "Geist" and "Fraunces" (see tokens.css §9), but the
+   @fontsource packages declare them as "Geist Sans" and "Fraunces Variable".
+   The bridge @font-face rules below register the same files under the names
+   tokens.css expects, so design-system fonts resolve without editing tokens. */
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-sans/700.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/source-serif-pro/400.css";
+@import "@fontsource/source-serif-pro/600.css";
+@import "@fontsource/cal-sans/400.css";
+@import "@fontsource-variable/fraunces/index.css";
+
 html,
 body,
 #root {
@@ -61,6 +81,49 @@ body,
   src: url("../assets/Equity-Sans/OTF/Equity Sans Alt Bold.otf") format("opentype");
   font-style: normal;
   font-weight: 700;
+  font-display: swap;
+}
+
+/* Bridge aliases: re-register fontsource files under the family names tokens.css
+   expects (tokens reference "Geist" and "Fraunces"; fontsource declares them as
+   "Geist Sans" and "Fraunces Variable"). Browser dedupes the woff2 fetches. */
+@font-face {
+  font-family: "Geist";
+  src: url("@fontsource/geist-sans/files/geist-sans-latin-400-normal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist";
+  src: url("@fontsource/geist-sans/files/geist-sans-latin-500-normal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist";
+  src: url("@fontsource/geist-sans/files/geist-sans-latin-600-normal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist";
+  src: url("@fontsource/geist-sans/files/geist-sans-latin-700-normal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fraunces";
+  src: url("@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2") format("woff2-variations");
+  font-style: normal;
+  font-weight: 100 900;
   font-display: swap;
 }
 
