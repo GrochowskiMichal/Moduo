@@ -5,6 +5,7 @@ import {
   type FeatureLayoutKey,
   type LayoutPanelsApplyDetail,
 } from "../../features/layout/panel-events";
+import { Sheet, SheetContent } from "../ui/sheet";
 
 type Props = {
   feature: FeatureLayoutKey;
@@ -15,8 +16,38 @@ type Props = {
   hideRight?: boolean;
 };
 
+type RailMode = "full" | "icon" | "sheet" | "hidden";
+
+const BP_NARROW = 900;
+const BP_RAIL_COLLAPSE = 1024;
+const BP_FULL = 1280;
+
+function useViewportWidth(): number {
+  const [width, setWidth] = useState(() =>
+    typeof window === "undefined" ? BP_FULL : window.innerWidth,
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return width;
+}
+
+function resolveMode(viewport: number, requested: boolean, kind: "left" | "right"): RailMode {
+  if (!requested) return "hidden";
+  if (viewport < BP_NARROW) return "sheet";
+  if (kind === "right" && viewport < BP_FULL) return "icon";
+  if (kind === "left" && viewport < BP_RAIL_COLLAPSE) return "icon";
+  return "full";
+}
+
 export function FeaturePanelsShell({ feature, center, left, right, hideRight = false }: Props) {
   const [panelState, setPanelState] = useState(() => readFeaturePanelState(feature));
+  const viewport = useViewportWidth();
+  const [leftSheetOpen, setLeftSheetOpen] = useState(false);
+  const [rightSheetOpen, setRightSheetOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -30,32 +61,72 @@ export function FeaturePanelsShell({ feature, center, left, right, hideRight = f
   }, [feature]);
 
   const showRight = panelState.right && !hideRight;
+  const leftMode = resolveMode(viewport, panelState.left, "left");
+  const rightMode = resolveMode(viewport, showRight, "right");
 
-  const layoutColumns = panelState.left
-    ? showRight
-      ? "grid-cols-[minmax(340px,22fr)_48fr_30fr]"
-      : "grid-cols-[minmax(340px,24fr)_76fr]"
-    : showRight
-      ? "grid-cols-[70fr_30fr]"
-      : "grid-cols-[1fr]";
+  useEffect(() => {
+    if (leftMode === "sheet" && panelState.left) setLeftSheetOpen(true);
+    else setLeftSheetOpen(false);
+  }, [leftMode, panelState.left]);
+
+  useEffect(() => {
+    if (rightMode === "sheet" && showRight) setRightSheetOpen(true);
+    else setRightSheetOpen(false);
+  }, [rightMode, showRight]);
+
+  const leftPanel =
+    leftMode === "full" || leftMode === "icon" ? (
+      <aside
+        className="min-h-0 min-w-0 h-full rounded-2xl border border-border bg-card p-5 flex flex-col overflow-hidden"
+        style={{
+          width: leftMode === "icon" ? "var(--width-sidebar-icon)" : "var(--width-sidebar)",
+          flex: "0 0 auto",
+        }}
+        data-rail-mode={leftMode}
+      >
+        {left ?? <div className="text-sm text-muted-foreground">Feature tools panel</div>}
+      </aside>
+    ) : null;
+
+  const rightPanel =
+    rightMode === "full" || rightMode === "icon" ? (
+      <aside
+        className="min-h-0 min-w-0 h-full rounded-2xl bg-card p-4 border border-border"
+        style={{
+          width: rightMode === "icon" ? "var(--width-rail-icon)" : "var(--width-rail)",
+          flex: "0 0 auto",
+        }}
+        data-rail-mode={rightMode}
+      >
+        {right ?? (
+          <div className="text-sm text-muted-foreground">Graph relations tree, feature coming soon.</div>
+        )}
+      </aside>
+    ) : null;
 
   return (
-    <div className={`grid h-full min-h-0 gap-4 bg-[#0C0C0C] px-4 pb-2 pt-2 ${layoutColumns}`}>
-      {panelState.left ? (
-        <aside className="min-h-0 min-w-0 h-full rounded-2xl border border-[#1b1b1b] bg-[#111111] p-5 flex flex-col overflow-hidden">
-          {left ?? <div className="text-[#8f8f8f] text-[13px]">Feature tools panel</div>}
-        </aside>
-      ) : null}
+    <>
+      <div className="flex h-full min-h-0 gap-4 bg-background px-4 pb-2 pt-2">
+        {leftPanel}
+        <main className="min-h-0 min-w-0 h-full flex-1 rounded-2xl bg-card p-4 overflow-auto relative border border-border">
+          {center}
+        </main>
+        {rightPanel}
+      </div>
 
-      <main className="min-h-0 min-w-0 h-full rounded-2xl bg-[#111111] p-4 overflow-auto relative">{center}</main>
+      <Sheet open={leftSheetOpen} onOpenChange={setLeftSheetOpen}>
+        <SheetContent side="left" className="w-[var(--width-sidebar)] max-w-[85vw] p-5">
+          {left ?? <div className="text-sm text-muted-foreground">Feature tools panel</div>}
+        </SheetContent>
+      </Sheet>
 
-      {showRight ? (
-        <aside className="min-h-0 min-w-0 h-full rounded-2xl bg-[#111111] p-4">
+      <Sheet open={rightSheetOpen} onOpenChange={setRightSheetOpen}>
+        <SheetContent side="right" className="w-[var(--width-rail)] max-w-[85vw] p-4">
           {right ?? (
-            <div className="text-[#9a9a9a] text-[13px]">Graph relations tree, feature coming soon.</div>
+            <div className="text-sm text-muted-foreground">Graph relations tree, feature coming soon.</div>
           )}
-        </aside>
-      ) : null}
-    </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
