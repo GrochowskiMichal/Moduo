@@ -1,7 +1,16 @@
 import { useMemo, useState } from "react";
-import { Modal, Pressable, Text, View } from "../tw";
 import { useWorkspace } from "../providers/workspace-provider";
+import { Card } from "./ui/card";
 import { Icon } from "./ui/icon";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "./ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export function NotificationCenter() {
   const {
@@ -16,83 +25,120 @@ export function NotificationCenter() {
     markAllNotificationsRead,
   } = useWorkspace();
   const [open, setOpen] = useState(false);
-  const topBarPressableStyle = { backgroundColor: "transparent", borderWidth: 0 };
 
   const activeUnread = useMemo(
     () => (notificationsScope === "workspace" ? unreadCountWorkspace : unreadCountGlobal),
-    [notificationsScope, unreadCountGlobal, unreadCountWorkspace]
+    [notificationsScope, unreadCountGlobal, unreadCountWorkspace],
   );
 
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) {
+      void refreshNotifications();
+    }
+  };
+
   return (
-    <View className="relative shrink-0">
-      <Pressable
-        className="flex h-10 w-10 shrink-0 items-center justify-center bg-transparent border-0 rounded-none"
-        style={topBarPressableStyle}
-        onPress={async () => {
-          setOpen(true);
-          await refreshNotifications();
-        }}
-      >
-        <Icon name="bell" size={16} color="#9a9a9a" />
-        {activeUnread > 0 ? (
-          <View className="absolute -right-1 -top-1 min-w-[18px] h-[18px] rounded-full bg-[#f08f42] items-center justify-center px-1">
-            <Text className="text-[#121212] text-[10px] font-semibold">{Math.min(activeUnread, 99)}</Text>
-          </View>
-        ) : null}
-      </Pressable>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <SheetTrigger
+            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            aria-label="Notifications"
+          >
+            <Icon name="bell" size={16} />
+            {activeUnread > 0 ? (
+              <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-warning px-1 text-xs font-semibold text-warning-foreground">
+                {Math.min(activeUnread, 99)}
+              </span>
+            ) : null}
+          </SheetTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Notifications</TooltipContent>
+      </Tooltip>
 
-      <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable className="fixed inset-0" onPress={() => setOpen(false)} />
-        <View className="fixed right-8 top-16 w-[420px] max-h-[580px] rounded-xl bg-[#171717] p-3 z-[999]">
-          <View className="flex-row items-center justify-between pb-2">
-            <Text className="text-[#e5e5e5] text-[16px] font-semibold">Notifications</Text>
-            <Pressable onPress={() => void markAllNotificationsRead()}>
-              <Text className="text-[#a6a6a6] text-[13px]">Mark all read</Text>
-            </Pressable>
-          </View>
+      <SheetContent side="right" className="w-[420px] max-w-[92vw] gap-3 p-0">
+        <SheetHeader className="flex-row items-center justify-between gap-2 border-b border-border">
+          <div className="flex flex-col gap-1">
+            <SheetTitle>Notifications</SheetTitle>
+            <SheetDescription>Stay on top of workspace and global activity.</SheetDescription>
+          </div>
+          <button
+            type="button"
+            className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => void markAllNotificationsRead()}
+          >
+            Mark all read
+          </button>
+        </SheetHeader>
 
-          <View className="mt-3 flex-row gap-2">
-            <Pressable
-              className={`rounded-md px-3 py-2 ${notificationsScope === "workspace" ? "bg-[#252525]" : "bg-[#191919]"}`}
-              onPress={() => setNotificationsScope("workspace")}
-            >
-              <Text className="text-[#dfdfdf] text-[13px]">Workspace ({unreadCountWorkspace})</Text>
-            </Pressable>
-            <Pressable
-              className={`rounded-md px-3 py-2 ${notificationsScope === "global" ? "bg-[#252525]" : "bg-[#191919]"}`}
-              onPress={() => setNotificationsScope("global")}
-            >
-              <Text className="text-[#dfdfdf] text-[13px]">Global ({unreadCountGlobal})</Text>
-            </Pressable>
-          </View>
+        <div className="flex flex-row gap-2 px-4">
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              notificationsScope === "workspace"
+                ? "bg-accent text-foreground"
+                : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
+            onClick={() => setNotificationsScope("workspace")}
+          >
+            Workspace ({unreadCountWorkspace})
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              notificationsScope === "global"
+                ? "bg-accent text-foreground"
+                : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
+            onClick={() => setNotificationsScope("global")}
+          >
+            Global ({unreadCountGlobal})
+          </button>
+        </div>
 
-          <View className="mt-3 max-h-[460px] overflow-y-auto">
-            {notificationsLoading ? (
-              <Text className="text-[#a0a0a0] text-[13px]">Loading notifications...</Text>
-            ) : notifications.length === 0 ? (
-              <Text className="text-[#a0a0a0] text-[13px]">No notifications yet.</Text>
-            ) : (
-              notifications.map((notification) => (
-                <Pressable
+        <div className="flex-1 overflow-y-auto px-4 pb-4">
+          {notificationsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading notifications...</p>
+          ) : notifications.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No notifications yet.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {notifications.map((notification) => (
+                <Card
                   key={notification.id}
-                  className={`mb-2 rounded-lg px-3 py-2 ${notification.readAt ? "bg-[#161616]" : "bg-[#1d1d1d]"}`}
-                  onPress={async () => {
+                  role="button"
+                  tabIndex={0}
+                  onClick={async () => {
                     if (!notification.readAt) {
                       await markNotificationRead(notification.id);
                     }
                   }}
+                  onKeyDown={async (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      if (!notification.readAt) {
+                        await markNotificationRead(notification.id);
+                      }
+                    }
+                  }}
+                  className={`cursor-pointer gap-1 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    notification.readAt ? "bg-muted" : "bg-card"
+                  }`}
                 >
-                  <Text className="text-[#e2e2e2] text-[13px]">{notification.eventType}</Text>
-                  <Text className="text-[#a4a4a4] text-[12px] mt-1" numberOfLines={2}>
+                  <p className="text-sm text-foreground">{notification.eventType}</p>
+                  <p className="line-clamp-2 text-xs text-muted-foreground">
                     {JSON.stringify(notification.payload)}
-                  </Text>
-                  <Text className="text-[#878787] text-[11px] mt-1">{new Date(notification.createdAt).toLocaleString()}</Text>
-                </Pressable>
-              ))
-            )}
-          </View>
-        </View>
-      </Modal>
-    </View>
+                  </p>
+                  <p className="text-xs text-muted-foreground/70">
+                    {new Date(notification.createdAt).toLocaleString()}
+                  </p>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
