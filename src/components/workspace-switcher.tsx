@@ -1,11 +1,22 @@
 import { useMemo, useState } from "react";
-import { Modal, Pressable, Text, TextInput, View } from "../tw";
 import { useWorkspace } from "../providers/workspace-provider";
+import { Avatar, AvatarFallback } from "./ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import { Icon } from "./ui/icon";
 
 type Props = {
   onOpenSettings?: () => void;
 };
+
+function formatWorkspaceLabel(name: string): string {
+  return name.replace(/\s+workspace$/i, "").trim() || name;
+}
 
 export function WorkspaceSwitcher({ onOpenSettings }: Props) {
   const {
@@ -21,36 +32,10 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
   const [deleteCandidateWorkspaceId, setDeleteCandidateWorkspaceId] = useState<string | null>(null);
   const [deleteWorkspaceInput, setDeleteWorkspaceInput] = useState("");
   const [deleteSubmittingWorkspaceId, setDeleteSubmittingWorkspaceId] = useState<string | null>(null);
-  const topBarPressableStyle = { backgroundColor: "transparent", borderWidth: 0 };
-  const formatWorkspaceLabel = (name: string) => name.replace(/\s+workspace$/i, "").trim() || name;
-  const rowStyle = { display: "flex", flexDirection: "row" as const, alignItems: "center" };
-  const workspaceRowStyle = {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
-    alignItems: "center",
-    columnGap: 8,
-    minHeight: 32,
-  } as const;
-  const workspaceNameWrapStyle = { minWidth: 0, display: "flex", alignItems: "center", height: 28 } as const;
-  const workspaceActionsStyle = { display: "flex", alignItems: "center", gap: 4, height: 28 } as const;
-  const iconButtonStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28 } as const;
-  const plusButtonStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24 } as const;
-  const deleteRevealBaseStyle = { overflow: "hidden", transition: "max-height 220ms ease, opacity 180ms ease, transform 180ms ease, margin-top 180ms ease" } as const;
-
-  const submitCreateWorkspace = async () => {
-    const name = newWorkspaceName.trim() || "New Workspace";
-    const workspaceId = await createWorkspace(name);
-    if (workspaceId) {
-      selectWorkspace(workspaceId);
-      setIsCreatingWorkspace(false);
-      setNewWorkspaceName("New Workspace");
-      setOpen(false);
-    }
-  };
 
   const workspaceLabel = useMemo(
     () => (selectedWorkspace?.name ? formatWorkspaceLabel(selectedWorkspace.name) : "No workspace"),
-    [selectedWorkspace?.name]
+    [selectedWorkspace?.name],
   );
 
   const cancelDeleteIntent = () => {
@@ -58,209 +43,228 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
     setDeleteWorkspaceInput("");
     setDeleteSubmittingWorkspaceId(null);
   };
-  const closeModal = () => {
+
+  const closeMenu = () => {
     setOpen(false);
     setIsCreatingWorkspace(false);
     setNewWorkspaceName("New Workspace");
     cancelDeleteIntent();
   };
 
-  return (
-    <View className="relative">
-      <Pressable
-        className="flex h-9 min-w-[220px] max-w-[320px] flex-row items-center gap-2 rounded-none border-0 bg-transparent px-1"
-        style={topBarPressableStyle}
-        onPress={() => setOpen((current) => !current)}
-      >
-        <View className="min-w-0 flex-1">
-          <Text as="div" className="truncate text-[14px] text-[#e0e0e0]">
-            {workspaceLabel}
-          </Text>
-        </View>
-        <Text className="shrink-0 text-[11px] text-[#9b9b9b] leading-none">▾</Text>
-      </Pressable>
+  const submitCreateWorkspace = async () => {
+    const name = newWorkspaceName.trim() || "New Workspace";
+    const workspaceId = await createWorkspace(name);
+    if (workspaceId) {
+      selectWorkspace(workspaceId);
+      closeMenu();
+    }
+  };
 
-      <Modal transparent visible={open} animationType="fade" onRequestClose={closeModal}>
-        <Pressable className="fixed inset-0" onPress={closeModal} />
-        <View className="fixed top-16 left-[72px] w-[360px] rounded-xl bg-[#171717] p-2 z-[999]">
-          <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
-            <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
-              <Text className="text-[#a0a0a0] text-xs">Workspaces</Text>
-              <Pressable
-                className="rounded-md"
-                style={plusButtonStyle}
-                onPress={async (event: any) => {
-                  event?.stopPropagation?.();
-                  setIsCreatingWorkspace(true);
+  return (
+    <DropdownMenu
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setOpen(true);
+        else closeMenu();
+      }}
+    >
+      <DropdownMenuTrigger
+        className="flex h-9 min-w-[220px] max-w-[320px] flex-row items-center gap-2 rounded-md bg-transparent px-1 text-sm text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+        aria-label="Switch workspace"
+      >
+        <span className="min-w-0 flex-1 truncate text-left">{workspaceLabel}</span>
+        <span className="shrink-0 text-xs leading-none text-muted-foreground">▾</span>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="start" sideOffset={8} className="w-[360px]">
+        <div className="flex flex-row items-center justify-between px-2 pb-1 pt-1">
+          <DropdownMenuLabel className="px-0">Workspaces</DropdownMenuLabel>
+          <button
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setIsCreatingWorkspace(true);
+              setNewWorkspaceName("New Workspace");
+            }}
+            aria-label="Create workspace"
+          >
+            <span className="text-base leading-none">+</span>
+          </button>
+        </div>
+        <DropdownMenuSeparator />
+        <div className="max-h-[260px] overflow-y-auto">
+          {isCreatingWorkspace ? (
+            <div className="mb-1 flex flex-row items-center gap-1 rounded-md border border-border bg-muted px-2 py-2">
+              <input
+                autoFocus
+                value={newWorkspaceName}
+                onChange={(event) => setNewWorkspaceName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void submitCreateWorkspace();
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setIsCreatingWorkspace(false);
+                  }
+                }}
+                className="h-8 flex-1 rounded-md border border-border bg-input px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
+              />
+              <button
+                type="button"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-foreground hover:bg-accent"
+                onClick={() => void submitCreateWorkspace()}
+              >
+                <span className="text-sm leading-none">✓</span>
+              </button>
+              <button
+                type="button"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-foreground hover:bg-accent"
+                onClick={() => {
+                  setIsCreatingWorkspace(false);
                   setNewWorkspaceName("New Workspace");
                 }}
               >
-                <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
-              </Pressable>
-            </View>
-          </View>
-          <View className="max-h-[260px] overflow-y-auto">
-            {isCreatingWorkspace ? (
-              <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
-                <TextInput
-                  autoFocus
-                  value={newWorkspaceName}
-                  onChangeText={setNewWorkspaceName}
-                  onKeyDown={(event: any) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void submitCreateWorkspace();
-                    }
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      setIsCreatingWorkspace(false);
-                    }
-                  }}
-                  className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
-                />
-                <View className="ml-1" style={rowStyle}>
-                  <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={() => void submitCreateWorkspace()}>
-                    <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
-                  </Pressable>
-                  <Pressable
-                    className="rounded-md hover:bg-[#2b2b2b]"
-                    style={iconButtonStyle}
-                    onPress={() => {
-                      setIsCreatingWorkspace(false);
-                      setNewWorkspaceName("New Workspace");
-                    }}
-                  >
-                    <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-            {workspaces.map((workspace) => {
-              const active = workspace.id === selectedWorkspace?.id;
-              const nameLabel = formatWorkspaceLabel(workspace.name);
-              const isDeleteOpen = deleteCandidateWorkspaceId === workspace.id;
-              const deleteMatches = deleteWorkspaceInput.trim() === nameLabel.trim();
-              return (
-                <View
-                  key={workspace.id}
-                  className={`rounded-lg px-3 py-2 ${active ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}
-                >
-                  <Pressable
-                    onPress={() => {
-                      selectWorkspace(workspace.id);
-                      setOpen(false);
-                    }}
-                  >
-                    <View style={workspaceRowStyle}>
-                      <View style={workspaceNameWrapStyle}>
-                        <Text
-                          as="div"
-                          className={`${active ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
-                          style={{ lineHeight: "28px" }}
-                          numberOfLines={1}
-                        >
-                          {nameLabel}
-                        </Text>
-                      </View>
-                      <View className="shrink-0" style={workspaceActionsStyle}>
-                        <Pressable
-                          className="rounded-md hover:bg-[#2b2b2b]"
-                          style={iconButtonStyle}
-                          onPress={(event: any) => {
-                            event?.stopPropagation?.();
-                            selectWorkspace(workspace.id);
-                            setOpen(false);
-                            onOpenSettings?.();
-                          }}
-                        >
-                          <Icon name="settings" size={13} color="#d8d8d8" />
-                        </Pressable>
-                        <Pressable
-                          className="rounded-md hover:bg-[#2b2b2b]"
-                          style={iconButtonStyle}
-                          onPress={(event: any) => {
-                            event?.stopPropagation?.();
-                            if (isDeleteOpen) {
-                              cancelDeleteIntent();
-                            } else {
-                              setDeleteCandidateWorkspaceId(workspace.id);
-                              setDeleteWorkspaceInput("");
-                            }
-                          }}
-                        >
-                          <Icon name="trash-2" size={13} color="#ffb0b0" />
-                        </Pressable>
-                      </View>
-                    </View>
-                  </Pressable>
+                <span className="text-sm leading-none">×</span>
+              </button>
+            </div>
+          ) : null}
 
-                  <View
-                    style={{
-                      ...deleteRevealBaseStyle,
-                      maxHeight: isDeleteOpen ? 116 : 0,
-                      opacity: isDeleteOpen ? 1 : 0,
-                      transform: isDeleteOpen ? "translateY(0)" : "translateY(-4px)",
-                      marginTop: isDeleteOpen ? 8 : 0,
-                    }}
+          {workspaces.map((workspace) => {
+            const active = workspace.id === selectedWorkspace?.id;
+            const nameLabel = formatWorkspaceLabel(workspace.name);
+            const isDeleteOpen = deleteCandidateWorkspaceId === workspace.id;
+            const deleteMatches = deleteWorkspaceInput.trim() === nameLabel.trim();
+
+            return (
+              <div
+                key={workspace.id}
+                className={`rounded-md px-2 py-2 ${active ? "bg-accent" : "hover:bg-accent"}`}
+              >
+                <button
+                  type="button"
+                  className="flex w-full flex-row items-center gap-2 text-left focus-visible:outline-none"
+                  onClick={() => {
+                    selectWorkspace(workspace.id);
+                    closeMenu();
+                  }}
+                >
+                  <Avatar size="sm" className="shrink-0">
+                    <AvatarFallback>{nameLabel.charAt(0).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <span
+                    className={`min-w-0 flex-1 truncate text-sm ${active ? "text-foreground" : "text-popover-foreground"}`}
                   >
-                    <Text className="text-[11px] text-[#9a9a9a]">
-                      Retype <Text className="text-[#d9d9d9] font-semibold">{nameLabel}</Text> to delete this workspace.
-                    </Text>
-                    <View className="mt-2" style={rowStyle}>
-                      <TextInput
-                        value={deleteWorkspaceInput}
-                        onChangeText={setDeleteWorkspaceInput}
-                        onKeyDown={(event: any) => {
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            cancelDeleteIntent();
-                          }
-                          if (event.key === "Enter" && deleteMatches && deleteSubmittingWorkspaceId !== workspace.id) {
-                            event.preventDefault();
-                            void (async () => {
-                              setDeleteSubmittingWorkspaceId(workspace.id);
-                              await softDeleteWorkspace(workspace.id);
-                              cancelDeleteIntent();
-                            })();
-                          }
-                        }}
-                        placeholder={nameLabel}
-                        className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
-                      />
-                      <Pressable
-                        className="ml-1 rounded-md hover:bg-[#2b2b2b]"
-                        style={iconButtonStyle}
-                        onPress={cancelDeleteIntent}
-                      >
-                        <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
-                      </Pressable>
-                      <Pressable
-                        className="ml-1 rounded-md"
-                        style={iconButtonStyle}
-                        onPress={async () => {
-                          if (!deleteMatches || deleteSubmittingWorkspaceId === workspace.id) return;
-                          setDeleteSubmittingWorkspaceId(workspace.id);
-                          await softDeleteWorkspace(workspace.id);
+                    {nameLabel}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Workspace settings"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        selectWorkspace(workspace.id);
+                        closeMenu();
+                        onOpenSettings?.();
+                      }}
+                    >
+                      <Icon name="settings" size={13} />
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Delete workspace"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (isDeleteOpen) {
                           cancelDeleteIntent();
-                        }}
-                        aria-disabled={!deleteMatches || deleteSubmittingWorkspaceId === workspace.id}
-                      >
-                        <Text
-                          className={`text-[11px] font-semibold leading-none ${
-                            deleteMatches && deleteSubmittingWorkspaceId !== workspace.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
-                          }`}
-                        >
-                          Del
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      </Modal>
-    </View>
+                        } else {
+                          setDeleteCandidateWorkspaceId(workspace.id);
+                          setDeleteWorkspaceInput("");
+                        }
+                      }}
+                    >
+                      <Icon name="trash-2" size={13} className="text-destructive" />
+                    </span>
+                  </span>
+                </button>
+
+                <div
+                  style={{
+                    overflow: "hidden",
+                    transition:
+                      "max-height 220ms ease, opacity 180ms ease, transform 180ms ease, margin-top 180ms ease",
+                    maxHeight: isDeleteOpen ? 116 : 0,
+                    opacity: isDeleteOpen ? 1 : 0,
+                    transform: isDeleteOpen ? "translateY(0)" : "translateY(-4px)",
+                    marginTop: isDeleteOpen ? 8 : 0,
+                  }}
+                >
+                  <p className="text-xs text-muted-foreground">
+                    Retype <span className="font-semibold text-foreground">{nameLabel}</span> to delete this workspace.
+                  </p>
+                  <div className="mt-2 flex flex-row items-center gap-1">
+                    <input
+                      value={deleteWorkspaceInput}
+                      onChange={(event) => setDeleteWorkspaceInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelDeleteIntent();
+                        }
+                        if (
+                          event.key === "Enter" &&
+                          deleteMatches &&
+                          deleteSubmittingWorkspaceId !== workspace.id
+                        ) {
+                          event.preventDefault();
+                          void (async () => {
+                            setDeleteSubmittingWorkspaceId(workspace.id);
+                            await softDeleteWorkspace(workspace.id);
+                            cancelDeleteIntent();
+                          })();
+                        }
+                      }}
+                      placeholder={nameLabel}
+                      className="h-8 flex-1 rounded-md border border-border bg-input px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
+                    />
+                    <button
+                      type="button"
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-foreground hover:bg-accent"
+                      onClick={cancelDeleteIntent}
+                    >
+                      <span className="text-xs leading-none">×</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex h-7 items-center justify-center rounded-md px-2 text-xs font-semibold ${
+                        deleteMatches && deleteSubmittingWorkspaceId !== workspace.id
+                          ? "text-destructive hover:bg-destructive/10"
+                          : "text-muted-foreground/50"
+                      }`}
+                      onClick={async () => {
+                        if (!deleteMatches || deleteSubmittingWorkspaceId === workspace.id) return;
+                        setDeleteSubmittingWorkspaceId(workspace.id);
+                        await softDeleteWorkspace(workspace.id);
+                        cancelDeleteIntent();
+                      }}
+                      aria-disabled={!deleteMatches || deleteSubmittingWorkspaceId === workspace.id}
+                    >
+                      Del
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
