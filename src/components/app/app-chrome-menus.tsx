@@ -110,10 +110,10 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
       {grid.open && grid.anchor ? (
         <Modal transparent visible={grid.open} animationType="fade" onRequestClose={grid.closeMenu}>
           <Pressable className="fixed inset-0 z-[998]" onPress={grid.closeMenu} />
-          <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: grid.anchor.left, top: grid.anchor.top }}>
-            <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
+          <View className="fixed z-[1000] w-[360px] rounded-xl border border-border bg-popover p-1 text-popover-foreground" style={{ left: grid.anchor.left, top: grid.anchor.top }}>
+            <View className="mb-2 border-b border-border px-2 pb-2 pt-1" style={rowStyle}>
               <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
-                <Text className="text-[#a0a0a0] text-xs">All scenes</Text>
+                <Text className="text-muted-foreground text-xs uppercase tracking-wide">All scenes</Text>
                 <Pressable
                   className="rounded-md"
                   style={plusButtonStyle}
@@ -123,13 +123,13 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                     grid.setNewName("New Scene");
                   }}
                 >
-                  <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
+                  <Text className="text-foreground text-base leading-none">+</Text>
                 </Pressable>
               </View>
             </View>
             <View className="max-h-[260px] overflow-y-auto">
               {grid.isCreating ? (
-                <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
+                <View className="mb-2 rounded-md border border-border bg-muted px-2 py-2" style={rowStyle}>
                   <TextInput
                     autoFocus
                     value={grid.newName}
@@ -144,21 +144,21 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         grid.setIsCreating(false);
                       }
                     }}
-                    className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
+                    className="h-8 flex-1 rounded-md border border-border bg-input px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
                   />
                   <View className="ml-1" style={rowStyle}>
-                    <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={grid.submitCreate}>
-                      <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
+                    <Pressable className="rounded-md hover:bg-accent" style={iconButtonStyle} onPress={grid.submitCreate}>
+                      <Text className="text-sm leading-none text-foreground">✓</Text>
                     </Pressable>
                     <Pressable
-                      className="rounded-md hover:bg-[#2b2b2b]"
+                      className="rounded-md hover:bg-accent"
                       style={iconButtonStyle}
                       onPress={() => {
                         grid.setIsCreating(false);
                         grid.setNewName("New Scene");
                       }}
                     >
-                      <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
+                      <Text className="text-sm leading-none text-foreground">×</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -169,7 +169,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                 const isDeleteOpen = grid.deleteCandidateId === scene.id;
                 const deleteMatches = grid.deleteInput.trim() === scene.name.trim();
                 return (
-                  <View key={scene.id} className={`rounded-lg px-3 py-2 ${isActiveScene ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}>
+                  <View key={scene.id} className={`rounded-md px-3 py-2 ${isActiveScene ? "bg-accent text-accent-foreground" : "bg-transparent hover:bg-accent"}`}>
                     <Pressable
                       onPress={() => {
                         grid.setActiveScene(scene.id);
@@ -180,7 +180,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         <View style={itemNameWrapStyle}>
                           <Text
                             as="div"
-                            className={`${isActiveScene ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                            className={`${isActiveScene ? "text-foreground" : "text-popover-foreground"} text-sm`}
                             style={{ lineHeight: "28px" }}
                             numberOfLines={1}
                           >
@@ -189,16 +189,16 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         </View>
                         <View className="shrink-0" style={itemActionsStyle}>
                           <Pressable
-                            className="rounded-md hover:bg-[#2b2b2b]"
+                            className="rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                             style={iconButtonStyle}
                             onPress={(event: any) => {
                               event?.stopPropagation?.();
                             }}
                           >
-                            <Icon name="settings" size={13} color="#d8d8d8" />
+                            <Icon name="settings" size={13} />
                           </Pressable>
                           <Pressable
-                            className="rounded-md hover:bg-[#2b2b2b]"
+                            className="rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                             style={iconButtonStyle}
                             onPress={(event: any) => {
                               event?.stopPropagation?.();
@@ -213,7 +213,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                             }}
                             disabled={grid.scenes.length <= 1}
                           >
-                            <Icon name="trash-2" size={13} color={grid.scenes.length > 1 ? "#ffb0b0" : "#6a6a6a"} />
+                            <Icon name="trash-2" size={13} className={grid.scenes.length > 1 ? "text-destructive" : "text-muted-foreground/50"} />
                           </Pressable>
                         </View>
                       </View>
@@ -228,8 +228,8 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         marginTop: isDeleteOpen ? 8 : 0,
                       }}
                     >
-                      <Text className="text-[11px] text-[#9a9a9a]">
-                        Retype <Text className="font-semibold text-[#d9d9d9]">{scene.name}</Text> to delete this scene.
+                      <Text className="text-xs text-muted-foreground">
+                        Retype <Text className="font-semibold text-foreground">{scene.name}</Text> to delete this scene.
                       </Text>
                       <View className="mt-2" style={rowStyle}>
                         <TextInput
@@ -248,10 +248,10 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                             }
                           }}
                           placeholder={scene.name}
-                          className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
+                          className="h-8 flex-1 rounded-md border border-border bg-input px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
                         />
                         <Pressable
-                          className="ml-1 rounded-md hover:bg-[#2b2b2b]"
+                          className="ml-1 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                           style={iconButtonStyle}
                           onPress={() => {
                             grid.setDeleteCandidateId(null);
@@ -259,7 +259,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                             grid.setDeleteSubmittingId(null);
                           }}
                         >
-                          <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
+                          <Text className="text-xs leading-none text-foreground">×</Text>
                         </Pressable>
                         <Pressable
                           className="ml-1 rounded-md"
@@ -268,8 +268,8 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                           aria-disabled={!deleteMatches || grid.deleteSubmittingId === scene.id}
                         >
                           <Text
-                            className={`text-[11px] font-semibold leading-none ${
-                              deleteMatches && grid.deleteSubmittingId !== scene.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
+                            className={`text-xs font-semibold leading-none ${
+                              deleteMatches && grid.deleteSubmittingId !== scene.id ? "text-destructive" : "text-muted-foreground/50"
                             }`}
                           >
                             Del
@@ -288,10 +288,10 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
       {tasks.open && tasks.anchor ? (
         <Modal transparent visible={tasks.open} animationType="fade" onRequestClose={tasks.closeMenu}>
           <Pressable className="fixed inset-0 z-[998]" onPress={tasks.closeMenu} />
-          <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: tasks.anchor.left, top: tasks.anchor.top }}>
-            <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
+          <View className="fixed z-[1000] w-[360px] rounded-xl border border-border bg-popover p-1 text-popover-foreground" style={{ left: tasks.anchor.left, top: tasks.anchor.top }}>
+            <View className="mb-2 border-b border-border px-2 pb-2 pt-1" style={rowStyle}>
               <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
-                <Text className="text-[#a0a0a0] text-xs">All projects</Text>
+                <Text className="text-muted-foreground text-xs uppercase tracking-wide">All projects</Text>
                 <Pressable
                   className="rounded-md"
                   style={plusButtonStyle}
@@ -303,13 +303,13 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                   }}
                   disabled={!tasks.canEditTasks}
                 >
-                  <Text className={`text-[16px] leading-none ${tasks.canEditTasks ? "text-[#d8d8d8]" : "text-[#6a6a6a]"}`}>+</Text>
+                  <Text className={`text-base leading-none ${tasks.canEditTasks ? "text-foreground" : "text-muted-foreground/50"}`}>+</Text>
                 </Pressable>
               </View>
             </View>
             <View className="max-h-[260px] overflow-y-auto">
               {tasks.isCreating && tasks.canEditTasks ? (
-                <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
+                <View className="mb-2 rounded-md border border-border bg-muted px-2 py-2" style={rowStyle}>
                   <TextInput
                     autoFocus
                     value={tasks.newName}
@@ -324,27 +324,27 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         tasks.setIsCreating(false);
                       }
                     }}
-                    className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
+                    className="h-8 flex-1 rounded-md border border-border bg-input px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
                   />
                   <View className="ml-1" style={rowStyle}>
-                    <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={() => void tasks.submitCreate()}>
-                      <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
+                    <Pressable className="rounded-md hover:bg-accent" style={iconButtonStyle} onPress={() => void tasks.submitCreate()}>
+                      <Text className="text-sm leading-none text-foreground">✓</Text>
                     </Pressable>
                     <Pressable
-                      className="rounded-md hover:bg-[#2b2b2b]"
+                      className="rounded-md hover:bg-accent"
                       style={iconButtonStyle}
                       onPress={() => {
                         tasks.setIsCreating(false);
                         tasks.setNewName("New Project");
                       }}
                     >
-                      <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
+                      <Text className="text-sm leading-none text-foreground">×</Text>
                     </Pressable>
                   </View>
                 </View>
               ) : null}
 
-              <View className={`rounded-lg px-3 py-2 ${tasks.selectedProjectId === null ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}>
+              <View className={`rounded-md px-3 py-2 ${tasks.selectedProjectId === null ? "bg-accent text-accent-foreground" : "bg-transparent hover:bg-accent"}`}>
                 <Pressable
                   onPress={() => {
                     tasks.setSelectedProjectId(null);
@@ -355,7 +355,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                     <View style={itemNameWrapStyle}>
                       <Text
                         as="div"
-                        className={`${tasks.selectedProjectId === null ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                        className={`${tasks.selectedProjectId === null ? "text-foreground" : "text-popover-foreground"} text-sm`}
                         style={{ lineHeight: "28px" }}
                         numberOfLines={1}
                       >
@@ -371,7 +371,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                 const isDeleteOpen = tasks.deleteCandidateId === project.id;
                 const deleteMatches = tasks.deleteInput.trim() === project.name.trim();
                 return (
-                  <View key={project.id} className={`rounded-lg px-3 py-2 ${isActiveProject ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}>
+                  <View key={project.id} className={`rounded-md px-3 py-2 ${isActiveProject ? "bg-accent text-accent-foreground" : "bg-transparent hover:bg-accent"}`}>
                     <Pressable
                       onPress={() => {
                         tasks.setSelectedProjectId(project.id);
@@ -382,7 +382,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         <View style={itemNameWrapStyle}>
                           <Text
                             as="div"
-                            className={`${isActiveProject ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                            className={`${isActiveProject ? "text-foreground" : "text-popover-foreground"} text-sm`}
                             style={{ lineHeight: "28px" }}
                             numberOfLines={1}
                           >
@@ -391,17 +391,17 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         </View>
                         <View className="shrink-0" style={itemActionsStyle}>
                           <Pressable
-                            className="rounded-md hover:bg-[#2b2b2b]"
+                            className="rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                             style={iconButtonStyle}
                             onPress={(event: any) => {
                               event?.stopPropagation?.();
                             }}
                             disabled={!tasks.canEditTasks}
                           >
-                            <Icon name="settings" size={13} color={tasks.canEditTasks ? "#d8d8d8" : "#6a6a6a"} />
+                            <Icon name="settings" size={13} className={tasks.canEditTasks ? undefined : "text-muted-foreground/50"} />
                           </Pressable>
                           <Pressable
-                            className="rounded-md hover:bg-[#2b2b2b]"
+                            className="rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                             style={iconButtonStyle}
                             onPress={(event: any) => {
                               event?.stopPropagation?.();
@@ -414,7 +414,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                             }}
                             disabled={!tasks.canEditTasks}
                           >
-                            <Icon name="trash-2" size={13} color={tasks.canEditTasks ? "#ffb0b0" : "#6a6a6a"} />
+                            <Icon name="trash-2" size={13} className={tasks.canEditTasks ? "text-destructive" : "text-muted-foreground/50"} />
                           </Pressable>
                         </View>
                       </View>
@@ -429,8 +429,8 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         marginTop: isDeleteOpen ? 8 : 0,
                       }}
                     >
-                      <Text className="text-[11px] text-[#9a9a9a]">
-                        Retype <Text className="font-semibold text-[#d9d9d9]">{project.name}</Text> to delete this project.
+                      <Text className="text-xs text-muted-foreground">
+                        Retype <Text className="font-semibold text-foreground">{project.name}</Text> to delete this project.
                       </Text>
                       <View className="mt-2" style={rowStyle}>
                         <TextInput
@@ -447,10 +447,10 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                             }
                           }}
                           placeholder={project.name}
-                          className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
+                          className="h-8 flex-1 rounded-md border border-border bg-input px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
                         />
-                        <Pressable className="ml-1 rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={tasks.cancelDeleteIntent}>
-                          <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
+                        <Pressable className="ml-1 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" style={iconButtonStyle} onPress={tasks.cancelDeleteIntent}>
+                          <Text className="text-xs leading-none text-foreground">×</Text>
                         </Pressable>
                         <Pressable
                           className="ml-1 rounded-md"
@@ -459,8 +459,8 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                           aria-disabled={!deleteMatches || tasks.deleteSubmittingId === project.id}
                         >
                           <Text
-                            className={`text-[11px] font-semibold leading-none ${
-                              deleteMatches && tasks.deleteSubmittingId !== project.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
+                            className={`text-xs font-semibold leading-none ${
+                              deleteMatches && tasks.deleteSubmittingId !== project.id ? "text-destructive" : "text-muted-foreground/50"
                             }`}
                           >
                             Del
@@ -479,10 +479,10 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
       {mindmap.open && mindmap.anchor ? (
         <Modal transparent visible={mindmap.open} animationType="fade" onRequestClose={mindmap.closeMenu}>
           <Pressable className="fixed inset-0 z-[998]" onPress={mindmap.closeMenu} />
-          <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: mindmap.anchor.left, top: mindmap.anchor.top }}>
-            <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
+          <View className="fixed z-[1000] w-[360px] rounded-xl border border-border bg-popover p-1 text-popover-foreground" style={{ left: mindmap.anchor.left, top: mindmap.anchor.top }}>
+            <View className="mb-2 border-b border-border px-2 pb-2 pt-1" style={rowStyle}>
               <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
-                <Text className="text-[#a0a0a0] text-xs">All mindmaps</Text>
+                <Text className="text-muted-foreground text-xs uppercase tracking-wide">All mindmaps</Text>
                 <Pressable
                   className="rounded-md"
                   style={plusButtonStyle}
@@ -492,13 +492,13 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                     mindmap.setNewName("New Mindmap");
                   }}
                 >
-                  <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
+                  <Text className="text-foreground text-base leading-none">+</Text>
                 </Pressable>
               </View>
             </View>
             <View className="max-h-[260px] overflow-y-auto">
               {mindmap.isCreating ? (
-                <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
+                <View className="mb-2 rounded-md border border-border bg-muted px-2 py-2" style={rowStyle}>
                   <TextInput
                     autoFocus
                     value={mindmap.newName}
@@ -513,21 +513,21 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         mindmap.setIsCreating(false);
                       }
                     }}
-                    className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
+                    className="h-8 flex-1 rounded-md border border-border bg-input px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
                   />
                   <View className="ml-1" style={rowStyle}>
-                    <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={() => void mindmap.submitCreate()}>
-                      <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
+                    <Pressable className="rounded-md hover:bg-accent" style={iconButtonStyle} onPress={() => void mindmap.submitCreate()}>
+                      <Text className="text-sm leading-none text-foreground">✓</Text>
                     </Pressable>
                     <Pressable
-                      className="rounded-md hover:bg-[#2b2b2b]"
+                      className="rounded-md hover:bg-accent"
                       style={iconButtonStyle}
                       onPress={() => {
                         mindmap.setIsCreating(false);
                         mindmap.setNewName("New Mindmap");
                       }}
                     >
-                      <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
+                      <Text className="text-sm leading-none text-foreground">×</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -535,7 +535,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
 
               {mindmap.mindmaps.length === 0 ? (
                 <View className="px-3 py-2">
-                  <Text className="text-[13px] text-[#8f8f8f]">No mindmaps yet.</Text>
+                  <Text className="text-sm text-muted-foreground">No mindmaps yet.</Text>
                 </View>
               ) : null}
 
@@ -544,7 +544,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                 const isDeleteOpen = mindmap.deleteCandidateId === map.id;
                 const deleteMatches = mindmap.deleteInput.trim() === map.name.trim();
                 return (
-                  <View key={map.id} className={`rounded-lg px-3 py-2 ${isActiveMindmap ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}>
+                  <View key={map.id} className={`rounded-md px-3 py-2 ${isActiveMindmap ? "bg-accent text-accent-foreground" : "bg-transparent hover:bg-accent"}`}>
                     <Pressable
                       onPress={() => {
                         mindmap.setSelectedMindmapId(map.id);
@@ -557,7 +557,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         <View style={itemNameWrapStyle}>
                           <Text
                             as="div"
-                            className={`${isActiveMindmap ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                            className={`${isActiveMindmap ? "text-foreground" : "text-popover-foreground"} text-sm`}
                             style={{ lineHeight: "28px" }}
                             numberOfLines={1}
                           >
@@ -566,16 +566,16 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         </View>
                         <View className="shrink-0" style={itemActionsStyle}>
                           <Pressable
-                            className="rounded-md hover:bg-[#2b2b2b]"
+                            className="rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                             style={iconButtonStyle}
                             onPress={(event: any) => {
                               event?.stopPropagation?.();
                             }}
                           >
-                            <Icon name="settings" size={13} color="#d8d8d8" />
+                            <Icon name="settings" size={13} />
                           </Pressable>
                           <Pressable
-                            className="rounded-md hover:bg-[#2b2b2b]"
+                            className="rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                             style={iconButtonStyle}
                             onPress={(event: any) => {
                               event?.stopPropagation?.();
@@ -587,7 +587,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                               }
                             }}
                           >
-                            <Icon name="trash-2" size={13} color="#ffb0b0" />
+                            <Icon name="trash-2" size={13} className="text-destructive" />
                           </Pressable>
                         </View>
                       </View>
@@ -602,8 +602,8 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         marginTop: isDeleteOpen ? 8 : 0,
                       }}
                     >
-                      <Text className="text-[11px] text-[#9a9a9a]">
-                        Retype <Text className="font-semibold text-[#d9d9d9]">{map.name}</Text> to delete this mindmap.
+                      <Text className="text-xs text-muted-foreground">
+                        Retype <Text className="font-semibold text-foreground">{map.name}</Text> to delete this mindmap.
                       </Text>
                       <View className="mt-2" style={rowStyle}>
                         <TextInput
@@ -620,10 +620,10 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                             }
                           }}
                           placeholder={map.name}
-                          className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
+                          className="h-8 flex-1 rounded-md border border-border bg-input px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
                         />
-                        <Pressable className="ml-1 rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={mindmap.cancelDeleteIntent}>
-                          <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
+                        <Pressable className="ml-1 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" style={iconButtonStyle} onPress={mindmap.cancelDeleteIntent}>
+                          <Text className="text-xs leading-none text-foreground">×</Text>
                         </Pressable>
                         <Pressable
                           className="ml-1 rounded-md"
@@ -632,8 +632,8 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                           aria-disabled={!deleteMatches || mindmap.deleteSubmittingId === map.id}
                         >
                           <Text
-                            className={`text-[11px] font-semibold leading-none ${
-                              deleteMatches && mindmap.deleteSubmittingId !== map.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
+                            className={`text-xs font-semibold leading-none ${
+                              deleteMatches && mindmap.deleteSubmittingId !== map.id ? "text-destructive" : "text-muted-foreground/50"
                             }`}
                           >
                             Del
@@ -652,10 +652,10 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
       {brainstorm.open && brainstorm.anchor ? (
         <Modal transparent visible={brainstorm.open} animationType="fade" onRequestClose={brainstorm.closeMenu}>
           <Pressable className="fixed inset-0 z-[998]" onPress={brainstorm.closeMenu} />
-          <View className="fixed z-[1000] w-[360px] rounded-xl bg-[#171717] p-2" style={{ left: brainstorm.anchor.left, top: brainstorm.anchor.top }}>
-            <View className="mb-2 border-b border-[#262626] px-2 pb-2 pt-1" style={rowStyle}>
+          <View className="fixed z-[1000] w-[360px] rounded-xl border border-border bg-popover p-1 text-popover-foreground" style={{ left: brainstorm.anchor.left, top: brainstorm.anchor.top }}>
+            <View className="mb-2 border-b border-border px-2 pb-2 pt-1" style={rowStyle}>
               <View className="min-w-0 flex flex-1 gap-2" style={rowStyle}>
-                <Text className="text-[#a0a0a0] text-xs">All sessions</Text>
+                <Text className="text-muted-foreground text-xs uppercase tracking-wide">All sessions</Text>
                 <Pressable
                   className="rounded-md"
                   style={plusButtonStyle}
@@ -665,13 +665,13 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                     brainstorm.setNewName("New Brainstorm");
                   }}
                 >
-                  <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
+                  <Text className="text-foreground text-base leading-none">+</Text>
                 </Pressable>
               </View>
             </View>
             <View className="max-h-[260px] overflow-y-auto">
               {brainstorm.isCreating ? (
-                <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2" style={rowStyle}>
+                <View className="mb-2 rounded-md border border-border bg-muted px-2 py-2" style={rowStyle}>
                   <TextInput
                     autoFocus
                     value={brainstorm.newName}
@@ -686,21 +686,21 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         brainstorm.setIsCreating(false);
                       }
                     }}
-                    className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[13px] text-[#e5e5e5] outline-none"
+                    className="h-8 flex-1 rounded-md border border-border bg-input px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
                   />
                   <View className="ml-1" style={rowStyle}>
-                    <Pressable className="rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={() => void brainstorm.submitCreate()}>
-                      <Text className="text-[14px] leading-none text-[#d8d8d8]">✓</Text>
+                    <Pressable className="rounded-md hover:bg-accent" style={iconButtonStyle} onPress={() => void brainstorm.submitCreate()}>
+                      <Text className="text-sm leading-none text-foreground">✓</Text>
                     </Pressable>
                     <Pressable
-                      className="rounded-md hover:bg-[#2b2b2b]"
+                      className="rounded-md hover:bg-accent"
                       style={iconButtonStyle}
                       onPress={() => {
                         brainstorm.setIsCreating(false);
                         brainstorm.setNewName("New Brainstorm");
                       }}
                     >
-                      <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
+                      <Text className="text-sm leading-none text-foreground">×</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -708,7 +708,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
 
               {brainstorm.brainstorms.length === 0 ? (
                 <View className="px-3 py-2">
-                  <Text className="text-[13px] text-[#8f8f8f]">No brainstorm sessions yet.</Text>
+                  <Text className="text-sm text-muted-foreground">No brainstorm sessions yet.</Text>
                 </View>
               ) : null}
 
@@ -717,7 +717,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                 const isDeleteOpen = brainstorm.deleteCandidateId === bs.id;
                 const deleteMatches = brainstorm.deleteInput.trim() === bs.name.trim();
                 return (
-                  <View key={bs.id} className={`rounded-lg px-3 py-2 ${isActive ? "bg-[#242424]" : "bg-transparent hover:bg-[#1f1f1f]"}`}>
+                  <View key={bs.id} className={`rounded-md px-3 py-2 ${isActive ? "bg-accent text-accent-foreground" : "bg-transparent hover:bg-accent"}`}>
                     <Pressable
                       onPress={() => {
                         brainstorm.setSelectedBrainstormId(bs.id);
@@ -730,7 +730,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         <View style={itemNameWrapStyle}>
                           <Text
                             as="div"
-                            className={`${isActive ? "text-white" : "text-[#d9d9d9]"} text-[14px]`}
+                            className={`${isActive ? "text-foreground" : "text-popover-foreground"} text-sm`}
                             style={{ lineHeight: "28px" }}
                             numberOfLines={1}
                           >
@@ -739,16 +739,16 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         </View>
                         <View className="shrink-0" style={itemActionsStyle}>
                           <Pressable
-                            className="rounded-md hover:bg-[#2b2b2b]"
+                            className="rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                             style={iconButtonStyle}
                             onPress={(event: any) => {
                               event?.stopPropagation?.();
                             }}
                           >
-                            <Icon name="settings" size={13} color="#d8d8d8" />
+                            <Icon name="settings" size={13} />
                           </Pressable>
                           <Pressable
-                            className="rounded-md hover:bg-[#2b2b2b]"
+                            className="rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                             style={iconButtonStyle}
                             onPress={(event: any) => {
                               event?.stopPropagation?.();
@@ -760,7 +760,7 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                               }
                             }}
                           >
-                            <Icon name="trash-2" size={13} color="#ffb0b0" />
+                            <Icon name="trash-2" size={13} className="text-destructive" />
                           </Pressable>
                         </View>
                       </View>
@@ -775,8 +775,8 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                         marginTop: isDeleteOpen ? 8 : 0,
                       }}
                     >
-                      <Text className="text-[11px] text-[#9a9a9a]">
-                        Retype <Text className="font-semibold text-[#d9d9d9]">{bs.name}</Text> to delete this session.
+                      <Text className="text-xs text-muted-foreground">
+                        Retype <Text className="font-semibold text-foreground">{bs.name}</Text> to delete this session.
                       </Text>
                       <View className="mt-2" style={rowStyle}>
                         <TextInput
@@ -793,10 +793,10 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                             }
                           }}
                           placeholder={bs.name}
-                          className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] text-[#e5e5e5] outline-none"
+                          className="h-8 flex-1 rounded-md border border-border bg-input px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
                         />
-                        <Pressable className="ml-1 rounded-md hover:bg-[#2b2b2b]" style={iconButtonStyle} onPress={brainstorm.cancelDeleteIntent}>
-                          <Text className="text-[12px] leading-none text-[#d0d0d0]">×</Text>
+                        <Pressable className="ml-1 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" style={iconButtonStyle} onPress={brainstorm.cancelDeleteIntent}>
+                          <Text className="text-xs leading-none text-foreground">×</Text>
                         </Pressable>
                         <Pressable
                           className="ml-1 rounded-md"
@@ -805,8 +805,8 @@ export function AppChromeMenus({ grid, tasks, mindmap, brainstorm }: Props) {
                           aria-disabled={!deleteMatches || brainstorm.deleteSubmittingId === bs.id}
                         >
                           <Text
-                            className={`text-[11px] font-semibold leading-none ${
-                              deleteMatches && brainstorm.deleteSubmittingId !== bs.id ? "text-[#ffb0b0]" : "text-[#6a6a6a]"
+                            className={`text-xs font-semibold leading-none ${
+                              deleteMatches && brainstorm.deleteSubmittingId !== bs.id ? "text-destructive" : "text-muted-foreground/50"
                             }`}
                           >
                             Del
