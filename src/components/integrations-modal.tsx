@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Modal, Pressable, Text, View } from "../tw";
+import { Badge } from "./ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 
 type IntegrationStatusItem = {
   provider: string;
@@ -26,13 +33,13 @@ const PROVIDERS: { id: "zoom" | "google_meet"; label: string; description: strin
 ];
 
 const ZoomIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M15.5 8.5v7L20 18V6l-4.5 2.5zM4 8a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H4z" />
   </svg>
 );
 
 const MeetIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4V6.5l-4 4z" />
   </svg>
 );
@@ -94,97 +101,89 @@ export function IntegrationsModal({ visible, onClose }: Props) {
   };
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <Pressable className="fixed inset-0 bg-black/50" onPress={onClose} />
-      <View className="fixed inset-x-0 top-16 mx-auto w-[min(520px,92vw)] rounded-2xl border border-[#1e2533] bg-[#0f141d] p-5 z-[999]">
-        {/* Header */}
-        <View className="flex-row items-center justify-between border-b border-[#1f2a3a] pb-4 mb-4">
-          <View>
-            <Text className="text-[#edf1fa] text-[18px] font-semibold">Integrations</Text>
-            <Text className="text-[#91a0ba] text-[12px] mt-0.5">
-              Connect your video accounts to auto-generate meeting links on bookings.
-            </Text>
-          </View>
-          <Pressable className="rounded-md border border-[#2c3547] px-3 py-2" onPress={onClose}>
-            <Text className="text-[#d6ddeb] text-[12px]">Close</Text>
-          </Pressable>
-        </View>
+    <Dialog open={visible} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>Integrations</DialogTitle>
+          <DialogDescription>
+            Connect your video accounts to auto-generate meeting links on bookings.
+          </DialogDescription>
+        </DialogHeader>
 
         {loading ? (
-          <View className="items-center py-8">
-            <View className="h-5 w-5 rounded-full border-2 border-[#2a3547] border-t-[#5f7db5] animate-spin" />
-          </View>
+          <div className="flex items-center justify-center py-8">
+            <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-border border-t-ring" />
+          </div>
         ) : (
-          <View className="gap-3">
+          <div className="flex flex-col gap-3">
             {PROVIDERS.map(({ id, label, description }) => {
               const connected = isConnected(id);
               const isBusy = busy === id;
-              const Icon = id === "zoom" ? ZoomIcon : MeetIcon;
+              const IconComp = id === "zoom" ? ZoomIcon : MeetIcon;
 
               return (
-                <View
+                <div
                   key={id}
-                  className="flex-row items-center gap-4 rounded-xl border border-[#1d2534] bg-[#111824] p-4"
+                  className="flex flex-row items-center gap-4 rounded-lg border border-border bg-card p-4"
                 >
-                  <View
-                    className={`h-10 w-10 rounded-xl items-center justify-center ${
-                      connected ? "bg-[#1a2e1a] text-[#5ec97a]" : "bg-[#191f2d] text-[#5f7db5]"
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                      connected ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
                     }`}
                   >
-                    <Icon />
-                  </View>
+                    <IconComp />
+                  </div>
 
-                  <View className="flex-1">
-                    <Text className="text-[#dce3f2] text-[14px] font-semibold">{label}</Text>
-                    <Text className="text-[#91a0ba] text-[11px] mt-0.5">{description}</Text>
-                  </View>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-foreground">{label}</p>
+                    <p className="text-xs text-muted-foreground">{description}</p>
+                  </div>
 
                   {connected ? (
-                    <View className="flex-row items-center gap-2">
-                      <View className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#162414] border border-[#203018]">
-                        <View className="h-1.5 w-1.5 rounded-full bg-[#5ec97a]" />
-                        <Text className="text-[#5ec97a] text-[10px] font-semibold">Connected</Text>
-                      </View>
-                      <Pressable
-                        className="px-3 py-1.5 rounded-lg border border-[#2c3547] hover:bg-[#161d2a]"
-                        onPress={() => { void handleDisconnect(id); }}
+                    <div className="flex flex-row items-center gap-2">
+                      <Badge variant="success">Connected</Badge>
+                      <button
+                        type="button"
+                        className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => {
+                          void handleDisconnect(id);
+                        }}
                         disabled={isBusy}
                       >
-                        <Text className="text-[#91a0ba] text-[11px]">
-                          {isBusy ? "…" : "Disconnect"}
-                        </Text>
-                      </Pressable>
-                    </View>
+                        {isBusy ? "…" : "Disconnect"}
+                      </button>
+                    </div>
                   ) : (
-                    <Pressable
-                      className="px-3 py-2 rounded-lg bg-[#1a2540] border border-[#243554] hover:bg-[#1f2c4d] disabled:opacity-50"
-                      onPress={() => { void handleConnect(id); }}
+                    <button
+                      type="button"
+                      className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                      onClick={() => {
+                        void handleConnect(id);
+                      }}
                       disabled={isBusy}
                     >
-                      <Text className="text-[#8baad4] text-[12px] font-semibold">
-                        {isBusy ? "Connecting…" : "Connect"}
-                      </Text>
-                    </Pressable>
+                      {isBusy ? "Connecting…" : "Connect"}
+                    </button>
                   )}
-                </View>
+                </div>
               );
             })}
-          </View>
+          </div>
         )}
 
         {error ? (
-          <View className="mt-3 rounded-xl border border-[#2a1818] bg-[#160e0e] px-4 py-2.5">
-            <Text className="text-[11px] text-[#c06060]">{error}</Text>
-          </View>
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
+            <p className="text-xs text-destructive">{error}</p>
+          </div>
         ) : null}
 
-        <View className="mt-4 rounded-lg bg-[#0c1119] border border-[#1a2030] px-4 py-3">
-          <Text className="text-[10px] text-[#4a5568] leading-relaxed">
+        <div className="rounded-md border border-border bg-muted px-3 py-2">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Tokens are encrypted with AES-256-GCM and stored securely. Only your server-side booking
             API can decrypt them to create meetings. They are never sent to your browser.
-          </Text>
-        </View>
-      </View>
-    </Modal>
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
