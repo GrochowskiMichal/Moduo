@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, Text, TextInput, View } from "../tw";
 import { useWorkspace } from "../providers/workspace-provider";
 import type { ModulePermission, WorkspaceRole } from "../features/workspaces/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 
 type Props = {
   visible: boolean;
@@ -10,6 +16,15 @@ type Props = {
 
 const roleOptions: WorkspaceRole[] = ["viewer", "editor", "admin", "owner"];
 const permissionOptions: ModulePermission[] = ["none", "view", "edit", "admin"];
+
+const inputClasses =
+  "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card placeholder:text-muted-foreground/70";
+
+const ghostButtonClasses =
+  "rounded-md border border-border px-2 py-1 text-xs text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+const destructiveButtonClasses =
+  "rounded-md border border-destructive/40 px-2 py-1 text-xs text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function WorkspaceSettingsModal({ visible, onClose }: Props) {
   const {
@@ -45,76 +60,79 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
   }, [itemAclJson]);
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <Pressable className="fixed inset-0 bg-black/40" onPress={onClose} />
-      <View className="fixed inset-x-0 top-10 mx-auto w-[min(980px,95vw)] max-h-[84vh] rounded-2xl border border-[#1e2533] bg-[#0f141d] p-4 z-[999] overflow-y-auto">
-        <View className="flex-row items-center justify-between border-b border-[#1f2a3a] pb-3">
-          <View>
-            <Text className="text-[#edf1fa] text-[20px] font-semibold">Workspace Settings</Text>
-            <Text className="text-[#91a0ba] text-[13px] mt-1">{selectedWorkspace?.name ?? "No workspace selected"}</Text>
-          </View>
-          <Pressable className="rounded-md border border-[#2c3547] px-3 py-2" onPress={onClose}>
-            <Text className="text-[#d6ddeb] text-[13px]">Close</Text>
-          </Pressable>
-        </View>
+    <Dialog open={visible} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-[980px]">
+        <DialogHeader>
+          <DialogTitle>Workspace Settings</DialogTitle>
+          <DialogDescription>{selectedWorkspace?.name ?? "No workspace selected"}</DialogDescription>
+        </DialogHeader>
 
         {!selectedWorkspace ? (
-          <Text className="text-[#91a0ba] mt-4">Select a workspace first.</Text>
+          <p className="text-sm text-muted-foreground">Select a workspace first.</p>
         ) : !canManageWorkspace ? (
-          <Text className="text-[#91a0ba] mt-4">Only owners/admins can manage workspace members and invites.</Text>
+          <p className="text-sm text-muted-foreground">
+            Only owners and admins can manage workspace members and invites.
+          </p>
         ) : (
-          <View className="mt-4 gap-4">
-            <View className="rounded-xl border border-[#1d2534] bg-[#111824] p-3">
-              <Text className="text-[#dce3f2] text-[15px] font-semibold">Invite User</Text>
-              <View className="mt-3 flex-row gap-2 items-center">
-                <TextInput
+          <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
+            <section className="rounded-lg border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground">Invite user</h3>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_120px_120px]">
+                <input
                   value={inviteEmail}
-                  onChangeText={setInviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
                   placeholder="email@example.com"
-                  placeholderTextColor="#65738b"
                   autoCapitalize="none"
-                  className="h-10 flex-1 rounded-md border border-[#2b3447] bg-[#0f141d] px-3 text-[#e5ebf7]"
+                  className={inputClasses}
                 />
-                <TextInput
+                <input
                   value={inviteRole}
-                  onChangeText={(value: string) =>
-                    setInviteRole(roleOptions.includes(value as WorkspaceRole) ? (value as WorkspaceRole) : "viewer")
+                  onChange={(event) =>
+                    setInviteRole(
+                      roleOptions.includes(event.target.value as WorkspaceRole)
+                        ? (event.target.value as WorkspaceRole)
+                        : "viewer",
+                    )
                   }
                   placeholder="role"
-                  placeholderTextColor="#65738b"
-                  className="h-10 w-[90px] rounded-md border border-[#2b3447] bg-[#0f141d] px-2 text-[#e5ebf7]"
+                  className={inputClasses}
                 />
-                <TextInput
+                <input
                   value={notesPermission}
-                  onChangeText={(value: string) =>
-                    setNotesPermission(permissionOptions.includes(value as ModulePermission) ? (value as ModulePermission) : "view")
+                  onChange={(event) =>
+                    setNotesPermission(
+                      permissionOptions.includes(event.target.value as ModulePermission)
+                        ? (event.target.value as ModulePermission)
+                        : "view",
+                    )
                   }
                   placeholder="notes"
-                  placeholderTextColor="#65738b"
-                  className="h-10 w-[86px] rounded-md border border-[#2b3447] bg-[#0f141d] px-2 text-[#e5ebf7]"
+                  className={inputClasses}
                 />
-                <TextInput
+                <input
                   value={tasksPermission}
-                  onChangeText={(value: string) =>
-                    setTasksPermission(permissionOptions.includes(value as ModulePermission) ? (value as ModulePermission) : "view")
+                  onChange={(event) =>
+                    setTasksPermission(
+                      permissionOptions.includes(event.target.value as ModulePermission)
+                        ? (event.target.value as ModulePermission)
+                        : "view",
+                    )
                   }
                   placeholder="tasks"
-                  placeholderTextColor="#65738b"
-                  className="h-10 w-[86px] rounded-md border border-[#2b3447] bg-[#0f141d] px-2 text-[#e5ebf7]"
+                  className={inputClasses}
                 />
-              </View>
-              <TextInput
+              </div>
+              <textarea
                 value={itemAclJson}
-                onChangeText={setItemAclJson}
-                multiline
-                numberOfLines={4}
+                onChange={(event) => setItemAclJson(event.target.value)}
+                rows={3}
                 placeholder='Item ACL JSON (e.g. [{"module":"notes","resourceType":"note","resourceId":"...","effect":"deny","permission":"view"}])'
-                placeholderTextColor="#65738b"
-                className="mt-2 min-h-[72px] rounded-md border border-[#2b3447] bg-[#0f141d] px-3 py-2 text-[#e5ebf7]"
+                className="mt-2 min-h-[72px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card placeholder:text-muted-foreground/70"
               />
-              <Pressable
-                className="mt-2 self-start rounded-md border border-[#2b476c] bg-[#16263a] px-3 py-2"
-                onPress={async () => {
+              <button
+                type="button"
+                className="mt-3 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                onClick={async () => {
                   const email = inviteEmail.trim();
                   if (!email) return;
                   await sendInvite({
@@ -130,57 +148,69 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                   setItemAclJson("[]");
                 }}
               >
-                <Text className="text-[#dce7fb] text-[13px]">Send Invite</Text>
-              </Pressable>
-            </View>
+                Send invite
+              </button>
+            </section>
 
-            <View className="rounded-xl border border-[#1d2534] bg-[#111824] p-3">
-              <Text className="text-[#dce3f2] text-[15px] font-semibold">Members</Text>
-              <View className="mt-2 max-h-[220px] overflow-y-auto">
+            <section className="rounded-lg border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground">Members</h3>
+              <div className="mt-2 flex max-h-[220px] flex-col gap-2 overflow-y-auto">
                 {members.map((member) => (
-                  <View key={member.id} className="mb-2 rounded-md border border-[#222d3f] px-3 py-2">
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-[#d6deed] text-[13px]">{member.userId}</Text>
-                      <Text className="text-[#94a5c2] text-[12px] uppercase">{member.role}</Text>
-                    </View>
-                    <View className="mt-2 flex-row gap-2">
+                  <div key={member.id} className="rounded-md border border-border bg-muted px-3 py-2">
+                    <div className="flex flex-row items-center justify-between">
+                      <p className="text-sm text-foreground">{member.userId}</p>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">{member.role}</p>
+                    </div>
+                    <div className="mt-2 flex flex-row flex-wrap gap-2">
                       {roleOptions.map((role) => (
-                        <Pressable
+                        <button
                           key={`${member.id}-${role}`}
-                          className="rounded-md border border-[#2a3448] px-2 py-1"
-                          onPress={() =>
+                          type="button"
+                          className={ghostButtonClasses}
+                          onClick={() =>
                             void updateMemberPermissions({
                               memberId: member.id,
                               role,
                               modulePermissions: {
-                                notes: role === "viewer" ? "view" : role === "owner" || role === "admin" ? "admin" : "edit",
-                                tasks: role === "viewer" ? "view" : role === "owner" || role === "admin" ? "admin" : "edit",
+                                notes:
+                                  role === "viewer"
+                                    ? "view"
+                                    : role === "owner" || role === "admin"
+                                      ? "admin"
+                                      : "edit",
+                                tasks:
+                                  role === "viewer"
+                                    ? "view"
+                                    : role === "owner" || role === "admin"
+                                      ? "admin"
+                                      : "edit",
                               },
                             })
                           }
                         >
-                          <Text className="text-[#c6d1e6] text-[11px] uppercase">{role}</Text>
-                        </Pressable>
+                          {role.toUpperCase()}
+                        </button>
                       ))}
-                    </View>
-                  </View>
+                    </div>
+                  </div>
                 ))}
-              </View>
-            </View>
+              </div>
+            </section>
 
-            <View className="rounded-xl border border-[#1d2534] bg-[#111824] p-3">
-              <Text className="text-[#dce3f2] text-[15px] font-semibold">Invites</Text>
-              <View className="mt-2 max-h-[180px] overflow-y-auto">
+            <section className="rounded-lg border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground">Invites</h3>
+              <div className="mt-2 flex max-h-[180px] flex-col gap-2 overflow-y-auto">
                 {invites.map((invite) => (
-                  <View key={invite.id} className="mb-2 rounded-md border border-[#222d3f] px-3 py-2">
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-[#d6deed] text-[13px]">{invite.email}</Text>
-                      <Text className="text-[#94a5c2] text-[12px] uppercase">{invite.status}</Text>
-                    </View>
-                    <View className="mt-2 flex-row gap-2">
-                      <Pressable
-                        className="rounded-md border border-[#2a3448] px-2 py-1"
-                        onPress={() =>
+                  <div key={invite.id} className="rounded-md border border-border bg-muted px-3 py-2">
+                    <div className="flex flex-row items-center justify-between">
+                      <p className="text-sm text-foreground">{invite.email}</p>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">{invite.status}</p>
+                    </div>
+                    <div className="mt-2 flex flex-row flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className={ghostButtonClasses}
+                        onClick={() =>
                           void updateInvite({
                             inviteId: invite.id,
                             role: invite.role,
@@ -188,11 +218,12 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                           })
                         }
                       >
-                        <Text className="text-[#c6d1e6] text-[11px]">Set View</Text>
-                      </Pressable>
-                      <Pressable
-                        className="rounded-md border border-[#2a3448] px-2 py-1"
-                        onPress={() =>
+                        Set view
+                      </button>
+                      <button
+                        type="button"
+                        className={ghostButtonClasses}
+                        onClick={() =>
                           void updateInvite({
                             inviteId: invite.id,
                             role: invite.role,
@@ -200,19 +231,23 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                           })
                         }
                       >
-                        <Text className="text-[#c6d1e6] text-[11px]">Set Edit</Text>
-                      </Pressable>
-                      <Pressable className="rounded-md border border-[#463333] px-2 py-1" onPress={() => void revokeInvite(invite.id)}>
-                        <Text className="text-[#f5b7b7] text-[11px]">Revoke</Text>
-                      </Pressable>
-                    </View>
-                  </View>
+                        Set edit
+                      </button>
+                      <button
+                        type="button"
+                        className={destructiveButtonClasses}
+                        onClick={() => void revokeInvite(invite.id)}
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  </div>
                 ))}
-              </View>
-            </View>
-          </View>
+              </div>
+            </section>
+          </div>
         )}
-      </View>
-    </Modal>
+      </DialogContent>
+    </Dialog>
   );
 }
