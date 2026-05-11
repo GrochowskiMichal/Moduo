@@ -5,6 +5,7 @@ import "@fontsource/nunito/600.css";
 import "@fontsource/nunito/700.css";
 import { router } from "./router";
 import { RootErrorBoundary } from "./components/app/root-error-boundary";
+import { Toaster } from "./components/ui/sonner";
 import { applyAppearance, readLocalAppearance } from "./lib/appearance";
 import "./global.css";
 
@@ -24,5 +25,6 @@ window.addEventListener("unhandledrejection", (event) => {
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <RootErrorBoundary>
     <RouterProvider router={router} />
+    <Toaster />
   </RootErrorBoundary>
 );
