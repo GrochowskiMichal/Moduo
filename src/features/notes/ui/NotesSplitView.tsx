@@ -18,19 +18,14 @@ import type { NotesSyncEngine } from "../sync/sync-engine";
 import { LexicalNoteEditor } from "../editor/LexicalNoteEditor";
 import {
   NOTES_CREATE_KIND_EVENT,
-  NOTES_FOCUS_SEARCH_EVENT,
   type NotesCreateKindEventDetail,
 } from "./layout-events";
 import { exposeNote, unexposeNote, getExposedSlug, buildSlug } from "../utils/expose";
 import { encodeUint8ToBase64 } from "../utils/base64";
 import * as Y from "yjs";
-import {
-  LAYOUT_PANELS_APPLY_EVENT,
-  readFeaturePanelState,
-  type LayoutPanelsApplyDetail,
-} from "../../layout/panel-events";
 import { useAuth } from "../../../providers/auth-provider";
 import { Icon } from "../../../components/ui/icon";
+import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 
 /**
  * Clipboard write that works in Tauri webviews.
@@ -286,7 +281,6 @@ export function NotesSplitView({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [categoryExpanded, setCategoryExpanded] = useState<Record<string, boolean>>({});
   const [sectionsExpanded, setSectionsExpanded] = useState({ pinned: true, notes: true });
-  const [panelState, setPanelState] = useState(() => readFeaturePanelState("notes"));
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [tagInputOpen, setTagInputOpen] = useState(false);
   const [tagDraft, setTagDraft] = useState("");
@@ -305,43 +299,23 @@ export function NotesSplitView({
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const onFocusSearch = () => {
-      setPanelState((current) => ({ ...current, left: true }));
-    };
-
     const onCreateKind = async (event: Event) => {
       if (readOnly) return;
       const detail = (event as CustomEvent<NotesCreateKindEventDetail>).detail;
       const kind = detail?.kind ?? "note";
       const createdId = await onCreateNote(null, kind);
-      if (createdId) {
-        if (kind !== "category") {
-          prewarmNoteSession(createdId);
-          onSelectNote(createdId);
-        }
-        setPanelState((current) => ({ ...current, left: true }));
+      if (createdId && kind !== "category") {
+        prewarmNoteSession(createdId);
+        onSelectNote(createdId);
       }
     };
 
-    window.addEventListener(NOTES_FOCUS_SEARCH_EVENT, onFocusSearch);
     window.addEventListener(NOTES_CREATE_KIND_EVENT, onCreateKind);
 
     return () => {
-      window.removeEventListener(NOTES_FOCUS_SEARCH_EVENT, onFocusSearch);
       window.removeEventListener(NOTES_CREATE_KIND_EVENT, onCreateKind);
     };
   }, [onCreateNote, onSelectNote, readOnly, syncEngine]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onApplyPanels = (event: Event) => {
-      const detail = (event as CustomEvent<LayoutPanelsApplyDetail>).detail;
-      if (detail?.feature !== "notes") return;
-      setPanelState({ left: detail.left, right: detail.right });
-    };
-    window.addEventListener(LAYOUT_PANELS_APPLY_EVENT, onApplyPanels);
-    return () => window.removeEventListener(LAYOUT_PANELS_APPLY_EVENT, onApplyPanels);
-  }, []);
 
   const activeNotes = useMemo(
     () => notes.filter((note) => !note.deletedAt && !note.isArchived),
@@ -737,17 +711,12 @@ export function NotesSplitView({
     );
   };
 
-  const layoutColumns = panelState.left
-    ? "grid-cols-[20fr_80fr]"
-    : "grid-cols-[1fr]";
-
-  return (
+  const leftSlot = (
     <div
-      className={`grid h-full min-h-0 overflow-hidden bg-[#0C0C0C] p-4 gap-4 ${layoutColumns}`}
+      className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden"
+      onContextMenu={openSidebarContextMenu}
     >
-      {panelState.left ? (
-        <aside className="min-h-0 overflow-x-hidden overflow-y-auto rounded-[14px] bg-[#111111] p-3" onContextMenu={openSidebarContextMenu}>
-          <div className="mb-[10px] grid gap-[6px]">
+      <div className="mb-[10px] grid gap-[6px]">
             <button
               type="button"
               className="notes-section-header flex w-full items-center justify-between border-0 bg-transparent px-[6px] py-[2px] text-[12px] tracking-[0.03em] text-[#8e8e8e]"
@@ -846,10 +815,11 @@ export function NotesSplitView({
               ) : null}
             </div>
           </DndContext>
-        </aside>
-      ) : null}
+    </div>
+  );
 
-      <main className="grid min-h-0 min-w-0 grid-rows-[48px_1fr] overflow-hidden rounded-[14px] bg-[#111111]">
+  const centerSlot = (
+    <div className="grid h-full min-h-0 min-w-0 grid-rows-[48px_1fr] overflow-hidden">
         <div className="flex items-center gap-[14px] px-[14px]">
           <div className="flex min-w-0 items-center gap-2 overflow-hidden">
             <div className="truncate whitespace-nowrap text-[13px] text-[#7a7a7a]" title={breadcrumb}>
@@ -955,7 +925,23 @@ export function NotesSplitView({
             <p>Use the bottom + menu to create section, folder, or note.</p>
           </div>
         )}
-      </main>
+    </div>
+  );
+
+  const rightSlot = (
+    <div className="grid h-full place-content-center text-center text-sm text-muted-foreground">
+      Relation graph, tags, and close relations coming soon.
+    </div>
+  );
+
+  return (
+    <>
+      <FeaturePanelsShell
+        feature="notes"
+        left={leftSlot}
+        center={centerSlot}
+        right={rightSlot}
+      />
 
       {contextMenu?.type === "note" && contextTarget ? (
         <div
@@ -1170,6 +1156,6 @@ export function NotesSplitView({
             document.body
           )
         : null}
-    </div>
+    </>
   );
 }

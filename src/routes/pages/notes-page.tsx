@@ -24,9 +24,9 @@ export function NotesPage() {
       <FeaturePanelsShell
         feature="notes"
         center={
-          <div className="grid h-full place-content-center gap-2 text-center text-[#d4d8e1]">
-            <h2>Notes unavailable</h2>
-            <p>
+          <div className="grid h-full place-content-center gap-2 text-center text-muted-foreground">
+            <h2 className="text-foreground font-display text-2xl">Notes unavailable</h2>
+            <p className="text-sm">
               {configError ??
                 (modulePermissions.notes === "none"
                   ? "You do not have Notes access in this workspace."
