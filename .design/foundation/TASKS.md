@@ -147,6 +147,17 @@ These already exist; the task is restyle to tokens + recompose on top of shadcn 
 
 ---
 
+## Phase 6.5 — apply REVISION_DELTA.md
+
+Captured during Phase 3 verification. Read [REVISION_DELTA.md](./REVISION_DELTA.md) and turn each section into discrete tasks for this phase.
+
+- [ ] **Read the delta and slice into tasks**. Each "Direction change" section (1–7) becomes one or more tasks; each "Real bug" (B1, B2) becomes one task. Order by which phase consumes the affected component first — anything Phase 4 (Notes page) depends on must land before Phase 4 starts.
+- [ ] **Decide where this runs.** If any direction change touches shell components Phase 4 will compose against (top bar surface, rail mode set, panel padding), run Phase 6.5 BEFORE Phase 4 to avoid double-rework. Density / radius tuning (delta §7) can defer to after Phase 5.
+- [ ] **Update DESIGN_BRIEF.md** with the resolved decisions so the brief and the implementation agree.
+- [ ] **Move REVISION_DELTA.md to `.design/foundation/archive/`** once all sections are resolved, so it's clear the delta has been processed.
+
+---
+
 ## Out of scope for this list (per the brief)
 
 - Light mode visual tuning.
