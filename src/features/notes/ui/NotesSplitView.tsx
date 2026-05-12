@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { createPortal } from "react-dom";
 import {
@@ -326,8 +326,6 @@ export function NotesSplitView({
     notes: true,
     customDb: true,
   });
-  const [tagInputOpen, setTagInputOpen] = useState(false);
-  const [tagDraft, setTagDraft] = useState("");
   const [dragActiveId, setDragActiveId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragDeltaX, setDragDeltaX] = useState(0);
@@ -335,7 +333,6 @@ export function NotesSplitView({
   const [exposedSlugs, setExposedSlugs] = useState<Record<string, string | null>>({});
   const [exposeLoading, setExposeLoading] = useState(false);
   const [exposeToast, setExposeToast] = useState<{ url: string; visible: boolean } | null>(null);
-  const tagInputRef = useRef<HTMLInputElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const rootDrop = useDroppable({ id: "inside:root" });
 
@@ -406,8 +403,8 @@ export function NotesSplitView({
   const selectedNote = activeNotes.find((note) => note.id === selectedNoteId) ?? null;
   const selectedEditorNote = selectedNote && selectedNote.kind !== "category" ? selectedNote : null;
 
-  const breadcrumb = useMemo(() => {
-    if (!selectedEditorNote) return "Notes";
+  const breadcrumbSegments = useMemo(() => {
+    if (!selectedEditorNote) return ["Notes"];
     const chain: string[] = [];
     const visited = new Set<string>([selectedEditorNote.id]);
     let parentId = selectedEditorNote.parentId;
@@ -421,8 +418,7 @@ export function NotesSplitView({
     }
 
     chain.reverse();
-    const fullPath = [...chain, selectedEditorNote.title || "Untitled"];
-    return fullPath.join(" / ");
+    return [...chain, selectedEditorNote.title || "Untitled"];
   }, [notesById, selectedEditorNote]);
 
   function prewarmNoteSession(noteId: string) {
@@ -446,17 +442,6 @@ export function NotesSplitView({
     if (!selectedEditorNote?.id) return;
     prewarmNoteSession(selectedEditorNote.id);
   }, [selectedEditorNote?.id, syncEngine]);
-
-  useEffect(() => {
-    setTagInputOpen(false);
-    setTagDraft("");
-  }, [selectedEditorNote?.id]);
-
-  useEffect(() => {
-    if (!tagInputOpen) return;
-    const timeout = setTimeout(() => tagInputRef.current?.focus(), 0);
-    return () => clearTimeout(timeout);
-  }, [tagInputOpen]);
 
   const isDescendantOf = (ancestorId: string, maybeDescendantId: string): boolean => {
     const queue = [...(byParent.get(ancestorId) ?? []).map((note) => note.id)];
@@ -1008,91 +993,34 @@ export function NotesSplitView({
   );
 
   const centerSlot = (
-    <div className="grid h-full min-h-0 min-w-0 grid-rows-[48px_1fr] overflow-hidden">
-        <div className="flex items-center gap-[14px] px-[14px]">
-          <div className="flex min-w-0 items-center gap-2 overflow-hidden">
-            <div className="truncate whitespace-nowrap text-[13px] text-[#7a7a7a]" title={breadcrumb}>
-              {breadcrumb}
-            </div>
-            {selectedEditorNote ? (
-              <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
-                <span className="px-1 text-[12px] text-[#5f6570]">|</span>
-                {(selectedEditorNote.tags ?? []).map((tag, index) => (
-                  <span key={`${tag}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-[#1a1a1a] px-2 py-0.5 text-[11px] text-[#9ea6b5]">
-                    <span>#{tag}</span>
-                    {!readOnly ? (
-                      <button
-                        type="button"
-                        className="border-0 bg-transparent p-0 text-[11px] leading-none text-[#7c8494]"
-                        onClick={() => {
-                          const next = (selectedEditorNote.tags ?? []).filter((_, i) => i !== index);
-                          void onUpdateTags(selectedEditorNote.id, next);
-                        }}
-                      >
-                        ×
-                      </button>
-                    ) : null}
-                  </span>
-                ))}
-                {!readOnly ? (
-                  tagInputOpen ? (
-                    <div className="inline-flex items-center gap-1 rounded-full bg-[#1a1a1a] px-2 py-0.5 text-[11px] text-[#9ea6b5]">
-                      <span>#</span>
-                      <input
-                        ref={tagInputRef}
-                        value={tagDraft}
-                        onChange={(event) => setTagDraft(event.target.value)}
-                        onBlur={() => {
-                          const nextTag = tagDraft.trim();
-                          if (!nextTag) {
-                            setTagInputOpen(false);
-                            return;
-                          }
-                          const nextTags = [...new Set([...(selectedEditorNote.tags ?? []), nextTag])];
-                          void onUpdateTags(selectedEditorNote.id, nextTags);
-                          setTagDraft("");
-                          setTagInputOpen(false);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            const nextTag = tagDraft.trim();
-                            if (!nextTag) {
-                              setTagInputOpen(false);
-                              return;
-                            }
-                            const nextTags = [...new Set([...(selectedEditorNote.tags ?? []), nextTag])];
-                            void onUpdateTags(selectedEditorNote.id, nextTags);
-                            setTagDraft("");
-                            setTagInputOpen(false);
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            setTagDraft("");
-                            setTagInputOpen(false);
-                          }
-                        }}
-                        className="w-20 bg-transparent text-[11px] text-[#d8dce5] outline-none"
-                        placeholder="tag"
-                      />
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="inline-flex items-center justify-center rounded-full bg-[#1a1a1a] px-2 py-0.5 text-[11px] text-[#8d95a5]"
-                      onClick={() => setTagInputOpen(true)}
-                    >
-                      + Tag
-                    </button>
-                  )
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <header className="flex shrink-0 items-center px-2" style={{ minHeight: "var(--ctrl-h-lg)" }}>
+        <nav
+          aria-label="Breadcrumb"
+          className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground"
+        >
+          {breadcrumbSegments.map((segment, index) => {
+            const isLast = index === breadcrumbSegments.length - 1;
+            return (
+              <Fragment key={`${segment}-${index}`}>
+                {index > 0 ? (
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
+                <span
+                  className={`truncate ${isLast ? "text-foreground" : ""}`}
+                  title={segment}
+                >
+                  {segment}
+                </span>
+              </Fragment>
+            );
+          })}
+        </nav>
+      </header>
 
-        {selectedEditorNote && syncEngine ? (
-          <div className="grid min-h-0">
+      {selectedEditorNote && syncEngine ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[var(--width-prose-max)] px-2 pb-24 pt-4">
             <LexicalNoteEditor
               noteId={selectedEditorNote.id}
               title={selectedEditorNote.title}
@@ -1104,16 +1032,19 @@ export function NotesSplitView({
               workspaceId={selectedEditorNote.workspaceId}
             />
           </div>
-        ) : selectedEditorNote ? (
-          <div className="grid min-h-0 place-content-center text-[#888888] text-[13px]">
-            Preparing note...
-          </div>
-        ) : (
-          <div className="grid place-content-center gap-[6px] text-[#9a9a9a]">
-            <h3>No note selected</h3>
-            <p>Use the bottom + menu to create section, folder, or note.</p>
-          </div>
-        )}
+        </div>
+      ) : selectedEditorNote ? (
+        <div className="grid min-h-0 flex-1 place-content-center text-sm text-muted-foreground">
+          Preparing note…
+        </div>
+      ) : (
+        <div className="grid min-h-0 flex-1 place-content-center gap-2 text-center">
+          <h3 className="font-display text-2xl text-foreground">No note selected</h3>
+          <p className="text-sm text-muted-foreground">
+            Pick a note from the sidebar, or right-click to create one.
+          </p>
+        </div>
+      )}
     </div>
   );
 
