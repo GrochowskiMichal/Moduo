@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { createPortal } from "react-dom";
+import { toast } from "sonner";
 import {
   DndContext,
   PointerSensor,
@@ -44,6 +44,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
+import { NotesRightRail } from "./notes-right-rail";
 
 /**
  * Clipboard write that works in Tauri webviews.
@@ -332,7 +333,6 @@ export function NotesSplitView({
   // Expose feature
   const [exposedSlugs, setExposedSlugs] = useState<Record<string, string | null>>({});
   const [exposeLoading, setExposeLoading] = useState(false);
-  const [exposeToast, setExposeToast] = useState<{ url: string; visible: boolean } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const rootDrop = useDroppable({ id: "inside:root" });
 
@@ -592,6 +592,17 @@ export function NotesSplitView({
     );
   };
 
+  const showLiveToast = (url: string) => {
+    toast.success("Note published", {
+      description: url.replace(/^https?:\/\//, ""),
+      action: {
+        label: "Open",
+        onClick: () => void openExternalUrl(url),
+      },
+      duration: 6000,
+    });
+  };
+
   const handleExposeNote = async (note: NoteMeta) => {
     if (!syncEngine || exposeLoading) return;
     setExposeLoading(true);
@@ -602,9 +613,7 @@ export function NotesSplitView({
     const assignedSlug = exposedSlugs[note.id] || buildSlug(note.title || "Untitled");
     const optimisticUrl = `https://moduo.app/notes/${assignedSlug}`;
     copyToClipboard(optimisticUrl);
-
-    // Show optimistic toast immediately
-    setExposeToast({ url: optimisticUrl, visible: true });
+    showLiveToast(optimisticUrl);
 
     try {
       // Flush latest edits first
@@ -625,15 +634,14 @@ export function NotesSplitView({
 
       if (result.success) {
         setExposedSlugs((prev) => ({ ...prev, [note.id]: result.slug }));
-        setExposeToast({ url: result.url, visible: true });
-        setTimeout(() => setExposeToast(null), 6000);
+        if (result.url !== optimisticUrl) showLiveToast(result.url);
       } else {
-        setExposeToast(null); // Clear optimistic toast on failure
-        alert(`Failed to expose note: ${result.error}`);
+        toast.error("Failed to publish note", { description: result.error });
       }
     } catch {
-      setExposeToast(null);
-      alert("Failed to expose note due to an unexpected error.");
+      toast.error("Failed to publish note", {
+        description: "An unexpected error occurred. Try again.",
+      });
     } finally {
       setExposeLoading(false);
     }
@@ -645,6 +653,7 @@ export function NotesSplitView({
     try {
       await unexposeNote(noteId);
       setExposedSlugs((prev) => ({ ...prev, [noteId]: null }));
+      toast.success("Note unpublished");
     } finally {
       setExposeLoading(false);
     }
@@ -652,6 +661,7 @@ export function NotesSplitView({
 
   const handleCopyLink = (noteId: string) => {
     copyToClipboard(`moduo://notes/${noteId}`);
+    toast.success("Link copied");
   };
 
   const handleRenameNote = (note: NoteMeta) => {
@@ -1049,9 +1059,13 @@ export function NotesSplitView({
   );
 
   const rightSlot = (
-    <div className="grid h-full place-content-center text-center text-sm text-muted-foreground">
-      Relation graph, tags, and close relations coming soon.
-    </div>
+    <NotesRightRail
+      selectedNote={selectedNote}
+      allNotes={activeNotes}
+      readOnly={readOnly}
+      onSelectNote={(id) => void selectNoteWithPrewarm(id)}
+      onUpdateTags={onUpdateTags}
+    />
   );
 
   return (
@@ -1062,40 +1076,6 @@ export function NotesSplitView({
         center={centerSlot}
         right={rightSlot}
       />
-
-
-      {/* ── Expose Toast ── */}
-      {typeof document !== "undefined" && exposeToast?.visible
-        ? createPortal(
-            <div
-              className="fixed bottom-6 z-[3500] flex items-center gap-3 rounded-[14px] border border-[#2a2a2a] bg-[#161616] px-5 py-3 shadow-[0_16px_40px_#00000080] text-[13px] text-[#d0d0d0] pointer-events-auto"
-              style={{ left: "50%", transform: "translateX(-50%)", animation: "fadeSlideUp 0.25s ease" }}
-            >
-              <span className="text-[#a3c4f3]">✦</span>
-              <span>
-                Note live at{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    void openExternalUrl(exposeToast.url);
-                  }}
-                  className="cursor-pointer border-0 bg-transparent p-0 underline text-[#a3c4f3] hover:text-[#c5d9f7]"
-                >
-                  {exposeToast.url.replace("https://", "")}
-                </button>
-              </span>
-              <span className="ml-1 text-[11px] text-[#555]">— URL copied!</span>
-              <button
-                type="button"
-                className="ml-2 text-[#555] hover:text-[#aaa]"
-                onClick={() => setExposeToast(null)}
-              >
-                ✕
-              </button>
-            </div>,
-            document.body
-          )
-        : null}
     </>
   );
 }
