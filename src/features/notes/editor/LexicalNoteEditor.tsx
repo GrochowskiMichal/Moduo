@@ -182,26 +182,26 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
   }), [noteId, editable]);
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_1fr]">
+    <div className="flex w-full flex-col gap-3">
       <input
-        className="mx-[22px] mb-[6px] mt-[18px] border-0 bg-transparent py-2 text-[30px] font-bold leading-[1.2] text-[#f1f1f1] outline-none"
+        className="w-full border-0 bg-transparent py-2 font-display text-3xl font-bold leading-tight text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-0"
         value={draftTitle}
         disabled={!editable}
         onChange={(event) => setDraftTitle(event.target.value)}
         placeholder="Untitled"
       />
 
-      <div className="relative h-full min-h-0 overflow-auto bg-[#111111]">
+      <div className="relative w-full">
         {collabReady ? (
           <LexicalCollaboration key={`collab-${noteId}`}>
             <LexicalComposer initialConfig={initialConfig} key={noteId}>
               <RichTextPlugin
                 contentEditable={
-                  <ContentEditable className="min-h-full px-[22px] pb-[90px] pt-[6px] text-[16px] leading-[1.7] text-[#cfcfcf] outline-none" />
+                  <ContentEditable className="min-h-[50vh] font-sans text-base leading-relaxed text-foreground outline-none" />
                 }
                 placeholder={
-                  <div className="pointer-events-none absolute left-[22px] top-[6px] text-[16px] leading-[1.7] text-[#7a7a7a]">
-                    Type '/' for commands...
+                  <div className="pointer-events-none absolute left-0 top-0 font-sans text-base leading-relaxed text-muted-foreground">
+                    Type '/' for commands…
                   </div>
                 }
                 ErrorBoundary={LexicalErrorBoundary}
@@ -231,8 +231,8 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
             </LexicalComposer>
           </LexicalCollaboration>
         ) : (
-          <div className="grid h-full place-content-center text-[13px] text-[#7a7a7a]">
-            Preparing note...
+          <div className="grid h-32 place-content-center text-sm text-muted-foreground">
+            Preparing note…
           </div>
         )}
       </div>
