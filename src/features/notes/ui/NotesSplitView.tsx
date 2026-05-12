@@ -31,7 +31,6 @@ import {
 import { exposeNote, unexposeNote, getExposedSlug, buildSlug } from "../utils/expose";
 import { encodeUint8ToBase64 } from "../utils/base64";
 import * as Y from "yjs";
-import { useAuth } from "../../../providers/auth-provider";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import {
   ContextMenu,
@@ -106,7 +105,8 @@ type Props = {
 const NEST_THRESHOLD_PX = 12;
 
 function NoteKindIcon({ kind }: { kind: NoteKind }) {
-  const className = "size-3.5 shrink-0 text-muted-foreground";
+  // text-current so the icon inherits the row colour and flips on hover / selection.
+  const className = "size-3.5 shrink-0 text-current opacity-70";
   if (kind === "category") return <Database className={className} aria-hidden="true" />;
   if (kind === "folder") return <Folder className={className} aria-hidden="true" />;
   return <FileIcon className={className} aria-hidden="true" />;
@@ -319,7 +319,6 @@ export function NotesSplitView({
   readOnly = false,
   syncEngine,
 }: Props) {
-  const { runtime, userId } = useAuth();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [categoryExpanded, setCategoryExpanded] = useState<Record<string, boolean>>({});
   const [sectionsExpanded, setSectionsExpanded] = useState({

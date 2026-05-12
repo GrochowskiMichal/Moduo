@@ -173,7 +173,8 @@ export function NotesRightRail({
     <div className="flex h-full min-h-0 flex-col gap-5 overflow-y-auto">
       <section className="flex flex-col gap-2">
         <h4 className={SECTION_TITLE}>Relation Graph</h4>
-        <div className="aspect-square w-full overflow-hidden rounded-md border border-border bg-background">
+        {/* Flat inner radius: outer aside is rounded-2xl with p-4, so 16 − 16 = 0 (concentric rule). */}
+        <div className="aspect-square w-full overflow-hidden border border-border bg-background">
           {closeRelations.length > 0 ? (
             <RelationGraph
               center={editorTarget}
