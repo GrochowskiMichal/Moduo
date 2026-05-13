@@ -290,7 +290,7 @@ export function FeaturePanelsShell({
 
   return (
     <>
-      <div className="flex h-full min-h-0 bg-background px-1">{panels}</div>
+      <div className="flex h-full min-h-0 bg-background px-4">{panels}</div>
 
       <Sheet open={leftSheetOpen} onOpenChange={onLeftSheetOpenChange}>
         <SheetContent side="left" className="w-[var(--width-sidebar)] max-w-[85vw] p-5">

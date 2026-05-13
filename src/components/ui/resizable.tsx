@@ -60,8 +60,9 @@ function ResizableHandle({
     <ResizableSeparatorPrimitive
       data-slot="resizable-handle"
       className={cn(
-        "relative flex w-1 items-center justify-center bg-transparent transition-colors",
-        "hover:bg-accent/40 data-[dragging=true]:bg-accent",
+        "relative flex w-4 items-center justify-center bg-transparent transition-colors",
+        "before:absolute before:inset-y-2 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-transparent before:transition-colors",
+        "hover:before:bg-border data-[dragging=true]:before:bg-primary",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         className,
       )}
