@@ -9,7 +9,7 @@
   ],
   "defaultSeverity": "warning",
   "rules": {
-    "color-no-hex": [true, { "severity": "warning" }],
+    "color-no-hex": [true, { "severity": "error" }],
     "scale-unlimited/declaration-strict-value": [
       [
         "/color$/",
@@ -27,7 +27,7 @@
           "unset",
           "/^var\\(--/"
         ],
-        "severity": "warning"
+        "severity": "error"
       }
     ],
     "at-rule-no-unknown": [
@@ -65,5 +65,36 @@
     "at-rule-empty-line-before": null,
     "no-duplicate-selectors": null,
     "block-no-empty": null
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/global.css",
+        "src/features/timetracking/**/*.css"
+      ],
+      "rules": {
+        "color-no-hex": [true, { "severity": "warning" }],
+        "scale-unlimited/declaration-strict-value": [
+          [
+            "/color$/",
+            "fill",
+            "stroke",
+            "background-color"
+          ],
+          {
+            "ignoreValues": [
+              "transparent",
+              "currentColor",
+              "inherit",
+              "none",
+              "initial",
+              "unset",
+              "/^var\\(--/"
+            ],
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  ]
 }
