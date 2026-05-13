@@ -1,7 +1,9 @@
 import { useAppearance } from "../../../lib/appearance";
 import { AccentPicker } from "../appearance/accent-picker";
 import { DensityPicker } from "../appearance/density-picker";
+import { FontPicker } from "../appearance/font-picker";
 import { RadiusPicker } from "../appearance/radius-picker";
+import { TextSizePicker } from "../appearance/text-size-picker";
 import { ThemePicker } from "../appearance/theme-picker";
 
 import { SettingsSectionShell } from "./section-shell";
@@ -13,6 +15,9 @@ export function AppearanceSection() {
     setAccent,
     setDensity,
     setRadius,
+    setFontDisplay,
+    setFontBody,
+    setTextSize,
   } = useAppearance();
 
   return (
@@ -25,6 +30,9 @@ export function AppearanceSection() {
         <AccentPicker value={appearance.accent} onChange={setAccent} />
         <DensityPicker value={appearance.density} onChange={setDensity} />
         <RadiusPicker value={appearance.radius} onChange={setRadius} />
+        <FontPicker role="display" value={appearance.fontDisplay} onChange={setFontDisplay} />
+        <FontPicker role="body" value={appearance.fontBody} onChange={setFontBody} />
+        <TextSizePicker value={appearance.textSize} onChange={setTextSize} />
       </section>
     </SettingsSectionShell>
   );
