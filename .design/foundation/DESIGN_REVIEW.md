@@ -181,3 +181,101 @@ corners (e.g. a sticky toolbar pinned to the top of a panel, a
 header bar bleeding to the panel's edge), they should pick a child
 radius that satisfies the formula. The design-review skill catches
 parallel-arc regressions on the visual sweep.
+
+## Final foundation review — global shell (2026-05-13)
+
+Branch: `design/settings-polish-delta` (commit 13f53c5…). Final pass
+across the whole foundation rebuild. Method: per the carried-over
+visual review caveat above — Storybook captures of the new + revised
+primitives (Tabs, Resizable, RadioGroup, Select, Switch, Card, Sheet,
+Dialog, Command), combined with source-level audit of the shell
+composition and a manual desktop walkthrough plan.
+
+### Top bar (REVISION_DELTA §1, §3, §7)
+
+- Sits on `bg-background`, no hairline. Verified via
+  `src/components/app/app-chrome.tsx:235` — `relative px-5 pt-4 bg-background`.
+- Carries module titles only. The chip-render blocks, the
+  AppChromeMenus mount, and ~700 lines of picker state are gone
+  (commit `f15d89d`). No `bg-card` survives in the top bar.
+- The modules nav fades into transparency at both edges via the
+  mask-image utility instead of the old native scrollbar. Wheel and
+  keyboard scroll still work; the `.no-scrollbar` utility removes the
+  visible WebKit / Firefox scrollbar chrome. Resolves bug B1.
+
+### Three-panel surface (§2, §3, §6)
+
+- `FeaturePanelsShell` composes `ResizablePanelGroup` with
+  `bg-card`-styled panel wrappers (`rounded-2xl border border-border`).
+  Drag handles sit between adjacent panels and persist their layout
+  per-feature in `localStorage` (key
+  `moduo:panels-layout:<feature>:<lr-flags>`). No icon mode; at
+  < 900 px the existing `Sheet` pattern fires.
+- Vertical padding between top bar / panels / bottom region is zero:
+  `FeaturePanelsShell` uses `px-4` with no `py-*`. The horizontal
+  gap between cards is `gap-2` (8 px) — the only inter-card breathing.
+
+### Bottom bar (Task 7)
+
+- Floating pill anchored at `fixed bottom-3` with
+  `bg-popover border border-border shadow-overlay rounded-full`. AI
+  disc keeps its pink via local `data-accent="pink"` so changing
+  user accent doesn't shift the brand moment.
+- Search trigger opens the global command palette (⌘K). Both the
+  bottom-bar trigger and the top-bar search icon now dispatch the
+  same `dispatchOpenPalette()` event. Create button is a placeholder
+  awaiting per-feature wiring.
+
+### Shortcuts (Task 8)
+
+- `src/lib/shortcuts.ts` owns the registry. Active list: ⌘K palette ·
+  ⌘N new note · ⌘, settings · ⌘⇧W workspace switcher · ⌘/
+  notifications. Esc-to-close handled by Radix.
+- Editable targets (input / textarea / contenteditable) only forward
+  the palette shortcut so typing in Lexical doesn't fire commands.
+
+### Settings page (Phase 5)
+
+- Vertical Tabs nav composes the seven sections in the left rail of
+  `FeaturePanelsShell feature="settings" hideRight`. Center scrolls
+  independently. Appearance section is sticky two-column at lg+:
+  pickers on the left, live preview on the right.
+- Every appearance axis (theme, accent, density, radius, display
+  font, body font, body text size) commits via `useAppearance`, which
+  sets the `data-*` attribute on `<html>` and persists. The live
+  preview re-renders against the cascade without a remount.
+
+### Notes page
+
+- Not re-touched as part of this PR (per the prompt). The §6 rail
+  rework affects it positively: the right rail no longer collapses
+  to a broken 1024–1280 px icon column.
+
+### Token / lint gates
+
+- `bun run typecheck` clean.
+- `bun run lint:tw` clean on all files touched in this PR. The
+  pre-existing 43 legacy files are in the script's IGNORED_PATHS
+  baseline (each queued for its own feature brief).
+- `bun run lint:css` shows 0 errors / 216 warnings; warnings all live
+  in `src/global.css` and `src/features/timetracking/ui/timetracking-styles.css`,
+  scoped at warning severity via the .stylelintrc overrides block.
+- The new `checks.yml` workflow runs typecheck + lint:tw + lint:css
+  on PRs and pushes.
+
+### Findings carried forward
+
+- Per-feature picker rails: the chip strip in §7 left the mindmap,
+  brainstorm, tasks, and grid workspaces without an in-UI way to
+  switch between mindmaps / sessions / projects / scenes. The
+  persistence still works; users can change the active item via the
+  storage layer or by waiting for each feature's per-feature rail
+  brief. Each affected module should land a small picker rail as the
+  first task of its brief.
+- Density / radius tuning (§8 of the delta) — deferred. No obvious
+  trivial wins surfaced during this pass.
+- Light mode visual tuning — still parked. Structural support
+  intact; the palette is unfinished.
+
+This review is the final visual gate for the foundation rebuild.
+The branch is ready to ship as a single PR.
