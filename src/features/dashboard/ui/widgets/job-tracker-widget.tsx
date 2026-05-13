@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { getRuntime } from "../../../../lib/runtime";
 import { Briefcase, Building2, Calendar, CircleDollarSign, Hash, Link2, Workflow } from "lucide-react";
 import type { JobApplicationEntry, JobApplicationStage, JobSalaryUnit, WidgetConfig } from "../../types";
 import { WidgetShell } from "./widget-shell";
@@ -71,8 +71,9 @@ async function openExternalOfferLink(url: string) {
   if (!target) return;
 
   try {
-    if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
-      await invoke("open_external_url", { url: target });
+    const rt = getRuntime();
+    if (rt) {
+      await rt.window.openExternalUrl(target);
       return;
     }
   } catch {
