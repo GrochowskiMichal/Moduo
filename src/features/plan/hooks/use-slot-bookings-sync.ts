@@ -21,8 +21,12 @@ import type { CalendarEvent } from "../../calendar/types";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const SUPABASE_URL = "https://ahhqsxjkwsqyszhxzjbc.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_RfaTM1fcomIzU191dDS5kw_7TDtK_Kd";
+const SUPABASE_URL: string =
+  (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
+  "https://wtoonrvuqumihpkbvwvs.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY: string =
+  (import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string | undefined) ||
+  "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so";
 const EVENTS_STORAGE_KEY = "moduo:calendar:events-v1";
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const BOOKING_CALENDAR_ID = "moduo-slot-bookings";

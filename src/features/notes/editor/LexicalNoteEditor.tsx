@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from "react";
+import * as Y from "yjs";
 import { CodeHighlightNode, CodeNode, registerCodeHighlighting } from "@lexical/code";
 import { LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
@@ -17,6 +18,7 @@ import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
 import { TableNode, TableCellNode, TableRowNode } from "@lexical/table";
+import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $getSelection,
   $isRangeSelection,
@@ -43,6 +45,29 @@ function NotesCodeHighlightPlugin() {
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => registerCodeHighlighting(editor), [editor]);
+  return null;
+}
+
+// Triggers syncYjsStateToLexicalV2__EXPERIMENTAL after the collab plugin sets up its
+// command handler. This loads existing Y.Doc content into the Lexical editor on mount.
+function SyncFromYjsPlugin({ doc }: { doc: Y.Doc }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    // Inspect the Y.Doc state right before dispatching the command
+    const root = doc.get("root-v2", Y.XmlElement);
+    const children = root.toArray();
+    const textPreview = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
+    console.log(`%c[NOTES:SyncFromYjs] PRE-COMMAND shareKeys=[${[...doc.share.keys()].join(",")}] rootType=${root.constructor.name} rootChildren=${children.length} textPreview="${textPreview.slice(0, 80)}"`, "color:#f4a;font-weight:bold");
+    // Small delay ensures the collab plugin's command handler is registered
+    const id = setTimeout(() => {
+      const root2 = doc.get("root-v2", Y.XmlElement);
+      const ch2 = root2.toArray();
+      const tp2 = ch2[0] ? (ch2[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
+      console.log(`%c[NOTES:SyncFromYjs] DISPATCHING CLEAR_DIFF_VERSIONS_COMMAND shareKeys=[${[...doc.share.keys()].join(",")}] rootChildren=${ch2.length} textPreview="${tp2.slice(0, 80)}"`, "color:#f4a;font-weight:bold");
+      editor.dispatchCommand(CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL, undefined);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [editor, doc]); // doc dep so re-runs when session changes (e.g. tab switch)
   return null;
 }
 
@@ -99,6 +124,7 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
     if (collabSession.doc.store.clients.size === 0) return "v2";
     return "v1";
   }, [collabSession]);
+  console.log(`%c[NOTES:LexicalNoteEditor] render noteId=${noteId} collabReady=${collabReady} collabMode=${collabMode} shareKeys=[${[...collabSession.doc.share.keys()].join(",")}]`, "color:#8af");
   useEffect(() => {
     let active = true;
     setCollabReady(collabSession.persistence.synced);
@@ -182,26 +208,26 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
   }), [noteId, editable]);
 
   return (
-    <div className="flex w-full flex-col gap-3">
+    <div className="grid h-full min-h-0 grid-rows-[auto_1fr]">
       <input
-        className="w-full border-0 bg-transparent py-2 font-display text-3xl font-bold leading-tight text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-0"
+        className="mx-[22px] mb-[6px] mt-[18px] border-0 bg-transparent py-2 text-[30px] font-bold leading-[1.2] text-[#f1f1f1] outline-none"
         value={draftTitle}
         disabled={!editable}
         onChange={(event) => setDraftTitle(event.target.value)}
         placeholder="Untitled"
       />
 
-      <div className="relative w-full">
+      <div className="relative h-full min-h-0 overflow-auto bg-[#111111]">
         {collabReady ? (
           <LexicalCollaboration key={`collab-${noteId}`}>
             <LexicalComposer initialConfig={initialConfig} key={noteId}>
               <RichTextPlugin
                 contentEditable={
-                  <ContentEditable className="min-h-[50vh] font-sans text-base leading-relaxed text-foreground outline-none" />
+                  <ContentEditable className="min-h-full px-[22px] pb-[90px] pt-[6px] text-[16px] leading-[1.7] text-[#cfcfcf] outline-none" />
                 }
                 placeholder={
-                  <div className="pointer-events-none absolute left-0 top-0 font-sans text-base leading-relaxed text-muted-foreground">
-                    Type '/' for commands…
+                  <div className="pointer-events-none absolute left-[22px] top-[6px] text-[16px] leading-[1.7] text-[#7a7a7a]">
+                    Type '/' for commands...
                   </div>
                 }
                 ErrorBoundary={LexicalErrorBoundary}
@@ -215,12 +241,15 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
               <TablePlugin />
               <SlashCommandPlugin workspaceId={workspaceId} />
               {collabMode === "v2" && collabSession ? (
-                <CollaborationPluginV2__EXPERIMENTAL
-                  id={noteId}
-                  doc={collabSession.doc}
-                  provider={collabSession.provider}
-                  __shouldBootstrapUnsafe={true}
-                />
+                <>
+                  <CollaborationPluginV2__EXPERIMENTAL
+                    id={noteId}
+                    doc={collabSession.doc}
+                    provider={collabSession.provider}
+                    __shouldBootstrapUnsafe={true}
+                  />
+                  <SyncFromYjsPlugin doc={collabSession.doc} />
+                </>
               ) : (
                 <CollaborationPlugin
                   id={noteId}
@@ -231,8 +260,8 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
             </LexicalComposer>
           </LexicalCollaboration>
         ) : (
-          <div className="grid h-32 place-content-center text-sm text-muted-foreground">
-            Preparing note…
+          <div className="grid h-full place-content-center text-[13px] text-[#7a7a7a]">
+            Preparing note...
           </div>
         )}
       </div>

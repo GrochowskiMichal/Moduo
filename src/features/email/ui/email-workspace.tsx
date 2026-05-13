@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { useWorkspace } from "../../../providers/workspace-provider";
+import { useAuth } from "../../../providers/auth-provider";
+import { getRuntime } from "../../../lib/runtime";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected";
 type MailboxProvider = "gmail" | "outlook" | "icloud" | "custom";
@@ -206,7 +207,8 @@ export function EmailWorkspace() {
   };
 
   const loadAccounts = async (preferredAccountId?: string | null) => {
-    const nextAccounts = (await invoke("email_accounts_list")) as SavedAccount[];
+    const rt = getRuntime();
+    const nextAccounts = rt ? ((await rt.email.listAccounts()) as SavedAccount[]) : [];
     accountsCache = { accounts: nextAccounts, fetchedAt: Date.now() };
     setAccounts(nextAccounts);
 
@@ -259,21 +261,21 @@ export function EmailWorkspace() {
     setAuthError(null);
 
     try {
-      const nextAccount = (await invoke("email_account_connect_and_save", {
-        input: {
-          provider,
-          email: creds.email.trim(),
-          password: creds.password,
-          workspaceId: selectedWorkspaceId,
-          ...(provider === "custom"
-            ? {
-              imapHost: customHosts.imapHost.trim(),
-              smtpHost: customHosts.smtpHost.trim(),
-              imapPort: Number(customHosts.imapPort),
-              smtpPort: Number(customHosts.smtpPort),
-            }
-            : {}),
-        },
+      const _rt = getRuntime();
+      if (!_rt) throw new Error("Runtime not available");
+      const nextAccount = (await _rt.email.connectAndSave({
+        provider,
+        email: creds.email.trim(),
+        password: creds.password,
+        workspaceId: selectedWorkspaceId,
+        ...(provider === "custom"
+          ? {
+            imapHost: customHosts.imapHost.trim(),
+            smtpHost: customHosts.smtpHost.trim(),
+            imapPort: Number(customHosts.imapPort),
+            smtpPort: Number(customHosts.smtpPort),
+          }
+          : {}),
       })) as SavedAccount;
       setCreds({ email: "", password: "" });
       setCustomHosts({ imapHost: "", smtpHost: "", imapPort: "993", smtpPort: "587" });
@@ -330,13 +332,13 @@ export function EmailWorkspace() {
       });
     };
     const readLocalEnvelopes = async (previousRows: Email[]) => {
-      const localResult = (await invoke("email_list_envelopes", {
-        input: {
-          accountId: accountId === ALL_ACCOUNTS_ID ? ALL_ACCOUNTS_ID : accountId,
-          folder,
-          limit: 50,
-          forceSync: false,
-        },
+      const _rt2 = getRuntime();
+      if (!_rt2) throw new Error("Runtime not available");
+      const localResult = (await _rt2.email.listEnvelopes({
+        accountId: accountId === ALL_ACCOUNTS_ID ? ALL_ACCOUNTS_ID : accountId,
+        folder,
+        limit: 50,
+        forceSync: false,
       })) as { envelopes: any[] };
       return mapEnvelopes(localResult.envelopes ?? [], previousRows);
     };
@@ -388,12 +390,10 @@ export function EmailWorkspace() {
     // Fire email_sync_now in the background — DO NOT await it here.
     // The UI already shows cached/local results. When the sync finishes,
     // we re-read local Redb and update the list in the background.
-    const syncPromise = invoke("email_sync_now", {
-      input: {
-        accountId: accountId === ALL_ACCOUNTS_ID ? null : accountId,
-        folder,
-      },
-    });
+    const _rt3 = getRuntime();
+    const syncPromise = _rt3
+      ? _rt3.email.syncNow({ accountId: accountId === ALL_ACCOUNTS_ID ? null : accountId, folder })
+      : Promise.resolve();
 
     // Show a non-blocking refreshing indicator.
     if (requestSeq === fetchRequestSeqRef.current) {
@@ -415,14 +415,7 @@ export function EmailWorkspace() {
               .map((row) => row.uid)
               .filter((uid) => uid > 0);
             if (uids.length > 0) {
-              void invoke("email_prefetch_bodies", {
-                input: {
-                  accountId,
-                  folder,
-                  uids,
-                  limit: 5,
-                },
-              });
+              void getRuntime()?.email.prefetchBodies({ accountId, folder, uids, limit: 5 });
             }
             patchAccount(accountId, {
               status: "active",
@@ -530,13 +523,7 @@ export function EmailWorkspace() {
   useEffect(() => {
     if (connectionStatus !== "connected") return;
     if (!activeAccountId) return;
-    void invoke("email_set_activity_state", {
-      input: {
-        mode: "mailForeground",
-        activeAccountId,
-        activeFolder,
-      },
-    }).catch(() => undefined);
+    void getRuntime()?.email.setActivityState({ mode: "mailForeground", activeAccountId, activeFolder });
   }, [activeAccountId, activeFolder, connectionStatus]);
 
   useEffect(() => {
@@ -571,7 +558,9 @@ export function EmailWorkspace() {
     }
     setIsSending(true);
     try {
-      await invoke("email_send_saved", {
+      const _rtSend = getRuntime();
+      if (!_rtSend) throw new Error("Runtime not available");
+      await _rtSend.email.sendSaved({
         accountId: activeAccountId,
         to: composeTo,
         subject: composeSubject,
@@ -600,12 +589,12 @@ export function EmailWorkspace() {
     setSelectedBodyError(null);
     setLoadingBodyEmailId(email.id);
     try {
-      const bodyResult = (await invoke("email_get_message_body", {
-        input: {
-          accountId: email.accountId,
-          folder: email.folder,
-          uid: email.uid,
-        },
+      const _rtBody = getRuntime();
+      if (!_rtBody) throw new Error("Runtime not available");
+      const bodyResult = (await _rtBody.email.getMessageBody({
+        accountId: email.accountId,
+        folder: email.folder,
+        uid: email.uid,
       })) as { body: string; bodyHtml?: string | null };
       setEmails((current) =>
         current.map((item) =>
@@ -1360,14 +1349,12 @@ export function EmailWorkspace() {
                             ),
                           );
                           if (email.accountId) {
-                            void invoke("email_apply_flag", {
-                              input: {
-                                accountId: email.accountId,
-                                folder: email.folder,
-                                uid: email.uid,
-                                flag: "seen",
-                                value: true,
-                              },
+                            void getRuntime()?.email.applyFlag({
+                              accountId: email.accountId,
+                              folder: email.folder,
+                              uid: email.uid,
+                              flag: "seen",
+                              value: true,
                             });
                           }
                         }

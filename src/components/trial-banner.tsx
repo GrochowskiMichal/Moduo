@@ -1,0 +1,121 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { Clock, X } from "lucide-react";
+
+import { useAuth } from "../providers/auth-provider";
+import { Button } from "./ui/button";
+
+/**
+ * TrialBanner — shown inside AppChrome for users on a trialing subscription.
+ * Reads the user_entitlements view to surface remaining trial days plus a
+ * CTA to add a card and extend to the full 30-day trial.
+ *
+ * Surface uses status tokens (bg-warning for normal trial, bg-destructive for
+ * the urgent <= 2 day window) instead of hardcoded amber/red. Dismissible per
+ * browser session via sessionStorage.
+ */
+
+type Entitlements = {
+  subscription_status: string | null;
+  trial_days_remaining: number | null;
+};
+
+const DISMISSED_KEY = "moduo:trial_banner_dismissed";
+
+export function TrialBanner() {
+  const { accessToken, isSignedIn, runtime } = useAuth();
+  const navigate = useNavigate();
+  const isWeb = !!runtime?.capabilities.isWeb;
+
+  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem(DISMISSED_KEY) === "1";
+  });
+
+  useEffect(() => {
+    if (!isSignedIn || !accessToken) return;
+
+    const supabaseUrl =
+      (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
+      "https://wtoonrvuqumihpkbvwvs.supabase.co";
+    const anonKey = (import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string | undefined) || "";
+
+    fetch(
+      `${supabaseUrl}/rest/v1/user_entitlements?select=subscription_status,trial_days_remaining`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: anonKey,
+        },
+      },
+    )
+      .then((r) => r.json())
+      .then((rows: Entitlements[]) => {
+        if (Array.isArray(rows) && rows.length > 0) {
+          setEntitlements(rows[0]);
+        }
+      })
+      .catch(() => {});
+  }, [isSignedIn, accessToken]);
+
+  const handleDismiss = () => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(DISMISSED_KEY, "1");
+    }
+    setDismissed(true);
+  };
+
+  const handleCta = () => {
+    void navigate({ to: "/settings", search: { section: "billing" } });
+  };
+
+  if (
+    dismissed ||
+    !entitlements ||
+    entitlements.subscription_status !== "trialing" ||
+    entitlements.trial_days_remaining === null
+  ) {
+    return null;
+  }
+
+  const days = Math.ceil(entitlements.trial_days_remaining);
+  const isUrgent = days <= 2;
+
+  const wrapperClass = isUrgent
+    ? "flex flex-row items-center gap-3 bg-destructive/15 text-destructive border-b border-destructive/30 px-5 py-2 text-xs"
+    : "flex flex-row items-center gap-3 bg-warning/15 text-warning border-b border-warning/30 px-5 py-2 text-xs";
+
+  return (
+    <div role="status" className={wrapperClass}>
+      <Clock className="size-3.5 shrink-0" aria-hidden />
+      <p className="min-w-0 flex-1 truncate">
+        {days <= 0
+          ? "Your trial has expired."
+          : `${days} day${days === 1 ? "" : "s"} left in your trial.`}
+        {isWeb ? (
+          <>
+            {" "}
+            <button
+              type="button"
+              onClick={handleCta}
+              className="font-medium underline underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            >
+              Add a card to extend to 30 days →
+            </button>
+          </>
+        ) : null}
+      </p>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={handleDismiss}
+        aria-label="Dismiss trial banner"
+        className="shrink-0 text-current hover:bg-current/10 hover:text-current"
+      >
+        <X className="size-3.5" aria-hidden />
+      </Button>
+    </div>
+  );
+}

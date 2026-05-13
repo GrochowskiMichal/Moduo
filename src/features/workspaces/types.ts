@@ -43,6 +43,7 @@ export type WorkspaceInvite = {
   email: string;
   role: WorkspaceRole;
   status: "pending" | "accepted" | "revoked" | "expired";
+  token?: string;
   createdAt: string;
   updatedAt: string;
 };

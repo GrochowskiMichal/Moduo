@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { getRuntime } from "../../../lib/runtime";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -74,8 +74,9 @@ async function openExternalUrl(url: string): Promise<void> {
   if (!target) return;
 
   try {
-    if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
-      await invoke("open_external_url", { url: target });
+    const rt = getRuntime();
+    if (rt) {
+      await rt.window.openExternalUrl(target);
       return;
     }
   } catch {

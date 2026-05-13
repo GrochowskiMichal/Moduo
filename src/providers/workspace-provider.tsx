@@ -44,7 +44,8 @@ type WorkspaceContextValue = {
       effect: "allow" | "deny";
       permission: ModulePermission;
     }>;
-  }) => Promise<void>;
+  }) => Promise<WorkspaceInvite | null>;
+  joinWorkspace: (token: string) => Promise<WorkspaceSummary | null>;
   updateMemberPermissions: (args: {
     memberId: string;
     role: WorkspaceRole;
@@ -115,6 +116,7 @@ function mapInvite(row: any): WorkspaceInvite {
     email: row.email,
     role: (row.role ?? "viewer") as WorkspaceRole,
     status: (row.status ?? "pending") as WorkspaceInvite["status"],
+    token: row.token ?? undefined,
     createdAt: row.createdAt ?? row.created_at ?? new Date().toISOString(),
     updatedAt: row.updatedAt ?? row.updated_at ?? new Date().toISOString(),
   };
@@ -293,13 +295,30 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         effect: "allow" | "deny";
         permission: ModulePermission;
       }>;
-    }) => {
-      if (!runtime || !selectedWorkspaceId) return;
-      await runtime.workspace.issueInvite(selectedWorkspaceId, args.email, args.role, args.modulePermissions);
+    }): Promise<WorkspaceInvite | null> => {
+      if (!runtime || !selectedWorkspaceId) return null;
+      const raw = await runtime.workspace.issueInvite(selectedWorkspaceId, args.email, args.role, args.modulePermissions);
       await refreshAccessData();
       await refreshNotifications();
+      return raw ? mapInvite(raw) : null;
     },
     [refreshAccessData, refreshNotifications, runtime, selectedWorkspaceId]
+  );
+
+  const joinWorkspace = useCallback(
+    async (token: string): Promise<WorkspaceSummary | null> => {
+      if (!runtime) return null;
+      try {
+        const raw = await runtime.workspace.joinInvite(token.trim());
+        await refreshWorkspaces();
+        if (raw?.id) selectWorkspace(raw.id);
+        return raw ? mapWorkspace(raw) : null;
+      } catch (err) {
+        console.error("[workspace] joinWorkspace failed:", err);
+        return null;
+      }
+    },
+    [refreshWorkspaces, runtime, selectWorkspace]
   );
 
   const updateInvite = useCallback(
@@ -430,6 +449,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       leaveWorkspace,
       softDeleteWorkspace,
       sendInvite,
+      joinWorkspace,
       updateMemberPermissions,
       updateInvite,
       revokeInvite,
@@ -459,6 +479,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       selectedWorkspaceId,
       selectWorkspace,
       sendInvite,
+      joinWorkspace,
       softDeleteWorkspace,
       unreadCountGlobal,
       unreadCountWorkspace,

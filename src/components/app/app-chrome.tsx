@@ -26,13 +26,13 @@ import { WorkspaceSwitcher } from "../workspace-switcher";
 import { WorkspaceSettingsModal } from "../workspace-settings-modal";
 import { IntegrationsModal } from "../integrations-modal";
 import { UserMenu } from "../user-menu";
-
 import { baseModulesNavItems } from "./app-chrome-constants";
 import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { SettingsModal } from "../../features/settings/settings-modal";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { dispatchCreateNew } from "./create-events";
+import { TrialBanner } from "../trial-banner";
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -88,19 +88,21 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [runtime]);
 
+  const isWebRuntime = !!runtime?.capabilities.isWeb;
   const modulesNavItems = useMemo(
     () =>
       baseModulesNavItems.filter((tab) => {
+        if (tab.desktopOnly && isWebRuntime) return false;
         if (tab.module === "notes") return modulePermissions.notes !== "none";
         if (tab.module === "tasks") return modulePermissions.tasks !== "none";
         return true;
       }),
-    [modulePermissions.notes, modulePermissions.tasks],
+    [isWebRuntime, modulePermissions.notes, modulePermissions.tasks],
   );
 
   useEffect(() => {
     if (!isSettingsRoute && !modulesNavItems.some((tab) => tab.href === pathname)) {
-      void navigate({ to: modulesNavItems[0]?.href ?? "/grid", replace: true });
+      void navigate({ to: modulesNavItems[0]?.href ?? "/", replace: true });
     }
   }, [isSettingsRoute, navigate, pathname, modulesNavItems]);
 
@@ -265,6 +267,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
   return (
     <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
+      <TrialBanner />
       <View
         className="relative px-5 bg-background flex flex-row items-center"
         style={{ zIndex: "var(--z-header)", height: "var(--bar-h)" }}
