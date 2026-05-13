@@ -9,6 +9,7 @@ export type ModuleNavItem = {
   desktopOnly?: boolean;
 };
 
+/** Used by the legacy per-route picker menus (see AppChromeMenus). */
 export type TaskProjectOption = {
   id: string;
   workspaceId: string;
@@ -22,4 +23,5 @@ export type TaskProjectOption = {
   deletedAt: string | null;
 };
 
+/** Anchor coordinates for a floating menu attached to a chip in the top bar. */
 export type MenuAnchor = { left: number; top: number };

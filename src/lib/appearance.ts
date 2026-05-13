@@ -8,6 +8,7 @@ export type Radius = "sharp" | "soft" | "round";
 export type DisplayFont = "pilat" | "geist" | "cal" | "fraunces";
 export type BodyFont = "geist" | "inter" | "serif" | "mono";
 export type TextSize = "small" | "normal" | "large";
+export type Tabs = "auto" | "icons";
 
 export interface Appearance {
   theme: Theme;
@@ -17,6 +18,7 @@ export interface Appearance {
   fontDisplay: DisplayFont;
   fontBody: BodyFont;
   textSize: TextSize;
+  tabs: Tabs;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -27,6 +29,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   fontDisplay: "pilat",
   fontBody: "geist",
   textSize: "normal",
+  tabs: "auto",
 };
 
 const LOCAL_STORAGE_KEY = "moduo.appearance";
@@ -41,6 +44,7 @@ const DATA_ATTR_MAP: Record<keyof Appearance, string> = {
   fontDisplay: "data-font-display",
   fontBody: "data-font-body",
   textSize: "data-text-size",
+  tabs: "data-tabs",
 };
 
 const VALID_VALUES: Record<keyof Appearance, ReadonlyArray<string>> = {
@@ -51,6 +55,7 @@ const VALID_VALUES: Record<keyof Appearance, ReadonlyArray<string>> = {
   fontDisplay: ["pilat", "geist", "cal", "fraunces"],
   fontBody: ["geist", "inter", "serif", "mono"],
   textSize: ["small", "normal", "large"],
+  tabs: ["auto", "icons"],
 };
 
 function sanitize(raw: unknown): Appearance {
@@ -131,6 +136,7 @@ export interface UseAppearance {
   setFontDisplay: (value: DisplayFont) => void;
   setFontBody: (value: BodyFont) => void;
   setTextSize: (value: TextSize) => void;
+  setTabs: (value: Tabs) => void;
   setAppearance: (patch: Partial<Appearance>) => void;
   reset: () => void;
 }
@@ -170,6 +176,7 @@ export function useAppearance(): UseAppearance {
     setFontDisplay: (value) => update({ fontDisplay: value }),
     setFontBody: (value) => update({ fontBody: value }),
     setTextSize: (value) => update({ textSize: value }),
+    setTabs: (value) => update({ tabs: value }),
     setAppearance: update,
     reset: () => update(DEFAULT_APPEARANCE),
   };

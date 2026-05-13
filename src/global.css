@@ -640,3 +640,22 @@ body,
   }
 }
 
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Module nav: icons-only mode hides every label except the active tab's.
+   Driven by [data-tabs="icons"] on <html>, set by the appearance hook. */
+[data-tabs="icons"] [data-slot="module-tab-label"] {
+  display: none;
+}
+
+[data-tabs="icons"] [data-slot="module-tab"][data-active="true"] [data-slot="module-tab-label"] {
+  display: inline;
+}

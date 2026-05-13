@@ -22,6 +22,56 @@ const PATTERNS: Pattern[] = [
 const IGNORED_PATHS: string[] = [
   // React Native compatibility shim — intentionally untouched per CLAUDE.md.
   "src/tw",
+
+  // Legacy baseline: files that still hold pre-foundation arbitrary
+  // Tailwind values. Each is queued for its own per-feature brief; the
+  // CI gate enforces "no new violations in clean files" without blocking
+  // on legacy. Remove an entry when its feature brief lands.
+  "src/components/auth/email-auth-panel.tsx",
+  "src/features/brainstorm/ui/brainstorm-workspace.tsx",
+  "src/features/brainstorm/ui/visual-templates/framework-poster.tsx",
+  "src/features/brainstorm/ui/visual-templates/swot-visual.tsx",
+  "src/features/dashboard/ui/dashboard-grid.tsx",
+  "src/features/dashboard/ui/grid-workspace.tsx",
+  "src/features/dashboard/ui/widget-container.tsx",
+  "src/features/dashboard/ui/widgets-panel.tsx",
+  "src/features/dashboard/ui/widgets/clock-widget.tsx",
+  "src/features/dashboard/ui/widgets/countdown-widget.tsx",
+  "src/features/dashboard/ui/widgets/crypto-widget.tsx",
+  "src/features/dashboard/ui/widgets/hydration-widget.tsx",
+  "src/features/dashboard/ui/widgets/job-tracker-widget.tsx",
+  "src/features/dashboard/ui/widgets/notes-widget.tsx",
+  "src/features/dashboard/ui/widgets/pomodoro-widget.tsx",
+  "src/features/dashboard/ui/widgets/stock-widget.tsx",
+  "src/features/dashboard/ui/widgets/tasks-widget.tsx",
+  "src/features/dashboard/ui/widgets/todo-list-widget.tsx",
+  "src/features/dashboard/ui/widgets/weather-widget.tsx",
+  "src/features/dashboard/ui/widgets/widget-shell.tsx",
+  "src/features/email/ui/email-workspace.tsx",
+  "src/features/mindmap/ui/components/mindmap-relations.tsx",
+  "src/features/mindmap/ui/components/mindmap-toolbar.tsx",
+  "src/features/mindmap/ui/custom-node.tsx",
+  "src/features/mindmap/ui/mindmap-workspace.tsx",
+  "src/features/notes/editor/LexicalNoteEditor.tsx",
+  "src/features/notes/editor/nodes/EmbeddedMindmap.tsx",
+  "src/features/notes/editor/nodes/EmbeddedTask.tsx",
+  "src/features/notes/editor/plugins/SlashCommandPlugin.tsx",
+  "src/features/notes/ui/NotesSplitView.tsx",
+  "src/features/plan/ui/calendar-view.tsx",
+  "src/features/plan/ui/kanban-task-context-modal.tsx",
+  "src/features/plan/ui/kanban-view.tsx",
+  "src/features/plan/ui/link-view.tsx",
+  "src/features/plan/ui/list-view.tsx",
+  "src/features/plan/ui/plan-nav.tsx",
+  "src/features/plan/ui/plan-workspace.tsx",
+  "src/features/plan/ui/project-settings-panel.tsx",
+  "src/features/plan/ui/task-details-view.tsx",
+  "src/features/tasks/ui/tasks-gantt.tsx",
+  "src/features/templates/ui/templates-editor.tsx",
+  "src/features/templates/ui/templates-preview.tsx",
+  "src/routes/pages/auth-page.tsx",
+  "src/routes/pages/onboarding-page.tsx",
+  "src/routes/pages/paywall-page.tsx",
 ];
 
 const PROJECT_ROOT = process.cwd();

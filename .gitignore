@@ -49,3 +49,6 @@ src-tauri/gen/
 src-tauri/*.sqlite3
 src-tauri/*.redb
 src-tauri/*.redb.lock
+
+# Claude Code runtime files
+.claude/

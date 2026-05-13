@@ -163,6 +163,40 @@ The component lands in `src/components/ui/`. Open it; replace any default `bg-zi
 3. Run Playwright snapshots (`bun run e2e`). Approve the visual diffs.
 4. Update [.design/foundation/TOKENS.md](./.design/foundation/TOKENS.md) if the rationale or default changed.
 
+## Concentric inner radius
+
+When you nest a rounded element inside another rounded element, the child's
+radius must equal **outer radius − distance from the edge** so the two curves
+read as concentric instead of parallel arcs.
+
+Formula:
+
+```
+inner-radius = max(outer-radius − padding, 0)
+```
+
+Worked examples:
+
+- A widget card inside a `rounded-xl` (16 px) panel with `p-5` (20 px) padding
+  is `rounded-none` — the parent's curve already meets the child's corner.
+- A notification card inside a `rounded-2xl` (24 px) sheet with `p-4` (16 px)
+  padding lands at `rounded-md` (≈ 8 px).
+- A chip inside a `rounded-md` (8 px) row with `p-2` (8 px) padding sits at
+  `rounded-none` for the same reason.
+- A graph node inside a `rounded-lg` (12 px) right-rail card with `p-3`
+  (12 px) padding is `rounded-none` and uses the parent's curve directly.
+
+Apply this anywhere a nested element borrows the visual frame from a parent:
+the widget cards in the WIDGETS sidebar, the notification cards inside the
+right sheet, the member / invite cards inside the workspace settings dialog,
+chip rows inside outer cards. If the formula produces a value that doesn't
+exist in the radius scale, pick the nearest scale step that keeps the curves
+visually concentric.
+
+This rule does not change tokens; it constrains how component code composes
+them. The Stylelint config can't enforce it — the design-review skill catches
+regressions during the visual sweep.
+
 ## Stylelint enforcement (to be added)
 
 A Stylelint config will land alongside the redesign work. It enforces:

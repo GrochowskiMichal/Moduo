@@ -14,6 +14,8 @@ For the maintainer, the problem is downstream: every new feature requires re-dec
 
 A token-first foundation that gives the eye a clear ladder of surfaces (canvas → card → popover), a single accent color that the user controls, and one display font + one body font with five sensible alternates each. Two anchor pages — **Notes** and **Settings** — get a complete redesign as the proof point. Everywhere else in the app inherits the visual improvement as components migrate; pages don't have to be touched all at once.
 
+The chrome itself stays flat against the canvas: only the three content panels (left rail · centre · right rail) carry `bg-card` + border + radius. The top bar and bottom bar sit on `bg-background` with no hairline, and the gaps between the top bar, panel area, and bottom bar drop to zero — the visual rhythm comes from the panel boxes against the canvas, not from gutters. The top bar carries module titles only; per-route picker chips moved into each module's own left rail (or away entirely, per its feature brief). A floating bottom pill ([global-bottom-bar.tsx](../../src/components/app/global-bottom-bar.tsx)) anchors AI · Search (Cmd-K palette) · Create across every page.
+
 For Claude (and humans), a short `CLAUDE.md` design section + a longer `DESIGN_SYSTEM.md` reference document plus a Stylelint check on PRs make "use a token, not a hex" enforceable instead of aspirational.
 
 ## Experience Principles
@@ -63,7 +65,7 @@ What's in the repo right now — the brief extends, not replaces, this.
 ### Components (today)
 **Layout / shell**:
 - [src/components/app/app-chrome.tsx](src/components/app/app-chrome.tsx) — top nav, app frame
-- [src/components/app/app-chrome-menus.tsx](src/components/app/app-chrome-menus.tsx) — menu bar
+- ~~[src/components/app/app-chrome-menus.tsx](src/components/app/app-chrome-menus.tsx)~~ — deleted as part of REVISION_DELTA §7 (per-route chips and pickers moved out of the chrome)
 - [src/components/app/feature-panels-shell.tsx](src/components/app/feature-panels-shell.tsx) — the 3-pane shell (sidebar / center / right rail)
 - [src/components/app/root-error-boundary.tsx](src/components/app/root-error-boundary.tsx)
 
@@ -142,11 +144,10 @@ These are the interactions the foundation must support cleanly. Per-feature inte
 This is a Tauri desktop app — no mobile breakpoint, but window resize matters.
 
 - **Minimum size**: enforce 1024 × 700 at the Tauri level.
-- **Default 3-pane layout** (sidebar + main + right rail) at ≥ 1280 px wide.
-- **At < 1280 px**: right rail collapses to icon-only (icon column you can click to expand a `Sheet`).
-- **At < 1024 px**: left sidebar collapses to icon-only (same `Sheet` pattern).
+- **Three-pane layout** (sidebar + main + right rail) at ≥ 900 px wide. Rails are user-resizable via drag handles ([src/components/ui/resizable.tsx](../../src/components/ui/resizable.tsx)); widths persist per-feature in `localStorage`.
 - **At < 900 px** (rare on desktop, e.g. split-screen): a single-pane layout with both sidebars accessible via `Sheet`. Not a "mobile design" — it's the same desktop design with both rails closed by default.
-- **No layout transforms above 1920 px** — content stays in a generous max-width center column; sidebars and rails take fixed widths from tokens.
+- **No collapsed icon-mode**. The legacy 1024–1280 px icon column was retired; each module's rails are bespoke content, so there's no shared icon column to fall back to.
+- **No layout transforms above 1920 px** — content stays in a generous max-width center column; sidebars and rails take resizable widths bounded by `min: 12%`, `max: 40%`.
 
 ## Accessibility Requirements
 

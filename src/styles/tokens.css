@@ -320,6 +320,10 @@
   --radius-lg: 0.75rem; /* 12 */
   --radius-xl: 1rem;    /* 16 */
   --radius-full: 9999px;
+  /* Avatar takes its own track: round on soft / round, square on sharp.
+     Reflects the user-visible "personality" of the radius choice on
+     profile chrome (avatar, fallback, hover ring). */
+  --avatar-radius: var(--radius-full);
 }
 
 [data-radius="sharp"] {
@@ -329,6 +333,7 @@
   --radius-lg: 0;
   --radius-xl: 0;
   --radius-full: 9999px; /* pills stay round */
+  --avatar-radius: 0;
 }
 
 [data-radius="round"] {
@@ -338,6 +343,7 @@
   --radius-lg: 1.25rem; /* 20 */
   --radius-xl: 1.5rem;  /* 24 */
   --radius-full: 9999px;
+  --avatar-radius: var(--radius-full);
 }
 
 /* ============================================================================
@@ -427,10 +433,9 @@
  * ==========================================================================*/
 
 :root {
-  --width-sidebar:        16rem;   /* 256 — left rail standard */
-  --width-sidebar-icon:   3.5rem;  /* 56  — collapsed left rail */
-  --width-rail:           20rem;   /* 320 — right rail standard */
-  --width-rail-icon:      3rem;    /* 48  — collapsed right rail */
+  --width-sidebar:        16rem;   /* 256 — left rail default */
+  --width-rail:           20rem;   /* 320 — right rail default */
+  --bar-h:                3rem;    /* 48  — shared height for top + bottom bars */
   --width-content-max:    65rem;   /* 1040 — center column cap */
   --width-prose-max:      42rem;   /* 672  — reading width (notes body) */
 
@@ -555,6 +560,7 @@
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
   --radius-full: var(--radius-full);
+  --radius-avatar: var(--avatar-radius);
 
   --font-display: var(--font-display);
   --font-sans:    var(--font-body);
@@ -575,4 +581,5 @@
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
+  --shadow-overlay: var(--shadow-overlay);
 }

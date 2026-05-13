@@ -55,11 +55,34 @@ export const itemRowStyle = {
   columnGap: 8,
   minHeight: 32,
 } as const;
-export const itemNameWrapStyle = { minWidth: 0, display: "flex", alignItems: "center", height: 28 } as const;
-export const itemActionsStyle = { display: "flex", alignItems: "center", gap: 4, height: 28 } as const;
-export const iconButtonStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28 } as const;
-export const plusButtonStyle = { display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24 } as const;
+export const itemNameWrapStyle = {
+  minWidth: 0,
+  display: "flex",
+  alignItems: "center",
+  height: 28,
+} as const;
+export const itemActionsStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  height: 28,
+} as const;
+export const iconButtonStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 28,
+  height: 28,
+} as const;
+export const plusButtonStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 24,
+  height: 24,
+} as const;
 export const deleteRevealBaseStyle = {
   overflow: "hidden",
-  transition: "max-height 220ms ease, opacity 180ms ease, transform 180ms ease, margin-top 180ms ease",
+  transition:
+    "max-height 220ms ease, opacity 180ms ease, transform 180ms ease, margin-top 180ms ease",
 } as const;
