@@ -270,7 +270,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         style={{ zIndex: "var(--z-header)", height: "var(--bar-h)" }}
       >
         <View className="relative z-[1] flex w-full flex-row items-center justify-between gap-3">
-          <View className="flex flex-row items-center gap-3 min-w-[260px]">
+          <View className="flex flex-row items-center gap-1">
             <Image source={moduoFavicon} className="h-8 w-8 shrink-0" contentFit="contain" />
             <WorkspaceSwitcher onOpenSettings={() => setWorkspaceSettingsOpen(true)} />
           </View>

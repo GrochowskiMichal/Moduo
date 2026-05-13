@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
+
 import { useWorkspace } from "../providers/workspace-provider";
 import { useShortcut } from "../lib/shortcuts";
 import { Avatar, AvatarFallback } from "./ui/avatar";
@@ -10,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Icon } from "./ui/icon";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type Props = {
   onOpenSettings?: () => void;
@@ -73,13 +76,17 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
         else closeMenu();
       }}
     >
-      <DropdownMenuTrigger
-        className="flex h-9 min-w-[220px] max-w-[320px] flex-row items-center gap-2 rounded-md bg-transparent px-1 text-sm text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-        aria-label="Switch workspace"
-      >
-        <span className="min-w-0 flex-1 truncate text-left">{workspaceLabel}</span>
-        <span className="shrink-0 text-xs leading-none text-muted-foreground">▾</span>
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger
+            className="grid h-7 w-7 place-items-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            aria-label={`Switch workspace · current: ${workspaceLabel}`}
+          >
+            <ChevronDown className="size-4" aria-hidden />
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{workspaceLabel}</TooltipContent>
+      </Tooltip>
 
       <DropdownMenuContent align="start" sideOffset={8} className="w-[360px]">
         <div className="flex flex-row items-center justify-between px-2 pb-1 pt-1">
