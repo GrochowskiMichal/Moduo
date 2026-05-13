@@ -103,3 +103,46 @@ sourced from primitive composition + token traces.
 - The `auth-provider` web gate remains the largest blocker to fully
   automated visual review. A documented manual walkthrough on
   `bun run dev:desktop` is the current fallback.
+
+## Focus management audit (2026-05-13)
+
+Branch: `design/settings-polish-delta` (commit 6adec1b…). Walked the
+keyboard-only paths across the new Settings page, the Notes
+composition, the workspace switcher, notification center, and both
+existing modals.
+
+### Primitives
+
+- `Dialog`, `Sheet`, `Popover`, `DropdownMenu`, `ContextMenu`,
+  `Select`, `Command` all wrap their Radix counterparts and do **not**
+  override `onCloseAutoFocus` or `onOpenAutoFocus`. Radix's default
+  behaviour restores focus to the original trigger when the surface
+  closes — verified by grep across `src/components/ui/*.tsx`.
+- `Sheet`, `Dialog`, `Popover`, `DropdownMenu`, `ContextMenu` all
+  mount their content inside a Portal, so the focus trap is honoured
+  even when the trigger lives inside another scroll container.
+- Escape closes every primitive: Dialog → backdrop, Sheet → drawer,
+  Popover / DropdownMenu / ContextMenu / Select → menu, Command →
+  dialog. Re-tested on the new bottom-bar palette and the Settings
+  Tabs.
+
+### Bespoke modals
+
+- `WorkspaceSettingsModal` and `IntegrationsModal` are composed on
+  top of the `Dialog` primitive. They inherit Radix focus restoration
+  for free; no custom focus code in either component.
+
+### New shortcuts
+
+- ⌘⇧W toggles `WorkspaceSwitcher` and ⌘/ toggles `NotificationCenter`
+  via the new `useShortcut` hook. Both keep their own internal `open`
+  state; when toggled by shortcut, Radix opens the menu / drawer
+  programmatically — focus moves to the menu / panel, and Escape
+  restores focus back to the trigger.
+- Inputs and contenteditable targets are excluded from `new-note`,
+  `settings`, `workspace-switcher`, and `notifications` shortcuts so
+  typing inside Lexical or a text field doesn't fire them. The
+  palette shortcut (⌘K) is intentionally allowed everywhere.
+
+No gaps surfaced during the walkthrough; no new code was added for
+this task beyond the audit notes above.
