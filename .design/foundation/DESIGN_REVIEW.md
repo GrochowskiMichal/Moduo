@@ -279,3 +279,86 @@ composition and a manual desktop walkthrough plan.
 
 This review is the final visual gate for the foundation rebuild.
 The branch is ready to ship as a single PR.
+
+## Post-review revision pass (2026-05-13, late)
+
+Captures the follow-up changes made after the first user testing
+session. Each entry maps to a commit on `design/settings-polish-delta`.
+
+### Settings becomes a modal (fbba87e)
+
+Settings is no longer a route destination. A `SettingsModal`
+mounts in AppChrome and listens for a `moduo:settings:open`
+CustomEvent dispatched by the UserMenu, the Cmd-, shortcut, the
+command palette, and the legacy `/settings` route (which now
+redirects to `/grid`).
+
+The Appearance section's backdrop is fully transparent so the app
+behind acts as the live preview — every appearance axis mutates
+the visible app in real time. The other sections draw a slightly
+darker, blurred backdrop (`bg-background/80 backdrop-blur-md`).
+
+The in-section live preview panel was removed (the app itself is
+the preview now). `live-preview.tsx` deleted.
+
+### Resizable panel layout (f122f1c, 270742d, 365e086, 0330e87)
+
+- v4 of `react-resizable-panels` treats unitless size props as
+  pixels. Every defaultSize / minSize / maxSize switched to
+  string percentages.
+- The default ResizablePanel className dropped `flex` so the
+  library's inner content div stays block-level; the rail
+  `<aside>` then fills the panel correctly.
+- Panels use `rounded-xl` (token-driven), not `rounded-2xl`.
+  Sharp radius now renders truly square panels.
+- Inter-panel space halved: outer padding `px-1`, group `gap-0`,
+  handle `w-1`. Side panels sit equidistant from edge and centre.
+- Sheet auto-open on viewport shrink is fixed. Transitioning
+  full → sheet snapshots the user's preferences and forces the
+  panels closed; sheet → full restores them. Sheet onOpenChange
+  syncs `panelState` back to false so the bottom-bar toggle is
+  never a click behind after an outside-click close.
+- `resizable` prop added (defaults true). Future fixed-width
+  compositions opt in via `resizable={false}`.
+
+### Unified bars and minimal bottom bar (7d33915)
+
+- New `--bar-h` token (3rem) drives both top and bottom bar
+  heights. Both bars use `flex items-center` for vertical centring.
+- The floating-pill bottom bar is gone. The bottom bar is a flat
+  flex row with three minimal icons (AI · Search · Add) centred
+  between the left / right panel toggles.
+- Search is removed from the top bar utility cluster — it lives
+  only on the bottom bar now.
+
+### Avatar follows radius axis (56fa76b)
+
+- New `--avatar-radius` track: 0 in sharp mode, `var(--radius-full)`
+  in soft and round modes. Exposed via `rounded-avatar` Tailwind
+  utility through the `@theme` block.
+- Avatar primitive (Root + Fallback) and UserMenu trigger now use
+  `rounded-avatar` instead of `rounded-full`.
+
+### Module navigation: icons-only axis (4be4246)
+
+- New 8th appearance axis `data-tabs`: `auto` (default) or `icons`.
+  In icons mode, every module label is hidden except the active
+  tab's. Tooltips on hover for the rest.
+- CSS rules in `global.css` drive the collapse off the data-attribute;
+  AppChrome marks each tab with `data-slot="module-tab"` / `data-active`.
+
+### Per-feature picker code preserved (4cf03bb)
+
+- `AppChromeMenus.tsx` (~826 lines) restored from history, along
+  with `MenuAnchor`, `TaskProjectOption`, and the supporting
+  utility constants. The file currently has no importers — the
+  top bar stays clean per §7 — but the code path compiles
+  standalone and is ready for the per-rail migration when each
+  module's brief lands.
+
+### Out-of-scope notes
+
+- **Notes right rail** — lives on `design/notes-page` (Phase 4
+  branch), not on this branch. Will appear when both PRs merge.
+- **Per-feature picker rails** — code preserved; each module's
+  own brief decides where the picker lands inside its rail.
