@@ -7,7 +7,8 @@
       hard square). Corner radius ≈ 22.5% of canvas width per Apple's icon
       guidelines.
     - Safe area for the logomark sits at ~80% of canvas, centred. The mark
-      takes ~81% of the canvas width — right in the Apple safe-area range.
+      takes ~70% of the canvas width — slightly inside the safe-area
+      maximum, which reads better than filling it completely.
   -->
 
   <!-- Squircle background. -->
@@ -20,7 +21,7 @@
     on the path's bounding box being symmetric around (500, 500).
     For scale s the centring offset is 512 − 500·s.
   -->
-  <g transform="translate(-63 -63) scale(1.15)">
+  <g transform="translate(12 12) scale(1.0)">
     <path
       fill="#ffffff"
       fill-rule="evenodd"
