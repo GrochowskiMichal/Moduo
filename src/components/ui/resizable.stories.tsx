@@ -26,15 +26,15 @@ export const Default: Story = {
   render: () => (
     <div className="h-[480px] w-full p-4">
       <ResizablePanelGroup direction="horizontal" className="gap-1">
-        <ResizablePanel defaultSize={25} minSize={15}>
+        <ResizablePanel defaultSize="25%" minSize="15%">
           <Pane label="Left rail" />
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={50}>
+        <ResizablePanel defaultSize="50%">
           <Pane label="Main" />
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={25} minSize={15}>
+        <ResizablePanel defaultSize="25%" minSize="15%">
           <Pane label="Right rail" />
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -46,11 +46,11 @@ export const Vertical: Story = {
   render: () => (
     <div className="h-[480px] w-full p-4">
       <ResizablePanelGroup direction="vertical" className="gap-1">
-        <ResizablePanel defaultSize={60}>
+        <ResizablePanel defaultSize="60%">
           <Pane label="Top" />
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={40} minSize={20}>
+        <ResizablePanel defaultSize="40%" minSize="20%">
           <Pane label="Bottom" />
         </ResizablePanel>
       </ResizablePanelGroup>

@@ -22,7 +22,7 @@ type RailMode = "full" | "sheet" | "hidden";
 type Layout = Record<string, number>;
 
 const BP_NARROW = 900;
-const LAYOUT_STORAGE_PREFIX = "moduo:panels-layout";
+const LAYOUT_STORAGE_PREFIX = "moduo:panels-layout:v2";
 
 function useViewportWidth(): number {
   const [width, setWidth] = useState(() =>
@@ -150,9 +150,9 @@ export function FeaturePanelsShell({
           {showLeftFull ? (
             <ResizablePanel
               id={`${feature}-left`}
-              defaultSize={20}
-              minSize={12}
-              maxSize={40}
+              defaultSize="20%"
+              minSize="12%"
+              maxSize="40%"
             >
               <aside className={RAIL_WRAPPER} data-rail-mode="full">
                 {leftSlot}
@@ -162,7 +162,7 @@ export function FeaturePanelsShell({
 
           {showLeftFull ? <ResizableHandle /> : null}
 
-          <ResizablePanel id={`${feature}-center`} defaultSize={60} minSize={30}>
+          <ResizablePanel id={`${feature}-center`} defaultSize="60%" minSize="30%">
             <main className={CENTER_WRAPPER}>{center}</main>
           </ResizablePanel>
 
@@ -171,9 +171,9 @@ export function FeaturePanelsShell({
           {showRightFull ? (
             <ResizablePanel
               id={`${feature}-right`}
-              defaultSize={20}
-              minSize={12}
-              maxSize={40}
+              defaultSize="20%"
+              minSize="12%"
+              maxSize="40%"
             >
               <aside className={RAIL_WRAPPER} data-rail-mode="full">
                 {rightSlot}
