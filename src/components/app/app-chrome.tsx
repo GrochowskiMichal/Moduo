@@ -65,6 +65,7 @@ import {
 } from "../../features/profile/profile-storage";
 import { baseModulesNavItems, normalizeTaskProject, nowIso, safeId } from "./app-chrome-constants";
 import { AppChromeMenus } from "./app-chrome-menus";
+import { TrialBanner } from "../trial-banner";
 import type { MenuAnchor, TaskProjectOption } from "./app-chrome-types";
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
@@ -161,14 +162,16 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [runtime]);
 
+  const isWebRuntime = !!runtime?.capabilities.isWeb;
   const modulesNavItems = useMemo(
     () =>
       baseModulesNavItems.filter((tab) => {
+        if (tab.desktopOnly && isWebRuntime) return false;
         if (tab.module === "notes") return modulePermissions.notes !== "none";
         if (tab.module === "tasks") return modulePermissions.tasks !== "none";
         return true;
       }),
-    [modulePermissions.notes, modulePermissions.tasks]
+    [isWebRuntime, modulePermissions.notes, modulePermissions.tasks]
   );
 
   const activeGridSceneName =
@@ -188,7 +191,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
   useEffect(() => {
     if (!isSettingsRoute && !modulesNavItems.some((tab) => tab.href === pathname)) {
-      void navigate({ to: modulesNavItems[0]?.href ?? "/grid", replace: true });
+      void navigate({ to: modulesNavItems[0]?.href ?? "/", replace: true });
     }
   }, [isSettingsRoute, navigate, pathname, modulesNavItems]);
 
@@ -909,6 +912,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
   return (
     <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
+      <TrialBanner />
       <View
         className="relative px-5 pt-4 pb-2 bg-card border-b border-border"
         style={{ zIndex: "var(--z-header)" }}
