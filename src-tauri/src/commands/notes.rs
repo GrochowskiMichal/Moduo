@@ -394,6 +394,32 @@ pub async fn notes_apply_crdt_updates(
 
     note.updated_at = now_iso();
     state.store.put_note(&note).map_err(|e| e.to_string())?;
+
+    // Enqueue for cloud sync. Include doc_state in the payload so the desktop
+    // sync worker pushes the full body snapshot to Supabase alongside note meta,
+    // mirroring what the web runtime writes directly via applyCrdtUpdates.
+    if inserted > 0 {
+        let doc_state = state
+            .store
+            .get_note_doc_state(&note_id)
+            .unwrap_or_default();
+        let mut payload = serde_json::to_value(&note).unwrap_or_default();
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert(
+                "doc_state".to_string(),
+                serde_json::Value::String(doc_state.snapshot_b64),
+            );
+        }
+        let _ = crate::sync::enqueue(
+            &state.store,
+            "notes_meta",
+            &note_id,
+            payload,
+            Some(&workspace_id),
+            crate::sync::OutboxOp::Upsert,
+        );
+    }
+
     Ok(serde_json::json!({
         "inserted": inserted,
         "lastClientSeq": max_seq,

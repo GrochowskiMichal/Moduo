@@ -940,13 +940,16 @@ impl RedbStore {
             oplog_table.insert(oplog_key.as_str(), payload.as_str())?;
 
             let mut doc_table = write_txn.open_table(NOTES_DOC_STATE)?;
-            let current = doc_table
-                .get(update.note_id.as_str())?
-                .map(|v| serde_json::from_str::<NoteDocState>(v.value()).unwrap_or_default())
-                .unwrap_or_default();
-            let mut merged = current;
-            merged.updates.push(update.clone());
-            let merged_payload = serde_json::to_string(&merged)?;
+            // The incoming update_b64 is a full Y.encodeStateAsUpdate snapshot (the
+            // new flush() contract). Store it directly as snapshot_b64 and clear any
+            // accumulated partial updates so that reload never depends on a sequence
+            // of incremental updates that may have missing CRDT dependencies.
+            let new_state = NoteDocState {
+                snapshot_b64: update.update_b64.clone(),
+                last_compacted_update_id: update.client_seq,
+                updates: vec![],
+            };
+            let merged_payload = serde_json::to_string(&new_state)?;
             doc_table.insert(update.note_id.as_str(), merged_payload.as_str())?;
         }
 

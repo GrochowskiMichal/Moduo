@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio::time::sleep;
 
+use crate::domain::NoteDocState;
 use crate::store_redb::RedbStore;
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -263,9 +264,28 @@ async fn push_outbox(
             .map(|(_, rest)| *rest)
             .unwrap_or(entry.table_name.as_str());
 
+        // For notes, enrich the outbound payload with the current doc_state snapshot
+        // so the body is pushed to Supabase alongside the metadata. This mirrors
+        // what the web runtime writes directly via applyCrdtUpdates.
+        let mut payload = entry.payload.clone();
+        if entry.table_name == "notes_meta" {
+            if let Some(note_id) = payload.get("id").and_then(|v| v.as_str()) {
+                if let Ok(doc_state) = store.get_note_doc_state(note_id) {
+                    if !doc_state.snapshot_b64.is_empty() {
+                        if let Some(obj) = payload.as_object_mut() {
+                            obj.insert(
+                                "doc_state".to_string(),
+                                serde_json::Value::String(doc_state.snapshot_b64),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         let success = match entry.op {
             OutboxOp::Upsert => {
-                push_upsert(client, supabase_url, anon_key, access_token, rest_table, &entry.payload).await
+                push_upsert(client, supabase_url, anon_key, access_token, rest_table, &payload).await
             }
             OutboxOp::Delete => {
                 push_delete(client, supabase_url, anon_key, access_token, rest_table, &entry.record_id).await
@@ -435,7 +455,6 @@ fn apply_inbound_row(store: &RedbStore, table_name: &str, row: &serde_json::Valu
 
     if table_name == "notes" {
         // Only update local note meta if remote is newer (last-writer-wins).
-        // CRDT doc_state is handled separately via the notes_apply_crdt_updates path.
         if let Ok(Some(local)) = store.get_note(id) {
             let local_ts = local.updated_at.as_str();
             if remote_ts <= local_ts {
@@ -444,6 +463,19 @@ fn apply_inbound_row(store: &RedbStore, table_name: &str, row: &serde_json::Valu
         }
         if let Ok(note) = serde_json::from_value::<crate::domain::NoteMeta>(row.clone()) {
             let _ = store.put_note(&note);
+        }
+        // Also pull the doc_state body snapshot so the desktop has the same
+        // canonical note body that the web runtime persists to Supabase.
+        // Only apply when the remote row carries a non-empty doc_state field.
+        if let Some(doc_state_b64) = row.get("doc_state").and_then(|v| v.as_str()) {
+            if !doc_state_b64.is_empty() {
+                let doc_state = NoteDocState {
+                    snapshot_b64: doc_state_b64.to_string(),
+                    last_compacted_update_id: 0,
+                    updates: vec![],
+                };
+                let _ = store.put_note_doc_state(id, &doc_state);
+            }
         }
     } else if table_name == "tasks_items" {
         if let Ok(task) = serde_json::from_value::<crate::domain::TaskItem>(row.clone()) {

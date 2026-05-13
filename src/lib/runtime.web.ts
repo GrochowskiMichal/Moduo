@@ -429,7 +429,7 @@ export const webRuntime: ModuoRuntime = {
       };
     },
     async applyCrdtUpdates(workspaceId, noteId, _clientId, updates) {
-      // Load existing snapshot, merge new updates into it, save back
+      // Load existing snapshot so concurrent edits from other clients are merged in.
       const existing = await webRuntime.notes.getDocState(workspaceId, noteId);
       console.log(`%c[NOTES:applyCrdtUpdates] noteId=${noteId} existingB64len=${existing?.snapshotB64?.length ?? 0} incomingUpdates=${updates.length}`, "color:#fa4;font-weight:bold");
 
@@ -458,13 +458,40 @@ export const webRuntime: ModuoRuntime = {
       }
       const root = doc.get("root-v2", Y.XmlElement);
       const children = root.toArray();
-      const firstChildText = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
-      console.log(`%c[NOTES:applyCrdtUpdates] FINAL before save: rootType=${root.constructor.name} rootChildren=${children.length} firstChild=${children[0]?.constructor?.name ?? "none"} firstChildLen=${(children[0] as any)?._length ?? "n/a"} textPreview="${firstChildText.slice(0, 60)}"`, "color:#4fa;font-weight:bold");
+      const mergedText = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
+      console.log(`%c[NOTES:applyCrdtUpdates] MERGED before save: rootType=${root.constructor.name} rootChildren=${children.length} firstChild=${children[0]?.constructor?.name ?? "none"} firstChildLen=${(children[0] as any)?._length ?? "n/a"} textPreview="${mergedText.slice(0, 60)}"`, "color:#4fa;font-weight:bold");
 
-      const mergedB64 = encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
-      console.log(`%c[NOTES:applyCrdtUpdates] saving mergedB64 len=${mergedB64.length} to DB`, "color:#fa4");
+      // Guard: the incoming updates are now full Y.Doc snapshots (see flush() in
+      // sync-engine.ts). If the merge result produced an empty body but the client's
+      // own snapshot contains text, the merge went wrong — use the client snapshot
+      // directly as the source of truth to prevent note body erasure.
+      let snapshotToSave: string;
+      if (!mergedText && updates.length > 0) {
+        const clientDoc = new Y.Doc();
+        clientDoc.get("root-v2", Y.XmlElement);
+        for (const u of updates) {
+          if (u.updateB64) {
+            try { Y.applyUpdate(clientDoc, decodeBase64ToUint8(u.updateB64)); } catch { /* ignore */ }
+          }
+        }
+        const clientRoot = clientDoc.get("root-v2", Y.XmlElement);
+        const clientChildren = clientRoot.toArray();
+        const clientText = clientChildren[0]
+          ? (clientChildren[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("")
+          : "";
+        if (clientText) {
+          console.warn(`[NOTES:applyCrdtUpdates] merge produced empty body but client snapshot has text — using client snapshot for ${noteId}`);
+          snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(clientDoc));
+        } else {
+          snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
+        }
+      } else {
+        snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
+      }
+
+      console.log(`%c[NOTES:applyCrdtUpdates] saving snapshot len=${snapshotToSave.length} to DB`, "color:#fa4");
       const { error } = await supabaseClient.from("notes")
-        .update({ doc_state: mergedB64, updated_at: new Date().toISOString() })
+        .update({ doc_state: snapshotToSave, updated_at: new Date().toISOString() })
         .eq("id", noteId);
       if (error) {
         console.error(`[NOTES:applyCrdtUpdates] DB save FAILED:`, error.message);

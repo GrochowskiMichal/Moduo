@@ -391,22 +391,29 @@ export class RedbPersistence {
 
     const queued = this.pendingUpdates;
     this.pendingUpdates = [];
-    const update = queued.length === 1 ? queued[0] : Y.mergeUpdates(queued);
-    if (!update.byteLength) {
-      console.log(`%c[NOTES:flush] update byteLength=0, nothing to flush`, "color:#888");
+
+    // Encode the full current document state as the durable payload.
+    // Sending only Y.mergeUpdates(queued) (partial incremental updates) risks
+    // losing nested XmlText content when the server-side applies them to a fresh
+    // doc whose type registry doesn't match the live client doc. The full
+    // Y.encodeStateAsUpdate snapshot is self-contained and always round-trips
+    // correctly. The queued incremental updates are kept only as a dirty-flag so
+    // we can re-queue them on failure and retry.
+    const fullSnapshot = Y.encodeStateAsUpdate(this.doc);
+    if (!fullSnapshot.byteLength) {
+      console.log(`%c[NOTES:flush] fullSnapshot byteLength=0, nothing to flush`, "color:#888");
       return;
     }
 
-    console.log(`%c[NOTES:flush] flushing noteId=${this.noteId} updateSize=${update.byteLength} queuedCount=${queued.length}`, "color:#fa4;font-weight:bold");
     const root = this.doc.get("root-v2", Y.XmlElement);
     const children = root.toArray();
     const textPreview = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
-    console.log(`%c[NOTES:flush] doc state: rootType=${root.constructor.name} rootChildren=${children.length} textPreview="${textPreview.slice(0, 80)}"`, "color:#fa4");
+    console.log(`%c[NOTES:flush] flushing noteId=${this.noteId} snapshotSize=${fullSnapshot.byteLength} queuedCount=${queued.length} textPreview="${textPreview.slice(0, 80)}"`, "color:#fa4;font-weight:bold");
 
     this.onStatus("syncing");
     const currentSeq = this.getNextSeq();
     try {
-      const b64 = encodeUint8ToBase64(update);
+      const b64 = encodeUint8ToBase64(fullSnapshot);
       await this.runtime.notes.applyCrdtUpdates(this.workspaceId, this.noteId, this.clientId, [
         {
           idempotencyKey: `${this.workspaceId}:${this.noteId}:${this.clientId}:${currentSeq}`,
@@ -416,9 +423,38 @@ export class RedbPersistence {
       ]);
       console.log(`%c[NOTES:flush] applyCrdtUpdates OK seq=${currentSeq}`, "color:#4fa;font-weight:bold");
       this.onStatus("synced");
-      void this.clearDraftB64();
+      // Delay clearing the local draft until we can confirm the persisted snapshot
+      // round-trips to the same root-v2 text/structure as the live document.
+      // We verify this locally against the same fullSnapshot we just sent rather
+      // than doing a network round-trip.
+      let draftSafelyClearable = true;
+      try {
+        const verifyDoc = new Y.Doc();
+        verifyDoc.get("root-v2", Y.XmlElement);
+        Y.applyUpdate(verifyDoc, fullSnapshot, "verify");
+        const verifyRoot = verifyDoc.get("root-v2", Y.XmlElement);
+        const verifyChildren = verifyRoot.toArray();
+        const verifyText = verifyChildren[0]
+          ? (verifyChildren[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("")
+          : "";
+        // If the live doc has text but the verified snapshot does not reproduce it,
+        // keep the draft as a safety net.
+        if (textPreview && !verifyText) {
+          draftSafelyClearable = false;
+          console.warn(`[RedbPersistence] snapshot verification mismatch for ${this.noteId}: liveText="${textPreview.slice(0, 40)}" verifyText="" — keeping draft`);
+        }
+      } catch {
+        // Verification failed; keep draft as safety net.
+        draftSafelyClearable = false;
+      }
+      if (draftSafelyClearable) {
+        void this.clearDraftB64();
+      }
     } catch (e) {
-      // Requeue unsent updates so the next flush can retry without data loss.
+      // Re-queue the original incremental updates as a dirty flag so the next
+      // scheduled flush retries. The actual payload at retry time will again be
+      // Y.encodeStateAsUpdate(this.doc), capturing any additional edits made in
+      // the interim.
       this.pendingUpdates = [...queued, ...this.pendingUpdates];
       console.error(`[RedbPersistence] applyCrdtUpdates ERROR:`, e);
       this.onStatus("error");
