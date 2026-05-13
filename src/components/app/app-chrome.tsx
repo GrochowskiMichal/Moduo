@@ -932,7 +932,15 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             <WorkspaceSwitcher onOpenSettings={() => setWorkspaceSettingsOpen(true)} />
           </View>
 
-          <View className="min-w-0 flex-1 overflow-x-auto overflow-y-visible">
+          <View
+            className="no-scrollbar min-w-0 flex-1 overflow-x-auto overflow-y-visible"
+            style={{
+              maskImage:
+                "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
+              WebkitMaskImage:
+                "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
+            }}
+          >
             <View className="flex min-w-max flex-row items-center gap-2 pr-2">
               {modulesNavItems.map((tab) => {
                 const active = pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));

@@ -429,6 +429,15 @@ body,
   background: var(--muted-foreground);
 }
 
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 /* React Flow overrides for the dark mindmap theme */
 .react-flow__edge-path {
   stroke-linecap: round;
