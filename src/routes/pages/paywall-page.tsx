@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check } from "lucide-react";
 import { Pressable, Text, View } from "../../tw";
 import { useAuth } from "../../providers/auth-provider";
+import { supabaseClient } from "../../lib/runtime.web";
 
 const SUPABASE_URL =
   (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
@@ -78,31 +79,19 @@ export function PaywallPage() {
       // Poll user_entitlements until subscription_status is trialing/active
       // (the edge function writes directly, but we wait to confirm before
       // redirecting to avoid a redirect loop back to /paywall).
-      const supabaseAnonKey =
-        (import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string | undefined) ?? "";
       const MAX_POLLS = 12;
       const POLL_INTERVAL_MS = 800;
       let confirmed = false;
       for (let i = 0; i < MAX_POLLS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        try {
-          const checkRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/user_entitlements?select=subscription_status`,
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                apikey: supabaseAnonKey,
-              },
-            }
-          );
-          const rows = await checkRes.json() as Array<{ subscription_status: string }>;
-          const status = rows[0]?.subscription_status;
-          if (status === "trialing" || status === "active") {
-            confirmed = true;
-            break;
-          }
-        } catch {
-          // network blip — keep polling
+        const { data: row } = await supabaseClient
+          .from("user_entitlements")
+          .select("subscription_status")
+          .maybeSingle<{ subscription_status: string }>();
+        const status = row?.subscription_status;
+        if (status === "trialing" || status === "active") {
+          confirmed = true;
+          break;
         }
       }
 
