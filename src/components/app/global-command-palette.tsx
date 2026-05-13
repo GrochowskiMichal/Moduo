@@ -21,6 +21,7 @@ import {
   CommandShortcut,
 } from "../ui/command";
 import { onShortcut, SHORTCUTS, formatShortcut } from "../../lib/shortcuts";
+import { dispatchOpenSettings } from "../../features/settings/settings-events";
 
 type Action = {
   id: string;
@@ -78,7 +79,10 @@ export function GlobalCommandPalette() {
       label: "Settings",
       icon: SettingsIcon,
       shortcut: settingsLabel,
-      run: go("/settings"),
+      run: () => {
+        setOpen(false);
+        dispatchOpenSettings();
+      },
     },
   ];
 

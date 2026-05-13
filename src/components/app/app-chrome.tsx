@@ -31,14 +31,16 @@ import moduoFavicon from "../../../assets/moduo_favicon.png";
 import { baseModulesNavItems } from "./app-chrome-constants";
 import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCommandPalette, dispatchOpenPalette } from "./global-command-palette";
+import { SettingsModal } from "../../features/settings/settings-modal";
+import { dispatchOpenSettings } from "../../features/settings/settings-events";
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
   useGlobalShortcuts();
-  useShortcut("settings", () => {
-    void navigate({ to: "/settings" });
-  });
+  // The Cmd-, shortcut is handled inside SettingsModal so it can toggle the
+  // modal open / closed without bouncing through the /settings route. Keep
+  // useShortcut wiring here for the rest.
   useShortcut("new-note", () => {
     void navigate({ to: "/notes" });
     if (typeof window !== "undefined") {
@@ -329,12 +331,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             <UserMenu
               avatarDataUrl={avatarDataUrl}
               profileInitial={derivedInitial}
-              onOpenSettings={() => {
-                void navigate({ to: "/settings" });
-              }}
-              onOpenIntegrations={() => {
-                void navigate({ to: "/settings", search: { section: "integrations" } });
-              }}
+              onOpenSettings={() => dispatchOpenSettings()}
+              onOpenIntegrations={() =>
+                dispatchOpenSettings({ section: "integrations" })
+              }
             />
           </View>
         </View>
@@ -379,6 +379,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
       <GlobalBottomBar />
       <GlobalCommandPalette />
+      <SettingsModal />
       <WorkspaceSettingsModal
         visible={workspaceSettingsOpen}
         onClose={() => setWorkspaceSettingsOpen(false)}
