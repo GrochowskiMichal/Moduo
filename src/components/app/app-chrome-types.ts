@@ -6,18 +6,3 @@ export type ModuleNavItem = {
   href: string;
   module?: "notes" | "tasks" | "mindmap" | "templates" | "email";
 };
-
-export type TaskProjectOption = {
-  id: string;
-  workspaceId: string;
-  ownerId: string;
-  name: string;
-  description: string;
-  logoUrl: string | null;
-  position: string;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-};
-
-export type MenuAnchor = { left: number; top: number };
