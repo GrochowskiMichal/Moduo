@@ -71,9 +71,9 @@ function writePersistedLayout(key: string, layout: Layout): void {
 }
 
 const RAIL_WRAPPER =
-  "min-h-0 min-w-0 h-full w-full rounded-2xl border border-border bg-card p-5 flex flex-col overflow-hidden";
+  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card p-5 flex flex-col overflow-hidden";
 const CENTER_WRAPPER =
-  "min-h-0 min-w-0 h-full w-full rounded-2xl border border-border bg-card p-4 overflow-auto relative";
+  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card p-4 overflow-auto relative";
 
 export function FeaturePanelsShell({
   feature,
@@ -139,13 +139,13 @@ export function FeaturePanelsShell({
 
   return (
     <>
-      <div className="flex h-full min-h-0 bg-background px-4">
+      <div className="flex h-full min-h-0 bg-background px-1">
         <ResizablePanelGroup
           key={layoutKey}
           direction="horizontal"
           defaultLayout={defaultLayout}
           onLayoutChanged={onLayoutChanged}
-          className="gap-2"
+          className="gap-0"
         >
           {showLeftFull ? (
             <ResizablePanel
