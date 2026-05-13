@@ -9,7 +9,7 @@
 
 ## Testing gate
 
-Target: <!-- task → personal | personal → develop | develop → production -->
+Target: <!-- task → personal | personal → develop | develop → main -->
 
 - [ ] `bun run typecheck` clean
 - [ ] `bun run lint:tw` clean on files touched
@@ -22,7 +22,7 @@ For **personal → develop** PRs, also:
 - [ ] Storybook renders for any new / changed primitives without console errors
 - [ ] Visual snapshot suite green (or new PNG committed intentionally)
 
-For **develop → production** PRs, also:
+For **develop → main** PRs, also:
 
 - [ ] Full walkthrough on a fresh vault
 - [ ] Full walkthrough on an existing vault (migration check)
