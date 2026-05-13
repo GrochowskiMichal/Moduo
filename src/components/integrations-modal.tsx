@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+
+import { useAuth } from "../providers/auth-provider";
 import { Badge } from "./ui/badge";
 import {
   Dialog,
@@ -45,15 +46,17 @@ const MeetIcon = () => (
 );
 
 export function IntegrationsModal({ visible, onClose }: Props) {
+  const { runtime } = useAuth();
   const [statuses, setStatuses] = useState<IntegrationStatusItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
+    if (!runtime) return;
     setLoading(true);
     try {
-      const result = await invoke<IntegrationStatusItem[]>("integration_get_status");
+      const result = await runtime.integrations.getStatus();
       setStatuses(result);
     } catch (e) {
       console.error("[integrations] get_status failed", e);
@@ -71,12 +74,15 @@ export function IntegrationsModal({ visible, onClose }: Props) {
     statuses.find((s) => s.provider === provider)?.connected ?? false;
 
   const handleConnect = async (provider: "zoom" | "google_meet") => {
+    if (!runtime) return;
     setBusy(provider);
     setError(null);
     try {
-      const cmd =
-        provider === "zoom" ? "integration_connect_zoom" : "integration_connect_google_meet";
-      await invoke(cmd);
+      if (provider === "zoom") {
+        await runtime.integrations.connectZoom();
+      } else {
+        await runtime.integrations.connectGoogleMeet();
+      }
       await load();
     } catch (e) {
       const msg = typeof e === "string" ? e : "Connection failed";
@@ -87,10 +93,11 @@ export function IntegrationsModal({ visible, onClose }: Props) {
   };
 
   const handleDisconnect = async (provider: string) => {
+    if (!runtime) return;
     setBusy(provider);
     setError(null);
     try {
-      await invoke("integration_disconnect", { provider });
+      await runtime.integrations.disconnect(provider);
       await load();
     } catch (e) {
       const msg = typeof e === "string" ? e : "Disconnect failed";
