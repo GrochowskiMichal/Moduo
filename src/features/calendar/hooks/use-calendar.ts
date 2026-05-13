@@ -6,6 +6,7 @@ import type {
   CalendarSource,
   CalendarViewMode,
 } from "../types";
+import { getRuntime } from "../../../lib/runtime";
 
 function safeId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -61,8 +62,9 @@ function dedupeEvents(list: CalendarEvent[]): CalendarEvent[] {
 
 async function tryListBackendEvents(): Promise<CalendarEvent[] | null> {
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const raw = (await invoke("calendar_events_list")) as unknown;
+    const rt = getRuntime();
+    if (!rt) return null;
+    const raw = await rt.calendar.listEvents();
     if (!Array.isArray(raw)) return [];
     return dedupeEvents(raw as CalendarEvent[]);
   } catch {
@@ -72,9 +74,9 @@ async function tryListBackendEvents(): Promise<CalendarEvent[] | null> {
 
 async function tryUpsertBackendEvent(event: CalendarEvent): Promise<boolean> {
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("calendar_events_upsert", { event });
-    return true;
+    const rt = getRuntime();
+    if (!rt) return false;
+    return rt.calendar.upsertEvent(event);
   } catch {
     return false;
   }
@@ -82,9 +84,9 @@ async function tryUpsertBackendEvent(event: CalendarEvent): Promise<boolean> {
 
 async function tryDeleteBackendEvent(eventId: string): Promise<boolean> {
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("calendar_events_delete", { eventId });
-    return true;
+    const rt = getRuntime();
+    if (!rt) return false;
+    return rt.calendar.deleteEvent(eventId);
   } catch {
     return false;
   }
@@ -96,38 +98,29 @@ function isGoogleSourceId(sourceId: string): boolean {
 
 async function tryUpsertGoogleEvent(accountId: string, event: CalendarEvent): Promise<CalendarEvent | null> {
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const raw = (await invoke("calendar_google_event_upsert", { accountId, event })) as unknown;
-    return raw as CalendarEvent;
+    const rt = getRuntime();
+    if (!rt) return null;
+    return rt.calendar.upsertGoogleEvent(accountId, event);
   } catch {
     return null;
   }
 }
 
-async function tryDeleteGoogleEvent(accountId: string, calendarSourceId: string, externalId: string): Promise<boolean> {
+async function tryDeleteGoogleEvent(accountId: string, _calendarSourceId: string, externalId: string): Promise<boolean> {
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("calendar_google_event_delete", { accountId, calendarSourceId, externalId });
-    return true;
+    const rt = getRuntime();
+    if (!rt) return false;
+    return rt.calendar.deleteGoogleEvent(accountId, externalId);
   } catch {
     return false;
   }
 }
 
-async function trySyncGoogleEvents(accountId: string, calendarSourceIds: string[]) {
+async function trySyncGoogleEvents(accountId: string, _calendarSourceIds: string[]) {
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const now = new Date();
-    const timeMin = new Date(now);
-    timeMin.setDate(timeMin.getDate() - 30);
-    const timeMax = new Date(now);
-    timeMax.setDate(timeMax.getDate() + 90);
-    await invoke("calendar_google_events_sync", {
-      accountId,
-      calendarSourceIds,
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
-    });
+    const rt = getRuntime();
+    if (!rt) return;
+    await rt.calendar.syncGoogleEvents(accountId);
   } catch {
     // ignore
   }

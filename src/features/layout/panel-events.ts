@@ -65,7 +65,7 @@ function cloneDefaultMap(): FeaturePanelsMap {
 }
 
 export function routeToFeatureLayout(pathname: string): FeatureLayoutKey {
-  if (pathname === "/grid" || pathname === "/") return "grid";
+  if (pathname === "/") return "grid";
   if (pathname === "/tasks") return "ground";
   if (pathname === "/ground") return "ground";
   if (pathname === "/mindmap") return "mindmap";

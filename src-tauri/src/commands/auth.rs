@@ -198,6 +198,9 @@ fn persist_active_session(
 
     *state.session.lock().map_err(|e| e.to_string())? = Some(session.clone());
 
+    // Start (or restart) the cloud sync worker if this is a Supabase JWT session.
+    start_sync_worker_if_needed(state, &session.access_token);
+
     let payload = serde_json::json!({
         "userId": session.user.id,
         "displayName": display_name,
@@ -206,6 +209,33 @@ fn persist_active_session(
         .store
         .kv_set("auth", "current-profile", &payload)
         .map_err(|e| e.to_string())
+}
+
+fn start_sync_worker_if_needed(state: &AppState, access_token: &str) {
+    if !crate::sync::is_cloud_session(access_token) {
+        return;
+    }
+
+    // Plan tier gating happens inside the sync worker itself (run_worker checks at startup
+    // and periodically), so we start it here for all cloud sessions. The worker will
+    // self-terminate if the user is on the free tier.
+    let anon_key = std::env::var("PUBLIC_SUPABASE_ANON_KEY")
+        .or_else(|_| std::env::var("MODUO_SUPABASE_ANON_KEY"))
+        .unwrap_or_default();
+
+    let handle = crate::sync::start_if_cloud(
+        state.store.clone(),
+        state.config.supabase_url.clone(),
+        anon_key,
+        access_token.to_string(),
+    );
+
+    if let Ok(mut guard) = state.sync_worker.lock() {
+        if let Some(old) = guard.take() {
+            old.shutdown();
+        }
+        *guard = handle;
+    }
 }
 
 fn ensure_local_workspace_for_user(
@@ -632,6 +662,12 @@ pub async fn auth_sign_out(state: State<'_, AppState>) -> Result<(), String> {
     let _ = state.store.kv_remove("auth", "current-profile");
     crate::commands::email::stop_all_idle_workers();
     *state.session.lock().map_err(|e| e.to_string())? = None;
+    // Stop the cloud sync worker on sign-out.
+    if let Ok(mut guard) = state.sync_worker.lock() {
+        if let Some(worker) = guard.take() {
+            worker.shutdown();
+        }
+    }
     Ok(())
 }
 

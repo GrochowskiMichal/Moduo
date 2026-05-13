@@ -69,6 +69,11 @@ pub const EMAIL_UI_STATE: TableDefinition<&str, &str> = TableDefinition::new("em
 
 pub const CALENDAR_EVENTS: TableDefinition<&str, &str> = TableDefinition::new("calendar_events");
 
+// Cloud sync tables
+pub const SYNC_CLOUD_OUTBOX: TableDefinition<&str, &str> =
+    TableDefinition::new("sync_cloud_outbox");
+pub const SYNC_PULL_CURSOR: TableDefinition<&str, &str> = TableDefinition::new("sync_pull_cursor");
+
 pub const TT_ENTRIES: TableDefinition<&str, &str> = TableDefinition::new("tt_entries");
 pub const TT_CATEGORIES: TableDefinition<&str, &str> = TableDefinition::new("tt_categories");
 pub const TT_RULES: TableDefinition<&str, &str> = TableDefinition::new("tt_rules");
@@ -125,6 +130,9 @@ impl RedbStore {
         let _ = write_txn.open_table(EMAIL_UI_STATE)?;
 
         let _ = write_txn.open_table(CALENDAR_EVENTS)?;
+
+        let _ = write_txn.open_table(SYNC_CLOUD_OUTBOX)?;
+        let _ = write_txn.open_table(SYNC_PULL_CURSOR)?;
 
         let _ = write_txn.open_table(TT_ENTRIES)?;
         let _ = write_txn.open_table(TT_CATEGORIES)?;
@@ -932,13 +940,16 @@ impl RedbStore {
             oplog_table.insert(oplog_key.as_str(), payload.as_str())?;
 
             let mut doc_table = write_txn.open_table(NOTES_DOC_STATE)?;
-            let current = doc_table
-                .get(update.note_id.as_str())?
-                .map(|v| serde_json::from_str::<NoteDocState>(v.value()).unwrap_or_default())
-                .unwrap_or_default();
-            let mut merged = current;
-            merged.updates.push(update.clone());
-            let merged_payload = serde_json::to_string(&merged)?;
+            // The incoming update_b64 is a full Y.encodeStateAsUpdate snapshot (the
+            // new flush() contract). Store it directly as snapshot_b64 and clear any
+            // accumulated partial updates so that reload never depends on a sequence
+            // of incremental updates that may have missing CRDT dependencies.
+            let new_state = NoteDocState {
+                snapshot_b64: update.update_b64.clone(),
+                last_compacted_update_id: update.client_seq,
+                updates: vec![],
+            };
+            let merged_payload = serde_json::to_string(&new_state)?;
             doc_table.insert(update.note_id.as_str(), merged_payload.as_str())?;
         }
 
@@ -957,6 +968,109 @@ impl RedbStore {
 
         write_txn.commit()?;
         Ok(next_seq)
+    }
+
+    // ── Cloud sync outbox ─────────────────────────────────────────────────
+
+    pub fn sync_outbox_push(&self, entry: &serde_json::Value) -> anyhow::Result<()> {
+        let id = entry
+            .get("id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("outbox entry missing id"))?;
+        let key = format!(
+            "{}:{}",
+            entry.get("table_name").and_then(|v| v.as_str()).unwrap_or("unknown"),
+            id
+        );
+        self.put_json(SYNC_CLOUD_OUTBOX, &key, entry)
+    }
+
+    pub fn sync_outbox_list(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        let read_txn = self.db.begin_read()?;
+        let table = match read_txn.open_table(SYNC_CLOUD_OUTBOX) {
+            Ok(t) => t,
+            Err(_) => return Ok(vec![]),
+        };
+        let mut entries = Vec::new();
+        for item in table.iter()? {
+            let (_, v) = item?;
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(v.value()) {
+                entries.push(parsed);
+            }
+        }
+        Ok(entries)
+    }
+
+    pub fn sync_outbox_delete(&self, table_name: &str, id: &str) -> anyhow::Result<()> {
+        let _lock = self.write_guard.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let key = format!("{table_name}:{id}");
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(SYNC_CLOUD_OUTBOX)?;
+            table.remove(key.as_str())?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    pub fn sync_outbox_increment_attempts(
+        &self,
+        table_name: &str,
+        id: &str,
+        max_attempts: u8,
+    ) -> anyhow::Result<bool> {
+        let _lock = self.write_guard.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let key = format!("{table_name}:{id}");
+        let write_txn = self.db.begin_write()?;
+        let dead = {
+            let mut table = write_txn.open_table(SYNC_CLOUD_OUTBOX)?;
+            // Read value first, drop guard before mutating.
+            let existing: Option<String> = table
+                .get(key.as_str())?
+                .map(|v| v.value().to_string());
+            if let Some(raw) = existing {
+                let mut entry: serde_json::Value = serde_json::from_str(&raw)?;
+                let attempts = entry
+                    .get("attempts")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0)
+                    + 1;
+                entry["attempts"] = serde_json::Value::Number(attempts.into());
+                if attempts >= max_attempts as u64 {
+                    table.remove(key.as_str())?;
+                    true
+                } else {
+                    let encoded = serde_json::to_string(&entry)?;
+                    table.insert(key.as_str(), encoded.as_str())?;
+                    false
+                }
+            } else {
+                false
+            }
+        };
+        write_txn.commit()?;
+        Ok(dead)
+    }
+
+    pub fn sync_get_pull_cursor(&self, table_name: &str) -> anyhow::Result<Option<String>> {
+        let read_txn = self.db.begin_read()?;
+        let table = match read_txn.open_table(SYNC_PULL_CURSOR) {
+            Ok(t) => t,
+            Err(_) => return Ok(None),
+        };
+        let value = table.get(table_name)?.map(|v| v.value().to_string());
+        Ok(value)
+    }
+
+    pub fn sync_set_pull_cursor(&self, table_name: &str, cursor: &str) -> anyhow::Result<()> {
+        let _lock = self.write_guard.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(SYNC_PULL_CURSOR)?;
+            table.insert(table_name, cursor)?;
+        }
+        write_txn.commit()?;
+        Ok(())
     }
 
     pub fn dump_workspace_hashes(
