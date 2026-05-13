@@ -26,7 +26,7 @@ maciej/* mike/*     ← task / milestone branches. Short-lived.
 | Branch | Owner | Who can merge into it |
 | --- | --- | --- |
 | `production` | shared | `develop` only, at release time, both devs sign off |
-| `develop` | shared | `mike` and `maciej`, via PR, the other dev reviews |
+| `develop` | shared | `mike` and `maciej`, via PR, self-merge OK (review optional) |
 | `maciej` | Maciej | `maciej/*` task branches, via PR or fast-forward |
 | `mike` | Mike | `mike/*` task branches, via PR or fast-forward |
 
@@ -60,10 +60,13 @@ task branch  →  personal branch  →  develop  →  production
   after merge.
 - **Personal → develop**: **owner's call.** A 1-day fix can sync immediately;
   a 2-week feature can sync the moment it's testable. The rule is "when ready",
-  not "on a clock." Open a PR; the other dev reviews. Use rebase-merge to keep
-  `develop` history linear. The personal branch stays after the merge.
-- **Develop → production**: only at a tagged release. Both devs sign off in
-  the PR. Tag the merge commit per the release scheme below.
+  not "on a clock." Open a PR so there's a diff record, run the testing gate,
+  then self-merge — peer review is welcome but never blocking, so nobody
+  stalls waiting on the other dev. Use rebase-merge to keep `develop` history
+  linear. The personal branch stays after the merge.
+- **Develop → production**: only at a tagged release. **This is the gated
+  checkpoint** — both devs sign off in the PR. Tag the merge commit per the
+  release scheme below.
 
 ## Testing gates
 
@@ -119,6 +122,18 @@ Tag format: `alpha-X.Y.Z`, `beta-X.Y.Z`, then plain `X.Y.Z` for 1.0+.
 Every release tag points at a commit on `production`. Keep
 [`package.json`](./package.json) `version` field in sync with the tag.
 
+### Hotfix flow
+
+When `production` needs a fix but you don't want to bring in everything
+sitting on `develop`:
+
+1. Branch `hotfix/<owner>/<short-name>` off `production`.
+2. Fix + run the develop-tier testing gate.
+3. PR straight into `production`. Both devs sign off (same as a release).
+4. Tag with `Z` bumped — e.g. `alpha-0.3.0` → `alpha-0.3.1`.
+5. Cherry-pick or merge the hotfix back into `develop` so the fix isn't
+   lost on the next release.
+
 ## CHANGELOG
 
 [CHANGELOG.md](./CHANGELOG.md) is updated on every `develop → production`
@@ -162,6 +177,21 @@ These apply to every AI session in this repo regardless of tool:
 7. **Reference [CLAUDE.md](./CLAUDE.md) and [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)
    before touching UI.** They're the design contract.
 
+### Session start checklist
+
+The first thing an LLM session should do, before any other action:
+
+1. Confirm whose session this is — Maciej or Mike. (CLAUDE.md says "the user
+   is Maciej" by default; Mike's CLAUDE.md fork or session prompt overrides.)
+2. `git fetch && git checkout <owner>` to land on the correct personal branch.
+3. `git pull` to refresh.
+4. `git checkout -b <owner>/<task>` for new work.
+5. Skim CLAUDE.md + this file's "Rules for LLM agents" + DESIGN_SYSTEM.md
+   if the task is UI.
+
+If any of the above can't be done (no personal branch yet, untracked work
+in progress, etc.), pause and ask before improvising.
+
 ## Pull request checklist
 
 (Mirrored in [`.github/pull_request_template.md`](.github/pull_request_template.md)
@@ -201,7 +231,8 @@ Apply via repo Settings → Branches once `production` and `develop` exist:
 - **`production`**: require PR, require both devs' approvals, require
   status checks to pass (`checks` workflow), require linear history,
   disallow force-push, disallow deletion.
-- **`develop`**: require PR, require 1 approval (the other dev), require
-  status checks to pass, disallow force-push, disallow deletion.
+- **`develop`**: require PR, require status checks to pass, disallow
+  force-push, disallow deletion. **Do not require approvals** — self-merge
+  is intentional so neither dev stalls.
 - **Personal branches**: no protection — the owner is free to push
   directly. (LLM agents are still constrained by the rules above.)
