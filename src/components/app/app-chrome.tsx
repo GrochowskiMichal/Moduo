@@ -329,9 +329,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               avatarDataUrl={avatarDataUrl}
               profileInitial={derivedInitial}
               onOpenSettings={() => dispatchOpenSettings()}
-              onOpenIntegrations={() =>
-                dispatchOpenSettings({ section: "integrations" })
-              }
             />
           </View>
         </View>

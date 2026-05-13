@@ -1,8 +1,10 @@
 import { useEffect, useState, type ComponentType } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import {
   Building2,
   Info,
+  LogOut,
   Palette,
   Plug,
   Sliders,
@@ -15,6 +17,7 @@ import {
 import { cn } from "../../lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useShortcut } from "../../lib/shortcuts";
+import { useAuth } from "../../providers/auth-provider";
 
 import { AboutSection } from "./sections/about-section";
 import { AccountSection } from "./sections/account-section";
@@ -58,6 +61,8 @@ const SECTIONS: SectionEntry[] = [
 ];
 
 export function SettingsModal() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSectionId>("appearance");
 
@@ -76,10 +81,21 @@ export function SettingsModal() {
 
   useShortcut("settings", () => setOpen((prev) => !prev));
 
-  // Appearance section is the live-preview surface — the app behind the modal
-  // is the preview, so the backdrop must not scrim or blur it. Other sections
-  // get a slightly darker, blurred backdrop that signals "you're in a panel."
+  // Appearance still leans on the visible app behind for the live preview, so
+  // its backdrop drops the blur — content stays legible while the modal sits
+  // in front. A medium scrim keeps focus on the controls without losing the
+  // preview surface. Other sections get a heavier scrim + blur to signal
+  // "you're in a panel."
   const isAppearance = section === "appearance";
+
+  const handleSignOut = async () => {
+    setOpen(false);
+    try {
+      await signOut();
+    } finally {
+      void navigate({ to: "/auth" });
+    }
+  };
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
@@ -89,7 +105,7 @@ export function SettingsModal() {
             "fixed inset-0 transition-opacity",
             "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
             "data-[state=open]:animate-in data-[state=open]:fade-in-0",
-            isAppearance ? "bg-transparent" : "bg-background/80 backdrop-blur-md",
+            isAppearance ? "bg-background/65" : "bg-background/85 backdrop-blur-md",
           )}
           style={{ zIndex: "var(--z-overlay)" }}
         />
@@ -148,6 +164,16 @@ export function SettingsModal() {
                   </TabsTrigger>
                 ))}
               </TabsList>
+
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                className="mt-auto flex items-center gap-2 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                style={{ height: "var(--row-h)" }}
+              >
+                <LogOut className="size-4" aria-hidden />
+                <span>Log out</span>
+              </button>
             </nav>
 
             <div className="min-h-0 overflow-y-auto px-2 py-4">
