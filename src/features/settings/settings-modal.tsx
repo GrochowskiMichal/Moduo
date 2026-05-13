@@ -151,15 +151,18 @@ export function SettingsModal() {
                 </DialogPrimitive.Close>
               </div>
 
-              <TabsList variant="line" className="border-none bg-transparent p-0">
+              <TabsList
+                variant="default"
+                className="rounded-none bg-transparent p-0 gap-1"
+              >
                 {SECTIONS.map(({ id, label, icon: Icon }) => (
                   <TabsTrigger
                     key={id}
                     value={id}
-                    className="justify-start gap-2 rounded-md px-3 hover:bg-accent data-[state=active]:bg-accent data-[state=active]:shadow-none"
+                    className="flex items-center justify-start gap-2 rounded-md px-3 font-sans text-sm font-normal text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-[state=active]:bg-accent data-[state=active]:text-foreground data-[state=active]:shadow-none"
                     style={{ height: "var(--row-h)" }}
                   >
-                    <Icon className="size-4 text-muted-foreground" aria-hidden />
+                    <Icon className="size-4" aria-hidden />
                     <span>{label}</span>
                   </TabsTrigger>
                 ))}
@@ -168,7 +171,7 @@ export function SettingsModal() {
               <button
                 type="button"
                 onClick={() => void handleSignOut()}
-                className="mt-auto flex items-center gap-2 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                className="mt-auto flex items-center gap-2 rounded-md px-3 font-sans text-sm font-normal text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
                 style={{ height: "var(--row-h)" }}
               >
                 <LogOut className="size-4" aria-hidden />
