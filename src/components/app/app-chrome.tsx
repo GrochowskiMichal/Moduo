@@ -18,14 +18,14 @@ import {
   type FeatureLayoutKey,
   type LayoutPanelsApplyDetail,
 } from "../../features/layout/panel-events";
-import { Image, Pressable, Text, View } from "../../tw";
+import { Pressable, Text, View } from "../../tw";
 import { Icon } from "../ui/icon";
+import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { WorkspaceSettingsModal } from "../workspace-settings-modal";
 import { IntegrationsModal } from "../integrations-modal";
 import { UserMenu } from "../user-menu";
-import moduoFavicon from "../../../assets/moduo_favicon.png";
 
 import { baseModulesNavItems } from "./app-chrome-constants";
 import { GlobalBottomBar } from "./global-bottom-bar";
@@ -271,7 +271,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       >
         <View className="relative z-[1] flex w-full flex-row items-center justify-between gap-3">
           <View className="flex flex-row items-center gap-1">
-            <Image source={moduoFavicon} className="h-8 w-8 shrink-0" contentFit="contain" />
+            <ModuoMark className="h-8 w-8 shrink-0 text-foreground" />
             <WorkspaceSwitcher onOpenSettings={() => setWorkspaceSettingsOpen(true)} />
           </View>
 
