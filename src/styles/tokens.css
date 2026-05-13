@@ -575,4 +575,5 @@
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
+  --shadow-overlay: var(--shadow-overlay);
 }

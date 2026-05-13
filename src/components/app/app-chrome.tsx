@@ -65,6 +65,8 @@ import {
 } from "../../features/profile/profile-storage";
 import { baseModulesNavItems, normalizeTaskProject, nowIso, safeId } from "./app-chrome-constants";
 import { AppChromeMenus } from "./app-chrome-menus";
+import { GlobalBottomBar } from "./global-bottom-bar";
+import { GlobalCommandPalette } from "./global-command-palette";
 import type { MenuAnchor, TaskProjectOption } from "./app-chrome-types";
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
@@ -1125,6 +1127,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         </View>
       </View>
 
+      <GlobalBottomBar />
+      <GlobalCommandPalette />
       <WorkspaceSettingsModal visible={workspaceSettingsOpen} onClose={() => setWorkspaceSettingsOpen(false)} />
       <IntegrationsModal visible={integrationsOpen} onClose={() => setIntegrationsOpen(false)} />
     </View>
