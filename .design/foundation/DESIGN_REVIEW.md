@@ -146,3 +146,38 @@ existing modals.
 
 No gaps surfaced during the walkthrough; no new code was added for
 this task beyond the audit notes above.
+
+## Concentric inner-radius audit (REVISION_DELTA §5, 2026-05-13)
+
+Branch: `design/settings-polish-delta` (commit a3e9dc0…). The
+formula `inner-radius = max(outer-radius − padding, 0)` is now
+codified in [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md). The rule
+kicks in when a nested element shares a corner with its parent —
+i.e. the child sits at the edge of the parent with no surrounding
+gap. Walked each of the targets named in the delta:
+
+- **Notes right rail's relation graph card** — already concentric
+  from Phase 4. Match-pattern reference; no change.
+- **Widget cards in the WIDGETS sidebar on `/grid`** — out of scope
+  for this rebuild. The dashboard widgets live in the legacy
+  baseline tracked by `lint:tw` and are queued for their own
+  feature brief. The rule applies once those files are rebuilt.
+- **Notification cards in the right sheet** — the Sheet primitive
+  carries no radius (it spans the viewport edge), so its children
+  do not share corners and keep their default `rounded-lg`. The
+  audit found no corner-sharing case here.
+- **Member / invite cards in Workspace Settings dialog** — sections
+  are `rounded-lg p-4`, member rows are `rounded-md px-3 py-2`
+  separated by `gap-2`. Rows do not touch the section's inner
+  corners (gap pushes the first / last row inward), so concentric
+  recalculation isn't required. The rounded-md radius reads as
+  intentional secondary rounding rather than parallel arcs.
+- **Chips and rows nested in outer cards** — same finding: where
+  the child is centred inside the parent with padding > 0, the
+  corner-sharing condition doesn't trigger.
+
+When future per-feature briefs introduce children that *do* share
+corners (e.g. a sticky toolbar pinned to the top of a panel, a
+header bar bleeding to the panel's edge), they should pick a child
+radius that satisfies the formula. The design-review skill catches
+parallel-arc regressions on the visual sweep.
