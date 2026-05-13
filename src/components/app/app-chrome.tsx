@@ -21,7 +21,6 @@ import {
 import { Image, Pressable, Text, View } from "../../tw";
 import { Icon } from "../ui/icon";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { NotificationCenter } from "../notification-center";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { WorkspaceSettingsModal } from "../workspace-settings-modal";
 import { IntegrationsModal } from "../integrations-modal";
@@ -33,6 +32,7 @@ import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { SettingsModal } from "../../features/settings/settings-modal";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
+import { dispatchCreateNew } from "./create-events";
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -41,12 +41,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   // The Cmd-, shortcut is handled inside SettingsModal so it can toggle the
   // modal open / closed without bouncing through the /settings route. Keep
   // useShortcut wiring here for the rest.
-  useShortcut("new-note", () => {
-    void navigate({ to: "/notes" });
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("moduo:notes:new"));
-    }
-  });
+  useShortcut("new-item", () => dispatchCreateNew());
   const { runtime, userEmail } = useAuth();
   const { loading, modulePermissions } = useWorkspace();
   const currentFeature = routeToFeatureLayout(pathname);
@@ -314,17 +309,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             </View>
           </View>
 
-          <View className="min-w-[120px] flex flex-row items-center justify-end gap-2">
-            <Tooltip>
-              <TooltipTrigger
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                aria-label="Recent activity"
-              >
-                <Icon name="clock" size={14} />
-              </TooltipTrigger>
-              <TooltipContent>Recent activity</TooltipContent>
-            </Tooltip>
-            <NotificationCenter />
+          <View className="flex flex-row items-center justify-end gap-2">
             <UserMenu
               avatarDataUrl={avatarDataUrl}
               profileInitial={derivedInitial}

@@ -12,7 +12,7 @@ import { useEffect } from "react";
 
 export type ShortcutId =
   | "palette"
-  | "new-note"
+  | "new-item"
   | "settings"
   | "workspace-switcher"
   | "notifications";
@@ -41,8 +41,8 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
       event.key.toLowerCase() === "k",
   },
   {
-    id: "new-note",
-    label: "New note",
+    id: "new-item",
+    label: "New item",
     mac: "⌘N",
     other: "Ctrl N",
     match: (event, isMac) =>

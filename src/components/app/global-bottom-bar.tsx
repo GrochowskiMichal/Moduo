@@ -1,36 +1,26 @@
-import { Plus, Search, Sparkles } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { NotificationCenter } from "../notification-center";
 
 import { dispatchOpenPalette } from "./global-command-palette";
-
-type Props = {
-  onCreate?: () => void;
-};
+import { dispatchCreateNew } from "./create-events";
 
 function BarButton({
   onClick,
   label,
   children,
-  accent,
 }: {
   onClick?: () => void;
   label: string;
   children: React.ReactNode;
-  accent?: "pink";
 }) {
-  const base =
-    "flex h-8 w-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
-  const cls = accent
-    ? `${base} bg-primary text-primary-foreground hover:brightness-110`
-    : `${base} bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground`;
   return (
     <Tooltip>
       <TooltipTrigger
-        className={cls}
+        className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         onClick={onClick}
         aria-label={label}
-        data-accent={accent}
       >
         {children}
       </TooltipTrigger>
@@ -39,7 +29,7 @@ function BarButton({
   );
 }
 
-export function GlobalBottomBar({ onCreate }: Props) {
+export function GlobalBottomBar() {
   return (
     <div
       data-slot="global-bottom-bar"
@@ -48,13 +38,11 @@ export function GlobalBottomBar({ onCreate }: Props) {
       role="toolbar"
       aria-label="Global actions"
     >
-      <BarButton accent="pink" label="Ask AI">
-        <Sparkles className="size-4" aria-hidden />
-      </BarButton>
+      <NotificationCenter />
       <BarButton onClick={() => dispatchOpenPalette()} label="Search">
         <Search className="size-4" aria-hidden />
       </BarButton>
-      <BarButton onClick={onCreate} label="Create new">
+      <BarButton onClick={() => dispatchCreateNew()} label="Create new">
         <Plus className="size-4" aria-hidden />
       </BarButton>
     </div>

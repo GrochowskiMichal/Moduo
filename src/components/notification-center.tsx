@@ -52,10 +52,10 @@ export function NotificationCenter() {
       <Tooltip>
         <TooltipTrigger asChild>
           <SheetTrigger
-            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             aria-label="Notifications"
           >
-            <Icon name="bell" size={16} />
+            <Icon name="bell" size={14} />
             {activeUnread > 0 ? (
               <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-warning px-1 text-xs font-semibold text-warning-foreground">
                 {Math.min(activeUnread, 99)}
