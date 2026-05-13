@@ -37,10 +37,15 @@ function ResizablePanelGroup({
 }
 
 function ResizablePanel({ className, ...props }: PanelProps) {
+  // The library writes flexGrow / overflow / max-size styles on the inner
+  // content div this className lands on; keep it as the default block-level
+  // container so children can simply fill width and height. Don't add `flex`
+  // here — that would make the inner div a flex container and shrink-wrap
+  // its children to content width.
   return (
     <ResizablePanelPrimitive
       data-slot="resizable-panel"
-      className={cn("flex min-h-0 min-w-0", className)}
+      className={cn("min-h-0 min-w-0", className)}
       {...props}
     />
   );

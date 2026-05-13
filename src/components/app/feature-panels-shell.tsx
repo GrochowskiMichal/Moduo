@@ -71,9 +71,9 @@ function writePersistedLayout(key: string, layout: Layout): void {
 }
 
 const RAIL_WRAPPER =
-  "min-h-0 min-w-0 h-full rounded-2xl border border-border bg-card p-5 flex flex-col overflow-hidden";
+  "min-h-0 min-w-0 h-full w-full rounded-2xl border border-border bg-card p-5 flex flex-col overflow-hidden";
 const CENTER_WRAPPER =
-  "min-h-0 min-w-0 h-full rounded-2xl border border-border bg-card p-4 overflow-auto relative";
+  "min-h-0 min-w-0 h-full w-full rounded-2xl border border-border bg-card p-4 overflow-auto relative";
 
 export function FeaturePanelsShell({
   feature,
