@@ -70,6 +70,8 @@ const IGNORED_PATHS: string[] = [
   "src/features/templates/ui/templates-editor.tsx",
   "src/features/templates/ui/templates-preview.tsx",
   "src/routes/pages/auth-page.tsx",
+  "src/routes/pages/onboarding-page.tsx",
+  "src/routes/pages/paywall-page.tsx",
 ];
 
 const PROJECT_ROOT = process.cwd();
