@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useWorkspace } from "../providers/workspace-provider";
+import { useShortcut } from "../lib/shortcuts";
 import { Card } from "./ui/card";
 import { Icon } from "./ui/icon";
 import {
@@ -31,12 +32,20 @@ export function NotificationCenter() {
     [notificationsScope, unreadCountGlobal, unreadCountWorkspace],
   );
 
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (next) {
-      void refreshNotifications();
-    }
-  };
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      setOpen(next);
+      if (next) {
+        void refreshNotifications();
+      }
+    },
+    [refreshNotifications],
+  );
+
+  useShortcut(
+    "notifications",
+    useCallback(() => handleOpenChange(!open), [handleOpenChange, open]),
+  );
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>

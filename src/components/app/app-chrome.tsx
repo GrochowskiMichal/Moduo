@@ -67,11 +67,22 @@ import { baseModulesNavItems, normalizeTaskProject, nowIso, safeId } from "./app
 import { AppChromeMenus } from "./app-chrome-menus";
 import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
+import { useGlobalShortcuts, useShortcut } from "../../lib/shortcuts";
 import type { MenuAnchor, TaskProjectOption } from "./app-chrome-types";
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
+  useGlobalShortcuts();
+  useShortcut("settings", () => {
+    void navigate({ to: "/settings" });
+  });
+  useShortcut("new-note", () => {
+    void navigate({ to: "/notes" });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("moduo:notes:new"));
+    }
+  });
   const { runtime, userEmail, userId } = useAuth();
   const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
   const currentFeature = routeToFeatureLayout(pathname);

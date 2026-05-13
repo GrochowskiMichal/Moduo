@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useWorkspace } from "../providers/workspace-provider";
+import { useShortcut } from "../lib/shortcuts";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import {
   DropdownMenu,
@@ -27,6 +28,10 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
     softDeleteWorkspace,
   } = useWorkspace();
   const [open, setOpen] = useState(false);
+  useShortcut(
+    "workspace-switcher",
+    useCallback(() => setOpen((prev) => !prev), []),
+  );
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("New Workspace");
   const [deleteCandidateWorkspaceId, setDeleteCandidateWorkspaceId] = useState<string | null>(null);

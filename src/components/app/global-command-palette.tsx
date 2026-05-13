@@ -20,6 +20,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "../ui/command";
+import { onShortcut, SHORTCUTS, formatShortcut } from "../../lib/shortcuts";
 
 type Action = {
   id: string;
@@ -41,16 +42,7 @@ export function GlobalCommandPalette() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setOpen((prev) => !prev);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  useEffect(() => onShortcut("palette", () => setOpen((prev) => !prev)), []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -67,6 +59,9 @@ export function GlobalCommandPalette() {
     [navigate],
   );
 
+  const settingsShortcut = SHORTCUTS.find((s) => s.id === "settings");
+  const settingsLabel = settingsShortcut ? formatShortcut(settingsShortcut) : "";
+
   const navActions: Action[] = [
     { id: "notes", label: "Open Notes", icon: FileText, run: go("/notes") },
     { id: "grid", label: "Open Grid", icon: LayoutGrid, run: go("/grid") },
@@ -82,7 +77,7 @@ export function GlobalCommandPalette() {
       id: "settings",
       label: "Settings",
       icon: SettingsIcon,
-      shortcut: "⌘,",
+      shortcut: settingsLabel,
       run: go("/settings"),
     },
   ];
