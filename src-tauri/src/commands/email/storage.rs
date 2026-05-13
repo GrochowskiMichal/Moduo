@@ -4,9 +4,9 @@ use crate::email_sync::EmailSyncCursorRecord;
 use crate::AppState;
 
 use super::{
-    now_iso, ALL_ACCOUNTS_ID, DEFAULT_WORKSPACE_ID, EMAIL_ACCOUNTS_KEY, EMAIL_BODY_MAX_BYTES_PER_ACCOUNT,
-    EMAIL_BODY_MAX_ITEMS_PER_ACCOUNT, EMAIL_NAMESPACE, StoredBodyCache, StoredBodyLru,
-    StoredEmailAccount, StoredEmailAccountV2, StoredEnvelope,
+    now_iso, StoredBodyCache, StoredBodyLru, StoredEmailAccount, StoredEmailAccountV2,
+    StoredEnvelope, ALL_ACCOUNTS_ID, DEFAULT_WORKSPACE_ID, EMAIL_ACCOUNTS_KEY,
+    EMAIL_BODY_MAX_BYTES_PER_ACCOUNT, EMAIL_BODY_MAX_ITEMS_PER_ACCOUNT, EMAIL_NAMESPACE,
 };
 
 pub(super) fn read_accounts(state: &AppState) -> Result<Vec<StoredEmailAccount>, String> {
@@ -17,11 +17,16 @@ pub(super) fn read_accounts(state: &AppState) -> Result<Vec<StoredEmailAccount>,
 
     match raw {
         None => Ok(vec![]),
-        Some(value) => Ok(serde_json::from_value::<Vec<StoredEmailAccount>>(value).unwrap_or_else(|_| vec![])),
+        Some(value) => {
+            Ok(serde_json::from_value::<Vec<StoredEmailAccount>>(value).unwrap_or_else(|_| vec![]))
+        }
     }
 }
 
-pub(super) fn write_accounts(state: &AppState, accounts: &[StoredEmailAccount]) -> Result<(), String> {
+pub(super) fn write_accounts(
+    state: &AppState,
+    accounts: &[StoredEmailAccount],
+) -> Result<(), String> {
     state
         .store
         .kv_set(
@@ -92,12 +97,19 @@ pub(super) fn message_key(account_id: &str, uid_validity: Option<u32>, uid: u32)
     )
 }
 
-pub(super) fn envelope_order_key(account_id: &str, folder: &str, timestamp_ms: i64, uid: u32) -> String {
+pub(super) fn envelope_order_key(
+    account_id: &str,
+    folder: &str,
+    timestamp_ms: i64,
+    uid: u32,
+) -> String {
     let reverse_ts = i64::MAX - timestamp_ms.max(0);
     format!("{}::{}::{:020}::{}", account_id, folder, reverse_ts, uid)
 }
 
-pub(super) fn parse_json_value<T: for<'de> Deserialize<'de>>(value: serde_json::Value) -> Option<T> {
+pub(super) fn parse_json_value<T: for<'de> Deserialize<'de>>(
+    value: serde_json::Value,
+) -> Option<T> {
     serde_json::from_value(value).ok()
 }
 
@@ -177,7 +189,10 @@ pub(super) fn load_folder_cursor(
         .and_then(parse_json_value::<EmailSyncCursorRecord>)
 }
 
-pub(super) fn save_folder_cursor(state: &AppState, cursor: &EmailSyncCursorRecord) -> Result<(), String> {
+pub(super) fn save_folder_cursor(
+    state: &AppState,
+    cursor: &EmailSyncCursorRecord,
+) -> Result<(), String> {
     state
         .store
         .put_email_folder_state(

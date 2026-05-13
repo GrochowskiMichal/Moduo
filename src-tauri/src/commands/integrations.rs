@@ -18,8 +18,8 @@ use aes_gcm::{Aes256Gcm, Key};
 use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL};
 use base64::Engine;
 use rand::RngCore;
-use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::State;
 use url::Url;
 
@@ -165,7 +165,9 @@ async fn delete_integration_from_supabase(
     user_id: &str,
     provider: &str,
 ) -> Result<(), String> {
-    let url = format!("{supabase_url}/functions/v1/manage-integration?provider={provider}&user_id={user_id}");
+    let url = format!(
+        "{supabase_url}/functions/v1/manage-integration?provider={provider}&user_id={user_id}"
+    );
     let client = reqwest::Client::new();
     let resp = client
         .delete(&url)
@@ -215,7 +217,10 @@ fn write_cb_response(mut stream: TcpStream, ok: bool, provider: &str) {
 
 // ── Google Meet (PKCE) ────────────────────────────────────────────────────────
 
-async fn run_google_meet_oauth(client_id: &str, client_secret: &str) -> Result<IntegrationTokens, String> {
+async fn run_google_meet_oauth(
+    client_id: &str,
+    client_secret: &str,
+) -> Result<IntegrationTokens, String> {
     let client_id_owned = client_id.to_string();
     let client_secret_owned = client_secret.to_string();
 
@@ -236,10 +241,15 @@ async fn run_google_meet_oauth(client_id: &str, client_secret: &str) -> Result<I
             B64URL.encode(&data)
         };
 
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .map_err(|e| format!("gmeet_bind_failed:{e}"))?;
-        listener.set_nonblocking(true).map_err(|e| format!("gmeet_nonblocking:{e}"))?;
-        let port = listener.local_addr().map_err(|e| format!("gmeet_addr:{e}"))?.port();
+        let listener =
+            TcpListener::bind("127.0.0.1:0").map_err(|e| format!("gmeet_bind_failed:{e}"))?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|e| format!("gmeet_nonblocking:{e}"))?;
+        let port = listener
+            .local_addr()
+            .map_err(|e| format!("gmeet_addr:{e}"))?
+            .port();
         let redirect_uri = format!("http://127.0.0.1:{port}/oauth/callback");
 
         let auth_url = Url::parse_with_params(
@@ -248,7 +258,10 @@ async fn run_google_meet_oauth(client_id: &str, client_secret: &str) -> Result<I
                 ("client_id", client_id_owned.as_str()),
                 ("response_type", "code"),
                 ("redirect_uri", redirect_uri.as_str()),
-                ("scope", "https://www.googleapis.com/auth/calendar.events email profile"),
+                (
+                    "scope",
+                    "https://www.googleapis.com/auth/calendar.events email profile",
+                ),
                 ("code_challenge", challenge.as_str()),
                 ("code_challenge_method", "S256"),
                 ("state", state_token.as_str()),
@@ -270,21 +283,33 @@ async fn run_google_meet_oauth(client_id: &str, client_secret: &str) -> Result<I
                 Ok((mut stream, _)) => {
                     let mut buf = [0u8; 8192];
                     let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-                    let n = stream.read(&mut buf).map_err(|e| format!("gmeet_read:{e}"))?;
-                    if n == 0 { continue; }
+                    let n = stream
+                        .read(&mut buf)
+                        .map_err(|e| format!("gmeet_read:{e}"))?;
+                    if n == 0 {
+                        continue;
+                    }
                     let request = String::from_utf8_lossy(&buf[..n]);
-                    let target = request.lines().next().unwrap_or_default()
-                        .split_whitespace().nth(1)
+                    let target = request
+                        .lines()
+                        .next()
+                        .unwrap_or_default()
+                        .split_whitespace()
+                        .nth(1)
                         .ok_or_else(|| "gmeet_invalid_request".to_string())?
                         .to_string();
                     let parsed = Url::parse(&format!("http://localhost{target}"))
                         .map_err(|e| format!("gmeet_parse:{e}"))?;
-                    let ps: std::collections::HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+                    let ps: std::collections::HashMap<_, _> =
+                        parsed.query_pairs().into_owned().collect();
                     if let Some(err) = ps.get("error") {
                         write_cb_response(stream, false, "Google Meet");
                         return Err(format!("gmeet_oauth_error:{err}"));
                     }
-                    let code = ps.get("code").cloned().ok_or_else(|| "gmeet_missing_code".to_string())?;
+                    let code = ps
+                        .get("code")
+                        .cloned()
+                        .ok_or_else(|| "gmeet_missing_code".to_string())?;
                     write_cb_response(stream, true, "Google Meet");
                     return Ok((code, redirect_uri, verifier));
                 }
@@ -321,7 +346,10 @@ async fn run_google_meet_oauth(client_id: &str, client_secret: &str) -> Result<I
         return Err(format!("gmeet_token_failed:{text}"));
     }
 
-    let token: FullOAuthTokenResponse = resp.json().await.map_err(|e| format!("gmeet_token_parse:{e}"))?;
+    let token: FullOAuthTokenResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("gmeet_token_parse:{e}"))?;
 
     let expires_at = token.expires_in.map(|s| chrono::Utc::now().timestamp() + s);
     Ok(IntegrationTokens {
@@ -344,10 +372,14 @@ async fn run_zoom_oauth(client_id: &str, client_secret: &str) -> Result<Integrat
             B64URL.encode(&data)
         };
 
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .map_err(|e| format!("zoom_bind:{e}"))?;
-        listener.set_nonblocking(true).map_err(|e| format!("zoom_nonblocking:{e}"))?;
-        let port = listener.local_addr().map_err(|e| format!("zoom_addr:{e}"))?.port();
+        let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("zoom_bind:{e}"))?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|e| format!("zoom_nonblocking:{e}"))?;
+        let port = listener
+            .local_addr()
+            .map_err(|e| format!("zoom_addr:{e}"))?
+            .port();
         let redirect_uri = format!("http://127.0.0.1:{port}/oauth/callback");
 
         let auth_url = Url::parse_with_params(
@@ -373,21 +405,33 @@ async fn run_zoom_oauth(client_id: &str, client_secret: &str) -> Result<Integrat
                 Ok((mut stream, _)) => {
                     let mut buf = [0u8; 8192];
                     let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-                    let n = stream.read(&mut buf).map_err(|e| format!("zoom_read:{e}"))?;
-                    if n == 0 { continue; }
+                    let n = stream
+                        .read(&mut buf)
+                        .map_err(|e| format!("zoom_read:{e}"))?;
+                    if n == 0 {
+                        continue;
+                    }
                     let request = String::from_utf8_lossy(&buf[..n]);
-                    let target = request.lines().next().unwrap_or_default()
-                        .split_whitespace().nth(1)
+                    let target = request
+                        .lines()
+                        .next()
+                        .unwrap_or_default()
+                        .split_whitespace()
+                        .nth(1)
                         .ok_or_else(|| "zoom_invalid_request".to_string())?
                         .to_string();
                     let parsed = Url::parse(&format!("http://localhost{target}"))
                         .map_err(|e| format!("zoom_parse:{e}"))?;
-                    let ps: std::collections::HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+                    let ps: std::collections::HashMap<_, _> =
+                        parsed.query_pairs().into_owned().collect();
                     if let Some(err) = ps.get("error") {
                         write_cb_response(stream, false, "Zoom");
                         return Err(format!("zoom_oauth_error:{err}"));
                     }
-                    let code = ps.get("code").cloned().ok_or_else(|| "zoom_missing_code".to_string())?;
+                    let code = ps
+                        .get("code")
+                        .cloned()
+                        .ok_or_else(|| "zoom_missing_code".to_string())?;
                     write_cb_response(stream, true, "Zoom");
                     return Ok((code, redirect_uri, client_id_owned, client_secret_owned));
                 }
@@ -422,7 +466,10 @@ async fn run_zoom_oauth(client_id: &str, client_secret: &str) -> Result<Integrat
         return Err(format!("zoom_token_failed:{text}"));
     }
 
-    let token: FullOAuthTokenResponse = resp.json().await.map_err(|e| format!("zoom_token_parse:{e}"))?;
+    let token: FullOAuthTokenResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("zoom_token_parse:{e}"))?;
 
     let expires_at = token.expires_in.map(|s| chrono::Utc::now().timestamp() + s);
     Ok(IntegrationTokens {
@@ -440,15 +487,27 @@ pub async fn integration_connect_zoom(
 ) -> Result<IntegrationStatusItem, String> {
     let config = state.config.clone();
     let user_id = {
-        let guard = state.session.lock().map_err(|_| "integration_session_lock".to_string())?;
-        guard.as_ref().map(|s| s.user.id.clone()).ok_or_else(|| "integration_not_signed_in".to_string())?
+        let guard = state
+            .session
+            .lock()
+            .map_err(|_| "integration_session_lock".to_string())?;
+        guard
+            .as_ref()
+            .map(|s| s.user.id.clone())
+            .ok_or_else(|| "integration_not_signed_in".to_string())?
     };
 
-    let client_id = config.zoom_client_id.as_deref()
+    let client_id = config
+        .zoom_client_id
+        .as_deref()
         .ok_or_else(|| "missing_zoom_client_id:set MODUO_ZOOM_CLIENT_ID".to_string())?;
-    let client_secret = config.zoom_client_secret.as_deref()
+    let client_secret = config
+        .zoom_client_secret
+        .as_deref()
         .ok_or_else(|| "missing_zoom_client_secret:set MODUO_ZOOM_CLIENT_SECRET".to_string())?;
-    let enc_secret = config.token_encryption_secret.as_deref()
+    let enc_secret = config
+        .token_encryption_secret
+        .as_deref()
         .ok_or_else(|| "missing_token_enc_secret:set MODUO_TOKEN_ENCRYPTION_SECRET".to_string())?;
 
     let tokens = run_zoom_oauth(client_id, client_secret).await?;
@@ -465,7 +524,10 @@ pub async fn integration_connect_zoom(
     )
     .await?;
 
-    Ok(IntegrationStatusItem { provider: "zoom".to_string(), connected: true })
+    Ok(IntegrationStatusItem {
+        provider: "zoom".to_string(),
+        connected: true,
+    })
 }
 
 #[tauri::command]
@@ -474,15 +536,25 @@ pub async fn integration_connect_google_meet(
 ) -> Result<IntegrationStatusItem, String> {
     let config = state.config.clone();
     let user_id = {
-        let guard = state.session.lock().map_err(|_| "integration_session_lock".to_string())?;
-        guard.as_ref().map(|s| s.user.id.clone()).ok_or_else(|| "integration_not_signed_in".to_string())?
+        let guard = state
+            .session
+            .lock()
+            .map_err(|_| "integration_session_lock".to_string())?;
+        guard
+            .as_ref()
+            .map(|s| s.user.id.clone())
+            .ok_or_else(|| "integration_not_signed_in".to_string())?
     };
 
-    let client_id = config.google_meet_client_id.as_deref()
-        .ok_or_else(|| "missing_google_meet_client_id:set MODUO_GOOGLE_MEET_CLIENT_ID".to_string())?;
-    let client_secret = config.google_meet_client_secret.as_deref()
-        .ok_or_else(|| "missing_google_meet_client_secret:set MODUO_GOOGLE_MEET_CLIENT_SECRET".to_string())?;
-    let enc_secret = config.token_encryption_secret.as_deref()
+    let client_id = config.google_meet_client_id.as_deref().ok_or_else(|| {
+        "missing_google_meet_client_id:set MODUO_GOOGLE_MEET_CLIENT_ID".to_string()
+    })?;
+    let client_secret = config.google_meet_client_secret.as_deref().ok_or_else(|| {
+        "missing_google_meet_client_secret:set MODUO_GOOGLE_MEET_CLIENT_SECRET".to_string()
+    })?;
+    let enc_secret = config
+        .token_encryption_secret
+        .as_deref()
         .ok_or_else(|| "missing_token_enc_secret:set MODUO_TOKEN_ENCRYPTION_SECRET".to_string())?;
 
     let tokens = run_google_meet_oauth(client_id, client_secret).await?;
@@ -499,7 +571,10 @@ pub async fn integration_connect_google_meet(
     )
     .await?;
 
-    Ok(IntegrationStatusItem { provider: "google_meet".to_string(), connected: true })
+    Ok(IntegrationStatusItem {
+        provider: "google_meet".to_string(),
+        connected: true,
+    })
 }
 
 #[tauri::command]
@@ -508,16 +583,26 @@ pub async fn integration_get_status(
 ) -> Result<Vec<IntegrationStatusItem>, String> {
     let config = state.config.clone();
     let user_id = {
-        let guard = state.session.lock().map_err(|_| "integration_session_lock".to_string())?;
-        guard.as_ref().map(|s| s.user.id.clone()).unwrap_or_default()
+        let guard = state
+            .session
+            .lock()
+            .map_err(|_| "integration_session_lock".to_string())?;
+        guard
+            .as_ref()
+            .map(|s| s.user.id.clone())
+            .unwrap_or_default()
     };
 
     let providers = ["zoom", "google_meet"];
     let result = providers
         .iter()
         .map(|p| {
-            let connected = load_tokens_from_keychain(&config.keychain_service, p, &user_id).is_some();
-            IntegrationStatusItem { provider: p.to_string(), connected }
+            let connected =
+                load_tokens_from_keychain(&config.keychain_service, p, &user_id).is_some();
+            IntegrationStatusItem {
+                provider: p.to_string(),
+                connected,
+            }
         })
         .collect();
 
@@ -531,21 +616,23 @@ pub async fn integration_disconnect(
 ) -> Result<(), String> {
     let config = state.config.clone();
     let user_id = {
-        let guard = state.session.lock().map_err(|_| "integration_session_lock".to_string())?;
-        guard.as_ref().map(|s| s.user.id.clone()).ok_or_else(|| "integration_not_signed_in".to_string())?
+        let guard = state
+            .session
+            .lock()
+            .map_err(|_| "integration_session_lock".to_string())?;
+        guard
+            .as_ref()
+            .map(|s| s.user.id.clone())
+            .ok_or_else(|| "integration_not_signed_in".to_string())?
     };
-    let enc_secret = config.token_encryption_secret.as_deref()
+    let enc_secret = config
+        .token_encryption_secret
+        .as_deref()
         .ok_or_else(|| "missing_token_enc_secret:set MODUO_TOKEN_ENCRYPTION_SECRET".to_string())?;
 
     delete_tokens_from_keychain(&config.keychain_service, &provider, &user_id);
 
-    delete_integration_from_supabase(
-        &config.supabase_url,
-        enc_secret,
-        &user_id,
-        &provider,
-    )
-    .await?;
+    delete_integration_from_supabase(&config.supabase_url, enc_secret, &user_id, &provider).await?;
 
     Ok(())
 }

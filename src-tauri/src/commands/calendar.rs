@@ -138,8 +138,12 @@ fn save_calendar_tokens_to_keychain(
 ) -> Result<(), String> {
     let encoded = serde_json::to_string(tokens)
         .map_err(|e| format!("calendar_keychain_serialize_failed:{e}"))?;
-    crate::keychain::set_secret(service, &calendar_keychain_account(provider, user_id, account_id), &encoded)
-        .map_err(|e| format!("calendar_keychain_save_failed:{e}"))
+    crate::keychain::set_secret(
+        service,
+        &calendar_keychain_account(provider, user_id, account_id),
+        &encoded,
+    )
+    .map_err(|e| format!("calendar_keychain_save_failed:{e}"))
 }
 
 fn load_calendar_tokens_from_keychain(
@@ -148,9 +152,12 @@ fn load_calendar_tokens_from_keychain(
     user_id: &str,
     account_id: &str,
 ) -> Option<OAuthTokenResponse> {
-    let raw = crate::keychain::get_secret(service, &calendar_keychain_account(provider, user_id, account_id))
-        .ok()
-        .flatten()?;
+    let raw = crate::keychain::get_secret(
+        service,
+        &calendar_keychain_account(provider, user_id, account_id),
+    )
+    .ok()
+    .flatten()?;
     serde_json::from_str::<OAuthTokenResponse>(&raw).ok()
 }
 
@@ -211,7 +218,10 @@ async fn run_oauth_authorization_code_flow(
     let challenge = pkce_challenge(&verifier);
     let client_id_owned = client_id.to_string();
     let auth_endpoint_owned = auth_endpoint.to_string();
-    let scopes_owned = scopes.iter().map(|scope| scope.to_string()).collect::<Vec<_>>();
+    let scopes_owned = scopes
+        .iter()
+        .map(|scope| scope.to_string())
+        .collect::<Vec<_>>();
     let challenge_owned = challenge.clone();
     let callback = tauri::async_runtime::spawn_blocking(move || {
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -421,7 +431,9 @@ pub async fn calendar_google_oauth_start(
         .enumerate()
         .filter_map(|(idx, cal)| {
             let id = cal.id?;
-            let name = cal.summary.unwrap_or_else(|| format!("Google Calendar {}", idx + 1));
+            let name = cal
+                .summary
+                .unwrap_or_else(|| format!("Google Calendar {}", idx + 1));
             let color = cal
                 .background_color
                 .filter(|value| !value.trim().is_empty())
@@ -519,7 +531,9 @@ pub async fn calendar_outlook_oauth_start(
         .enumerate()
         .filter_map(|(idx, cal)| {
             let id = cal.id?;
-            let name = cal.name.unwrap_or_else(|| format!("Outlook Calendar {}", idx + 1));
+            let name = cal
+                .name
+                .unwrap_or_else(|| format!("Outlook Calendar {}", idx + 1));
             let color = cal
                 .hex_color
                 .filter(|value| !value.trim().is_empty())
@@ -548,7 +562,9 @@ pub async fn calendar_outlook_oauth_start(
 }
 
 #[tauri::command]
-pub async fn calendar_events_list(state: State<'_, AppState>) -> Result<Vec<serde_json::Value>, String> {
+pub async fn calendar_events_list(
+    state: State<'_, AppState>,
+) -> Result<Vec<serde_json::Value>, String> {
     state
         .store
         .list_calendar_events()
@@ -574,7 +590,10 @@ pub async fn calendar_events_upsert(
 }
 
 #[tauri::command]
-pub async fn calendar_events_delete(state: State<'_, AppState>, event_id: String) -> Result<(), String> {
+pub async fn calendar_events_delete(
+    state: State<'_, AppState>,
+    event_id: String,
+) -> Result<(), String> {
     state
         .store
         .remove_calendar_event(&event_id)
@@ -626,17 +645,14 @@ pub async fn calendar_google_events_sync(
         let mut page_token: Option<String> = None;
         loop {
             let url = google_calendar_events_url(&cal_id)?;
-            let mut req = client
-                .get(url)
-                .bearer_auth(&access_token)
-                .query(&[
-                    ("timeMin", time_min.as_str()),
-                    ("timeMax", time_max.as_str()),
-                    ("singleEvents", "true"),
-                    ("orderBy", "startTime"),
-                    ("maxResults", "2500"),
-                    ("showDeleted", "false"),
-                ]);
+            let mut req = client.get(url).bearer_auth(&access_token).query(&[
+                ("timeMin", time_min.as_str()),
+                ("timeMax", time_max.as_str()),
+                ("singleEvents", "true"),
+                ("orderBy", "startTime"),
+                ("maxResults", "2500"),
+                ("showDeleted", "false"),
+            ]);
             if let Some(ref token) = page_token {
                 req = req.query(&[("pageToken", token.as_str())]);
             }
@@ -697,7 +713,10 @@ pub async fn calendar_google_events_sync(
                     "externalId": external_id,
                     "externalICalUid": item.ical_uid,
                 });
-                let id = record.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+                let id = record
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
                 state
                     .store
                     .put_calendar_event(id, &record)
@@ -730,12 +749,24 @@ pub async fn calendar_google_event_upsert(
         .nth(2)
         .ok_or_else(|| "google_event_calendar_source_invalid".to_string())?;
 
-    let title = event.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled");
-    let description = event.get("description").and_then(|v| v.as_str()).unwrap_or("");
+    let title = event
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Untitled");
+    let description = event
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let location = event.get("location").and_then(|v| v.as_str()).unwrap_or("");
-    let start_time = event.get("startTime").and_then(|v| v.as_str()).unwrap_or("");
+    let start_time = event
+        .get("startTime")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let end_time = event.get("endTime").and_then(|v| v.as_str()).unwrap_or("");
-    let all_day = event.get("allDay").and_then(|v| v.as_bool()).unwrap_or(false);
+    let all_day = event
+        .get("allDay")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     let (start_obj, end_obj) = if all_day {
         let start_date = start_time.split('T').next().unwrap_or(start_time);
@@ -759,7 +790,10 @@ pub async fn calendar_google_event_upsert(
         "end": end_obj,
     });
 
-    let external_id = event.get("externalId").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let external_id = event
+        .get("externalId")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     let client = reqwest::Client::new();
     let resp = if let Some(ref id) = external_id {
         client

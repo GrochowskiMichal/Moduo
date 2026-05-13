@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::State;
 use uuid::Uuid;
 
@@ -33,11 +33,7 @@ pub struct ActiveWindowInfo {
 
 static TRACKING_ACTIVE: AtomicBool = AtomicBool::new(false);
 
-fn auto_categorize(
-    app_name: &str,
-    window_title: &str,
-    rules: &[CategoryRule],
-) -> Option<String> {
+fn auto_categorize(app_name: &str, window_title: &str, rules: &[CategoryRule]) -> Option<String> {
     for rule in rules {
         if rule.deleted_at.is_some() {
             continue;
@@ -47,8 +43,7 @@ fn auto_categorize(
             "app" => app_name.to_lowercase().contains(&val),
             "window_title" => window_title.to_lowercase().contains(&val),
             "keyword" => {
-                app_name.to_lowercase().contains(&val)
-                    || window_title.to_lowercase().contains(&val)
+                app_name.to_lowercase().contains(&val) || window_title.to_lowercase().contains(&val)
             }
             "url" => false, // URL matching would need browser integration
             _ => false,
@@ -82,18 +77,12 @@ pub async fn tt_upsert_entry(
     let _ = require_user_id(&state)?;
     let mut next = entry;
     next.updated_at = now_iso();
-    state
-        .store
-        .put_tt_entry(&next)
-        .map_err(|e| e.to_string())?;
+    state.store.put_tt_entry(&next).map_err(|e| e.to_string())?;
     Ok(next)
 }
 
 #[tauri::command]
-pub async fn tt_delete_entry(
-    state: State<'_, AppState>,
-    entry_id: String,
-) -> Result<(), String> {
+pub async fn tt_delete_entry(state: State<'_, AppState>, entry_id: String) -> Result<(), String> {
     let _ = require_user_id(&state)?;
     if let Some(mut entry) = state
         .store
@@ -146,18 +135,12 @@ pub async fn tt_upsert_rule(
     let _ = require_user_id(&state)?;
     let mut next = rule;
     next.updated_at = now_iso();
-    state
-        .store
-        .put_tt_rule(&next)
-        .map_err(|e| e.to_string())?;
+    state.store.put_tt_rule(&next).map_err(|e| e.to_string())?;
     Ok(next)
 }
 
 #[tauri::command]
-pub async fn tt_delete_rule(
-    state: State<'_, AppState>,
-    rule_id: String,
-) -> Result<(), String> {
+pub async fn tt_delete_rule(state: State<'_, AppState>, rule_id: String) -> Result<(), String> {
     let _ = require_user_id(&state)?;
     state
         .store
@@ -305,11 +288,8 @@ pub async fn tt_start_tracking(
                     let duration = compute_duration(start, &end);
                     if duration >= MIN_SEGMENT_SECS {
                         let rules = store.list_tt_rules(&ws_id).unwrap_or_default();
-                        let cat_id = auto_categorize(
-                            prev_app,
-                            last_title.as_deref().unwrap_or(""),
-                            &rules,
-                        );
+                        let cat_id =
+                            auto_categorize(prev_app, last_title.as_deref().unwrap_or(""), &rules);
                         let entry = TimeEntry {
                             id: Uuid::new_v4().to_string(),
                             workspace_id: ws_id.clone(),
@@ -348,8 +328,7 @@ pub async fn tt_start_tracking(
             let duration = compute_duration(start, &end);
             if duration >= MIN_SEGMENT_SECS {
                 let rules = store.list_tt_rules(&ws_id).unwrap_or_default();
-                let cat_id =
-                    auto_categorize(app, last_title.as_deref().unwrap_or(""), &rules);
+                let cat_id = auto_categorize(app, last_title.as_deref().unwrap_or(""), &rules);
                 let entry = TimeEntry {
                     id: Uuid::new_v4().to_string(),
                     workspace_id: ws_id.clone(),

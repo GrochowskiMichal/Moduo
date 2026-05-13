@@ -222,13 +222,13 @@ pub async fn workspace_list_local(
                     notes: "view".to_string(),
                     tasks: "view".to_string(),
                 };
-                let _ =
-                    state
-                        .store
-                        .upsert_workspace_acl(&workspace.id, &user_id, &workspace.permissions);
+                let _ = state.store.upsert_workspace_acl(
+                    &workspace.id,
+                    &user_id,
+                    &workspace.permissions,
+                );
             }
         }
-
     }
     workspaces.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
     Ok(workspaces)

@@ -118,6 +118,7 @@ export type ModuoRuntime = {
   notes: {
     list(workspaceId: string): Promise<any[]>;
     upsert(note: any): Promise<any>;
+    duplicate(input: { workspaceId: string; sourceNoteId: string }): Promise<any>;
     move(input: {
       workspaceId: string;
       noteId: string;
@@ -482,6 +483,9 @@ const runtimeClient: ModuoRuntime = {
     },
     upsert(note) {
       return invoke<any>("notes_upsert", { note });
+    },
+    duplicate(input) {
+      return invoke<any>("notes_duplicate", { input });
     },
     move(input) {
       return invoke<any>("notes_move", { input });

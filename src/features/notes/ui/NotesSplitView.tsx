@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { createPortal } from "react-dom";
+import { toast } from "sonner";
 import {
   DndContext,
   PointerSensor,
@@ -13,24 +13,37 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import {
+  ChevronDown,
+  ChevronRight,
+  Database,
+  File as FileIcon,
+  Folder,
+  Pin,
+} from "lucide-react";
 import type { NoteKind, NoteMeta } from "../types";
 import type { NotesSyncEngine } from "../sync/sync-engine";
 import { LexicalNoteEditor } from "../editor/LexicalNoteEditor";
 import {
   NOTES_CREATE_KIND_EVENT,
-  NOTES_FOCUS_SEARCH_EVENT,
   type NotesCreateKindEventDetail,
 } from "./layout-events";
 import { exposeNote, unexposeNote, getExposedSlug, buildSlug } from "../utils/expose";
 import { encodeUint8ToBase64 } from "../utils/base64";
 import * as Y from "yjs";
+import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import {
-  LAYOUT_PANELS_APPLY_EVENT,
-  readFeaturePanelState,
-  type LayoutPanelsApplyDetail,
-} from "../../layout/panel-events";
-import { useAuth } from "../../../providers/auth-provider";
-import { Icon } from "../../../components/ui/icon";
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "../../../components/ui/context-menu";
+import { NotesRightRail } from "./notes-right-rail";
 
 /**
  * Clipboard write that works in Tauri webviews.
@@ -89,22 +102,28 @@ type Props = {
   syncEngine: NotesSyncEngine | null;
 };
 
-type ContextMenuState =
-  | { type: "note"; noteId: string; top: number; left: number }
-  | { type: "sidebar"; top: number; left: number };
-
-const contextMenuPanelClass =
-  "notes-context-menu fixed z-[1100] min-w-[148px] rounded-lg border border-[#2b2b2b] bg-[#141414] p-1 shadow-xl";
-const contextMenuItemClass =
-  "notes-context-item flex w-full items-center rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-[11px] font-medium text-[#d8d8d8] transition-colors hover:bg-[#1f1f1f]";
-const contextMenuDeleteItemClass =
-  "notes-context-item flex w-full items-center rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-[11px] font-medium text-[#d8d8d8] transition-colors hover:bg-[#1f1f1f]";
 const NEST_THRESHOLD_PX = 12;
 
-function kindIcon(kind: NoteKind) {
-  if (kind === "category") return "▣";
-  if (kind === "folder") return <Icon name="folder" size={12} />;
-  return "☰";
+function NoteKindIcon({ kind }: { kind: NoteKind }) {
+  // text-current so the icon inherits the row colour and flips on hover / selection.
+  const className = "size-3.5 shrink-0 text-current opacity-70";
+  if (kind === "category") return <Database className={className} aria-hidden="true" />;
+  if (kind === "folder") return <Folder className={className} aria-hidden="true" />;
+  return <FileIcon className={className} aria-hidden="true" />;
+}
+
+const SIDEBAR_ROW_BASE =
+  "group/row relative flex w-full min-w-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring data-[selected=true]:bg-accent data-[selected=true]:text-foreground";
+const SIDEBAR_SECTION_TITLE =
+  "flex w-full items-center justify-between gap-2 border-0 bg-transparent px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm";
+
+function MenuOpenEffect({ onMount }: { onMount: () => void }) {
+  useEffect(() => {
+    onMount();
+    // We want this to run exactly once per ContextMenuContent mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
 }
 
 type NoteRowProps = {
@@ -115,7 +134,7 @@ type NoteRowProps = {
   isSelected: boolean;
   onSelect: () => void;
   onToggleExpanded: () => void;
-  onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  menu: ReactNode;
   dragHint?: "none" | "reorder" | "nest";
 };
 
@@ -127,60 +146,66 @@ function TreeRow({
   isSelected,
   onSelect,
   onToggleExpanded,
-  onContextMenu,
+  menu,
   dragHint = "none",
 }: NoteRowProps) {
   const sortable = useSortable({ id: `note:${note.id}` });
 
-  const style = {
+  const wrapperStyle = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
     opacity: sortable.isDragging ? 0.5 : 1,
-    marginLeft: depth * 18,
+    paddingLeft: depth * 14,
   };
 
   return (
-    <div
-      ref={sortable.setNodeRef}
-      style={style}
-      className="rounded-[10px]"
-    >
-      <div
-        className={`notes-tree-row relative grid min-h-8 grid-cols-[18px_1fr_20px] items-center gap-[10px] rounded-[10px] px-[6px] py-1 text-[#a3a3a3] ${isSelected ? "bg-[#1a1a1a] text-[#f1f1f1]" : ""} ${dragHint === "nest" ? "bg-[#1e1e1e]" : ""}`}
-        onClick={onSelect}
-        onContextMenu={(event) => {
-          event.stopPropagation();
-          onContextMenu(event);
-        }}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") onSelect();
-        }}
-      >
-        <span className="text-[12px] text-[#303030]">{kindIcon(note.kind)}</span>
-
-        <div
-          className="truncate text-[14px]"
-          ref={sortable.setActivatorNodeRef}
-          {...sortable.attributes}
-          {...sortable.listeners}
-        >
-          {note.title || "Untitled"}
-        </div>
-
-        <button
-          type="button"
-          className={`grid h-4 w-4 place-items-center border-0 bg-transparent text-[11px] text-[#6b6b6b] ${hasChildren ? "" : "pointer-events-none opacity-0"}`}
-          disabled={!hasChildren}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (hasChildren) onToggleExpanded();
-          }}
-        >
-          {hasChildren ? (isExpanded ? "▾" : "▸") : ""}
-        </button>
-      </div>
+    <div ref={sortable.setNodeRef} style={wrapperStyle} className="relative">
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            className={`${SIDEBAR_ROW_BASE} py-1 ${dragHint === "nest" ? "bg-accent/60" : ""}`}
+            style={{ minHeight: "var(--row-h)" }}
+            data-selected={isSelected ? "true" : "false"}
+            onClick={onSelect}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") onSelect();
+            }}
+          >
+            <button
+              type="button"
+              aria-label={isExpanded ? "Collapse" : "Expand"}
+              className="grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground transition-opacity hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[has-children=false]:pointer-events-none data-[has-children=false]:opacity-0"
+              data-has-children={hasChildren ? "true" : "false"}
+              disabled={!hasChildren}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (hasChildren) onToggleExpanded();
+              }}
+            >
+              {isExpanded ? (
+                <ChevronDown className="size-3" aria-hidden="true" />
+              ) : (
+                <ChevronRight className="size-3" aria-hidden="true" />
+              )}
+            </button>
+            <NoteKindIcon kind={note.kind} />
+            <span
+              className="min-w-0 flex-1 truncate"
+              ref={sortable.setActivatorNodeRef}
+              {...sortable.attributes}
+              {...sortable.listeners}
+            >
+              {note.title || "Untitled"}
+            </span>
+            {note.isPinned ? (
+              <Pin className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+            ) : null}
+          </div>
+        </ContextMenuTrigger>
+        {menu}
+      </ContextMenu>
     </div>
   );
 }
@@ -189,27 +214,31 @@ type ShortcutRowProps = {
   note: NoteMeta;
   isSelected: boolean;
   onSelect: () => void;
-  onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  menu: ReactNode;
 };
 
-function ShortcutRow({ note, isSelected, onSelect, onContextMenu }: ShortcutRowProps) {
+function ShortcutRow({ note, isSelected, onSelect, menu }: ShortcutRowProps) {
   return (
-    <div
-      className={`notes-tree-row grid min-h-8 grid-cols-[16px_1fr] items-center gap-[10px] rounded-[10px] px-[6px] py-1 text-[#a3a3a3] ${isSelected ? "bg-[#1a1a1a] text-[#f1f1f1]" : ""}`}
-      onClick={onSelect}
-      onContextMenu={(event) => {
-        event.stopPropagation();
-        onContextMenu(event);
-      }}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") onSelect();
-      }}
-    >
-      <span className="text-[12px] text-[#303030]">{kindIcon(note.kind)}</span>
-      <div className="truncate text-[14px]">{note.title || "Untitled"}</div>
-    </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className={`${SIDEBAR_ROW_BASE} py-1`}
+          style={{ minHeight: "var(--row-h)" }}
+          data-selected={isSelected ? "true" : "false"}
+          onClick={onSelect}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") onSelect();
+          }}
+        >
+          <Pin className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <NoteKindIcon kind={note.kind} />
+          <span className="min-w-0 flex-1 truncate">{note.title || "Untitled"}</span>
+        </div>
+      </ContextMenuTrigger>
+      {menu}
+    </ContextMenu>
   );
 }
 
@@ -217,7 +246,7 @@ type CategorySectionHeaderProps = {
   category: NoteMeta;
   isExpanded: boolean;
   onToggle: () => void;
-  onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  menu: ReactNode;
   dragHint?: "none" | "reorder" | "nest";
 };
 
@@ -225,7 +254,7 @@ function CategorySectionHeader({
   category,
   isExpanded,
   onToggle,
-  onContextMenu,
+  menu,
   dragHint = "none",
 }: CategorySectionHeaderProps) {
   const sortable = useSortable({ id: `note:${category.id}` });
@@ -243,27 +272,35 @@ function CategorySectionHeader({
         drop.setNodeRef(node);
       }}
       style={style}
-      className={`relative rounded-[10px] ${drop.isOver || dragHint === "nest" ? "bg-[#1d1d1d]" : ""}`}
-      onContextMenu={(event) => {
-        event.stopPropagation();
-        onContextMenu(event);
-      }}
+      className={`relative rounded-md ${drop.isOver || dragHint === "nest" ? "bg-accent/60" : ""}`}
     >
-      <button
-        type="button"
-        className="notes-section-header flex w-full items-center justify-between border-0 bg-transparent px-[6px] py-[2px] text-[12px] tracking-[0.03em] text-[#8e8e8e]"
-        onClick={onToggle}
-      >
-        <span
-          ref={sortable.setActivatorNodeRef}
-          {...sortable.attributes}
-          {...sortable.listeners}
-          className="truncate"
-        >
-          {category.title || "Untitled Section"}
-        </span>
-        <span>{isExpanded ? "▾" : "▸"}</span>
-      </button>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <button
+            type="button"
+            className={SIDEBAR_SECTION_TITLE}
+            onClick={onToggle}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              {isExpanded ? (
+                <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
+              ) : (
+                <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
+              )}
+              <Database className="size-3 shrink-0" aria-hidden="true" />
+              <span
+                ref={sortable.setActivatorNodeRef}
+                {...sortable.attributes}
+                {...sortable.listeners}
+                className="truncate"
+              >
+                {category.title || "Untitled Database"}
+              </span>
+            </span>
+          </button>
+        </ContextMenuTrigger>
+        {menu}
+      </ContextMenu>
     </div>
   );
 }
@@ -282,66 +319,42 @@ export function NotesSplitView({
   readOnly = false,
   syncEngine,
 }: Props) {
-  const { runtime, userId } = useAuth();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [categoryExpanded, setCategoryExpanded] = useState<Record<string, boolean>>({});
-  const [sectionsExpanded, setSectionsExpanded] = useState({ pinned: true, notes: true });
-  const [panelState, setPanelState] = useState(() => readFeaturePanelState("notes"));
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [tagInputOpen, setTagInputOpen] = useState(false);
-  const [tagDraft, setTagDraft] = useState("");
+  const [sectionsExpanded, setSectionsExpanded] = useState({
+    pinned: true,
+    notes: true,
+    customDb: true,
+  });
   const [dragActiveId, setDragActiveId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragDeltaX, setDragDeltaX] = useState(0);
   // Expose feature
   const [exposedSlugs, setExposedSlugs] = useState<Record<string, string | null>>({});
   const [exposeLoading, setExposeLoading] = useState(false);
-  const [exposeToast, setExposeToast] = useState<{ url: string; visible: boolean } | null>(null);
-  const contextMenuRef = useRef<HTMLDivElement | null>(null);
-  const tagInputRef = useRef<HTMLInputElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const rootDrop = useDroppable({ id: "inside:root" });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const onFocusSearch = () => {
-      setPanelState((current) => ({ ...current, left: true }));
-    };
-
     const onCreateKind = async (event: Event) => {
       if (readOnly) return;
       const detail = (event as CustomEvent<NotesCreateKindEventDetail>).detail;
       const kind = detail?.kind ?? "note";
       const createdId = await onCreateNote(null, kind);
-      if (createdId) {
-        if (kind !== "category") {
-          prewarmNoteSession(createdId);
-          onSelectNote(createdId);
-        }
-        setPanelState((current) => ({ ...current, left: true }));
+      if (createdId && kind !== "category") {
+        prewarmNoteSession(createdId);
+        onSelectNote(createdId);
       }
     };
 
-    window.addEventListener(NOTES_FOCUS_SEARCH_EVENT, onFocusSearch);
     window.addEventListener(NOTES_CREATE_KIND_EVENT, onCreateKind);
 
     return () => {
-      window.removeEventListener(NOTES_FOCUS_SEARCH_EVENT, onFocusSearch);
       window.removeEventListener(NOTES_CREATE_KIND_EVENT, onCreateKind);
     };
   }, [onCreateNote, onSelectNote, readOnly, syncEngine]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onApplyPanels = (event: Event) => {
-      const detail = (event as CustomEvent<LayoutPanelsApplyDetail>).detail;
-      if (detail?.feature !== "notes") return;
-      setPanelState({ left: detail.left, right: detail.right });
-    };
-    window.addEventListener(LAYOUT_PANELS_APPLY_EVENT, onApplyPanels);
-    return () => window.removeEventListener(LAYOUT_PANELS_APPLY_EVENT, onApplyPanels);
-  }, []);
 
   const activeNotes = useMemo(
     () => notes.filter((note) => !note.deletedAt && !note.isArchived),
@@ -388,12 +401,9 @@ export function NotesSplitView({
   const notesById = useMemo(() => new Map(activeNotes.map((note) => [note.id, note])), [activeNotes]);
   const selectedNote = activeNotes.find((note) => note.id === selectedNoteId) ?? null;
   const selectedEditorNote = selectedNote && selectedNote.kind !== "category" ? selectedNote : null;
-  const contextTarget =
-    contextMenu?.type === "note" ? notesById.get(contextMenu.noteId) ?? null : null;
-  const contextTargetIsSection = contextTarget?.kind === "category";
 
-  const breadcrumb = useMemo(() => {
-    if (!selectedEditorNote) return "Notes";
+  const breadcrumbSegments = useMemo(() => {
+    if (!selectedEditorNote) return ["Notes"];
     const chain: string[] = [];
     const visited = new Set<string>([selectedEditorNote.id]);
     let parentId = selectedEditorNote.parentId;
@@ -407,8 +417,7 @@ export function NotesSplitView({
     }
 
     chain.reverse();
-    const fullPath = [...chain, selectedEditorNote.title || "Untitled"];
-    return fullPath.join(" / ");
+    return [...chain, selectedEditorNote.title || "Untitled"];
   }, [notesById, selectedEditorNote]);
 
   function prewarmNoteSession(noteId: string) {
@@ -432,43 +441,6 @@ export function NotesSplitView({
     if (!selectedEditorNote?.id) return;
     prewarmNoteSession(selectedEditorNote.id);
   }, [selectedEditorNote?.id, syncEngine]);
-
-  useEffect(() => {
-    setTagInputOpen(false);
-    setTagDraft("");
-  }, [selectedEditorNote?.id]);
-
-  useEffect(() => {
-    if (!tagInputOpen) return;
-    const timeout = setTimeout(() => tagInputRef.current?.focus(), 0);
-    return () => clearTimeout(timeout);
-  }, [tagInputOpen]);
-
-  useEffect(() => {
-    if (!contextMenu) return;
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (contextMenuRef.current?.contains(event.target as Node)) return;
-      setContextMenu(null);
-    };
-
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setContextMenu(null);
-    };
-
-    const onScroll = () => {
-      setContextMenu(null);
-    };
-
-    window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onEscape);
-    window.addEventListener("scroll", onScroll, true);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onEscape);
-      window.removeEventListener("scroll", onScroll, true);
-    };
-  }, [contextMenu]);
 
   const isDescendantOf = (ancestorId: string, maybeDescendantId: string): boolean => {
     const queue = [...(byParent.get(ancestorId) ?? []).map((note) => note.id)];
@@ -604,7 +576,7 @@ export function NotesSplitView({
     setExpanded((current) => ({ ...current, [noteId]: !current[noteId] }));
   };
 
-  const toggleSection = (section: "pinned" | "notes") => {
+  const toggleSection = (section: "pinned" | "notes" | "customDb") => {
     setSectionsExpanded((current) => ({ ...current, [section]: !current[section] }));
   };
 
@@ -612,30 +584,27 @@ export function NotesSplitView({
     setCategoryExpanded((current) => ({ ...current, [categoryId]: !(current[categoryId] ?? true) }));
   };
 
-  const getMenuPosition = (event: ReactMouseEvent, width: number, height: number) => {
-    const gutter = 8;
-    const left = Math.max(gutter, Math.min(event.clientX, window.innerWidth - width - gutter));
-    const top = Math.max(gutter, Math.min(event.clientY, window.innerHeight - height - gutter));
-    return { top, left };
+  const preloadExposeStatus = (noteId: string) => {
+    if (exposedSlugs[noteId] !== undefined) return;
+    void getExposedSlug(noteId).then((slug) =>
+      setExposedSlugs((prev) => ({ ...prev, [noteId]: slug }))
+    );
   };
 
-  const openContextMenu = (noteId: string, event: ReactMouseEvent<HTMLDivElement>) => {
-    if (readOnly) return;
-    event.preventDefault();
-    const position = getMenuPosition(event, 200, 280);
-    setContextMenu({ type: "note", noteId, ...position });
-    // Preload expose status
-    if (exposedSlugs[noteId] === undefined) {
-      void getExposedSlug(noteId).then((slug) =>
-        setExposedSlugs((prev) => ({ ...prev, [noteId]: slug }))
-      );
-    }
+  const showLiveToast = (url: string) => {
+    toast.success("Note published", {
+      description: url.replace(/^https?:\/\//, ""),
+      action: {
+        label: "Open",
+        onClick: () => void openExternalUrl(url),
+      },
+      duration: 6000,
+    });
   };
 
   const handleExposeNote = async (note: NoteMeta) => {
     if (!syncEngine || exposeLoading) return;
     setExposeLoading(true);
-    setContextMenu(null);
 
     // Safari/WebKit/Tauri drops clipboard permissions after the first `await`.
     // We must generate the slug and execute the copy synchronously right here,
@@ -643,9 +612,7 @@ export function NotesSplitView({
     const assignedSlug = exposedSlugs[note.id] || buildSlug(note.title || "Untitled");
     const optimisticUrl = `https://moduo.app/notes/${assignedSlug}`;
     copyToClipboard(optimisticUrl);
-
-    // Show optimistic toast immediately
-    setExposeToast({ url: optimisticUrl, visible: true });
+    showLiveToast(optimisticUrl);
 
     try {
       // Flush latest edits first
@@ -666,15 +633,14 @@ export function NotesSplitView({
 
       if (result.success) {
         setExposedSlugs((prev) => ({ ...prev, [note.id]: result.slug }));
-        setExposeToast({ url: result.url, visible: true });
-        setTimeout(() => setExposeToast(null), 6000);
+        if (result.url !== optimisticUrl) showLiveToast(result.url);
       } else {
-        setExposeToast(null); // Clear optimistic toast on failure
-        alert(`Failed to expose note: ${result.error}`);
+        toast.error("Failed to publish note", { description: result.error });
       }
     } catch {
-      setExposeToast(null);
-      alert("Failed to expose note due to an unexpected error.");
+      toast.error("Failed to publish note", {
+        description: "An unexpected error occurred. Try again.",
+      });
     } finally {
       setExposeLoading(false);
     }
@@ -686,25 +652,173 @@ export function NotesSplitView({
     try {
       await unexposeNote(noteId);
       setExposedSlugs((prev) => ({ ...prev, [noteId]: null }));
+      toast.success("Note unpublished");
     } finally {
       setExposeLoading(false);
-      setContextMenu(null);
     }
   };
 
-  const openSidebarContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
-    if (readOnly) return;
-    event.preventDefault();
-    const target = event.target as HTMLElement;
-    if (target.closest(".notes-tree-row, .notes-section-header, .notes-context-menu")) return;
-    const position = getMenuPosition(event, 170, 130);
-    setContextMenu({ type: "sidebar", ...position });
+  const handleCopyLink = (noteId: string) => {
+    copyToClipboard(`moduo://notes/${noteId}`);
+    toast.success("Link copied");
   };
 
-  const runContextAction = (action: () => Promise<void>) => {
-    setContextMenu(null);
-    void action().catch(() => undefined);
+  const handleRenameNote = (note: NoteMeta) => {
+    const next = window.prompt("Rename", note.title || "Untitled");
+    if (!next) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === note.title) return;
+    void onUpdateTitle(note.id, trimmed);
   };
+
+  const handleAddNote = async (parentId: string | null, kind: NoteKind = "note") => {
+    const created = await onCreateNote(parentId, kind);
+    if (!created) return;
+    if (parentId) {
+      setExpanded((current) => ({ ...current, [parentId]: true }));
+      setCategoryExpanded((current) => ({ ...current, [parentId]: true }));
+    }
+    if (kind !== "category") {
+      await selectNoteWithPrewarm(created);
+    }
+  };
+
+  const renderMoveSubmenu = (note: NoteMeta) => {
+    if (note.kind === "category") return null;
+    const targets = categorySections.filter((cat) => cat.id !== note.id);
+    return (
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>Move</ContextMenuSubTrigger>
+        <ContextMenuSubContent>
+          <ContextMenuLabel>Move to</ContextMenuLabel>
+          <ContextMenuItem
+            disabled={!note.parentId}
+            onSelect={() => void onMoveNote(note.id, null, null)}
+          >
+            Top level
+          </ContextMenuItem>
+          {targets.length > 0 ? <ContextMenuSeparator /> : null}
+          {targets.map((target) => (
+            <ContextMenuItem
+              key={target.id}
+              disabled={target.id === note.parentId}
+              onSelect={() => {
+                void onMoveNote(note.id, target.id, null);
+                setCategoryExpanded((current) => ({ ...current, [target.id]: true }));
+              }}
+            >
+              {target.title || "Untitled Database"}
+            </ContextMenuItem>
+          ))}
+          {targets.length === 0 ? (
+            <ContextMenuItem disabled>No databases available</ContextMenuItem>
+          ) : null}
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+    );
+  };
+
+  const renderNoteMenu = (note: NoteMeta): ReactNode => {
+    const isSection = note.kind === "category";
+    const isExposed = !!exposedSlugs[note.id];
+    return (
+      <ContextMenuContent
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
+        <MenuOpenEffect onMount={() => preloadExposeStatus(note.id)} />
+        {!isSection ? (
+          <ContextMenuItem
+            disabled={readOnly}
+            onSelect={() => void onTogglePin(note.id, !note.isPinned)}
+          >
+            {note.isPinned ? "Unpin" : "Pin"}
+          </ContextMenuItem>
+        ) : null}
+        <ContextMenuItem onSelect={() => handleCopyLink(note.id)}>
+          Copy Link
+        </ContextMenuItem>
+        {!isSection ? (
+          <ContextMenuItem
+            disabled={readOnly}
+            onSelect={() => {
+              void (async () => {
+                const created = await onDuplicateNote(note.id);
+                if (created) await selectNoteWithPrewarm(created);
+              })();
+            }}
+          >
+            Duplicate
+          </ContextMenuItem>
+        ) : null}
+        <ContextMenuItem
+          disabled={readOnly}
+          onSelect={() => handleRenameNote(note)}
+        >
+          Rename
+        </ContextMenuItem>
+        {!isSection ? renderMoveSubmenu(note) : null}
+        {isSection ? (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              disabled={readOnly}
+              onSelect={() => void handleAddNote(note.id, "note")}
+            >
+              Add Note
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={readOnly}
+              onSelect={() => void handleAddNote(note.id, "folder")}
+            >
+              Add Folder
+            </ContextMenuItem>
+          </>
+        ) : null}
+        {!isSection && note.kind === "note" ? (
+          <ContextMenuItem
+            disabled={readOnly || exposeLoading || !syncEngine}
+            onSelect={() => {
+              if (isExposed) void handleUnexposeNote(note.id);
+              else void handleExposeNote(note);
+            }}
+          >
+            {isExposed ? (exposeLoading ? "Unpublishing…" : "Unpublish") : exposeLoading ? "Publishing…" : "Publish"}
+          </ContextMenuItem>
+        ) : null}
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          variant="destructive"
+          disabled={readOnly}
+          onSelect={() => void onDeleteNote(note.id)}
+        >
+          Move to Trash
+        </ContextMenuItem>
+      </ContextMenuContent>
+    );
+  };
+
+  const sidebarMenuContent: ReactNode = (
+    <ContextMenuContent>
+      <ContextMenuItem
+        disabled={readOnly}
+        onSelect={() => void handleAddNote(null, "category")}
+      >
+        New Database
+      </ContextMenuItem>
+      <ContextMenuItem
+        disabled={readOnly}
+        onSelect={() => void handleAddNote(null, "folder")}
+      >
+        New Folder
+      </ContextMenuItem>
+      <ContextMenuItem
+        disabled={readOnly}
+        onSelect={() => void handleAddNote(null, "note")}
+      >
+        New Note
+      </ContextMenuItem>
+    </ContextMenuContent>
+  );
 
   const renderBranch = (parentId: string | null, depth: number) => {
     const items = byParent.get(parentId) ?? [];
@@ -726,7 +840,7 @@ export function NotesSplitView({
                 isSelected={selectedNoteId === note.id}
                 onSelect={() => selectNoteWithPrewarm(note.id)}
                 onToggleExpanded={() => toggleExpanded(note.id)}
-                onContextMenu={(event) => openContextMenu(note.id, event)}
+                menu={renderNoteMenu(note)}
                 dragHint={resolveDragHint(note.id)}
               />
               {isExpanded ? renderBranch(note.id, depth + 1) : null}
@@ -737,44 +851,44 @@ export function NotesSplitView({
     );
   };
 
-  const layoutColumns = panelState.left
-    ? "grid-cols-[20fr_80fr]"
-    : "grid-cols-[1fr]";
-
-  return (
-    <div
-      className={`grid h-full min-h-0 overflow-hidden bg-[#0C0C0C] p-4 gap-4 ${layoutColumns}`}
-    >
-      {panelState.left ? (
-        <aside className="min-h-0 overflow-x-hidden overflow-y-auto rounded-[14px] bg-[#111111] p-3" onContextMenu={openSidebarContextMenu}>
-          <div className="mb-[10px] grid gap-[6px]">
+  const leftSlot = (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden">
+          <section className="flex flex-col gap-1">
             <button
               type="button"
-              className="notes-section-header flex w-full items-center justify-between border-0 bg-transparent px-[6px] py-[2px] text-[12px] tracking-[0.03em] text-[#8e8e8e]"
+              className={SIDEBAR_SECTION_TITLE}
               onClick={() => toggleSection("pinned")}
             >
-              <span>Pinned</span>
-              <span>{sectionsExpanded.pinned ? "▾" : "▸"}</span>
+              <span className="flex items-center gap-2">
+                {sectionsExpanded.pinned ? (
+                  <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
+                ) : (
+                  <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
+                )}
+                <Pin className="size-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">Pinned</span>
+              </span>
             </button>
-
             {sectionsExpanded.pinned ? (
               pinnedNotes.length > 0 ? (
-                <div className="grid gap-[3px] mb-2">
+                <div className="flex flex-col gap-px">
                   {pinnedNotes.map((note) => (
                     <ShortcutRow
                       key={`pinned:${note.id}`}
                       note={note}
                       isSelected={selectedNoteId === note.id}
                       onSelect={() => selectNoteWithPrewarm(note.id)}
-                      onContextMenu={(event) => openContextMenu(note.id, event)}
+                      menu={renderNoteMenu(note)}
                     />
                   ))}
                 </div>
               ) : (
-                <div className="px-2 pb-[6px] pt-[2px] text-[13px] text-[#7a7a7a]">No pinned notes</div>
+                <p className="px-2 py-1 text-xs text-muted-foreground">No pinned notes</p>
               )
             ) : null}
-          </div>
+          </section>
 
           <DndContext
             sensors={sensors}
@@ -805,135 +919,117 @@ export function NotesSplitView({
               void handleDragEnd(event).finally(resetDragState);
             }}
           >
-            <SortableContext
-              items={categorySections.map((entry) => `note:${entry.id}`)}
-              strategy={verticalListSortingStrategy}
-            >
-              {categorySections.map((category) => {
-                const isOpen = categoryExpanded[category.id] ?? true;
-                return (
-                  <div key={category.id} className="mb-[10px] grid gap-[6px]">
-                    <CategorySectionHeader
-                      category={category}
-                      isExpanded={isOpen}
-                      onToggle={() => toggleCategorySection(category.id)}
-                      onContextMenu={(event) => openContextMenu(category.id, event)}
-                      dragHint={resolveDragHint(category.id)}
-                    />
-                    {isOpen ? <div className="grid gap-[3px]">{renderBranch(category.id, 1)}</div> : null}
-                  </div>
-                );
-              })}
-            </SortableContext>
-
-            <div className="mb-[10px] grid gap-[6px]">
+            <section className="flex flex-col gap-1">
               <button
                 type="button"
-                className="notes-section-header flex w-full items-center justify-between border-0 bg-transparent px-[6px] py-[2px] text-[12px] tracking-[0.03em] text-[#8e8e8e]"
+                className={SIDEBAR_SECTION_TITLE}
+                onClick={() => toggleSection("customDb")}
+              >
+                <span className="flex items-center gap-2">
+                  {sectionsExpanded.customDb ? (
+                    <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
+                  ) : (
+                    <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
+                  )}
+                  <Database className="size-3 shrink-0" aria-hidden="true" />
+                  <span className="truncate">Custom DB</span>
+                </span>
+              </button>
+              {sectionsExpanded.customDb ? (
+                <SortableContext
+                  items={categorySections.map((entry) => `note:${entry.id}`)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {categorySections.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      {categorySections.map((category) => {
+                        const isOpen = categoryExpanded[category.id] ?? true;
+                        return (
+                          <div key={category.id} className="flex flex-col gap-px">
+                            <CategorySectionHeader
+                              category={category}
+                              isExpanded={isOpen}
+                              onToggle={() => toggleCategorySection(category.id)}
+                              menu={renderNoteMenu(category)}
+                              dragHint={resolveDragHint(category.id)}
+                            />
+                            {isOpen ? (
+                              <div className="flex flex-col gap-px">
+                                {renderBranch(category.id, 1)}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="px-2 py-1 text-xs text-muted-foreground">No databases yet</p>
+                  )}
+                </SortableContext>
+              ) : null}
+            </section>
+
+            <section className="flex flex-col gap-1">
+              <button
+                type="button"
+                className={SIDEBAR_SECTION_TITLE}
                 onClick={() => toggleSection("notes")}
               >
-                <span>Notes</span>
-                <span>{sectionsExpanded.notes ? "▾" : "▸"}</span>
+                <span className="flex items-center gap-2">
+                  {sectionsExpanded.notes ? (
+                    <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
+                  ) : (
+                    <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
+                  )}
+                  <FileIcon className="size-3 shrink-0" aria-hidden="true" />
+                  <span className="truncate">Notes</span>
+                </span>
               </button>
-
               {sectionsExpanded.notes ? (
                 <div
                   ref={rootDrop.setNodeRef}
-                  className={`grid min-h-6 gap-[3px] rounded-[10px] ${rootDrop.isOver ? "bg-[#1c1c1c]" : ""}`}
+                  className={`flex min-h-6 flex-col gap-px rounded-md transition-colors ${rootDrop.isOver ? "bg-accent/50" : ""}`}
                 >
                   {renderBranch(null, 0) ?? <div className="h-6" />}
                 </div>
               ) : null}
-            </div>
+            </section>
           </DndContext>
-        </aside>
-      ) : null}
-
-      <main className="grid min-h-0 min-w-0 grid-rows-[48px_1fr] overflow-hidden rounded-[14px] bg-[#111111]">
-        <div className="flex items-center gap-[14px] px-[14px]">
-          <div className="flex min-w-0 items-center gap-2 overflow-hidden">
-            <div className="truncate whitespace-nowrap text-[13px] text-[#7a7a7a]" title={breadcrumb}>
-              {breadcrumb}
-            </div>
-            {selectedEditorNote ? (
-              <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
-                <span className="px-1 text-[12px] text-[#5f6570]">|</span>
-                {(selectedEditorNote.tags ?? []).map((tag, index) => (
-                  <span key={`${tag}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-[#1a1a1a] px-2 py-0.5 text-[11px] text-[#9ea6b5]">
-                    <span>#{tag}</span>
-                    {!readOnly ? (
-                      <button
-                        type="button"
-                        className="border-0 bg-transparent p-0 text-[11px] leading-none text-[#7c8494]"
-                        onClick={() => {
-                          const next = (selectedEditorNote.tags ?? []).filter((_, i) => i !== index);
-                          void onUpdateTags(selectedEditorNote.id, next);
-                        }}
-                      >
-                        ×
-                      </button>
-                    ) : null}
-                  </span>
-                ))}
-                {!readOnly ? (
-                  tagInputOpen ? (
-                    <div className="inline-flex items-center gap-1 rounded-full bg-[#1a1a1a] px-2 py-0.5 text-[11px] text-[#9ea6b5]">
-                      <span>#</span>
-                      <input
-                        ref={tagInputRef}
-                        value={tagDraft}
-                        onChange={(event) => setTagDraft(event.target.value)}
-                        onBlur={() => {
-                          const nextTag = tagDraft.trim();
-                          if (!nextTag) {
-                            setTagInputOpen(false);
-                            return;
-                          }
-                          const nextTags = [...new Set([...(selectedEditorNote.tags ?? []), nextTag])];
-                          void onUpdateTags(selectedEditorNote.id, nextTags);
-                          setTagDraft("");
-                          setTagInputOpen(false);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            const nextTag = tagDraft.trim();
-                            if (!nextTag) {
-                              setTagInputOpen(false);
-                              return;
-                            }
-                            const nextTags = [...new Set([...(selectedEditorNote.tags ?? []), nextTag])];
-                            void onUpdateTags(selectedEditorNote.id, nextTags);
-                            setTagDraft("");
-                            setTagInputOpen(false);
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            setTagDraft("");
-                            setTagInputOpen(false);
-                          }
-                        }}
-                        className="w-20 bg-transparent text-[11px] text-[#d8dce5] outline-none"
-                        placeholder="tag"
-                      />
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="inline-flex items-center justify-center rounded-full bg-[#1a1a1a] px-2 py-0.5 text-[11px] text-[#8d95a5]"
-                      onClick={() => setTagInputOpen(true)}
-                    >
-                      + Tag
-                    </button>
-                  )
-                ) : null}
-              </div>
-            ) : null}
-          </div>
         </div>
+      </ContextMenuTrigger>
+      {sidebarMenuContent}
+    </ContextMenu>
+  );
 
-        {selectedEditorNote && syncEngine ? (
-          <div className="grid min-h-0">
+  const centerSlot = (
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <header className="flex shrink-0 items-center px-2" style={{ minHeight: "var(--ctrl-h-lg)" }}>
+        <nav
+          aria-label="Breadcrumb"
+          className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground"
+        >
+          {breadcrumbSegments.map((segment, index) => {
+            const isLast = index === breadcrumbSegments.length - 1;
+            return (
+              <Fragment key={`${segment}-${index}`}>
+                {index > 0 ? (
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                ) : null}
+                <span
+                  className={`truncate ${isLast ? "text-foreground" : ""}`}
+                  title={segment}
+                >
+                  {segment}
+                </span>
+              </Fragment>
+            );
+          })}
+        </nav>
+      </header>
+
+      {selectedEditorNote && syncEngine ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[var(--width-prose-max)] px-2 pb-24 pt-4">
             <LexicalNoteEditor
               noteId={selectedEditorNote.id}
               title={selectedEditorNote.title}
@@ -945,231 +1041,40 @@ export function NotesSplitView({
               workspaceId={selectedEditorNote.workspaceId}
             />
           </div>
-        ) : selectedEditorNote ? (
-          <div className="grid min-h-0 place-content-center text-[#888888] text-[13px]">
-            Preparing note...
-          </div>
-        ) : (
-          <div className="grid place-content-center gap-[6px] text-[#9a9a9a]">
-            <h3>No note selected</h3>
-            <p>Use the bottom + menu to create section, folder, or note.</p>
-          </div>
-        )}
-      </main>
-
-      {contextMenu?.type === "note" && contextTarget ? (
-        <div
-          ref={contextMenuRef}
-          className={contextMenuPanelClass}
-          style={{ top: contextMenu.top, left: contextMenu.left }}
-        >
-          {!contextTargetIsSection ? (
-            <button
-              type="button"
-              className={contextMenuItemClass}
-              onClick={() => {
-                runContextAction(async () => {
-                  await onTogglePin(contextTarget.id, !contextTarget.isPinned);
-                });
-              }}
-            >
-              <span>{contextTarget.isPinned ? "Unpin" : "Pin"}</span>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={contextMenuItemClass}
-            onClick={() => {
-              runContextAction(async () => {
-                const created = await onCreateNote(contextTarget.id, "note");
-                if (created) selectNoteWithPrewarm(created);
-                setExpanded((current) => ({ ...current, [contextTarget.id]: true }));
-                if (contextTarget.kind === "category") {
-                  setCategoryExpanded((current) => ({ ...current, [contextTarget.id]: true }));
-                }
-              });
-            }}
-          >
-            <span>Add Note</span>
-          </button>
-          <button
-            type="button"
-            className={contextMenuItemClass}
-            onClick={() => {
-              runContextAction(async () => {
-                const created = await onCreateNote(contextTarget.id, "folder");
-                if (created) selectNoteWithPrewarm(created);
-                setExpanded((current) => ({ ...current, [contextTarget.id]: true }));
-                if (contextTarget.kind === "category") {
-                  setCategoryExpanded((current) => ({ ...current, [contextTarget.id]: true }));
-                }
-              });
-            }}
-          >
-            <span>Add Folder</span>
-          </button>
-          <button
-            type="button"
-            className={contextMenuItemClass}
-            onClick={() => {
-              const currentTitle = contextTarget.title || "Untitled";
-              const next = window.prompt("Rename", currentTitle);
-              if (!next) return;
-              const trimmed = next.trim();
-              if (!trimmed || trimmed === currentTitle) return;
-              runContextAction(async () => {
-                await onUpdateTitle(contextTarget.id, trimmed);
-              });
-            }}
-          >
-            <span>Rename</span>
-          </button>
-          {!contextTargetIsSection ? (
-            <button
-              type="button"
-              className={contextMenuItemClass}
-              onClick={() => {
-                runContextAction(async () => {
-                  const created = await onDuplicateNote(contextTarget.id);
-                  if (created && contextTarget.kind !== "category") selectNoteWithPrewarm(created);
-                });
-              }}
-            >
-              <span>Mirror</span>
-            </button>
-          ) : null}
-
-          {/* ── Expose ── */}
-          {!contextTargetIsSection && contextTarget.kind === "note" ? (
-            exposedSlugs[contextTarget.id] ? (
-              <>
-                <button
-                  type="button"
-                  className={contextMenuItemClass}
-                  onClick={() => {
-                    const url = `https://moduo.app/notes/${exposedSlugs[contextTarget.id]}`;
-                    copyToClipboard(url);
-                    setExposeToast({ url, visible: true });
-                    setTimeout(() => setExposeToast(null), 4000);
-                    setContextMenu(null);
-                  }}
-                >
-                  <span>Copy Public URL</span>
-                </button>
-                <button
-                  type="button"
-                  className={contextMenuDeleteItemClass}
-                  disabled={exposeLoading}
-                  onClick={() => void handleUnexposeNote(contextTarget.id)}
-                >
-                  <span>{exposeLoading ? "Removing…" : "Unexpose"}</span>
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className={contextMenuItemClass}
-                style={{ color: "#a3c4f3" }}
-                disabled={exposeLoading || !syncEngine}
-                onClick={() => void handleExposeNote(contextTarget)}
-              >
-                <span>{exposeLoading ? "Exposing…" : "✦ Expose to web"}</span>
-              </button>
-            )
-          ) : null}
-
-          <div style={{ height: 1, background: "#222", margin: "4px 0" }} />
-
-          <button
-            type="button"
-            className={contextMenuDeleteItemClass}
-            onClick={() => {
-              runContextAction(async () => {
-                await onDeleteNote(contextTarget.id);
-              });
-            }}
-          >
-            <span>Delete</span>
-          </button>
         </div>
-      ) : null}
-
-      {contextMenu?.type === "sidebar" ? (
-        <div
-          ref={contextMenuRef}
-          className={contextMenuPanelClass}
-          style={{ top: contextMenu.top, left: contextMenu.left }}
-        >
-          <button
-            type="button"
-            className={contextMenuItemClass}
-            onClick={() => {
-              runContextAction(async () => {
-                await onCreateNote(null, "category");
-              });
-            }}
-          >
-            <span>New Section</span>
-          </button>
-          <button
-            type="button"
-            className={contextMenuItemClass}
-            onClick={() => {
-              runContextAction(async () => {
-                const created = await onCreateNote(null, "folder");
-                if (created) selectNoteWithPrewarm(created);
-              });
-            }}
-          >
-            <span>New Folder</span>
-          </button>
-          <button
-            type="button"
-            className={contextMenuItemClass}
-            onClick={() => {
-              runContextAction(async () => {
-                const created = await onCreateNote(null, "note");
-                if (created) selectNoteWithPrewarm(created);
-              });
-            }}
-          >
-            <span>New Note</span>
-          </button>
+      ) : selectedEditorNote ? (
+        <div className="grid min-h-0 flex-1 place-content-center text-sm text-muted-foreground">
+          Preparing note…
         </div>
-      ) : null}
-
-      {/* ── Expose Toast ── */}
-      {typeof document !== "undefined" && exposeToast?.visible
-        ? createPortal(
-            <div
-              className="fixed bottom-6 z-[3500] flex items-center gap-3 rounded-[14px] border border-[#2a2a2a] bg-[#161616] px-5 py-3 shadow-[0_16px_40px_#00000080] text-[13px] text-[#d0d0d0] pointer-events-auto"
-              style={{ left: "50%", transform: "translateX(-50%)", animation: "fadeSlideUp 0.25s ease" }}
-            >
-              <span className="text-[#a3c4f3]">✦</span>
-              <span>
-                Note live at{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    void openExternalUrl(exposeToast.url);
-                  }}
-                  className="cursor-pointer border-0 bg-transparent p-0 underline text-[#a3c4f3] hover:text-[#c5d9f7]"
-                >
-                  {exposeToast.url.replace("https://", "")}
-                </button>
-              </span>
-              <span className="ml-1 text-[11px] text-[#555]">— URL copied!</span>
-              <button
-                type="button"
-                className="ml-2 text-[#555] hover:text-[#aaa]"
-                onClick={() => setExposeToast(null)}
-              >
-                ✕
-              </button>
-            </div>,
-            document.body
-          )
-        : null}
+      ) : (
+        <div className="grid min-h-0 flex-1 place-content-center gap-2 text-center">
+          <h3 className="font-display text-2xl text-foreground">No note selected</h3>
+          <p className="text-sm text-muted-foreground">
+            Pick a note from the sidebar, or right-click to create one.
+          </p>
+        </div>
+      )}
     </div>
+  );
+
+  const rightSlot = (
+    <NotesRightRail
+      selectedNote={selectedNote}
+      allNotes={activeNotes}
+      readOnly={readOnly}
+      onSelectNote={(id) => void selectNoteWithPrewarm(id)}
+      onUpdateTags={onUpdateTags}
+    />
+  );
+
+  return (
+    <>
+      <FeaturePanelsShell
+        feature="notes"
+        left={leftSlot}
+        center={centerSlot}
+        right={rightSlot}
+      />
+    </>
   );
 }
