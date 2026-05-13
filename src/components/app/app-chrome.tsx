@@ -64,6 +64,7 @@ import {
 } from "../../features/profile/profile-storage";
 import { baseModulesNavItems, normalizeTaskProject, nowIso, safeId } from "./app-chrome-constants";
 import { AppChromeMenus } from "./app-chrome-menus";
+import { TrialBanner } from "../trial-banner";
 import type { MenuAnchor, TaskProjectOption } from "./app-chrome-types";
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
@@ -72,7 +73,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const { runtime, userEmail, userId } = useAuth();
   const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
   const currentFeature = routeToFeatureLayout(pathname);
-  const isGridRoute = pathname === "/" || pathname.startsWith("/grid");
+   const isGridRoute = pathname === "/";
   const isTasksRoute = pathname.startsWith("/tasks") || pathname.startsWith("/ground");
   const isMindmapRoute = pathname.startsWith("/mindmap");
   const isBrainstormRoute = pathname.startsWith("/brainstorm");
@@ -163,11 +164,12 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const modulesNavItems = useMemo(
     () =>
       baseModulesNavItems.filter((tab) => {
+        if (tab.desktopOnly && !runtime?.capabilities.isDesktop) return false;
         if (tab.module === "notes") return modulePermissions.notes !== "none";
         if (tab.module === "tasks") return modulePermissions.tasks !== "none";
         return true;
       }),
-    [modulePermissions.notes, modulePermissions.tasks]
+    [modulePermissions.notes, modulePermissions.tasks, runtime?.capabilities.isDesktop]
   );
 
   const activeGridSceneName =
@@ -187,7 +189,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
   useEffect(() => {
     if (!isSettingsRoute && !modulesNavItems.some((tab) => tab.href === pathname)) {
-      void navigate({ to: modulesNavItems[0]?.href ?? "/grid", replace: true });
+      void navigate({ to: modulesNavItems[0]?.href ?? "/", replace: true });
     }
   }, [isSettingsRoute, navigate, pathname, modulesNavItems]);
 
@@ -919,7 +921,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             <View className="flex min-w-max flex-row items-center gap-2 pr-2">
               {modulesNavItems.map((tab) => {
                 const active = pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
-                const isGridTab = tab.href === "/grid";
+                const isGridTab = tab.href === "/";
                 const isMindmapTab = tab.href === "/mindmap";
                 const isBrainstormTab = tab.href === "/brainstorm";
                 return (
@@ -1075,6 +1077,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           </View>
         </View>
       </View>
+
+      <TrialBanner />
 
       <View className="flex-1 min-h-0 overflow-hidden">
         <Outlet />

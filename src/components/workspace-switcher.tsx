@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Modal, Pressable, Text, TextInput, View } from "../tw";
 import { useWorkspace } from "../providers/workspace-provider";
+import { useEntitlement } from "../hooks/use-entitlement";
+import { UpgradeModal } from "./upgrade-modal";
 import { Icon } from "./ui/icon";
 
 type Props = {
@@ -14,10 +16,17 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
     selectWorkspace,
     createWorkspace,
     softDeleteWorkspace,
+    joinWorkspace,
   } = useWorkspace();
+  const { allowed: canAddWorkspace } = useEntitlement("unlimited_workspaces");
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("New Workspace");
+  const [isJoiningWorkspace, setIsJoiningWorkspace] = useState(false);
+  const [joinToken, setJoinToken] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [joinBusy, setJoinBusy] = useState(false);
   const [deleteCandidateWorkspaceId, setDeleteCandidateWorkspaceId] = useState<string | null>(null);
   const [deleteWorkspaceInput, setDeleteWorkspaceInput] = useState("");
   const [deleteSubmittingWorkspaceId, setDeleteSubmittingWorkspaceId] = useState<string | null>(null);
@@ -62,7 +71,27 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
     setOpen(false);
     setIsCreatingWorkspace(false);
     setNewWorkspaceName("New Workspace");
+    setIsJoiningWorkspace(false);
+    setJoinToken("");
+    setJoinError(null);
     cancelDeleteIntent();
+  };
+
+  const submitJoinWorkspace = async () => {
+    if (!joinToken.trim() || joinBusy) return;
+    setJoinBusy(true);
+    setJoinError(null);
+    try {
+      const ws = await joinWorkspace(joinToken.trim());
+      if (!ws) throw new Error("Invalid or expired invite code.");
+      setOpen(false);
+      setIsJoiningWorkspace(false);
+      setJoinToken("");
+    } catch (err: any) {
+      setJoinError(err?.message ?? "Failed to join workspace.");
+    } finally {
+      setJoinBusy(false);
+    }
   };
 
   return (
@@ -80,6 +109,11 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
         <Text className="shrink-0 text-[11px] text-[#9b9b9b] leading-none">▾</Text>
       </Pressable>
 
+      <UpgradeModal
+        visible={upgradeModalOpen}
+        feature="unlimited_workspaces"
+        onClose={() => setUpgradeModalOpen(false)}
+      />
       <Modal transparent visible={open} animationType="fade" onRequestClose={closeModal}>
         <Pressable className="fixed inset-0" onPress={closeModal} />
         <View className="fixed top-16 left-[72px] w-[360px] rounded-xl bg-[#171717] p-2 z-[999]">
@@ -91,11 +125,30 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                 style={plusButtonStyle}
                 onPress={async (event: any) => {
                   event?.stopPropagation?.();
+                  if (workspaces.length >= 1 && !canAddWorkspace) {
+                    setUpgradeModalOpen(true);
+                    return;
+                  }
+                  setIsJoiningWorkspace(false);
                   setIsCreatingWorkspace(true);
                   setNewWorkspaceName("New Workspace");
                 }}
               >
                 <Text className="text-[#d8d8d8] text-[16px] leading-none">+</Text>
+              </Pressable>
+              <Pressable
+                className="rounded-md"
+                style={plusButtonStyle}
+                title="Join workspace with invite code"
+                onPress={(event: any) => {
+                  event?.stopPropagation?.();
+                  setIsCreatingWorkspace(false);
+                  setJoinToken("");
+                  setJoinError(null);
+                  setIsJoiningWorkspace((v) => !v);
+                }}
+              >
+                <Text className="text-[#a0a0a0] text-[13px] leading-none">↩</Text>
               </Pressable>
             </View>
           </View>
@@ -133,6 +186,44 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                     <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
                   </Pressable>
                 </View>
+              </View>
+            ) : null}
+
+            {isJoiningWorkspace ? (
+              <View className="mb-2 rounded-lg border border-[#2a2a2a] bg-[#1b1b1b] px-2 py-2 gap-1.5">
+                <Text className="text-[11px] text-[#9a9a9a] px-1">Paste invite code from workspace owner:</Text>
+                <View style={rowStyle}>
+                  <TextInput
+                    autoFocus
+                    value={joinToken}
+                    onChangeText={(v: string) => { setJoinToken(v); setJoinError(null); }}
+                    placeholder="Paste invite code…"
+                    onKeyDown={(event: any) => {
+                      if (event.key === "Enter") { event.preventDefault(); void submitJoinWorkspace(); }
+                      if (event.key === "Escape") { event.preventDefault(); setIsJoiningWorkspace(false); }
+                    }}
+                    className="h-8 flex-1 rounded-md border border-[#333] bg-[#151515] px-2 text-[12px] font-mono text-[#e5e5e5] outline-none"
+                  />
+                  <Pressable
+                    className="ml-1 rounded-md hover:bg-[#2b2b2b]"
+                    style={iconButtonStyle}
+                    onPress={() => void submitJoinWorkspace()}
+                  >
+                    <Text className={`text-[12px] leading-none font-semibold ${joinToken.trim() && !joinBusy ? "text-[#d8d8d8]" : "text-[#555]"}`}>
+                      {joinBusy ? "…" : "↩"}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    className="ml-0.5 rounded-md hover:bg-[#2b2b2b]"
+                    style={iconButtonStyle}
+                    onPress={() => { setIsJoiningWorkspace(false); setJoinToken(""); setJoinError(null); }}
+                  >
+                    <Text className="text-[14px] leading-none text-[#d8d8d8]">×</Text>
+                  </Pressable>
+                </View>
+                {joinError && (
+                  <Text className="text-[11px] text-red-400 px-1">{joinError}</Text>
+                )}
               </View>
             ) : null}
             {workspaces.map((workspace) => {

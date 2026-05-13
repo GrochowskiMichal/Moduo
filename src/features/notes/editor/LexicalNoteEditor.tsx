@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from "react";
+import * as Y from "yjs";
 import { CodeHighlightNode, CodeNode, registerCodeHighlighting } from "@lexical/code";
 import { LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
@@ -17,6 +18,7 @@ import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
 import { TableNode, TableCellNode, TableRowNode } from "@lexical/table";
+import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $getSelection,
   $isRangeSelection,
@@ -43,6 +45,29 @@ function NotesCodeHighlightPlugin() {
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => registerCodeHighlighting(editor), [editor]);
+  return null;
+}
+
+// Triggers syncYjsStateToLexicalV2__EXPERIMENTAL after the collab plugin sets up its
+// command handler. This loads existing Y.Doc content into the Lexical editor on mount.
+function SyncFromYjsPlugin({ doc }: { doc: Y.Doc }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    // Inspect the Y.Doc state right before dispatching the command
+    const root = doc.get("root-v2", Y.XmlElement);
+    const children = root.toArray();
+    const textPreview = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
+    console.log(`%c[NOTES:SyncFromYjs] PRE-COMMAND shareKeys=[${[...doc.share.keys()].join(",")}] rootType=${root.constructor.name} rootChildren=${children.length} textPreview="${textPreview.slice(0, 80)}"`, "color:#f4a;font-weight:bold");
+    // Small delay ensures the collab plugin's command handler is registered
+    const id = setTimeout(() => {
+      const root2 = doc.get("root-v2", Y.XmlElement);
+      const ch2 = root2.toArray();
+      const tp2 = ch2[0] ? (ch2[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
+      console.log(`%c[NOTES:SyncFromYjs] DISPATCHING CLEAR_DIFF_VERSIONS_COMMAND shareKeys=[${[...doc.share.keys()].join(",")}] rootChildren=${ch2.length} textPreview="${tp2.slice(0, 80)}"`, "color:#f4a;font-weight:bold");
+      editor.dispatchCommand(CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL, undefined);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [editor, doc]); // doc dep so re-runs when session changes (e.g. tab switch)
   return null;
 }
 
@@ -99,6 +124,7 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
     if (collabSession.doc.store.clients.size === 0) return "v2";
     return "v1";
   }, [collabSession]);
+  console.log(`%c[NOTES:LexicalNoteEditor] render noteId=${noteId} collabReady=${collabReady} collabMode=${collabMode} shareKeys=[${[...collabSession.doc.share.keys()].join(",")}]`, "color:#8af");
   useEffect(() => {
     let active = true;
     setCollabReady(collabSession.persistence.synced);
@@ -215,12 +241,15 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
               <TablePlugin />
               <SlashCommandPlugin workspaceId={workspaceId} />
               {collabMode === "v2" && collabSession ? (
-                <CollaborationPluginV2__EXPERIMENTAL
-                  id={noteId}
-                  doc={collabSession.doc}
-                  provider={collabSession.provider}
-                  __shouldBootstrapUnsafe={true}
-                />
+                <>
+                  <CollaborationPluginV2__EXPERIMENTAL
+                    id={noteId}
+                    doc={collabSession.doc}
+                    provider={collabSession.provider}
+                    __shouldBootstrapUnsafe={true}
+                  />
+                  <SyncFromYjsPlugin doc={collabSession.doc} />
+                </>
               ) : (
                 <CollaborationPlugin
                   id={noteId}

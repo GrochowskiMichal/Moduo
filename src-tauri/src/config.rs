@@ -55,7 +55,7 @@ impl AppConfig {
                 .ok()
                 .map(|v| v.trim().to_string())
                 .filter(|v| !v.is_empty())
-                .unwrap_or_else(|| "https://ahhqsxjkwsqyszhxzjbc.supabase.co".to_string()),
+                .unwrap_or_else(|| "https://wtoonrvuqumihpkbvwvs.supabase.co".to_string()),
         }
     }
 }

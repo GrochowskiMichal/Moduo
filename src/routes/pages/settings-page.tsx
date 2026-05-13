@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { Cloud, CloudOff, CreditCard, Eye, EyeOff, Sparkles } from "lucide-react";
+import { getRuntime } from "../../lib/runtime";
 import type { CalendarAccount, CalendarSource } from "../../features/calendar/types";
 import { CALENDAR_ACCOUNTS_UPDATED_EVENT, readLocalAccounts, readLocalSources, writeLocalAccounts, writeLocalSources } from "../../features/calendar/hooks/use-calendar";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { useAuth } from "../../providers/auth-provider";
-import { Image, Pressable, Text } from "../../tw";
+import { Image, Pressable, Text, TextInput } from "../../tw";
 import defaultProfilePic from "../../../assets/icon.png";
 import { notifyProfileUpdated, readStoredAvatar, writeStoredAvatar } from "../../features/profile/profile-storage";
 
-type SettingsSection = "profile" | "login-key" | "integrations";
+type SettingsSection = "profile" | "login-key" | "integrations" | "cloud-sync" | "billing";
 
 type IntegrationStatus = { provider: string; connected: boolean };
 
@@ -23,15 +23,24 @@ function maskedPhrase(phrase: string | null) {
 }
 
 export function SettingsPage() {
-  const { runtime, userEmail } = useAuth();
+  const { runtime, userEmail, isSignedIn, accessToken, planTier, syncSubscription } = useAuth();
+  const isDesktop = !!runtime?.capabilities.isDesktop;
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [section, setSection] = useState<SettingsSection>(() => {
     if (typeof window !== "undefined") {
       const s = new URLSearchParams(window.location.search).get("section");
       if (s === "integrations") return "integrations";
+      if (s === "billing") return "billing";
     }
     return "profile";
   });
+
+  // Redirect web users away from the Login Key section — mnemonic is desktop-only.
+  useEffect(() => {
+    if (!isDesktop && section === "login-key") {
+      setSection("profile");
+    }
+  }, [isDesktop, section]);
   const [displayName, setDisplayName] = useState("");
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
@@ -49,6 +58,13 @@ export function SettingsPage() {
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoBusy, setVideoBusy] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
+
+  // Cloud sync state (desktop only)
+  const [cloudLinkEmail, setCloudLinkEmail] = useState("");
+  const [cloudLinkPassword, setCloudLinkPassword] = useState("");
+  const [cloudLinkBusy, setCloudLinkBusy] = useState(false);
+  const [cloudLinkError, setCloudLinkError] = useState<string | null>(null);
+  const [cloudLinkInfo, setCloudLinkInfo] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -76,8 +92,9 @@ export function SettingsPage() {
       setVideoLoading(true);
       setVideoError(null);
       try {
-        const result = await invoke<IntegrationStatus[]>("integration_get_status");
-        setVideoStatuses(result);
+        const rt = getRuntime();
+        const result = rt ? await rt.integrations.getStatus() : [];
+        setVideoStatuses(result as IntegrationStatus[]);
       } catch (e) {
         setVideoError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -97,9 +114,11 @@ export function SettingsPage() {
     setCalBusy("google");
     setCalError(null);
     try {
-      const result = await invoke<{ accountId: string; email: string; displayName: string; calendars: { id: string; name: string; color: string }[] }>("calendar_google_oauth_start");
+      const _rt = getRuntime();
+      if (!_rt) throw new Error("Runtime not available");
+      const result = await _rt.calendar.startGoogleOAuth() as { accountId: string; email: string; displayName: string; calendars: { id: string; name: string; color: string }[] };
       const newAccount: CalendarAccount = { id: result.accountId, provider: "google", email: result.email, displayName: result.displayName, connected: true, lastSyncAt: new Date().toISOString() };
-      const newSrcs: CalendarSource[] = result.calendars.map((c) => ({ id: c.id, accountId: result.accountId, name: c.name, color: c.color || "#4285f4", visible: true }));
+      const newSrcs: CalendarSource[] = result.calendars.map((c: any) => ({ id: c.id, accountId: result.accountId, name: c.name, color: c.color || "#4285f4", visible: true }));
       const cur = readLocalAccounts();
       const idx = cur.findIndex((a) => a.id === newAccount.id);
       const nextAccounts = idx === -1 ? [...cur, newAccount] : cur.map((a, i) => (i === idx ? newAccount : a));
@@ -130,11 +149,17 @@ export function SettingsPage() {
   };
 
   const handleVideoConnect = async (provider: "zoom" | "google_meet") => {
+    const rt = getRuntime();
+    if (!rt) return;
     setVideoBusy(provider);
     setVideoError(null);
     try {
-      await invoke(provider === "zoom" ? "integration_connect_zoom" : "integration_connect_google_meet");
-      setVideoStatuses(await invoke<IntegrationStatus[]>("integration_get_status"));
+      if (provider === "zoom") {
+        await rt.integrations.connectZoom();
+      } else {
+        await rt.integrations.connectGoogleMeet();
+      }
+      setVideoStatuses(await rt.integrations.getStatus());
     } catch (e) {
       setVideoError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -143,11 +168,13 @@ export function SettingsPage() {
   };
 
   const handleVideoDisconnect = async (provider: string) => {
+    const rt = getRuntime();
+    if (!rt) return;
     setVideoBusy(provider);
     setVideoError(null);
     try {
-      await invoke("integration_disconnect", { provider });
-      setVideoStatuses(await invoke<IntegrationStatus[]>("integration_get_status"));
+      await rt.integrations.disconnect(provider);
+      setVideoStatuses(await rt.integrations.getStatus());
     } catch (e) {
       setVideoError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -235,6 +262,305 @@ export function SettingsPage() {
     setIsPhraseVisible(true);
   };
 
+  const handleEnableCloudSync = async () => {
+    if (!runtime || cloudLinkBusy) return;
+    if (!cloudLinkEmail.trim() || !cloudLinkPassword) { setCloudLinkError("Email and password are required."); return; }
+    setCloudLinkBusy(true); setCloudLinkError(null); setCloudLinkInfo(null);
+    const { data, error: linkError } = await runtime.auth.signUpWithEmail({
+      email: cloudLinkEmail.trim().toLowerCase(),
+      password: cloudLinkPassword,
+    });
+    setCloudLinkBusy(false);
+    if (linkError) { setCloudLinkError(linkError.message); return; }
+    if (!data.session) {
+      setCloudLinkInfo("Check your email to verify your account, then sign in to complete cloud sync setup.");
+    } else {
+      setCloudLinkInfo("Cloud sync enabled! Your data will start syncing.");
+      setCloudLinkEmail(""); setCloudLinkPassword("");
+    }
+  };
+
+  const handleCloudSignIn = async () => {
+    if (!runtime || cloudLinkBusy) return;
+    if (!cloudLinkEmail.trim() || !cloudLinkPassword) { setCloudLinkError("Email and password are required."); return; }
+    setCloudLinkBusy(true); setCloudLinkError(null); setCloudLinkInfo(null);
+    const { error: signInError } = await runtime.auth.signInWithEmail({
+      email: cloudLinkEmail.trim().toLowerCase(),
+      password: cloudLinkPassword,
+    });
+    setCloudLinkBusy(false);
+    if (signInError) { setCloudLinkError(signInError.message); return; }
+    setCloudLinkInfo("Signed in to cloud. Sync is active.");
+    setCloudLinkEmail(""); setCloudLinkPassword("");
+  };
+
+  const centerCloudSync = (
+    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 rounded-2xl border border-[#242424] bg-[#131313] p-6">
+      <div>
+        <Text className="text-[30px] font-semibold text-[#f3f3f3]">Cloud Sync</Text>
+        <Text className="mt-2 text-[16px] text-[#b5b5b5]">
+          Link your local vault to a cloud account to sync data across devices and the web app.
+        </Text>
+      </div>
+
+      {isSignedIn && userEmail ? (
+        <div className="flex items-center gap-3 rounded-xl border border-[#1c2a1c] bg-[#0f1f0f] p-4">
+          <Cloud size={20} color="#5ec97a" />
+          <div className="flex-1">
+            <Text className="text-[14px] font-medium text-[#f1f1f1]">Cloud sync active</Text>
+            <Text className="text-[12px] text-[#666]">{userEmail}</Text>
+          </div>
+          <Pressable
+            className="rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 hover:bg-[#2a1a1a]"
+            onPress={async () => { if (runtime) { await runtime.auth.signOut(); } }}
+          >
+            <Text className="text-[13px] text-[#f87171]">Disconnect</Text>
+          </Pressable>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-3 rounded-xl border border-[#242424] bg-[#0e0e0e] p-4">
+            <CloudOff size={20} color="#666" />
+            <div>
+              <Text className="text-[14px] font-medium text-[#f1f1f1]">Not connected</Text>
+              <Text className="text-[12px] text-[#666]">Sign up or sign in to enable cloud sync.</Text>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <input
+              type="email"
+              placeholder="Email"
+              value={cloudLinkEmail}
+              onChange={(e) => setCloudLinkEmail(e.target.value)}
+              className="h-12 w-full rounded-xl border border-[#2a2a2a] bg-[#0c0c0c] px-4 text-[14px] text-[#f1f1f1] outline-none focus:border-[#3a3a3a] placeholder:text-[#555]"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={cloudLinkPassword}
+              onChange={(e) => setCloudLinkPassword(e.target.value)}
+              className="h-12 w-full rounded-xl border border-[#2a2a2a] bg-[#0c0c0c] px-4 text-[14px] text-[#f1f1f1] outline-none focus:border-[#3a3a3a] placeholder:text-[#555]"
+            />
+            <div className="flex gap-3">
+              <Pressable
+                className="flex h-10 flex-1 items-center justify-center rounded-xl bg-[#f2f2f2] disabled:opacity-50"
+                onPress={handleEnableCloudSync}
+                disabled={cloudLinkBusy || !cloudLinkEmail.trim() || !cloudLinkPassword}
+              >
+                <Text className="text-[14px] font-semibold text-[#101010]">
+                  {cloudLinkBusy ? "Working..." : "Create account & sync"}
+                </Text>
+              </Pressable>
+              <Pressable
+                className="flex h-10 flex-1 items-center justify-center rounded-xl border border-[#2a2a2a] bg-[#101010] disabled:opacity-50"
+                onPress={handleCloudSignIn}
+                disabled={cloudLinkBusy || !cloudLinkEmail.trim() || !cloudLinkPassword}
+              >
+                <Text className="text-[14px] text-[#c0c0c0]">Sign in</Text>
+              </Pressable>
+            </div>
+            {cloudLinkError ? <Text className="text-[12px] text-[#f87171]">{cloudLinkError}</Text> : null}
+            {cloudLinkInfo ? <Text className="text-[12px] text-[#5ec97a]">{cloudLinkInfo}</Text> : null}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const PLAN_LABELS: Record<string, string> = {
+    free: "Free",
+    pro: "Pro",
+    team: "Team",
+    founders: "Early Founders",
+  };
+
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const handleOpenBillingPortal = async () => {
+    const SUPABASE_URL = (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ??
+      "https://wtoonrvuqumihpkbvwvs.supabase.co";
+    if (!accessToken) return;
+    setPortalBusy(true);
+    setPortalError(null);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/create-portal-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ returnUrl: window.location.href }),
+      });
+      const { url, error } = await res.json();
+      if (error) throw new Error(error);
+      if (url) {
+        if (runtime?.capabilities.isDesktop) {
+          await runtime.openExternalUrl(url);
+        } else {
+          window.location.href = url;
+        }
+      }
+    } catch (e) {
+      console.error("[settings] billing portal error:", e);
+      setPortalError(e instanceof Error ? e.message : "Could not open billing portal.");
+    } finally {
+      setPortalBusy(false);
+    }
+  };
+
+  const handleCheckout = async (plan: "pro" | "team") => {
+    const SUPABASE_URL = (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ??
+      "https://wtoonrvuqumihpkbvwvs.supabase.co";
+    if (!accessToken) {
+      if (runtime?.capabilities.isDesktop) await runtime.openExternalUrl("https://moduo.app/#pricing");
+      else window.open("https://moduo.app/#pricing", "_blank");
+      return;
+    }
+    try {
+      const body: Record<string, string> = {
+        plan,
+        interval: "monthly",
+        successUrl: `${window.location.origin}/settings?section=billing&upgrade=success`,
+        cancelUrl: `${window.location.origin}/settings?section=billing`,
+      };
+      if (couponCode.trim()) body.coupon = couponCode.trim();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/create-checkout-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify(body),
+      });
+      const { url, error: checkoutError } = await res.json();
+      if (checkoutError) throw new Error(checkoutError);
+      if (url) {
+        if (runtime?.capabilities.isDesktop) await runtime.openExternalUrl(url);
+        else window.location.href = url;
+      }
+    } catch {
+      if (runtime?.capabilities.isDesktop) await runtime.openExternalUrl("https://moduo.app/#pricing");
+      else window.open("https://moduo.app/#pricing", "_blank");
+    }
+  };
+
+  const centerBilling = (
+    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 rounded-2xl border border-[#242424] bg-[#131313] p-6">
+      <div>
+        <Text className="text-[30px] font-semibold text-[#f3f3f3]">Billing</Text>
+        <Text className="mt-2 text-[16px] text-[#b5b5b5]">
+          Manage your subscription and payment details.
+        </Text>
+      </div>
+
+      <div className="flex items-center gap-3 rounded-xl border border-[#242424] bg-[#0e0e0e] p-4">
+        <Sparkles size={20} color={planTier === "free" ? "#666" : "#f59e0b"} />
+        <div className="flex-1">
+          <Text className="text-[14px] font-medium text-[#f1f1f1]">
+            Current plan: <Text className="text-[#f59e0b]">{PLAN_LABELS[planTier] ?? planTier}</Text>
+          </Text>
+          {planTier === "free" && (
+            <Text className="text-[12px] text-[#666]">Upgrade to Pro to unlock cloud sync and more.</Text>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {isSignedIn && (
+            <Pressable
+              disabled={syncBusy}
+              className="flex-row items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#151515] px-2.5 py-1.5 hover:bg-[#1e1e1e]"
+              onPress={async () => {
+                setSyncBusy(true);
+                setSyncMessage(null);
+                const tier = await syncSubscription();
+                setSyncBusy(false);
+                setSyncMessage(`Plan synced: ${PLAN_LABELS[tier] ?? tier}`);
+                setTimeout(() => setSyncMessage(null), 3000);
+              }}
+            >
+              <Text className="text-[12px] text-[#888]">{syncBusy ? "Syncing…" : "↻ Sync"}</Text>
+            </Pressable>
+          )}
+          {planTier !== "free" && isSignedIn && (
+            <Pressable
+              disabled={portalBusy}
+              className="flex-row items-center gap-2 rounded-lg border border-[#333] bg-[#1a1a1a] px-3 py-1.5 hover:bg-[#222]"
+              onPress={handleOpenBillingPortal}
+            >
+              <CreditCard size={14} color="#ccc" />
+              <Text className="text-[13px] text-[#c0c0c0]">{portalBusy ? "Opening…" : "Manage"}</Text>
+            </Pressable>
+          )}
+        </div>
+      </div>
+
+      {syncMessage && (
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2.5">
+          <Text className="text-[13px] text-emerald-300">{syncMessage}</Text>
+        </div>
+      )}
+
+      {(planTier === "free" || planTier === "pro") && isSignedIn && (
+        <div className="flex items-center gap-2 rounded-xl border border-[#242424] bg-[#0e0e0e] px-3 py-2">
+          <TextInput
+            value={couponCode}
+            onChangeText={setCouponCode}
+            placeholder="Coupon code (optional)"
+            placeholderTextColor="#555"
+            autoCapitalize="characters"
+            className="flex-1 bg-transparent text-[13px] text-[#e0e0e0] outline-none"
+          />
+          {couponCode.trim() && (
+            <Pressable onPress={() => setCouponCode("")} className="px-1">
+              <Text className="text-[12px] text-[#555] hover:text-[#888]">✕</Text>
+            </Pressable>
+          )}
+        </div>
+      )}
+
+      {planTier === "free" && isSignedIn && (
+        <div className="flex gap-2">
+          <Pressable
+            className="flex flex-1 h-10 items-center justify-center rounded-xl bg-amber-500 hover:bg-amber-400"
+            onPress={() => handleCheckout("pro")}
+          >
+            <Text className="text-[14px] font-semibold text-black">Upgrade to Pro →</Text>
+          </Pressable>
+          <Pressable
+            className="flex flex-1 h-10 items-center justify-center rounded-xl border border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20"
+            onPress={() => handleCheckout("team")}
+          >
+            <Text className="text-[14px] font-semibold text-violet-300">Upgrade to Team →</Text>
+          </Pressable>
+        </div>
+      )}
+
+      {planTier === "pro" && isSignedIn && (
+        <Pressable
+          className="flex h-10 items-center justify-center rounded-xl border border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20"
+          onPress={() => handleCheckout("team")}
+        >
+          <Text className="text-[14px] font-semibold text-violet-300">Upgrade to Team →</Text>
+        </Pressable>
+      )}
+
+      {portalError && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+          <Text className="text-[13px] text-red-300">{portalError}</Text>
+        </div>
+      )}
+
+      {!isSignedIn && (
+        <div className="rounded-xl border border-[#242424] bg-[#0e0e0e] p-4">
+          <Text className="text-[13px] text-[#666]">
+            Sign in to a cloud account to manage your subscription.
+          </Text>
+        </div>
+      )}
+    </div>
+  );
+
   const leftPanel = (
     <div className="flex h-full flex-col gap-2">
       <Text className="text-[13px] uppercase tracking-[0.08em] text-[#7f7f7f]">Settings</Text>
@@ -244,17 +570,33 @@ export function SettingsPage() {
       >
         <Text className={`text-[14px] ${section === "profile" ? "text-[#f1f1f1]" : "text-[#adadad]"}`}>Profile</Text>
       </Pressable>
-      <Pressable
-        className={`rounded-lg px-3 py-2 text-left ${section === "login-key" ? "bg-[#242424]" : "bg-transparent hover:bg-[#1b1b1b]"}`}
-        onPress={() => setSection("login-key")}
-      >
-        <Text className={`text-[14px] ${section === "login-key" ? "text-[#f1f1f1]" : "text-[#adadad]"}`}>Login Key</Text>
-      </Pressable>
+      {isDesktop && (
+        <Pressable
+          className={`rounded-lg px-3 py-2 text-left ${section === "login-key" ? "bg-[#242424]" : "bg-transparent hover:bg-[#1b1b1b]"}`}
+          onPress={() => setSection("login-key")}
+        >
+          <Text className={`text-[14px] ${section === "login-key" ? "text-[#f1f1f1]" : "text-[#adadad]"}`}>Login Key</Text>
+        </Pressable>
+      )}
       <Pressable
         className={`rounded-lg px-3 py-2 text-left ${section === "integrations" ? "bg-[#242424]" : "bg-transparent hover:bg-[#1b1b1b]"}`}
         onPress={() => setSection("integrations")}
       >
         <Text className={`text-[14px] ${section === "integrations" ? "text-[#f1f1f1]" : "text-[#adadad]"}`}>Integrations</Text>
+      </Pressable>
+      {isDesktop ? (
+        <Pressable
+          className={`rounded-lg px-3 py-2 text-left ${section === "cloud-sync" ? "bg-[#242424]" : "bg-transparent hover:bg-[#1b1b1b]"}`}
+          onPress={() => setSection("cloud-sync")}
+        >
+          <Text className={`text-[14px] ${section === "cloud-sync" ? "text-[#f1f1f1]" : "text-[#adadad]"}`}>Cloud Sync</Text>
+        </Pressable>
+      ) : null}
+      <Pressable
+        className={`rounded-lg px-3 py-2 text-left ${section === "billing" ? "bg-[#242424]" : "bg-transparent hover:bg-[#1b1b1b]"}`}
+        onPress={() => setSection("billing")}
+      >
+        <Text className={`text-[14px] ${section === "billing" ? "text-[#f1f1f1]" : "text-[#adadad]"}`}>Billing</Text>
       </Pressable>
     </div>
   );
@@ -463,7 +805,11 @@ export function SettingsPage() {
       left={leftPanel}
       center={
         <div className="h-full overflow-auto py-2">
-          {section === "profile" ? centerProfile : section === "login-key" ? centerLoginKey : centerIntegrations}
+          {section === "profile" ? centerProfile
+            : section === "login-key" ? centerLoginKey
+            : section === "cloud-sync" ? centerCloudSync
+            : section === "billing" ? centerBilling
+            : centerIntegrations}
         </div>
       }
     />

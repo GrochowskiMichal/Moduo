@@ -5,6 +5,8 @@ export type ModuleNavItem = {
   iconName: IconName;
   href: string;
   module?: "notes" | "tasks" | "mindmap" | "templates" | "email";
+  /** If true, hidden on web builds. */
+  desktopOnly?: boolean;
 };
 
 export type TaskProjectOption = {
