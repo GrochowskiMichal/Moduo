@@ -294,14 +294,21 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                 const active =
                   pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
                 return (
-                  <Pressable
-                    key={tab.href}
-                    className={`flex flex-row items-center gap-2 rounded-md px-3 py-2 ${active ? "bg-accent text-foreground" : "bg-transparent text-muted-foreground hover:bg-accent/60"}`}
-                    onPress={() => void navigate({ to: tab.href })}
-                  >
-                    <Icon name={tab.iconName} size={14} />
-                    <Text className="text-sm">{tab.label}</Text>
-                  </Pressable>
+                  <Tooltip key={tab.href}>
+                    <TooltipTrigger
+                      data-slot="module-tab"
+                      data-active={active}
+                      className={`flex flex-row items-center gap-2 rounded-md px-3 py-2 ${active ? "bg-accent text-foreground" : "bg-transparent text-muted-foreground hover:bg-accent/60"}`}
+                      onClick={() => void navigate({ to: tab.href })}
+                      aria-label={tab.label}
+                    >
+                      <Icon name={tab.iconName} size={14} />
+                      <Text data-slot="module-tab-label" className="text-sm">
+                        {tab.label}
+                      </Text>
+                    </TooltipTrigger>
+                    <TooltipContent>{tab.label}</TooltipContent>
+                  </Tooltip>
                 );
               })}
             </View>

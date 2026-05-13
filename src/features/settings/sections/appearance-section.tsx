@@ -3,6 +3,7 @@ import { AccentPicker } from "../appearance/accent-picker";
 import { DensityPicker } from "../appearance/density-picker";
 import { FontPicker } from "../appearance/font-picker";
 import { RadiusPicker } from "../appearance/radius-picker";
+import { TabsPicker } from "../appearance/tabs-picker";
 import { TextSizePicker } from "../appearance/text-size-picker";
 import { ThemePicker } from "../appearance/theme-picker";
 
@@ -18,6 +19,7 @@ export function AppearanceSection() {
     setFontDisplay,
     setFontBody,
     setTextSize,
+    setTabs,
   } = useAppearance();
 
   return (
@@ -33,6 +35,7 @@ export function AppearanceSection() {
         <FontPicker role="display" value={appearance.fontDisplay} onChange={setFontDisplay} />
         <FontPicker role="body" value={appearance.fontBody} onChange={setFontBody} />
         <TextSizePicker value={appearance.textSize} onChange={setTextSize} />
+        <TabsPicker value={appearance.tabs} onChange={setTabs} />
       </section>
     </SettingsSectionShell>
   );
