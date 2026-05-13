@@ -4,14 +4,14 @@ This document is the contract for how Mike and Maciej work in this repo —
 human or AI. Read it before starting a new task; it covers branching, PR
 direction, release cadence, testing gates, and how LLM agents should behave.
 
-> **Effective date:** after the in-flight wild branches are reconciled and
-> merged. Until then the existing ad-hoc branches stand; new task branches
-> should already follow this model.
+> **Effective date:** 2026-05-14. The branch model is active. Branch
+> protection on `main` and `develop` is pending Mike's admin action —
+> until then, the contract is honored by convention.
 
 ## Branch hierarchy
 
 ```
-production          ← release-quality. Alpha / beta tags live here.
+main          ← release-quality. Alpha / beta tags live here.
    ↑                   Only develop merges in.
 develop             ← integration. Sync target for personal branches.
    ↑    ↑              Only personal branches merge in.
@@ -25,12 +25,12 @@ maciej/* mike/*     ← task / milestone branches. Short-lived.
 
 | Branch | Owner | Who can merge into it |
 | --- | --- | --- |
-| `production` | shared | `develop` only, at release time, both devs sign off |
+| `main` | shared | `develop` only, at release time, both devs sign off |
 | `develop` | shared | `mike` and `maciej`, via PR, self-merge OK (review optional) |
 | `maciej` | Maciej | `maciej/*` task branches, via PR or fast-forward |
 | `mike` | Mike | `mike/*` task branches, via PR or fast-forward |
 
-Nobody pushes directly to `production` or `develop`. Personal branches can be
+Nobody pushes directly to `main` or `develop`. Personal branches can be
 pushed to directly by their owner; PRs are preferred when an LLM did the work
 so there's a diff to review.
 
@@ -44,14 +44,14 @@ remain the canonical base for every new task branch.
 - Name pattern: `<owner>/<short-kebab-case>`. Examples: `maciej/settings-modal`,
   `mike/calendar-sync-bug`, `maciej/m2-foundation-polish`.
 - Always branch from your **personal branch**, not from `develop` or
-  `production`. The personal branch is your latest known-working state.
+  `main`. The personal branch is your latest known-working state.
 - Keep them short-lived where possible. If a task grows beyond ~2 weeks,
   consider splitting it.
 
 ## Sync flow
 
 ```
-task branch  →  personal branch  →  develop  →  production
+task branch  →  personal branch  →  develop  →  main
                   (when ready)     (when ready)   (release)
 ```
 
@@ -64,7 +64,7 @@ task branch  →  personal branch  →  develop  →  production
   then self-merge — peer review is welcome but never blocking, so nobody
   stalls waiting on the other dev. Use rebase-merge to keep `develop` history
   linear. The personal branch stays after the merge.
-- **Develop → production**: only at a tagged release. **This is the gated
+- **Develop → main**: only at a tagged release. **This is the gated
   checkpoint** — both devs sign off in the PR. Tag the merge commit per the
   release scheme below.
 
@@ -97,7 +97,7 @@ Everything above, plus:
   intentionally regenerated and the new PNG committed.
 - Either reviewer can request screenshots / a short Loom; if asked, attach.
 
-### Develop → production (release)
+### Develop → main (release)
 
 Everything above, plus:
 
@@ -107,7 +107,7 @@ Everything above, plus:
 - A second walkthrough against an **existing vault** to catch migration /
   upgrade regressions.
 - CHANGELOG entry written for the release.
-- Both devs sign off in the `develop → production` PR before merging.
+- Both devs sign off in the `develop → main` PR before merging.
 
 ## Release tags
 
@@ -119,24 +119,24 @@ Tag format: `alpha-X.Y.Z`, `beta-X.Y.Z`, then plain `X.Y.Z` for 1.0+.
   we're hunting bugs.
 - `1.0.0`, `1.1.0`, `1.1.1` — regular SemVer once we're past beta.
 
-Every release tag points at a commit on `production`. Keep
+Every release tag points at a commit on `main`. Keep
 [`package.json`](./package.json) `version` field in sync with the tag.
 
 ### Hotfix flow
 
-When `production` needs a fix but you don't want to bring in everything
+When `main` needs a fix but you don't want to bring in everything
 sitting on `develop`:
 
-1. Branch `hotfix/<owner>/<short-name>` off `production`.
+1. Branch `hotfix/<owner>/<short-name>` off `main`.
 2. Fix + run the develop-tier testing gate.
-3. PR straight into `production`. Both devs sign off (same as a release).
+3. PR straight into `main`. Both devs sign off (same as a release).
 4. Tag with `Z` bumped — e.g. `alpha-0.3.0` → `alpha-0.3.1`.
 5. Cherry-pick or merge the hotfix back into `develop` so the fix isn't
    lost on the next release.
 
 ## CHANGELOG
 
-[CHANGELOG.md](./CHANGELOG.md) is updated on every `develop → production`
+[CHANGELOG.md](./CHANGELOG.md) is updated on every `develop → main`
 release. Section per release tag, dated, with subsections for **Added /
 Changed / Fixed / Removed**. The release PR's description doubles as the
 changelog draft if you keep both in sync.
@@ -144,7 +144,7 @@ changelog draft if you keep both in sync.
 ## Conflict policy
 
 If a personal-branch PR into `develop` conflicts with the other dev's recent
-merge, the PR author resolves. If `develop → production` conflicts arise (rare),
+merge, the PR author resolves. If `develop → main` conflicts arise (rare),
 the dev whose work caused the conflict resolves and re-requests review.
 
 ## Commit style
@@ -160,16 +160,16 @@ These apply to every AI session in this repo regardless of tool:
 
 1. **Default base branch is the user's personal branch.** Unless told otherwise,
    `git checkout -b <owner>/<task> <owner>` is the right starting point. Never
-   branch from `production`. Never branch from `develop` unless explicitly
+   branch from `main`. Never branch from `develop` unless explicitly
    instructed.
-2. **Never push to `production` or `develop` directly.** Always go through a PR.
+2. **Never push to `main` or `develop` directly.** Always go through a PR.
 3. **Never merge or close PRs without explicit authorization.** Even when auto
    mode is active. Merging is a shared-state action that needs the human's
    "yes."
 4. **Never delete branches without explicit authorization.** Especially personal
    or long-running ones.
 5. **`--force-push` only with `--force-with-lease`** and only on task branches
-   you own. Never force-push personal branches, `develop`, or `production`.
+   you own. Never force-push personal branches, `develop`, or `main`.
 6. **Run the testing gate for the merge you're targeting.** Don't open a PR
    into `develop` if you've only run the task-tier checks; either run the
    personal-tier walkthrough or flag in the PR description that the human
@@ -198,7 +198,7 @@ in progress, etc.), pause and ask before improvising.
 so it pre-fills automatically.)
 
 - [ ] Targets the correct base branch (`maciej` / `mike` for task PRs;
-      `develop` for personal sync; `production` only for releases).
+      `develop` for personal sync; `main` only for releases).
 - [ ] Branch name follows `<owner>/<kebab>` for task branches.
 - [ ] Testing gate for the target tier completed (see **Testing gates**).
 - [ ] If UI was changed, screenshots or a short Loom of the affected surface.
@@ -206,33 +206,29 @@ so it pre-fills automatically.)
       [tests/visual/primitives.spec.ts](tests/visual/primitives.spec.ts).
 - [ ] CHANGELOG entry drafted if this PR will be in the next release.
 
-## Reconciling the in-flight branches (one-time)
+## Branch model activation
 
-Before this convention goes live, we still need to land:
+Activated 2026-05-14:
 
-- `design/notes-page` (PR #1) — **merged 2026-05-13.**
-- `design/settings-polish-delta` (PR #2) — open, awaiting Mike + sign-off.
-- Mike's in-flight batch — TBD; will merge once Mike is done.
+- `develop`, `maciej`, and `mike` created off `main`.
+- `mike-backend`, `mike-ui-upgrade-modal`, and `design/settings-polish-delta`
+  merged into `main` and deleted.
+- Mike's pre-split branch preserved as `archive/mike-original`.
+- The originally-planned rename of `main` was skipped; the release-quality
+  branch keeps the name `main`.
 
-Once those are on `main`, we'll:
+## GitHub branch protection (pending)
 
-1. Rename `main` → `production`.
-2. Create `develop` from `production`.
-3. Create `maciej` and `mike` from `develop`.
-4. Delete or archive the stale `design/*` and `claude/*` branches.
-5. Configure GitHub branch protection on `production` and `develop` (see
-   below).
-6. All new work starts under this contract.
+Mike (admin) needs to apply via repo Settings → Branches:
 
-## GitHub branch protection (set on activation)
-
-Apply via repo Settings → Branches once `production` and `develop` exist:
-
-- **`production`**: require PR, require both devs' approvals, require
-  status checks to pass (`checks` workflow), require linear history,
-  disallow force-push, disallow deletion.
+- **`main`**: require PR, require both devs' approvals, require status
+  checks to pass (`checks` workflow), require linear history, disallow
+  force-push, disallow deletion.
 - **`develop`**: require PR, require status checks to pass, disallow
   force-push, disallow deletion. **Do not require approvals** — self-merge
   is intentional so neither dev stalls.
-- **Personal branches**: no protection — the owner is free to push
-  directly. (LLM agents are still constrained by the rules above.)
+- **Personal branches** (`maciej`, `mike`): no protection — the owner is
+  free to push directly. (LLM agents are still constrained by the rules
+  above.)
+
+Until protection lands, the contract is honored by convention.
