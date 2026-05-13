@@ -923,7 +923,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   return (
     <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
       <View
-        className="relative px-5 pt-4 pb-2 bg-background"
+        className="relative px-5 pt-4 bg-background"
         style={{ zIndex: "var(--z-header)" }}
       >
         <View className="relative z-[1] flex flex-row items-center justify-between gap-3">
@@ -1109,7 +1109,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         <Outlet />
       </View>
 
-      <View className="px-5 py-2 bg-background">
+      <View className="px-5 pb-2 bg-background">
         <View className="flex flex-row items-center justify-between">
           <Tooltip>
             <TooltipTrigger

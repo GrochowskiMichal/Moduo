@@ -106,7 +106,7 @@ export function FeaturePanelsShell({ feature, center, left, right, hideRight = f
 
   return (
     <>
-      <div className="flex h-full min-h-0 gap-4 bg-background px-4 pb-2 pt-2">
+      <div className="flex h-full min-h-0 gap-4 bg-background px-4">
         {leftPanel}
         <main className="min-h-0 min-w-0 h-full flex-1 rounded-2xl bg-card p-4 overflow-auto relative border border-border">
           {center}
