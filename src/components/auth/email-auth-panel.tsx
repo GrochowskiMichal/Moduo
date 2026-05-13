@@ -1,41 +1,64 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CircleHelp, CircleUserRound, UserPlus } from "lucide-react";
-import { Image, Pressable, Text, TextInput, View } from "../../tw";
-import moduoLogoWhite from "../../../assets/moduo_logo_white.svg";
-import defaultProfilePic from "../../../assets/icon.png";
-import { useAuth } from "../../providers/auth-provider";
-import type { AuthMnemonic } from "../../lib/runtime";
-import { notifyProfileUpdated, writeStoredAvatar } from "../../features/profile/profile-storage";
+import { ArrowLeft, CircleHelp, CircleUserRound, Mail, UserPlus } from "lucide-react";
 
-type Flow = "entry" | "create_profile" | "create_phrase" | "create_email" | "unlock" | "pin" | "reset_confirm";
+import { Avatar, AvatarFallback, AvatarImage } from "@/src/components/ui/avatar";
+import { Button } from "@/src/components/ui/button";
+import { Input } from "@/src/components/ui/input";
+import { ModuoMark } from "@/src/components/ui/moduo-mark";
+import { useAuth } from "@/src/providers/auth-provider";
+import type { AuthMnemonic } from "@/src/lib/runtime";
+import { notifyProfileUpdated, writeStoredAvatar } from "@/src/features/profile/profile-storage";
+import { cn } from "@/src/lib/utils";
+
+import defaultProfilePic from "../../../assets/icon.png";
+
+type DesktopFlow =
+  | "entry"
+  | "create_profile"
+  | "create_phrase"
+  | "create_email"
+  | "unlock"
+  | "pin"
+  | "reset_confirm";
+
+type WebFlow = "email" | "otp_sent";
+
+type Flow = DesktopFlow | WebFlow;
+
+interface Props {
+  priceId?: string | null;
+}
 
 function normalizePhrase(value: string) {
   return value
     .split(/\s+/)
-    .map((word) => word.trim().toLowerCase())
+    .map((w) => w.trim().toLowerCase())
     .filter(Boolean)
     .join(" ");
 }
 
-export function EmailAuthPanel() {
+export function EmailAuthPanel({ priceId = null }: Props) {
   const { runtime, configError } = useAuth();
+  const isWeb = !!runtime?.capabilities.isWeb;
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [flow, setFlow] = useState<Flow>("entry");
+
+  const [otpEmail, setOtpEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
+
   const [profileExists, setProfileExists] = useState(false);
   const [hasPin, setHasPin] = useState(false);
-  const [hasKeychainMnemonic, setHasKeychainMnemonic] = useState(false);
-  const [pinValue, setPinValue] = useState("");
-
   const [profileName, setProfileName] = useState("");
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   const [contactEmail, setContactEmail] = useState("");
-
   const [generatedMnemonic, setGeneratedMnemonic] = useState<AuthMnemonic | null>(null);
   const [phraseRevealed, setPhraseRevealed] = useState(false);
   const [phraseCopied, setPhraseCopied] = useState(false);
   const [unlockPhrase, setUnlockPhrase] = useState("");
+  const [pinValue, setPinValue] = useState("");
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,26 +69,25 @@ export function EmailAuthPanel() {
       setLoading(false);
       return;
     }
-
     let active = true;
+
     const run = async () => {
       setLoading(true);
-      const { data, error } = await runtime.auth.getLocalAuthState();
+      if (isWeb) {
+        setLoading(false);
+        setFlow("email");
+        return;
+      }
+      const { data, error: authErr } = await runtime.auth.getLocalAuthState();
       if (!active) return;
-      if (error) {
-        setError(error.message);
+      if (authErr) {
+        setError(authErr.message);
       } else {
         setProfileExists(data.profileExists);
         setHasPin(data.hasPin);
-        setHasKeychainMnemonic(data.hasKeychainMnemonic);
         if (data.displayName) setProfileName(data.displayName);
-        // Route directly to PIN unlock if profile+PIN exist (auto-unlock
-        // already failed in AuthProvider, so we know keychain is unavailable).
-        if (data.profileExists && data.hasPin) {
-          setFlow("pin");
-        } else {
-          setFlow("entry");
-        }
+        if (data.profileExists && data.hasPin) setFlow("pin");
+        else setFlow("entry");
       }
       setLoading(false);
     };
@@ -74,36 +96,120 @@ export function EmailAuthPanel() {
     return () => {
       active = false;
     };
-  }, [runtime]);
+  }, [runtime, isWeb]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const persistAvatar = async () => {
-      await writeStoredAvatar(runtime, avatarDataUrl);
-      notifyProfileUpdated();
-    };
-    void persistAvatar();
+    void writeStoredAvatar(runtime, avatarDataUrl).then(() => notifyProfileUpdated());
   }, [avatarDataUrl, runtime]);
 
-  const canUnlock = !!runtime && normalizePhrase(unlockPhrase).length > 0 && !busy;
-  const avatarInitial = useMemo(() => profileName.trim().slice(0, 1).toUpperCase(), [profileName]);
+  const avatarInitial = useMemo(
+    () => profileName.trim().slice(0, 1).toUpperCase(),
+    [profileName],
+  );
 
-  const goToCreateProfile = () => {
-    if (profileExists) {
-      setError(null);
-      setInfo(null);
-      setFlow("reset_confirm");
+  const handleSendOtp = async () => {
+    if (!runtime || busy) return;
+    const email = otpEmail.trim().toLowerCase();
+    if (!email) {
+      setError("Enter your email address.");
       return;
     }
+    setBusy(true);
     setError(null);
     setInfo(null);
-    setFlow("create_profile");
+    const sentAt = Date.now();
+    const { error: otpErr } = await runtime.auth.sendOtp({ email });
+    setBusy(false);
+    if (otpErr) {
+      setError(otpErr.message);
+      return;
+    }
+    setOtpSentAt(sentAt);
+    setFlow("otp_sent");
   };
 
-  const goToUnlock = () => {
+  const handleVerifyOtp = async () => {
+    if (!runtime || busy) return;
+    const code = otpCode.trim();
+    if (code.length !== 6) {
+      setError("Enter the 6-digit code from your email.");
+      return;
+    }
+    setBusy(true);
     setError(null);
     setInfo(null);
-    setFlow("unlock");
+    window.sessionStorage.setItem("moduo:auth_resolving", "1");
+    const { data, error: verifyErr } = await runtime.auth.verifyOtp({
+      email: otpEmail.trim().toLowerCase(),
+      token: code,
+      sentAt: otpSentAt ?? undefined,
+    });
+    setBusy(false);
+    if (verifyErr) {
+      window.sessionStorage.removeItem("moduo:auth_resolving");
+      setError(verifyErr.message);
+      return;
+    }
+
+    if (priceId) {
+      window.localStorage.setItem("moduo:pending_price_id", priceId);
+    }
+
+    let hasWorkspace = false;
+    try {
+      const workspaces = await runtime.workspace.list();
+      hasWorkspace = workspaces.length > 0;
+    } catch {
+      hasWorkspace = false;
+    }
+
+    const shouldOnboard = !!data.isNewUser || !hasWorkspace;
+    window.sessionStorage.removeItem("moduo:auth_resolving");
+
+    if (data.isNewUser && !priceId) {
+      try {
+        const supabaseUrl =
+          (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
+          "https://wtoonrvuqumihpkbvwvs.supabase.co";
+        const session = await runtime.auth.getSession();
+        const token = session?.data?.session?.access_token;
+        if (token) {
+          await fetch(`${supabaseUrl}/functions/v1/start-trial`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
+      } catch (trialErr) {
+        console.warn("[auth] auto-trial start failed (non-fatal):", trialErr);
+      }
+    }
+
+    if (shouldOnboard) {
+      window.location.href = "/onboarding";
+      return;
+    }
+
+    const pendingPriceId = priceId ?? window.localStorage.getItem("moduo:pending_price_id");
+    if (pendingPriceId) {
+      window.localStorage.removeItem("moduo:pending_price_id");
+      const supabaseUrl =
+        (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
+        "https://wtoonrvuqumihpkbvwvs.supabase.co";
+      const session = await runtime.auth.getSession();
+      const token = session?.data?.session?.access_token;
+      window.location.href = `${supabaseUrl}/functions/v1/create-checkout-session?price_id=${encodeURIComponent(pendingPriceId)}${token ? `&access_token=${encodeURIComponent(token)}` : ""}`;
+      return;
+    }
+
+    window.location.href = "/";
+  };
+
+  const handleResendOtp = async () => {
+    setOtpCode("");
+    setError(null);
+    setInfo(null);
+    await handleSendOtp();
   };
 
   const continueFromCreateProfile = async () => {
@@ -112,7 +218,6 @@ export function EmailAuthPanel() {
       setError("Full name is required.");
       return;
     }
-    if (!runtime || busy) return;
     setBusy(true);
     setError(null);
     setInfo(null);
@@ -134,22 +239,20 @@ export function EmailAuthPanel() {
       setFlow("create_email");
       return;
     }
-
     setBusy(true);
     setError(null);
     setInfo(null);
     setPhraseRevealed(true);
-
     try {
       if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(generatedMnemonic.phrase);
         setInfo("12-word phrase copied to clipboard.");
       } else {
-        setInfo("Clipboard unavailable. Copy the 12-word phrase manually.");
+        setInfo("Clipboard unavailable — copy the phrase manually.");
       }
       setPhraseCopied(true);
-    } catch (e) {
-      setInfo("Could not copy automatically. Copy the 12-word phrase manually.");
+    } catch {
+      setInfo("Could not copy automatically — copy the phrase manually.");
       setPhraseCopied(true);
     } finally {
       setBusy(false);
@@ -168,7 +271,6 @@ export function EmailAuthPanel() {
     }
     setProfileExists(false);
     setHasPin(false);
-    setHasKeychainMnemonic(false);
     setPinValue("");
     setUnlockPhrase("");
     setProfileName("");
@@ -182,38 +284,27 @@ export function EmailAuthPanel() {
       setError("Full name is required.");
       return;
     }
-
     setBusy(true);
     setError(null);
     setInfo(null);
-
-    // registerLocalMnemonic emits SIGNED_IN via the runtime — AuthProvider
-    // picks it up and navigates to the app. No sign-out needed.
     const { error: regError } = await runtime.auth.registerLocalMnemonic({
       displayName: profileName.trim(),
       mnemonicPhrase: generatedMnemonic.phrase,
     });
-
     setBusy(false);
-    if (regError) {
-      setError(regError.message);
-    }
+    if (regError) setError(regError.message);
   };
 
   const unlock = async () => {
-    if (!canUnlock) return;
+    if (!runtime || busy || !normalizePhrase(unlockPhrase).length) return;
     setBusy(true);
     setError(null);
     setInfo(null);
-
-    const { error: unlockError } = await runtime!.auth.unlockWithMnemonic({
+    const { error: unlockError } = await runtime.auth.unlockWithMnemonic({
       mnemonicPhrase: unlockPhrase,
     });
     setBusy(false);
-    if (unlockError) {
-      setError(unlockError.message);
-    }
-    // On success AuthProvider navigates away via SIGNED_IN event.
+    if (unlockError) setError(unlockError.message);
   };
 
   const unlockWithPin = async () => {
@@ -221,36 +312,47 @@ export function EmailAuthPanel() {
     setBusy(true);
     setError(null);
     setInfo(null);
-
     const { error: pinError } = await runtime.auth.unlockWithPin(pinValue.trim());
     setBusy(false);
-    if (pinError) {
-      setError(pinError.message);
-    }
-    // On success AuthProvider navigates away via SIGNED_IN event.
+    if (pinError) setError(pinError.message);
   };
 
-  const inputClass =
-    "h-13 w-full appearance-none rounded-2xl border border-[#1b1b1b] bg-[#090909] px-5 text-[15px] text-[#f1f1f1] outline-none focus:border-[#2c2c2c] focus:outline-none focus:ring-0";
+  const panelTitle =
+    isWeb && flow === "otp_sent"
+      ? "Check your email"
+      : isWeb && flow === "email"
+        ? "Log in or create account"
+        : isWeb
+          ? "Continue"
+          : profileExists
+            ? "Unlock your vault"
+            : "Create your vault";
 
-  const openAvatarPicker = () => {
-    avatarInputRef.current?.click();
-  };
+  const panelSubtitle =
+    isWeb && flow === "otp_sent"
+      ? "Enter the six-digit code we sent. It expires shortly."
+      : isWeb && flow === "email"
+        ? "We’ll email you a secure code to continue."
+        : isWeb
+          ? ""
+          : profileExists
+            ? "Use your PIN or recovery phrase to continue."
+            : "Your local vault stays private on this device.";
+
+  const openAvatarPicker = () => avatarInputRef.current?.click();
 
   const onAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-
     if (!file.type.startsWith("image/")) {
       setError("Profile picture must be an image file.");
       return;
     }
     if (file.size > 4 * 1024 * 1024) {
-      setError("Profile picture is too large. Use file up to 4MB.");
+      setError("Profile picture is too large (max 4 MB).");
       return;
     }
-
     const reader = new FileReader();
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : null;
@@ -262,7 +364,7 @@ export function EmailAuthPanel() {
   };
 
   const smallAvatar = (
-    <View className="mx-auto mb-4 mt-1">
+    <div className="mx-auto mb-4 mt-1">
       <input
         ref={avatarInputRef}
         type="file"
@@ -270,306 +372,465 @@ export function EmailAuthPanel() {
         className="hidden"
         onChange={onAvatarChange}
       />
-      <Pressable
-        onPress={openAvatarPicker}
-        className="relative h-[58px] w-[58px] overflow-hidden rounded-full border border-[#2a2a2a] bg-[#090909]"
+      <button
+        type="button"
+        onClick={openAvatarPicker}
+        className="group relative rounded-avatar outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        aria-label="Choose profile picture"
       >
-        <Image
-          source={avatarDataUrl ? { uri: avatarDataUrl } : defaultProfilePic}
-          className={`h-full w-full ${avatarDataUrl ? "opacity-100" : "opacity-30"}`}
-          contentFit="cover"
-        />
-        {!avatarDataUrl && avatarInitial ? (
-          <View className="absolute inset-0 items-center justify-center bg-[linear-gradient(180deg,rgba(8,8,8,0.2),rgba(8,8,8,0.72))]">
-            <Text as="p" className="text-[20px] font-semibold text-[#f2f2f2]">
-              {avatarInitial}
-            </Text>
-          </View>
-        ) : null}
-      </Pressable>
-    </View>
+        <Avatar className="size-14 border border-border">
+          <AvatarImage src={avatarDataUrl ?? defaultProfilePic} alt="" />
+          <AvatarFallback className="font-display text-lg">{avatarInitial || "?"}</AvatarFallback>
+        </Avatar>
+      </button>
+    </div>
   );
 
   if (loading) {
     return (
-      <View className="relative z-10 w-full max-w-[560px] px-1 sm:px-2">
-        <Image source={moduoLogoWhite} className="mx-auto mb-10 h-[88px] w-[340px] opacity-95" contentFit="contain" />
-        <Text as="p" className="text-center text-[15px] text-[#8e8e8e]">
-          Loading local auth...
-        </Text>
-      </View>
+      <div className="relative z-10 flex w-full flex-col items-center">
+        <ModuoMark className="mb-8 size-10 opacity-95" aria-hidden="true" />
+        <p className="text-center text-sm text-muted-foreground">Loading…</p>
+      </div>
     );
   }
 
   return (
-    <View className="relative z-10 w-full max-w-[560px] px-1 sm:px-2">
-      <Image source={moduoLogoWhite} className="mx-auto mb-8 h-[88px] w-[340px] opacity-95" contentFit="contain" />
-
-      <View className="w-full">
-        {flow === "entry" ? (
-          <View className="gap-3">
-            {!profileExists ? (
-              <Pressable
-                disabled={busy}
-                onPress={goToCreateProfile}
-                className="flex h-12 w-full items-center justify-center rounded-2xl bg-[#f2f2f2]"
-              >
-                <Text as="p" className="text-[16px] font-semibold text-[#101010]">
-                  Create vault
-                </Text>
-              </Pressable>
-            ) : null}
-            {profileExists ? (
-              <Pressable
-                disabled={busy}
-                onPress={goToUnlock}
-                className="flex h-12 w-full items-center justify-center rounded-2xl bg-[#f2f2f2]"
-              >
-                <Text as="p" className="text-[16px] font-semibold text-[#101010]">
-                  Unlock vault
-                </Text>
-              </Pressable>
-            ) : null}
-            {profileExists ? (
-              <Pressable
-                disabled={busy}
-                onPress={() => { setError(null); setInfo(null); setFlow("reset_confirm"); }}
-                className="flex h-12 w-full items-center justify-center rounded-2xl border border-[#2b2b2b] bg-[#101010]"
-              >
-                <Text as="p" className="text-[13px] text-[#6e6e6e]">
-                  Forgot phrase / Reset vault
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
+    <div className="relative z-10 w-full">
+      <div className="mb-7 flex w-full flex-col items-center">
+        <ModuoMark
+          className={cn(
+            "size-8 opacity-95",
+            isWeb && flow === "otp_sent" ? "mb-10" : "mb-6",
+          )}
+          aria-hidden="true"
+        />
+        {isWeb && flow === "otp_sent" ? (
+          <div className="relative w-full px-10">
+            <button
+              type="button"
+              aria-label="Back to email"
+              onClick={() => {
+                setFlow("email");
+                setOtpCode("");
+                setError(null);
+                setInfo(null);
+              }}
+              className="absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-md p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ArrowLeft className="size-5" />
+            </button>
+            <h1 className="w-full text-center font-display text-3xl font-semibold leading-tight tracking-tight text-foreground">
+              Check your email
+            </h1>
+          </div>
+        ) : (
+          <h1 className="w-full text-center font-display text-3xl font-semibold leading-tight tracking-tight text-foreground">
+            {panelTitle}
+          </h1>
+        )}
+        {panelSubtitle ? (
+          <p className="mx-auto mt-2 max-w-[300px] text-center text-sm leading-5 text-muted-foreground">
+            {panelSubtitle}
+          </p>
         ) : null}
+      </div>
 
-        {flow === "create_profile" ? (
-          <>
-            {smallAvatar}
-
-            <View className="relative">
-              <View className="pointer-events-none absolute inset-y-0 left-4 flex items-center justify-center">
-                <UserPlus size={18} color="#4a4a4a" />
-              </View>
-              <TextInput
-                placeholder="Profile name"
-                placeholderTextColor="#6f6f6f"
-                value={profileName}
-                onChangeText={setProfileName}
-                className={`${inputClass} pl-12`}
+      <div className="w-full">
+        {isWeb && flow === "email" ? (
+          <div className="w-full">
+            <div className="relative w-full">
+              <Mail
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
               />
-            </View>
+              <Input
+                type="email"
+                autoCapitalize="none"
+                autoComplete="email"
+                inputMode="email"
+                placeholder="you@example.com"
+                value={otpEmail}
+                onChange={(e) => {
+                  setOtpEmail(e.target.value);
+                  setError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && otpEmail.trim() && !busy) void handleSendOtp();
+                }}
+                className="pl-10"
+              />
+            </div>
 
-            <Pressable
-              disabled={busy || !profileName.trim()}
-              onPress={continueFromCreateProfile}
-              className={`mt-3 flex h-12 w-full items-center justify-center rounded-2xl ${profileName.trim() && !busy ? "bg-[#f2f2f2]" : "bg-[#2c2c2c]"}`}
+            <Button
+              size="lg"
+              className="mt-5 w-full"
+              disabled={busy || !otpEmail.trim()}
+              onClick={handleSendOtp}
             >
-              <Text
-                as="p"
-                className={`w-full text-center text-[16px] font-semibold ${profileName.trim() && !busy ? "text-[#101010]" : "text-[#7e7e7e]"}`}
+              {busy ? "Sending…" : "Continue with email"}
+            </Button>
+          </div>
+        ) : null}
+
+        {isWeb && flow === "otp_sent" ? (
+          <div className="w-full">
+            <div className="flex flex-col gap-4">
+              <Input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="one-time-code"
+                placeholder="000000"
+                value={otpCode}
+                maxLength={6}
+                onChange={(e) => {
+                  setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                  setError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && otpCode.length === 6 && !busy) void handleVerifyOtp();
+                }}
+                className="text-center font-mono text-2xl font-semibold tabular-nums tracking-[0.4em]"
+              />
+
+              <Button
+                size="lg"
+                className="w-full"
+                disabled={busy || otpCode.length !== 6}
+                onClick={handleVerifyOtp}
               >
-                {busy ? "Preparing..." : "Continue"}
-              </Text>
-            </Pressable>
+                {busy ? "Verifying…" : "Continue"}
+              </Button>
+            </div>
 
-            <Pressable disabled={busy} onPress={() => setFlow("entry")} className="mt-3">
-              <Text as="p" className="text-center text-[13px] text-[#8f8f8f]">
-                Back
-              </Text>
-            </Pressable>
-          </>
-        ) : null}
-
-        {flow === "create_phrase" ? (
-          <>
-            <View className="mb-2 flex items-center justify-between px-1">
-              <Text as="p" className="text-[12px] font-bold uppercase tracking-widest text-[#8f8f8f]">
-                12-word phrase
-              </Text>
-              <View className="group relative">
-                <Pressable
-                  aria-label="Why mnemonic phrase"
-                  className="grid h-7 w-7 place-items-center rounded-full text-[#8d8d8d] hover:bg-[#1a1a1a] hover:text-[#d7d7d7]"
-                >
-                  <CircleHelp size={15} />
-                </Pressable>
-                <View className="pointer-events-none invisible absolute right-0 top-full z-20 mt-2 w-[320px] rounded-xl bg-[#171717] p-3 opacity-0 shadow-2xl transition-all duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
-                  <Text as="p" className="text-[12px] leading-5 text-[#c7c7c7]">
-                    This 12-word phrase is your vault root key. It is processed locally with strong one-way crypto, so no reusable
-                    password is sent to a server. Compared with password-only logins, it has higher entropy and a smaller remote
-                    attack surface. Keep it private and offline.
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <View className="rounded-2xl border border-[#2b2b2b] bg-[#101010] p-4">
-              <Text as="p" className="text-[14px] leading-6 text-[#efefef]">
-                {phraseRevealed ? generatedMnemonic?.phrase ?? "" : "•••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• ••••••"}
-              </Text>
-            </View>
-
-            <Pressable
-              disabled={busy || !generatedMnemonic}
-              onPress={revealCopyOrContinue}
-              className={`mt-3 flex h-12 w-full items-center justify-center rounded-2xl ${!generatedMnemonic || busy ? "bg-[#2c2c2c]" : "bg-[#f2f2f2]"}`}
+            <Button
+              variant="link"
+              size="sm"
+              disabled={busy}
+              onClick={handleResendOtp}
+              className="mx-auto mt-8 block text-muted-foreground hover:text-foreground"
             >
-              <Text as="p" className={`text-[16px] font-semibold ${!generatedMnemonic || busy ? "text-[#7e7e7e]" : "text-[#101010]"}`}>
-                {busy ? "Working..." : phraseCopied ? "Continue" : "Reveal & copy"}
-              </Text>
-            </Pressable>
-
-            <Pressable disabled={busy} onPress={() => setFlow("create_profile")} className="mt-3">
-              <Text as="p" className="text-center text-[13px] text-[#8f8f8f]">
-                Back
-              </Text>
-            </Pressable>
-          </>
+              Didn't receive it? <span className="ml-1 underline">Resend code</span>
+            </Button>
+          </div>
         ) : null}
 
-        {flow === "create_email" ? (
-          <>
-            <TextInput
+        {!isWeb && flow === "entry" ? (
+          <div className="flex flex-col gap-3">
+            {!profileExists ? (
+              <Button
+                size="lg"
+                className="w-full"
+                disabled={busy}
+                onClick={() => {
+                  setError(null);
+                  setInfo(null);
+                  setFlow("create_profile");
+                }}
+              >
+                Create vault
+              </Button>
+            ) : null}
+            {profileExists ? (
+              <Button
+                size="lg"
+                className="w-full"
+                disabled={busy}
+                onClick={() => {
+                  setError(null);
+                  setInfo(null);
+                  setFlow("unlock");
+                }}
+              >
+                Unlock vault
+              </Button>
+            ) : null}
+            {profileExists ? (
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full text-muted-foreground"
+                disabled={busy}
+                onClick={() => {
+                  setError(null);
+                  setInfo(null);
+                  setFlow("reset_confirm");
+                }}
+              >
+                Forgot phrase / Reset vault
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!isWeb && flow === "create_profile" ? (
+          <div className="flex flex-col gap-3">
+            {smallAvatar}
+            <div className="relative">
+              <UserPlus
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                placeholder="Profile name"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={busy || !profileName.trim()}
+              onClick={continueFromCreateProfile}
+            >
+              {busy ? "Preparing…" : "Continue"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => setFlow("entry")}
+              className="mx-auto text-muted-foreground"
+            >
+              Back
+            </Button>
+          </div>
+        ) : null}
+
+        {!isWeb && flow === "create_phrase" ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                12-word phrase
+              </span>
+              <div className="group relative">
+                <button
+                  type="button"
+                  aria-label="Why mnemonic phrase"
+                  className="grid size-7 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <CircleHelp className="size-4" />
+                </button>
+                <div className="pointer-events-none invisible absolute right-0 top-full z-20 mt-2 w-[320px] rounded-xl border border-border bg-popover p-3 text-popover-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:opacity-100">
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    This 12-word phrase is your vault root key. Keep it private and offline.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-muted p-4">
+              <p className="font-mono text-sm leading-6 text-foreground">
+                {phraseRevealed
+                  ? (generatedMnemonic?.phrase ?? "")
+                  : "•••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• ••••••"}
+              </p>
+            </div>
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={busy || !generatedMnemonic}
+              onClick={revealCopyOrContinue}
+            >
+              {busy ? "Working…" : phraseCopied ? "Continue" : "Reveal & copy"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => setFlow("create_profile")}
+              className="mx-auto text-muted-foreground"
+            >
+              Back
+            </Button>
+          </div>
+        ) : null}
+
+        {!isWeb && flow === "create_email" ? (
+          <div className="flex flex-col gap-3">
+            <Input
+              type="email"
               autoCapitalize="none"
               autoComplete="email"
-              keyboardType="email-address"
-              placeholder="Email (not associated with this account)"
-              placeholderTextColor="#6f6f6f"
+              inputMode="email"
+              placeholder="Email (optional)"
               value={contactEmail}
-              onChangeText={setContactEmail}
-              className={inputClass}
+              onChange={(e) => setContactEmail(e.target.value)}
             />
-            <Text as="p" className="mt-2 text-[13px] text-[#9a9a9a]">
-              This email is informational only for now and will not be saved.
-            </Text>
-
-            <Pressable
+            <p className="text-xs text-muted-foreground">
+              Optional — not linked to your vault. For cloud sync, use Settings → Enable cloud sync.
+            </p>
+            <Button size="lg" className="w-full" disabled={busy} onClick={finishCreateVault}>
+              {busy ? "Finishing…" : "Finish"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={busy}
-              onPress={finishCreateVault}
-              className={`mt-3 flex h-12 w-full items-center justify-center rounded-2xl ${busy ? "bg-[#2c2c2c]" : "bg-[#f2f2f2]"}`}
+              onClick={() => setFlow("create_phrase")}
+              className="mx-auto text-muted-foreground"
             >
-              <Text as="p" className={`text-[16px] font-semibold ${busy ? "text-[#7e7e7e]" : "text-[#101010]"}`}>
-                {busy ? "Finishing..." : "Finish"}
-              </Text>
-            </Pressable>
-
-            <Pressable disabled={busy} onPress={() => setFlow("create_phrase")} className="mt-3">
-              <Text as="p" className="text-center text-[13px] text-[#8f8f8f]">
-                Back
-              </Text>
-            </Pressable>
-          </>
+              Back
+            </Button>
+          </div>
         ) : null}
 
-        {flow === "pin" ? (
-          <>
-            <Text as="p" className="mb-2 text-center text-[14px] text-[#8f8f8f]">
+        {!isWeb && flow === "pin" ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-center text-sm text-muted-foreground">
               {profileName ? `Welcome back, ${profileName}` : "Enter your PIN"}
-            </Text>
-            <TextInput
+            </p>
+            <Input
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
               placeholder="PIN"
-              placeholderTextColor="#6f6f6f"
               value={pinValue}
-              onChangeText={setPinValue}
-              secureTextEntry
-              keyboardType="numeric"
+              onChange={(e) => setPinValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && pinValue.trim().length >= 4 && !busy) void unlockWithPin();
+              }}
               maxLength={16}
-              className={inputClass}
             />
-
-            <Pressable
+            <Button
+              size="lg"
+              className="w-full"
               disabled={busy || pinValue.trim().length < 4}
-              onPress={unlockWithPin}
-              className={`mt-3 flex h-12 w-full items-center justify-center rounded-2xl ${!busy && pinValue.trim().length >= 4 ? "bg-[#f2f2f2]" : "bg-[#2c2c2c]"}`}
+              onClick={unlockWithPin}
             >
-              <Text as="p" className={`text-[16px] font-semibold ${!busy && pinValue.trim().length >= 4 ? "text-[#101010]" : "text-[#7e7e7e]"}`}>
-                {busy ? "Unlocking..." : "Unlock with PIN"}
-              </Text>
-            </Pressable>
-
-            <Pressable disabled={busy} onPress={() => { setPinValue(""); setError(null); setFlow("unlock"); }} className="mt-3">
-              <Text as="p" className="text-center text-[13px] text-[#8f8f8f]">
-                Use recovery phrase instead
-              </Text>
-            </Pressable>
-            <Pressable disabled={busy} onPress={() => { setError(null); setInfo(null); setFlow("reset_confirm"); }} className="mt-2">
-              <Text as="p" className="text-center text-[12px] text-[#555555]">
-                Forgot PIN / Reset vault
-              </Text>
-            </Pressable>
-          </>
-        ) : null}
-
-        {flow === "unlock" ? (
-          <>
-            <View className="relative">
-              <View className="pointer-events-none absolute inset-y-0 left-4 flex items-center justify-center">
-                <CircleUserRound size={18} color="#4a4a4a" />
-              </View>
-              <TextInput
-                placeholder="12-word mnemonic phrase"
-                placeholderTextColor="#6f6f6f"
-                value={unlockPhrase}
-                onChangeText={setUnlockPhrase}
-                className={`${inputClass} pl-12`}
-              />
-            </View>
-
-            <Pressable
-              disabled={!canUnlock}
-              onPress={unlock}
-              className={`mt-3 flex h-12 w-full items-center justify-center rounded-2xl ${canUnlock ? "bg-[#f2f2f2]" : "bg-[#2c2c2c]"}`}
-            >
-              <Text as="p" className={`w-full text-center text-[16px] font-semibold ${canUnlock ? "text-[#101010]" : "text-[#7e7e7e]"}`}>
-                {busy ? "Unlocking..." : "Unlock"}
-              </Text>
-            </Pressable>
-
-            <Pressable disabled={busy} onPress={() => setFlow(hasPin ? "pin" : "entry")} className="mt-3">
-              <Text as="p" className="text-center text-[13px] text-[#8f8f8f]">
-                {hasPin ? "Back to PIN" : "Back"}
-              </Text>
-            </Pressable>
-            <Pressable disabled={busy} onPress={() => { setError(null); setInfo(null); setFlow("reset_confirm"); }} className="mt-2">
-              <Text as="p" className="text-center text-[12px] text-[#555555]">
-                Forgot phrase / Reset vault
-              </Text>
-            </Pressable>
-          </>
-        ) : null}
-
-        {flow === "reset_confirm" ? (
-          <>
-            <Text as="p" className="mb-1 text-center text-[17px] font-semibold text-[#f2f2f2]">
-              Reset vault?
-            </Text>
-            <Text as="p" className="mb-4 text-center text-[13px] leading-5 text-[#8f8f8f]">
-              This will permanently delete all local data. Your data can only be recovered if you have your 12-word phrase. This cannot be undone.
-            </Text>
-            <Pressable
+              {busy ? "Unlocking…" : "Unlock with PIN"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={busy}
-              onPress={forgotReset}
-              className={`flex h-12 w-full items-center justify-center rounded-2xl ${busy ? "bg-[#2c2c2c]" : "bg-[#7f1d1d]"}`}
+              onClick={() => {
+                setPinValue("");
+                setError(null);
+                setFlow("unlock");
+              }}
+              className="mx-auto text-muted-foreground"
             >
-              <Text as="p" className="text-[16px] font-semibold text-[#fca5a5]">
-                {busy ? "Resetting..." : "Delete & reset vault"}
-              </Text>
-            </Pressable>
-            <Pressable disabled={busy} onPress={() => setFlow(profileExists ? (hasPin ? "pin" : "unlock") : "entry")} className="mt-3">
-              <Text as="p" className="text-center text-[13px] text-[#8f8f8f]">
-                Cancel
-              </Text>
-            </Pressable>
-          </>
+              Use recovery phrase instead
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                setInfo(null);
+                setFlow("reset_confirm");
+              }}
+              className="mx-auto text-xs text-muted-foreground/70 hover:text-muted-foreground"
+            >
+              Forgot PIN / Reset vault
+            </Button>
+          </div>
         ) : null}
 
-        <View className="gap-1.5 pt-3">
-          {configError ? <Text as="p" className="text-[14px] text-[#ffb3b3]">{configError}</Text> : null}
-          {error ? <Text as="p" className="text-[14px] text-[#ffb3b3]">{error}</Text> : null}
-          {info ? <Text as="p" className="text-[14px] text-[#a6a6a6]">{info}</Text> : null}
-        </View>
-      </View>
-    </View>
+        {!isWeb && flow === "unlock" ? (
+          <div className="flex flex-col gap-3">
+            <div className="relative">
+              <CircleUserRound
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                placeholder="12-word mnemonic phrase"
+                value={unlockPhrase}
+                onChange={(e) => setUnlockPhrase(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && normalizePhrase(unlockPhrase).length && !busy)
+                    void unlock();
+                }}
+                className="pl-10"
+              />
+            </div>
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={busy || !normalizePhrase(unlockPhrase).length}
+              onClick={unlock}
+            >
+              {busy ? "Unlocking…" : "Unlock"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => setFlow(hasPin ? "pin" : "entry")}
+              className="mx-auto text-muted-foreground"
+            >
+              {hasPin ? "Back to PIN" : "Back"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                setInfo(null);
+                setFlow("reset_confirm");
+              }}
+              className="mx-auto text-xs text-muted-foreground/70 hover:text-muted-foreground"
+            >
+              Forgot phrase / Reset vault
+            </Button>
+          </div>
+        ) : null}
+
+        {!isWeb && flow === "reset_confirm" ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-center font-display text-base font-semibold text-foreground">
+              Reset vault?
+            </p>
+            <p className="text-center text-sm leading-5 text-muted-foreground">
+              This will permanently delete all local data. Your data can only be recovered with your
+              12-word phrase. This cannot be undone.
+            </p>
+            <Button
+              variant="destructive"
+              size="lg"
+              className="w-full"
+              disabled={busy}
+              onClick={forgotReset}
+            >
+              {busy ? "Resetting…" : "Delete & reset vault"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => setFlow(profileExists ? (hasPin ? "pin" : "unlock") : "entry")}
+              className="mx-auto text-muted-foreground"
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : null}
+
+        <div className="flex flex-col gap-2 pt-4">
+          {configError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3">
+              <p className="text-sm leading-5 text-destructive">{configError}</p>
+            </div>
+          ) : null}
+          {error ? (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3"
+            >
+              <p className="text-sm leading-5 text-destructive">{error}</p>
+            </div>
+          ) : null}
+          {info && !(isWeb && flow === "otp_sent") ? (
+            <div role="status" className="rounded-md border border-border bg-muted px-4 py-3">
+              <p className="text-sm leading-5 text-muted-foreground">{info}</p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
