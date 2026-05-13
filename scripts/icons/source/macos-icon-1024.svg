@@ -7,18 +7,20 @@
       hard square). Corner radius ≈ 22.5% of canvas width per Apple's icon
       guidelines.
     - Safe area for the logomark sits at ~80% of canvas, centred. The mark
-      itself takes ~62% of the canvas so it doesn't crowd the edges.
+      takes ~81% of the canvas width — right in the Apple safe-area range.
   -->
 
   <!-- Squircle background. -->
   <rect x="0" y="0" width="1024" height="1024" rx="230" ry="230" fill="#0a0a0a" />
 
   <!--
-    The moduo logomark, scaled and translated so it occupies ~62% of the
-    canvas centred at (512, 512). Path is the same vector as
-    assets/moduo_sign_white.svg (viewBox 0 0 1000 1000).
+    The moduo logomark, scaled and translated so it occupies ~81% of the
+    canvas width centred at (512, 512). Path is the same vector as
+    assets/moduo_sign_white.svg (viewBox 0 0 1000 1000); centering relies
+    on the path's bounding box being symmetric around (500, 500).
+    For scale s the centring offset is 512 − 500·s.
   -->
-  <g transform="translate(192 192) scale(0.64)">
+  <g transform="translate(-63 -63) scale(1.15)">
     <path
       fill="#ffffff"
       fill-rule="evenodd"
