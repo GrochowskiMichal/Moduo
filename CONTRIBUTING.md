@@ -2,7 +2,7 @@
 
 This document is the contract for how Mike and Maciej work in this repo —
 human or AI. Read it before starting a new task; it covers branching, PR
-direction, release cadence, and how LLM agents should behave.
+direction, release cadence, testing gates, and how LLM agents should behave.
 
 > **Effective date:** after the in-flight wild branches are reconciled and
 > merged. Until then the existing ad-hoc branches stand; new task branches
@@ -34,38 +34,97 @@ Nobody pushes directly to `production` or `develop`. Personal branches can be
 pushed to directly by their owner; PRs are preferred when an LLM did the work
 so there's a diff to review.
 
+**Personal branches are long-lived.** They are not deleted after a sync into
+`develop`. The owner keeps refreshing them — pulling `develop` into `maciej` /
+`mike` whenever it helps you stay close to the other dev's work — and they
+remain the canonical base for every new task branch.
+
 ## Task branches
 
 - Name pattern: `<owner>/<short-kebab-case>`. Examples: `maciej/settings-modal`,
   `mike/calendar-sync-bug`, `maciej/m2-foundation-polish`.
 - Always branch from your **personal branch**, not from `develop` or
   `production`. The personal branch is your latest known-working state.
-- Keep them short-lived. Merge back to the personal branch within ~3 working
-  days or rebase to stay current.
+- Keep them short-lived where possible. If a task grows beyond ~2 weeks,
+  consider splitting it.
 
 ## Sync flow
 
 ```
 task branch  →  personal branch  →  develop  →  production
-                   (continuous)        (weekly)     (release)
+                  (when ready)     (when ready)   (release)
 ```
 
-- **Task → personal**: as soon as the task is complete. Squash-merge or
-  rebase-merge, your choice. Delete the task branch after merge.
-- **Personal → develop**: at least weekly, more often if changes are small or
-  unblock the other dev. Open a PR; the other dev reviews. Use rebase-merge
-  to keep `develop` history linear.
+- **Task → personal**: as soon as the task is complete and passes its own
+  testing. Squash-merge or rebase-merge, your choice. Delete the task branch
+  after merge.
+- **Personal → develop**: **owner's call.** A 1-day fix can sync immediately;
+  a 2-week feature can sync the moment it's testable. The rule is "when ready",
+  not "on a clock." Open a PR; the other dev reviews. Use rebase-merge to keep
+  `develop` history linear. The personal branch stays after the merge.
 - **Develop → production**: only at a tagged release. Both devs sign off in
-  the PR. Tag the merge commit (`alpha-1`, `alpha-2`, `beta-1`, `1.0.0`, …).
+  the PR. Tag the merge commit per the release scheme below.
+
+## Testing gates
+
+Each merge tier has a stricter testing bar. The PR author is responsible for
+running the gate; the reviewer verifies before approving.
+
+### Task → personal (you alone)
+
+- `bun run typecheck` clean.
+- `bun run lint:tw` clean on files touched (and removed from `IGNORED_PATHS`
+  in [scripts/check-arbitrary-tw.ts](scripts/check-arbitrary-tw.ts) if you
+  rewrote a previously-legacy file).
+- `bun run lint:css` clean on files touched.
+- The task's own happy-path verified in `bun run dev:desktop`.
+
+### Personal → develop (reviewed)
+
+Everything above, plus:
+
+- The feature exercised end-to-end on `bun run dev:desktop`, not just unit
+  smoke-tested.
+- Adjacent / regressed surfaces checked manually (e.g. touching shell code →
+  walk Notes + Grid + Settings; touching tokens → toggle accent / radius /
+  density / fonts).
+- Storybook stories render without console errors for any new / changed
+  primitives.
+- Visual snapshot suite (`bunx playwright test --project=visual`) green, or
+  intentionally regenerated and the new PNG committed.
+- Either reviewer can request screenshots / a short Loom; if asked, attach.
+
+### Develop → production (release)
+
+Everything above, plus:
+
+- A full release walkthrough on `bun run dev:desktop` against a **fresh
+  vault**: sign-in, workspace create, the golden path for every feature
+  touched in this release.
+- A second walkthrough against an **existing vault** to catch migration /
+  upgrade regressions.
+- CHANGELOG entry written for the release.
+- Both devs sign off in the `develop → production` PR before merging.
 
 ## Release tags
 
-- Alpha: `alpha-N` while we're still iterating on core surfaces.
-- Beta: `beta-N` once the feature surface is stable and we're hunting bugs.
-- 1.0+: regular SemVer once we're past beta.
+Tag format: `alpha-X.Y.Z`, `beta-X.Y.Z`, then plain `X.Y.Z` for 1.0+.
 
-Every release tag points at a commit on `production`. The `develop → production`
-PR description lists what's in the release and any breaking changes.
+- `alpha-0.1.0`, `alpha-0.2.0` — alpha development. Bump `Y` per release;
+  reserve `Z` for hotfix tags on a previously-shipped alpha.
+- `beta-0.1.0`, `beta-0.2.0` — beta once the feature surface is stable and
+  we're hunting bugs.
+- `1.0.0`, `1.1.0`, `1.1.1` — regular SemVer once we're past beta.
+
+Every release tag points at a commit on `production`. Keep
+[`package.json`](./package.json) `version` field in sync with the tag.
+
+## CHANGELOG
+
+[CHANGELOG.md](./CHANGELOG.md) is updated on every `develop → production`
+release. Section per release tag, dated, with subsections for **Added /
+Changed / Fixed / Removed**. The release PR's description doubles as the
+changelog draft if you keep both in sync.
 
 ## Conflict policy
 
@@ -96,23 +155,26 @@ These apply to every AI session in this repo regardless of tool:
    or long-running ones.
 5. **`--force-push` only with `--force-with-lease`** and only on task branches
    you own. Never force-push personal branches, `develop`, or `production`.
-6. **Run typecheck and lint gates after each commit.** `bun run typecheck` +
-   `bun run lint:tw` + `bun run lint:css` should be clean before a PR opens.
+6. **Run the testing gate for the merge you're targeting.** Don't open a PR
+   into `develop` if you've only run the task-tier checks; either run the
+   personal-tier walkthrough or flag in the PR description that the human
+   still owes the walkthrough.
 7. **Reference [CLAUDE.md](./CLAUDE.md) and [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)
    before touching UI.** They're the design contract.
 
 ## Pull request checklist
 
+(Mirrored in [`.github/pull_request_template.md`](.github/pull_request_template.md)
+so it pre-fills automatically.)
+
 - [ ] Targets the correct base branch (`maciej` / `mike` for task PRs;
       `develop` for personal sync; `production` only for releases).
 - [ ] Branch name follows `<owner>/<kebab>` for task branches.
-- [ ] `bun run typecheck` clean.
-- [ ] `bun run lint:tw` clean on files you touched.
-- [ ] `bun run lint:css` clean on files you touched.
+- [ ] Testing gate for the target tier completed (see **Testing gates**).
 - [ ] If UI was changed, screenshots or a short Loom of the affected surface.
-- [ ] If a new primitive was added, Storybook story + entry in the visual
-      snapshot list ([tests/visual/primitives.spec.ts](tests/visual/primitives.spec.ts)).
-- [ ] CHANGELOG / DESIGN_REVIEW updated if the change is user-visible.
+- [ ] If a new primitive was added, Storybook story + entry in
+      [tests/visual/primitives.spec.ts](tests/visual/primitives.spec.ts).
+- [ ] CHANGELOG entry drafted if this PR will be in the next release.
 
 ## Reconciling the in-flight branches (one-time)
 
@@ -128,4 +190,18 @@ Once those are on `main`, we'll:
 2. Create `develop` from `production`.
 3. Create `maciej` and `mike` from `develop`.
 4. Delete or archive the stale `design/*` and `claude/*` branches.
-5. All new work starts under this contract.
+5. Configure GitHub branch protection on `production` and `develop` (see
+   below).
+6. All new work starts under this contract.
+
+## GitHub branch protection (set on activation)
+
+Apply via repo Settings → Branches once `production` and `develop` exist:
+
+- **`production`**: require PR, require both devs' approvals, require
+  status checks to pass (`checks` workflow), require linear history,
+  disallow force-push, disallow deletion.
+- **`develop`**: require PR, require 1 approval (the other dev), require
+  status checks to pass, disallow force-push, disallow deletion.
+- **Personal branches**: no protection — the owner is free to push
+  directly. (LLM agents are still constrained by the rules above.)
