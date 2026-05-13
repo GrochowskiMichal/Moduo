@@ -46,7 +46,7 @@ export function GlobalBottomBar({ onCreate }: Props) {
           <span className="flex-1 text-left">Search or jump…</span>
           <kbd
             aria-hidden
-            className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
+            className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
           >
             {shortcutLabel}
           </kbd>
@@ -55,7 +55,7 @@ export function GlobalBottomBar({ onCreate }: Props) {
         <Tooltip>
           <TooltipTrigger
             onClick={onCreate}
-            className="grid h-9 w-9 place-items-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
+            className="grid h-9 w-9 place-items-center rounded-full border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover"
             aria-label="Create new"
           >
             <Plus className="size-4" aria-hidden />

@@ -132,7 +132,7 @@ export function NotificationCenter() {
                     }
                   }}
                   className={`cursor-pointer gap-1 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    notification.readAt ? "bg-muted" : "bg-card"
+                    notification.readAt ? "bg-muted" : "bg-secondary"
                   }`}
                 >
                   <p className="text-sm text-foreground">{notification.eventType}</p>

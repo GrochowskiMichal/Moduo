@@ -24,7 +24,7 @@ export function UserMenu({ avatarDataUrl, profileInitial = "U", onOpenSettings, 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="relative inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border bg-card text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+        className="relative inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         aria-label="User menu"
       >
         <Avatar size="sm" className="h-full w-full">
