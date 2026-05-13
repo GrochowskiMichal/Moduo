@@ -25,7 +25,7 @@ export function SettingsPage() {
     dispatchOpenSettings(
       section && isSettingsSectionId(section) ? { section } : {},
     );
-    void navigate({ to: "/grid", replace: true });
+    void navigate({ to: "/", replace: true });
   }, [navigate]);
 
   return null;
