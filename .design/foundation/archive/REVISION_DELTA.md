@@ -1,9 +1,13 @@
-# Revision Delta — captured during Phase 3 verification
+# Revision Delta — captured during Phase 3 verification (archived)
 
-> Source: live walkthrough of `bun run dev:desktop` on macOS, 2026-05-12, against the `design/foundation-build` branch.
-> Author input during the walkthrough revealed design decisions in [DESIGN_BRIEF.md](./DESIGN_BRIEF.md) and [TASKS.md](./TASKS.md) that we want to revise. This doc captures those revisions in one place so we don't lose them. It is consumed by a dedicated revision session (Phase 6.5 — see TASKS.md), not by any of the existing phases.
+> **Status (2026-05-13)**: applied. Each section was processed during Phase 6.5
+> on branch `design/settings-polish-delta`. The current state of the system is
+> reflected in [../DESIGN_BRIEF.md](../DESIGN_BRIEF.md) and
+> [../DESIGN_REVIEW.md](../DESIGN_REVIEW.md). This document is kept for
+> historical context only.
 >
-> Nothing in here is implemented yet. This is a brief, not code.
+> Source: live walkthrough of `bun run dev:desktop` on macOS, 2026-05-12, against the `design/foundation-build` branch.
+> Author input during the walkthrough revealed design decisions in [DESIGN_BRIEF.md](../DESIGN_BRIEF.md) and [TASKS.md](../TASKS.md) that we want to revise. This doc captured those revisions in one place so we wouldn't lose them. It is consumed by a dedicated revision session (Phase 6.5 — see TASKS.md), not by any of the existing phases.
 
 ## Direction changes (apply before Phase 4 starts)
 
