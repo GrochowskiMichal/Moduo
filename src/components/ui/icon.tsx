@@ -18,6 +18,7 @@ import {
   Tag,
   Trash2,
   Bell,
+  UserPlus,
 } from "lucide-react";
 import type { CSSProperties } from "react";
 
@@ -61,6 +62,7 @@ export type IconName =
   | "bar-chart-2"
   | "dollar-sign"
   | "search"
+  | "user-plus"
   | "ground-roots";
 
 export type IconSize = "sm" | "md" | "lg";
@@ -97,6 +99,7 @@ const ICONS: Record<IconName, any> = {
   "bar-chart-2": BarChart2,
   "dollar-sign": DollarSign,
   search: Search,
+  "user-plus": UserPlus,
   "ground-roots": GroundRootsIcon,
 };
 
