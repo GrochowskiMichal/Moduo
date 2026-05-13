@@ -427,10 +427,8 @@
  * ==========================================================================*/
 
 :root {
-  --width-sidebar:        16rem;   /* 256 — left rail standard */
-  --width-sidebar-icon:   3.5rem;  /* 56  — collapsed left rail */
-  --width-rail:           20rem;   /* 320 — right rail standard */
-  --width-rail-icon:      3rem;    /* 48  — collapsed right rail */
+  --width-sidebar:        16rem;   /* 256 — left rail default */
+  --width-rail:           20rem;   /* 320 — right rail default */
   --width-content-max:    65rem;   /* 1040 — center column cap */
   --width-prose-max:      42rem;   /* 672  — reading width (notes body) */
 
