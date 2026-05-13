@@ -429,6 +429,7 @@
 :root {
   --width-sidebar:        16rem;   /* 256 — left rail default */
   --width-rail:           20rem;   /* 320 — right rail default */
+  --bar-h:                3rem;    /* 48  — shared height for top + bottom bars */
   --width-content-max:    65rem;   /* 1040 — center column cap */
   --width-prose-max:      42rem;   /* 672  — reading width (notes body) */
 

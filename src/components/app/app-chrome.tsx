@@ -30,7 +30,7 @@ import moduoFavicon from "../../../assets/moduo_favicon.png";
 
 import { baseModulesNavItems } from "./app-chrome-constants";
 import { GlobalBottomBar } from "./global-bottom-bar";
-import { GlobalCommandPalette, dispatchOpenPalette } from "./global-command-palette";
+import { GlobalCommandPalette } from "./global-command-palette";
 import { SettingsModal } from "../../features/settings/settings-modal";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 
@@ -271,10 +271,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   return (
     <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
       <View
-        className="relative px-5 pt-4 bg-background"
-        style={{ zIndex: "var(--z-header)" }}
+        className="relative px-5 bg-background flex flex-row items-center"
+        style={{ zIndex: "var(--z-header)", height: "var(--bar-h)" }}
       >
-        <View className="relative z-[1] flex flex-row items-center justify-between gap-3">
+        <View className="relative z-[1] flex w-full flex-row items-center justify-between gap-3">
           <View className="flex flex-row items-center gap-3 min-w-[260px]">
             <Image source={moduoFavicon} className="h-8 w-8 shrink-0" contentFit="contain" />
             <WorkspaceSwitcher onOpenSettings={() => setWorkspaceSettingsOpen(true)} />
@@ -310,16 +310,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           <View className="min-w-[120px] flex flex-row items-center justify-end gap-2">
             <Tooltip>
               <TooltipTrigger
-                onClick={() => dispatchOpenPalette()}
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                aria-label="Search"
-              >
-                <Icon name="search" size={14} />
-              </TooltipTrigger>
-              <TooltipContent>Search</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
                 className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 aria-label="Recent activity"
               >
@@ -344,11 +334,14 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         <Outlet />
       </View>
 
-      <View className="px-5 pb-2 bg-background">
-        <View className="flex flex-row items-center justify-between">
+      <View
+        className="relative px-5 bg-background flex flex-row items-center"
+        style={{ height: "var(--bar-h)" }}
+      >
+        <View className="flex flex-1 flex-row items-center justify-start">
           <Tooltip>
             <TooltipTrigger
-              className="flex h-9 w-9 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               onClick={toggleLeftPanel}
               aria-label={currentPanels.left ? "Collapse left panel" : "Expand left panel"}
             >
@@ -358,10 +351,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               {currentPanels.left ? "Collapse left panel" : "Expand left panel"}
             </TooltipContent>
           </Tooltip>
+        </View>
+        <GlobalBottomBar />
+        <View className="flex flex-1 flex-row items-center justify-end">
           {!isSettingsRoute ? (
             <Tooltip>
               <TooltipTrigger
-                className="flex h-9 w-9 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 onClick={toggleRightPanel}
                 aria-label={currentPanels.right ? "Collapse right panel" : "Expand right panel"}
               >
@@ -371,13 +367,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                 {currentPanels.right ? "Collapse right panel" : "Expand right panel"}
               </TooltipContent>
             </Tooltip>
-          ) : (
-            <View className="h-9 w-9" />
-          )}
+          ) : null}
         </View>
       </View>
-
-      <GlobalBottomBar />
       <GlobalCommandPalette />
       <SettingsModal />
       <WorkspaceSettingsModal
