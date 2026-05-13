@@ -27,7 +27,6 @@ const IGNORED_PATHS: string[] = [
   // Tailwind values. Each is queued for its own per-feature brief; the
   // CI gate enforces "no new violations in clean files" without blocking
   // on legacy. Remove an entry when its feature brief lands.
-  "src/components/auth/email-auth-panel.tsx",
   "src/features/brainstorm/ui/brainstorm-workspace.tsx",
   "src/features/brainstorm/ui/visual-templates/framework-poster.tsx",
   "src/features/brainstorm/ui/visual-templates/swot-visual.tsx",
@@ -69,7 +68,6 @@ const IGNORED_PATHS: string[] = [
   "src/features/tasks/ui/tasks-gantt.tsx",
   "src/features/templates/ui/templates-editor.tsx",
   "src/features/templates/ui/templates-preview.tsx",
-  "src/routes/pages/auth-page.tsx",
   "src/routes/pages/onboarding-page.tsx",
   "src/routes/pages/paywall-page.tsx",
 ];
