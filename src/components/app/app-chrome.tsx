@@ -923,7 +923,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   return (
     <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
       <View
-        className="relative px-5 pt-4 pb-2 bg-card border-b border-border"
+        className="relative px-5 pt-4 pb-2 bg-background"
         style={{ zIndex: "var(--z-header)" }}
       >
         <View className="relative z-[1] flex flex-row items-center justify-between gap-3">
@@ -1076,7 +1076,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           <View className="min-w-[120px] flex flex-row items-center justify-end gap-2">
             <Tooltip>
               <TooltipTrigger
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 aria-label="Search"
               >
                 <Icon name="search" size={14} />
@@ -1085,7 +1085,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 aria-label="Recent activity"
               >
                 <Icon name="clock" size={14} />
