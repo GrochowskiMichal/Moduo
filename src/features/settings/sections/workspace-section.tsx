@@ -8,8 +8,14 @@ import { Button } from "../../../components/ui/button";
 import { SettingsSectionShell } from "./section-shell";
 
 export function WorkspaceSection() {
-  const { selectedWorkspace, canManageWorkspace } = useWorkspace();
+  const { selectedWorkspace, canManageWorkspace, members, invites } = useWorkspace();
   const [modalOpen, setModalOpen] = useState(false);
+
+  const memberCount = members.length;
+  const inviteCount = invites.length;
+  const subtitle = canManageWorkspace
+    ? `${memberCount} member${memberCount === 1 ? "" : "s"} · ${inviteCount} pending invite${inviteCount === 1 ? "" : "s"}`
+    : "Only owners and admins can manage workspace members.";
 
   return (
     <SettingsSectionShell
@@ -25,11 +31,7 @@ export function WorkspaceSection() {
             <h3 className="font-display text-lg text-foreground">
               {selectedWorkspace?.name ?? "No workspace selected"}
             </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {canManageWorkspace
-                ? "Manage members, invites, and module permissions."
-                : "Only owners and admins can manage workspace members."}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
             <Button
               type="button"
               variant="outline"
