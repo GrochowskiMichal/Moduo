@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
+  dispatchLayoutPanelsSet,
   LAYOUT_PANELS_APPLY_EVENT,
   readFeaturePanelState,
   type FeatureLayoutKey,
@@ -16,6 +24,11 @@ type Props = {
   right?: ReactNode;
   /** When true the right panel is never rendered, regardless of saved state */
   hideRight?: boolean;
+  /**
+   * When false, the side panels render as fixed-width columns (no drag
+   * handles, no per-feature width persistence). Defaults to true.
+   */
+  resizable?: boolean;
 };
 
 type RailMode = "full" | "sheet" | "hidden";
@@ -81,9 +94,20 @@ export function FeaturePanelsShell({
   left,
   right,
   hideRight = false,
+  resizable = true,
 }: Props) {
   const [panelState, setPanelState] = useState(() => readFeaturePanelState(feature));
   const viewport = useViewportWidth();
+
+  // Snapshot the user's full-mode preference so we can restore it when the
+  // viewport grows back. While in sheet mode the panels are forced closed
+  // (no auto-open); the user re-opens via the toggle.
+  const fullModePreferenceRef = useRef<{ left: boolean; right: boolean }>({
+    left: panelState.left,
+    right: panelState.right,
+  });
+  const lastViewportModeRef = useRef<"full" | "sheet" | "init">("init");
+
   const [leftSheetOpen, setLeftSheetOpen] = useState(false);
   const [rightSheetOpen, setRightSheetOpen] = useState(false);
 
@@ -99,21 +123,102 @@ export function FeaturePanelsShell({
   }, [feature]);
 
   const showRight = panelState.right && !hideRight;
-  const leftMode = resolveMode(viewport, panelState.left);
-  const rightMode = resolveMode(viewport, showRight);
+  const viewportMode: "full" | "sheet" = viewport < BP_NARROW ? "sheet" : "full";
+
+  // Drive transitions between full and sheet viewport modes.
+  useEffect(() => {
+    const prev = lastViewportModeRef.current;
+    lastViewportModeRef.current = viewportMode;
+
+    if (prev === "init") {
+      if (viewportMode === "full") {
+        fullModePreferenceRef.current = {
+          left: panelState.left,
+          right: panelState.right,
+        };
+      }
+      return;
+    }
+
+    if (prev === "full" && viewportMode === "sheet") {
+      fullModePreferenceRef.current = {
+        left: panelState.left,
+        right: panelState.right,
+      };
+      // Force-close in sheet mode so the sheet doesn't pop open just because
+      // the panel was open at full width. User re-opens via the toggle.
+      setLeftSheetOpen(false);
+      setRightSheetOpen(false);
+      if (panelState.left || panelState.right) {
+        dispatchLayoutPanelsSet({ feature, left: false, right: false });
+      }
+      return;
+    }
+
+    if (prev === "sheet" && viewportMode === "full") {
+      const restored = fullModePreferenceRef.current;
+      if (panelState.left !== restored.left || panelState.right !== restored.right) {
+        dispatchLayoutPanelsSet({ feature, left: restored.left, right: restored.right });
+      }
+    }
+  }, [feature, panelState.left, panelState.right, viewportMode]);
+
+  // In full mode, snapshot the user's panel preference so a later
+  // sheet-mode transition has the right values to restore.
+  useEffect(() => {
+    if (viewportMode === "full") {
+      fullModePreferenceRef.current = {
+        left: panelState.left,
+        right: panelState.right,
+      };
+    }
+  }, [panelState.left, panelState.right, viewportMode]);
+
+  // Sheet open state mirrors panelState in sheet mode. When user clicks the
+  // toggle, panelState flips → sheet opens. When user clicks outside or
+  // presses Escape, the Sheet's onOpenChange syncs panelState back to false
+  // (see onLeftSheetOpenChange / onRightSheetOpenChange below) so the toggle
+  // button isn't a click behind.
+  useEffect(() => {
+    if (viewportMode !== "sheet") return;
+    setLeftSheetOpen(panelState.left);
+  }, [panelState.left, viewportMode]);
 
   useEffect(() => {
-    if (leftMode === "sheet" && panelState.left) setLeftSheetOpen(true);
-    else setLeftSheetOpen(false);
-  }, [leftMode, panelState.left]);
+    if (viewportMode !== "sheet") return;
+    setRightSheetOpen(showRight);
+  }, [showRight, viewportMode]);
 
-  useEffect(() => {
-    if (rightMode === "sheet" && showRight) setRightSheetOpen(true);
-    else setRightSheetOpen(false);
-  }, [rightMode, showRight]);
+  const onLeftSheetOpenChange = useCallback(
+    (next: boolean) => {
+      setLeftSheetOpen(next);
+      if (!next && panelState.left) {
+        dispatchLayoutPanelsSet({
+          feature,
+          left: false,
+          right: panelState.right,
+        });
+      }
+    },
+    [feature, panelState.left, panelState.right],
+  );
 
-  const showLeftFull = leftMode === "full";
-  const showRightFull = rightMode === "full";
+  const onRightSheetOpenChange = useCallback(
+    (next: boolean) => {
+      setRightSheetOpen(next);
+      if (!next && panelState.right) {
+        dispatchLayoutPanelsSet({
+          feature,
+          left: panelState.left,
+          right: false,
+        });
+      }
+    },
+    [feature, panelState.left, panelState.right],
+  );
+
+  const showLeftFull = viewportMode === "full" && panelState.left;
+  const showRightFull = viewportMode === "full" && showRight;
 
   const leftSlot = left ?? (
     <div className="text-sm text-muted-foreground">Feature tools panel</div>
@@ -126,70 +231,74 @@ export function FeaturePanelsShell({
 
   const layoutKey = `${LAYOUT_STORAGE_PREFIX}:${feature}:${showLeftFull ? "l" : "-"}${showRightFull ? "r" : "-"}`;
   const defaultLayout = useMemo<Layout | undefined>(
-    () => readPersistedLayout(layoutKey),
-    [layoutKey],
+    () => (resizable ? readPersistedLayout(layoutKey) : undefined),
+    [layoutKey, resizable],
   );
 
   const onLayoutChanged = useCallback(
     (layout: Layout) => {
+      if (!resizable) return;
       writePersistedLayout(layoutKey, layout);
     },
-    [layoutKey],
+    [layoutKey, resizable],
+  );
+
+  const panels = (
+    <ResizablePanelGroup
+      key={layoutKey}
+      direction="horizontal"
+      defaultLayout={defaultLayout}
+      onLayoutChanged={onLayoutChanged}
+      disabled={!resizable}
+      className="gap-0"
+    >
+      {showLeftFull ? (
+        <ResizablePanel
+          id={`${feature}-left`}
+          defaultSize="20%"
+          minSize={resizable ? "12%" : "20%"}
+          maxSize={resizable ? "40%" : "20%"}
+        >
+          <aside className={RAIL_WRAPPER} data-rail-mode="full">
+            {leftSlot}
+          </aside>
+        </ResizablePanel>
+      ) : null}
+
+      {showLeftFull ? <ResizableHandle /> : null}
+
+      <ResizablePanel id={`${feature}-center`} defaultSize="60%" minSize="30%">
+        <main className={CENTER_WRAPPER}>{center}</main>
+      </ResizablePanel>
+
+      {showRightFull ? <ResizableHandle /> : null}
+
+      {showRightFull ? (
+        <ResizablePanel
+          id={`${feature}-right`}
+          defaultSize="20%"
+          minSize={resizable ? "12%" : "20%"}
+          maxSize={resizable ? "40%" : "20%"}
+        >
+          <aside className={RAIL_WRAPPER} data-rail-mode="full">
+            {rightSlot}
+          </aside>
+        </ResizablePanel>
+      ) : null}
+    </ResizablePanelGroup>
   );
 
   return (
     <>
-      <div className="flex h-full min-h-0 bg-background px-1">
-        <ResizablePanelGroup
-          key={layoutKey}
-          direction="horizontal"
-          defaultLayout={defaultLayout}
-          onLayoutChanged={onLayoutChanged}
-          className="gap-0"
-        >
-          {showLeftFull ? (
-            <ResizablePanel
-              id={`${feature}-left`}
-              defaultSize="20%"
-              minSize="12%"
-              maxSize="40%"
-            >
-              <aside className={RAIL_WRAPPER} data-rail-mode="full">
-                {leftSlot}
-              </aside>
-            </ResizablePanel>
-          ) : null}
+      <div className="flex h-full min-h-0 bg-background px-1">{panels}</div>
 
-          {showLeftFull ? <ResizableHandle /> : null}
-
-          <ResizablePanel id={`${feature}-center`} defaultSize="60%" minSize="30%">
-            <main className={CENTER_WRAPPER}>{center}</main>
-          </ResizablePanel>
-
-          {showRightFull ? <ResizableHandle /> : null}
-
-          {showRightFull ? (
-            <ResizablePanel
-              id={`${feature}-right`}
-              defaultSize="20%"
-              minSize="12%"
-              maxSize="40%"
-            >
-              <aside className={RAIL_WRAPPER} data-rail-mode="full">
-                {rightSlot}
-              </aside>
-            </ResizablePanel>
-          ) : null}
-        </ResizablePanelGroup>
-      </div>
-
-      <Sheet open={leftSheetOpen} onOpenChange={setLeftSheetOpen}>
+      <Sheet open={leftSheetOpen} onOpenChange={onLeftSheetOpenChange}>
         <SheetContent side="left" className="w-[var(--width-sidebar)] max-w-[85vw] p-5">
           {leftSlot}
         </SheetContent>
       </Sheet>
 
-      <Sheet open={rightSheetOpen} onOpenChange={setRightSheetOpen}>
+      <Sheet open={rightSheetOpen} onOpenChange={onRightSheetOpenChange}>
         <SheetContent side="right" className="w-[var(--width-rail)] max-w-[85vw] p-4">
           {rightSlot}
         </SheetContent>
