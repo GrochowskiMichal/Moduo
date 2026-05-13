@@ -8,8 +8,8 @@ on:
       - develop
       - maciej
       - mike
-      - "maciej/**"
-      - "mike/**"
+      - "t/maciej/**"
+      - "t/mike/**"
 
 permissions:
   contents: read

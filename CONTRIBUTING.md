@@ -17,7 +17,7 @@ develop             ← integration. Sync target for personal branches.
    ↑    ↑              Only personal branches merge in.
 maciej  mike        ← personal long-running branches (one per dev).
    ↑      ↑            Only task branches merge in.
-maciej/* mike/*     ← task / milestone branches. Short-lived.
+t/maciej/* t/mike/* ← task / milestone branches. Short-lived.
                       Always merge into your own personal branch first.
 ```
 
@@ -27,8 +27,8 @@ maciej/* mike/*     ← task / milestone branches. Short-lived.
 | --- | --- | --- |
 | `main` | shared | `develop` only, at release time, both devs sign off |
 | `develop` | shared | `mike` and `maciej`, via PR, self-merge OK (review optional) |
-| `maciej` | Maciej | `maciej/*` task branches, via PR or fast-forward |
-| `mike` | Mike | `mike/*` task branches, via PR or fast-forward |
+| `maciej` | Maciej | `t/maciej/*` task branches, via PR or fast-forward |
+| `mike` | Mike | `t/mike/*` task branches, via PR or fast-forward |
 
 Nobody pushes directly to `main` or `develop`. Personal branches can be
 pushed to directly by their owner; PRs are preferred when an LLM did the work
@@ -41,8 +41,11 @@ remain the canonical base for every new task branch.
 
 ## Task branches
 
-- Name pattern: `<owner>/<short-kebab-case>`. Examples: `maciej/settings-modal`,
-  `mike/calendar-sync-bug`, `maciej/m2-foundation-polish`.
+- Name pattern: `t/<owner>/<short-kebab-case>`. Examples:
+  `t/maciej/settings-modal`, `t/mike/calendar-sync-bug`,
+  `t/maciej/m2-foundation-polish`. The `t/` prefix is required because
+  Git refs can't be both a file (`maciej`) and a directory (`maciej/x`)
+  at the same path.
 - Always branch from your **personal branch**, not from `develop` or
   `main`. The personal branch is your latest known-working state.
 - Keep them short-lived where possible. If a task grows beyond ~2 weeks,
@@ -199,7 +202,7 @@ so it pre-fills automatically.)
 
 - [ ] Targets the correct base branch (`maciej` / `mike` for task PRs;
       `develop` for personal sync; `main` only for releases).
-- [ ] Branch name follows `<owner>/<kebab>` for task branches.
+- [ ] Branch name follows `t/<owner>/<kebab>` for task branches.
 - [ ] Testing gate for the target tier completed (see **Testing gates**).
 - [ ] If UI was changed, screenshots or a short Loom of the affected surface.
 - [ ] If a new primitive was added, Storybook story + entry in
