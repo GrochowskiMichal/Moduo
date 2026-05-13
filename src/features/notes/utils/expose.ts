@@ -8,8 +8,12 @@
 import * as Y from "yjs";
 import { decodeBase64ToUint8 } from "./base64";
 
-const SUPABASE_URL = "https://ahhqsxjkwsqyszhxzjbc.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_RfaTM1fcomIzU191dDS5kw_7TDtK_Kd";
+const SUPABASE_URL: string =
+    (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
+    "https://wtoonrvuqumihpkbvwvs.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY: string =
+    (import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string | undefined) ||
+    "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so";
 
 type SupabaseResponse = { data?: unknown; error?: { message: string; code?: string } | null };
 

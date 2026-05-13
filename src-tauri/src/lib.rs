@@ -12,18 +12,19 @@ pub mod graph_helix;
 pub mod identity_acl;
 pub mod keychain;
 pub mod migration_legacy;
-pub mod replication_iroh;
 pub mod store_redb;
+pub mod sync;
 
 pub struct AppState {
     pub config: config::AppConfig,
     pub session: Mutex<Option<auth::AuthSession>>,
     pub store: std::sync::Arc<store_redb::RedbStore>,
     pub acl: identity_acl::AclManager,
-    pub p2p: replication_iroh::P2pManager,
     pub graph: std::sync::Arc<graph_helix::GraphManager>,
     pub embeddings: std::sync::Arc<embeddings::EmbeddingEngine>,
     pub indexer: embeddings::BackgroundIndexer,
+    /// Background cloud-sync worker. Present only when signed in with a Supabase JWT.
+    pub sync_worker: Mutex<Option<sync::SyncHandle>>,
 }
 
 impl AppState {
@@ -61,10 +62,10 @@ impl AppState {
             session: Mutex::new(session),
             store,
             acl,
-            p2p: replication_iroh::P2pManager::new(),
             graph,
             embeddings,
             indexer,
+            sync_worker: Mutex::new(None),
         })
     }
 }
@@ -163,9 +164,6 @@ pub fn run() {
             commands::tasks::tasks_upsert_comment,
             commands::tasks::tasks_delete_comment,
             commands::tasks::tasks_subscribe_local,
-            commands::p2p::p2p_start,
-            commands::p2p::p2p_peer_status,
-            commands::p2p::p2p_sync_now,
             commands::graph::graph_upsert_nodes_edges,
             commands::graph::graph_query_related,
             commands::graph::graph_query_hybrid,

@@ -228,10 +228,12 @@ export class RedbPersistence {
     if (this.destroyed) return;
 
     const draftB64 = await this.readDraftB64();
+    console.log(`%c[NOTES:tryInit] noteId=${this.noteId} attempt=${this.initAttempt + 1} draftB64len=${draftB64?.length ?? 0}`, "color:#a8f;font-weight:bold");
     if (draftB64) {
       try {
         Y.applyUpdate(this.doc, decodeBase64ToUint8(draftB64), "bootstrap");
         this.draftWasApplied = true;
+        console.log(`%c[NOTES:tryInit] applied LOCAL DRAFT — share keys: ${[...this.doc.share.keys()].join(",")}`, "color:#a8f");
       } catch (e) {
         console.error(`[RedbPersistence] Failed to apply local draft for ${this.noteId}:`, e);
       }
@@ -253,8 +255,15 @@ export class RedbPersistence {
 
       if (this.destroyed) return;
 
+      console.log(`%c[NOTES:tryInit] remote snapshotB64len=${state?.snapshotB64?.length ?? 0} pendingUpdatesFromServer=${state?.updates?.length ?? 0}`, "color:#a8f");
       if (state?.snapshotB64) {
         Y.applyUpdate(this.doc, decodeBase64ToUint8(state.snapshotB64), "bootstrap");
+        const root = this.doc.get("root-v2", Y.XmlElement);
+        const children = root.toArray();
+        const textPreview = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
+        console.log(`%c[NOTES:tryInit] after snapshot: rootType=${root.constructor.name} rootChildren=${children.length} textPreview="${textPreview.slice(0, 60)}"`, "color:#a8f");
+      } else {
+        console.log(`%c[NOTES:tryInit] NO snapshot from server — fresh/empty doc`, "color:#fa8");
       }
 
       const updates = Array.isArray(state?.updates) ? state.updates : [];
@@ -273,6 +282,11 @@ export class RedbPersistence {
         maxSeq = Math.max(maxSeq, Number(row?.clientSeq ?? 0));
       }
       this.setMaxSeq(maxSeq);
+
+      const rootFinal = this.doc.get("root-v2", Y.XmlElement);
+      const childrenFinal = rootFinal.toArray();
+      const textFinal = childrenFinal[0] ? (childrenFinal[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
+      console.log(`%c[NOTES:tryInit] SYNCED — shareKeys=[${[...this.doc.share.keys()].join(",")}] rootChildren=${childrenFinal.length} textPreview="${textFinal.slice(0, 80)}"`, "color:#4fa;font-weight:bold");
 
       this.synced = true;
       this.onStatus("synced");
@@ -328,13 +342,16 @@ export class RedbPersistence {
 
   private onUpdate = (update: Uint8Array, origin: any) => {
     if (origin === "remote" || origin === "bootstrap" || this.destroyed) {
+      console.log(`%c[NOTES:onUpdate] SKIPPED origin=${origin} size=${update.byteLength}`, "color:#888");
       return;
     }
+    console.log(`%c[NOTES:onUpdate] LOCAL update size=${update.byteLength} synced=${this.synced} pendingCount=${this.pendingUpdates.length + 1}`, "color:#fa4");
     this.pendingUpdates.push(update);
     this.scheduleDraftSave();
 
     if (!this.synced) {
       this.pendingFlush = true;
+      console.log(`%c[NOTES:onUpdate] not yet synced — queued for later flush`, "color:#888");
       return;
     }
     if (this.timeoutId) {
@@ -374,15 +391,29 @@ export class RedbPersistence {
 
     const queued = this.pendingUpdates;
     this.pendingUpdates = [];
-    const update = queued.length === 1 ? queued[0] : Y.mergeUpdates(queued);
-    if (!update.byteLength) {
+
+    // Encode the full current document state as the durable payload.
+    // Sending only Y.mergeUpdates(queued) (partial incremental updates) risks
+    // losing nested XmlText content when the server-side applies them to a fresh
+    // doc whose type registry doesn't match the live client doc. The full
+    // Y.encodeStateAsUpdate snapshot is self-contained and always round-trips
+    // correctly. The queued incremental updates are kept only as a dirty-flag so
+    // we can re-queue them on failure and retry.
+    const fullSnapshot = Y.encodeStateAsUpdate(this.doc);
+    if (!fullSnapshot.byteLength) {
+      console.log(`%c[NOTES:flush] fullSnapshot byteLength=0, nothing to flush`, "color:#888");
       return;
     }
+
+    const root = this.doc.get("root-v2", Y.XmlElement);
+    const children = root.toArray();
+    const textPreview = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
+    console.log(`%c[NOTES:flush] flushing noteId=${this.noteId} snapshotSize=${fullSnapshot.byteLength} queuedCount=${queued.length} textPreview="${textPreview.slice(0, 80)}"`, "color:#fa4;font-weight:bold");
 
     this.onStatus("syncing");
     const currentSeq = this.getNextSeq();
     try {
-      const b64 = encodeUint8ToBase64(update);
+      const b64 = encodeUint8ToBase64(fullSnapshot);
       await this.runtime.notes.applyCrdtUpdates(this.workspaceId, this.noteId, this.clientId, [
         {
           idempotencyKey: `${this.workspaceId}:${this.noteId}:${this.clientId}:${currentSeq}`,
@@ -390,10 +421,40 @@ export class RedbPersistence {
           updateB64: b64,
         },
       ]);
+      console.log(`%c[NOTES:flush] applyCrdtUpdates OK seq=${currentSeq}`, "color:#4fa;font-weight:bold");
       this.onStatus("synced");
-      void this.clearDraftB64();
+      // Delay clearing the local draft until we can confirm the persisted snapshot
+      // round-trips to the same root-v2 text/structure as the live document.
+      // We verify this locally against the same fullSnapshot we just sent rather
+      // than doing a network round-trip.
+      let draftSafelyClearable = true;
+      try {
+        const verifyDoc = new Y.Doc();
+        verifyDoc.get("root-v2", Y.XmlElement);
+        Y.applyUpdate(verifyDoc, fullSnapshot, "verify");
+        const verifyRoot = verifyDoc.get("root-v2", Y.XmlElement);
+        const verifyChildren = verifyRoot.toArray();
+        const verifyText = verifyChildren[0]
+          ? (verifyChildren[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("")
+          : "";
+        // If the live doc has text but the verified snapshot does not reproduce it,
+        // keep the draft as a safety net.
+        if (textPreview && !verifyText) {
+          draftSafelyClearable = false;
+          console.warn(`[RedbPersistence] snapshot verification mismatch for ${this.noteId}: liveText="${textPreview.slice(0, 40)}" verifyText="" — keeping draft`);
+        }
+      } catch {
+        // Verification failed; keep draft as safety net.
+        draftSafelyClearable = false;
+      }
+      if (draftSafelyClearable) {
+        void this.clearDraftB64();
+      }
     } catch (e) {
-      // Requeue unsent updates so the next flush can retry without data loss.
+      // Re-queue the original incremental updates as a dirty flag so the next
+      // scheduled flush retries. The actual payload at retry time will again be
+      // Y.encodeStateAsUpdate(this.doc), capturing any additional edits made in
+      // the interim.
       this.pendingUpdates = [...queued, ...this.pendingUpdates];
       console.error(`[RedbPersistence] applyCrdtUpdates ERROR:`, e);
       this.onStatus("error");
