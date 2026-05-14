@@ -3,7 +3,7 @@ import { ChevronDown } from "lucide-react";
 
 import { useWorkspace } from "../providers/workspace-provider";
 import { useEntitlement } from "../hooks/use-entitlement";
-import { useShortcut } from "../lib/shortcuts";
+import { formatShortcut, SHORTCUTS, useShortcut } from "../lib/shortcuts";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Button } from "./ui/button";
 import {
@@ -37,6 +37,9 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
   } = useWorkspace();
   const { allowed: canAddWorkspace } = useEntitlement("unlimited_workspaces");
   const [open, setOpen] = useState(false);
+  // The shortcut hook must mount before the early return so React's hook
+  // order rule is respected. It becomes a no-op when the trigger is hidden
+  // (single-workspace case) because there's nothing to open.
   useShortcut(
     "workspace-switcher",
     useCallback(() => setOpen((prev) => !prev), []),
@@ -120,6 +123,11 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
     }
   };
 
+  if (workspaces.length <= 1) return null;
+
+  const switcherShortcut = SHORTCUTS.find((s) => s.id === "workspace-switcher");
+  const switcherHint = switcherShortcut ? formatShortcut(switcherShortcut) : "";
+
   return (
     <>
       <DropdownMenu
@@ -132,13 +140,19 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger
-              className="grid h-7 w-7 place-items-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="flex h-8 flex-row items-center gap-1.5 rounded-md bg-transparent px-2 text-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               aria-label={`Switch workspace · current: ${workspaceLabel}`}
             >
-              <ChevronDown className="size-4" aria-hidden />
+              <Avatar size="sm" className="h-7 w-7 shrink-0">
+                <AvatarFallback>{workspaceLabel.charAt(0).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <span className="max-w-[14ch] truncate text-sm">{workspaceLabel}</span>
+              <ChevronDown className="size-4 shrink-0" aria-hidden />
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>{workspaceLabel}</TooltipContent>
+          <TooltipContent>
+            Switch workspace{switcherHint ? ` · ${switcherHint}` : ""}
+          </TooltipContent>
         </Tooltip>
 
         <DropdownMenuContent align="start" sideOffset={8} className="w-[360px]">
