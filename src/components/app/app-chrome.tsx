@@ -1,10 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
-import { useGlobalShortcuts, useShortcut } from "../../lib/shortcuts";
+import {
+  formatShortcut,
+  SHORTCUTS,
+  useGlobalShortcuts,
+  useShortcut,
+  type ShortcutId,
+} from "../../lib/shortcuts";
 import {
   PROFILE_UPDATED_EVENT,
   readStoredAvatar,
@@ -27,12 +33,48 @@ import { IntegrationsModal } from "../integrations-modal";
 import { UserMenu } from "../user-menu";
 import { NotificationCenter } from "../notification-center";
 import { baseModulesNavItems } from "./app-chrome-constants";
+import type { ModuleNavItem } from "./app-chrome-types";
 import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { SettingsModal } from "../../features/settings/settings-modal";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { dispatchCreateNew } from "./create-events";
 import { TrialBanner } from "../trial-banner";
+
+type ModuleTabProps = {
+  item: ModuleNavItem;
+  active: boolean;
+  index: number;
+  onClick: () => void;
+};
+
+function ModuleTab({ item, active, index, onClick }: ModuleTabProps) {
+  const shortcutId = `module-${index + 1}` as ShortcutId;
+  const shortcut = SHORTCUTS.find((s) => s.id === shortcutId);
+  const hint = shortcut ? formatShortcut(shortcut) : "";
+  const ariaLabel = hint ? `${item.label} (${hint})` : item.label;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        data-slot="module-tab"
+        data-active={active}
+        aria-current={active ? "page" : undefined}
+        aria-label={ariaLabel}
+        onClick={onClick}
+        className={`flex h-8 flex-row items-center gap-2 rounded-md px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${active ? "bg-accent text-foreground" : "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+      >
+        <Icon name={item.iconName} size={14} />
+        <span data-slot="module-tab-label" className="text-sm">
+          {item.label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        <span>{item.label}</span>
+        {hint ? <kbd className="ml-2 font-mono text-xs text-muted-foreground">{hint}</kbd> : null}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -103,6 +145,24 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       void navigate({ to: modulesNavItems[0]?.href ?? "/", replace: true });
     }
   }, [isSettingsRoute, navigate, pathname, modulesNavItems]);
+
+  // ⌘1..⌘6 navigate to the Nth visible module tab. Six fixed useShortcut
+  // calls keeps hook order stable across renders; handlers no-op when the
+  // index exceeds the current visible list.
+  const navigateToIndex = useCallback(
+    (index: number) => {
+      const item = modulesNavItems[index];
+      if (!item) return;
+      void navigate({ to: item.href });
+    },
+    [modulesNavItems, navigate],
+  );
+  useShortcut("module-1", useCallback(() => navigateToIndex(0), [navigateToIndex]));
+  useShortcut("module-2", useCallback(() => navigateToIndex(1), [navigateToIndex]));
+  useShortcut("module-3", useCallback(() => navigateToIndex(2), [navigateToIndex]));
+  useShortcut("module-4", useCallback(() => navigateToIndex(3), [navigateToIndex]));
+  useShortcut("module-5", useCallback(() => navigateToIndex(4), [navigateToIndex]));
+  useShortcut("module-6", useCallback(() => navigateToIndex(5), [navigateToIndex]));
 
   useEffect(() => {
     writePanelsMap(featurePanels);
@@ -281,26 +341,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         </div>
 
         <div className="flex flex-row items-center justify-center gap-1">
-          {modulesNavItems.map((tab) => {
+          {modulesNavItems.map((tab, index) => {
             const active =
               pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
             return (
-              <Tooltip key={tab.href}>
-                <TooltipTrigger
-                  data-slot="module-tab"
-                  data-active={active}
-                  className={`flex h-8 flex-row items-center gap-2 rounded-md px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${active ? "bg-accent text-foreground" : "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"}`}
-                  onClick={() => void navigate({ to: tab.href })}
-                  aria-label={tab.label}
-                  aria-current={active ? "page" : undefined}
-                >
-                  <Icon name={tab.iconName} size={14} />
-                  <span data-slot="module-tab-label" className="text-sm">
-                    {tab.label}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{tab.label}</TooltipContent>
-              </Tooltip>
+              <ModuleTab
+                key={tab.href}
+                item={tab}
+                active={active}
+                index={index}
+                onClick={() => void navigate({ to: tab.href })}
+              />
             );
           })}
         </div>

@@ -650,12 +650,18 @@ body,
   height: 0;
 }
 
-/* Module nav: icons-only mode hides every label except the active tab's.
-   Driven by [data-tabs="icons"] on <html>, set by the appearance hook. */
+/* Module nav: icons-only mode hides every label and collapses each tab to
+   an equal-width square. Driven by [data-tabs="icons"] on <html>, set by
+   the appearance hook. Active state is signalled by background + colour
+   only — no label is shown for the active tab in icons mode. */
 [data-tabs="icons"] [data-slot="module-tab-label"] {
   display: none;
 }
 
-[data-tabs="icons"] [data-slot="module-tab"][data-active="true"] [data-slot="module-tab-label"] {
-  display: inline;
+[data-tabs="icons"] [data-slot="module-tab"] {
+  width: 2rem;
+  padding-left: 0;
+  padding-right: 0;
+  justify-content: center;
+  gap: 0;
 }
