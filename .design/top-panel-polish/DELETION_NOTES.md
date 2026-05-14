@@ -58,15 +58,33 @@ Confirmed by audit:
 - [src/routes/pages/onboarding-page.tsx](../../src/routes/pages/onboarding-page.tsx) — no deep-links to any deleted slug.
 - [src/components/notification-center.tsx](../../src/components/notification-center.tsx) — no deep-links to any deleted slug.
 
-## Out of scope for task 9 (per brief)
+## Scope expansion during task 9 (authorised mid-flight)
 
-Orphaned feature directories — keep, do not delete:
-- `src/features/templates/`
-- `src/features/brainstorm/`
-- `src/features/timetracking/`
+The brief originally said the orphaned `src/features/{brainstorm,
+templates, timetracking}/` directories would stay, with cleanup as a
+follow-up ticket. That assumed the orphans didn't reference deleted
+`FeatureLayoutKey` union members. They do — three workspace files broke
+typecheck after the union was trimmed.
 
-These directories' internals are unused after the route deletion but the
-brief explicitly defers their cleanup to a follow-up ticket. Some entries
-in `scripts/check-arbitrary-tw.ts` IGNORED_PATHS point into these
-directories — leave them in place; removing the entries is also a
-follow-up concern.
+User authorised deleting the three feature directories outright. Doing
+that also forced deletion of [src/components/app/app-chrome-menus.tsx](../../src/components/app/app-chrome-menus.tsx),
+which imported a type from `features/brainstorm/storage`. That file was
+already unused (no imports referencing it), so the deletion is a net
+cleanup of dead code rather than a real surface change.
+
+Files deleted in task 9 beyond the original plan:
+- `src/features/brainstorm/` (entire directory)
+- `src/features/templates/` (entire directory)
+- `src/features/timetracking/` (entire directory)
+- `src/components/app/app-chrome-menus.tsx`
+
+`scripts/check-arbitrary-tw.ts` `IGNORED_PATHS` entries for files inside
+those directories are now stale no-op lookups. The brief said do not edit
+that file; harmless to leave the stale entries until a follow-up cleanup.
+
+`src/components/app/app-chrome-types.ts` still exports `TaskProjectOption`
+and `MenuAnchor`, and `app-chrome-constants.ts` still exports
+`normalizeTaskProject`, `safeId`, `nowIso`, and the various style helpers.
+These had only one consumer (`app-chrome-menus.tsx`) and are now truly
+dead exports — they don't break typecheck and removing them is its own
+follow-up cleanup, not part of this polish run's contract.
