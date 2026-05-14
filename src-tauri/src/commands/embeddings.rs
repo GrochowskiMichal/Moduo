@@ -3,10 +3,10 @@ use tauri::State;
 
 fn require_embeddings_access(
     state: &AppState,
-    workspace_id: &str,
-    action: &str,
+    _workspace_id: &str,
+    _action: &str,
 ) -> Result<(), String> {
-    let session = state
+    let _session = state
         .session
         .lock()
         .map_err(|e| e.to_string())?

@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
-import { EmailAuthPanel } from "@/src/components/auth/email-auth-panel";
-import { useAuth } from "@/src/providers/auth-provider";
+import { EmailAuthPanel } from "@/components/auth/email-auth-panel";
+import { useAuth } from "@/providers/auth-provider";
 
 function getSearchParam(key: string): string | null {
   if (typeof window === "undefined") return null;

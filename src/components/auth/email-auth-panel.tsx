@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Mail } from "lucide-react";
 
-import { Button } from "@/src/components/ui/button";
-import { Input } from "@/src/components/ui/input";
-import { ModuoMark } from "@/src/components/ui/moduo-mark";
-import { useAuth } from "@/src/providers/auth-provider";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ModuoMark } from "@/components/ui/moduo-mark";
+import { useAuth } from "@/providers/auth-provider";
 
 type Flow = "email" | "otp_sent";
 
