@@ -186,7 +186,7 @@ export function SettingsModal() {
                   value={id}
                   className="data-[state=inactive]:hidden"
                 >
-                  <Component />
+                  {id === section ? <Component /> : null}
                 </TabsContent>
               ))}
             </div>

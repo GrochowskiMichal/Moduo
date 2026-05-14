@@ -1,18 +1,38 @@
 /**
  * Tauri desktop implementation of ModuoRuntime.
- * All data operations go through Tauri `invoke()` to the Rust core.
+ * Auth is handled via Supabase JS (same as web). After a successful sign-in the
+ * session is forwarded to the Rust core via `auth_accept_supabase_session` so
+ * workspace / data commands can resolve the current user identity.
+ * All workspace / notes / tasks / graph operations go through Tauri `invoke()`.
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
   AuthChangeEvent,
   AuthListener,
   IntegrationStatusItem,
-  LocalAuthState,
   ModuoRuntime,
   RuntimeCapabilities,
   RuntimeSession,
 } from "./runtime.types";
+
+// ── Supabase client (shared with the web runtime) ─────────────────────────────
+
+const SUPABASE_URL: string =
+  (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
+  "https://wtoonrvuqumihpkbvwvs.supabase.co";
+const SUPABASE_ANON_KEY: string =
+  (import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string | undefined) ||
+  "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so";
+
+const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+  },
+});
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -21,27 +41,31 @@ function toError(error: unknown): { message: string } {
   return { message: String(error) };
 }
 
-function normalizeSession(raw: any): RuntimeSession | null {
-  if (!raw) return null;
-  const accessToken = raw.accessToken ?? raw.access_token;
-  const userRaw = raw.user ?? {};
-  const userId = userRaw.id;
-  if (!accessToken || !userId) return null;
+function sessionFromSupabase(supaSession: any): RuntimeSession | null {
+  if (!supaSession?.access_token || !supaSession?.user?.id) return null;
   return {
-    access_token: accessToken,
-    refresh_token: raw.refreshToken ?? raw.refresh_token ?? null,
-    expires_at: raw.expiresAt ?? raw.expires_at ?? undefined,
+    access_token: supaSession.access_token,
+    refresh_token: supaSession.refresh_token ?? null,
+    expires_at: supaSession.expires_at ?? undefined,
     user: {
-      id: userId,
-      email: userRaw.email ?? null,
+      id: supaSession.user.id,
+      email: supaSession.user.email ?? null,
     },
   };
 }
 
-const authListeners = new Set<AuthListener>();
-
-function emitAuth(event: AuthChangeEvent, session: RuntimeSession | null) {
-  for (const listener of authListeners) listener(event, session);
+/** Forward a JS Supabase session to the Rust data layer so workspace ops work. */
+async function syncSessionToRust(session: RuntimeSession, displayName?: string | null) {
+  await invoke("auth_accept_supabase_session", {
+    input: {
+      accessToken: session.access_token,
+      refreshToken: session.refresh_token ?? null,
+      userId: session.user.id,
+      email: session.user.email ?? null,
+      expiresAt: session.expires_at ?? null,
+      displayName: displayName ?? null,
+    },
+  }).catch(() => {});
 }
 
 // ── Capabilities ──────────────────────────────────────────────────────────────
@@ -52,7 +76,6 @@ export const tauriCapabilities: RuntimeCapabilities = {
   hasEmail: true,
   hasTimeTracking: true,
   hasCalendarOAuth: true,
-  hasLocalMnemonic: true,
   hasOfflineMode: true,
 };
 
@@ -62,135 +85,35 @@ export const tauriRuntime: ModuoRuntime = {
   capabilities: tauriCapabilities,
 
   auth: {
-    async getLocalAuthState() {
-      try {
-        const raw = await invoke<any>("auth_get_local_auth_state");
-        const data: LocalAuthState = {
-          profileExists: !!(raw?.profileExists ?? raw?.profile_exists),
-          displayName: raw?.displayName ?? raw?.display_name ?? null,
-          userId: raw?.userId ?? raw?.user_id ?? null,
-          hasPin: !!(raw?.hasPin ?? raw?.has_pin),
-          hasKeychainMnemonic: !!(raw?.hasKeychainMnemonic ?? raw?.has_keychain_mnemonic),
-        };
-        return { data, error: null };
-      } catch (error) {
-        return {
-          data: { profileExists: false, displayName: null, userId: null, hasPin: false, hasKeychainMnemonic: false },
-          error: toError(error),
-        };
-      }
-    },
-
-    async generateMnemonic() {
-      try {
-        const raw = await invoke<any>("auth_generate_mnemonic");
-        return { data: { words: Array.isArray(raw?.words) ? raw.words : [], phrase: raw?.phrase ?? "" }, error: null };
-      } catch (error) {
-        return { data: { words: [], phrase: "" }, error: toError(error) };
-      }
-    },
-
-    async registerLocalMnemonic({ displayName, mnemonicPhrase, inviteToken }) {
-      try {
-        const raw = await invoke<any>("auth_register_local_mnemonic", {
-          input: { displayName, mnemonicPhrase, inviteToken: inviteToken ?? null },
-        });
-        const session = normalizeSession(raw?.session);
-        emitAuth("SIGNED_IN", session);
-        return { data: { user: session?.user ?? null, session }, error: null };
-      } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
-      }
-    },
-
-    async unlockWithMnemonic({ mnemonicPhrase, inviteToken }) {
-      try {
-        await invoke("auth_unlock_with_mnemonic", {
-          input: { mnemonicPhrase, inviteToken: inviteToken ?? null },
-        });
-        const next = await tauriRuntime.auth.getSession();
-        emitAuth("SIGNED_IN", next.data.session ?? null);
-        return {
-          data: { user: next.data.session?.user ?? null, session: next.data.session ?? null },
-          error: null,
-        };
-      } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
-      }
-    },
-
-    async forgotResetLocal() {
-      try {
-        await invoke("auth_forgot_reset_local");
-        emitAuth("SIGNED_OUT", null);
-        return { error: null };
-      } catch (error) {
-        return { error: toError(error) };
-      }
-    },
-
     async tryAutoUnlock() {
       try {
-        const raw = await invoke<any>("auth_try_auto_unlock");
-        const session = normalizeSession(raw);
-        if (session) emitAuth("SIGNED_IN", session);
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (error || !data.session) return { data: { session: null }, error: null };
+        const session = sessionFromSupabase(data.session);
+        if (session) await syncSessionToRust(session);
         return { data: { session }, error: null };
       } catch (error) {
         return { data: { session: null }, error: toError(error) };
-      }
-    },
-
-    async setPin(pin: string) {
-      try {
-        await invoke("auth_set_pin", { pin });
-        return { error: null };
-      } catch (error) {
-        return { error: toError(error) };
-      }
-    },
-
-    async unlockWithPin(pin: string) {
-      try {
-        const raw = await invoke<any>("auth_unlock_with_pin", { pin });
-        const session = normalizeSession(raw);
-        if (session) emitAuth("SIGNED_IN", session);
-        return { data: { session }, error: null };
-      } catch (error) {
-        return { data: { session: null }, error: toError(error) };
-      }
-    },
-
-    async removePin() {
-      try {
-        await invoke("auth_remove_pin");
-        return { error: null };
-      } catch (error) {
-        return { error: toError(error) };
       }
     },
 
     async updateDisplayName(displayName: string) {
       try {
-        const raw = await invoke<any>("auth_update_display_name", { input: { displayName } });
-        return { data: { displayName: raw?.displayName ?? raw?.display_name ?? displayName }, error: null };
+        const { error } = await supabaseClient.auth.updateUser({
+          data: { display_name: displayName },
+        });
+        if (error) return { data: { displayName }, error: toError(error) };
+        return { data: { displayName }, error: null };
       } catch (error) {
         return { data: { displayName }, error: toError(error) };
       }
     },
 
-    async getStoredMnemonic() {
-      try {
-        const phrase = await invoke<string | null>("auth_get_stored_mnemonic");
-        return { data: { phrase: typeof phrase === "string" ? phrase : null }, error: null };
-      } catch (error) {
-        return { data: { phrase: null }, error: toError(error) };
-      }
-    },
-
     async getSession() {
       try {
-        const raw = await invoke<any>("auth_get_session");
-        return { data: { session: normalizeSession(raw) }, error: null };
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (error) return { data: { session: null }, error: toError(error) };
+        return { data: { session: sessionFromSupabase(data.session) }, error: null };
       } catch (error) {
         return { data: { session: null }, error: toError(error) };
       }
@@ -198,72 +121,81 @@ export const tauriRuntime: ModuoRuntime = {
 
     async refreshSession() {
       try {
-        const raw = await invoke<any>("auth_refresh_session");
-        const session = normalizeSession(raw);
-        emitAuth("TOKEN_REFRESHED", session);
+        const { data, error } = await supabaseClient.auth.refreshSession();
+        if (error) return { data: { user: null, session: null }, error: toError(error) };
+        const session = sessionFromSupabase(data.session);
+        if (session) await syncSessionToRust(session);
         return { data: { user: session?.user ?? null, session }, error: null };
       } catch (error) {
         return { data: { user: null, session: null }, error: toError(error) };
       }
     },
 
-    onAuthStateChange(callback) {
-      authListeners.add(callback);
-      void tauriRuntime.auth.getSession().then((result: any) => {
-        callback("INITIAL_SESSION", result?.data?.session ?? null);
+    onAuthStateChange(callback: AuthListener) {
+      const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, supaSession) => {
+        const eventMap: Record<string, AuthChangeEvent> = {
+          INITIAL_SESSION: "INITIAL_SESSION",
+          SIGNED_IN: "SIGNED_IN",
+          SIGNED_OUT: "SIGNED_OUT",
+          TOKEN_REFRESHED: "TOKEN_REFRESHED",
+          USER_UPDATED: "TOKEN_REFRESHED",
+        };
+        const mapped = eventMap[event] ?? "TOKEN_REFRESHED";
+        const session = sessionFromSupabase(supaSession);
+        if (session && (mapped === "SIGNED_IN" || mapped === "TOKEN_REFRESHED")) {
+          await syncSessionToRust(session);
+        }
+        if (mapped === "SIGNED_OUT") {
+          await invoke("auth_sign_out").catch(() => {});
+        }
+        callback(mapped, session);
       });
-      return {
-        data: {
-          subscription: {
-            unsubscribe() {
-              authListeners.delete(callback);
-            },
-          },
-        },
-      };
+      return { data: { subscription: { unsubscribe: () => subscription.unsubscribe() } } };
     },
 
     async signOut() {
       try {
-        await invoke("auth_sign_out");
-        emitAuth("SIGNED_OUT", null);
+        await invoke("auth_sign_out").catch(() => {});
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) return { error: toError(error) };
         return { error: null };
       } catch (error) {
         return { error: toError(error) };
       }
     },
 
-    async signUpWithEmail({ email, password, displayName }) {
-      // Desktop: proxies to the Rust auth_link_to_cloud command
+    async sendOtp({ email }) {
       try {
-        const raw = await invoke<any>("auth_link_to_cloud", {
-          input: { email, password, displayName: displayName ?? null },
+        const { error } = await supabaseClient.auth.signInWithOtp({
+          email,
+          options: { shouldCreateUser: true },
         });
-        const session = normalizeSession(raw?.session);
-        if (session) emitAuth("SIGNED_IN", session);
-        return { data: { user: session?.user ?? null, session }, error: null };
+        if (error) return { data: {}, error: toError(error) };
+        return { data: {}, error: null };
       } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
+        return { data: {}, error: toError(error) };
       }
     },
 
-    async signInWithEmail({ email, password }) {
+    async verifyOtp({ email, token, sentAt }) {
       try {
-        const raw = await invoke<any>("auth_sign_in_cloud", { input: { email, password } });
-        const session = normalizeSession(raw?.session);
-        if (session) emitAuth("SIGNED_IN", session);
-        return { data: { user: session?.user ?? null, session }, error: null };
+        const { data, error } = await supabaseClient.auth.verifyOtp({
+          email,
+          token,
+          type: "email",
+        });
+        if (error) return { data: { user: null, session: null }, error: toError(error) };
+        const session = sessionFromSupabase(data.session);
+        if (session) {
+          const displayName = data.user?.user_metadata?.display_name ?? null;
+          await syncSessionToRust(session, displayName);
+        }
+        const createdAt = data.user?.created_at ? new Date(data.user.created_at).getTime() : 0;
+        const isNewUser = !!sentAt && !!createdAt && createdAt >= sentAt - 30_000;
+        return { data: { user: session?.user ?? null, session, isNewUser }, error: null };
       } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
+        return { data: { user: null, session: null, isNewUser: false }, error: toError(error) };
       }
-    },
-
-    async sendOtp() {
-      return { data: {}, error: { message: "OTP auth is only available on web." } };
-    },
-
-    async verifyOtp() {
-      return { data: { user: null, session: null, isNewUser: false }, error: { message: "OTP auth is only available on web." } };
     },
   },
 

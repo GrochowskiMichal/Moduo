@@ -33,7 +33,7 @@ use crate::email_sync::{
     now_iso, EmailActivityMode, EmailActivityStateRecord, EMAIL_BODY_MAX_BYTES_PER_ACCOUNT,
     EMAIL_BODY_MAX_ITEMS_PER_ACCOUNT, EMAIL_DEFAULT_LIST_LIMIT, EMAIL_PREFETCH_DEFAULT_LIMIT,
 };
-use crate::{keychain, AppState};
+use crate::AppState;
 
 mod connection;
 mod flags;
@@ -43,7 +43,7 @@ mod sync;
 
 const EMAIL_NAMESPACE: &str = "email";
 const EMAIL_ACCOUNTS_KEY: &str = "accounts_v1";
-const EMAIL_KEYCHAIN_PREFIX: &str = "email_account::";
+const EMAIL_SECRET_KEY_PREFIX: &str = "secret::";
 const EMAIL_ACTIVITY_UI_STATE_KEY: &str = "activity_state_v2";
 const EMAIL_FOLDER_UI_STATE_PREFIX: &str = "folder_state::";
 const DEFAULT_WORKSPACE_ID: &str = "__global__";
@@ -496,16 +496,22 @@ fn account_id(provider: &str, email: &str, imap_host: Option<&str>) -> String {
     format!("{}:{}", provider, email)
 }
 
-fn keychain_account_key(account_id: &str) -> String {
-    format!("{}{}", EMAIL_KEYCHAIN_PREFIX, account_id)
+fn account_secret_key(account_id: &str) -> String {
+    format!("{}{}", EMAIL_SECRET_KEY_PREFIX, account_id)
 }
 
 fn get_password_for_account(state: &AppState, account_id: &str) -> Result<Option<String>, String> {
-    keychain::get_secret_strict(
-        &state.config.keychain_service,
-        &keychain_account_key(account_id),
-    )
-    .map_err(|e| e.to_string())
+    let key = account_secret_key(account_id);
+    let raw = state
+        .store
+        .kv_get(EMAIL_NAMESPACE, &key)
+        .map_err(|e| e.to_string())?;
+    match raw {
+        None => Ok(None),
+        Some(value) => serde_json::from_value::<String>(value)
+            .map(Some)
+            .map_err(|e| e.to_string()),
+    }
 }
 
 fn mailbox_candidates(provider: &str, folder: &str) -> Vec<String> {
@@ -1789,12 +1795,14 @@ pub async fn email_account_connect_and_save(
         .map_err(|e| format!("connect_task_failed:{e}"))??;
 
     let id = account_id(&provider, &email, imap_host.as_deref());
-    keychain::set_secret(
-        &state.config.keychain_service,
-        &keychain_account_key(&id),
-        &input.password,
-    )
-    .map_err(|e| format!("keychain_store_failed:{e}"))?;
+    state
+        .store
+        .kv_set(
+            EMAIL_NAMESPACE,
+            &account_secret_key(&id),
+            &serde_json::to_value(&input.password).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| format!("email_secret_store_failed:{e}"))?;
 
     let mut accounts = read_accounts(&state)?;
     if let Some(existing) = accounts.iter_mut().find(|account| account.id == id) {
@@ -1847,10 +1855,9 @@ pub async fn email_account_disconnect(
     accounts.retain(|account| account.id != account_id);
     write_accounts(&state, &accounts)?;
 
-    let _ = keychain::delete_secret(
-        &state.config.keychain_service,
-        &keychain_account_key(&account_id),
-    );
+    let _ = state
+        .store
+        .kv_remove(EMAIL_NAMESPACE, &account_secret_key(&account_id));
     remove_account_v2(&state, &account_id);
     schedule_idle_worker_reconcile(&app, false);
     Ok(())
