@@ -140,13 +140,12 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
   useEffect(() => {
     if (!runtime || typeof document === "undefined") return;
+    if (!isEmailRoute) return;
     const publishActivity = async () => {
-      if (document.visibilityState !== "hidden" && isEmailRoute) {
-        // Email workspace publishes account/folder-specific foreground state.
-        return;
-      }
-      const mode =
-        document.visibilityState === "hidden" ? "appBackground" : "appForegroundNonMail";
+      // Email workspace publishes account/folder-specific foreground state.
+      // Outside of /email we avoid background email signals to prevent secret access.
+      if (document.visibilityState !== "hidden") return;
+      const mode = "appBackground";
       try {
         await runtime.email.setActivityState({
           mode,
@@ -170,9 +169,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
   useEffect(() => {
     if (!runtime || typeof document === "undefined" || typeof window === "undefined") return;
+    if (!isEmailRoute) return;
     const timer = window.setInterval(() => {
-      const shouldRefreshInboxes = document.visibilityState === "hidden" || !isEmailRoute;
-      if (!shouldRefreshInboxes) return;
+      if (document.visibilityState === "hidden") return;
       void runtime.email.syncNow({ folder: "inbox" });
     }, 5 * 60 * 1000);
     return () => window.clearInterval(timer);
@@ -205,9 +204,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     if (!runtime) return;
     let active = true;
     const load = async () => {
-      const { data } = await runtime.auth.getLocalAuthState();
+      const { data } = await runtime.auth.getSession();
       if (!active) return;
-      setDisplayName(data.displayName);
+      const name = data.session?.user?.email?.split("@")[0] ?? null;
+      setDisplayName(name);
     };
     void load();
     const onProfileUpdated = () => {

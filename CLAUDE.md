@@ -101,8 +101,8 @@ Format follows the existing project style (concise present-tense imperative). Si
 
 Branching model and PR direction live in [CONTRIBUTING.md](./CONTRIBUTING.md). Short version for LLM agents:
 
-- Default base for new task branches is the user's personal branch (`maciej` or `mike`). Never branch from `production`. Never branch from `develop` unless explicitly told.
-- Never push directly to `production` or `develop`. Never merge or close PRs without explicit authorization.
+- Default base for new task branches is the user's personal branch (`maciej` or `mike`). Never branch from `main`. Never branch from `develop` unless explicitly told.
+- Never push directly to `main` or `develop`. Never merge or close PRs without explicit authorization.
 - Force-push only on your own task branches, only with `--force-with-lease`.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contract.

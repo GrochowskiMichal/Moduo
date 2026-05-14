@@ -4,6 +4,7 @@ import { useAuth } from "../../providers/auth-provider";
 import { WorkspaceProvider, useWorkspace } from "../../providers/workspace-provider";
 import { AppChrome } from "../../components/app/app-chrome";
 import { useSlotBookingsSync } from "../../features/plan/hooks/use-slot-bookings-sync";
+import { supabaseClient } from "../../lib/runtime.web";
 
 function WorkspaceGate() {
   const { loading, workspaces } = useWorkspace();
@@ -41,25 +42,12 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
 
     let cancelled = false;
 
-    const supabaseUrl =
-      (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-      "https://wtoonrvuqumihpkbvwvs.supabase.co";
-    const supabaseAnonKey =
-      (import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string | undefined) ||
-      "";
-
     const fetchStatus = async (): Promise<string> => {
-      const r = await fetch(
-        `${supabaseUrl}/rest/v1/user_entitlements?select=subscription_status`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            apikey: supabaseAnonKey,
-          },
-        }
-      );
-      const rows = await r.json() as Array<{ subscription_status: string }>;
-      return Array.isArray(rows) && rows[0] ? rows[0].subscription_status : "none";
+      const { data: row } = await supabaseClient
+        .from("user_entitlements")
+        .select("subscription_status")
+        .maybeSingle<{ subscription_status: string }>();
+      return row?.subscription_status ?? "none";
     };
 
     const run = async () => {

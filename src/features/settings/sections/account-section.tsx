@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
 
 import { useAuth } from "../../../providers/auth-provider";
 import {
@@ -14,17 +13,6 @@ import defaultProfilePic from "../../../../assets/icon.png";
 
 import { SettingsSectionShell } from "./section-shell";
 
-function maskedPhrase(phrase: string | null) {
-  if (!phrase) {
-    return "•••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• •••••• ••••••";
-  }
-  return phrase
-    .split(/\s+/)
-    .filter(Boolean)
-    .map(() => "••••••")
-    .join(" ");
-}
-
 export function AccountSection() {
   const { runtime, userEmail } = useAuth();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
@@ -35,21 +23,12 @@ export function AccountSection() {
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  const [isPhraseVisible, setIsPhraseVisible] = useState(false);
-  const [mnemonicPhrase, setMnemonicPhrase] = useState<string | null>(null);
-  const [phraseLoading, setPhraseLoading] = useState(false);
-  const [phraseError, setPhraseError] = useState<string | null>(null);
-
   useEffect(() => {
     let active = true;
     const load = async () => {
       if (!runtime) return;
-      const [{ data }, avatar] = await Promise.all([
-        runtime.auth.getLocalAuthState(),
-        readStoredAvatar(runtime),
-      ]);
+      const avatar = await readStoredAvatar(runtime);
       if (!active) return;
-      setDisplayName(data.displayName ?? "");
       setAvatarDataUrl(avatar);
     };
     void load();
@@ -112,30 +91,6 @@ export function AccountSection() {
     notifyProfileUpdated();
     setProfileBusy(false);
     setProfileMessage("Profile updated.");
-  };
-
-  const togglePhraseVisibility = async () => {
-    if (!runtime) return;
-    if (isPhraseVisible) {
-      setIsPhraseVisible(false);
-      return;
-    }
-    if (!mnemonicPhrase) {
-      setPhraseLoading(true);
-      setPhraseError(null);
-      const result = await runtime.auth.getStoredMnemonic();
-      setPhraseLoading(false);
-      if (result.error) {
-        setPhraseError(result.error.message);
-        return;
-      }
-      if (!result.data.phrase) {
-        setPhraseError("No key found in keychain for this profile.");
-        return;
-      }
-      setMnemonicPhrase(result.data.phrase);
-    }
-    setIsPhraseVisible(true);
   };
 
   return (
@@ -219,44 +174,6 @@ export function AccountSection() {
             </p>
           ) : null}
         </div>
-      </section>
-
-      <section className="rounded-lg border border-border bg-card p-6">
-        <h3 className="font-display text-lg text-foreground">Login key</h3>
-        <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-          Your key protects this vault. You&apos;ll need it to sign in if you lose access to your
-          devices. Keep it in a safe place.
-        </p>
-
-        <div className="mt-4 flex items-center gap-2 rounded-md border border-border bg-muted p-4">
-          <p
-            className={
-              isPhraseVisible
-                ? "min-w-0 flex-1 break-words font-mono text-sm text-foreground"
-                : "min-w-0 flex-1 break-words font-mono text-sm text-muted-foreground blur-sm"
-            }
-          >
-            {isPhraseVisible ? mnemonicPhrase ?? "" : maskedPhrase(mnemonicPhrase)}
-          </p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => void togglePhraseVisibility()}
-            disabled={phraseLoading}
-            aria-label={isPhraseVisible ? "Hide login key" : "Show login key"}
-          >
-            {isPhraseVisible ? <EyeOff /> : <Eye />}
-          </Button>
-        </div>
-        {phraseLoading ? (
-          <p className="mt-2 text-xs text-muted-foreground">Reading key from keychain…</p>
-        ) : null}
-        {phraseError ? (
-          <p className="mt-2 text-xs text-destructive" role="alert">
-            {phraseError}
-          </p>
-        ) : null}
       </section>
     </SettingsSectionShell>
   );

@@ -181,8 +181,9 @@ export function LinkView({ events, sources }: { events: CalendarEvent[]; sources
       let nextDisplayName: string | null = null;
       if (runtime) {
         try {
-          const { data } = await runtime.auth.getLocalAuthState();
-          nextDisplayName = data.displayName?.trim() || null;
+          const { data } = await runtime.auth.getSession();
+          const email = data.session?.user?.email ?? null;
+          nextDisplayName = email?.split("@")[0]?.trim() || null;
         } catch {
           // ignore profile read failures
         }

@@ -13,7 +13,6 @@ import type {
   AuthChangeEvent,
   AuthListener,
   IntegrationStatusItem,
-  LocalAuthState,
   ModuoRuntime,
   RuntimeCapabilities,
   RuntimeSession,
@@ -73,7 +72,6 @@ export const webCapabilities: RuntimeCapabilities = {
   hasEmail: false,
   hasTimeTracking: false,
   hasCalendarOAuth: false,
-  hasLocalMnemonic: false,
   hasOfflineMode: false,
 };
 
@@ -83,33 +81,6 @@ export const webRuntime: ModuoRuntime = {
   capabilities: webCapabilities,
 
   auth: {
-    async getLocalAuthState() {
-      const data: LocalAuthState = {
-        profileExists: false,
-        displayName: null,
-        userId: null,
-        hasPin: false,
-        hasKeychainMnemonic: false,
-      };
-      return { data, error: null };
-    },
-
-    async generateMnemonic() {
-      return { data: { words: [], phrase: "" }, error: desktopOnly() };
-    },
-
-    async registerLocalMnemonic() {
-      return { data: { user: null, session: null }, error: desktopOnly() };
-    },
-
-    async unlockWithMnemonic() {
-      return { data: { user: null, session: null }, error: desktopOnly() };
-    },
-
-    async forgotResetLocal() {
-      return { error: desktopOnly() };
-    },
-
     async tryAutoUnlock() {
       try {
         const { data, error } = await supabaseClient.auth.getSession();
@@ -118,18 +89,6 @@ export const webRuntime: ModuoRuntime = {
       } catch (error) {
         return { data: { session: null }, error: toError(error) };
       }
-    },
-
-    async setPin() {
-      return { error: desktopOnly() };
-    },
-
-    async unlockWithPin() {
-      return { data: { session: null }, error: desktopOnly() };
-    },
-
-    async removePin() {
-      return { error: desktopOnly() };
     },
 
     async updateDisplayName(displayName: string) {
@@ -147,10 +106,6 @@ export const webRuntime: ModuoRuntime = {
       } catch (error) {
         return { data: { displayName }, error: toError(error) };
       }
-    },
-
-    async getStoredMnemonic() {
-      return { data: { phrase: null }, error: desktopOnly() };
     },
 
     async getSession() {
@@ -196,32 +151,6 @@ export const webRuntime: ModuoRuntime = {
         return { error: null };
       } catch (error) {
         return { error: toError(error) };
-      }
-    },
-
-    async signUpWithEmail({ email, password, displayName }) {
-      try {
-        const { data, error } = await supabaseClient.auth.signUp({
-          email,
-          password,
-          options: { data: { display_name: displayName ?? "" } },
-        });
-        if (error) return { data: { user: null, session: null }, error: toError(error) };
-        const session = sessionFromSupabase(data.session);
-        return { data: { user: session?.user ?? data.user ? { id: data.user!.id, email: data.user!.email ?? null } : null, session }, error: null };
-      } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
-      }
-    },
-
-    async signInWithEmail({ email, password }) {
-      try {
-        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        if (error) return { data: { user: null, session: null }, error: toError(error) };
-        const session = sessionFromSupabase(data.session);
-        return { data: { user: session?.user ?? null, session }, error: null };
-      } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
       }
     },
 
