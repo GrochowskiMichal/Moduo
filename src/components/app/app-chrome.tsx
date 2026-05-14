@@ -88,16 +88,14 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [runtime]);
 
-  const isWebRuntime = !!runtime?.capabilities.isWeb;
   const modulesNavItems = useMemo(
     () =>
       baseModulesNavItems.filter((tab) => {
-        if (tab.desktopOnly && isWebRuntime) return false;
         if (tab.module === "notes") return modulePermissions.notes !== "none";
         if (tab.module === "tasks") return modulePermissions.tasks !== "none";
         return true;
       }),
-    [isWebRuntime, modulePermissions.notes, modulePermissions.tasks],
+    [modulePermissions.notes, modulePermissions.tasks],
   );
 
   useEffect(() => {
