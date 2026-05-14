@@ -18,7 +18,6 @@ import {
   type FeatureLayoutKey,
   type LayoutPanelsApplyDetail,
 } from "../../features/layout/panel-events";
-import { Pressable, Text, View } from "../../tw";
 import { Icon } from "../ui/icon";
 import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -26,6 +25,7 @@ import { WorkspaceSwitcher } from "../workspace-switcher";
 import { WorkspaceSettingsModal } from "../workspace-settings-modal";
 import { IntegrationsModal } from "../integrations-modal";
 import { UserMenu } from "../user-menu";
+import { NotificationCenter } from "../notification-center";
 import { baseModulesNavItems } from "./app-chrome-constants";
 import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
@@ -243,9 +243,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
   if (loading) {
     return (
-      <View className="flex-1 bg-background items-center justify-center">
-        <Text className="text-muted-foreground text-sm">Loading workspace...</Text>
-      </View>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <span className="text-sm text-muted-foreground">Loading workspace...</span>
+      </div>
     );
   }
 
@@ -264,71 +264,66 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   };
 
   return (
-    <View className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
+    <div className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
       <TrialBanner />
-      <View
-        className="relative px-5 bg-background flex flex-row items-center"
-        style={{ zIndex: "var(--z-header)", height: "var(--bar-h)" }}
+      <nav
+        aria-label="Workspace navigation"
+        className="relative grid w-full items-center bg-background px-5"
+        style={{
+          zIndex: "var(--z-header)",
+          height: "var(--bar-h)",
+          gridTemplateColumns: "1fr auto 1fr",
+        }}
       >
-        <View className="relative z-[1] flex w-full flex-row items-center justify-between gap-3">
-          <View className="flex flex-row items-center gap-1">
-            <ModuoMark className="h-8 w-8 shrink-0 text-foreground" />
-            <WorkspaceSwitcher onOpenSettings={() => setWorkspaceSettingsOpen(true)} />
-          </View>
+        <div className="flex flex-row items-center justify-start gap-1">
+          <ModuoMark className="h-8 w-8 shrink-0 text-foreground" />
+          <WorkspaceSwitcher onOpenSettings={() => setWorkspaceSettingsOpen(true)} />
+        </div>
 
-          <View
-            className="no-scrollbar min-w-0 flex-1 overflow-x-auto overflow-y-visible"
-            style={{
-              maskImage:
-                "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
-              WebkitMaskImage:
-                "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
-            }}
-          >
-            <View className="flex min-w-max flex-row items-center gap-2 pr-2">
-              {modulesNavItems.map((tab) => {
-                const active =
-                  pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
-                return (
-                  <Tooltip key={tab.href}>
-                    <TooltipTrigger
-                      data-slot="module-tab"
-                      data-active={active}
-                      className={`flex flex-row items-center gap-2 rounded-md px-3 py-2 ${active ? "bg-accent text-foreground" : "bg-transparent text-muted-foreground hover:bg-accent/60"}`}
-                      onClick={() => void navigate({ to: tab.href })}
-                      aria-label={tab.label}
-                    >
-                      <Icon name={tab.iconName} size={14} />
-                      <Text data-slot="module-tab-label" className="text-sm">
-                        {tab.label}
-                      </Text>
-                    </TooltipTrigger>
-                    <TooltipContent>{tab.label}</TooltipContent>
-                  </Tooltip>
-                );
-              })}
-            </View>
-          </View>
+        <div className="flex flex-row items-center justify-center gap-1">
+          {modulesNavItems.map((tab) => {
+            const active =
+              pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href));
+            return (
+              <Tooltip key={tab.href}>
+                <TooltipTrigger
+                  data-slot="module-tab"
+                  data-active={active}
+                  className={`flex h-8 flex-row items-center gap-2 rounded-md px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${active ? "bg-accent text-foreground" : "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+                  onClick={() => void navigate({ to: tab.href })}
+                  aria-label={tab.label}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <Icon name={tab.iconName} size={14} />
+                  <span data-slot="module-tab-label" className="text-sm">
+                    {tab.label}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{tab.label}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
 
-          <View className="flex flex-row items-center justify-end gap-2">
-            <UserMenu
-              avatarDataUrl={avatarDataUrl}
-              profileInitial={derivedInitial}
-              onOpenSettings={() => dispatchOpenSettings()}
-            />
-          </View>
-        </View>
-      </View>
+        <div className="flex flex-row items-center justify-end gap-2">
+          <NotificationCenter />
+          <UserMenu
+            avatarDataUrl={avatarDataUrl}
+            profileInitial={derivedInitial}
+            onOpenSettings={() => dispatchOpenSettings()}
+          />
+        </div>
+      </nav>
 
-      <View className="flex-1 min-h-0 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <Outlet />
-      </View>
+      </div>
 
-      <View
-        className="relative px-5 bg-background flex flex-row items-center"
+      <div
+        className="relative flex flex-row items-center bg-background px-5"
         style={{ height: "var(--bar-h)" }}
       >
-        <View className="flex flex-1 flex-row items-center justify-start">
+        <div className="flex flex-1 flex-row items-center justify-start">
           <Tooltip>
             <TooltipTrigger
               className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -341,9 +336,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               {currentPanels.left ? "Collapse left panel" : "Expand left panel"}
             </TooltipContent>
           </Tooltip>
-        </View>
+        </div>
         <GlobalBottomBar />
-        <View className="flex flex-1 flex-row items-center justify-end">
+        <div className="flex flex-1 flex-row items-center justify-end">
           {!isSettingsRoute ? (
             <Tooltip>
               <TooltipTrigger
@@ -358,8 +353,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               </TooltipContent>
             </Tooltip>
           ) : null}
-        </View>
-      </View>
+        </div>
+      </div>
       <GlobalCommandPalette />
       <SettingsModal />
       <WorkspaceSettingsModal
@@ -370,6 +365,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         visible={integrationsOpen}
         onClose={() => setIntegrationsOpen(false)}
       />
-    </View>
+    </div>
   );
 }

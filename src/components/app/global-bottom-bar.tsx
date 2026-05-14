@@ -1,7 +1,6 @@
 import { Plus, Search } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { NotificationCenter } from "../notification-center";
 
 import { dispatchOpenPalette } from "./global-command-palette";
 import { dispatchCreateNew } from "./create-events";
@@ -38,7 +37,6 @@ export function GlobalBottomBar() {
       role="toolbar"
       aria-label="Global actions"
     >
-      <NotificationCenter />
       <BarButton onClick={() => dispatchOpenPalette()} label="Search">
         <Search className="size-4" aria-hidden />
       </BarButton>
