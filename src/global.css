@@ -665,3 +665,20 @@ body,
   justify-content: center;
   gap: 0;
 }
+
+/* Chrome fade-in: used by elements that conditionally mount and should not
+   pop in (e.g. the workspace switcher trigger when the user creates their
+   second workspace). Opacity-only — never translate or scale, since the
+   parent grid relies on stable widths. */
+@keyframes chromeFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+[data-slot="chrome-fade-in"] {
+  animation: chromeFadeIn var(--motion-base) var(--ease-out) both;
+}

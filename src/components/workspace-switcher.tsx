@@ -140,6 +140,7 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger
+              data-slot="chrome-fade-in"
               className="flex h-8 flex-row items-center gap-1.5 rounded-md bg-transparent px-2 text-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               aria-label={`Switch workspace · current: ${workspaceLabel}`}
             >
