@@ -15,7 +15,13 @@ export type ShortcutId =
   | "new-item"
   | "settings"
   | "workspace-switcher"
-  | "notifications";
+  | "notifications"
+  | "module-1"
+  | "module-2"
+  | "module-3"
+  | "module-4"
+  | "module-5"
+  | "module-6";
 
 export type ShortcutEntry = {
   id: ShortcutId;
@@ -83,6 +89,25 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
       !event.altKey &&
       event.key === "/",
   },
+  // Module shortcuts ⌘1..⌘6 navigate to the Nth visible module tab in the
+  // top bar. On the dev:web build these collide with the browser's built-in
+  // tab-switching shortcuts (most browsers reserve Cmd/Ctrl+1..9 for tabs).
+  // moduo is Tauri-first, so we accept the collision and do NOT preventDefault
+  // at a level that would fight the browser. In Tauri there is no browser
+  // chrome to compete with.
+  ...(["1", "2", "3", "4", "5", "6"] as const).map(
+    (digit): ShortcutEntry => ({
+      id: `module-${digit}` as ShortcutId,
+      label: `Module ${digit}`,
+      mac: `⌘${digit}`,
+      other: `Ctrl ${digit}`,
+      match: (event, isMac) =>
+        (isMac ? event.metaKey : event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key === digit,
+    }),
+  ),
 ];
 
 const SHORTCUT_EVENT_PREFIX = "moduo:shortcut:";
