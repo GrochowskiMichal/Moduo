@@ -31,6 +31,19 @@ fn format_position(value: i64) -> String {
     format!("{value:0POSITION_PAD$}")
 }
 
+fn normalize_note_kind(kind: &str) -> String {
+    if kind == "note" {
+        "note".to_string()
+    } else {
+        "folder".to_string()
+    }
+}
+
+fn normalize_note_meta(mut note: NoteMeta) -> NoteMeta {
+    note.kind = normalize_note_kind(&note.kind);
+    note
+}
+
 fn generate_position(prev: Option<&str>, next: Option<&str>) -> String {
     let prev_value = parse_position(prev);
     let next_value = parse_position(next);
@@ -130,17 +143,18 @@ pub async fn notes_list(
     workspace_id: String,
 ) -> Result<Vec<NoteMeta>, String> {
     let _ = require_notes_permission(&state, &workspace_id, "view", "list")?;
-    state
+    let notes = state
         .store
         .list_notes(&workspace_id)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    Ok(notes.into_iter().map(normalize_note_meta).collect())
 }
 
 #[tauri::command]
 pub async fn notes_upsert(state: State<'_, AppState>, note: NoteMeta) -> Result<NoteMeta, String> {
     let _ = require_notes_permission(&state, &note.workspace_id, "edit", "upsert")?;
 
-    let mut normalized = note;
+    let mut normalized = normalize_note_meta(note);
     normalized.updated_at = now_iso();
 
     state
@@ -162,6 +176,7 @@ pub async fn notes_move(
         .get_note(&input.note_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Note not found".to_string())?;
+    note = normalize_note_meta(note);
     if note.workspace_id != input.workspace_id {
         return Err("Workspace mismatch".to_string());
     }
@@ -172,10 +187,6 @@ pub async fn notes_move(
         .is_some_and(|parent_id| parent_id == &note.id)
     {
         return Err("Cannot move note into itself".to_string());
-    }
-
-    if note.kind == "category" && input.new_parent_id.is_some() {
-        return Err("Sections can only exist at root".to_string());
     }
 
     if let Some(parent_id) = input.new_parent_id.as_ref() {
@@ -261,6 +272,7 @@ pub async fn notes_duplicate(
         .get_note(&input.source_note_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Note not found".to_string())?;
+    let source = normalize_note_meta(source);
     if source.workspace_id != input.workspace_id {
         return Err("Workspace mismatch".to_string());
     }

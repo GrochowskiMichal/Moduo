@@ -34,7 +34,6 @@ function useCloseRelations(selectedNote: NoteMeta | null, allNotes: NoteMeta[]):
       .filter(
         (note) =>
           note.id !== selectedNote.id &&
-          note.kind !== "category" &&
           !note.deletedAt &&
           !note.isArchived,
       )
@@ -157,7 +156,7 @@ export function NotesRightRail({
   onSelectNote,
   onUpdateTags,
 }: Props) {
-  const editorTarget = selectedNote && selectedNote.kind !== "category" ? selectedNote : null;
+  const editorTarget = selectedNote;
   const closeRelations = useCloseRelations(editorTarget, allNotes);
 
   if (!editorTarget) {

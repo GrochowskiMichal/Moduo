@@ -16,7 +16,6 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ChevronDown,
   ChevronRight,
-  Database,
   File as FileIcon,
   Folder,
   Pin,
@@ -36,11 +35,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuLabel,
   ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
 import { NotesRightRail } from "./notes-right-rail";
@@ -108,7 +103,6 @@ const NEST_THRESHOLD_PX = 12;
 function NoteKindIcon({ kind }: { kind: NoteKind }) {
   // text-current so the icon inherits the row colour and flips on hover / selection.
   const className = "size-3.5 shrink-0 text-current opacity-70";
-  if (kind === "category") return <Database className={className} aria-hidden="true" />;
   if (kind === "folder") return <Folder className={className} aria-hidden="true" />;
   return <FileIcon className={className} aria-hidden="true" />;
 }
@@ -243,69 +237,6 @@ function ShortcutRow({ note, isSelected, onSelect, menu }: ShortcutRowProps) {
   );
 }
 
-type CategorySectionHeaderProps = {
-  category: NoteMeta;
-  isExpanded: boolean;
-  onToggle: () => void;
-  menu: ReactNode;
-  dragHint?: "none" | "reorder" | "nest";
-};
-
-function CategorySectionHeader({
-  category,
-  isExpanded,
-  onToggle,
-  menu,
-  dragHint = "none",
-}: CategorySectionHeaderProps) {
-  const sortable = useSortable({ id: `note:${category.id}` });
-  const drop = useDroppable({ id: `inside:${category.id}` });
-  const style = {
-    transform: CSS.Transform.toString(sortable.transform),
-    transition: sortable.transition,
-    opacity: sortable.isDragging ? 0.5 : 1,
-  };
-
-  return (
-    <div
-      ref={(node) => {
-        sortable.setNodeRef(node);
-        drop.setNodeRef(node);
-      }}
-      style={style}
-      className={`relative rounded-md ${drop.isOver || dragHint === "nest" ? "bg-accent/60" : ""}`}
-    >
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <button
-            type="button"
-            className={SIDEBAR_SECTION_TITLE}
-            onClick={onToggle}
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              {isExpanded ? (
-                <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
-              ) : (
-                <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
-              )}
-              <Database className="size-3 shrink-0" aria-hidden="true" />
-              <span
-                ref={sortable.setActivatorNodeRef}
-                {...sortable.attributes}
-                {...sortable.listeners}
-                className="truncate"
-              >
-                {category.title || "Untitled Database"}
-              </span>
-            </span>
-          </button>
-        </ContextMenuTrigger>
-        {menu}
-      </ContextMenu>
-    </div>
-  );
-}
-
 export function NotesSplitView({
   notes,
   selectedNoteId,
@@ -321,11 +252,9 @@ export function NotesSplitView({
   syncEngine,
 }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [categoryExpanded, setCategoryExpanded] = useState<Record<string, boolean>>({});
   const [sectionsExpanded, setSectionsExpanded] = useState({
     pinned: true,
     notes: true,
-    customDb: true,
   });
   const [dragActiveId, setDragActiveId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -344,7 +273,7 @@ export function NotesSplitView({
       const detail = (event as CustomEvent<NotesCreateKindEventDetail>).detail;
       const kind = detail?.kind ?? "note";
       const createdId = await onCreateNote(null, kind);
-      if (createdId && kind !== "category") {
+      if (createdId) {
         prewarmNoteSession(createdId);
         onSelectNote(createdId);
       }
@@ -367,7 +296,6 @@ export function NotesSplitView({
   const byParent = useMemo(() => {
     const grouped = new Map<string | null, NoteMeta[]>();
     for (const note of listNotes) {
-      if (note.kind === "category") continue;
       const list = grouped.get(note.parentId) ?? [];
       list.push(note);
       grouped.set(note.parentId, list);
@@ -379,29 +307,17 @@ export function NotesSplitView({
     return grouped;
   }, [listNotes]);
 
-  const categorySections = useMemo(
-    () =>
-      listNotes
-        .filter((note) => note.kind === "category" && !note.parentId)
-        .sort(
-          (a, b) =>
-            a.position.localeCompare(b.position) ||
-            a.title.localeCompare(b.title)
-        ),
-    [listNotes]
-  );
-
   const pinnedNotes = useMemo(
     () =>
       listNotes
-        .filter((note) => note.isPinned && note.kind !== "category")
+        .filter((note) => note.isPinned)
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title)),
     [listNotes]
   );
 
   const notesById = useMemo(() => new Map(activeNotes.map((note) => [note.id, note])), [activeNotes]);
   const selectedNote = activeNotes.find((note) => note.id === selectedNoteId) ?? null;
-  const selectedEditorNote = selectedNote && selectedNote.kind !== "category" ? selectedNote : null;
+  const selectedEditorNote = selectedNote;
 
   const breadcrumbSegments = useMemo(() => {
     if (!selectedEditorNote) return ["Notes"];
@@ -455,7 +371,6 @@ export function NotesSplitView({
   };
 
   const canMoveUnderParent = (moving: NoteMeta, targetParentId: string | null): boolean => {
-    if (moving.kind === "category") return targetParentId === null;
     if (!targetParentId) return true;
     if (targetParentId === moving.id) return false;
     if (isDescendantOf(moving.id, targetParentId)) return false;
@@ -467,7 +382,6 @@ export function NotesSplitView({
   const expandParent = (parentId: string | null) => {
     if (!parentId) return;
     setExpanded((current) => ({ ...current, [parentId]: true }));
-    setCategoryExpanded((current) => ({ ...current, [parentId]: true }));
   };
 
   const resetDragState = () => {
@@ -490,13 +404,6 @@ export function NotesSplitView({
 
     if (overId === "inside:root" || overId.startsWith("inside:")) {
       const targetParentId = overId === "inside:root" ? null : overId.replace("inside:", "");
-      if (moving.kind === "category" && targetParentId) {
-        const target = notesById.get(targetParentId);
-        if (target?.kind === "category") {
-          await onMoveNote(movingNoteId, null, target.id);
-        }
-        return;
-      }
       if (!canMoveUnderParent(moving, targetParentId)) return;
       await onMoveNote(movingNoteId, targetParentId, null);
       expandParent(targetParentId);
@@ -520,25 +427,6 @@ export function NotesSplitView({
         if (index === -1) return null;
         return siblings[index + 1]?.id ?? null;
       };
-
-      // Dropping on a section row always attaches non-section entries to that section.
-      if (target.kind === "category" && moving.kind !== "category") {
-        if (!canMoveUnderParent(moving, target.id)) return;
-        await onMoveNote(movingNoteId, target.id, null);
-        expandParent(target.id);
-        return;
-      }
-
-      // Sections are root-only and reorder only against sections.
-      if (moving.kind === "category") {
-        if (target.kind !== "category") return;
-        const categorySiblings = categorySections.filter((entry) => entry.id !== moving.id);
-        const beforeId = dropAfter
-          ? getBeforeIdAfterTarget(categorySiblings, target.id)
-          : target.id;
-        await onMoveNote(movingNoteId, null, beforeId);
-        return;
-      }
 
       const nestIntent = (event.delta?.x ?? 0) > NEST_THRESHOLD_PX;
       if (nestIntent) {
@@ -567,8 +455,6 @@ export function NotesSplitView({
     const moving = listNotes.find((note) => note.id === movingId);
     const target = listNotes.find((note) => note.id === targetNoteId);
     if (!moving || !target) return "none";
-    if (moving.kind === "category") return target.kind === "category" ? "reorder" : "none";
-    if (target.kind === "category") return "nest";
     if (dragDeltaX > NEST_THRESHOLD_PX) return "nest";
     return "reorder";
   };
@@ -577,12 +463,8 @@ export function NotesSplitView({
     setExpanded((current) => ({ ...current, [noteId]: !current[noteId] }));
   };
 
-  const toggleSection = (section: "pinned" | "notes" | "customDb") => {
+  const toggleSection = (section: "pinned" | "notes") => {
     setSectionsExpanded((current) => ({ ...current, [section]: !current[section] }));
-  };
-
-  const toggleCategorySection = (categoryId: string) => {
-    setCategoryExpanded((current) => ({ ...current, [categoryId]: !(current[categoryId] ?? true) }));
   };
 
   const preloadExposeStatus = (noteId: string) => {
@@ -677,90 +559,45 @@ export function NotesSplitView({
     if (!created) return;
     if (parentId) {
       setExpanded((current) => ({ ...current, [parentId]: true }));
-      setCategoryExpanded((current) => ({ ...current, [parentId]: true }));
     }
-    if (kind !== "category") {
-      await selectNoteWithPrewarm(created);
-    }
-  };
-
-  const renderMoveSubmenu = (note: NoteMeta) => {
-    if (note.kind === "category") return null;
-    const targets = categorySections.filter((cat) => cat.id !== note.id);
-    return (
-      <ContextMenuSub>
-        <ContextMenuSubTrigger>Move</ContextMenuSubTrigger>
-        <ContextMenuSubContent>
-          <ContextMenuLabel>Move to</ContextMenuLabel>
-          <ContextMenuItem
-            disabled={!note.parentId}
-            onSelect={() => void onMoveNote(note.id, null, null)}
-          >
-            Top level
-          </ContextMenuItem>
-          {targets.length > 0 ? <ContextMenuSeparator /> : null}
-          {targets.map((target) => (
-            <ContextMenuItem
-              key={target.id}
-              disabled={target.id === note.parentId}
-              onSelect={() => {
-                void onMoveNote(note.id, target.id, null);
-                setCategoryExpanded((current) => ({ ...current, [target.id]: true }));
-              }}
-            >
-              {target.title || "Untitled Database"}
-            </ContextMenuItem>
-          ))}
-          {targets.length === 0 ? (
-            <ContextMenuItem disabled>No databases available</ContextMenuItem>
-          ) : null}
-        </ContextMenuSubContent>
-      </ContextMenuSub>
-    );
+    await selectNoteWithPrewarm(created);
   };
 
   const renderNoteMenu = (note: NoteMeta): ReactNode => {
-    const isSection = note.kind === "category";
     const isExposed = !!exposedSlugs[note.id];
     return (
       <ContextMenuContent
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
         <MenuOpenEffect onMount={() => preloadExposeStatus(note.id)} />
-        {!isSection ? (
-          <ContextMenuItem
-            disabled={readOnly}
-            onSelect={() => void onTogglePin(note.id, !note.isPinned)}
-          >
-            {note.isPinned ? "Unpin" : "Pin"}
-          </ContextMenuItem>
-        ) : null}
+        <ContextMenuItem
+          disabled={readOnly}
+          onSelect={() => void onTogglePin(note.id, !note.isPinned)}
+        >
+          {note.isPinned ? "Unpin" : "Pin"}
+        </ContextMenuItem>
         <ContextMenuItem onSelect={() => handleCopyLink(note.id)}>
           Copy Link
         </ContextMenuItem>
-        {!isSection ? (
-          <ContextMenuItem
-            disabled={readOnly}
-            onSelect={() => {
-              void (async () => {
-                const created = await onDuplicateNote(note.id);
-                if (created) await selectNoteWithPrewarm(created);
-              })();
-            }}
-          >
-            Duplicate
-          </ContextMenuItem>
-        ) : null}
+        <ContextMenuItem
+          disabled={readOnly}
+          onSelect={() => {
+            void (async () => {
+              const created = await onDuplicateNote(note.id);
+              if (created) await selectNoteWithPrewarm(created);
+            })();
+          }}
+        >
+          Duplicate
+        </ContextMenuItem>
         <ContextMenuItem
           disabled={readOnly}
           onSelect={() => handleRenameNote(note)}
         >
           Rename
         </ContextMenuItem>
-        {!isSection ? renderMoveSubmenu(note) : null}
-        {isSection ? (
+        {note.kind === "folder" ? (
           <>
-            <ContextMenuSeparator />
             <ContextMenuItem
               disabled={readOnly}
               onSelect={() => void handleAddNote(note.id, "note")}
@@ -775,7 +612,7 @@ export function NotesSplitView({
             </ContextMenuItem>
           </>
         ) : null}
-        {!isSection && note.kind === "note" ? (
+        {note.kind === "note" ? (
           <ContextMenuItem
             disabled={readOnly || exposeLoading || !syncEngine}
             onSelect={() => {
@@ -800,12 +637,6 @@ export function NotesSplitView({
 
   const sidebarMenuContent: ReactNode = (
     <ContextMenuContent>
-      <ContextMenuItem
-        disabled={readOnly}
-        onSelect={() => void handleAddNote(null, "category")}
-      >
-        New Database
-      </ContextMenuItem>
       <ContextMenuItem
         disabled={readOnly}
         onSelect={() => void handleAddNote(null, "folder")}
@@ -918,56 +749,6 @@ export function NotesSplitView({
               void handleDragEnd(event).finally(resetDragState);
             }}
           >
-            <section className="flex flex-col gap-1">
-              <button
-                type="button"
-                className={SIDEBAR_SECTION_TITLE}
-                onClick={() => toggleSection("customDb")}
-              >
-                <span className="flex items-center gap-2">
-                  {sectionsExpanded.customDb ? (
-                    <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
-                  ) : (
-                    <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
-                  )}
-                  <Database className="size-3 shrink-0" aria-hidden="true" />
-                  <span className="truncate">Custom DB</span>
-                </span>
-              </button>
-              {sectionsExpanded.customDb ? (
-                <SortableContext
-                  items={categorySections.map((entry) => `note:${entry.id}`)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {categorySections.length > 0 ? (
-                    <div className="flex flex-col gap-1">
-                      {categorySections.map((category) => {
-                        const isOpen = categoryExpanded[category.id] ?? true;
-                        return (
-                          <div key={category.id} className="flex flex-col gap-px">
-                            <CategorySectionHeader
-                              category={category}
-                              isExpanded={isOpen}
-                              onToggle={() => toggleCategorySection(category.id)}
-                              menu={renderNoteMenu(category)}
-                              dragHint={resolveDragHint(category.id)}
-                            />
-                            {isOpen ? (
-                              <div className="flex flex-col gap-px">
-                                {renderBranch(category.id, 1)}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">No databases yet</p>
-                  )}
-                </SortableContext>
-              ) : null}
-            </section>
-
             <section className="flex flex-col gap-1">
               <button
                 type="button"

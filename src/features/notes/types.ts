@@ -1,4 +1,4 @@
-export type NoteKind = "category" | "folder" | "note";
+export type NoteKind = "folder" | "note";
 
 export type NoteMeta = {
   id: string;
