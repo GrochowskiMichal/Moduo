@@ -133,6 +133,13 @@ export type ModuoRuntime = {
     list(workspaceId: string): Promise<any[]>;
     upsert(note: any): Promise<any>;
     duplicate(input: { workspaceId: string; sourceNoteId: string }): Promise<any>;
+    updateSharing(input: {
+      workspaceId: string;
+      noteId: string;
+      shareScope: "private" | "workspace" | "selected";
+      sharePermission: "view" | "edit";
+      selectedUsers: Array<{ userId: string; permission: "view" | "edit" }>;
+    }): Promise<any>;
     move(input: {
       workspaceId: string;
       noteId: string;

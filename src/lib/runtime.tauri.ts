@@ -305,6 +305,17 @@ export const tauriRuntime: ModuoRuntime = {
     list(workspaceId) { return invoke<any[]>("notes_list", { workspaceId }); },
     upsert(note) { return invoke<any>("notes_upsert", { note }); },
     duplicate(input) { return invoke<any>("notes_duplicate", { input }); },
+    async updateSharing(input) {
+      const notes = await tauriRuntime.notes.list(input.workspaceId);
+      const note = notes.find((entry: any) => entry.id === input.noteId);
+      if (!note) throw new Error("Note not found");
+      return tauriRuntime.notes.upsert({
+        ...note,
+        shareScope: input.shareScope,
+        sharePermission: input.sharePermission,
+        shares: input.shareScope === "selected" ? input.selectedUsers : [],
+      });
+    },
     move(input) { return invoke<any>("notes_move", { input }); },
     remove(input) { return invoke<any>("notes_delete", { input }); },
     getDocState(workspaceId, noteId) { return invoke<any>("notes_get_doc_state", { workspaceId, noteId }); },

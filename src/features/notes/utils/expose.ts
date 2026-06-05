@@ -510,6 +510,23 @@ export async function getExposedSlug(noteId: string): Promise<string | null> {
     }
 }
 
+export async function listExposedSlugs(workspaceId: string): Promise<Record<string, string>> {
+    try {
+        const res = await supabaseFetch(
+            `exposed_notes?workspace_id=eq.${encodeURIComponent(workspaceId)}&select=note_id,slug`,
+            { method: "GET" }
+        );
+        if (res.error || !Array.isArray(res.data)) return {};
+        const out: Record<string, string> = {};
+        for (const row of res.data as Array<{ note_id?: string; slug?: string }>) {
+            if (row.note_id && row.slug) out[row.note_id] = row.slug;
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
 /**
  * Remove the public exposure for a note.
  */

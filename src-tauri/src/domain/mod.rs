@@ -69,6 +69,21 @@ pub struct WorkspaceNotification {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NoteShareTarget {
+    pub user_id: String,
+    pub permission: String,
+}
+
+fn default_note_share_scope() -> String {
+    "private".to_string()
+}
+
+fn default_note_share_permission() -> String {
+    "view".to_string()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NoteMeta {
     pub id: String,
     pub workspace_id: String,
@@ -81,6 +96,14 @@ pub struct NoteMeta {
     pub is_pinned: bool,
     pub position: String,
     pub is_archived: bool,
+    #[serde(default = "default_note_share_scope")]
+    pub share_scope: String,
+    #[serde(default = "default_note_share_permission")]
+    pub share_permission: String,
+    #[serde(default)]
+    pub shares: Vec<NoteShareTarget>,
+    #[serde(default = "default_note_share_permission")]
+    pub effective_permission: String,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,

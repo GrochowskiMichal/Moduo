@@ -1,4 +1,11 @@
 export type NoteKind = "note" | "section";
+export type NoteShareScope = "private" | "workspace" | "selected";
+export type NoteSharePermission = "view" | "edit";
+
+export type NoteShareTarget = {
+  userId: string;
+  permission: NoteSharePermission;
+};
 
 export type NoteMeta = {
   id: string;
@@ -12,6 +19,10 @@ export type NoteMeta = {
   isPinned: boolean;
   position: string;
   isArchived: boolean;
+  shareScope: NoteShareScope;
+  sharePermission: NoteSharePermission;
+  shares: NoteShareTarget[];
+  effectivePermission: NoteSharePermission;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

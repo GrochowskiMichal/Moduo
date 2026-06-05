@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModuoRuntime } from "../../../lib/runtime";
 import { NotesSyncEngine } from "../sync/sync-engine";
-import type { NoteKind, NoteMeta } from "../types";
+import type { NoteKind, NoteMeta, NoteSharePermission, NoteShareScope, NoteShareTarget } from "../types";
 import { generatePosition, initialPosition } from "../utils/position";
 
 function safeId(): string {
@@ -24,11 +24,45 @@ function normalizeKind(kind: unknown): NoteKind {
   return kind === "note" ? "note" : "section";
 }
 
-function normalizeNote(note: any): NoteMeta {
+function normalizeShareScope(value: unknown): NoteShareScope {
+  return value === "workspace" || value === "selected" ? value : "private";
+}
+
+function normalizeSharePermission(value: unknown): NoteSharePermission {
+  return value === "edit" ? "edit" : "view";
+}
+
+function normalizeShares(raw: unknown): NoteShareTarget[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((share) => {
+      const userId = String(share?.userId ?? share?.user_id ?? "").trim();
+      if (!userId) return null;
+      return {
+        userId,
+        permission: normalizeSharePermission(share?.permission),
+      };
+    })
+    .filter((share): share is NoteShareTarget => !!share);
+}
+
+function normalizeNote(note: any, userId?: string | null): NoteMeta {
+  const ownerId = note.ownerId ?? note.owner_id ?? note.created_by;
+  const shareScope = normalizeShareScope(note.shareScope ?? note.share_scope);
+  const sharePermission = normalizeSharePermission(note.sharePermission ?? note.share_permission);
+  const shares = normalizeShares(note.shares ?? note.note_shares);
+  const userShare = userId ? shares.find((share) => share.userId === userId) : null;
+  const effectivePermission: NoteSharePermission =
+    userId && ownerId === userId
+      ? "edit"
+      : shareScope === "workspace"
+        ? sharePermission
+        : userShare?.permission ?? "view";
+
   return {
     id: note.id,
     workspaceId: note.workspaceId ?? note.workspace_id,
-    ownerId: note.ownerId ?? note.owner_id,
+    ownerId,
     parentId: note.parentId ?? note.parent_id ?? null,
     title: note.title ?? "Untitled",
     icon: note.icon ?? null,
@@ -37,6 +71,10 @@ function normalizeNote(note: any): NoteMeta {
     isPinned: !!(note.isPinned ?? note.is_pinned),
     position: note.position ?? initialPosition(),
     isArchived: !!(note.isArchived ?? note.is_archived),
+    shareScope,
+    sharePermission,
+    shares,
+    effectivePermission,
     createdAt: note.createdAt ?? note.created_at ?? nowIso(),
     updatedAt: note.updatedAt ?? note.updated_at ?? nowIso(),
     deletedAt: note.deletedAt ?? note.deleted_at ?? null,
@@ -84,10 +122,10 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   const loadNotes = useCallback(async () => {
     if (!runtime || !workspaceId) return;
     const rows = await runtime.notes.list(workspaceId);
-    const mapped = rows.map(normalizeNote).sort(sortNotes);
+    const mapped = rows.map((row) => normalizeNote(row, userId)).sort(sortNotes);
     setNotes(mapped);
     ensureSelectedNote(mapped);
-  }, [ensureSelectedNote, runtime, workspaceId]);
+  }, [ensureSelectedNote, runtime, userId, workspaceId]);
 
   const updateNotesState = useCallback(
     (updater: (current: NoteMeta[]) => NoteMeta[]) => {
@@ -186,6 +224,10 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
       kind,
       tags: [],
       isPinned: false,
+      shareScope: "private",
+      sharePermission: "view",
+      shares: [],
+      effectivePermission: "edit",
       position,
       isArchived: false,
       createdAt: nowIso(),
@@ -194,7 +236,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
     };
 
     try {
-      const saved = normalizeNote(await runtime.notes.upsert(note));
+      const saved = normalizeNote(await runtime.notes.upsert(note), userId);
       upsertNoteInState(saved);
       if (saved.kind === "note") setSelectedNoteId(saved.id);
       return saved.id;
@@ -208,12 +250,12 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   const updateNoteTitle = useCallback(async (noteId: string, title: string) => {
     if (!runtime || !workspaceId || !canEdit) return;
     const current = notes.find((note) => note.id === noteId);
-    if (!current) return;
+    if (!current || current.effectivePermission !== "edit") return;
 
     const optimistic: NoteMeta = { ...current, title, updatedAt: nowIso() };
     upsertNoteInState(optimistic);
     try {
-      const saved = normalizeNote(await runtime.notes.upsert(optimistic));
+      const saved = normalizeNote(await runtime.notes.upsert(optimistic), userId);
       upsertNoteInState(saved);
     } catch {
       upsertNoteInState(current);
@@ -257,7 +299,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   const moveNote = useCallback(async (noteId: string, newParentId: string | null, beforeId: string | null = null) => {
     if (!runtime || !workspaceId || !canEdit) return;
     const current = notes.find((note) => note.id === noteId);
-    if (!current) return;
+    if (!current || current.effectivePermission !== "edit") return;
     if (current.kind === "section" && newParentId) return;
     if (newParentId === noteId) return;
 
@@ -295,7 +337,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
         noteId,
         newParentId,
         newPosition: position,
-      }));
+      }), userId);
       upsertNoteInState(saved);
     } catch {
       upsertNoteInState(current);
@@ -306,12 +348,12 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   const archiveNote = useCallback(async (noteId: string, isArchived: boolean) => {
     if (!runtime || !workspaceId || !canEdit) return;
     const current = notes.find((note) => note.id === noteId);
-    if (!current) return;
+    if (!current || current.effectivePermission !== "edit") return;
 
     const optimistic: NoteMeta = { ...current, isArchived, updatedAt: nowIso() };
     upsertNoteInState(optimistic);
     try {
-      const saved = normalizeNote(await runtime.notes.upsert(optimistic));
+      const saved = normalizeNote(await runtime.notes.upsert(optimistic), userId);
       upsertNoteInState(saved);
     } catch {
       upsertNoteInState(current);
@@ -322,7 +364,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   const updateNoteTags = useCallback(async (noteId: string, tags: string[]) => {
     if (!runtime || !workspaceId || !canEdit) return;
     const current = notes.find((note) => note.id === noteId);
-    if (!current) return;
+    if (!current || current.effectivePermission !== "edit") return;
 
     const cleanTags = [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))];
     const optimistic: NoteMeta = {
@@ -332,7 +374,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
     };
     upsertNoteInState(optimistic);
     try {
-      const saved = normalizeNote(await runtime.notes.upsert(optimistic));
+      const saved = normalizeNote(await runtime.notes.upsert(optimistic), userId);
       upsertNoteInState(saved);
     } catch {
       upsertNoteInState(current);
@@ -343,7 +385,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   const togglePin = useCallback(async (noteId: string, isPinned: boolean) => {
     if (!runtime || !workspaceId) return;
     const current = notes.find((note) => note.id === noteId);
-    if (!current) return;
+    if (!current || current.effectivePermission !== "edit") return;
 
     const optimistic: NoteMeta = {
       ...current,
@@ -352,7 +394,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
     };
     upsertNoteInState(optimistic);
     try {
-      const saved = normalizeNote(await runtime.notes.upsert(optimistic));
+      const saved = normalizeNote(await runtime.notes.upsert(optimistic), userId);
       upsertNoteInState(saved);
     } catch {
       upsertNoteInState(current);
@@ -364,7 +406,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
     if (!runtime || !workspaceId || !canEdit) return;
     const deletedAt = nowIso();
     const current = notes.find((note) => note.id === noteId);
-    if (!current) return;
+    if (!current || current.effectivePermission !== "edit") return;
     const optimistic: NoteMeta = {
       ...current,
       deletedAt,
@@ -379,7 +421,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
         deletedAt,
       });
       if (removed?.id) {
-        upsertNoteInState(normalizeNote(removed));
+        upsertNoteInState(normalizeNote(removed, userId));
       }
     } catch {
       upsertNoteInState(current);
@@ -390,13 +432,13 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   const duplicateNote = useCallback(async (noteId: string) => {
     if (!runtime || !workspaceId || !canEdit) return null;
     const source = notes.find((note) => note.id === noteId && !note.deletedAt);
-    if (!source) return null;
+    if (!source || source.effectivePermission !== "edit") return null;
 
     try {
       const saved = normalizeNote(await runtime.notes.duplicate({
         workspaceId,
         sourceNoteId: source.id,
-      }));
+      }), userId);
       upsertNoteInState(saved);
       if (saved.kind === "note") setSelectedNoteId(saved.id);
       return saved.id;
@@ -405,6 +447,39 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
       return null;
     }
   }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
+
+  const updateNoteSharing = useCallback(async (
+    noteId: string,
+    shareScope: NoteShareScope,
+    sharePermission: NoteSharePermission,
+    selectedUsers: NoteShareTarget[]
+  ) => {
+    if (!runtime || !workspaceId || !canEdit) return;
+    const current = notes.find((note) => note.id === noteId);
+    if (!current || current.ownerId !== userId) return;
+
+    const optimistic: NoteMeta = {
+      ...current,
+      shareScope,
+      sharePermission,
+      shares: shareScope === "selected" ? selectedUsers : [],
+      updatedAt: nowIso(),
+    };
+    upsertNoteInState(optimistic);
+    try {
+      const saved = normalizeNote(await runtime.notes.updateSharing({
+        workspaceId,
+        noteId,
+        shareScope,
+        sharePermission,
+        selectedUsers,
+      }), userId);
+      upsertNoteInState(saved);
+    } catch {
+      upsertNoteInState(current);
+      await loadNotes();
+    }
+  }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, userId, workspaceId]);
 
   return {
     notes,
@@ -420,6 +495,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
     deleteNote,
     duplicateNote,
     togglePin,
+    updateNoteSharing,
     syncEngine,
   };
 }

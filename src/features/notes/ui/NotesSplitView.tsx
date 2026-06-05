@@ -20,15 +20,16 @@ import {
   MoreHorizontal,
   Pin,
   Plus,
+  Share2,
 } from "lucide-react";
-import type { NoteKind, NoteMeta } from "../types";
+import type { NoteKind, NoteMeta, NoteSharePermission, NoteShareScope, NoteShareTarget } from "../types";
 import type { NotesSyncEngine } from "../sync/sync-engine";
 import { LexicalNoteEditor } from "../editor/LexicalNoteEditor";
 import {
   NOTES_CREATE_KIND_EVENT,
   type NotesCreateKindEventDetail,
 } from "./layout-events";
-import { exposeNote, unexposeNote, getExposedSlug, buildSlug } from "../utils/expose";
+import { exposeNote, unexposeNote, getExposedSlug, listExposedSlugs, buildSlug } from "../utils/expose";
 import { encodeUint8ToBase64 } from "../utils/base64";
 import * as Y from "yjs";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
@@ -47,6 +48,14 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/dialog";
+import { Button } from "../../../components/ui/button";
 import { NotesRightRail } from "./notes-right-rail";
 
 /**
@@ -94,6 +103,7 @@ async function openExternalUrl(url: string): Promise<void> {
 
 type Props = {
   notes: NoteMeta[];
+  workspaceId: string;
   selectedNoteId: string | null;
   onSelectNote: (id: string) => void;
   onCreateNote: (parentId?: string | null, kind?: NoteKind) => Promise<string | null>;
@@ -103,6 +113,14 @@ type Props = {
   onDeleteNote: (noteId: string) => Promise<void>;
   onDuplicateNote: (noteId: string) => Promise<string | null>;
   onTogglePin: (noteId: string, isPinned: boolean) => Promise<void>;
+  onUpdateSharing: (
+    noteId: string,
+    shareScope: NoteShareScope,
+    sharePermission: NoteSharePermission,
+    selectedUsers: NoteShareTarget[]
+  ) => Promise<void>;
+  workspaceMembers: any[];
+  currentUserId: string | null;
   readOnly?: boolean;
   syncEngine: NotesSyncEngine | null;
 };
@@ -456,6 +474,7 @@ function SectionHeader({
 
 export function NotesSplitView({
   notes,
+  workspaceId,
   selectedNoteId,
   onSelectNote,
   onCreateNote,
@@ -465,13 +484,18 @@ export function NotesSplitView({
   onDeleteNote,
   onDuplicateNote,
   onTogglePin,
+  onUpdateSharing,
+  workspaceMembers,
+  currentUserId,
   readOnly = false,
   syncEngine,
 }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [sectionsExpanded, setSectionsExpanded] = useState({
     pinned: true,
-    notes: true,
+    published: true,
+    shared: true,
+    private: true,
   });
   const [dragActiveId, setDragActiveId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -479,6 +503,11 @@ export function NotesSplitView({
   // Expose feature
   const [exposedSlugs, setExposedSlugs] = useState<Record<string, string | null>>({});
   const [exposeLoading, setExposeLoading] = useState(false);
+  const [sharingNote, setSharingNote] = useState<NoteMeta | null>(null);
+  const [shareScopeDraft, setShareScopeDraft] = useState<NoteShareScope>("private");
+  const [sharePermissionDraft, setSharePermissionDraft] = useState<NoteSharePermission>("view");
+  const [shareUsersDraft, setShareUsersDraft] = useState<NoteShareTarget[]>([]);
+  const [shareSaving, setShareSaving] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const rootDrop = useDroppable({ id: "inside:root" });
 
@@ -507,6 +536,18 @@ export function NotesSplitView({
     () => notes.filter((note) => !note.deletedAt && !note.isArchived),
     [notes]
   );
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    let active = true;
+    void listExposedSlugs(workspaceId).then((slugs) => {
+      if (!active) return;
+      setExposedSlugs((current) => ({ ...slugs, ...current }));
+    });
+    return () => {
+      active = false;
+    };
+  }, [workspaceId]);
 
   const listNotes = useMemo(() => activeNotes, [activeNotes]);
 
@@ -541,12 +582,47 @@ export function NotesSplitView({
     [listNotes]
   );
 
+  const publishedNotes = useMemo(
+    () =>
+      listNotes
+        .filter((note) => note.kind === "note" && !!exposedSlugs[note.id])
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title)),
+    [exposedSlugs, listNotes]
+  );
+
+  const sharedNotes = useMemo(
+    () =>
+      listNotes
+        .filter((note) => note.kind === "note" && note.shareScope !== "private")
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title)),
+    [listNotes]
+  );
+
+  const teamMembers = useMemo(
+    () =>
+      workspaceMembers
+        .map((member) => ({
+          id: String(member.user_id ?? member.userId ?? ""),
+          name: String(member.profiles?.display_name ?? member.displayName ?? member.user_id ?? member.userId ?? "Teammate"),
+          role: String(member.role ?? "member"),
+        }))
+        .filter((member) => member.id && member.id !== currentUserId),
+    [currentUserId, workspaceMembers]
+  );
+
+  const isTeamWorkspace = teamMembers.length > 0;
+
   const notesById = useMemo(() => new Map(activeNotes.map((note) => [note.id, note])), [activeNotes]);
   const selectedNote = activeNotes.find((note) => note.id === selectedNoteId) ?? null;
   const selectedEditorNote = selectedNote?.kind === "note" ? selectedNote : null;
+  const selectedReadOnly = readOnly || selectedEditorNote?.effectivePermission !== "edit";
+
+  const noteReadOnly = (note: NoteMeta): boolean => readOnly || note.effectivePermission !== "edit";
+  const canManageSharing = (note: NoteMeta): boolean =>
+    !readOnly && isTeamWorkspace && note.kind === "note" && note.ownerId === currentUserId;
 
   const breadcrumbSegments = useMemo(() => {
-    if (!selectedEditorNote) return ["Notes"];
+    if (!selectedEditorNote) return ["Private"];
     const chain: string[] = [];
     const visited = new Set<string>([selectedEditorNote.id]);
     let parentId = selectedEditorNote.parentId;
@@ -716,7 +792,7 @@ export function NotesSplitView({
     setExpanded((current) => ({ ...current, [noteId]: !current[noteId] }));
   };
 
-  const toggleSection = (section: "pinned" | "notes") => {
+  const toggleSection = (section: "pinned" | "published" | "shared" | "private") => {
     setSectionsExpanded((current) => ({ ...current, [section]: !current[section] }));
   };
 
@@ -816,8 +892,50 @@ export function NotesSplitView({
     if (kind === "note") await selectNoteWithPrewarm(created);
   };
 
+  const openShareDialog = (note: NoteMeta) => {
+    setSharingNote(note);
+    setShareScopeDraft(note.shareScope);
+    setSharePermissionDraft(note.sharePermission);
+    setShareUsersDraft(note.shares);
+  };
+
+  const toggleShareUser = (userId: string) => {
+    setShareUsersDraft((current) => {
+      if (current.some((share) => share.userId === userId)) {
+        return current.filter((share) => share.userId !== userId);
+      }
+      return [...current, { userId, permission: sharePermissionDraft }];
+    });
+  };
+
+  const setShareUserPermission = (userId: string, permission: NoteSharePermission) => {
+    setShareUsersDraft((current) =>
+      current.map((share) => (share.userId === userId ? { ...share, permission } : share))
+    );
+  };
+
+  const saveShareDialog = async () => {
+    if (!sharingNote || shareSaving) return;
+    setShareSaving(true);
+    try {
+      const selectedUsers =
+        shareScopeDraft === "selected"
+          ? shareUsersDraft.map((share) => ({ ...share, permission: share.permission ?? sharePermissionDraft }))
+          : [];
+      await onUpdateSharing(sharingNote.id, shareScopeDraft, sharePermissionDraft, selectedUsers);
+      setSharingNote(null);
+      toast.success(shareScopeDraft === "private" ? "Note is private" : "Sharing updated");
+    } catch {
+      toast.error("Failed to update sharing");
+    } finally {
+      setShareSaving(false);
+    }
+  };
+
   const renderNoteMenu = (note: NoteMeta): ReactNode => {
     const isExposed = !!exposedSlugs[note.id];
+    const isReadOnly = noteReadOnly(note);
+    const canShare = canManageSharing(note);
     return (
       <ContextMenuContent
         onCloseAutoFocus={(event) => event.preventDefault()}
@@ -825,7 +943,7 @@ export function NotesSplitView({
         <MenuOpenEffect onMount={() => preloadExposeStatus(note.id)} />
         {note.kind === "note" ? (
           <ContextMenuItem
-            disabled={readOnly}
+            disabled={isReadOnly}
             onSelect={() => void onTogglePin(note.id, !note.isPinned)}
           >
             {note.isPinned ? "Unpin" : "Pin"}
@@ -835,7 +953,7 @@ export function NotesSplitView({
           Copy Link
         </ContextMenuItem>
         <ContextMenuItem
-          disabled={readOnly}
+          disabled={isReadOnly}
           onSelect={() => {
               void (async () => {
                 const created = await onDuplicateNote(note.id);
@@ -846,7 +964,7 @@ export function NotesSplitView({
           Duplicate
         </ContextMenuItem>
         <ContextMenuItem
-          disabled={readOnly}
+          disabled={isReadOnly}
           onSelect={() => handleRenameNote(note)}
         >
           Rename
@@ -863,7 +981,7 @@ export function NotesSplitView({
         ) : null}
         {note.kind === "note" ? (
           <ContextMenuItem
-            disabled={readOnly || exposeLoading || !syncEngine}
+            disabled={isReadOnly || exposeLoading || !syncEngine}
             onSelect={() => {
               if (isExposed) void handleUnexposeNote(note.id);
               else void handleExposeNote(note);
@@ -872,10 +990,18 @@ export function NotesSplitView({
             {isExposed ? (exposeLoading ? "Unpublishing…" : "Unpublish") : exposeLoading ? "Publishing…" : "Publish"}
           </ContextMenuItem>
         ) : null}
+        {note.kind === "note" && isTeamWorkspace ? (
+          <ContextMenuItem
+            disabled={!canShare}
+            onSelect={() => openShareDialog(note)}
+          >
+            Share
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuSeparator />
         <ContextMenuItem
           variant="destructive"
-          disabled={readOnly}
+          disabled={readOnly || note.ownerId !== currentUserId}
           onSelect={() => void onDeleteNote(note.id)}
         >
           Move to Trash
@@ -886,6 +1012,8 @@ export function NotesSplitView({
 
   const renderNoteDropdownMenu = (note: NoteMeta): ReactNode => {
     const isExposed = !!exposedSlugs[note.id];
+    const isReadOnly = noteReadOnly(note);
+    const canShare = canManageSharing(note);
     return (
       <DropdownMenuContent
         align="end"
@@ -894,7 +1022,7 @@ export function NotesSplitView({
         <MenuOpenEffect onMount={() => preloadExposeStatus(note.id)} />
         {note.kind === "note" ? (
           <DropdownMenuItem
-            disabled={readOnly}
+            disabled={isReadOnly}
             onSelect={() => void onTogglePin(note.id, !note.isPinned)}
           >
             {note.isPinned ? "Unpin" : "Pin"}
@@ -904,7 +1032,7 @@ export function NotesSplitView({
           Copy Link
         </DropdownMenuItem>
         <DropdownMenuItem
-          disabled={readOnly}
+          disabled={isReadOnly}
           onSelect={() => {
               void (async () => {
                 const created = await onDuplicateNote(note.id);
@@ -915,7 +1043,7 @@ export function NotesSplitView({
           Duplicate
         </DropdownMenuItem>
         <DropdownMenuItem
-          disabled={readOnly}
+          disabled={isReadOnly}
           onSelect={() => handleRenameNote(note)}
         >
           Rename
@@ -923,7 +1051,7 @@ export function NotesSplitView({
         {note.kind === "section" ? (
           <>
             <DropdownMenuItem
-              disabled={readOnly}
+              disabled={isReadOnly}
               onSelect={() => void handleAddNote(note.id, "note")}
             >
               Add Note
@@ -932,7 +1060,7 @@ export function NotesSplitView({
         ) : null}
         {note.kind === "note" ? (
           <DropdownMenuItem
-            disabled={readOnly || exposeLoading || !syncEngine}
+            disabled={isReadOnly || exposeLoading || !syncEngine}
             onSelect={() => {
               if (isExposed) void handleUnexposeNote(note.id);
               else void handleExposeNote(note);
@@ -941,10 +1069,18 @@ export function NotesSplitView({
             {isExposed ? (exposeLoading ? "Unpublishing…" : "Unpublish") : exposeLoading ? "Publishing…" : "Publish"}
           </DropdownMenuItem>
         ) : null}
+        {note.kind === "note" && isTeamWorkspace ? (
+          <DropdownMenuItem
+            disabled={!canShare}
+            onSelect={() => openShareDialog(note)}
+          >
+            Share
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"
-          disabled={readOnly}
+          disabled={readOnly || note.ownerId !== currentUserId}
           onSelect={() => void onDeleteNote(note.id)}
         >
           Move to Trash
@@ -993,7 +1129,7 @@ export function NotesSplitView({
                   onAddChild={() => void handleAddNote(note.id, "note")}
                   menu={renderNoteMenu(note)}
                   dropdownMenu={renderNoteDropdownMenu(note)}
-                  readOnly={readOnly}
+                  readOnly={noteReadOnly(note)}
                   dragHint={resolveDragHint(note.id)}
                 />
                 {isExpanded ? (
@@ -1025,7 +1161,7 @@ export function NotesSplitView({
           onAddChild={() => void handleAddNote(section.id, "note")}
           menu={renderNoteMenu(section)}
           dropdownMenu={renderNoteDropdownMenu(section)}
-          readOnly={readOnly}
+          readOnly={noteReadOnly(section)}
           dragHint={resolveDragHint(section.id)}
         />
         {isOpen ? (
@@ -1066,7 +1202,69 @@ export function NotesSplitView({
                       onAddChild={() => void handleAddNote(note.id, "note")}
                       menu={renderNoteMenu(note)}
                       dropdownMenu={renderNoteDropdownMenu(note)}
-                      readOnly={readOnly}
+                      readOnly={noteReadOnly(note)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </section>
+	          ) : null}
+
+          {publishedNotes.length > 0 ? (
+            <section className="flex flex-col gap-1">
+              <button
+                type="button"
+                className={`${SIDEBAR_SECTION_TITLE} group/section`}
+                onClick={() => toggleSection("published")}
+              >
+                <SectionTitleContents
+                  title="Published"
+                  isExpanded={sectionsExpanded.published}
+                />
+              </button>
+              {sectionsExpanded.published ? (
+                <div className="flex flex-col gap-1">
+                  {publishedNotes.map((note) => (
+                    <ShortcutRow
+                      key={`published:${note.id}`}
+                      note={note}
+                      isSelected={selectedNoteId === note.id}
+                      onSelect={() => selectNoteWithPrewarm(note.id)}
+                      onAddChild={() => void handleAddNote(note.id, "note")}
+                      menu={renderNoteMenu(note)}
+                      dropdownMenu={renderNoteDropdownMenu(note)}
+                      readOnly={noteReadOnly(note)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {isTeamWorkspace && sharedNotes.length > 0 ? (
+            <section className="flex flex-col gap-1">
+              <button
+                type="button"
+                className={`${SIDEBAR_SECTION_TITLE} group/section`}
+                onClick={() => toggleSection("shared")}
+              >
+                <SectionTitleContents
+                  title="Shared"
+                  isExpanded={sectionsExpanded.shared}
+                />
+              </button>
+              {sectionsExpanded.shared ? (
+                <div className="flex flex-col gap-1">
+                  {sharedNotes.map((note) => (
+                    <ShortcutRow
+                      key={`shared:${note.id}`}
+                      note={note}
+                      isSelected={selectedNoteId === note.id}
+                      onSelect={() => selectNoteWithPrewarm(note.id)}
+                      onAddChild={() => void handleAddNote(note.id, "note")}
+                      menu={renderNoteMenu(note)}
+                      dropdownMenu={renderNoteDropdownMenu(note)}
+                      readOnly={noteReadOnly(note)}
                     />
                   ))}
                 </div>
@@ -1115,17 +1313,17 @@ export function NotesSplitView({
             ) : null}
 
             <section className="flex flex-col gap-1">
-              <button
-                type="button"
-                className={`${SIDEBAR_SECTION_TITLE} group/section`}
-                onClick={() => toggleSection("notes")}
-              >
-                <SectionTitleContents
-                  title="Notes"
-                  isExpanded={sectionsExpanded.notes}
-                />
-              </button>
-              {sectionsExpanded.notes ? (
+	              <button
+	                type="button"
+	                className={`${SIDEBAR_SECTION_TITLE} group/section`}
+	                onClick={() => toggleSection("private")}
+	              >
+	                <SectionTitleContents
+	                  title="Private"
+	                  isExpanded={sectionsExpanded.private}
+	                />
+	              </button>
+	              {sectionsExpanded.private ? (
                 <div
                   ref={rootDrop.setNodeRef}
                   className={`flex min-h-6 flex-col gap-1 rounded-md transition-colors ${rootDrop.isOver ? "bg-accent/50" : ""}`}
@@ -1173,7 +1371,7 @@ export function NotesSplitView({
             <LexicalNoteEditor
               noteId={selectedEditorNote.id}
               title={selectedEditorNote.title}
-              editable={!readOnly}
+              editable={!selectedReadOnly}
               onTitleChange={(value) => {
                 void onUpdateTitle(selectedEditorNote.id, value);
               }}
@@ -1201,7 +1399,7 @@ export function NotesSplitView({
     <NotesRightRail
       selectedNote={selectedNote}
       allNotes={activeNotes}
-      readOnly={readOnly}
+      readOnly={readOnly || selectedNote?.effectivePermission !== "edit"}
       onSelectNote={(id) => void selectNoteWithPrewarm(id)}
       onUpdateTags={onUpdateTags}
     />
@@ -1209,6 +1407,105 @@ export function NotesSplitView({
 
   return (
     <>
+      <Dialog open={!!sharingNote} onOpenChange={(open) => !open && setSharingNote(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="size-4" aria-hidden="true" />
+              Share note
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-1 rounded-md bg-muted p-1">
+              {(["private", "workspace", "selected"] as NoteShareScope[]).map((scope) => (
+                <button
+                  key={scope}
+                  type="button"
+                  className={`rounded px-2 py-1.5 text-sm font-medium capitalize transition-colors ${
+                    shareScopeDraft === scope ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => setShareScopeDraft(scope)}
+                >
+                  {scope === "workspace" ? "Everyone" : scope}
+                </button>
+              ))}
+            </div>
+
+            {shareScopeDraft !== "private" ? (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-foreground">Permission</span>
+                <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
+                  {(["view", "edit"] as NoteSharePermission[]).map((permission) => (
+                    <button
+                      key={permission}
+                      type="button"
+                      className={`rounded px-3 py-1 text-sm font-medium capitalize transition-colors ${
+                        sharePermissionDraft === permission ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => {
+                        setSharePermissionDraft(permission);
+                        setShareUsersDraft((current) => current.map((share) => ({ ...share, permission })));
+                      }}
+                    >
+                      {permission}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {shareScopeDraft === "selected" ? (
+              <div className="max-h-56 space-y-1 overflow-y-auto">
+                {teamMembers.map((member) => {
+                  const checked = shareUsersDraft.some((share) => share.userId === member.id);
+                  const permission = shareUsersDraft.find((share) => share.userId === member.id)?.permission ?? sharePermissionDraft;
+                  return (
+                    <div key={member.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-foreground"
+                        checked={checked}
+                        onChange={() => toggleShareUser(member.id)}
+                        aria-label={`Share with ${member.name}`}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{member.name}</span>
+                      <div className="grid grid-cols-2 gap-1 rounded bg-muted p-0.5">
+                        {(["view", "edit"] as NoteSharePermission[]).map((item) => (
+                          <button
+                            key={item}
+                            type="button"
+                            className={`rounded px-2 py-0.5 text-xs font-medium capitalize transition-colors ${
+                              checked && permission === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            }`}
+                            disabled={!checked}
+                            onClick={() => setShareUserPermission(member.id, item)}
+                          >
+                            {item}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {teamMembers.length === 0 ? (
+                  <div className="px-2 py-4 text-center text-sm text-muted-foreground">No teammates</div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSharingNote(null)} disabled={shareSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void saveShareDialog()}
+              disabled={shareSaving || (shareScopeDraft === "selected" && shareUsersDraft.length === 0)}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <FeaturePanelsShell
         feature="notes"
         left={leftSlot}

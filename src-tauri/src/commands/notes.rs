@@ -41,6 +41,18 @@ fn normalize_note_kind(kind: &str) -> String {
 
 fn normalize_note_meta(mut note: NoteMeta) -> NoteMeta {
     note.kind = normalize_note_kind(&note.kind);
+    if note.share_scope != "workspace" && note.share_scope != "selected" {
+        note.share_scope = "private".to_string();
+    }
+    if note.share_permission != "edit" {
+        note.share_permission = "view".to_string();
+    }
+    for share in &mut note.shares {
+        if share.permission != "edit" {
+            share.permission = "view".to_string();
+        }
+    }
+    note.effective_permission = "edit".to_string();
     note
 }
 
@@ -313,6 +325,10 @@ pub async fn notes_duplicate(
         }
     );
     copy.is_pinned = false;
+    copy.share_scope = "private".to_string();
+    copy.share_permission = "view".to_string();
+    copy.shares = Vec::new();
+    copy.effective_permission = "edit".to_string();
     copy.position = generate_position(
         Some(source.position.as_str()),
         next_sibling.as_ref().map(|note| note.position.as_str()),

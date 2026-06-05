@@ -370,7 +370,7 @@ export const webRuntime: ModuoRuntime = {
 
   notes: {
     async list(workspaceId) {
-      const { data, error } = await supabaseClient.from("notes").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position");
+      const { data, error } = await supabaseClient.from("notes").select("*, note_shares(*)").eq("workspace_id", workspaceId).is("deleted_at", null).order("position");
       if (error) throw new Error(error.message);
       return data ?? [];
     },
@@ -386,6 +386,8 @@ export const webRuntime: ModuoRuntime = {
         kind: note.kind === "section" ? "section" : "note",
         tags: Array.isArray(note.tags) ? note.tags : [],
         is_pinned: !!(note.isPinned ?? note.is_pinned),
+        share_scope: note.shareScope ?? note.share_scope ?? "private",
+        share_permission: note.sharePermission ?? note.share_permission ?? "view",
         position: note.position,
         is_archived: !!(note.isArchived ?? note.is_archived),
         created_at: note.createdAt ?? note.created_at,
@@ -407,12 +409,55 @@ export const webRuntime: ModuoRuntime = {
         kind: source.kind === "section" ? "section" : "note",
         tags: source.tags ?? [],
         is_pinned: false,
+        share_scope: "private",
+        share_permission: "view",
         is_archived: source.is_archived ?? false,
         position: generatePosition(source.position ?? null, null),
         doc_state: source.doc_state,
       }).select().single();
       if (error) throw new Error(error.message);
       return data;
+    },
+    async updateSharing({ workspaceId, noteId, shareScope, sharePermission, selectedUsers }) {
+      const { data: note, error: noteError } = await supabaseClient
+        .from("notes")
+        .update({
+          share_scope: shareScope,
+          share_permission: sharePermission,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("id", noteId)
+        .select("*, note_shares(*)")
+        .single();
+      if (noteError) throw new Error(noteError.message);
+
+      const { error: deleteError } = await supabaseClient
+        .from("note_shares")
+        .delete()
+        .eq("workspace_id", workspaceId)
+        .eq("note_id", noteId);
+      if (deleteError) throw new Error(deleteError.message);
+
+      if (shareScope === "selected" && selectedUsers.length > 0) {
+        const rows = selectedUsers.map((share) => ({
+          workspace_id: workspaceId,
+          note_id: noteId,
+          user_id: share.userId,
+          permission: share.permission,
+        }));
+        const { error: insertError } = await supabaseClient.from("note_shares").insert(rows);
+        if (insertError) throw new Error(insertError.message);
+      }
+
+      const { data: updated, error: readError } = await supabaseClient
+        .from("notes")
+        .select("*, note_shares(*)")
+        .eq("workspace_id", workspaceId)
+        .eq("id", noteId)
+        .single();
+      if (readError) throw new Error(readError.message);
+      return updated ?? note;
     },
     async move({ workspaceId, noteId, newParentId, newPosition }) {
       const { data, error } = await supabaseClient.from("notes").update({
