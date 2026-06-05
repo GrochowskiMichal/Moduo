@@ -21,7 +21,7 @@ function sortNotes(a: NoteMeta, b: NoteMeta): number {
 }
 
 function normalizeKind(kind: unknown): NoteKind {
-  return kind === "note" ? "note" : "folder";
+  return kind === "note" ? "note" : "section";
 }
 
 function normalizeNote(note: any): NoteMeta {
@@ -66,7 +66,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
   const ensureSelectedNote = useCallback((current: NoteMeta[], preferredId?: string | null) => {
     const existingId = preferredId ?? selectedNoteId;
     const visible = current
-      .filter((note) => !note.deletedAt && !note.isArchived)
+      .filter((note) => !note.deletedAt && !note.isArchived && note.kind === "note")
       .sort(sortNotes);
     if (visible.length === 0) {
       setSelectedNoteId(null);
@@ -159,12 +159,14 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
 
   const createNote = useCallback(async (parentId: string | null = null, kind: NoteKind = "note") => {
     if (!runtime || !userId || !workspaceId || !canEdit) return null;
+    const effectiveParentId = kind === "section" ? null : parentId;
 
     const siblings = notes
       .filter(
         (note) =>
-          note.parentId === parentId &&
-          !note.deletedAt
+          note.parentId === effectiveParentId &&
+          !note.deletedAt &&
+          (kind === "section" ? note.kind === "section" : note.kind === "note")
       )
       .sort((a, b) => a.position.localeCompare(b.position));
 
@@ -172,13 +174,13 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
       ? generatePosition(siblings[siblings.length - 1]?.position, null)
       : initialPosition();
 
-    const defaultTitle = kind === "folder" ? "New Note Folder" : "New Note";
+    const defaultTitle = kind === "section" ? "New Section" : "New Note";
 
     const note: NoteMeta = {
       id: safeId(),
       workspaceId,
       ownerId: userId,
-      parentId,
+      parentId: effectiveParentId,
       title: defaultTitle,
       icon: null,
       kind,
@@ -194,7 +196,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
     try {
       const saved = normalizeNote(await runtime.notes.upsert(note));
       upsertNoteInState(saved);
-      setSelectedNoteId(saved.id);
+      if (saved.kind === "note") setSelectedNoteId(saved.id);
       return saved.id;
     } catch (e) {
       console.error(`[useNotes] createNote upsert ERROR:`, e);
@@ -223,14 +225,16 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
     (
       noteId: string,
       targetParentId: string | null,
-      beforeId: string | null
+      beforeId: string | null,
+      movingKind: NoteKind
     ) => {
       const siblings = notes
         .filter(
           (note) =>
             note.parentId === targetParentId &&
             note.id !== noteId &&
-            !note.deletedAt
+            !note.deletedAt &&
+            (movingKind === "section" ? note.kind === "section" : note.kind === "note")
         )
         .sort((a, b) => a.position.localeCompare(b.position));
 
@@ -254,6 +258,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
     if (!runtime || !workspaceId || !canEdit) return;
     const current = notes.find((note) => note.id === noteId);
     if (!current) return;
+    if (current.kind === "section" && newParentId) return;
     if (newParentId === noteId) return;
 
     const notesById = new Map(
@@ -274,7 +279,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
       }
     }
 
-    const position = computePositionForMove(noteId, newParentId, beforeId);
+    const position = computePositionForMove(noteId, newParentId, beforeId, current.kind);
     const optimistic: NoteMeta = {
       ...current,
       parentId: newParentId,
@@ -391,7 +396,7 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
         sourceNoteId: source.id,
       }));
       upsertNoteInState(saved);
-      setSelectedNoteId(saved.id);
+      if (saved.kind === "note") setSelectedNoteId(saved.id);
       return saved.id;
     } catch {
       await loadNotes();

@@ -35,7 +35,7 @@ fn normalize_note_kind(kind: &str) -> String {
     if kind == "note" {
         "note".to_string()
     } else {
-        "folder".to_string()
+        "section".to_string()
     }
 }
 
@@ -187,6 +187,10 @@ pub async fn notes_move(
         .is_some_and(|parent_id| parent_id == &note.id)
     {
         return Err("Cannot move note into itself".to_string());
+    }
+
+    if note.kind == "section" && input.new_parent_id.is_some() {
+        return Err("Sections can only exist at root".to_string());
     }
 
     if let Some(parent_id) = input.new_parent_id.as_ref() {

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type HTMLAttributes, type ReactNode, type RefCallback } from "react";
 import { getRuntime } from "../../../lib/runtime";
 import { toast } from "sonner";
 import {
@@ -17,8 +17,9 @@ import {
   ChevronDown,
   ChevronRight,
   File as FileIcon,
-  Folder,
+  MoreHorizontal,
   Pin,
+  Plus,
 } from "lucide-react";
 import type { NoteKind, NoteMeta } from "../types";
 import type { NotesSyncEngine } from "../sync/sync-engine";
@@ -38,6 +39,14 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { NotesRightRail } from "./notes-right-rail";
 
 /**
@@ -103,7 +112,6 @@ const NEST_THRESHOLD_PX = 12;
 function NoteKindIcon({ kind }: { kind: NoteKind }) {
   // text-current so the icon inherits the row colour and flips on hover / selection.
   const className = "size-3.5 shrink-0 text-current opacity-70";
-  if (kind === "folder") return <Folder className={className} aria-hidden="true" />;
   return <FileIcon className={className} aria-hidden="true" />;
 }
 
@@ -111,6 +119,33 @@ const SIDEBAR_ROW_BASE =
   "group/row relative flex w-full min-w-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring data-[selected=true]:bg-accent data-[selected=true]:text-foreground";
 const SIDEBAR_SECTION_TITLE =
   "flex w-full items-center justify-between gap-2 border-0 bg-transparent px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm";
+
+function SectionTitleContents({
+  title,
+  isExpanded,
+  titleRef,
+  titleProps,
+}: {
+  title: string;
+  isExpanded: boolean;
+  titleRef?: RefCallback<HTMLSpanElement>;
+  titleProps?: HTMLAttributes<HTMLSpanElement>;
+}) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span ref={titleRef} {...titleProps} className={`truncate ${titleProps?.className ?? ""}`}>
+        {title}
+      </span>
+      <span className="grid size-3 shrink-0 place-items-center opacity-0 transition-opacity group-hover/section:opacity-100 group-focus-within/section:opacity-100">
+        {isExpanded ? (
+          <ChevronDown className="size-3" aria-hidden="true" />
+        ) : (
+          <ChevronRight className="size-3" aria-hidden="true" />
+        )}
+      </span>
+    </span>
+  );
+}
 
 function MenuOpenEffect({ onMount }: { onMount: () => void }) {
   useEffect(() => {
@@ -124,24 +159,28 @@ function MenuOpenEffect({ onMount }: { onMount: () => void }) {
 type NoteRowProps = {
   note: NoteMeta;
   depth: number;
-  hasChildren: boolean;
   isExpanded: boolean;
   isSelected: boolean;
   onSelect: () => void;
   onToggleExpanded: () => void;
+  onAddChild: () => void;
   menu: ReactNode;
+  dropdownMenu: ReactNode;
+  readOnly: boolean;
   dragHint?: "none" | "reorder" | "nest";
 };
 
 function TreeRow({
   note,
   depth,
-  hasChildren,
   isExpanded,
   isSelected,
   onSelect,
   onToggleExpanded,
+  onAddChild,
   menu,
+  dropdownMenu,
+  readOnly,
   dragHint = "none",
 }: NoteRowProps) {
   const sortable = useSortable({ id: `note:${note.id}` });
@@ -158,7 +197,7 @@ function TreeRow({
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
-            className={`${SIDEBAR_ROW_BASE} py-1 ${dragHint === "nest" ? "bg-accent/60" : ""}`}
+            className={`${SIDEBAR_ROW_BASE} py-1 pr-1 ${dragHint === "nest" ? "bg-accent/60" : ""}`}
             style={{ minHeight: "var(--row-h)" }}
             data-selected={isSelected ? "true" : "false"}
             onClick={onSelect}
@@ -171,21 +210,23 @@ function TreeRow({
             <button
               type="button"
               aria-label={isExpanded ? "Collapse" : "Expand"}
-              className="grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground transition-opacity hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[has-children=false]:pointer-events-none data-[has-children=false]:opacity-0"
-              data-has-children={hasChildren ? "true" : "false"}
-              disabled={!hasChildren}
+              className="relative grid size-5 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={(event) => {
                 event.stopPropagation();
-                if (hasChildren) onToggleExpanded();
+                onToggleExpanded();
               }}
             >
-              {isExpanded ? (
-                <ChevronDown className="size-3" aria-hidden="true" />
-              ) : (
-                <ChevronRight className="size-3" aria-hidden="true" />
-              )}
+              <span className="grid place-items-center opacity-100 transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0">
+                <NoteKindIcon kind={note.kind} />
+              </span>
+              <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+                {isExpanded ? (
+                  <ChevronDown className="size-3.5" aria-hidden="true" />
+                ) : (
+                  <ChevronRight className="size-3.5" aria-hidden="true" />
+                )}
+              </span>
             </button>
-            <NoteKindIcon kind={note.kind} />
             <span
               className="min-w-0 flex-1 truncate"
               ref={sortable.setActivatorNodeRef}
@@ -194,9 +235,43 @@ function TreeRow({
             >
               {note.title || "Untitled"}
             </span>
-            {note.isPinned ? (
-              <Pin className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-            ) : null}
+            <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Delete, duplicate, and more"
+                        className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <MoreHorizontal className="size-4" aria-hidden="true" />
+                      </button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete, duplicate, and more...</TooltipContent>
+                </Tooltip>
+                {dropdownMenu}
+              </DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Add a page inside"
+                    className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                    disabled={readOnly}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAddChild();
+                    }}
+                  >
+                    <Plus className="size-4" aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Add a page inside</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
         </ContextMenuTrigger>
         {menu}
@@ -209,15 +284,18 @@ type ShortcutRowProps = {
   note: NoteMeta;
   isSelected: boolean;
   onSelect: () => void;
+  onAddChild: () => void;
   menu: ReactNode;
+  dropdownMenu: ReactNode;
+  readOnly: boolean;
 };
 
-function ShortcutRow({ note, isSelected, onSelect, menu }: ShortcutRowProps) {
+function ShortcutRow({ note, isSelected, onSelect, onAddChild, menu, dropdownMenu, readOnly }: ShortcutRowProps) {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          className={`${SIDEBAR_ROW_BASE} py-1`}
+          className={`${SIDEBAR_ROW_BASE} py-1 pr-1`}
           style={{ minHeight: "var(--row-h)" }}
           data-selected={isSelected ? "true" : "false"}
           onClick={onSelect}
@@ -227,13 +305,152 @@ function ShortcutRow({ note, isSelected, onSelect, menu }: ShortcutRowProps) {
             if (event.key === "Enter") onSelect();
           }}
         >
-          <Pin className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
           <NoteKindIcon kind={note.kind} />
           <span className="min-w-0 flex-1 truncate">{note.title || "Untitled"}</span>
+          <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Delete, duplicate, and more"
+                      className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <MoreHorizontal className="size-4" aria-hidden="true" />
+                    </button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Delete, duplicate, and more...</TooltipContent>
+              </Tooltip>
+              {dropdownMenu}
+            </DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Add a page inside"
+                  className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                  disabled={readOnly}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onAddChild();
+                  }}
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Add a page inside</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       </ContextMenuTrigger>
       {menu}
     </ContextMenu>
+  );
+}
+
+type SectionHeaderProps = {
+  section: NoteMeta;
+  isExpanded: boolean;
+  onToggleExpanded: () => void;
+  onAddChild: () => void;
+  menu: ReactNode;
+  dropdownMenu: ReactNode;
+  readOnly: boolean;
+  dragHint?: "none" | "reorder" | "nest";
+};
+
+function SectionHeader({
+  section,
+  isExpanded,
+  onToggleExpanded,
+  onAddChild,
+  menu,
+  dropdownMenu,
+  readOnly,
+  dragHint = "none",
+}: SectionHeaderProps) {
+  const sortable = useSortable({ id: `note:${section.id}` });
+  const drop = useDroppable({ id: `inside:${section.id}` });
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={(node) => {
+        sortable.setNodeRef(node);
+        drop.setNodeRef(node);
+      }}
+      style={style}
+      className={`relative rounded-md ${drop.isOver || dragHint === "nest" ? "bg-accent/60" : ""}`}
+    >
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            className={`${SIDEBAR_SECTION_TITLE} group/section pr-1`}
+            role="button"
+            tabIndex={0}
+            onClick={onToggleExpanded}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") onToggleExpanded();
+            }}
+          >
+            <SectionTitleContents
+              title={section.title || "New Section"}
+              isExpanded={isExpanded}
+              titleRef={sortable.setActivatorNodeRef}
+              titleProps={{
+                ...sortable.attributes,
+                ...sortable.listeners,
+              }}
+            />
+            <span className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/section:opacity-100 group-focus-within/section:opacity-100">
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Delete, duplicate, and more"
+                        className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <MoreHorizontal className="size-4" aria-hidden="true" />
+                      </button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete, duplicate, and more...</TooltipContent>
+                </Tooltip>
+                {dropdownMenu}
+              </DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Add a page inside"
+                    className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                    disabled={readOnly}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAddChild();
+                    }}
+                  >
+                    <Plus className="size-4" aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Add a page inside</TooltipContent>
+              </Tooltip>
+            </span>
+          </div>
+        </ContextMenuTrigger>
+        {menu}
+      </ContextMenu>
+    </div>
   );
 }
 
@@ -273,7 +490,7 @@ export function NotesSplitView({
       const detail = (event as CustomEvent<NotesCreateKindEventDetail>).detail;
       const kind = detail?.kind ?? "note";
       const createdId = await onCreateNote(null, kind);
-      if (createdId) {
+      if (createdId && kind === "note") {
         prewarmNoteSession(createdId);
         onSelectNote(createdId);
       }
@@ -296,6 +513,7 @@ export function NotesSplitView({
   const byParent = useMemo(() => {
     const grouped = new Map<string | null, NoteMeta[]>();
     for (const note of listNotes) {
+      if (note.kind === "section") continue;
       const list = grouped.get(note.parentId) ?? [];
       list.push(note);
       grouped.set(note.parentId, list);
@@ -307,17 +525,25 @@ export function NotesSplitView({
     return grouped;
   }, [listNotes]);
 
+  const sectionNotes = useMemo(
+    () =>
+      listNotes
+        .filter((note) => note.kind === "section" && !note.parentId)
+        .sort((a, b) => a.position.localeCompare(b.position) || a.title.localeCompare(b.title)),
+    [listNotes]
+  );
+
   const pinnedNotes = useMemo(
     () =>
       listNotes
-        .filter((note) => note.isPinned)
+        .filter((note) => note.isPinned && note.kind === "note")
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title)),
     [listNotes]
   );
 
   const notesById = useMemo(() => new Map(activeNotes.map((note) => [note.id, note])), [activeNotes]);
   const selectedNote = activeNotes.find((note) => note.id === selectedNoteId) ?? null;
-  const selectedEditorNote = selectedNote;
+  const selectedEditorNote = selectedNote?.kind === "note" ? selectedNote : null;
 
   const breadcrumbSegments = useMemo(() => {
     if (!selectedEditorNote) return ["Notes"];
@@ -371,6 +597,7 @@ export function NotesSplitView({
   };
 
   const canMoveUnderParent = (moving: NoteMeta, targetParentId: string | null): boolean => {
+    if (moving.kind === "section") return targetParentId === null;
     if (!targetParentId) return true;
     if (targetParentId === moving.id) return false;
     if (isDescendantOf(moving.id, targetParentId)) return false;
@@ -404,6 +631,13 @@ export function NotesSplitView({
 
     if (overId === "inside:root" || overId.startsWith("inside:")) {
       const targetParentId = overId === "inside:root" ? null : overId.replace("inside:", "");
+      if (moving.kind === "section" && targetParentId) {
+        const target = notesById.get(targetParentId);
+        if (target?.kind === "section") {
+          await onMoveNote(movingNoteId, null, target.id);
+        }
+        return;
+      }
       if (!canMoveUnderParent(moving, targetParentId)) return;
       await onMoveNote(movingNoteId, targetParentId, null);
       expandParent(targetParentId);
@@ -427,6 +661,23 @@ export function NotesSplitView({
         if (index === -1) return null;
         return siblings[index + 1]?.id ?? null;
       };
+
+      if (target.kind === "section" && moving.kind === "note") {
+        if (!canMoveUnderParent(moving, target.id)) return;
+        await onMoveNote(movingNoteId, target.id, null);
+        expandParent(target.id);
+        return;
+      }
+
+      if (moving.kind === "section") {
+        if (target.kind !== "section") return;
+        const sectionSiblings = sectionNotes.filter((entry) => entry.id !== moving.id);
+        const beforeId = dropAfter
+          ? getBeforeIdAfterTarget(sectionSiblings, target.id)
+          : target.id;
+        await onMoveNote(movingNoteId, null, beforeId);
+        return;
+      }
 
       const nestIntent = (event.delta?.x ?? 0) > NEST_THRESHOLD_PX;
       if (nestIntent) {
@@ -455,6 +706,8 @@ export function NotesSplitView({
     const moving = listNotes.find((note) => note.id === movingId);
     const target = listNotes.find((note) => note.id === targetNoteId);
     if (!moving || !target) return "none";
+    if (moving.kind === "section") return target.kind === "section" ? "reorder" : "none";
+    if (target.kind === "section") return "nest";
     if (dragDeltaX > NEST_THRESHOLD_PX) return "nest";
     return "reorder";
   };
@@ -560,7 +813,7 @@ export function NotesSplitView({
     if (parentId) {
       setExpanded((current) => ({ ...current, [parentId]: true }));
     }
-    await selectNoteWithPrewarm(created);
+    if (kind === "note") await selectNoteWithPrewarm(created);
   };
 
   const renderNoteMenu = (note: NoteMeta): ReactNode => {
@@ -570,22 +823,24 @@ export function NotesSplitView({
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
         <MenuOpenEffect onMount={() => preloadExposeStatus(note.id)} />
-        <ContextMenuItem
-          disabled={readOnly}
-          onSelect={() => void onTogglePin(note.id, !note.isPinned)}
-        >
-          {note.isPinned ? "Unpin" : "Pin"}
-        </ContextMenuItem>
+        {note.kind === "note" ? (
+          <ContextMenuItem
+            disabled={readOnly}
+            onSelect={() => void onTogglePin(note.id, !note.isPinned)}
+          >
+            {note.isPinned ? "Unpin" : "Pin"}
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuItem onSelect={() => handleCopyLink(note.id)}>
           Copy Link
         </ContextMenuItem>
         <ContextMenuItem
           disabled={readOnly}
           onSelect={() => {
-            void (async () => {
-              const created = await onDuplicateNote(note.id);
-              if (created) await selectNoteWithPrewarm(created);
-            })();
+              void (async () => {
+                const created = await onDuplicateNote(note.id);
+                if (created && note.kind === "note") await selectNoteWithPrewarm(created);
+              })();
           }}
         >
           Duplicate
@@ -596,19 +851,13 @@ export function NotesSplitView({
         >
           Rename
         </ContextMenuItem>
-        {note.kind === "folder" ? (
+        {note.kind === "section" ? (
           <>
             <ContextMenuItem
               disabled={readOnly}
               onSelect={() => void handleAddNote(note.id, "note")}
             >
               Add Note
-            </ContextMenuItem>
-            <ContextMenuItem
-              disabled={readOnly}
-              onSelect={() => void handleAddNote(note.id, "folder")}
-            >
-              Add Folder
             </ContextMenuItem>
           </>
         ) : null}
@@ -635,13 +884,82 @@ export function NotesSplitView({
     );
   };
 
+  const renderNoteDropdownMenu = (note: NoteMeta): ReactNode => {
+    const isExposed = !!exposedSlugs[note.id];
+    return (
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
+        <MenuOpenEffect onMount={() => preloadExposeStatus(note.id)} />
+        {note.kind === "note" ? (
+          <DropdownMenuItem
+            disabled={readOnly}
+            onSelect={() => void onTogglePin(note.id, !note.isPinned)}
+          >
+            {note.isPinned ? "Unpin" : "Pin"}
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem onSelect={() => handleCopyLink(note.id)}>
+          Copy Link
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={readOnly}
+          onSelect={() => {
+              void (async () => {
+                const created = await onDuplicateNote(note.id);
+                if (created && note.kind === "note") await selectNoteWithPrewarm(created);
+              })();
+          }}
+        >
+          Duplicate
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={readOnly}
+          onSelect={() => handleRenameNote(note)}
+        >
+          Rename
+        </DropdownMenuItem>
+        {note.kind === "section" ? (
+          <>
+            <DropdownMenuItem
+              disabled={readOnly}
+              onSelect={() => void handleAddNote(note.id, "note")}
+            >
+              Add Note
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {note.kind === "note" ? (
+          <DropdownMenuItem
+            disabled={readOnly || exposeLoading || !syncEngine}
+            onSelect={() => {
+              if (isExposed) void handleUnexposeNote(note.id);
+              else void handleExposeNote(note);
+            }}
+          >
+            {isExposed ? (exposeLoading ? "Unpublishing…" : "Unpublish") : exposeLoading ? "Publishing…" : "Publish"}
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          variant="destructive"
+          disabled={readOnly}
+          onSelect={() => void onDeleteNote(note.id)}
+        >
+          Move to Trash
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    );
+  };
+
   const sidebarMenuContent: ReactNode = (
     <ContextMenuContent>
       <ContextMenuItem
         disabled={readOnly}
-        onSelect={() => void handleAddNote(null, "folder")}
+        onSelect={() => void handleAddNote(null, "section")}
       >
-        New Folder
+        New Section
       </ContextMenuItem>
       <ContextMenuItem
         disabled={readOnly}
@@ -660,26 +978,62 @@ export function NotesSplitView({
       <SortableContext items={items.map((note) => `note:${note.id}`)} strategy={verticalListSortingStrategy}>
         {items.map((note) => {
           const children = byParent.get(note.id) ?? [];
-          const isExpanded = expanded[note.id] ?? true;
+          const isExpanded = expanded[note.id] ?? children.length > 0;
 
           return (
             <div key={note.id}>
               <TreeRow
                 note={note}
                 depth={depth}
-                hasChildren={children.length > 0}
                 isExpanded={isExpanded}
                 isSelected={selectedNoteId === note.id}
                 onSelect={() => selectNoteWithPrewarm(note.id)}
                 onToggleExpanded={() => toggleExpanded(note.id)}
+                onAddChild={() => void handleAddNote(note.id, "note")}
                 menu={renderNoteMenu(note)}
+                dropdownMenu={renderNoteDropdownMenu(note)}
+                readOnly={readOnly}
                 dragHint={resolveDragHint(note.id)}
               />
-              {isExpanded ? renderBranch(note.id, depth + 1) : null}
+              {isExpanded ? (
+                renderBranch(note.id, depth + 1) ?? (
+                  <div
+                    className="px-2 py-1 text-sm font-semibold text-muted-foreground/70"
+                    style={{ paddingLeft: (depth + 1) * 14 + 28 }}
+                  >
+                    No pages inside
+                  </div>
+                )
+              ) : null}
             </div>
           );
         })}
       </SortableContext>
+    );
+  };
+
+  const renderSection = (section: NoteMeta) => {
+    const isOpen = expanded[section.id] ?? true;
+    return (
+      <div key={section.id} className="flex flex-col gap-px">
+        <SectionHeader
+          section={section}
+          isExpanded={isOpen}
+          onToggleExpanded={() => toggleExpanded(section.id)}
+          onAddChild={() => void handleAddNote(section.id, "note")}
+          menu={renderNoteMenu(section)}
+          dropdownMenu={renderNoteDropdownMenu(section)}
+          readOnly={readOnly}
+          dragHint={resolveDragHint(section.id)}
+        />
+        {isOpen ? (
+          renderBranch(section.id, 1) ?? (
+            <div className="px-2 py-1 text-sm font-semibold text-muted-foreground/70" style={{ paddingLeft: 42 }}>
+              No pages inside
+            </div>
+          )
+        ) : null}
+      </div>
     );
   };
 
@@ -691,18 +1045,13 @@ export function NotesSplitView({
             <section className="flex flex-col gap-1">
               <button
                 type="button"
-                className={SIDEBAR_SECTION_TITLE}
+                className={`${SIDEBAR_SECTION_TITLE} group/section`}
                 onClick={() => toggleSection("pinned")}
               >
-                <span className="flex items-center gap-2">
-                  {sectionsExpanded.pinned ? (
-                    <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
-                  ) : (
-                    <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
-                  )}
-                  <Pin className="size-3 shrink-0" aria-hidden="true" />
-                  <span className="truncate">Pinned</span>
-                </span>
+                <SectionTitleContents
+                  title="Pinned"
+                  isExpanded={sectionsExpanded.pinned}
+                />
               </button>
               {sectionsExpanded.pinned ? (
                 <div className="flex flex-col gap-px">
@@ -712,7 +1061,10 @@ export function NotesSplitView({
                       note={note}
                       isSelected={selectedNoteId === note.id}
                       onSelect={() => selectNoteWithPrewarm(note.id)}
+                      onAddChild={() => void handleAddNote(note.id, "note")}
                       menu={renderNoteMenu(note)}
+                      dropdownMenu={renderNoteDropdownMenu(note)}
+                      readOnly={readOnly}
                     />
                   ))}
                 </div>
@@ -749,21 +1101,27 @@ export function NotesSplitView({
               void handleDragEnd(event).finally(resetDragState);
             }}
           >
+            {sectionNotes.length > 0 ? (
+              <SortableContext
+                items={sectionNotes.map((entry) => `note:${entry.id}`)}
+                strategy={verticalListSortingStrategy}
+              >
+                <section className="flex flex-col gap-1">
+                  {sectionNotes.map(renderSection)}
+                </section>
+              </SortableContext>
+            ) : null}
+
             <section className="flex flex-col gap-1">
               <button
                 type="button"
-                className={SIDEBAR_SECTION_TITLE}
+                className={`${SIDEBAR_SECTION_TITLE} group/section`}
                 onClick={() => toggleSection("notes")}
               >
-                <span className="flex items-center gap-2">
-                  {sectionsExpanded.notes ? (
-                    <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
-                  ) : (
-                    <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
-                  )}
-                  <FileIcon className="size-3 shrink-0" aria-hidden="true" />
-                  <span className="truncate">Notes</span>
-                </span>
+                <SectionTitleContents
+                  title="Notes"
+                  isExpanded={sectionsExpanded.notes}
+                />
               </button>
               {sectionsExpanded.notes ? (
                 <div
