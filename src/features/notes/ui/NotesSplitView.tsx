@@ -976,38 +976,40 @@ export function NotesSplitView({
 
     return (
       <SortableContext items={items.map((note) => `note:${note.id}`)} strategy={verticalListSortingStrategy}>
-        {items.map((note) => {
-          const children = byParent.get(note.id) ?? [];
-          const isExpanded = expanded[note.id] ?? children.length > 0;
+        <div className="flex flex-col gap-1">
+          {items.map((note) => {
+            const children = byParent.get(note.id) ?? [];
+            const isExpanded = expanded[note.id] ?? children.length > 0;
 
-          return (
-            <div key={note.id}>
-              <TreeRow
-                note={note}
-                depth={depth}
-                isExpanded={isExpanded}
-                isSelected={selectedNoteId === note.id}
-                onSelect={() => selectNoteWithPrewarm(note.id)}
-                onToggleExpanded={() => toggleExpanded(note.id)}
-                onAddChild={() => void handleAddNote(note.id, "note")}
-                menu={renderNoteMenu(note)}
-                dropdownMenu={renderNoteDropdownMenu(note)}
-                readOnly={readOnly}
-                dragHint={resolveDragHint(note.id)}
-              />
-              {isExpanded ? (
-                renderBranch(note.id, depth + 1) ?? (
-                  <div
-                    className="px-2 py-1 text-sm font-semibold text-muted-foreground/70"
-                    style={{ paddingLeft: (depth + 1) * 14 + 28 }}
-                  >
-                    No pages inside
-                  </div>
-                )
-              ) : null}
-            </div>
-          );
-        })}
+            return (
+              <div key={note.id}>
+                <TreeRow
+                  note={note}
+                  depth={depth}
+                  isExpanded={isExpanded}
+                  isSelected={selectedNoteId === note.id}
+                  onSelect={() => selectNoteWithPrewarm(note.id)}
+                  onToggleExpanded={() => toggleExpanded(note.id)}
+                  onAddChild={() => void handleAddNote(note.id, "note")}
+                  menu={renderNoteMenu(note)}
+                  dropdownMenu={renderNoteDropdownMenu(note)}
+                  readOnly={readOnly}
+                  dragHint={resolveDragHint(note.id)}
+                />
+                {isExpanded ? (
+                  renderBranch(note.id, depth + 1) ?? (
+                    <div
+                      className="px-2 py-1 text-sm font-semibold text-muted-foreground/70"
+                      style={{ paddingLeft: (depth + 1) * 14 + 28 }}
+                    >
+                      No pages inside
+                    </div>
+                  )
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       </SortableContext>
     );
   };
@@ -1015,7 +1017,7 @@ export function NotesSplitView({
   const renderSection = (section: NoteMeta) => {
     const isOpen = expanded[section.id] ?? true;
     return (
-      <div key={section.id} className="flex flex-col gap-px">
+      <div key={section.id} className="flex flex-col gap-1">
         <SectionHeader
           section={section}
           isExpanded={isOpen}
@@ -1054,7 +1056,7 @@ export function NotesSplitView({
                 />
               </button>
               {sectionsExpanded.pinned ? (
-                <div className="flex flex-col gap-px">
+                <div className="flex flex-col gap-1">
                   {pinnedNotes.map((note) => (
                     <ShortcutRow
                       key={`pinned:${note.id}`}
@@ -1126,7 +1128,7 @@ export function NotesSplitView({
               {sectionsExpanded.notes ? (
                 <div
                   ref={rootDrop.setNodeRef}
-                  className={`flex min-h-6 flex-col gap-px rounded-md transition-colors ${rootDrop.isOver ? "bg-accent/50" : ""}`}
+                  className={`flex min-h-6 flex-col gap-1 rounded-md transition-colors ${rootDrop.isOver ? "bg-accent/50" : ""}`}
                 >
                   {renderBranch(null, 0) ?? <div className="h-6" />}
                 </div>

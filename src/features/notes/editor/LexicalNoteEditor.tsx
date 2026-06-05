@@ -217,7 +217,7 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
         placeholder="Untitled"
       />
 
-      <div className="relative h-full min-h-0 overflow-auto bg-[#111111]">
+      <div className="relative h-full min-h-0 overflow-auto bg-transparent">
         {collabReady ? (
           <LexicalCollaboration key={`collab-${noteId}`}>
             <LexicalComposer initialConfig={initialConfig} key={noteId}>
