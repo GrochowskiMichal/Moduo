@@ -294,8 +294,13 @@ export type Database = {
           deleted_at: string | null
           doc_state: string | null
           id: string
+          icon: string | null
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
           parent_id: string | null
-          position: number
+          position: string
+          tags: Json
           title: string
           updated_at: string
           workspace_id: string
@@ -306,8 +311,13 @@ export type Database = {
           deleted_at?: string | null
           doc_state?: string | null
           id?: string
+          icon?: string | null
+          is_archived?: boolean
+          is_pinned?: boolean
+          kind?: string
           parent_id?: string | null
-          position?: number
+          position?: string
+          tags?: Json
           title?: string
           updated_at?: string
           workspace_id: string
@@ -318,8 +328,13 @@ export type Database = {
           deleted_at?: string | null
           doc_state?: string | null
           id?: string
+          icon?: string | null
+          is_archived?: boolean
+          is_pinned?: boolean
+          kind?: string
           parent_id?: string | null
-          position?: number
+          position?: string
+          tags?: Json
           title?: string
           updated_at?: string
           workspace_id?: string

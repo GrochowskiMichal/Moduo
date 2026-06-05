@@ -856,24 +856,24 @@ export function NotesSplitView({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden">
-          <section className="flex flex-col gap-1">
-            <button
-              type="button"
-              className={SIDEBAR_SECTION_TITLE}
-              onClick={() => toggleSection("pinned")}
-            >
-              <span className="flex items-center gap-2">
-                {sectionsExpanded.pinned ? (
-                  <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
-                ) : (
-                  <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
-                )}
-                <Pin className="size-3 shrink-0" aria-hidden="true" />
-                <span className="truncate">Pinned</span>
-              </span>
-            </button>
-            {sectionsExpanded.pinned ? (
-              pinnedNotes.length > 0 ? (
+          {pinnedNotes.length > 0 ? (
+            <section className="flex flex-col gap-1">
+              <button
+                type="button"
+                className={SIDEBAR_SECTION_TITLE}
+                onClick={() => toggleSection("pinned")}
+              >
+                <span className="flex items-center gap-2">
+                  {sectionsExpanded.pinned ? (
+                    <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
+                  ) : (
+                    <ChevronRight className="size-3 shrink-0" aria-hidden="true" />
+                  )}
+                  <Pin className="size-3 shrink-0" aria-hidden="true" />
+                  <span className="truncate">Pinned</span>
+                </span>
+              </button>
+              {sectionsExpanded.pinned ? (
                 <div className="flex flex-col gap-px">
                   {pinnedNotes.map((note) => (
                     <ShortcutRow
@@ -885,11 +885,9 @@ export function NotesSplitView({
                     />
                   ))}
                 </div>
-              ) : (
-                <p className="px-2 py-1 text-xs text-muted-foreground">No pinned notes</p>
-              )
-            ) : null}
-          </section>
+              ) : null}
+            </section>
+          ) : null}
 
           <DndContext
             sensors={sensors}

@@ -9,6 +9,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
+import { generatePosition } from "../features/notes/utils/position";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -381,7 +382,12 @@ export const webRuntime: ModuoRuntime = {
         created_by: note.ownerId ?? note.owner_id ?? note.created_by,
         title: note.title,
         parent_id: note.parentId ?? note.parent_id ?? null,
+        icon: note.icon ?? null,
+        kind: note.kind ?? "note",
+        tags: Array.isArray(note.tags) ? note.tags : [],
+        is_pinned: !!(note.isPinned ?? note.is_pinned),
         position: note.position,
+        is_archived: !!(note.isArchived ?? note.is_archived),
         created_at: note.createdAt ?? note.created_at,
         updated_at: note.updatedAt ?? note.updated_at,
         deleted_at: note.deletedAt ?? note.deleted_at ?? null,
@@ -397,7 +403,12 @@ export const webRuntime: ModuoRuntime = {
         workspace_id: workspaceId,
         title: `${source.title} (copy)`,
         parent_id: source.parent_id,
-        position: source.position + 1,
+        icon: source.icon,
+        kind: source.kind ?? "note",
+        tags: source.tags ?? [],
+        is_pinned: false,
+        is_archived: source.is_archived ?? false,
+        position: generatePosition(source.position ?? null, null),
         doc_state: source.doc_state,
       }).select().single();
       if (error) throw new Error(error.message);
@@ -406,7 +417,7 @@ export const webRuntime: ModuoRuntime = {
     async move({ workspaceId, noteId, newParentId, newPosition }) {
       const { data, error } = await supabaseClient.from("notes").update({
         parent_id: newParentId,
-        position: parseInt(newPosition) || 0,
+        position: newPosition,
         workspace_id: workspaceId,
       }).eq("id", noteId).select().single();
       if (error) throw new Error(error.message);
