@@ -424,9 +424,14 @@ export const webRuntime: ModuoRuntime = {
       return data;
     },
     async remove({ workspaceId: _w, noteId, deletedAt }) {
-      const { error } = await supabaseClient.from("notes").update({ deleted_at: deletedAt ?? new Date().toISOString() }).eq("id", noteId);
+      const { data, error } = await supabaseClient
+        .from("notes")
+        .update({ deleted_at: deletedAt ?? new Date().toISOString() })
+        .eq("id", noteId)
+        .select()
+        .single();
       if (error) throw new Error(error.message);
-      return { noteId };
+      return data;
     },
     async getDocState(_workspaceId, noteId) {
       const { data, error } = await supabaseClient.from("notes").select("doc_state").eq("id", noteId).single();

@@ -373,12 +373,14 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
 
     upsertNoteInState(optimistic);
     try {
-      const saved = normalizeNote(await runtime.notes.remove({
+      const removed = await runtime.notes.remove({
         workspaceId,
         noteId,
         deletedAt,
-      }));
-      upsertNoteInState(saved);
+      });
+      if (removed?.id) {
+        upsertNoteInState(normalizeNote(removed));
+      }
     } catch {
       upsertNoteInState(current);
       await loadNotes();
