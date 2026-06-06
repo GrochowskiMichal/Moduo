@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type HTMLAttributes, type ReactNode, type RefCallback } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getRuntime } from "../../../lib/runtime";
 import { toast } from "sonner";
 import {
@@ -9,19 +9,9 @@ import {
   useDroppable,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
-  ChevronDown,
-  ChevronRight,
-  File as FileIcon,
-  MoreHorizontal,
-  Pin,
-  Plus,
-  Share2,
-} from "lucide-react";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { ChevronRight } from "lucide-react";
 import type { NoteKind, NoteMeta, NoteSharePermission, NoteShareScope, NoteShareTarget } from "../types";
 import type { NotesSyncEngine } from "../sync/sync-engine";
 import { LexicalNoteEditor } from "../editor/LexicalNoteEditor";
@@ -45,18 +35,19 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../../../components/ui/dialog";
-import { Button } from "../../../components/ui/button";
 import { NotesRightRail } from "./notes-right-rail";
+import {
+  MenuOpenEffect,
+  SectionHeader,
+  SectionTitleContents,
+  ShortcutRow,
+  SIDEBAR_SECTION_TITLE,
+  TreeRow,
+} from "./split-view/notes-sidebar";
+import { NotesShareDialog } from "./split-view/notes-share-dialog";
+import { buildNotesTreeModel } from "./split-view/notes-tree-model";
+import { handleNoteDragEnd, resolveNoteDragHint } from "./split-view/notes-drag";
 
 /**
  * Clipboard write that works in Tauri webviews.
@@ -127,351 +118,6 @@ type Props = {
 
 const NEST_THRESHOLD_PX = 12;
 
-function NoteKindIcon({ kind }: { kind: NoteKind }) {
-  // text-current so the icon inherits the row colour and flips on hover / selection.
-  const className = "size-3.5 shrink-0 text-current opacity-70";
-  return <FileIcon className={className} aria-hidden="true" />;
-}
-
-const SIDEBAR_ROW_BASE =
-  "group/row relative flex w-full min-w-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring data-[selected=true]:bg-accent data-[selected=true]:text-foreground";
-const SIDEBAR_SECTION_TITLE =
-  "flex w-full items-center justify-between gap-2 border-0 bg-transparent px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm";
-
-function SectionTitleContents({
-  title,
-  isExpanded,
-  titleRef,
-  titleProps,
-}: {
-  title: string;
-  isExpanded: boolean;
-  titleRef?: RefCallback<HTMLSpanElement>;
-  titleProps?: HTMLAttributes<HTMLSpanElement>;
-}) {
-  return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <span ref={titleRef} {...titleProps} className={`truncate ${titleProps?.className ?? ""}`}>
-        {title}
-      </span>
-      <span className="grid size-3 shrink-0 place-items-center opacity-0 transition-opacity group-hover/section:opacity-100 group-focus-within/section:opacity-100">
-        {isExpanded ? (
-          <ChevronDown className="size-3" aria-hidden="true" />
-        ) : (
-          <ChevronRight className="size-3" aria-hidden="true" />
-        )}
-      </span>
-    </span>
-  );
-}
-
-function MenuOpenEffect({ onMount }: { onMount: () => void }) {
-  useEffect(() => {
-    onMount();
-    // We want this to run exactly once per ContextMenuContent mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return null;
-}
-
-type NoteRowProps = {
-  note: NoteMeta;
-  depth: number;
-  isExpanded: boolean;
-  isSelected: boolean;
-  onSelect: () => void;
-  onToggleExpanded: () => void;
-  onAddChild: () => void;
-  menu: ReactNode;
-  dropdownMenu: ReactNode;
-  readOnly: boolean;
-  dragHint?: "none" | "reorder" | "nest";
-};
-
-function TreeRow({
-  note,
-  depth,
-  isExpanded,
-  isSelected,
-  onSelect,
-  onToggleExpanded,
-  onAddChild,
-  menu,
-  dropdownMenu,
-  readOnly,
-  dragHint = "none",
-}: NoteRowProps) {
-  const sortable = useSortable({ id: `note:${note.id}` });
-
-  const wrapperStyle = {
-    transform: CSS.Transform.toString(sortable.transform),
-    transition: sortable.transition,
-    opacity: sortable.isDragging ? 0.5 : 1,
-    paddingLeft: depth * 14,
-  };
-
-  return (
-    <div ref={sortable.setNodeRef} style={wrapperStyle} className="relative">
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div
-            className={`${SIDEBAR_ROW_BASE} py-1 pr-1 ${dragHint === "nest" ? "bg-accent/60" : ""}`}
-            style={{ minHeight: "var(--row-h)" }}
-            data-selected={isSelected ? "true" : "false"}
-            onClick={onSelect}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") onSelect();
-            }}
-          >
-            <button
-              type="button"
-              aria-label={isExpanded ? "Collapse" : "Expand"}
-              className="relative grid size-5 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggleExpanded();
-              }}
-            >
-              <span className="grid place-items-center opacity-100 transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0">
-                <NoteKindIcon kind={note.kind} />
-              </span>
-              <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
-                {isExpanded ? (
-                  <ChevronDown className="size-3.5" aria-hidden="true" />
-                ) : (
-                  <ChevronRight className="size-3.5" aria-hidden="true" />
-                )}
-              </span>
-            </button>
-            <span
-              className="min-w-0 flex-1 truncate"
-              ref={sortable.setActivatorNodeRef}
-              {...sortable.attributes}
-              {...sortable.listeners}
-            >
-              {note.title || "Untitled"}
-            </span>
-            <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
-              <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label="Delete, duplicate, and more"
-                        className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <MoreHorizontal className="size-4" aria-hidden="true" />
-                      </button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>Delete, duplicate, and more...</TooltipContent>
-                </Tooltip>
-                {dropdownMenu}
-              </DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Add a page inside"
-                    className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
-                    disabled={readOnly}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onAddChild();
-                    }}
-                  >
-                    <Plus className="size-4" aria-hidden="true" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Add a page inside</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-        </ContextMenuTrigger>
-        {menu}
-      </ContextMenu>
-    </div>
-  );
-}
-
-type ShortcutRowProps = {
-  note: NoteMeta;
-  isSelected: boolean;
-  onSelect: () => void;
-  onAddChild: () => void;
-  menu: ReactNode;
-  dropdownMenu: ReactNode;
-  readOnly: boolean;
-};
-
-function ShortcutRow({ note, isSelected, onSelect, onAddChild, menu, dropdownMenu, readOnly }: ShortcutRowProps) {
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div
-          className={`${SIDEBAR_ROW_BASE} py-1 pr-1`}
-          style={{ minHeight: "var(--row-h)" }}
-          data-selected={isSelected ? "true" : "false"}
-          onClick={onSelect}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") onSelect();
-          }}
-        >
-          <NoteKindIcon kind={note.kind} />
-          <span className="min-w-0 flex-1 truncate">{note.title || "Untitled"}</span>
-          <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="Delete, duplicate, and more"
-                      className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <MoreHorizontal className="size-4" aria-hidden="true" />
-                    </button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Delete, duplicate, and more...</TooltipContent>
-              </Tooltip>
-              {dropdownMenu}
-            </DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Add a page inside"
-                  className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
-                  disabled={readOnly}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onAddChild();
-                  }}
-                >
-                  <Plus className="size-4" aria-hidden="true" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Add a page inside</TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-      </ContextMenuTrigger>
-      {menu}
-    </ContextMenu>
-  );
-}
-
-type SectionHeaderProps = {
-  section: NoteMeta;
-  isExpanded: boolean;
-  onToggleExpanded: () => void;
-  onAddChild: () => void;
-  menu: ReactNode;
-  dropdownMenu: ReactNode;
-  readOnly: boolean;
-  dragHint?: "none" | "reorder" | "nest";
-};
-
-function SectionHeader({
-  section,
-  isExpanded,
-  onToggleExpanded,
-  onAddChild,
-  menu,
-  dropdownMenu,
-  readOnly,
-  dragHint = "none",
-}: SectionHeaderProps) {
-  const sortable = useSortable({ id: `note:${section.id}` });
-  const drop = useDroppable({ id: `inside:${section.id}` });
-  const style = {
-    transform: CSS.Transform.toString(sortable.transform),
-    transition: sortable.transition,
-    opacity: sortable.isDragging ? 0.5 : 1,
-  };
-
-  return (
-    <div
-      ref={(node) => {
-        sortable.setNodeRef(node);
-        drop.setNodeRef(node);
-      }}
-      style={style}
-      className={`relative rounded-md ${drop.isOver || dragHint === "nest" ? "bg-accent/60" : ""}`}
-    >
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div
-            className={`${SIDEBAR_SECTION_TITLE} group/section pr-1`}
-            role="button"
-            tabIndex={0}
-            onClick={onToggleExpanded}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") onToggleExpanded();
-            }}
-          >
-            <SectionTitleContents
-              title={section.title || "New Section"}
-              isExpanded={isExpanded}
-              titleRef={sortable.setActivatorNodeRef}
-              titleProps={{
-                ...sortable.attributes,
-                ...sortable.listeners,
-              }}
-            />
-            <span className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/section:opacity-100 group-focus-within/section:opacity-100">
-              <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label="Delete, duplicate, and more"
-                        className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <MoreHorizontal className="size-4" aria-hidden="true" />
-                      </button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>Delete, duplicate, and more...</TooltipContent>
-                </Tooltip>
-                {dropdownMenu}
-              </DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Add a page inside"
-                    className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
-                    disabled={readOnly}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onAddChild();
-                    }}
-                  >
-                    <Plus className="size-4" aria-hidden="true" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Add a page inside</TooltipContent>
-              </Tooltip>
-            </span>
-          </div>
-        </ContextMenuTrigger>
-        {menu}
-      </ContextMenu>
-    </div>
-  );
-}
-
 export function NotesSplitView({
   notes,
   workspaceId,
@@ -532,11 +178,6 @@ export function NotesSplitView({
     };
   }, [onCreateNote, onSelectNote, readOnly, syncEngine]);
 
-  const activeNotes = useMemo(
-    () => notes.filter((note) => !note.deletedAt && !note.isArchived),
-    [notes]
-  );
-
   useEffect(() => {
     if (!workspaceId) return;
     let active = true;
@@ -549,95 +190,36 @@ export function NotesSplitView({
     };
   }, [workspaceId]);
 
-  const listNotes = useMemo(() => activeNotes, [activeNotes]);
-
-  const byParent = useMemo(() => {
-    const grouped = new Map<string | null, NoteMeta[]>();
-    for (const note of listNotes) {
-      if (note.kind === "section") continue;
-      const list = grouped.get(note.parentId) ?? [];
-      list.push(note);
-      grouped.set(note.parentId, list);
-    }
-    for (const [key, list] of grouped.entries()) {
-      list.sort((a, b) => a.position.localeCompare(b.position));
-      grouped.set(key, list);
-    }
-    return grouped;
-  }, [listNotes]);
-
-  const sectionNotes = useMemo(
+  const {
+    activeNotes,
+    listNotes,
+    byParent,
+    sectionNotes,
+    pinnedNotes,
+    publishedNotes,
+    sharedNotes,
+    teamMembers,
+    isTeamWorkspace,
+    notesById,
+    selectedNote,
+    selectedEditorNote,
+    breadcrumbSegments,
+  } = useMemo(
     () =>
-      listNotes
-        .filter((note) => note.kind === "section" && !note.parentId)
-        .sort((a, b) => a.position.localeCompare(b.position) || a.title.localeCompare(b.title)),
-    [listNotes]
+      buildNotesTreeModel({
+        notes,
+        exposedSlugs,
+        selectedNoteId,
+        workspaceMembers,
+        currentUserId,
+      }),
+    [currentUserId, exposedSlugs, notes, selectedNoteId, workspaceMembers]
   );
-
-  const pinnedNotes = useMemo(
-    () =>
-      listNotes
-        .filter((note) => note.isPinned && note.kind === "note")
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title)),
-    [listNotes]
-  );
-
-  const publishedNotes = useMemo(
-    () =>
-      listNotes
-        .filter((note) => note.kind === "note" && !!exposedSlugs[note.id])
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title)),
-    [exposedSlugs, listNotes]
-  );
-
-  const sharedNotes = useMemo(
-    () =>
-      listNotes
-        .filter((note) => note.kind === "note" && note.shareScope !== "private")
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title)),
-    [listNotes]
-  );
-
-  const teamMembers = useMemo(
-    () =>
-      workspaceMembers
-        .map((member) => ({
-          id: String(member.user_id ?? member.userId ?? ""),
-          name: String(member.profiles?.display_name ?? member.displayName ?? member.user_id ?? member.userId ?? "Teammate"),
-          role: String(member.role ?? "member"),
-        }))
-        .filter((member) => member.id && member.id !== currentUserId),
-    [currentUserId, workspaceMembers]
-  );
-
-  const isTeamWorkspace = teamMembers.length > 0;
-
-  const notesById = useMemo(() => new Map(activeNotes.map((note) => [note.id, note])), [activeNotes]);
-  const selectedNote = activeNotes.find((note) => note.id === selectedNoteId) ?? null;
-  const selectedEditorNote = selectedNote?.kind === "note" ? selectedNote : null;
   const selectedReadOnly = readOnly || selectedEditorNote?.effectivePermission !== "edit";
 
   const noteReadOnly = (note: NoteMeta): boolean => readOnly || note.effectivePermission !== "edit";
   const canManageSharing = (note: NoteMeta): boolean =>
     !readOnly && isTeamWorkspace && note.kind === "note" && note.ownerId === currentUserId;
-
-  const breadcrumbSegments = useMemo(() => {
-    if (!selectedEditorNote) return ["Private"];
-    const chain: string[] = [];
-    const visited = new Set<string>([selectedEditorNote.id]);
-    let parentId = selectedEditorNote.parentId;
-
-    while (parentId && !visited.has(parentId)) {
-      visited.add(parentId);
-      const parent = notesById.get(parentId);
-      if (!parent || parent.deletedAt || parent.isArchived) break;
-      chain.push(parent.title || "Untitled");
-      parentId = parent.parentId;
-    }
-
-    chain.reverse();
-    return [...chain, selectedEditorNote.title || "Untitled"];
-  }, [notesById, selectedEditorNote]);
 
   function prewarmNoteSession(noteId: string) {
     if (!syncEngine) return;
@@ -661,27 +243,6 @@ export function NotesSplitView({
     prewarmNoteSession(selectedEditorNote.id);
   }, [selectedEditorNote?.id, syncEngine]);
 
-  const isDescendantOf = (ancestorId: string, maybeDescendantId: string): boolean => {
-    const queue = [...(byParent.get(ancestorId) ?? []).map((note) => note.id)];
-    while (queue.length > 0) {
-      const current = queue.shift();
-      if (!current) continue;
-      if (current === maybeDescendantId) return true;
-      for (const child of byParent.get(current) ?? []) queue.push(child.id);
-    }
-    return false;
-  };
-
-  const canMoveUnderParent = (moving: NoteMeta, targetParentId: string | null): boolean => {
-    if (moving.kind === "section") return targetParentId === null;
-    if (!targetParentId) return true;
-    if (targetParentId === moving.id) return false;
-    if (isDescendantOf(moving.id, targetParentId)) return false;
-    const targetParent = notesById.get(targetParentId);
-    if (!targetParent || targetParent.deletedAt || targetParent.isArchived) return false;
-    return true;
-  };
-
   const expandParent = (parentId: string | null) => {
     if (!parentId) return;
     setExpanded((current) => ({ ...current, [parentId]: true }));
@@ -693,100 +254,18 @@ export function NotesSplitView({
     setDragDeltaX(0);
   };
 
-  const handleDragEnd = async (event: DragEndEvent) => {
-    if (readOnly) return;
-    const activeId = String(event.active.id);
-    const overId = event.over ? String(event.over.id) : null;
-
-    if (!overId || !activeId.startsWith("note:")) return;
-
-    const movingNoteId = activeId.replace("note:", "");
-    const moving = listNotes.find((note) => note.id === movingNoteId);
-    if (!moving) return;
-    if (overId === activeId) return;
-
-    if (overId === "inside:root" || overId.startsWith("inside:")) {
-      const targetParentId = overId === "inside:root" ? null : overId.replace("inside:", "");
-      if (moving.kind === "section" && targetParentId) {
-        const target = notesById.get(targetParentId);
-        if (target?.kind === "section") {
-          await onMoveNote(movingNoteId, null, target.id);
-        }
-        return;
-      }
-      if (!canMoveUnderParent(moving, targetParentId)) return;
-      await onMoveNote(movingNoteId, targetParentId, null);
-      expandParent(targetParentId);
-      return;
-    }
-
-    if (overId.startsWith("note:")) {
-      const targetNoteId = overId.replace("note:", "");
-      const target = listNotes.find((note) => note.id === targetNoteId);
-      if (!target) return;
-      if (target.id === moving.id) return;
-      const finalRect = event.active.rect.current.translated ?? event.active.rect.current.initial;
-      const overRect = event.over?.rect;
-      const dropAfter = !!(
-        finalRect &&
-        overRect &&
-        finalRect.top + finalRect.height / 2 > overRect.top + overRect.height / 2
-      );
-      const getBeforeIdAfterTarget = (siblings: NoteMeta[], targetId: string): string | null => {
-        const index = siblings.findIndex((note) => note.id === targetId);
-        if (index === -1) return null;
-        return siblings[index + 1]?.id ?? null;
-      };
-
-      if (target.kind === "section" && moving.kind === "note") {
-        if (!canMoveUnderParent(moving, target.id)) return;
-        await onMoveNote(movingNoteId, target.id, null);
-        expandParent(target.id);
-        return;
-      }
-
-      if (moving.kind === "section") {
-        if (target.kind !== "section") return;
-        const sectionSiblings = sectionNotes.filter((entry) => entry.id !== moving.id);
-        const beforeId = dropAfter
-          ? getBeforeIdAfterTarget(sectionSiblings, target.id)
-          : target.id;
-        await onMoveNote(movingNoteId, null, beforeId);
-        return;
-      }
-
-      const nestIntent = (event.delta?.x ?? 0) > NEST_THRESHOLD_PX;
-      if (nestIntent) {
-        if (!canMoveUnderParent(moving, target.id)) return;
-        await onMoveNote(movingNoteId, target.id, null);
-        expandParent(target.id);
-        return;
-      }
-
-      if (!canMoveUnderParent(moving, target.parentId)) return;
-      const siblingCandidates = (byParent.get(target.parentId) ?? []).filter((entry) => entry.id !== moving.id);
-      const beforeId = dropAfter
-        ? getBeforeIdAfterTarget(siblingCandidates, target.id)
-        : target.id;
-      await onMoveNote(movingNoteId, target.parentId, beforeId);
-    }
-  };
-
-  const resolveDragHint = (targetNoteId: string): "none" | "reorder" | "nest" => {
-    if (!dragActiveId || !dragOverId) return "none";
-    if (!dragActiveId.startsWith("note:") || !dragOverId.startsWith("note:")) return "none";
-    const movingId = dragActiveId.replace("note:", "");
-    const overNoteId = dragOverId.replace("note:", "");
-    if (targetNoteId !== overNoteId || movingId === targetNoteId) return "none";
-
-    const moving = listNotes.find((note) => note.id === movingId);
-    const target = listNotes.find((note) => note.id === targetNoteId);
-    if (!moving || !target) return "none";
-    if (moving.kind === "section") return target.kind === "section" ? "reorder" : "none";
-    if (target.kind === "section") return "nest";
-    if (dragDeltaX > NEST_THRESHOLD_PX) return "nest";
-    return "reorder";
-  };
+  const resolveDragHint = (targetNoteId: string) =>
+    resolveNoteDragHint({
+      targetNoteId,
+      dragActiveId,
+      dragOverId,
+      dragDeltaX,
+      nestThresholdPx: NEST_THRESHOLD_PX,
+      listNotes,
+      sectionNotes,
+      byParent,
+      notesById,
+    });
 
   const toggleExpanded = (noteId: string) => {
     setExpanded((current) => ({ ...current, [noteId]: !current[noteId] }));
@@ -1298,7 +777,17 @@ export function NotesSplitView({
             }}
             onDragCancel={resetDragState}
             onDragEnd={(event) => {
-              void handleDragEnd(event).finally(resetDragState);
+              void handleNoteDragEnd({
+                event,
+                readOnly,
+                nestThresholdPx: NEST_THRESHOLD_PX,
+                listNotes,
+                sectionNotes,
+                byParent,
+                notesById,
+                onMoveNote,
+                expandParent,
+              }).finally(resetDragState);
             }}
           >
             {sectionNotes.length > 0 ? (
@@ -1407,105 +896,21 @@ export function NotesSplitView({
 
   return (
     <>
-      <Dialog open={!!sharingNote} onOpenChange={(open) => !open && setSharingNote(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Share2 className="size-4" aria-hidden="true" />
-              Share note
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-1 rounded-md bg-muted p-1">
-              {(["private", "workspace", "selected"] as NoteShareScope[]).map((scope) => (
-                <button
-                  key={scope}
-                  type="button"
-                  className={`rounded px-2 py-1.5 text-sm font-medium capitalize transition-colors ${
-                    shareScopeDraft === scope ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => setShareScopeDraft(scope)}
-                >
-                  {scope === "workspace" ? "Everyone" : scope}
-                </button>
-              ))}
-            </div>
-
-            {shareScopeDraft !== "private" ? (
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-foreground">Permission</span>
-                <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
-                  {(["view", "edit"] as NoteSharePermission[]).map((permission) => (
-                    <button
-                      key={permission}
-                      type="button"
-                      className={`rounded px-3 py-1 text-sm font-medium capitalize transition-colors ${
-                        sharePermissionDraft === permission ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                      onClick={() => {
-                        setSharePermissionDraft(permission);
-                        setShareUsersDraft((current) => current.map((share) => ({ ...share, permission })));
-                      }}
-                    >
-                      {permission}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {shareScopeDraft === "selected" ? (
-              <div className="max-h-56 space-y-1 overflow-y-auto">
-                {teamMembers.map((member) => {
-                  const checked = shareUsersDraft.some((share) => share.userId === member.id);
-                  const permission = shareUsersDraft.find((share) => share.userId === member.id)?.permission ?? sharePermissionDraft;
-                  return (
-                    <div key={member.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-foreground"
-                        checked={checked}
-                        onChange={() => toggleShareUser(member.id)}
-                        aria-label={`Share with ${member.name}`}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{member.name}</span>
-                      <div className="grid grid-cols-2 gap-1 rounded bg-muted p-0.5">
-                        {(["view", "edit"] as NoteSharePermission[]).map((item) => (
-                          <button
-                            key={item}
-                            type="button"
-                            className={`rounded px-2 py-0.5 text-xs font-medium capitalize transition-colors ${
-                              checked && permission === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                            }`}
-                            disabled={!checked}
-                            onClick={() => setShareUserPermission(member.id, item)}
-                          >
-                            {item}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-                {teamMembers.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-sm text-muted-foreground">No teammates</div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setSharingNote(null)} disabled={shareSaving}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => void saveShareDialog()}
-              disabled={shareSaving || (shareScopeDraft === "selected" && shareUsersDraft.length === 0)}
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <NotesShareDialog
+        open={!!sharingNote}
+        shareScope={shareScopeDraft}
+        sharePermission={sharePermissionDraft}
+        shareUsers={shareUsersDraft}
+        teamMembers={teamMembers}
+        saving={shareSaving}
+        onOpenChange={(open) => !open && setSharingNote(null)}
+        onShareScopeChange={setShareScopeDraft}
+        onSharePermissionChange={setSharePermissionDraft}
+        onShareUsersChange={setShareUsersDraft}
+        onToggleUser={toggleShareUser}
+        onSetUserPermission={setShareUserPermission}
+        onSave={() => void saveShareDialog()}
+      />
       <FeaturePanelsShell
         feature="notes"
         left={leftSlot}
