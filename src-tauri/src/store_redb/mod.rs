@@ -11,10 +11,10 @@ use redb::{Database, ReadableTable, TableDefinition};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::domain::{
-    CategoryRule, FocusSession, GraphEdge, GraphNode, ModulePermissions, NoteCrdtUpdate,
-    NoteDocState, NoteMeta, TaskActivity, TaskComment, TaskItem, TaskProject, TaskWorkflowState,
-    TasksBundle, TimeCategory, TimeEntry, TimeProject, TimetrackingBundle, WorkspaceInvite,
-    WorkspaceMember, WorkspaceNotification, WorkspaceSummary,
+    Bucket, CategoryRule, FocusSession, GraphEdge, GraphNode, ModulePermissions, NoteCrdtUpdate,
+    NoteDocState, NoteMeta, Tag, TagLink, Task, TaskActivity, TaskComment, TaskItem, TaskProject,
+    TaskWorkflowState, TasksBundle, TasksModuleBundle, TimeCategory, TimeEntry, TimeProject,
+    TimetrackingBundle, WorkspaceInvite, WorkspaceMember, WorkspaceNotification, WorkspaceSummary,
 };
 
 pub const NOTES_META: TableDefinition<&str, &str> = TableDefinition::new("notes_meta");
@@ -30,6 +30,13 @@ pub const TASKS_COMMENTS: TableDefinition<&str, &str> = TableDefinition::new("ta
 pub const TASKS_OUTBOX: TableDefinition<&str, &str> = TableDefinition::new("tasks_outbox");
 pub const TASKS_OPLOG: TableDefinition<&str, &str> = TableDefinition::new("tasks_oplog");
 pub const TASKS_ACTIVITY: TableDefinition<&str, &str> = TableDefinition::new("tasks_activity");
+
+// Tasks module v1 (ADHD bucket / commit / execute model). Canonical going
+// forward; supersedes the legacy tasks_* tables above.
+pub const BUCKETS: TableDefinition<&str, &str> = TableDefinition::new("buckets");
+pub const TASKS: TableDefinition<&str, &str> = TableDefinition::new("tasks");
+pub const TAGS: TableDefinition<&str, &str> = TableDefinition::new("tags");
+pub const TAG_LINKS: TableDefinition<&str, &str> = TableDefinition::new("tag_links");
 
 pub const WORKSPACE_MEMBERSHIP: TableDefinition<&str, &str> =
     TableDefinition::new("workspace_membership");
@@ -101,6 +108,11 @@ impl RedbStore {
         let _ = write_txn.open_table(TASKS_OUTBOX)?;
         let _ = write_txn.open_table(TASKS_OPLOG)?;
         let _ = write_txn.open_table(TASKS_ACTIVITY)?;
+
+        let _ = write_txn.open_table(BUCKETS)?;
+        let _ = write_txn.open_table(TASKS)?;
+        let _ = write_txn.open_table(TAGS)?;
+        let _ = write_txn.open_table(TAG_LINKS)?;
 
         let _ = write_txn.open_table(WORKSPACES)?;
         let _ = write_txn.open_table(WORKSPACE_MEMBERSHIP)?;
@@ -227,6 +239,10 @@ impl RedbStore {
             TASKS_OUTBOX,
             TASKS_OPLOG,
             TASKS_ACTIVITY,
+            BUCKETS,
+            TASKS,
+            TAGS,
+            TAG_LINKS,
             WORKSPACES,
             WORKSPACE_MEMBERSHIP,
             WORKSPACE_ACL,
@@ -527,6 +543,84 @@ impl RedbStore {
             tasks,
             comments,
             activities,
+        })
+    }
+
+    // ─── Tasks module v1 (buckets / tasks / tags) ──────────────────────────────
+
+    pub fn put_bucket(&self, bucket: &Bucket) -> anyhow::Result<()> {
+        self.put_json(BUCKETS, &bucket.id, bucket)
+    }
+
+    pub fn get_bucket(&self, id: &str) -> anyhow::Result<Option<Bucket>> {
+        self.get_json(BUCKETS, id)
+    }
+
+    pub fn list_buckets(&self, workspace_id: &str) -> anyhow::Result<Vec<Bucket>> {
+        Ok(self
+            .list_json::<Bucket>(BUCKETS)?
+            .into_iter()
+            .filter(|b| b.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn put_task(&self, task: &Task) -> anyhow::Result<()> {
+        self.put_json(TASKS, &task.id, task)
+    }
+
+    pub fn get_task(&self, id: &str) -> anyhow::Result<Option<Task>> {
+        self.get_json(TASKS, id)
+    }
+
+    pub fn list_tasks(&self, workspace_id: &str) -> anyhow::Result<Vec<Task>> {
+        Ok(self
+            .list_json::<Task>(TASKS)?
+            .into_iter()
+            .filter(|t| t.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn put_tag(&self, tag: &Tag) -> anyhow::Result<()> {
+        self.put_json(TAGS, &tag.id, tag)
+    }
+
+    pub fn get_tag(&self, id: &str) -> anyhow::Result<Option<Tag>> {
+        self.get_json(TAGS, id)
+    }
+
+    pub fn list_tags(&self, workspace_id: &str) -> anyhow::Result<Vec<Tag>> {
+        Ok(self
+            .list_json::<Tag>(TAGS)?
+            .into_iter()
+            .filter(|t| t.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn put_tag_link(&self, link: &TagLink) -> anyhow::Result<()> {
+        self.put_json(TAG_LINKS, &link.id, link)
+    }
+
+    pub fn remove_tag_link(&self, id: &str) -> anyhow::Result<()> {
+        self.remove_key(TAG_LINKS, id)
+    }
+
+    pub fn list_tag_links(&self, workspace_id: &str) -> anyhow::Result<Vec<TagLink>> {
+        Ok(self
+            .list_json::<TagLink>(TAG_LINKS)?
+            .into_iter()
+            .filter(|l| l.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn list_tasks_module_bundle(
+        &self,
+        workspace_id: &str,
+    ) -> anyhow::Result<TasksModuleBundle> {
+        Ok(TasksModuleBundle {
+            buckets: self.list_buckets(workspace_id)?,
+            tasks: self.list_tasks(workspace_id)?,
+            tags: self.list_tags(workspace_id)?,
+            tag_links: self.list_tag_links(workspace_id)?,
         })
     }
 
