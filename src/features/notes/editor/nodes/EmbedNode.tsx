@@ -1,6 +1,5 @@
 import { DecoratorNode, NodeKey, SerializedLexicalNode, Spread } from "lexical";
 import { ReactNode } from "react";
-import { EmbeddedTask } from "./EmbeddedTask";
 import { EmbeddedMindmap } from "./EmbeddedMindmap";
 
 export type SerializedEmbedNode = Spread<
@@ -60,9 +59,8 @@ export class EmbedNode extends DecoratorNode<ReactNode> {
         if (this.__kind === "mindmap") {
             return <EmbeddedMindmap mindmapId={this.__itemId} />;
         }
-        if (this.__kind === "task") {
-            return <EmbeddedTask taskId={this.__itemId} />;
-        }
+        // The legacy "task" embed was removed with the old tasks model; any
+        // persisted task embeds import cleanly but render nothing.
         return null;
     }
 }

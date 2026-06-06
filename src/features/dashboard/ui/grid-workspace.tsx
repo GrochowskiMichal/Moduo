@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import type { ModuoRuntime } from "../../../lib/runtime";
 import type { NoteMeta } from "../../notes/types";
-import type { Task, TaskProject, TaskWorkflowState } from "../../tasks/types";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { useDashboard } from "../hooks/use-dashboard";
 import type { WidgetType } from "../types";
@@ -21,12 +20,9 @@ type Props = {
   runtime: ModuoRuntime | null;
   workspaceId: string;
   notes: NoteMeta[];
-  tasks: Task[];
-  projects: TaskProject[];
-  states: TaskWorkflowState[];
 };
 
-export function GridWorkspace({ runtime, workspaceId, notes, tasks, projects, states }: Props) {
+export function GridWorkspace({ runtime, workspaceId, notes }: Props) {
   const [activeSceneId, setActiveSceneId] = useState<string | null>(() => readStoredGridActiveScene(workspaceId));
   const { widgets, isLocked, isLoading, toggleLock, addWidget, moveWidget, resizeWidget, removeWidget, updateWidgetConfig } =
     useDashboard(workspaceId, activeSceneId, runtime);
@@ -101,9 +97,6 @@ export function GridWorkspace({ runtime, workspaceId, notes, tasks, projects, st
               runtime={runtime}
               workspaceId={workspaceId}
               notes={notes}
-              tasks={tasks}
-              projects={projects}
-              states={states}
               onResize={resizeWidget}
               onRemove={removeWidget}
               onUpdateConfig={updateWidgetConfig}

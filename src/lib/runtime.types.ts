@@ -3,6 +3,14 @@
  * Implementations live in runtime.tauri.ts (desktop) and runtime.web.ts (web).
  */
 
+import type {
+  Bucket,
+  Tag,
+  TagLink,
+  Task,
+  TasksModuleBundle,
+} from "../features/tasks/model";
+
 export type RuntimeSession = {
   access_token: string;
   refresh_token?: string | null;
@@ -150,26 +158,6 @@ export type ModuoRuntime = {
     subscribeLocal(workspaceId: string, noteId?: string | null): Promise<string>;
   };
 
-  tasks: {
-    list(workspaceId: string): Promise<any>;
-    upsert(input: { project?: any; workflowState?: any; task?: any }): Promise<any>;
-    upsertProject(project: any): Promise<any>;
-    upsertState(workflowState: any): Promise<any>;
-    upsertItem(task: any): Promise<any>;
-    move(input: {
-      workspaceId: string;
-      taskId: string;
-      newParentTaskId: string | null;
-      newStateId: string;
-      newPosition: string;
-    }): Promise<any>;
-    deleteItem(input: { workspaceId: string; taskId: string; deletedAt?: string }): Promise<any>;
-    addComment(comment: any): Promise<any>;
-    upsertComment(comment: any): Promise<any>;
-    deleteComment(commentId: string): Promise<void>;
-    subscribeLocal(workspaceId: string): Promise<string>;
-  };
-
   graph: {
     upsertNodesEdges(request: any): Promise<void>;
     queryRelated(workspaceId: string, nodeId: string, limit?: number): Promise<any>;
@@ -265,5 +253,33 @@ export type ModuoRuntime = {
     startGoogleOAuth(): Promise<any>;
     startOutlookOAuth(): Promise<any>;
     startAppleOAuth(): Promise<any>;
+  };
+
+  /**
+   * Tasks module v1 — buckets / tasks / tags. Desktop reads/writes the
+   * local-first redb store via Tauri commands; web talks to Supabase directly.
+   * Both seed the reserved Inbox bucket lazily on first `list`.
+   */
+  tasks: {
+    list(workspaceId: string): Promise<TasksModuleBundle>;
+    seedInbox(workspaceId: string): Promise<Bucket>;
+    upsertBucket(bucket: Bucket): Promise<Bucket>;
+    deleteBucket(input: { workspaceId: string; bucketId: string }): Promise<void>;
+    upsertTask(task: Task): Promise<Task>;
+    deleteTask(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    upsertTag(tag: Tag): Promise<Tag>;
+    deleteTag(input: { workspaceId: string; tagId: string }): Promise<void>;
+    attachTag(input: {
+      workspaceId: string;
+      tagId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<TagLink>;
+    detachTag(input: {
+      workspaceId: string;
+      tagId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<void>;
   };
 };

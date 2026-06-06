@@ -1,13 +1,13 @@
-import { createRootRoute, createRoute, createRouter, Navigate, Outlet, redirect } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, Outlet, redirect } from "@tanstack/react-router";
 import { AuthProvider } from "./providers/auth-provider";
 import { AppGate } from "./routes/layouts/app-gate";
 import { AuthPage } from "./routes/pages/auth-page";
 import { OnboardingPage } from "./routes/pages/onboarding-page";
 import { GridPage } from "./routes/pages/grid-page";
 import { NotesPage } from "./routes/pages/notes-page";
+import { TasksPage } from "./routes/pages/tasks-page";
 import { MindmapPage } from "./routes/pages/mindmap-page";
 import { EmailPage } from "./routes/pages/email-page";
-import { GroundPage } from "./routes/pages/ground-page";
 import { CrmPage } from "./routes/pages/crm-page";
 import { SettingsPage } from "./routes/pages/settings-page";
 import { PaywallPage } from "./routes/pages/paywall-page";
@@ -70,7 +70,7 @@ const notesRoute = createRoute({
 const tasksRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/tasks",
-  component: () => <Navigate to="/ground" replace />,
+  component: TasksPage,
 });
 
 const mindmapRoute = createRoute({
@@ -83,18 +83,6 @@ const emailRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/email",
   component: EmailPage,
-});
-
-const calendarRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/calendar",
-  component: () => <Navigate to="/ground" replace />,
-});
-
-const groundRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/ground",
-  component: GroundPage,
 });
 
 const crmRoute = createRoute({
@@ -118,10 +106,8 @@ const routeTree = rootRoute.addChildren([
     legacyGridRoute,
     notesRoute,
     tasksRoute,
-    groundRoute,
     mindmapRoute,
     emailRoute,
-    calendarRoute,
     crmRoute,
     settingsRoute,
   ]),

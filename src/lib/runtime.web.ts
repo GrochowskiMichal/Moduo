@@ -9,6 +9,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
+import type { Bucket, Tag, TagLink, Task } from "../features/tasks/model";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -505,66 +506,6 @@ export const webRuntime: ModuoRuntime = {
     },
   },
 
-  tasks: {
-    async list(workspaceId) {
-      const [projectsRes, statesRes, itemsRes, commentsRes] = await Promise.all([
-        supabaseClient.from("tasks_projects").select("*").eq("workspace_id", workspaceId).is("deleted_at", null),
-        supabaseClient.from("tasks_states").select("*"),
-        supabaseClient.from("tasks_items").select("*").is("deleted_at", null),
-        supabaseClient.from("tasks_comments").select("*").is("deleted_at", null),
-      ]);
-      return {
-        projects: projectsRes.data ?? [],
-        states: statesRes.data ?? [],
-        tasks: itemsRes.data ?? [],
-        comments: commentsRes.data ?? [],
-      };
-    },
-    async upsert(input) {
-      if (input.project) {
-        const { data, error } = await supabaseClient.from("tasks_projects").upsert(input.project, { onConflict: "id" }).select().single();
-        if (error) throw new Error(error.message);
-        return { project: data };
-      }
-      if (input.workflowState) {
-        const { data, error } = await supabaseClient.from("tasks_states").upsert(input.workflowState, { onConflict: "id" }).select().single();
-        if (error) throw new Error(error.message);
-        return { workflowState: data };
-      }
-      if (input.task) {
-        const { data, error } = await supabaseClient.from("tasks_items").upsert(input.task, { onConflict: "id" }).select().single();
-        if (error) throw new Error(error.message);
-        return { task: data };
-      }
-      return null;
-    },
-    upsertProject(project) { return webRuntime.tasks.upsert({ project }).then((r: any) => r?.project ?? r); },
-    upsertState(workflowState) { return webRuntime.tasks.upsert({ workflowState }).then((r: any) => r?.workflowState ?? r); },
-    upsertItem(task) { return webRuntime.tasks.upsert({ task }).then((r: any) => r?.task ?? r); },
-    async move({ taskId, newStateId, newPosition }) {
-      const { data, error } = await supabaseClient.from("tasks_items").update({ state_id: newStateId, position: parseInt(newPosition) || 0 }).eq("id", taskId).select().single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    async deleteItem({ taskId, deletedAt }) {
-      const { error } = await supabaseClient.from("tasks_items").update({ deleted_at: deletedAt ?? new Date().toISOString() }).eq("id", taskId);
-      if (error) throw new Error(error.message);
-      return { taskId };
-    },
-    async addComment(comment) {
-      const { data, error } = await supabaseClient.from("tasks_comments").insert(comment).select().single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    upsertComment(comment) { return webRuntime.tasks.addComment(comment); },
-    async deleteComment(commentId) {
-      await supabaseClient.from("tasks_comments").update({ deleted_at: new Date().toISOString() }).eq("id", commentId);
-    },
-    async subscribeLocal(workspaceId) {
-      return `tasks:${workspaceId}`;
-    },
-  },
-
   graph: {
     async upsertNodesEdges() { /* Graph search not available on web in v1 */ },
     async queryRelated() { return []; },
@@ -669,4 +610,268 @@ export const webRuntime: ModuoRuntime = {
     async startOutlookOAuth() { throw new Error(desktopOnly().message); },
     async startAppleOAuth() { throw new Error(desktopOnly().message); },
   },
+
+  // ── Tasks module ───────────────────────────────────────────────────────────
+  // Supabase-backed mirror of the desktop redb path. RLS scopes every row to the
+  // workspace; the Inbox bucket is seeded lazily here (no DB trigger). camelCase
+  // model fields map to snake_case columns via the helpers at the bottom of this
+  // file.
+  tasks: {
+    async list(workspaceId) {
+      await ensureWebInbox(workspaceId);
+      const [bucketsRes, tasksRes, tagsRes, linksRes] = await Promise.all([
+        supabaseClient.from("buckets").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position"),
+        supabaseClient.from("tasks").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position"),
+        supabaseClient.from("tags").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
+        supabaseClient.from("tag_links").select("*").eq("workspace_id", workspaceId),
+      ]);
+      const firstError = bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error;
+      if (firstError) throw new Error(firstError.message);
+      return {
+        buckets: (bucketsRes.data ?? []).map(bucketRowToModel),
+        tasks: (tasksRes.data ?? []).map(taskRowToModel),
+        tags: (tagsRes.data ?? []).map(tagRowToModel),
+        tagLinks: (linksRes.data ?? []).map(tagLinkRowToModel),
+      };
+    },
+
+    async seedInbox(workspaceId) {
+      return ensureWebInbox(workspaceId);
+    },
+
+    async upsertBucket(bucket) {
+      const id = bucket.id?.trim() || crypto.randomUUID();
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      const now = new Date().toISOString();
+      const { data: prev } = await supabaseClient.from("buckets").select("is_system, created_at").eq("id", id).maybeSingle();
+      // is_system is owned by the seeding path only — never settable via upsert.
+      const row = {
+        id,
+        workspace_id: bucket.workspaceId,
+        owner_id: bucket.ownerId || user?.id || null,
+        name: bucket.name,
+        is_system: prev ? prev.is_system : false,
+        position: bucket.position ?? "",
+        created_at: prev ? prev.created_at : (bucket.createdAt || now),
+        updated_at: now,
+        deleted_at: bucket.deletedAt ?? null,
+      };
+      const { data, error } = await supabaseClient.from("buckets").upsert(row, { onConflict: "id" }).select().single();
+      if (error) throw new Error(error.message);
+      return bucketRowToModel(data);
+    },
+
+    async deleteBucket({ workspaceId, bucketId }) {
+      const { data: bucket } = await supabaseClient.from("buckets").select("is_system").eq("id", bucketId).maybeSingle();
+      if (!bucket) return;
+      if (bucket.is_system) throw new Error("The Inbox bucket cannot be deleted");
+      // Reassign live tasks to Inbox so none are orphaned, then soft-delete.
+      const inbox = await ensureWebInbox(workspaceId);
+      const now = new Date().toISOString();
+      await supabaseClient.from("tasks").update({ bucket_id: inbox.id, updated_at: now }).eq("bucket_id", bucketId).is("deleted_at", null);
+      const { error } = await supabaseClient.from("buckets").update({ deleted_at: now, updated_at: now }).eq("id", bucketId);
+      if (error) throw new Error(error.message);
+    },
+
+    async upsertTask(task) {
+      const id = task.id?.trim() || crypto.randomUUID();
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      const now = new Date().toISOString();
+      // Every task lives in exactly one bucket; an empty/unknown/deleted/cross-
+      // workspace bucket falls back to Inbox (spec §6/§7).
+      let bucketId = task.bucketId;
+      let bucketOk = false;
+      if (bucketId) {
+        const { data: b } = await supabaseClient.from("buckets").select("workspace_id, deleted_at").eq("id", bucketId).maybeSingle();
+        bucketOk = !!b && b.workspace_id === task.workspaceId && !b.deleted_at;
+      }
+      if (!bucketOk) bucketId = (await ensureWebInbox(task.workspaceId)).id;
+      const { data: prev } = await supabaseClient.from("tasks").select("created_at").eq("id", id).maybeSingle();
+      const row = taskModelToRow({
+        ...task,
+        id,
+        bucketId,
+        ownerId: task.ownerId || user?.id || "",
+        createdAt: prev ? prev.created_at : (task.createdAt || now),
+        updatedAt: now,
+      });
+      const { data, error } = await supabaseClient.from("tasks").upsert(row, { onConflict: "id" }).select().single();
+      if (error) throw new Error(error.message);
+      return taskRowToModel(data);
+    },
+
+    async deleteTask({ taskId }) {
+      const now = new Date().toISOString();
+      const { data, error } = await supabaseClient.from("tasks").update({ deleted_at: now, updated_at: now }).eq("id", taskId).select().single();
+      if (error) throw new Error(error.message);
+      return taskRowToModel(data);
+    },
+
+    async upsertTag(tag) {
+      const id = tag.id?.trim() || crypto.randomUUID();
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      const now = new Date().toISOString();
+      const { data: prev } = await supabaseClient.from("tags").select("created_at").eq("id", id).maybeSingle();
+      const row = {
+        id,
+        workspace_id: tag.workspaceId,
+        owner_id: tag.ownerId || user?.id || null,
+        name: tag.name,
+        color: tag.color ?? null,
+        created_at: prev ? prev.created_at : (tag.createdAt || now),
+        updated_at: now,
+        deleted_at: tag.deletedAt ?? null,
+      };
+      const { data, error } = await supabaseClient.from("tags").upsert(row, { onConflict: "id" }).select().single();
+      if (error) throw new Error(error.message);
+      return tagRowToModel(data);
+    },
+
+    async deleteTag({ tagId }) {
+      const now = new Date().toISOString();
+      // tag_links cascade on tag delete in the schema, but soft-delete the tag.
+      await supabaseClient.from("tag_links").delete().eq("tag_id", tagId);
+      const { error } = await supabaseClient.from("tags").update({ deleted_at: now, updated_at: now }).eq("id", tagId);
+      if (error) throw new Error(error.message);
+    },
+
+    async attachTag({ workspaceId, tagId, entityType, entityId }) {
+      const { data: existing } = await supabaseClient
+        .from("tag_links").select("*")
+        .eq("workspace_id", workspaceId).eq("tag_id", tagId)
+        .eq("entity_type", entityType).eq("entity_id", entityId)
+        .maybeSingle();
+      if (existing) return tagLinkRowToModel(existing);
+      const { data, error } = await supabaseClient.from("tag_links")
+        .insert({ workspace_id: workspaceId, tag_id: tagId, entity_type: entityType, entity_id: entityId })
+        .select().single();
+      if (error) throw new Error(error.message);
+      return tagLinkRowToModel(data);
+    },
+
+    async detachTag({ workspaceId, tagId, entityType, entityId }) {
+      const { error } = await supabaseClient.from("tag_links").delete()
+        .eq("workspace_id", workspaceId).eq("tag_id", tagId)
+        .eq("entity_type", entityType).eq("entity_id", entityId);
+      if (error) throw new Error(error.message);
+    },
+  },
 };
+
+// ── Tasks module: Inbox seeding + row<->model mappers ─────────────────────────
+
+/** Ensure the workspace has its reserved Inbox bucket (idempotent). */
+async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
+  const find = () =>
+    supabaseClient.from("buckets").select("*")
+      .eq("workspace_id", workspaceId).eq("is_system", true).is("deleted_at", null)
+      .limit(1).maybeSingle();
+  const { data: existing } = await find();
+  if (existing) return bucketRowToModel(existing);
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  const now = new Date().toISOString();
+  const { data, error } = await supabaseClient.from("buckets").insert({
+    workspace_id: workspaceId,
+    owner_id: user?.id ?? null,
+    name: "Inbox",
+    is_system: true,
+    position: "a0", // low lexorank anchor — sorts first
+    created_at: now,
+    updated_at: now,
+  }).select().single();
+  if (error) {
+    // Lost a create race (unique partial index) — re-read the winner.
+    const { data: again } = await find();
+    if (again) return bucketRowToModel(again);
+    throw new Error(error.message);
+  }
+  return bucketRowToModel(data);
+}
+
+function bucketRowToModel(r: any): Bucket {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    ownerId: r.owner_id ?? "",
+    name: r.name,
+    isSystem: !!r.is_system,
+    position: r.position ?? "",
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+function taskRowToModel(r: any): Task {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    ownerId: r.owner_id ?? "",
+    bucketId: r.bucket_id,
+    title: r.title ?? "",
+    description: r.description ?? "",
+    dueDate: r.due_date ?? null,
+    scheduledAt: r.scheduled_at ?? null,
+    durationMinutes: r.duration_minutes ?? null,
+    recurrence: r.recurrence ?? null,
+    energyLevel: r.energy_level ?? null,
+    priority: r.priority ?? null,
+    status: r.status ?? "todo",
+    committedFor: r.committed_for ?? null,
+    commitOrder: r.commit_order ?? null,
+    rescheduleCount: r.reschedule_count ?? 0,
+    position: r.position ?? "",
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+function taskModelToRow(t: Task): Record<string, unknown> {
+  return {
+    id: t.id,
+    workspace_id: t.workspaceId,
+    owner_id: t.ownerId || null,
+    bucket_id: t.bucketId,
+    title: t.title,
+    description: t.description ?? "",
+    due_date: t.dueDate ?? null,
+    scheduled_at: t.scheduledAt ?? null,
+    duration_minutes: t.durationMinutes ?? null,
+    recurrence: t.recurrence ?? null,
+    energy_level: t.energyLevel ?? null,
+    priority: t.priority ?? null,
+    status: t.status,
+    committed_for: t.committedFor ?? null,
+    commit_order: t.commitOrder ?? null,
+    reschedule_count: t.rescheduleCount ?? 0,
+    position: t.position ?? "",
+    created_at: t.createdAt,
+    updated_at: t.updatedAt,
+    deleted_at: t.deletedAt ?? null,
+  };
+}
+
+function tagRowToModel(r: any): Tag {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    ownerId: r.owner_id ?? "",
+    name: r.name,
+    color: r.color ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+function tagLinkRowToModel(r: any): TagLink {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    tagId: r.tag_id,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    createdAt: r.created_at,
+  };
+}

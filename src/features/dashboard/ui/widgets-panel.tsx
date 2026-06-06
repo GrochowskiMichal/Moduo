@@ -50,7 +50,6 @@ export function WidgetsPanel({ isLocked, onToggleLock }: { isLocked: boolean; on
       </div>
 
       <WidgetSource type="notes" label="Notes" description="Pinned or selected note focus" disabled={isLocked} />
-      <WidgetSource type="tasks" label="Tasks" description="Task queue with project filter" disabled={isLocked} />
       <WidgetSource type="clock" label="Timezone Clock" description="List of selected timezone clocks" disabled={isLocked} />
       <WidgetSource type="weather" label="Weather" description="Live weather for any city" disabled={isLocked} />
       <WidgetSource type="stock" label="Stock Tracker" description="Watchlist with price & change" disabled={isLocked} />

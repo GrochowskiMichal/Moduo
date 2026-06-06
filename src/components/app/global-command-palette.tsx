@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
-  CalendarDays,
+  CheckSquare,
   FileText,
   GitBranch,
   Inbox,
   LayoutGrid,
-  ListTodo,
   Settings as SettingsIcon,
 } from "lucide-react";
 
@@ -64,11 +63,10 @@ export function GlobalCommandPalette() {
 
   const navActions: Action[] = [
     { id: "notes", label: "Open Notes", icon: FileText, run: go("/notes") },
-    { id: "grid", label: "Open Grid", icon: LayoutGrid, run: go("/grid") },
-    { id: "ground", label: "Open Ground", icon: ListTodo, run: go("/ground") },
+    { id: "tasks", label: "Open Tasks", icon: CheckSquare, run: go("/tasks") },
+    { id: "grid", label: "Open Grid", icon: LayoutGrid, run: go("/") },
     { id: "mindmap", label: "Open Mindmap", icon: GitBranch, run: go("/mindmap") },
     { id: "email", label: "Open Email", icon: Inbox, run: go("/email") },
-    { id: "calendar", label: "Open Calendar", icon: CalendarDays, run: go("/calendar") },
   ];
 
   const settingsActions: Action[] = [

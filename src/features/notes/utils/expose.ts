@@ -281,34 +281,9 @@ async function buildEmbedsPayload(
 
         const payload: ExposedEmbed[] = [];
 
-        const taskRefs = embedRefs.filter((embed) => embed.kind === "task");
-        if (taskRefs.length) {
-            try {
-                const raw = await runtime.tasks.list(workspaceId);
-                const tasks: any[] = Array.isArray(raw?.tasks) ? raw.tasks : Array.isArray(raw) ? raw : [];
-                for (const ref of taskRefs) {
-                    const task = tasks.find((item) => item?.id === ref.itemId && !item?.deletedAt);
-                    if (!task) continue;
-                    payload.push({
-                        kind: "task",
-                        itemId: ref.itemId,
-                        task: {
-                            title: String(task.title ?? "Untitled"),
-                            description: String(task.description ?? ""),
-                            priority: Number(task.priority ?? 0),
-                            dueDate: task.dueDate ? String(task.dueDate) : null,
-                            tags: Array.isArray(task.tags)
-                                ? task.tags.map((tag: unknown) => String(tag)).slice(0, 8)
-                                : [],
-                            updatedAt: String(task.updatedAt ?? new Date().toISOString()),
-                        },
-                    });
-                }
-            } catch {
-                // ignore embed hydration failures
-            }
-        }
-
+        // The legacy task embed was removed with the old tasks model; only
+        // mindmap embeds are hydrated now. Any persisted task embed refs are
+        // skipped.
         const mindmapRefs = embedRefs.filter((embed) => embed.kind === "mindmap");
         if (mindmapRefs.length) {
             try {
