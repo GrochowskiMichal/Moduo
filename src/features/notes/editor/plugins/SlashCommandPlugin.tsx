@@ -10,7 +10,6 @@ import { $createTableNodeWithDimensions } from "@lexical/table";
 import { $isCodeNode } from "@lexical/code";
 import {
   $createParagraphNode,
-  $createTextNode,
   $getNodeByKey,
   $getSelection,
   $isRangeSelection,
@@ -210,9 +209,8 @@ function runCommand(command: SlashCommand, tableSize?: { rows: number; cols: num
       selection.insertNodes([$createHorizontalRuleNode(), $createParagraphNode()]);
       return;
     case "toggle": {
-      const toggle = $createToggleNode(true);
-      toggle.append($createTextNode("Toggle"));
-      selection.insertNodes([toggle, $createParagraphNode()]);
+      const toggle = $createToggleNode(true, "");
+      selection.insertNodes([toggle]);
       toggle.selectEnd();
       return;
     }

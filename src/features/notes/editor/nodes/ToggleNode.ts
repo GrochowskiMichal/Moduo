@@ -1,6 +1,7 @@
 import {
   $applyNodeReplacement,
   $createParagraphNode,
+  $createTextNode,
   ElementNode,
   type DOMConversionMap,
   type DOMConversionOutput,
@@ -95,12 +96,6 @@ export class ToggleNode extends ElementNode {
 
   canIndent(): false {
     return false;
-  }
-
-  insertNewAfter(): LexicalNode {
-    const paragraph = $createParagraphNode();
-    this.insertAfter(paragraph);
-    return paragraph;
   }
 
   collapseAtStart(): true {
