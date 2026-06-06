@@ -865,7 +865,6 @@ export function NotesSplitView({
                 void onUpdateTitle(selectedEditorNote.id, value);
               }}
               syncEngine={syncEngine}
-              workspaceId={selectedEditorNote.workspaceId}
             />
           </div>
         </div>

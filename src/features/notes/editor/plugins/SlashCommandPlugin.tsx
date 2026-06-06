@@ -7,7 +7,6 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $setBlocksType } from "@lexical/selection";
 import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
 import { $createTableNodeWithDimensions } from "@lexical/table";
-import { $createEmbedNode } from "../nodes/EmbedNode";
 import {
   $createParagraphNode,
   $createTextNode,
@@ -51,8 +50,6 @@ const COMMANDS: SlashCommand[] = [
   { id: "divider", title: "Divider", keywords: ["hr", "separator"], group: "Blocks" },
   { id: "toggle", title: "Toggle", keywords: ["collapsible", "disclosure"], group: "Blocks" },
   { id: "table", title: "Table", keywords: ["grid", "spreadsheet"], group: "Media" },
-  { id: "embed-mindmap", title: "Embed Mindmap", keywords: ["mindmap", "link", "embed", "map"], group: "Embeds" },
-  { id: "embed-task", title: "Embed Task", keywords: ["task", "link", "embed", "kanban"], group: "Embeds" },
 ];
 
 // Icon map (SVG paths) keyed by command id
@@ -81,10 +78,6 @@ const COMMAND_ICONS: Record<string, string> = {
     "M9 18l6-6-6-6",
   table:
     "M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18",
-  "embed-mindmap":
-    "M12 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM20 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 5v3M6.5 15.5l3.5-4M17.5 15.5l-3.5-4",
-  "embed-task":
-    "M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11M3 12h4M3 16h4M3 8h4",
 };
 
 function CommandIcon({ id }: { id: string }) {
@@ -215,7 +208,6 @@ function runCommand(command: SlashCommand, tableSize?: { rows: number; cols: num
       selection.insertNodes([tableNode, $createParagraphNode()]);
       return;
     }
-    // embed-mindmap and embed-task are handled via picker, not here
     default:
       return;
   }
@@ -309,78 +301,21 @@ function groupedCommands(commands: SlashCommand[]) {
   return groups;
 }
 
-// ─── Embed pickers ────────────────────────────────────────────────────────────
-
-type EmbedItem = { id: string; label: string; sublabel?: string };
-
-function EmbedPicker({
-  items,
-  loading,
-  onPick,
-  emptyLabel,
-}: {
-  items: EmbedItem[];
-  loading: boolean;
-  onPick: (item: EmbedItem) => void;
-  emptyLabel: string;
-}) {
-  if (loading) {
-    return (
-      <div className="px-[10px] py-[8px] text-[12px] text-[#666]">
-        Loading…
-      </div>
-    );
-  }
-  if (items.length === 0) {
-    return (
-      <div className="px-[10px] py-[8px] text-[12px] text-[#666]">
-        {emptyLabel}
-      </div>
-    );
-  }
-  return (
-    <div className="max-h-[200px] overflow-y-auto px-[4px] py-[4px] custom-scrollbar">
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          className="flex w-full flex-col rounded-[8px] px-[10px] py-[6px] text-left hover:bg-[#202020] transition-colors"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            onPick(item);
-          }}
-        >
-          <span className="text-[13px] font-medium text-[#e0e0e0] truncate">{item.label}</span>
-          {item.sublabel ? (
-            <span className="text-[10px] text-[#666] mt-0.5 truncate">{item.sublabel}</span>
-          ) : null}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ─── Plugin ───────────────────────────────────────────────────────────────────
 
-export function SlashCommandPlugin({
-  workspaceId,
-}: {
-  workspaceId?: string;
-}) {
+export function SlashCommandPlugin() {
   const [editor] = useLexicalComposerContext();
   const [menu, setMenu] = useState<SlashMenuState | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   // Table picker
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
-  // Embed pickers
-  const [embedPickerKind, setEmbedPickerKind] = useState<"mindmap" | "task" | null>(null);
-  const [embedItems, setEmbedItems] = useState<EmbedItem[]>([]);
-  const [embedLoading, setEmbedLoading] = useState(false);
 
   const menuRef = useRef<SlashMenuState | null>(null);
+  const menuElementRef = useRef<HTMLDivElement | null>(null);
   const commandsRef = useRef<SlashCommand[]>([]);
   const selectedIndexRef = useRef(0);
   const menuSigRef = useRef<string | null>(null);
+  const dismissedMenuSigRef = useRef<string | null>(null);
 
   menuRef.current = menu;
 
@@ -396,8 +331,6 @@ export function SlashCommandPlugin({
     if (!menu) {
       setSelectedIndex(0);
       setTablePickerOpen(false);
-      setEmbedPickerKind(null);
-      setEmbedItems([]);
       return;
     }
     setSelectedIndex((current) => Math.min(current, Math.max(0, commands.length - 1)));
@@ -409,17 +342,39 @@ export function SlashCommandPlugin({
       if (typeof window === "undefined") return;
       const next = resolveSlashMenuState(editor);
       const nextSig = next ? `${next.nodeKey}:${next.startOffset}` : null;
+      const nextDismissSig = next ? `${next.nodeKey}:${next.startOffset}:${next.endOffset}:${next.query}` : null;
+      if (nextDismissSig !== dismissedMenuSigRef.current) {
+        dismissedMenuSigRef.current = null;
+      }
       if (nextSig && nextSig !== menuSigRef.current) {
         selectedIndexRef.current = 0;
         setSelectedIndex(0);
         setTablePickerOpen(false);
-        setEmbedPickerKind(null);
-        setEmbedItems([]);
       }
       menuSigRef.current = nextSig;
-      setMenu(next);
+      setMenu(nextDismissSig === dismissedMenuSigRef.current ? null : next);
     });
   }, [editor]);
+
+  // ── Close when clicking outside the menu ──────────────────────────────────
+  useEffect(() => {
+    if (!menu) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const menuElement = menuElementRef.current;
+      const target = event.target;
+      if (menuElement && target instanceof Node && menuElement.contains(target)) return;
+
+      dismissedMenuSigRef.current = `${menu.nodeKey}:${menu.startOffset}:${menu.endOffset}:${menu.query}`;
+      setTablePickerOpen(false);
+      setMenu(null);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [menu]);
 
   // ── Apply a command ────────────────────────────────────────────────────────
   const applyCommand = (command: SlashCommand, activeMenu: SlashMenuState, tableSize?: { rows: number; cols: number }) => {
@@ -428,69 +383,6 @@ export function SlashCommandPlugin({
       removeSlashToken(activeMenu);
       runCommand(command, tableSize);
     });
-  };
-
-  // ── Insert embed block ────────────────────────────────────────────────────
-  const insertEmbedBlock = (kind: "mindmap" | "task", item: EmbedItem, activeMenu: SlashMenuState) => {
-    editor.focus();
-    editor.update(() => {
-      removeSlashToken(activeMenu);
-      const selection = $getSelection();
-      if (!$isRangeSelection(selection)) return;
-      const embedNode = $createEmbedNode(kind, item.id);
-      selection.insertNodes([embedNode, $createParagraphNode()]);
-    });
-  };
-
-  // ── Load embed items ─────────────────────────────────────────────────────
-  const openEmbedPicker = async (kind: "mindmap" | "task", activeMenu: SlashMenuState) => {
-    setEmbedPickerKind(kind);
-    setEmbedLoading(true);
-    setEmbedItems([]);
-
-    try {
-      const { runtime } = await import("../../../../lib/runtime");
-      if (!runtime) {
-        setEmbedItems([]);
-        setEmbedLoading(false);
-        return;
-      }
-
-      if (kind === "mindmap") {
-        const wId = workspaceId ?? "";
-        const { listMindmaps } = await import("../../../mindmap/ui/mindmap-storage");
-        const maps = await listMindmaps(runtime, wId);
-        setEmbedItems(
-          maps.map((m) => ({ id: m.id, label: m.name, sublabel: `Mindmap · ${new Date(m.updatedAt).toLocaleDateString()}` }))
-        );
-      } else {
-        const wId = workspaceId ?? "";
-        const raw = await runtime.tasks.list(wId);
-        const allTasks: any[] = Array.isArray(raw?.tasks) ? raw.tasks : Array.isArray(raw) ? raw : [];
-        const projects: any[] = Array.isArray(raw?.projects) ? raw.projects : [];
-        const visibleProjectIds = new Set(
-          projects
-            .filter((p) => !(p.deletedAt ?? p.deleted_at))
-            .map((p) => p.id)
-        );
-        const visible = allTasks
-          .filter((t: any) => !t.deletedAt && !t.parentTaskId && visibleProjectIds.has(t.projectId))
-          .slice(0, 40);
-        setEmbedItems(
-          visible.map((t: any) => ({
-            id: t.id,
-            label: t.title || "Untitled",
-            sublabel: t.description ? t.description.slice(0, 60) : undefined,
-          }))
-        );
-      }
-    } catch {
-      setEmbedItems([]);
-    } finally {
-      setEmbedLoading(false);
-    }
-    // Keep a ref to the active menu for the picker callback
-    menuRef.current = activeMenu;
   };
 
   // ── Handle table pick ──────────────────────────────────────────────────────
@@ -549,12 +441,6 @@ export function SlashCommandPlugin({
           setTablePickerOpen(false);
           return true;
         }
-        if (embedPickerKind) {
-          event?.preventDefault();
-          setEmbedPickerKind(null);
-          setEmbedItems([]);
-          return true;
-        }
         if (!menuRef.current) return false;
         event?.preventDefault();
         setMenu(null);
@@ -562,7 +448,7 @@ export function SlashCommandPlugin({
       },
       COMMAND_PRIORITY_HIGH
     );
-  }, [editor, tablePickerOpen, embedPickerKind]);
+  }, [editor, tablePickerOpen]);
 
   // ── Enter ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -578,12 +464,6 @@ export function SlashCommandPlugin({
 
         if (command.id === "table") {
           setTablePickerOpen(true);
-          return true;
-        }
-
-        if (command.id === "embed-mindmap" || command.id === "embed-task") {
-          const kind = command.id === "embed-mindmap" ? "mindmap" : "task";
-          void openEmbedPicker(kind, activeMenu);
           return true;
         }
 
@@ -620,6 +500,7 @@ export function SlashCommandPlugin({
 
   return createPortal(
     <div
+      ref={menuElementRef}
       className="fixed z-[999] max-h-[420px] min-w-[280px] overflow-y-auto rounded-[14px] border border-[#252525] bg-[#161616] p-[6px] shadow-[0_16px_40px_#00000070] custom-scrollbar"
       style={{ top: menu.top, left: menu.left }}
       role="listbox"
@@ -667,12 +548,6 @@ export function SlashCommandPlugin({
                       return;
                     }
 
-                    if (command.id === "embed-mindmap" || command.id === "embed-task") {
-                      const kind = command.id === "embed-mindmap" ? "mindmap" : "task";
-                      void openEmbedPicker(kind, activeMenu);
-                      return;
-                    }
-
                     applyCommand(command, activeMenu);
                     setMenu(null);
                   }}
@@ -711,26 +586,6 @@ export function SlashCommandPlugin({
                 {isTable && tablePickerOpen && isSelected && (
                   <TableSizePicker onPick={handleTablePick} />
                 )}
-
-                {/* Embed picker (inline, under the embed button) */}
-                {(command.id === "embed-mindmap" || command.id === "embed-task") &&
-                  embedPickerKind === (command.id === "embed-mindmap" ? "mindmap" : "task") &&
-                  isSelected && (
-                    <EmbedPicker
-                      items={embedItems}
-                      loading={embedLoading}
-                      emptyLabel={command.id === "embed-mindmap" ? "No mindmaps found" : "No tasks found"}
-                      onPick={(item) => {
-                        const activeMenu = menuRef.current;
-                        if (!activeMenu) return;
-                        const kind = command.id === "embed-mindmap" ? "mindmap" : "task";
-                        insertEmbedBlock(kind, item, activeMenu);
-                        setMenu(null);
-                        setEmbedPickerKind(null);
-                        setEmbedItems([]);
-                      }}
-                    />
-                  )}
               </div>
             );
           })}

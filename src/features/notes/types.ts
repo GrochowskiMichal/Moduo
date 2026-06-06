@@ -65,12 +65,10 @@ export type SlashCommand = {
   | "code"
   | "divider"
   | "toggle"
-  | "table"
-  | "embed-mindmap"
-  | "embed-task";
+  | "table";
   title: string;
   keywords: string[];
-  group: "Basic" | "Lists" | "Blocks" | "Media" | "Embeds";
+  group: "Basic" | "Lists" | "Blocks" | "Media";
 };
 
 export type LocalOutboxEntry = {

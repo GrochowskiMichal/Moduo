@@ -20,6 +20,7 @@ import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
 import { TableNode, TableCellNode, TableRowNode } from "@lexical/table";
 import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
+  $createParagraphNode,
   $getSelection,
   $isRangeSelection,
   COMMAND_PRIORITY_HIGH,
@@ -30,7 +31,7 @@ import {
 import { $isListItemNode } from "@lexical/list";
 import type { NotesSyncEngine } from "../sync/sync-engine";
 import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
-import { EmbedNode } from "./nodes/EmbedNode";
+import { $createHorizontalRuleNode, $isHorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 
 type Props = {
   noteId: string;
@@ -38,7 +39,6 @@ type Props = {
   editable?: boolean;
   onTitleChange: (nextTitle: string) => void;
   syncEngine: NotesSyncEngine;
-  workspaceId?: string;
 };
 
 function NotesCodeHighlightPlugin() {
@@ -115,7 +115,59 @@ function NotesListTabIndentationPlugin() {
   return null;
 }
 
-export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChange, syncEngine, workspaceId }: Props) {
+function NotesDividerShortcutPlugin() {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    return editor.registerUpdateListener(() => {
+      const shouldConvert = editor.getEditorState().read(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+
+        let node = selection.anchor.getNode();
+        while (node && node.getType() !== "paragraph") {
+          const parent = node.getParent();
+          if (!parent) return false;
+          node = parent;
+        }
+
+        if (node.getType() !== "paragraph") return false;
+        const parent = node.getParent();
+        return parent?.getType() === "root" && node.getTextContent().trim() === "---";
+      });
+
+      if (!shouldConvert) return;
+
+      editor.update(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) return;
+
+        let node = selection.anchor.getNode();
+        while (node && node.getType() !== "paragraph") {
+          const parent = node.getParent();
+          if (!parent) return;
+          node = parent;
+        }
+
+        if (node.getType() !== "paragraph") return;
+        const parent = node.getParent();
+        if (parent?.getType() !== "root") return;
+        if (node.getTextContent().trim() !== "---") return;
+
+        const divider = $createHorizontalRuleNode();
+        const nextParagraph = $createParagraphNode();
+        node.insertBefore(divider);
+        divider.insertAfter(nextParagraph);
+        node.remove();
+        nextParagraph.select();
+      });
+    });
+  }, [editor]);
+
+  return null;
+}
+
+export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChange, syncEngine }: Props) {
   const [draftTitle, setDraftTitle] = useState(title);
   const collabSession = useMemo(() => syncEngine.getOrCreateSession(noteId), [noteId, syncEngine]);
   const [collabReady, setCollabReady] = useState(() => collabSession.persistence.synced);
@@ -178,7 +230,7 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
     onError: (error: Error) => {
       console.error("Lexical editor error:", error);
     },
-    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode, LinkNode, HorizontalRuleNode, TableNode, TableCellNode, TableRowNode, EmbedNode],
+    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode, LinkNode, HorizontalRuleNode, TableNode, TableCellNode, TableRowNode],
     theme: {
       paragraph: "notes-p",
       heading: {
@@ -223,7 +275,7 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
             <LexicalComposer initialConfig={initialConfig} key={noteId}>
               <RichTextPlugin
                 contentEditable={
-                  <ContentEditable className="min-h-full px-[22px] pb-[90px] pt-[6px] text-[16px] leading-[1.7] text-[#cfcfcf] outline-none" />
+                  <ContentEditable className="notes-editor-content min-h-full px-[22px] pb-[90px] pt-[6px] text-[16px] leading-[1.7] text-[#cfcfcf] outline-none" />
                 }
                 placeholder={
                   <div className="pointer-events-none absolute left-[22px] top-[6px] text-[16px] leading-[1.7] text-[#7a7a7a]">
@@ -235,11 +287,12 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
               <HistoryPlugin />
               <ListPlugin />
               <CheckListPlugin />
+              <NotesDividerShortcutPlugin />
               <NotesListTabIndentationPlugin />
               <NotesCodeHighlightPlugin />
               <LinkPlugin />
               <TablePlugin />
-              <SlashCommandPlugin workspaceId={workspaceId} />
+              <SlashCommandPlugin />
               {collabMode === "v2" && collabSession ? (
                 <>
                   <CollaborationPluginV2__EXPERIMENTAL
