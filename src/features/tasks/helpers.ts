@@ -56,6 +56,7 @@ export type NewTaskFields = {
   recurrence?: Task["recurrence"];
   energyLevel?: EnergyLevel | null;
   priority?: PriorityLevel | null;
+  durationMinutes?: number | null;
 };
 
 /**
@@ -74,7 +75,7 @@ export function makeTask(fields: NewTaskFields): Task {
     description: fields.description ?? "",
     dueDate: fields.dueDate ?? null,
     scheduledAt: fields.scheduledAt ?? null,
-    durationMinutes: null,
+    durationMinutes: fields.durationMinutes ?? null,
     recurrence: fields.recurrence ?? null,
     energyLevel: fields.energyLevel ?? null,
     priority: fields.priority ?? null,

@@ -77,6 +77,32 @@ touched). Full web production build compiles.
   to the hosted project for the **web** path to work; not auto-applied here.
 - Tags UI (model + runtime bindings exist; no surface yet).
 
+**Parked feedback (app-wide, not Tasks-specific):** Maciej finds the overall app
+density too large vs. Notion/Linear — even the smallest font-size setting is
+bigger than Notion's default. Needs a global type-scale / density tuning pass
+(tokens.css + the density setting). Recorded; **not to be started unprompted.**
+
+**Post-merge fixups (after syncing develop into maciej):** capture no longer
+fails silently when no bucket is loaded (toasts instead); the List view shows a
+"couldn't load tasks" banner + Retry when the bundle fails (e.g. web tables not
+yet migrated).
+
+**Capture modal redesigned → Linear-style (decision — Maciej; spec §6 updated
+first).** Quiet by default, every property one click away: NL title line +
+description + a row of always-visible property **pills** (bucket, scheduled, due,
+recurrence, priority, energy, duration). The title still parses dates/recurrence
+and pre-fills the relevant pills, but each pill is directly settable and a
+manual edit wins over the parser (so a user can set a date by hand, or not at
+all). Title is the only thing needed — Enter files instantly; `⌘↵` submits from
+the description; a "Create more" toggle keeps it open for rapid entry. Recurrence
+pill uses simple presets (no complex builder, per §7); tags deferred. New
+`parse/recurrence.ts` (preset → RRULE + next occurrence + human label);
+`durationMinutes` added to the task factory.
+
+**Right panel:** Tasks now renders a placeholder right rail (removed the
+`hideRight` lock) so the 3-pane resize/layout can be tested; real content comes
+later.
+
 ---
 
 ## Session 1b — Legacy tasks model removed (2026-06-06)

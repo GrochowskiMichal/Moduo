@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { onCreateNew } from "../../../components/app/create-events";
+import { Button } from "../../../components/ui/button";
 import type { GroupBy } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { BucketRail, type TasksMode } from "./bucket-rail";
@@ -91,7 +92,6 @@ export function TasksPlanView({ api, workspaceId }: Props) {
 
   // Where a captured task lands: the selected bucket, else Inbox.
   const captureBucketId = isAll ? inboxId : selection === "inbox" ? inboxId : selection;
-  const captureBucketName = captureBucketId ? bucketNameById(captureBucketId) : "Inbox";
 
   const totalOpenCount = useMemo(
     () => tasks.filter((t) => t.status !== "done" && t.status !== "archived").length,
@@ -127,7 +127,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     />
   );
 
-  const center =
+  const body =
     mode === "execute" ? (
       <ExecuteStub committedCount={committedCount} onBackToPlan={() => setMode("plan")} />
     ) : (
@@ -146,14 +146,44 @@ export function TasksPlanView({ api, workspaceId }: Props) {
       />
     );
 
+  const center = (
+    <div className="flex h-full min-h-0 flex-col">
+      {api.error ? (
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-3 rounded-md border border-border bg-muted px-3 py-2 text-sm">
+          <span className="min-w-0 truncate text-muted-foreground">
+            Couldn’t load tasks: {api.error}
+          </span>
+          <Button size="sm" variant="secondary" onClick={() => void api.reload()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+      <div className="min-h-0 flex-1">{body}</div>
+    </div>
+  );
+
+  const right = (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <h2 className="font-display text-sm text-foreground">Context</h2>
+      <p className="text-sm text-muted-foreground">
+        Placeholder panel. Task details, a mini-calendar, and related context will
+        live here in future sessions.
+      </p>
+      <p className="mt-auto text-xs text-muted-foreground/70">
+        Drag the divider to resize — this rail is here for layout testing.
+      </p>
+    </div>
+  );
+
   return (
     <>
-      <FeaturePanelsShell feature="tasks" left={left} center={center} hideRight />
+      <FeaturePanelsShell feature="tasks" left={left} center={center} right={right} />
       <CaptureModal
         open={captureOpen}
         onOpenChange={setCaptureOpen}
-        bucketId={captureBucketId}
-        bucketName={captureBucketName}
+        buckets={buckets}
+        inbox={inbox}
+        defaultBucketId={captureBucketId}
         onCreate={api.createTask}
       />
     </>

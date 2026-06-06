@@ -75,7 +75,11 @@ Example buckets: Junction, Fitness, Diet, Money, Moduo, Plugin Client, EP, Hango
 
 Keyboard: `cmd+n` → new item in current module (Tasks → new-task modal). `cmd+shift+n` → numbered module selector, then `cmd+number`. `cmd+k` (separate workstream) → Spotlight-like search.
 
-New-task modal: single text field, natural language. Parser extracts dates + recurrence only. Bucket defaults to selected/last-used. Enter submits; task lands immediately. **Land directly, fix lazily** — no triage queue; a confirmation toast shows the parse ("Take vitamins — recurs daily at 8:00 AM. Change?") with one-click edit.
+New-task modal — **Linear-style**: a natural-language title line on top, a description field, and a quiet row of always-visible **property pills** (bucket, due date, scheduled time, recurrence, priority, energy, duration). Quiet by default, **everything one click away** (principles 1 & 3). The title still parses dates + recurrence (chrono + vocabulary) and **pre-fills the relevant pills** — but every pill is also directly settable, so a user can enter a date manually (not parsed) or leave it off entirely. A manually-set pill wins over the parser for that field.
+
+Bucket defaults to selected/last-used. **Title is the only thing needed** — Enter on the title alone files immediately to the default bucket. `⌘↵` submits from anywhere (e.g. the description). A "Create more" toggle keeps the modal open for rapid entry. **Land directly, fix lazily** — a confirmation toast shows the parse ("Take vitamins — recurs daily at 8:00 AM").
+
+This is *not* a required-field form: the pills are optional, never block submit, and default to sensible values. Tags are deferred (own surface).
 
 Anti-patterns: required-field forms before submit, triage queues, multi-step wizards, forced bucket dropdowns.
 
