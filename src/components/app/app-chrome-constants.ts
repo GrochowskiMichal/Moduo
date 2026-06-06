@@ -12,6 +12,7 @@ export function nowIso(): string {
 export const baseModulesNavItems: ModuleNavItem[] = [
   { label: "Grid", iconName: "grid", href: "/" },
   { label: "Notes", iconName: "file-text", href: "/notes", module: "notes" },
+  { label: "Tasks", iconName: "check-square", href: "/tasks", module: "tasks" },
   { label: "Mindmap", iconName: "git-branch", href: "/mindmap", module: "mindmap" },
   { label: "Email", iconName: "mail", href: "/email", module: "email" },
   { label: "CRM", iconName: "folder", href: "/crm" },

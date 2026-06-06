@@ -10,8 +10,15 @@
 /** Fixed task lifecycle status. */
 export type TaskStatus = "todo" | "in_progress" | "done" | "archived";
 
-/** Optional per-task energy estimate. */
+/** Optional per-task energy estimate — *how demanding* a task is to do. */
 export type EnergyLevel = "low" | "medium" | "high";
+
+/**
+ * Optional per-task priority — *how important* a task is to get done. Distinct
+ * from {@link EnergyLevel} (demand). Ambient only — never render as red/alarming
+ * (design principles 4 & 5). An `"urgent"` tier is a future, non-breaking add.
+ */
+export type PriorityLevel = "low" | "medium" | "high";
 
 /** Recurrence definition (rrule.js-compatible). Produced by the capture parser. */
 export type RecurrenceRule = {
@@ -59,7 +66,10 @@ export type Task = {
   /** Estimated/blocked duration in minutes (default-on-drop, resizable). */
   durationMinutes: number | null;
   recurrence: RecurrenceRule | null;
+  /** How demanding the task is to do. */
   energyLevel: EnergyLevel | null;
+  /** How important the task is to get done. Optional, ambient. */
+  priority: PriorityLevel | null;
   status: TaskStatus;
   /** Today's-commit-queue membership: the date (YYYY-MM-DD) committed for. */
   committedFor: string | null;

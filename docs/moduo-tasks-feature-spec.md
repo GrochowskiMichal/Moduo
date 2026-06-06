@@ -123,7 +123,9 @@ Anti-patterns: required-field forms before submit, triage queues, multi-step wiz
 
 ## 11. Data Model (suggested — adjust to codebase)
 
-**Task:** `id`, `workspace_id`, `bucket_id` (req), `title`, `description`, `due_date?`, `scheduled_at?`, `duration_minutes?` (default-on-drop, resizable), `recurrence?` (rrule), `energy_level?` (low/med/high), `status` (todo/in_progress/done/archived), `committed_for?` (date), `commit_order?` (int), `reschedule_count` (int, ambient), `created_at`, `updated_at`, `drifted` (computed: `scheduled_at < now() AND status NOT IN (done, archived)`).
+**Task:** `id`, `workspace_id`, `bucket_id` (req), `title`, `description`, `due_date?`, `scheduled_at?`, `duration_minutes?` (default-on-drop, resizable), `recurrence?` (rrule), `energy_level?` (low/med/high), `priority?` (low/med/high), `status` (todo/in_progress/done/archived), `committed_for?` (date), `commit_order?` (int), `reschedule_count` (int, ambient), `created_at`, `updated_at`, `drifted` (computed: `scheduled_at < now() AND status NOT IN (done, archived)`).
+
+**Energy vs. priority (two distinct optional axes).** `energy_level` = *how demanding* a task is (the cost to do it); `priority` = *how important* it is to get done (its weight in time). Both are optional, unset by default, and rendered **ambiently** — never red, never alarming (principles 4 & 5). Both are offered as opt-in group-by dimensions in List view alongside None / Status / Bucket. `priority` uses low/med/high to mirror `energy_level`; an `urgent` tier is a non-breaking future enum extension if dogfooding wants it.
 
 **Bucket:** `id`, `workspace_id`, `name`, `is_system` (Inbox), `created_at`. No cooldown field.
 

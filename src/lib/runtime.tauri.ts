@@ -437,4 +437,37 @@ export const tauriRuntime: ModuoRuntime = {
       return invoke<any>("calendar_apple_oauth_start");
     },
   },
+
+  tasks: {
+    list(workspaceId) {
+      return invoke("tasks_module_list", { workspaceId });
+    },
+    seedInbox(workspaceId) {
+      return invoke("tasks_module_seed_inbox", { workspaceId });
+    },
+    upsertBucket(bucket) {
+      return invoke("tasks_module_upsert_bucket", { bucket });
+    },
+    deleteBucket(input) {
+      return invoke("tasks_module_delete_bucket", { input });
+    },
+    upsertTask(task) {
+      return invoke("tasks_module_upsert_task", { task });
+    },
+    deleteTask(input) {
+      return invoke("tasks_module_delete_task", { input });
+    },
+    upsertTag(tag) {
+      return invoke("tasks_module_upsert_tag", { tag });
+    },
+    deleteTag(input) {
+      return invoke("tasks_module_delete_tag", { input });
+    },
+    attachTag(input) {
+      return invoke("tasks_module_attach_tag", { input });
+    },
+    detachTag(input) {
+      return invoke("tasks_module_detach_tag", { input });
+    },
+  },
 };

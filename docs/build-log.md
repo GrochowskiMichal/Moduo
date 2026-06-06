@@ -6,6 +6,79 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Session 2 — Plan Mode: Buckets + List + Capture (2026-06-06)
+
+Branch `t/maciej/tasks-plan-mode` off `maciej`. First visible, usable Tasks UI on
+the new model. Desktop (redb) and web (Supabase) both functional.
+
+**New data-model field (decision — Maciej):** added an optional `priority`
+(low/med/high) axis distinct from `energy_level`. Energy = *how demanding*;
+priority = *how important in time*. Both optional, ambient (never red), and
+opt-in group-by dimensions. Spec §11 updated first, then code. Touched:
+[domain/mod.rs](../src-tauri/src/domain/mod.rs) (`PriorityLevel` enum +
+`Task.priority`, `#[serde(default)]` → backward-compatible redb rows; test
+literal updated), [model.ts](../src/features/tasks/model.ts), and a new
+append-only migration
+[20260606130000_tasks_add_priority.sql](../supabase/migrations/20260606130000_tasks_add_priority.sql)
+(adds the column + recreates the drift view). `urgent` is a future non-breaking
+enum/CHECK extension.
+
+**Runtime bindings (both platforms — was deferred from Session 1):**
+`ModuoRuntime.tasks` interface in [runtime.types.ts](../src/lib/runtime.types.ts);
+desktop impl invokes the `tasks_module_*` commands
+([runtime.tauri.ts](../src/lib/runtime.tauri.ts)); **web impl is Supabase-backed**
+([runtime.web.ts](../src/lib/runtime.web.ts)) with camelCase↔snake_case row
+mappers and JS-side lazy Inbox seeding (mirrors the redb path; RLS scopes rows).
+Per Maciej's call, web parity is in this session (not deferred with cloud-sync).
+
+**Route + nav:** `/tasks` route re-added ([router.tsx](../src/router.tsx)); nav
+item (`module:"tasks"`, `check-square`) in
+[app-chrome-constants.ts](../src/components/app/app-chrome-constants.ts) — gated by
+`modulePermissions.tasks` (shows on web too, not desktop-only); palette "Open
+Tasks"; `/tasks → "tasks"` in [panel-events.ts](../src/features/layout/panel-events.ts).
+
+**Feature ([src/features/tasks/](../src/features/tasks/)):**
+- `hooks/use-tasks-module.ts` — loads the bundle, optimistic CRUD over
+  buckets/tasks, derived open-counts + soft per-bucket drift counts.
+- `parse/capture-parser.ts` — Tier-1 parser: `chrono-node` for date/time +
+  constrained vocabulary over `rrule.js` for recurrence (every day / weekday /
+  <weekday> / N weeks / daily-weekly-monthly-yearly). Time-bearing → `scheduledAt`;
+  date-only → `dueDate`; recurrence → `recurrence` + next occurrence (9am default
+  when timeless). Unparseable "every …" is flagged, never guessed.
+- `ui/` — `tasks-plan-view` (FeaturePanelsShell, hideRight; persists
+  mode/selection/groupBy per workspace), `bucket-rail` (Plan/Execute toggle,
+  All/Inbox + user buckets with counts + ambient drift, **instant** add-bucket,
+  rename/delete), `task-list-view` (Linear-style: group by None/Status/Bucket/
+  Priority/Energy, collapsible groups — one open by default when grouped by
+  bucket; keyboard j/k/x/Enter-e/c/b/s/d, mod+⌫ delete), `task-row` (complete
+  toggle, inline rename, scheduled/due/recurrence meta with inline popovers,
+  energy/priority dots + right-click context menu), `capture-modal` (cmd+n,
+  single field, live parse preview, confirmation toast), `execute-stub`.
+- `routes/pages/tasks-page.tsx` — permission/auth gating (mirrors NotesPage).
+
+Design principles honored: no required-field forms (capture is one field, lands
+immediately), no triage queue, no blocking modals; drift is ambient/soft;
+instant bucket creation.
+
+**Verified:** `bun run typecheck` clean; `cargo check` clean; `cargo test
+domain::tests` 5/5; `bun run lint:tw` clean; `lint:css` unchanged (no CSS
+touched). Full web production build compiles.
+
+**Deferred / not this session:**
+- Commit action + Execute-mode loop (Now card/timer/queue, "Start my day") —
+  **Session 3**. Execute is a visible stub; the toggle works.
+- One-click "Edit" action on the confirmation toast (spec §6) — toast shows the
+  parse; the inline-edit jump from it is a small follow-up.
+- Real drift batch-triage + Board view + default-view (time-block) logic —
+  **Session 4**. (Per-bucket drift counts already render, soft.)
+- Live cloud-sync of the redb↔postgres tables (desktop offline → cloud) — still
+  its own task; web talks to Supabase directly, desktop to redb.
+- Supabase migrations (`…create_tasks_module`, `…add_priority`) must be applied
+  to the hosted project for the **web** path to work; not auto-applied here.
+- Tags UI (model + runtime bindings exist; no surface yet).
+
+---
+
 ## Session 1b — Legacy tasks model removed (2026-06-06)
 
 Same branch. Pulled the staged deletion forward (was planned for the Plan-mode

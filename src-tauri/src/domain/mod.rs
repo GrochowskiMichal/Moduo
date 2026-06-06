@@ -136,10 +136,22 @@ impl Default for TaskStatus {
     }
 }
 
-/// Optional per-task energy estimate.
+/// Optional per-task energy estimate — *how demanding* a task is to do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EnergyLevel {
+    Low,
+    Medium,
+    High,
+}
+
+/// Optional per-task priority — *how important* a task is to get done. Distinct
+/// from [`EnergyLevel`] (demand). Ambient signal only — never rendered as red /
+/// alarming (design principles 4 & 5). Mirrors `EnergyLevel`'s shape; an
+/// `urgent` tier is a non-breaking future extension.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PriorityLevel {
     Low,
     Medium,
     High,
@@ -196,7 +208,12 @@ pub struct Task {
     /// Estimated/blocked duration in minutes (default-on-drop, resizable).
     pub duration_minutes: Option<i64>,
     pub recurrence: Option<RecurrenceRule>,
+    /// How demanding the task is to do.
     pub energy_level: Option<EnergyLevel>,
+    /// How important the task is to get done. Optional, ambient. `serde(default)`
+    /// keeps existing redb rows (written before this field) deserializable.
+    #[serde(default)]
+    pub priority: Option<PriorityLevel>,
     #[serde(default)]
     pub status: TaskStatus,
     /// Today's-commit-queue membership: the date (YYYY-MM-DD) committed for.
@@ -419,6 +436,7 @@ mod tests {
             duration_minutes: None,
             recurrence: None,
             energy_level: None,
+            priority: None,
             status,
             committed_for: None,
             commit_order: None,

@@ -5,6 +5,7 @@ import { AuthPage } from "./routes/pages/auth-page";
 import { OnboardingPage } from "./routes/pages/onboarding-page";
 import { GridPage } from "./routes/pages/grid-page";
 import { NotesPage } from "./routes/pages/notes-page";
+import { TasksPage } from "./routes/pages/tasks-page";
 import { MindmapPage } from "./routes/pages/mindmap-page";
 import { EmailPage } from "./routes/pages/email-page";
 import { CrmPage } from "./routes/pages/crm-page";
@@ -66,6 +67,12 @@ const notesRoute = createRoute({
   component: NotesPage,
 });
 
+const tasksRoute = createRoute({
+  getParentRoute: () => appGateRoute,
+  path: "/tasks",
+  component: TasksPage,
+});
+
 const mindmapRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/mindmap",
@@ -98,6 +105,7 @@ const routeTree = rootRoute.addChildren([
     homeRoute,
     legacyGridRoute,
     notesRoute,
+    tasksRoute,
     mindmapRoute,
     emailRoute,
     crmRoute,
