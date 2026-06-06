@@ -505,66 +505,6 @@ export const webRuntime: ModuoRuntime = {
     },
   },
 
-  tasks: {
-    async list(workspaceId) {
-      const [projectsRes, statesRes, itemsRes, commentsRes] = await Promise.all([
-        supabaseClient.from("tasks_projects").select("*").eq("workspace_id", workspaceId).is("deleted_at", null),
-        supabaseClient.from("tasks_states").select("*"),
-        supabaseClient.from("tasks_items").select("*").is("deleted_at", null),
-        supabaseClient.from("tasks_comments").select("*").is("deleted_at", null),
-      ]);
-      return {
-        projects: projectsRes.data ?? [],
-        states: statesRes.data ?? [],
-        tasks: itemsRes.data ?? [],
-        comments: commentsRes.data ?? [],
-      };
-    },
-    async upsert(input) {
-      if (input.project) {
-        const { data, error } = await supabaseClient.from("tasks_projects").upsert(input.project, { onConflict: "id" }).select().single();
-        if (error) throw new Error(error.message);
-        return { project: data };
-      }
-      if (input.workflowState) {
-        const { data, error } = await supabaseClient.from("tasks_states").upsert(input.workflowState, { onConflict: "id" }).select().single();
-        if (error) throw new Error(error.message);
-        return { workflowState: data };
-      }
-      if (input.task) {
-        const { data, error } = await supabaseClient.from("tasks_items").upsert(input.task, { onConflict: "id" }).select().single();
-        if (error) throw new Error(error.message);
-        return { task: data };
-      }
-      return null;
-    },
-    upsertProject(project) { return webRuntime.tasks.upsert({ project }).then((r: any) => r?.project ?? r); },
-    upsertState(workflowState) { return webRuntime.tasks.upsert({ workflowState }).then((r: any) => r?.workflowState ?? r); },
-    upsertItem(task) { return webRuntime.tasks.upsert({ task }).then((r: any) => r?.task ?? r); },
-    async move({ taskId, newStateId, newPosition }) {
-      const { data, error } = await supabaseClient.from("tasks_items").update({ state_id: newStateId, position: parseInt(newPosition) || 0 }).eq("id", taskId).select().single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    async deleteItem({ taskId, deletedAt }) {
-      const { error } = await supabaseClient.from("tasks_items").update({ deleted_at: deletedAt ?? new Date().toISOString() }).eq("id", taskId);
-      if (error) throw new Error(error.message);
-      return { taskId };
-    },
-    async addComment(comment) {
-      const { data, error } = await supabaseClient.from("tasks_comments").insert(comment).select().single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    upsertComment(comment) { return webRuntime.tasks.addComment(comment); },
-    async deleteComment(commentId) {
-      await supabaseClient.from("tasks_comments").update({ deleted_at: new Date().toISOString() }).eq("id", commentId);
-    },
-    async subscribeLocal(workspaceId) {
-      return `tasks:${workspaceId}`;
-    },
-  },
-
   graph: {
     async upsertNodesEdges() { /* Graph search not available on web in v1 */ },
     async queryRelated() { return []; },

@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useAuth } from "../../../providers/auth-provider";
-import type { CalendarEvent } from "../../calendar/types";
+import type { CalendarEvent } from "../types";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 

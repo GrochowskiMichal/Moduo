@@ -6,6 +6,51 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Session 1b — Legacy tasks model removed (2026-06-06)
+
+Same branch. Pulled the staged deletion forward (was planned for the Plan-mode
+session) so Session 2 starts on a clean slate. The new bucket/task/tag model is
+now the **only** Tasks model.
+
+**Removed (pure-legacy):** `commands/tasks.rs`; the legacy domain structs
+(`TaskProject`/`TaskWorkflowState`/`TaskItem`/`TaskComment`/`TaskActivity`/
+`TasksBundle`/`ProjectLabel`) + their redb tables (`tasks_projects`,
+`tasks_states`, `tasks_items`, `tasks_comments`, `tasks_outbox`, `tasks_oplog`,
+`tasks_activity`) + store methods; the entire `src/features/plan/` UI; the legacy
+`src/features/tasks/` files (kept only `model.ts`); `ground-page.tsx`; the
+dashboard `tasks-widget`; the notes `EmbeddedTask` block; and the orphaned
+(dead) `app-chrome-menus.tsx`.
+
+**Decoupled (edited, not deleted):** runtime `tasks` namespace dropped from
+`runtime.types.ts` + `.tauri.ts` + `.web.ts`; `router.tsx` lost `/ground`,
+`/tasks`, `/calendar` routes; `app-chrome-constants` lost the "Ground" nav item;
+dashboard `grid-page`/`grid-workspace`/`dashboard-grid`/`widgets-panel` +
+`WidgetType` lost the "tasks" widget; notes `SlashCommandPlugin` lost the "Embed
+Task" command; `expose.ts` no longer hydrates task embeds; `EmbedNode` keeps the
+`"task"` kind for back-compat but renders nothing; `sync/mod.rs` lost the
+`tasks_*` push/pull entries; `migration_legacy` keeps notes import only;
+`dump_workspace_hashes` now hashes the new bucket/task/tag bundle.
+
+**Preserved (moved out of `plan/`):** `use-slot-bookings-sync.ts` (Calendar
+slot-booking → calendar-event sync; live, called by `app-gate`) and
+`expose-slot.ts` (Calendly-style host-side slot exposure) → moved to
+`src/features/calendar/{hooks,utils}/`. `expose-slot` is now uncalled (its only
+UI was the deleted plan link-view) — re-surface it when the Calendar module is built.
+
+**Decisions (Maciej):** strip all tasks routes & nav now (no placeholder — Session
+2 re-adds the `/tasks` route + nav); remove the notes EmbeddedTask + dashboard
+tasks-widget (rebuild on the new model later). `modulePermissions.tasks` kept —
+the new model reuses it.
+
+**Verified:** `bun run typecheck` clean; `cargo check` clean; `cargo test
+domain::tests` 5/5.
+
+**Left for Session 2:** add the `/tasks` route + nav entry; build Plan-mode UI
+(buckets + List + capture) on the new model; runtime bindings (`rt.tasks.*`) for
+the `tasks_module_*` commands; cloud-sync wiring for the new tables.
+
+---
+
 ## Session 1 — Data Model & Foundation (2026-06-06)
 
 Branch `t/maciej/tasks-data-model` off `maciej`.
@@ -49,7 +94,7 @@ Branch `t/maciej/tasks-data-model` off `maciej`.
 **Verified:** `bun run typecheck` clean; `cargo check` clean.
 
 **Deferred (not this session):**
-- Removal of the legacy `tasks_*` model + `features/plan` UI (staged → Plan-mode session).
+- Removal of the legacy `tasks_*` model + `features/plan` UI → **done in Session 1b (above)**.
 - Live cloud-sync wiring for the new tables (SYNC_TABLES/PULL_TABLES + the
   redb-camelCase ↔ postgres-snake_case field mapping). The existing sync engine
   has a casing mismatch and an unpopulated task outbox; wiring it correctly is

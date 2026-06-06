@@ -2,18 +2,13 @@
 //!
 //! This is the spec'd ADHD bucket/commit/execute Tasks model (see
 //! `docs/moduo-tasks-feature-spec.md` §11 and `docs/moduo-architecture-vocabulary.md`).
-//! It is the canonical Tasks model going forward and supersedes the legacy
-//! Linear-style `commands/tasks.rs` (TaskProject / TaskWorkflowState / TaskItem),
-//! which is slated for removal together with its `features/plan` UI in a later
-//! session.
+//! It is the only Tasks model; the legacy Linear-style `commands/tasks.rs`
+//! (TaskProject / TaskWorkflowState / TaskItem) and its `features/plan` UI were
+//! removed.
 //!
-//! Scope of this session is the data layer only (schema + CRUD + Inbox seeding +
-//! computed drift). The commit-queue / Execute-mode behavior and cloud-sync
-//! wiring are intentionally deferred — the fields exist; the logic lands later.
-//!
-//! The small permission/identity helpers below are duplicated from
-//! `commands/tasks.rs` on purpose, so this module stays self-contained and the
-//! legacy file can be deleted wholesale later without breaking this one.
+//! Scope is the data layer (schema + CRUD + Inbox seeding + computed drift). The
+//! commit-queue / Execute-mode behavior and cloud-sync wiring are intentionally
+//! deferred — the fields exist; the logic lands later.
 
 use serde::Deserialize;
 use tauri::State;

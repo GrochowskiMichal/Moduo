@@ -12,9 +12,9 @@ use serde::{de::DeserializeOwned, Serialize};
 
 use crate::domain::{
     Bucket, CategoryRule, FocusSession, GraphEdge, GraphNode, ModulePermissions, NoteCrdtUpdate,
-    NoteDocState, NoteMeta, Tag, TagLink, Task, TaskActivity, TaskComment, TaskItem, TaskProject,
-    TaskWorkflowState, TasksBundle, TasksModuleBundle, TimeCategory, TimeEntry, TimeProject,
-    TimetrackingBundle, WorkspaceInvite, WorkspaceMember, WorkspaceNotification, WorkspaceSummary,
+    NoteDocState, NoteMeta, Tag, TagLink, Task, TasksModuleBundle, TimeCategory, TimeEntry,
+    TimeProject, TimetrackingBundle, WorkspaceInvite, WorkspaceMember, WorkspaceNotification,
+    WorkspaceSummary,
 };
 
 pub const NOTES_META: TableDefinition<&str, &str> = TableDefinition::new("notes_meta");
@@ -23,16 +23,8 @@ pub const NOTES_DOC_STATE: TableDefinition<&str, &str> = TableDefinition::new("n
 pub const NOTES_OUTBOX: TableDefinition<&str, &str> = TableDefinition::new("notes_outbox");
 pub const NOTES_OPLOG: TableDefinition<&str, &str> = TableDefinition::new("notes_oplog");
 
-pub const TASKS_PROJECTS: TableDefinition<&str, &str> = TableDefinition::new("tasks_projects");
-pub const TASKS_STATES: TableDefinition<&str, &str> = TableDefinition::new("tasks_states");
-pub const TASKS_ITEMS: TableDefinition<&str, &str> = TableDefinition::new("tasks_items");
-pub const TASKS_COMMENTS: TableDefinition<&str, &str> = TableDefinition::new("tasks_comments");
-pub const TASKS_OUTBOX: TableDefinition<&str, &str> = TableDefinition::new("tasks_outbox");
-pub const TASKS_OPLOG: TableDefinition<&str, &str> = TableDefinition::new("tasks_oplog");
-pub const TASKS_ACTIVITY: TableDefinition<&str, &str> = TableDefinition::new("tasks_activity");
-
-// Tasks module v1 (ADHD bucket / commit / execute model). Canonical going
-// forward; supersedes the legacy tasks_* tables above.
+// Tasks module v1 (ADHD bucket / commit / execute model). The only Tasks model;
+// the legacy tasks_projects/tasks_states/tasks_items/... tables were removed.
 pub const BUCKETS: TableDefinition<&str, &str> = TableDefinition::new("buckets");
 pub const TASKS: TableDefinition<&str, &str> = TableDefinition::new("tasks");
 pub const TAGS: TableDefinition<&str, &str> = TableDefinition::new("tags");
@@ -100,14 +92,6 @@ impl RedbStore {
         let _ = write_txn.open_table(NOTES_DOC_STATE)?;
         let _ = write_txn.open_table(NOTES_OUTBOX)?;
         let _ = write_txn.open_table(NOTES_OPLOG)?;
-
-        let _ = write_txn.open_table(TASKS_PROJECTS)?;
-        let _ = write_txn.open_table(TASKS_STATES)?;
-        let _ = write_txn.open_table(TASKS_ITEMS)?;
-        let _ = write_txn.open_table(TASKS_COMMENTS)?;
-        let _ = write_txn.open_table(TASKS_OUTBOX)?;
-        let _ = write_txn.open_table(TASKS_OPLOG)?;
-        let _ = write_txn.open_table(TASKS_ACTIVITY)?;
 
         let _ = write_txn.open_table(BUCKETS)?;
         let _ = write_txn.open_table(TASKS)?;
@@ -232,13 +216,6 @@ impl RedbStore {
             NOTES_DOC_STATE,
             NOTES_OUTBOX,
             NOTES_OPLOG,
-            TASKS_PROJECTS,
-            TASKS_STATES,
-            TASKS_ITEMS,
-            TASKS_COMMENTS,
-            TASKS_OUTBOX,
-            TASKS_OPLOG,
-            TASKS_ACTIVITY,
             BUCKETS,
             TASKS,
             TAGS,
@@ -476,74 +453,6 @@ impl RedbStore {
             update.workspace_id, update.note_id, update.client_id, update.client_seq
         );
         self.put_json(NOTES_OPLOG, key.as_str(), update)
-    }
-
-    pub fn put_task_project(&self, project: &TaskProject) -> anyhow::Result<()> {
-        self.put_json(TASKS_PROJECTS, &project.id, project)
-    }
-
-    pub fn put_task_state(&self, state: &TaskWorkflowState) -> anyhow::Result<()> {
-        self.put_json(TASKS_STATES, &state.id, state)
-    }
-
-    pub fn put_task_item(&self, task: &TaskItem) -> anyhow::Result<()> {
-        self.put_json(TASKS_ITEMS, &task.id, task)
-    }
-
-    pub fn put_task_comment(&self, comment: &TaskComment) -> anyhow::Result<()> {
-        self.put_json(TASKS_COMMENTS, &comment.id, comment)
-    }
-
-    pub fn put_task_activity(&self, activity: &TaskActivity) -> anyhow::Result<()> {
-        self.put_json(TASKS_ACTIVITY, &activity.id, activity)
-    }
-
-    pub fn get_task_item(&self, task_id: &str) -> anyhow::Result<Option<TaskItem>> {
-        self.get_json(TASKS_ITEMS, task_id)
-    }
-
-    pub fn get_task_comment(&self, comment_id: &str) -> anyhow::Result<Option<TaskComment>> {
-        self.get_json(TASKS_COMMENTS, comment_id)
-    }
-
-    pub fn remove_task_comment(&self, comment_id: &str) -> anyhow::Result<()> {
-        self.remove_key(TASKS_COMMENTS, comment_id)
-    }
-
-    pub fn list_tasks_bundle(&self, workspace_id: &str) -> anyhow::Result<TasksBundle> {
-        let projects = self
-            .list_json::<TaskProject>(TASKS_PROJECTS)?
-            .into_iter()
-            .filter(|x| x.workspace_id == workspace_id)
-            .collect();
-        let states = self
-            .list_json::<TaskWorkflowState>(TASKS_STATES)?
-            .into_iter()
-            .filter(|x| x.workspace_id == workspace_id)
-            .collect();
-        let tasks = self
-            .list_json::<TaskItem>(TASKS_ITEMS)?
-            .into_iter()
-            .filter(|x| x.workspace_id == workspace_id)
-            .collect();
-        let comments = self
-            .list_json::<TaskComment>(TASKS_COMMENTS)?
-            .into_iter()
-            .filter(|x| x.workspace_id == workspace_id)
-            .collect();
-        let activities = self
-            .list_json::<TaskActivity>(TASKS_ACTIVITY)?
-            .into_iter()
-            .filter(|x| x.workspace_id == workspace_id)
-            .collect();
-
-        Ok(TasksBundle {
-            projects,
-            states,
-            tasks,
-            comments,
-            activities,
-        })
     }
 
     // ─── Tasks module v1 (buckets / tasks / tags) ──────────────────────────────
@@ -1172,14 +1081,14 @@ impl RedbStore {
         workspace_id: &str,
     ) -> anyhow::Result<HashMap<String, String>> {
         let notes = self.list_notes(workspace_id)?;
-        let tasks = self.list_tasks_bundle(workspace_id)?;
+        let bundle = self.list_tasks_module_bundle(workspace_id)?;
         let notes_hash = format!("{}:{}", notes.len(), stable_hash(&notes)?);
         let task_hash = format!(
             "{}:{}:{}:{}",
-            tasks.projects.len() + tasks.states.len() + tasks.tasks.len() + tasks.comments.len(),
-            stable_hash(&tasks.projects)?,
-            stable_hash(&tasks.tasks)?,
-            stable_hash(&tasks.comments)?
+            bundle.buckets.len() + bundle.tasks.len() + bundle.tags.len() + bundle.tag_links.len(),
+            stable_hash(&bundle.buckets)?,
+            stable_hash(&bundle.tasks)?,
+            stable_hash(&bundle.tags)?
         );
 
         let mut out = HashMap::new();

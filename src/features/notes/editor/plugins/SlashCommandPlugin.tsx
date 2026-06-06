@@ -52,7 +52,6 @@ const COMMANDS: SlashCommand[] = [
   { id: "toggle", title: "Toggle", keywords: ["collapsible", "disclosure"], group: "Blocks" },
   { id: "table", title: "Table", keywords: ["grid", "spreadsheet"], group: "Media" },
   { id: "embed-mindmap", title: "Embed Mindmap", keywords: ["mindmap", "link", "embed", "map"], group: "Embeds" },
-  { id: "embed-task", title: "Embed Task", keywords: ["task", "link", "embed", "kanban"], group: "Embeds" },
 ];
 
 // Icon map (SVG paths) keyed by command id
@@ -83,8 +82,6 @@ const COMMAND_ICONS: Record<string, string> = {
     "M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18",
   "embed-mindmap":
     "M12 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM20 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 5v3M6.5 15.5l3.5-4M17.5 15.5l-3.5-4",
-  "embed-task":
-    "M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11M3 12h4M3 16h4M3 8h4",
 };
 
 function CommandIcon({ id }: { id: string }) {
@@ -464,25 +461,9 @@ export function SlashCommandPlugin({
           maps.map((m) => ({ id: m.id, label: m.name, sublabel: `Mindmap · ${new Date(m.updatedAt).toLocaleDateString()}` }))
         );
       } else {
-        const wId = workspaceId ?? "";
-        const raw = await runtime.tasks.list(wId);
-        const allTasks: any[] = Array.isArray(raw?.tasks) ? raw.tasks : Array.isArray(raw) ? raw : [];
-        const projects: any[] = Array.isArray(raw?.projects) ? raw.projects : [];
-        const visibleProjectIds = new Set(
-          projects
-            .filter((p) => !(p.deletedAt ?? p.deleted_at))
-            .map((p) => p.id)
-        );
-        const visible = allTasks
-          .filter((t: any) => !t.deletedAt && !t.parentTaskId && visibleProjectIds.has(t.projectId))
-          .slice(0, 40);
-        setEmbedItems(
-          visible.map((t: any) => ({
-            id: t.id,
-            label: t.title || "Untitled",
-            sublabel: t.description ? t.description.slice(0, 60) : undefined,
-          }))
-        );
+        // The legacy task embed was removed with the old tasks model; the
+        // "Embed Task" slash command no longer exists, so this branch is inert.
+        setEmbedItems([]);
       }
     } catch {
       setEmbedItems([]);

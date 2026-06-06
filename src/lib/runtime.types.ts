@@ -150,26 +150,6 @@ export type ModuoRuntime = {
     subscribeLocal(workspaceId: string, noteId?: string | null): Promise<string>;
   };
 
-  tasks: {
-    list(workspaceId: string): Promise<any>;
-    upsert(input: { project?: any; workflowState?: any; task?: any }): Promise<any>;
-    upsertProject(project: any): Promise<any>;
-    upsertState(workflowState: any): Promise<any>;
-    upsertItem(task: any): Promise<any>;
-    move(input: {
-      workspaceId: string;
-      taskId: string;
-      newParentTaskId: string | null;
-      newStateId: string;
-      newPosition: string;
-    }): Promise<any>;
-    deleteItem(input: { workspaceId: string; taskId: string; deletedAt?: string }): Promise<any>;
-    addComment(comment: any): Promise<any>;
-    upsertComment(comment: any): Promise<any>;
-    deleteComment(commentId: string): Promise<void>;
-    subscribeLocal(workspaceId: string): Promise<string>;
-  };
-
   graph: {
     upsertNodesEdges(request: any): Promise<void>;
     queryRelated(workspaceId: string, nodeId: string, limit?: number): Promise<any>;
