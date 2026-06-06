@@ -9,6 +9,7 @@ pub mod migration;
 pub mod notes;
 pub mod system;
 pub mod tasks;
+pub mod tasks_module;
 pub mod timetracking;
 pub mod window;
 pub mod workspace;
