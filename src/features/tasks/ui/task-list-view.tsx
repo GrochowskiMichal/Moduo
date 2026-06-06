@@ -56,8 +56,11 @@ export function TaskListView({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const isAll = selection === "all";
-  const showBucketTag = isAll || groupBy === "status" || groupBy === "priority" || groupBy === "energy";
+  const crossBucket = selection === "all" || selection === "today";
+  const showBucketTag =
+    crossBucket || groupBy === "status" || groupBy === "priority" || groupBy === "energy";
+  // Grouping by bucket only makes sense across buckets (the "All" view).
+  const groupOptions = GROUP_OPTIONS.filter((o) => o.value !== "bucket" || selection === "all");
 
   const groups = useMemo(
     () => groupTasks(tasks, groupBy, { bucketName: bucketNameById }),
@@ -143,6 +146,9 @@ export function TaskListView({
       } else if (key === "d" && selectedTask && canEdit) {
         e.preventDefault();
         setCommand({ taskId: selectedTask.id, kind: "due" });
+      } else if (key === "t" && selectedTask && canEdit) {
+        e.preventDefault();
+        api.toggleCommit(selectedTask.id);
       } else if ((e.metaKey || e.ctrlKey) && (e.key === "Backspace" || e.key === "Delete")) {
         if (!selectedTask || !canEdit) return;
         e.preventDefault();
@@ -168,13 +174,13 @@ export function TaskListView({
         <h1 className="truncate font-display text-lg text-foreground">{scopeTitle}</h1>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Group</span>
+            <span className="font-display text-xs text-muted-foreground">Group</span>
             <Select value={groupBy} onValueChange={(v) => onGroupByChange(v as GroupBy)}>
-              <SelectTrigger size="sm" className="w-28">
+              <SelectTrigger size="sm" className="w-28 font-display">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {GROUP_OPTIONS.map((o) => (
+                {groupOptions.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
                     {o.label}
                   </SelectItem>
@@ -209,7 +215,7 @@ export function TaskListView({
                   <button
                     type="button"
                     onClick={() => toggleGroup(group.key)}
-                    className="flex w-full items-center gap-1.5 rounded px-1 py-1 text-left text-xs font-medium text-muted-foreground hover:text-foreground"
+                    className="flex w-full items-center gap-1.5 rounded px-1 py-1 text-left font-display text-2xs font-medium text-muted-foreground hover:text-foreground"
                   >
                     {isCollapsed ? (
                       <ChevronRight className="size-3.5" aria-hidden />
@@ -217,7 +223,7 @@ export function TaskListView({
                       <ChevronDown className="size-3.5" aria-hidden />
                     )}
                     <span className="uppercase tracking-wide">{group.label}</span>
-                    <span className="text-muted-foreground/70">{group.tasks.length}</span>
+                    <span className="font-sans text-muted-foreground/70 tabular-nums">{group.tasks.length}</span>
                   </button>
                 ) : null}
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, Check, Clock, Inbox, Repeat } from "lucide-react";
+import { CalendarDays, Check, Clock, Inbox, Repeat, Sunrise } from "lucide-react";
 
 import { Badge } from "../../../components/ui/badge";
 import {
@@ -83,6 +83,7 @@ export function TaskRow({
 }: Props) {
   const done = task.status === "done";
   const drifted = isDrifted(task);
+  const committed = !!task.committedFor && task.committedFor === api.today;
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
 
@@ -114,7 +115,7 @@ export function TaskRow({
           <button
             type="button"
             className={cn(
-              "block max-w-full truncate text-left",
+              "block max-w-full truncate text-left font-display",
               done ? "text-muted-foreground line-through" : "text-foreground",
             )}
             onClick={(e) => {
@@ -133,6 +134,17 @@ export function TaskRow({
 
       {/* meta cluster — quiet, right-aligned */}
       <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+        {committed ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex items-center text-foreground" aria-label="Committed for today">
+                <Sunrise className="size-3.5" aria-hidden />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Committed for today</TooltipContent>
+          </Tooltip>
+        ) : null}
+
         {task.recurrence ? (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -190,6 +202,9 @@ export function TaskRow({
         <ContextMenuItem onSelect={() => onStartEdit()}>Rename</ContextMenuItem>
         <ContextMenuItem onSelect={() => api.toggleDone(task)}>
           {done ? "Mark not done" : "Mark done"}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => api.toggleCommit(task.id)}>
+          {committed ? "Remove from today" : "Commit to today"}
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => onRequestCommand("schedule")}>Schedule…</ContextMenuItem>
@@ -308,7 +323,7 @@ function TitleEditor({
         else if (e.key === "Escape") onCancel();
       }}
       onBlur={() => onCommit(value)}
-      className="h-7 px-1.5 py-0 text-sm"
+      className="h-7 px-1.5 py-0 font-display text-sm"
     />
   );
 }
@@ -361,7 +376,7 @@ function MetaChip({
   return (
     <span
       className={cn(
-        "flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:bg-muted",
+        "flex items-center gap-1 rounded px-1 py-0.5 font-sans transition-colors hover:bg-muted",
         active ? "text-foreground" : "text-muted-foreground",
         // drift is ambient — a quiet emphasis, never red / "overdue"
         drifted && "text-foreground",
@@ -394,9 +409,15 @@ function SchedulePopover({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild disabled={!canEdit}>
-        <button type="button" onClick={(e) => e.stopPropagation()} aria-label="Scheduled time">
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Scheduled time"
+          // empty + idle collapses (no reserved space); reveals on hover or when opened
+          className={cn("items-center", label ? "flex" : open ? "flex" : "hidden group-hover:flex")}
+        >
           <MetaChip active={!!label} drifted={drifted} icon={<Clock className="size-3.5" aria-hidden />}>
-            {label ?? <span className="opacity-0 group-hover:opacity-100">Schedule</span>}
+            {label}
           </MetaChip>
         </button>
       </PopoverTrigger>
@@ -448,9 +469,14 @@ function DuePopover({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild disabled={!canEdit}>
-        <button type="button" onClick={(e) => e.stopPropagation()} aria-label="Due date">
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Due date"
+          className={cn("items-center", label ? "flex" : open ? "flex" : "hidden group-hover:flex")}
+        >
           <MetaChip active={!!label} icon={<CalendarDays className="size-3.5" aria-hidden />}>
-            {label ?? <span className="opacity-0 group-hover:opacity-100">Due</span>}
+            {label}
           </MetaChip>
         </button>
       </PopoverTrigger>

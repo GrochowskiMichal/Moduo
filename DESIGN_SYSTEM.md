@@ -197,6 +197,40 @@ This rule does not change tokens; it constrains how component code composes
 them. The Stylelint config can't enforce it — the design-review skill catches
 regressions during the visual sweep.
 
+## Typography roles (primary vs. secondary)
+
+Two user-selectable families live in Settings → Appearance: a **display** font
+and a **body** font. Components map to a *role*, never to a hardcoded family, so
+the user's choice always flows through:
+
+- **Primary = `font-display`** — structure & app chrome: headings, section /
+  eyebrow labels, control labels, **buttons**, menu / select triggers, and
+  titles (task titles, page titles, the capture title + description).
+- **Secondary = body** (the default; use `font-sans` to force it back where a
+  primary ancestor would otherwise win) — content & context: dates, counters,
+  row meta / badges, contextual descriptions, the capture-modal footer.
+
+Rules:
+- **Buttons are always primary.** The `Button` primitive sets `font-display` in
+  its base — never body, never mono.
+- `font-mono` is **code only** (it's also a selectable *body* alternate, but UI
+  chrome must not depend on the body font being mono — that's why chrome uses
+  `font-display`).
+- Eyebrow / section labels use **`text-2xs`** (a token that scales with the
+  Appearance → text-size setting).
+
+## Casing
+
+**Sentence case** across the UI. Saved here as the single convention for all new
+copy:
+
+- Buttons, labels, menu items, headings: "New task", "Do last", "Group",
+  "Mark done", "Add description".
+- Standalone status words and proper nouns stay capitalized: "Done", "Today",
+  "Inbox", "Skip".
+- Counts read like "2 / 2 Done".
+- Acronyms and proper nouns as-is (CRM, Inbox).
+
 ## Stylelint enforcement (to be added)
 
 A Stylelint config will land alongside the redesign work. It enforces:

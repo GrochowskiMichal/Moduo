@@ -370,6 +370,7 @@
 
   /* Type scale — base case (data-text-size="normal").
      Sizes use rem so the user's OS text-size pref still applies. */
+  --text-2xs:  0.6875rem; /* 11 — eyebrow / section labels */
   --text-xs:   0.75rem;   /* 12 — labels, captions   */
   --text-sm:   0.8125rem; /* 13 — secondary UI       */
   --text-base: 0.9375rem; /* 15 — body text          */
@@ -411,6 +412,7 @@
 /* Text-size variants — only the body-tier sizes shift. Display sizes stay
    fixed so page titles don't change with user-text-size prefs. */
 [data-text-size="small"] {
+  --text-2xs:  0.625rem;   /* 10 */
   --text-xs:   0.6875rem;  /* 11 */
   --text-sm:   0.75rem;    /* 12 */
   --text-base: 0.8125rem;  /* 13 */
@@ -422,6 +424,7 @@
 }
 
 [data-text-size="large"] {
+  --text-2xs:  0.75rem;    /* 12 */
   --text-xs:   0.8125rem;  /* 13 */
   --text-sm:   0.875rem;   /* 14 */
   --text-base: 1.0625rem;  /* 17 */
@@ -566,6 +569,7 @@
   --font-sans:    var(--font-body);
   --font-mono:    var(--font-mono);
 
+  --text-2xs:  var(--text-2xs);
   --text-xs:   var(--text-xs);
   --text-sm:   var(--text-sm);
   --text-base: var(--text-base);
