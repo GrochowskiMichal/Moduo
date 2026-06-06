@@ -1,6 +1,5 @@
 import { useDroppable } from "@dnd-kit/core";
 import type { ModuoRuntime } from "../../../lib/runtime";
-import type { Task, TaskProject, TaskWorkflowState } from "../../tasks/types";
 import type { NoteMeta } from "../../notes/types";
 import type { WidgetConfig, WidgetInstance } from "../types";
 import { WidgetContainer } from "./widget-container";
@@ -12,7 +11,6 @@ import { JobTrackerWidget } from "./widgets/job-tracker-widget";
 import { NotesWidget } from "./widgets/notes-widget";
 import { PomodoroWidget } from "./widgets/pomodoro-widget";
 import { StockWidget } from "./widgets/stock-widget";
-import { TasksWidget } from "./widgets/tasks-widget";
 import { TodoListWidget } from "./widgets/todo-list-widget";
 import { WeatherWidget } from "./widgets/weather-widget";
 
@@ -23,9 +21,6 @@ type Props = {
   runtime: ModuoRuntime | null;
   workspaceId: string;
   notes: NoteMeta[];
-  tasks: Task[];
-  projects: TaskProject[];
-  states: TaskWorkflowState[];
   onResize: (id: string, w: number, h: number) => void;
   onRemove: (id: string) => void;
   onUpdateConfig: (id: string, patch: Partial<WidgetConfig>) => void;
@@ -38,9 +33,6 @@ export function DashboardGrid({
   runtime,
   workspaceId,
   notes,
-  tasks,
-  projects,
-  states,
   onResize,
   onRemove,
   onUpdateConfig,
@@ -70,16 +62,6 @@ export function DashboardGrid({
               notes={notes}
               workspaceId={workspaceId}
               runtime={runtime}
-              config={widget.config}
-              isLocked={isLocked}
-              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
-            />
-          ) : null}
-          {widget.type === "tasks" ? (
-            <TasksWidget
-              tasks={tasks}
-              projects={projects}
-              states={states}
               config={widget.config}
               isLocked={isLocked}
               onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}

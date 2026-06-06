@@ -4,9 +4,8 @@
 // docs/moduo-architecture-vocabulary.md). Mirrors the Rust domain structs in
 // src-tauri/src/domain/mod.rs (serde camelCase fields, snake_case enum values).
 //
-// This SUPERSEDES the legacy Linear-style types in ./types.ts (TaskProject /
-// TaskWorkflowState / Task-as-issue), which will be removed together with the
-// features/plan UI in a later session. Don't mix the two.
+// This is the only Tasks model. The legacy Linear-style types (TaskProject /
+// TaskWorkflowState / Task-as-issue) and the features/plan UI were removed.
 
 /** Fixed task lifecycle status. */
 export type TaskStatus = "todo" | "in_progress" | "done" | "archived";

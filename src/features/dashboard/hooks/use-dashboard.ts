@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ModuoRuntime } from "../../../lib/runtime";
 import type { DashboardLayout, WidgetConfig, WidgetInstance, WidgetType } from "../types";
 
-const VALID_WIDGET_TYPES = new Set<WidgetType>(["notes", "tasks", "clock", "weather", "stock", "crypto", "pomodoro", "hydration", "countdown", "todolist", "job-tracker"]);
+const VALID_WIDGET_TYPES = new Set<WidgetType>(["notes", "clock", "weather", "stock", "crypto", "pomodoro", "hydration", "countdown", "todolist", "job-tracker"]);
 
 // redb namespace for all dashboard layouts.
 const STORE_NS = "dashboard-layout";

@@ -1,4 +1,4 @@
-import type { ModuleNavItem, TaskProjectOption } from "./app-chrome-types";
+import type { ModuleNavItem } from "./app-chrome-types";
 
 export function safeId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -9,25 +9,9 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
-export function normalizeTaskProject(raw: any): TaskProjectOption {
-  return {
-    id: raw.id,
-    workspaceId: raw.workspaceId ?? raw.workspace_id,
-    ownerId: raw.ownerId ?? raw.owner_id,
-    name: raw.name ?? "New Project",
-    description: raw.description ?? "",
-    logoUrl: raw.logoUrl ?? raw.logo_url ?? null,
-    position: raw.position ?? `m${Date.now().toString(36)}`,
-    createdAt: raw.createdAt ?? raw.created_at ?? nowIso(),
-    updatedAt: raw.updatedAt ?? raw.updated_at ?? nowIso(),
-    deletedAt: raw.deletedAt ?? raw.deleted_at ?? null,
-  };
-}
-
 export const baseModulesNavItems: ModuleNavItem[] = [
   { label: "Grid", iconName: "grid", href: "/" },
   { label: "Notes", iconName: "file-text", href: "/notes", module: "notes" },
-  { label: "Ground", iconName: "ground-roots", href: "/ground" },
   { label: "Mindmap", iconName: "git-branch", href: "/mindmap", module: "mindmap" },
   { label: "Templates", iconName: "edit-3", href: "/templates", module: "templates" },
   { label: "Email", iconName: "mail", href: "/email", module: "email", desktopOnly: true },

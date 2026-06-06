@@ -316,26 +316,6 @@ export const tauriRuntime: ModuoRuntime = {
     },
   },
 
-  tasks: {
-    list(workspaceId) { return invoke<any>("tasks_list", { workspaceId }); },
-    upsert(input) { return invoke<any>("tasks_upsert", { input }); },
-    upsertProject(project) {
-      return tauriRuntime.tasks.upsert({ project }).then((r: any) => r?.project ?? r);
-    },
-    upsertState(workflowState) {
-      return tauriRuntime.tasks.upsert({ workflowState }).then((r: any) => r?.workflowState ?? r);
-    },
-    upsertItem(task) {
-      return tauriRuntime.tasks.upsert({ task }).then((r: any) => r?.task ?? r);
-    },
-    move(input) { return invoke<any>("tasks_move", { input }); },
-    deleteItem(input) { return invoke<any>("tasks_delete_item", { input }); },
-    addComment(comment) { return invoke<any>("tasks_add_comment", { comment }); },
-    upsertComment(comment) { return tauriRuntime.tasks.addComment(comment); },
-    deleteComment(commentId) { return invoke<void>("tasks_delete_comment", { commentId }); },
-    subscribeLocal(workspaceId) { return invoke<string>("tasks_subscribe_local", { workspaceId }); },
-  },
-
   graph: {
     upsertNodesEdges(request) { return invoke<void>("graph_upsert_nodes_edges", { request }); },
     queryRelated(workspaceId, nodeId, limit) { return invoke<any>("graph_query_related", { workspaceId, nodeId, limit }); },

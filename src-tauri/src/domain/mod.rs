@@ -106,117 +106,15 @@ pub struct NoteDocState {
     pub updates: Vec<NoteCrdtUpdate>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectLabel {
-    pub name: String,
-    pub color: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskProject {
-    pub id: String,
-    pub workspace_id: String,
-    pub owner_id: String,
-    pub name: String,
-    pub description: String,
-    pub logo_url: Option<String>,
-    #[serde(default)]
-    pub labels: Vec<ProjectLabel>,
-    pub position: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub deleted_at: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskWorkflowState {
-    pub id: String,
-    pub workspace_id: String,
-    pub owner_id: String,
-    pub project_id: String,
-    pub name: String,
-    pub kind: String,
-    pub icon: Option<String>,
-    pub color: Option<String>,
-    pub position: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub deleted_at: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskItem {
-    pub id: String,
-    pub workspace_id: String,
-    pub owner_id: String,
-    pub project_id: String,
-    pub task_code: Option<String>,
-    pub parent_task_id: Option<String>,
-    pub child_of_task_id: Option<String>,
-    #[serde(default)]
-    pub blocked_by_task_ids: Vec<String>,
-    pub duplicate_of_task_id: Option<String>,
-    pub state_id: String,
-    pub assignee_id: Option<String>,
-    pub title: String,
-    pub description: String,
-    pub tags: Vec<String>,
-    pub priority: i16,
-    pub due_date: Option<String>,
-    pub position: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub deleted_at: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskComment {
-    pub id: String,
-    pub workspace_id: String,
-    pub owner_id: String,
-    pub task_id: String,
-    pub body: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub deleted_at: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskActivity {
-    pub id: String,
-    pub workspace_id: String,
-    pub task_id: String,
-    pub actor_user_id: String,
-    pub action: String,
-    pub payload: serde_json::Value,
-    pub created_at: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct TasksBundle {
-    pub projects: Vec<TaskProject>,
-    pub states: Vec<TaskWorkflowState>,
-    pub tasks: Vec<TaskItem>,
-    pub comments: Vec<TaskComment>,
-    pub activities: Vec<TaskActivity>,
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Tasks module v1 — ADHD bucket / commit / execute model.
 //
 // This is the spec'd Tasks module (docs/moduo-tasks-feature-spec.md §11): buckets
 // (exclusive categories), tasks with both due_date and scheduled_at, a today's
 // commit queue, recurrence, energy, and a computed `drifted` signal. It is the
-// canonical Tasks model going forward and supersedes the legacy Linear-style
-// `TaskProject`/`TaskWorkflowState`/`TaskItem` types above, which are slated for
-// removal together with their `features/plan` UI in a later session.
+// canonical (and only) Tasks model; the legacy Linear-style
+// TaskProject/TaskWorkflowState/TaskItem model and its `features/plan` UI were
+// removed.
 //
 // Field names serialize as camelCase (TS interop); enum values serialize as
 // snake_case to match the spec vocabulary and the Supabase column values.
