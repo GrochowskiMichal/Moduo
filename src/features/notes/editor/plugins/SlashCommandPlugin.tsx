@@ -7,6 +7,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $setBlocksType } from "@lexical/selection";
 import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
 import { $createTableNodeWithDimensions } from "@lexical/table";
+import { $isCodeNode } from "@lexical/code";
 import {
   $createParagraphNode,
   $createTextNode,
@@ -23,6 +24,7 @@ import {
   type NodeKey,
 } from "lexical";
 import type { SlashCommand } from "../../types";
+import { $createToggleNode } from "../nodes/ToggleNode";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -192,14 +194,26 @@ function runCommand(command: SlashCommand, tableSize?: { rows: number; cols: num
       return;
     case "code":
       $setBlocksType(selection, () => $createCodeNode());
+      {
+        let node = selection.anchor.getNode();
+        while (node && !$isCodeNode(node)) {
+          const parent = node.getParent();
+          if (!parent) return;
+          node = parent;
+        }
+        if ($isCodeNode(node) && !node.getNextSibling()) {
+          node.insertAfter($createParagraphNode());
+        }
+      }
       return;
     case "divider":
       selection.insertNodes([$createHorizontalRuleNode(), $createParagraphNode()]);
       return;
     case "toggle": {
-      const paragraph = $createParagraphNode();
-      paragraph.append($createTextNode("▸ Toggle"));
-      selection.insertNodes([paragraph]);
+      const toggle = $createToggleNode(true);
+      toggle.append($createTextNode("Toggle"));
+      selection.insertNodes([toggle, $createParagraphNode()]);
+      toggle.selectEnd();
       return;
     }
     case "table": {
@@ -316,8 +330,10 @@ export function SlashCommandPlugin() {
   const selectedIndexRef = useRef(0);
   const menuSigRef = useRef<string | null>(null);
   const dismissedMenuSigRef = useRef<string | null>(null);
+  const tablePickerOpenRef = useRef(false);
 
   menuRef.current = menu;
+  tablePickerOpenRef.current = tablePickerOpen;
 
   const commands = useMemo(() => filterCommands(menu?.query ?? ""), [menu?.query]);
   commandsRef.current = commands;
@@ -461,6 +477,13 @@ export function SlashCommandPlugin() {
         event?.preventDefault();
         const command = activeCommands[selectedIndexRef.current] ?? activeCommands[0];
         if (!command) return true;
+
+        if (command.id === "table" && tablePickerOpenRef.current) {
+          applyCommand(command, activeMenu, { rows: 3, cols: 3 });
+          setMenu(null);
+          setTablePickerOpen(false);
+          return true;
+        }
 
         if (command.id === "table") {
           setTablePickerOpen(true);

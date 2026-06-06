@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import * as Y from "yjs";
 import { CodeHighlightNode, CodeNode, registerCodeHighlighting } from "@lexical/code";
-import { LinkNode } from "@lexical/link";
+import { $createLinkNode, LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -21,12 +21,17 @@ import { TableNode, TableCellNode, TableRowNode } from "@lexical/table";
 import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $createParagraphNode,
+  $createTextNode,
+  $getNearestNodeFromDOMNode,
+  $getRoot,
   $getSelection,
+  $getNodeByKey,
   $isElementNode,
   $isRangeSelection,
   $isTextNode,
   COMMAND_PRIORITY_HIGH,
   INDENT_CONTENT_COMMAND,
+  KEY_ENTER_COMMAND,
   KEY_TAB_COMMAND,
   OUTDENT_CONTENT_COMMAND,
 } from "lexical";
@@ -37,7 +42,17 @@ import {
 } from "@lexical/list";
 import type { NotesSyncEngine } from "../sync/sync-engine";
 import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
-import { $createHorizontalRuleNode, $isHorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
+import { $createHorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
+import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
+import { $setBlocksType } from "@lexical/selection";
+import { $createCodeNode, $isCodeNode } from "@lexical/code";
+import { $createToggleNode, $isToggleNode, ToggleNode } from "./nodes/ToggleNode";
+import {
+  NOTES_INSERT_CHILD_LINK_EVENT,
+  clearQueuedNotesChildLink,
+  consumeNotesChildLinks,
+  type NotesInsertChildLinkEventDetail,
+} from "../ui/layout-events";
 
 type Props = {
   noteId: string;
@@ -59,17 +74,7 @@ function NotesCodeHighlightPlugin() {
 function SyncFromYjsPlugin({ doc }: { doc: Y.Doc }) {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
-    // Inspect the Y.Doc state right before dispatching the command
-    const root = doc.get("root-v2", Y.XmlElement);
-    const children = root.toArray();
-    const textPreview = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
-    console.log(`%c[NOTES:SyncFromYjs] PRE-COMMAND shareKeys=[${[...doc.share.keys()].join(",")}] rootType=${root.constructor.name} rootChildren=${children.length} textPreview="${textPreview.slice(0, 80)}"`, "color:#f4a;font-weight:bold");
-    // Small delay ensures the collab plugin's command handler is registered
     const id = setTimeout(() => {
-      const root2 = doc.get("root-v2", Y.XmlElement);
-      const ch2 = root2.toArray();
-      const tp2 = ch2[0] ? (ch2[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
-      console.log(`%c[NOTES:SyncFromYjs] DISPATCHING CLEAR_DIFF_VERSIONS_COMMAND shareKeys=[${[...doc.share.keys()].join(",")}] rootChildren=${ch2.length} textPreview="${tp2.slice(0, 80)}"`, "color:#f4a;font-weight:bold");
       editor.dispatchCommand(CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL, undefined);
     }, 0);
     return () => clearTimeout(id);
@@ -173,6 +178,31 @@ function NotesDividerShortcutPlugin() {
   return null;
 }
 
+type MarkdownShortcut =
+  | { type: "list"; listType: "number" | "bullet" | "check"; deleteCount: number; start?: number }
+  | { type: "heading"; tag: "h1" | "h2" | "h3"; deleteCount: number }
+  | { type: "quote"; deleteCount: number }
+  | { type: "code"; deleteCount: number }
+  | { type: "toggle"; deleteCount: number };
+
+function resolveMarkdownShortcut(text: string): MarkdownShortcut | null {
+  const numberListMatch = text.match(/^(\d+)\. $/);
+  if (numberListMatch) {
+    return { type: "list", listType: "number", deleteCount: text.length, start: Number(numberListMatch[1]) || 1 };
+  }
+  if (text === "- " || text === "* ") return { type: "list", listType: "bullet", deleteCount: 2 };
+  if (text === "[] " || text === "[ ] " || text === "- [ ] ") {
+    return { type: "list", listType: "check", deleteCount: text.length };
+  }
+  if (text === "# ") return { type: "heading", tag: "h1", deleteCount: 2 };
+  if (text === "## ") return { type: "heading", tag: "h2", deleteCount: 3 };
+  if (text === "### ") return { type: "heading", tag: "h3", deleteCount: 4 };
+  if (text === "> ") return { type: "toggle", deleteCount: 2 };
+  if (text === "\" ") return { type: "quote", deleteCount: 2 };
+  if (text === "``` ") return { type: "code", deleteCount: 4 };
+  return null;
+}
+
 function NotesMarkdownListShortcutPlugin() {
   const [editor] = useLexicalComposerContext();
 
@@ -193,18 +223,7 @@ function NotesMarkdownListShortcutPlugin() {
         const parent = node.getParent();
         if (parent?.getType() !== "root") return false;
 
-        const text = node.getTextContent();
-        const numberListMatch = text.match(/^(\d+)\. $/);
-        if (numberListMatch) {
-          return { type: "number" as const, deleteCount: text.length };
-        }
-        if (text === "- ") {
-          return { type: "bullet" as const, deleteCount: 2 };
-        }
-        if (text === "* ") {
-          return { type: "bullet" as const, deleteCount: 2 };
-        }
-        return false;
+        return resolveMarkdownShortcut(node.getTextContent());
       });
 
       if (!shouldConvert) return;
@@ -224,48 +243,221 @@ function NotesMarkdownListShortcutPlugin() {
         const parent = node.getParent();
         if (parent?.getType() !== "root") return;
 
-        const text = node.getTextContent();
-        let listType: "number" | "bullet" | null = null;
-        let deleteCount = 0;
-
-        const numberListMatch = text.match(/^(\d+)\. $/);
-        if (numberListMatch) {
-          listType = "number";
-          deleteCount = text.length;
-        } else if (text === "- ") {
-          listType = "bullet";
-          deleteCount = 2;
-        } else if (text === "* ") {
-          listType = "bullet";
-          deleteCount = 2;
-        }
-
-        if (!listType) return;
+        const shortcut = resolveMarkdownShortcut(node.getTextContent());
+        if (!shortcut) return;
         if (!$isElementNode(node)) return;
 
         const textNode = node.getFirstChild();
         if (!$isTextNode(textNode)) return;
 
-        textNode.spliceText(0, deleteCount, "", false);
+        textNode.spliceText(0, shortcut.deleteCount, "", false);
         selection.setTextNodeRange(textNode, 0, textNode, 0);
 
-        $insertList(listType);
+        if (shortcut.type === "list") {
+          $insertList(shortcut.listType);
 
-        if (listType === "number" && numberListMatch) {
-          const start = Number(numberListMatch[1]) || 1;
-          const anchorNode = selection.anchor.getNode();
-          const listItem = $isListItemNode(anchorNode)
-            ? anchorNode
-            : anchorNode.getParent();
-          if (!$isListItemNode(listItem)) return;
-          const listNode = listItem.getParent();
-          if (!$isListNode(listNode)) return;
-          listNode.setStart(start);
-          listItem.setValue(start);
+          if (shortcut.listType === "number") {
+            const start = shortcut.start ?? 1;
+            const anchorNode = selection.anchor.getNode();
+            const listItem = $isListItemNode(anchorNode)
+              ? anchorNode
+              : anchorNode.getParent();
+            if (!$isListItemNode(listItem)) return;
+            const listNode = listItem.getParent();
+            if (!$isListNode(listNode)) return;
+            listNode.setStart(start);
+            listItem.setValue(start);
+          }
+          return;
+        }
+
+        if (shortcut.type === "heading") {
+          $setBlocksType(selection, () => $createHeadingNode(shortcut.tag));
+          return;
+        }
+        if (shortcut.type === "quote") {
+          $setBlocksType(selection, () => $createQuoteNode());
+          return;
+        }
+        if (shortcut.type === "code") {
+          $setBlocksType(selection, () => $createCodeNode());
+          return;
+        }
+        if (shortcut.type === "toggle") {
+          const toggle = $createToggleNode(true);
+          toggle.append($createTextNode(""));
+          node.replace(toggle);
+          toggle.selectEnd();
         }
       });
     });
   }, [editor]);
+
+  return null;
+}
+
+function NotesToggleInteractionPlugin() {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    const root = editor.getRootElement();
+    if (!root) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const button = target.closest<HTMLElement>("[data-toggle-button]");
+      const wrapper = button?.closest<HTMLElement>("[data-toggle-key]");
+      const key = wrapper?.dataset.toggleKey;
+      if (!key) return;
+
+      event.preventDefault();
+      editor.update(() => {
+        const node = $getNodeByKey(key);
+        if ($isToggleNode(node)) node.toggleOpen();
+      });
+    };
+
+    root.addEventListener("pointerdown", onPointerDown);
+    return () => root.removeEventListener("pointerdown", onPointerDown);
+  }, [editor]);
+
+  return null;
+}
+
+function NotesCodeBlockEscapePlugin() {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    const unregisterEnter = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event) => {
+        const shouldExit = editor.getEditorState().read(() => {
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+          let node = selection.anchor.getNode();
+          while (node && !$isCodeNode(node)) {
+            const parent = node.getParent();
+            if (!parent) return false;
+            node = parent;
+          }
+          if (!$isCodeNode(node)) return false;
+          return selection.anchor.offset === node.getTextContentSize();
+        });
+
+        if (!shouldExit) return false;
+        event?.preventDefault();
+        editor.update(() => {
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection)) return;
+          let node = selection.anchor.getNode();
+          while (node && !$isCodeNode(node)) {
+            const parent = node.getParent();
+            if (!parent) return;
+            node = parent;
+          }
+          if (!$isCodeNode(node)) return;
+          const paragraph = $createParagraphNode();
+          node.insertAfter(paragraph);
+          paragraph.select();
+        });
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH
+    );
+
+    const root = editor.getRootElement();
+    if (!root) return unregisterEnter;
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest(".notes-code-block")) return;
+
+      const codeBlocks = [...root.querySelectorAll<HTMLElement>(".notes-code-block")];
+      const clickedTarget = codeBlocks.reduce<{ block: HTMLElement; placement: "before" | "after" } | null>((match, block) => {
+        if (match) return match;
+        const rect = block.getBoundingClientRect();
+        const withinX = event.clientX >= rect.left && event.clientX <= rect.right;
+        if (!withinX) return null;
+        if (event.clientY >= rect.top - 36 && event.clientY < rect.top) return { block, placement: "before" };
+        if (event.clientY > rect.bottom && event.clientY <= rect.bottom + 36) return { block, placement: "after" };
+        return null;
+      }, null);
+      if (!clickedTarget) return;
+
+      event.preventDefault();
+      editor.update(() => {
+        const node = $getNearestNodeFromDOMNode(clickedTarget.block);
+        if (!$isCodeNode(node)) return;
+        if (clickedTarget.placement === "before") {
+          const prev = node.getPreviousSibling();
+          if (prev?.getType() === "paragraph" && prev.getTextContent() === "") {
+            prev.selectStart();
+            return;
+          }
+          const paragraph = $createParagraphNode();
+          node.insertBefore(paragraph);
+          paragraph.select();
+          return;
+        }
+        const next = node.getNextSibling();
+        if (next?.getType() === "paragraph" && next.getTextContent() === "") {
+          next.selectStart();
+          return;
+        }
+        const paragraph = $createParagraphNode();
+        node.insertAfter(paragraph);
+        paragraph.select();
+      });
+    };
+
+    root.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      unregisterEnter();
+      root.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [editor]);
+
+  return null;
+}
+
+function NotesChildLinkPlugin({ noteId }: { noteId: string }) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    const insertChildLink = (detail: NotesInsertChildLinkEventDetail) => {
+      editor.focus();
+      editor.update(() => {
+        const paragraph = $createParagraphNode();
+        const link = $createLinkNode(`moduo://notes/${detail.childId}`);
+        link.append($createTextNode(detail.childTitle || "Untitled"));
+        paragraph.append(link);
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          selection.insertNodes([paragraph]);
+        } else {
+          $getRoot().append(paragraph);
+        }
+        paragraph.selectEnd();
+      });
+      clearQueuedNotesChildLink(detail.parentId, detail.childId);
+    };
+
+    for (const pending of consumeNotesChildLinks(noteId)) {
+      insertChildLink(pending);
+    }
+
+    const onInsertChildLink = (event: Event) => {
+      const detail = (event as CustomEvent<NotesInsertChildLinkEventDetail>).detail;
+      if (!detail || detail.parentId !== noteId) return;
+      insertChildLink(detail);
+    };
+
+    window.addEventListener(NOTES_INSERT_CHILD_LINK_EVENT, onInsertChildLink);
+    return () => window.removeEventListener(NOTES_INSERT_CHILD_LINK_EVENT, onInsertChildLink);
+  }, [editor, noteId]);
 
   return null;
 }
@@ -279,7 +471,6 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
     if (collabSession.doc.store.clients.size === 0) return "v2";
     return "v1";
   }, [collabSession]);
-  console.log(`%c[NOTES:LexicalNoteEditor] render noteId=${noteId} collabReady=${collabReady} collabMode=${collabMode} shareKeys=[${[...collabSession.doc.share.keys()].join(",")}]`, "color:#8af");
   useEffect(() => {
     let active = true;
     setCollabReady(collabSession.persistence.synced);
@@ -333,7 +524,7 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
     onError: (error: Error) => {
       console.error("Lexical editor error:", error);
     },
-    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode, LinkNode, HorizontalRuleNode, TableNode, TableCellNode, TableRowNode],
+    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode, LinkNode, HorizontalRuleNode, TableNode, TableCellNode, TableRowNode, ToggleNode],
     theme: {
       paragraph: "notes-p",
       heading: {
@@ -393,6 +584,9 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
               <NotesDividerShortcutPlugin />
               <NotesMarkdownListShortcutPlugin />
               <NotesListTabIndentationPlugin />
+              <NotesToggleInteractionPlugin />
+              <NotesCodeBlockEscapePlugin />
+              <NotesChildLinkPlugin noteId={noteId} />
               <NotesCodeHighlightPlugin />
               <LinkPlugin />
               <TablePlugin />

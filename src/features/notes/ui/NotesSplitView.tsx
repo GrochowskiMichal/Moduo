@@ -17,6 +17,7 @@ import type { NotesSyncEngine } from "../sync/sync-engine";
 import { LexicalNoteEditor } from "../editor/LexicalNoteEditor";
 import {
   NOTES_CREATE_KIND_EVENT,
+  dispatchNotesInsertChildLink,
   type NotesCreateKindEventDetail,
 } from "./layout-events";
 import { exposeNote, unexposeNote, getExposedSlug, listExposedSlugs, buildSlug } from "../utils/expose";
@@ -248,6 +249,19 @@ export function NotesSplitView({
     setExpanded((current) => ({ ...current, [parentId]: true }));
   };
 
+  const handleMoveNote = async (noteId: string, parentId: string | null, beforeId?: string | null) => {
+    const moving = notesById.get(noteId);
+    const previousParentId = moving?.parentId ?? null;
+    await onMoveNote(noteId, parentId, beforeId ?? null);
+    if (moving?.kind === "note" && parentId && parentId !== previousParentId) {
+      dispatchNotesInsertChildLink({
+        parentId,
+        childId: noteId,
+        childTitle: moving.title || "Untitled",
+      });
+    }
+  };
+
   const resetDragState = () => {
     setDragActiveId(null);
     setDragOverId(null);
@@ -365,6 +379,13 @@ export function NotesSplitView({
   const handleAddNote = async (parentId: string | null, kind: NoteKind = "note") => {
     const created = await onCreateNote(parentId, kind);
     if (!created) return;
+    if (parentId && kind === "note") {
+      dispatchNotesInsertChildLink({
+        parentId,
+        childId: created,
+        childTitle: "New Note",
+      });
+    }
     if (parentId) {
       setExpanded((current) => ({ ...current, [parentId]: true }));
     }
@@ -785,7 +806,7 @@ export function NotesSplitView({
                 sectionNotes,
                 byParent,
                 notesById,
-                onMoveNote,
+                onMoveNote: handleMoveNote,
                 expandParent,
               }).finally(resetDragState);
             }}

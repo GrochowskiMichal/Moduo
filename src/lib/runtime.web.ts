@@ -401,9 +401,21 @@ export const webRuntime: ModuoRuntime = {
     async duplicate({ workspaceId, sourceNoteId }) {
       const { data: source, error: srcErr } = await supabaseClient.from("notes").select("*").eq("id", sourceNoteId).single();
       if (srcErr || !source) throw new Error("Source note not found");
+      let siblingsQuery = supabaseClient
+        .from("notes")
+        .select("id, parent_id, position, deleted_at")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .order("position", { ascending: true });
+      siblingsQuery = source.parent_id
+        ? siblingsQuery.eq("parent_id", source.parent_id)
+        : siblingsQuery.is("parent_id", null);
+      const { data: siblings, error: siblingsErr } = await siblingsQuery;
+      if (siblingsErr) throw new Error(siblingsErr.message);
+      const nextSibling = (siblings ?? []).find((note) => note.id !== source.id && note.position > source.position);
       const { data, error } = await supabaseClient.from("notes").insert({
         workspace_id: workspaceId,
-        title: `${source.title} (copy)`,
+        title: `${source.title || "Untitled"} (Copy)`,
         parent_id: source.parent_id,
         icon: source.icon,
         kind: source.kind === "section" ? "section" : "note",
@@ -412,7 +424,7 @@ export const webRuntime: ModuoRuntime = {
         share_scope: "private",
         share_permission: "view",
         is_archived: source.is_archived ?? false,
-        position: generatePosition(source.position ?? null, null),
+        position: generatePosition(source.position ?? null, nextSibling?.position ?? null),
         doc_state: source.doc_state,
       }).select().single();
       if (error) throw new Error(error.message);
@@ -481,7 +493,6 @@ export const webRuntime: ModuoRuntime = {
     async getDocState(_workspaceId, noteId) {
       const { data, error } = await supabaseClient.from("notes").select("doc_state").eq("id", noteId).single();
       const b64len = data?.doc_state?.length ?? 0;
-      console.log(`%c[NOTES:getDocState] noteId=${noteId} b64len=${b64len} error=${error?.message ?? null}`, "color:#4af;font-weight:bold");
       if (error || !data) return null;
       return {
         snapshotB64: data.doc_state ?? "",
@@ -492,7 +503,6 @@ export const webRuntime: ModuoRuntime = {
     async applyCrdtUpdates(workspaceId, noteId, _clientId, updates) {
       // Load existing snapshot so concurrent edits from other clients are merged in.
       const existing = await webRuntime.notes.getDocState(workspaceId, noteId);
-      console.log(`%c[NOTES:applyCrdtUpdates] noteId=${noteId} existingB64len=${existing?.snapshotB64?.length ?? 0} incomingUpdates=${updates.length}`, "color:#fa4;font-weight:bold");
 
       const doc = new Y.Doc();
       // Pre-register root-v2 as YXmlElement BEFORE applying any updates so that
@@ -506,7 +516,6 @@ export const webRuntime: ModuoRuntime = {
           Y.applyUpdate(doc, decodeBase64ToUint8(existing.snapshotB64));
           const root = doc.get("root-v2", Y.XmlElement);
           const children = root.toArray();
-          console.log(`%c[NOTES:applyCrdtUpdates] after applying existing snapshot: rootType=${root.constructor.name} rootChildren=${children.length} firstChild=${children[0]?.constructor?.name ?? "none"} firstChildLen=${(children[0] as any)?._length ?? "n/a"}`, "color:#fa4");
         } catch (e) {
           console.error(`[NOTES:applyCrdtUpdates] failed to apply existing snapshot:`, e);
         }
@@ -520,7 +529,6 @@ export const webRuntime: ModuoRuntime = {
       const root = doc.get("root-v2", Y.XmlElement);
       const children = root.toArray();
       const mergedText = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
-      console.log(`%c[NOTES:applyCrdtUpdates] MERGED before save: rootType=${root.constructor.name} rootChildren=${children.length} firstChild=${children[0]?.constructor?.name ?? "none"} firstChildLen=${(children[0] as any)?._length ?? "n/a"} textPreview="${mergedText.slice(0, 60)}"`, "color:#4fa;font-weight:bold");
 
       // Guard: the incoming updates are now full Y.Doc snapshots (see flush() in
       // sync-engine.ts). If the merge result produced an empty body but the client's
@@ -541,7 +549,6 @@ export const webRuntime: ModuoRuntime = {
           ? (clientChildren[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("")
           : "";
         if (clientText) {
-          console.warn(`[NOTES:applyCrdtUpdates] merge produced empty body but client snapshot has text — using client snapshot for ${noteId}`);
           snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(clientDoc));
         } else {
           snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
@@ -550,7 +557,6 @@ export const webRuntime: ModuoRuntime = {
         snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
       }
 
-      console.log(`%c[NOTES:applyCrdtUpdates] saving snapshot len=${snapshotToSave.length} to DB`, "color:#fa4");
       const { error } = await supabaseClient.from("notes")
         .update({ doc_state: snapshotToSave, updated_at: new Date().toISOString() })
         .eq("id", noteId);
@@ -558,7 +564,6 @@ export const webRuntime: ModuoRuntime = {
         console.error(`[NOTES:applyCrdtUpdates] DB save FAILED:`, error.message);
         throw new Error(error.message);
       }
-      console.log(`%c[NOTES:applyCrdtUpdates] DB save OK`, "color:#4fa;font-weight:bold");
       return { noteId, updates: [], existing: null };
     },
     async subscribeLocal(_workspaceId, noteId) {

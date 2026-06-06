@@ -407,27 +407,45 @@ export function useNotes(runtime: ModuoRuntime | null, params: UseNotesParams) {
     const deletedAt = nowIso();
     const current = notes.find((note) => note.id === noteId);
     if (!current || current.effectivePermission !== "edit") return;
-    const optimistic: NoteMeta = {
-      ...current,
-      deletedAt,
-      updatedAt: deletedAt,
-    };
+    const descendantIds = new Set<string>();
+    const queue = [noteId];
+    while (queue.length > 0) {
+      const parent = queue.shift();
+      for (const note of notes) {
+        if (note.parentId === parent && !note.deletedAt && !descendantIds.has(note.id)) {
+          descendantIds.add(note.id);
+          queue.push(note.id);
+        }
+      }
+    }
+    const deleteIds = [noteId, ...descendantIds];
+    const originals = notes.filter((note) => deleteIds.includes(note.id));
 
-    upsertNoteInState(optimistic);
+    updateNotesState((snapshot) =>
+      snapshot.map((note) =>
+        deleteIds.includes(note.id)
+          ? { ...note, deletedAt, updatedAt: deletedAt }
+          : note
+      )
+    );
     try {
-      const removed = await runtime.notes.remove({
-        workspaceId,
-        noteId,
-        deletedAt,
-      });
-      if (removed?.id) {
-        upsertNoteInState(normalizeNote(removed, userId));
+      for (const id of deleteIds) {
+        const removed = await runtime.notes.remove({
+          workspaceId,
+          noteId: id,
+          deletedAt,
+        });
+        if (removed?.id) {
+          upsertNoteInState(normalizeNote(removed, userId));
+        }
       }
     } catch {
-      upsertNoteInState(current);
+      updateNotesState((snapshot) =>
+        snapshot.map((note) => originals.find((entry) => entry.id === note.id) ?? note)
+      );
       await loadNotes();
     }
-  }, [canEdit, loadNotes, notes, runtime, upsertNoteInState, workspaceId]);
+  }, [canEdit, loadNotes, notes, runtime, updateNotesState, upsertNoteInState, workspaceId]);
 
   const duplicateNote = useCallback(async (noteId: string) => {
     if (!runtime || !workspaceId || !canEdit) return null;

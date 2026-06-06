@@ -130,6 +130,23 @@ function extractXmlText(node: Y.XmlElement, depth = 0): string {
                 parts.push("```");
                 parts.push(childText.trim());
                 parts.push("```");
+            } else if (childName === "toggle") {
+                const open = child.getAttribute("open") as unknown;
+                parts.push(`${open === false || open === "false" ? ">" : "v"} ${childText.trim()}`);
+            } else if (childName === "link") {
+                const url = child.getAttribute("url") as string | undefined;
+                const label = childText.trim();
+                parts.push(url ? `[${label || url}](${url})` : label);
+            } else if (childName === "table") {
+                parts.push(childText.trim());
+            } else if (childName === "tablerow") {
+                const cells = child
+                    .toArray()
+                    .filter((entry): entry is Y.XmlElement => entry instanceof Y.XmlElement)
+                    .map((entry) => extractXmlText(entry).replace(/\s+/g, " ").trim());
+                if (cells.length) parts.push(`| ${cells.join(" | ")} |`);
+            } else if (childName === "tablecell") {
+                if (childText) parts.push(childText);
             } else if (childName === "listitem") {
                 const listType = (node.getAttribute("listType") as string | undefined) ?? "bullet";
                 const value = child.getAttribute("value") as number | undefined;
@@ -153,6 +170,9 @@ function extractXmlText(node: Y.XmlElement, depth = 0): string {
                 childName === "heading" ||
                 childName === "quote" ||
                 childName === "code" ||
+                childName === "toggle" ||
+                childName === "table" ||
+                childName === "tablerow" ||
                 childName === "listitem" ||
                 childName === "horizontalrule"
             ) {

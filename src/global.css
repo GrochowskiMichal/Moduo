@@ -333,6 +333,53 @@ body,
   text-decoration-thickness: 0.08em;
 }
 
+.notes-toggle-block {
+  position: relative;
+  display: block;
+  min-height: 1.75rem;
+  margin: 0.25rem 0 0.625rem;
+  padding-left: 1.75rem;
+  color: var(--foreground);
+}
+
+.notes-toggle-caret {
+  position: absolute;
+  left: 0;
+  top: 0.125rem;
+  display: grid;
+  width: 1.375rem;
+  height: 1.375rem;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.notes-toggle-caret:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.notes-toggle-caret::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-bottom: 0.3125rem solid transparent;
+  border-left: 0.4375rem solid currentColor;
+  border-top: 0.3125rem solid transparent;
+  transition: transform 120ms ease;
+}
+
+.notes-toggle-block[data-open="true"]>.notes-toggle-caret::before {
+  transform: rotate(90deg);
+}
+
+.notes-toggle-block[data-open="false"] > :not(.notes-toggle-caret) ~ * {
+  display: none;
+}
+
 .notes-editor-content hr {
   margin: 1rem 0;
   border: 0;
