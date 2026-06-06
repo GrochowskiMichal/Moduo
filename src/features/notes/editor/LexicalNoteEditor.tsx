@@ -22,13 +22,19 @@ import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $createParagraphNode,
   $getSelection,
+  $isElementNode,
   $isRangeSelection,
+  $isTextNode,
   COMMAND_PRIORITY_HIGH,
   INDENT_CONTENT_COMMAND,
   KEY_TAB_COMMAND,
   OUTDENT_CONTENT_COMMAND,
 } from "lexical";
-import { $isListItemNode } from "@lexical/list";
+import {
+  $isListItemNode,
+  $isListNode,
+  $insertList,
+} from "@lexical/list";
 import type { NotesSyncEngine } from "../sync/sync-engine";
 import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
 import { $createHorizontalRuleNode, $isHorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
@@ -167,6 +173,103 @@ function NotesDividerShortcutPlugin() {
   return null;
 }
 
+function NotesMarkdownListShortcutPlugin() {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    return editor.registerUpdateListener(() => {
+      const shouldConvert = editor.getEditorState().read(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+
+        let node = selection.anchor.getNode();
+        while (node && node.getType() !== "paragraph") {
+          const parent = node.getParent();
+          if (!parent) return false;
+          node = parent;
+        }
+
+        if (node.getType() !== "paragraph") return false;
+        const parent = node.getParent();
+        if (parent?.getType() !== "root") return false;
+
+        const text = node.getTextContent();
+        const numberListMatch = text.match(/^(\d+)\. $/);
+        if (numberListMatch) {
+          return { type: "number" as const, deleteCount: text.length };
+        }
+        if (text === "- ") {
+          return { type: "bullet" as const, deleteCount: 2 };
+        }
+        if (text === "* ") {
+          return { type: "bullet" as const, deleteCount: 2 };
+        }
+        return false;
+      });
+
+      if (!shouldConvert) return;
+
+      editor.update(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) return;
+
+        let node = selection.anchor.getNode();
+        while (node && node.getType() !== "paragraph") {
+          const parent = node.getParent();
+          if (!parent) return;
+          node = parent;
+        }
+
+        if (node.getType() !== "paragraph") return;
+        const parent = node.getParent();
+        if (parent?.getType() !== "root") return;
+
+        const text = node.getTextContent();
+        let listType: "number" | "bullet" | null = null;
+        let deleteCount = 0;
+
+        const numberListMatch = text.match(/^(\d+)\. $/);
+        if (numberListMatch) {
+          listType = "number";
+          deleteCount = text.length;
+        } else if (text === "- ") {
+          listType = "bullet";
+          deleteCount = 2;
+        } else if (text === "* ") {
+          listType = "bullet";
+          deleteCount = 2;
+        }
+
+        if (!listType) return;
+        if (!$isElementNode(node)) return;
+
+        const textNode = node.getFirstChild();
+        if (!$isTextNode(textNode)) return;
+
+        textNode.spliceText(0, deleteCount, "", false);
+        selection.setTextNodeRange(textNode, 0, textNode, 0);
+
+        $insertList(listType);
+
+        if (listType === "number" && numberListMatch) {
+          const start = Number(numberListMatch[1]) || 1;
+          const anchorNode = selection.anchor.getNode();
+          const listItem = $isListItemNode(anchorNode)
+            ? anchorNode
+            : anchorNode.getParent();
+          if (!$isListItemNode(listItem)) return;
+          const listNode = listItem.getParent();
+          if (!$isListNode(listNode)) return;
+          listNode.setStart(start);
+          listItem.setValue(start);
+        }
+      });
+    });
+  }, [editor]);
+
+  return null;
+}
+
 export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChange, syncEngine }: Props) {
   const [draftTitle, setDraftTitle] = useState(title);
   const collabSession = useMemo(() => syncEngine.getOrCreateSession(noteId), [noteId, syncEngine]);
@@ -288,6 +391,7 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
               <ListPlugin />
               <CheckListPlugin />
               <NotesDividerShortcutPlugin />
+              <NotesMarkdownListShortcutPlugin />
               <NotesListTabIndentationPlugin />
               <NotesCodeHighlightPlugin />
               <LinkPlugin />
