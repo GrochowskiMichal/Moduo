@@ -7,7 +7,7 @@ import type { GroupBy } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { BucketRail, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
-import { ExecuteStub } from "./execute-stub";
+import { ExecuteView } from "./execute-view";
 import { TaskListView } from "./task-list-view";
 
 type Props = {
@@ -59,7 +59,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
   const inboxId = inbox?.id ?? null;
   useEffect(() => {
-    if (selection === "all" || selection === "inbox") return;
+    if (selection === "all" || selection === "inbox" || selection === "today") return;
     if (inboxId && selection === inboxId) return;
     if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
   }, [selection, buckets, inboxId]);
@@ -82,25 +82,28 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   );
 
   const scopeTasks = useMemo(() => {
+    if (selection === "today") return api.committedTasks;
     if (selection === "all") return tasks.filter((t) => t.status !== "archived");
     const bucketId = selection === "inbox" ? inboxId : selection;
     if (!bucketId) return [];
     return tasks.filter((t) => t.bucketId === bucketId && t.status !== "archived");
-  }, [selection, tasks, inboxId]);
+  }, [selection, tasks, inboxId, api.committedTasks]);
 
-  const scopeTitle = isAll ? "All" : selection === "inbox" ? "Inbox" : bucketNameById(selection);
+  const scopeTitle =
+    isAll ? "All" : selection === "today" ? "Today" : selection === "inbox" ? "Inbox" : bucketNameById(selection);
+
+  // The commit queue is inherently ordered, so Today is never grouped.
+  const effectiveGroupBy = selection === "today" ? "none" : groupBy;
 
   // Where a captured task lands: the selected bucket, else Inbox.
-  const captureBucketId = isAll ? inboxId : selection === "inbox" ? inboxId : selection;
+  const captureBucketId =
+    isAll || selection === "today" ? inboxId : selection === "inbox" ? inboxId : selection;
 
   const totalOpenCount = useMemo(
     () => tasks.filter((t) => t.status !== "done" && t.status !== "archived").length,
     [tasks],
   );
-  const committedCount = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    return tasks.filter((t) => t.committedFor === today && t.status !== "archived").length;
-  }, [tasks]);
+  const committedCount = api.committedTasks.length;
 
   const openCapture = useCallback(() => {
     if (canEdit) setCaptureOpen(true);
@@ -108,6 +111,8 @@ export function TasksPlanView({ api, workspaceId }: Props) {
 
   // cmd+n / global "+" → capture (this listener is only mounted on /tasks).
   useEffect(() => onCreateNew(openCapture), [openCapture]);
+
+  const exitExecute = useCallback(() => setMode("plan"), []);
 
   const left = (
     <BucketRail
@@ -120,6 +125,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
       openCountByBucket={api.openTaskCountByBucket}
       driftCountByBucket={api.driftCountByBucket}
       totalOpenCount={totalOpenCount}
+      committedCount={committedCount}
       canEdit={canEdit}
       onCreateBucket={api.createBucket}
       onRenameBucket={api.renameBucket}
@@ -127,15 +133,23 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     />
   );
 
+  // Execute mode is enclosed in the center panel (rails stay visible).
   const body =
     mode === "execute" ? (
-      <ExecuteStub committedCount={committedCount} onBackToPlan={() => setMode("plan")} />
+      <ExecuteView
+        committedTasks={api.committedTasks}
+        bucketNameById={bucketNameById}
+        onMarkDone={api.markDone}
+        onSkip={api.rescheduleFromToday}
+        onDoLast={api.doLast}
+        onExit={exitExecute}
+      />
     ) : (
       <TaskListView
         tasks={scopeTasks}
         scopeTitle={scopeTitle}
         selection={selection}
-        groupBy={groupBy}
+        groupBy={effectiveGroupBy}
         onGroupByChange={setGroupBy}
         buckets={buckets}
         inbox={inbox}
@@ -146,15 +160,24 @@ export function TasksPlanView({ api, workspaceId }: Props) {
       />
     );
 
+  // The hosted Supabase project may not have the tasks tables yet (web only).
+  const notMigrated = /schema cache|could not find the table|does not exist/i.test(api.error ?? "");
   const center = (
     <div className="flex h-full min-h-0 flex-col">
       {api.error ? (
-        <div className="mb-3 flex shrink-0 items-center justify-between gap-3 rounded-md border border-border bg-muted px-3 py-2 text-sm">
-          <span className="min-w-0 truncate text-muted-foreground">
-            Couldn’t load tasks: {api.error}
+        <div className="mb-3 flex shrink-0 items-start justify-between gap-3 rounded-md border border-border bg-muted px-3 py-2 text-sm">
+          <span className="min-w-0 flex-1 font-sans text-muted-foreground">
+            {notMigrated
+              ? "Tasks aren’t set up on this database yet — apply the Supabase migrations, or use the desktop app."
+              : `Couldn’t load tasks: ${api.error}`}
           </span>
-          <Button size="sm" variant="secondary" onClick={() => void api.reload()}>
-            Retry
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={api.loading}
+            onClick={() => void api.reload()}
+          >
+            {api.loading ? "Retrying…" : "Retry"}
           </Button>
         </div>
       ) : null}

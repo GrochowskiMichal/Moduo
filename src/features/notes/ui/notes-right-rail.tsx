@@ -13,7 +13,7 @@ import { TagInput } from "../../../components/ui/tag-input";
 import { Badge } from "../../../components/ui/badge";
 
 const SECTION_TITLE =
-  "text-xs font-semibold uppercase tracking-wider text-muted-foreground";
+  "text-2xs font-semibold uppercase tracking-wider text-muted-foreground";
 
 type Props = {
   selectedNote: NoteMeta | null;

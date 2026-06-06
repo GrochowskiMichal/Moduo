@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Inbox, Layers, MoreHorizontal, Plus } from "lucide-react";
+import { Inbox, Layers, MoreHorizontal, Plus, Sunrise } from "lucide-react";
 
 import { Input } from "../../../components/ui/input";
 import {
@@ -9,21 +9,31 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import type { Bucket } from "../model";
 
 export type TasksMode = "plan" | "execute";
 
+// Primary (display) font for structure/labels; secondary (body) for meta/counts.
+const SECTION_LABEL =
+  "px-2 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70";
+
 type Props = {
   mode: TasksMode;
   onModeChange: (mode: TasksMode) => void;
-  selection: string; // "all" | "inbox" | bucketId
+  selection: string; // "all" | "today" | "inbox" | bucketId
   onSelect: (selection: string) => void;
   buckets: Bucket[];
   inbox: Bucket | null;
   openCountByBucket: Map<string, number>;
   driftCountByBucket: Map<string, number>;
   totalOpenCount: number;
+  committedCount: number;
   canEdit: boolean;
   onCreateBucket: (name: string) => void;
   onRenameBucket: (id: string, name: string) => void;
@@ -40,11 +50,14 @@ export function BucketRail({
   openCountByBucket,
   driftCountByBucket,
   totalOpenCount,
+  committedCount,
   canEdit,
   onCreateBucket,
   onRenameBucket,
   onDeleteBucket,
 }: Props) {
+  const [adding, setAdding] = useState(false);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <ModeToggle mode={mode} onModeChange={onModeChange} />
@@ -56,7 +69,16 @@ export function BucketRail({
             label="All"
             count={totalOpenCount}
             active={selection === "all"}
+            reserveAction={canEdit}
             onClick={() => onSelect("all")}
+          />
+          <SelectionRow
+            icon={<Sunrise className="size-4" aria-hidden />}
+            label="Today"
+            count={committedCount}
+            active={selection === "today"}
+            reserveAction={canEdit}
+            onClick={() => onSelect("today")}
           />
           {inbox ? (
             <SelectionRow
@@ -65,14 +87,28 @@ export function BucketRail({
               count={openCountByBucket.get(inbox.id) ?? 0}
               drift={driftCountByBucket.get(inbox.id) ?? 0}
               active={selection === "inbox" || selection === inbox.id}
+              reserveAction={canEdit}
               onClick={() => onSelect("inbox")}
             />
           ) : null}
 
-          {buckets.length > 0 ? (
-            <div className="mt-3 mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-              Buckets
-            </div>
+          {/* Buckets section header — hover reveals a "+" (Notion-style add). */}
+          <div className="group/sec mt-3 mb-1 flex items-center justify-between">
+            <span className={SECTION_LABEL}>Buckets</span>
+            {canEdit ? (
+              <button
+                type="button"
+                aria-label="New bucket"
+                onClick={() => setAdding(true)}
+                className="mr-1 flex size-5 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/sec:opacity-100"
+              >
+                <Plus className="size-4" aria-hidden />
+              </button>
+            ) : null}
+          </div>
+
+          {adding ? (
+            <BucketAddInput onCreate={onCreateBucket} onClose={() => setAdding(false)} />
           ) : null}
 
           {buckets.map((bucket) => (
@@ -90,8 +126,6 @@ export function BucketRail({
           ))}
         </nav>
       </div>
-
-      {canEdit ? <AddBucket onCreate={onCreateBucket} /> : null}
     </div>
   );
 }
@@ -109,7 +143,7 @@ function ModeToggle({
     <div
       role="tablist"
       aria-label="Tasks mode"
-      className="flex shrink-0 items-center gap-1 rounded-md bg-muted p-1"
+      className="flex shrink-0 gap-1 rounded-md bg-muted p-1"
     >
       {(["plan", "execute"] as const).map((value) => (
         <button
@@ -117,8 +151,10 @@ function ModeToggle({
           role="tab"
           aria-selected={mode === value}
           onClick={() => onModeChange(value)}
+          // flex-1 fills width (uniform p-1 inset all around); inner radius =
+          // outer (rounded-md) minus p-1 → rounded-sm, so corners nest cleanly.
           className={cn(
-            "flex-1 rounded px-2 py-1 text-sm capitalize transition-colors",
+            "flex-1 rounded-sm py-1 text-center font-display text-sm capitalize transition-colors",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             mode === value
               ? "bg-background text-foreground shadow-sm"
@@ -132,48 +168,30 @@ function ModeToggle({
   );
 }
 
-// ── rows ──────────────────────────────────────────────────────────────────────
+// ── meta (counts + drift) — secondary font, numbers only ──────────────────────
 
-function RowShell({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-      )}
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none"
-      >
-        {children}
-      </button>
-    </div>
-  );
-}
-
-function CountAndDrift({ count, drift }: { count: number; drift?: number }) {
-  return (
-    <span className="flex shrink-0 items-center gap-1.5 text-xs">
-      {drift && drift > 0 ? (
-        // Ambient drift — soft, never red, never "overdue" (principles 4 & 5).
-        <span className="text-muted-foreground/80" title={`${drift} drifted`}>
-          · {drift} drifted
-        </span>
-      ) : null}
-      {count > 0 ? <span className="text-muted-foreground/70 tabular-nums">{count}</span> : null}
+function CountDrift({ count, drift }: { count: number; drift?: number }) {
+  const hasDrift = !!drift && drift > 0;
+  if (count === 0 && !hasDrift) return null;
+  // X (Y): X = open count, Y = drifted (parenthesised). Word lives in the tooltip.
+  const body = (
+    <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground/70">
+      {count}
+      {hasDrift ? <span className="text-muted-foreground/50"> ({drift})</span> : null}
     </span>
   );
+  if (!hasDrift) return body;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{body}</TooltipTrigger>
+      <TooltipContent>
+        {count} open · {drift} drifted
+      </TooltipContent>
+    </Tooltip>
+  );
 }
+
+// ── rows ──────────────────────────────────────────────────────────────────────
 
 function SelectionRow({
   icon,
@@ -181,6 +199,7 @@ function SelectionRow({
   count,
   drift,
   active,
+  reserveAction,
   onClick,
 }: {
   icon: React.ReactNode;
@@ -188,14 +207,30 @@ function SelectionRow({
   count: number;
   drift?: number;
   active: boolean;
+  /** Reserve a trailing slot so counts align with bucket rows' hover "…". */
+  reserveAction?: boolean;
   onClick: () => void;
 }) {
   return (
-    <RowShell active={active} onClick={onClick}>
-      <span className="shrink-0">{icon}</span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <CountAndDrift count={count} drift={drift} />
-    </RowShell>
+    <div
+      className={cn(
+        "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+        active
+          ? "bg-accent text-foreground"
+          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none"
+      >
+        <span className="shrink-0">{icon}</span>
+        <span className="min-w-0 flex-1 truncate font-display">{label}</span>
+      </button>
+      <CountDrift count={count} drift={drift} />
+      {reserveAction ? <span className="size-5 shrink-0" aria-hidden /> : null}
+    </div>
   );
 }
 
@@ -258,25 +293,28 @@ function BucketRow({
     <div
       className={cn(
         "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+        active
+          ? "bg-accent text-foreground"
+          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
       )}
     >
       <button
         type="button"
         onClick={onClick}
         onDoubleClick={() => canEdit && setRenaming(true)}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none"
+        className="flex min-w-0 flex-1 items-center text-left focus-visible:outline-none"
       >
-        <span className="min-w-0 flex-1 truncate">{bucket.name}</span>
+        <span className="min-w-0 flex-1 truncate font-display">{bucket.name}</span>
       </button>
-      <CountAndDrift count={count} drift={drift} />
+      <CountDrift count={count} drift={drift} />
       {canEdit ? (
+        // reserves its slot always (no layout shift); just fades in on hover
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
               aria-label={`${bucket.name} options`}
-              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100"
             >
               <MoreHorizontal className="size-4" aria-hidden />
             </button>
@@ -296,37 +334,29 @@ function BucketRow({
 
 // ── add bucket (instant, no cooldown) ─────────────────────────────────────────
 
-function AddBucket({ onCreate }: { onCreate: (name: string) => void }) {
-  const [open, setOpen] = useState(false);
+function BucketAddInput({
+  onCreate,
+  onClose,
+}: {
+  onCreate: (name: string) => void;
+  onClose: () => void;
+}) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (open) ref.current?.focus();
-  }, [open]);
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <Plus className="size-4" aria-hidden />
-        New bucket
-      </button>
-    );
-  }
+    ref.current?.focus();
+  }, []);
 
   const commit = (keepOpen: boolean) => {
     const name = value.trim();
     if (name) onCreate(name);
     setValue("");
-    if (!keepOpen) setOpen(false);
-    else ref.current?.focus();
+    if (keepOpen) ref.current?.focus();
+    else onClose();
   };
 
   return (
-    <div className="shrink-0 px-1">
+    <div className="px-1 py-0.5">
       <Input
         ref={ref}
         value={value}
@@ -336,11 +366,11 @@ function AddBucket({ onCreate }: { onCreate: (name: string) => void }) {
           if (e.key === "Enter") commit(true); // instant, keep open for rapid adds
           else if (e.key === "Escape") {
             setValue("");
-            setOpen(false);
+            onClose();
           }
         }}
         onBlur={() => commit(false)}
-        className="h-8 text-sm"
+        className="h-7 px-1.5 py-0 text-sm"
       />
     </div>
   );

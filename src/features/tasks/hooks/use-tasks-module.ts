@@ -10,6 +10,7 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import {
   endPosition,
   makeTask,
+  todayStr,
   type NewTaskFields,
 } from "../helpers";
 import {
@@ -105,6 +106,18 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     return counts;
   }, [liveTasks]);
 
+  // ── today's commit queue ─────────────────────────────────────────────────────
+  const today = todayStr();
+  /** Tasks committed for today, ordered by commitOrder (the Execute queue). */
+  const committedTasks = useMemo(
+    () =>
+      liveTasks
+        .filter((t) => t.committedFor === today && t.status !== "archived")
+        .slice()
+        .sort((a, b) => (a.commitOrder ?? 0) - (b.commitOrder ?? 0)),
+    [liveTasks, today],
+  );
+
   // ── helpers ──────────────────────────────────────────────────────────────────
   const guard = useCallback(
     (fn: () => Promise<void>) => {
@@ -175,6 +188,49 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       patchTask(task.id, { status: task.status === "done" ? "todo" : "done" });
     },
     [patchTask],
+  );
+
+  const markDone = useCallback(
+    (id: string) => patchTask(id, { status: "done" }),
+    [patchTask],
+  );
+
+  /** Toggle a task in/out of today's commit queue (commit = "doing this today"). */
+  const toggleCommit = useCallback(
+    (id: string) => {
+      const existing = bundle.tasks.find((t) => t.id === id);
+      if (!existing) return;
+      if (existing.committedFor === today) {
+        patchTask(id, { committedFor: null, commitOrder: null });
+        return;
+      }
+      const maxOrder = committedTasks.reduce((m, t) => Math.max(m, t.commitOrder ?? 0), 0);
+      patchTask(id, { committedFor: today, commitOrder: maxOrder + 1 });
+    },
+    [bundle.tasks, today, committedTasks, patchTask],
+  );
+
+  /** Skip: reschedule a committed task out of today — ambient count++ (no wall). */
+  const rescheduleFromToday = useCallback(
+    (id: string) => {
+      const existing = bundle.tasks.find((t) => t.id === id);
+      if (!existing) return;
+      patchTask(id, {
+        committedFor: null,
+        commitOrder: null,
+        rescheduleCount: existing.rescheduleCount + 1,
+      });
+    },
+    [bundle.tasks, patchTask],
+  );
+
+  /** Do last: keep it committed but send it to the end of today's queue. */
+  const doLast = useCallback(
+    (id: string) => {
+      const maxOrder = committedTasks.reduce((m, t) => Math.max(m, t.commitOrder ?? 0), 0);
+      patchTask(id, { commitOrder: maxOrder + 1 });
+    },
+    [committedTasks, patchTask],
   );
 
   const deleteTask = useCallback(
@@ -274,10 +330,16 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     tags: bundle.tags,
     openTaskCountByBucket,
     driftCountByBucket,
+    today,
+    committedTasks,
     reload: load,
     createTask,
     patchTask,
     toggleDone,
+    markDone,
+    toggleCommit,
+    rescheduleFromToday,
+    doLast,
     deleteTask,
     createBucket,
     renameBucket,

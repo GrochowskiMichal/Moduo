@@ -6,6 +6,7 @@ import {
   CornerDownLeft,
   Flag,
   Inbox,
+  Paperclip,
   Repeat,
   Timer,
   X,
@@ -13,8 +14,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { Button } from "../../../components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -161,39 +164,47 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="top-[18%] translate-y-0 gap-3 p-4 sm:max-w-xl">
-        <DialogHeader className="space-y-0">
-          <DialogTitle className="sr-only">New task</DialogTitle>
+      <DialogContent
+        showCloseButton={false}
+        className="top-[12%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl"
+      >
+        <DialogHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border px-4 py-2.5 text-left">
+          <DialogTitle className="font-display text-sm font-medium text-foreground">New task</DialogTitle>
           <DialogDescription className="sr-only">
             Type a task. Dates and recurrence parse automatically; set any property below.
           </DialogDescription>
+          <DialogClose className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <X className="size-4" aria-hidden />
+            <span className="sr-only">Close</span>
+          </DialogClose>
         </DialogHeader>
 
-        <Input
-          ref={inputRef}
-          value={raw}
-          placeholder="Task title — e.g. Take vitamins every day at 8am"
-          onChange={(e) => setRaw(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          className="h-10 border-0 px-0 text-base shadow-none focus-visible:ring-0"
-        />
+        <div className="flex flex-col gap-2 px-4 pt-3 pb-1">
+          <Input
+            ref={inputRef}
+            value={raw}
+            placeholder="Task title"
+            onChange={(e) => setRaw(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            className="h-9 border-0 bg-transparent px-0 font-display text-lg shadow-none focus-visible:ring-0"
+          />
 
-        <Textarea
-          value={description}
-          placeholder="Add description…"
-          onChange={(e) => setDescription(e.target.value)}
-          onKeyDown={onKeyDownSubmit}
-          className="min-h-9 resize-none border-0 px-0 text-sm shadow-none focus-visible:ring-0"
-          rows={2}
-        />
+          <Textarea
+            value={description}
+            placeholder="Add description…"
+            onChange={(e) => setDescription(e.target.value)}
+            onKeyDown={onKeyDownSubmit}
+            className="min-h-9 resize-none border-0 bg-transparent px-0 font-display text-sm shadow-none focus-visible:ring-0"
+            rows={2}
+          />
 
-        {/* property pills — quiet, everything one click away */}
-        <div className="flex flex-wrap items-center gap-2">
+          {/* property pills — quiet, everything one click away (secondary font) */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
           {/* Bucket */}
           <ListPill
             active
@@ -319,25 +330,31 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
               ))}
             </div>
           </InputPill>
+          </div>
         </div>
 
-        {/* footer */}
-        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch checked={createMore} onCheckedChange={setCreateMore} />
-            Create more
-          </label>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!raw.trim()}
-            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
+        {/* footer — secondary font; attachment placeholder (cross-module links) */}
+        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Link items (coming soon)"
+              title="Link notes, emails, and more — coming soon"
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Paperclip className="size-4" aria-hidden />
+            </button>
+            <label className="flex items-center gap-2 font-sans text-xs text-muted-foreground">
+              <Switch checked={createMore} onCheckedChange={setCreateMore} />
+              Create more
+            </label>
+          </div>
+          <Button size="sm" onClick={submit} disabled={!raw.trim()}>
             Create
-            <kbd className="flex items-center gap-0.5 text-xs opacity-80">
-              <CornerDownLeft className="size-3" />
+            <kbd className="flex items-center opacity-80">
+              <CornerDownLeft className="size-3" aria-hidden />
             </kbd>
-          </button>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -374,7 +391,8 @@ function ListPill({
         {icon}
         <span className="max-w-40 truncate">{label}</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-44">
+      {/* lift above the dialog (z-dialog 60); default dropdown z is below it */}
+      <DropdownMenuContent align="start" className="min-w-44" style={{ zIndex: "var(--z-popover)" }}>
         {children}
       </DropdownMenuContent>
     </DropdownMenu>

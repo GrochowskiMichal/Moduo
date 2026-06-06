@@ -43,6 +43,12 @@ export function betweenPositions(a: string | null, b: string | null): string {
   return encodePos(Math.floor((lo + hi) / 2));
 }
 
+/** Local calendar date as YYYY-MM-DD (the value stored in `committedFor`). */
+export function todayStr(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 // ── Task factory ─────────────────────────────────────────────────────────────
 
 export type NewTaskFields = {

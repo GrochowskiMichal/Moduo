@@ -84,9 +84,14 @@ function writePersistedLayout(key: string, layout: Layout): void {
 }
 
 const RAIL_WRAPPER =
-  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card p-5 flex flex-col overflow-hidden";
+  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card flex flex-col overflow-hidden";
 const CENTER_WRAPPER =
-  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card p-4 overflow-auto relative";
+  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card overflow-auto relative";
+
+// Density-driven, uniform padding (responds to Appearance → density). Uniform so
+// content sits equidistant from every panel edge. Rails run tighter than center.
+const RAIL_PAD = { padding: "var(--pad-x-sm)" } as const;
+const CENTER_PAD = { padding: "var(--pad-x)" } as const;
 
 export function FeaturePanelsShell({
   feature,
@@ -259,7 +264,7 @@ export function FeaturePanelsShell({
           minSize={resizable ? "12%" : "20%"}
           maxSize={resizable ? "40%" : "20%"}
         >
-          <aside className={RAIL_WRAPPER} data-rail-mode="full">
+          <aside className={RAIL_WRAPPER} data-rail-mode="full" style={RAIL_PAD}>
             {leftSlot}
           </aside>
         </ResizablePanel>
@@ -268,7 +273,7 @@ export function FeaturePanelsShell({
       {showLeftFull ? <ResizableHandle /> : null}
 
       <ResizablePanel id={`${feature}-center`} defaultSize="60%" minSize="30%">
-        <main className={CENTER_WRAPPER}>{center}</main>
+        <main className={CENTER_WRAPPER} style={CENTER_PAD}>{center}</main>
       </ResizablePanel>
 
       {showRightFull ? <ResizableHandle /> : null}
@@ -280,7 +285,7 @@ export function FeaturePanelsShell({
           minSize={resizable ? "12%" : "20%"}
           maxSize={resizable ? "40%" : "20%"}
         >
-          <aside className={RAIL_WRAPPER} data-rail-mode="full">
+          <aside className={RAIL_WRAPPER} data-rail-mode="full" style={RAIL_PAD}>
             {rightSlot}
           </aside>
         </ResizablePanel>

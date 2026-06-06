@@ -6,6 +6,73 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Session 3 — Commit + Execute loop (2026-06-06)
+
+Branch `t/maciej/tasks-commit-execute` off `maciej` (which now includes the
+develop sync + all of Session 2). The core feature: build today's queue, then run it.
+
+**Commit queue (Plan side):** `toggleCommit` / `markDone` / `rescheduleFromToday`
+on the hook (sets `committedFor`=today + `commitOrder`; reschedule bumps
+`rescheduleCount` ambiently, no wall). `committedTasks` derived (today, ordered).
+Commit from the List via the **`t`** key (`c` is capture) or the row context menu;
+committed rows show a quiet Sunrise marker. New **"Today"** selection in the left
+rail (ordered queue + count) and a **"Start my day"** CTA (shown when ≥1
+committed). Today is never grouped (queue order); capture from Today lands in Inbox.
+
+**Execute mode** ([ui/execute-view.tsx](../src/features/tasks/ui/execute-view.tsx)):
+isolated — replaces the whole 3-pane area (no rails). Brief **intro ceremony**
+("N tasks committed. Let's go.") on Start-my-day; the plain mode toggle skips
+straight in. **Now card**: bucket + duration context, large title, **timer
+(Pomodoro 25/5 default, switchable to per-task Duration countdown)** auto-running
+on entry, "Mark done → next". **Queue** below (items 3+ dimmed, read-only).
+**End-of-queue**: factual done/total summary. "Reschedule" drops the current task
+from today (ambient count++) and advances; "End session" returns to Plan.
+
+**Decisions (Maciej):** timer = Pomodoro **+ switchable** to Duration; commit
+queue surfaced as a **"Today" rail selection** (+ row marker).
+
+**Polish pass (round-2 feedback — Maciej):**
+- **Typography roles** codified in `DESIGN_SYSTEM.md` + applied: primary =
+  `font-display` (chrome: buttons, labels, titles, headings), secondary = body
+  (context: dates, counters, meta, modal footer). The **`Button` primitive base
+  is now `font-display`** (was `font-sans`) — fixes the "mono button" app-wide
+  (mono now strictly code-only).
+- **Casing**: Sentence case convention documented in `DESIGN_SYSTEM.md`
+  ("Done, next", "Do last", "2 / 2 Done", etc.).
+- **Density now reaches modules**: `FeaturePanelsShell` padding is driven by the
+  `--pad-*` tokens (was fixed `p-5`/`p-4`) → the Appearance → density control
+  moves the panels; baseline is tighter (rails run on `--pad-*-sm`). New
+  **`--text-2xs`** eyebrow token (scales with text-size) for section labels.
+- **Dialog blur reduced globally** (`bg-background/60`, no `backdrop-blur`); the
+  Settings modal keeps its own overlay so its appearance-tab behaviour is intact.
+- **Execute moved into the center panel** (rails stay), redesigned: richer Now
+  card + meta, a **relations placeholder** (cross-module links, future), button
+  **"✓ Done, next"**, **Skip** (reschedule out, ambient count++) + **Do last**
+  (re-queue to end), "N / M Done". Pomodoro/Duration toggle kept.
+- **Left rail**: Plan/Execute toggle concentric-radius fix; **"Today"** queue
+  selection; drift is numbers-only (dot + count, word in tooltip) with the hover
+  "…" pushing counts left; **hover "+"** add-bucket on the Buckets header
+  (removed the bottom button + the redundant "Start my day" button/ceremony).
+- **List**: group control + dropdown → primary font; **no "Bucket" grouping
+  inside a single bucket**; empty schedule/due affordances no longer reserve
+  space (only show on hover / when set) — fixes the lone-calendar-icon misalign.
+- **Capture modal**: visible header title (fixes the X overlap), borderless
+  Linear-style inputs, primary fonts for title/description, secondary footer,
+  **attachment placeholder** (left of the footer) for the cross-module link concept.
+- **Parked (noted, not done):** full density/type-scale pass (per Maciej);
+  wiring the *content* of cross-module relations/embeds (placeholders only).
+
+**Verified:** typecheck ✓, cargo check ✓, lint:tw ✓, lint:css (no new errors) ✓,
+web production build ✓, app boots clean (no console errors). Not yet hand-dogfooded
+(Execute timer/flow + the visual polish need a real run); commit not yet made —
+left in the working tree for review.
+
+**Deferred:** queue reordering (drag) within Today; long-break pomodoro cadence;
+sound/notification on phase change; Board view + drift triage + default-view
+(Session 4).
+
+---
+
 ## Session 2 — Plan Mode: Buckets + List + Capture (2026-06-06)
 
 Branch `t/maciej/tasks-plan-mode` off `maciej`. First visible, usable Tasks UI on

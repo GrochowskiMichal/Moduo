@@ -116,7 +116,7 @@ function NoteKindIcon({ kind }: { kind: NoteKind }) {
 const SIDEBAR_ROW_BASE =
   "group/row relative flex w-full min-w-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring data-[selected=true]:bg-accent data-[selected=true]:text-foreground";
 const SIDEBAR_SECTION_TITLE =
-  "flex w-full items-center justify-between gap-2 border-0 bg-transparent px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm";
+  "flex w-full items-center justify-between gap-2 border-0 bg-transparent px-2 py-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm";
 
 function MenuOpenEffect({ onMount }: { onMount: () => void }) {
   useEffect(() => {

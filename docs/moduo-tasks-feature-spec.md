@@ -41,9 +41,9 @@ Toggled at the **top of the left panel**. The split is the heart of the module: 
 **Left panel:**
 - Mode toggle (Plan / Execute) at the very top.
 - Bucket list: name + task count. One bucket open by default; all expandable.
-- Per-bucket **drift indicator** — ambient, soft (e.g. "Fitness · 3 drifted"). Never red, never "overdue". Click → batch-triage for that bucket (reschedule / archive / ignore).
-- Add-bucket control — instant, no cooldown.
-- A cross-bucket "All" selection and the reserved "Inbox" bucket.
+- Per-bucket **drift indicator** — ambient, soft, **numbers-only** (a small dot + drift count, with the open count; the word "drifted" lives in the hover tooltip). Never red, never "overdue". Click → batch-triage for that bucket (reschedule / archive / ignore).
+- Add-bucket — instant, no cooldown; a hover **"+"** on the "Buckets" header (Notion-style), not a standalone button.
+- A cross-bucket "All" selection, a **"Today"** selection (today's commit queue, ordered), and the reserved "Inbox" bucket.
 
 **Center panel:**
 - View switcher: **List | Board** (Gantt deferred).
@@ -53,13 +53,18 @@ Toggled at the **top of the left panel**. The split is the heart of the module: 
 
 ### Execute Mode
 
-Entered via a ceremonial **"Start my day"** (or the mode toggle). Brief confirmation: "N tasks committed. Let's go." View is **isolated** — bucket list, backlog, other views all hidden.
+Entered via the **Plan / Execute mode toggle** at the top of the left panel. Execute is a **reusable batch runner** — run a committed batch whenever you sit down to focus, not just once each morning. (The old ceremonial "Start my day" button was removed; the toggle is the entry point.)
 
-- **Now card** (dominant, top): current committed task — large title, bucket, timer, prominent "Mark done → next". Timer auto-runs on entry (assume the user is working).
-  - **Timer:** pomodoro (fixed work/break) as default; show the task's estimated duration as context. (Open: per-task duration countdown is an alternative — default to pomodoro unless told otherwise.)
-- **Queue** (below): remaining committed tasks; items 3+ away dimmed; read-only while a task is in progress. "Mark done" slides the next task into the Now card.
-- **End of queue:** factual summary — done vs committed (e.g. "3 / 4"). No streaks, no gamification.
-- **Reschedule from Execute:** allowed; returns to limited Plan. Track a reschedule count as **ambient** info on the task — never a modal, never a forced reason, never a blocked save (principle 5: mirrors not walls).
+**Enclosed in the center panel** — the left rail and right panel stay visible; Execute owns the *center*, it does not take over the whole screen. (Revised from the earlier full-screen "isolated" model.)
+
+- **Now card** (dominant, top): current committed task with as much context as we have — large title, bucket, priority/energy, scheduled/due, duration estimate, description — plus a **relations area** (placeholder for now) for cross-module links (notes, emails, calendar events). Primary action **"✓ Done, next"**. Timer auto-runs on entry.
+  - **Timer:** **pomodoro (25/5) by default, switchable** per session to a per-task duration countdown.
+- **Skip** (reschedule out of today, ambient count++) and **Do last** (send to the end of today's queue — for "I'm stuck, come back to it") sit alongside Done.
+- **Queue** (below): remaining committed tasks; items 3+ away dimmed; read-only while a task is in progress. "Done, next" slides the next task into the Now card.
+- **End of queue:** factual summary — "N / M Done". No streaks, no gamification.
+- **Reschedule (Skip)**: increments a reschedule count as **ambient** info on the task — never a modal, never a forced reason, never a blocked save (principle 5: mirrors not walls).
+
+Typography/casing/density follow `DESIGN_SYSTEM.md` (primary = display font for chrome, secondary = body for context; Sentence case).
 
 ---
 
