@@ -16,6 +16,7 @@ import "@fontsource/nunito/700.css";
 
 import { AuthContext, type AuthContextValue } from "../src/providers/auth-provider";
 import { WorkspaceContext, type WorkspaceContextValue } from "../src/providers/workspace-provider";
+import { TooltipProvider } from "../src/components/ui/tooltip";
 
 const mockAuth: AuthContextValue = {
   userId: "storybook-user",
@@ -87,7 +88,9 @@ const withAppProviders: Decorator = (Story, context) => {
   return (
     <AuthContext.Provider value={mockAuth}>
       <WorkspaceContext.Provider value={mockWorkspace}>
-        <RouterShell />
+        <TooltipProvider>
+          <RouterShell />
+        </TooltipProvider>
       </WorkspaceContext.Provider>
     </AuthContext.Provider>
   );

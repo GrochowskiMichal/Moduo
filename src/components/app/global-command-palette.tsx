@@ -5,7 +5,6 @@ import {
   GitBranch,
   Inbox,
   LayoutGrid,
-  PenTool,
   Settings as SettingsIcon,
 } from "lucide-react";
 
@@ -66,7 +65,6 @@ export function GlobalCommandPalette() {
     { id: "grid", label: "Open Grid", icon: LayoutGrid, run: go("/") },
     { id: "mindmap", label: "Open Mindmap", icon: GitBranch, run: go("/mindmap") },
     { id: "email", label: "Open Email", icon: Inbox, run: go("/email") },
-    { id: "brainstorm", label: "Open Brainstorm", icon: PenTool, run: go("/brainstorm") },
   ];
 
   const settingsActions: Action[] = [

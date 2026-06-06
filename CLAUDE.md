@@ -89,7 +89,7 @@ Three-pane desktop shell. Min window 1024×700. See [.design/foundation/INFORMAT
 - `src/components/app/` — app shell (top bar, 3-pane shell, menus).
 - `src/components/` (root) — shared bespoke components (modals, switchers, menus).
 - `src/styles/tokens.css` — design tokens. **Never edit a component to change a token. Edit the token.**
-- `src/tw/` — React Native compatibility shim. Leave alone unless explicitly touched.
+- `src/tw/` — React Native compatibility shim. Being phased out from files we actively touch: new and edited chrome code uses raw HTML (`<div>`, `<span>`, `<button>`) rather than `<View>` / `<Text>` / `<Pressable>`. Pre-existing usages elsewhere stay until each file has a reason to be edited. Do not undertake a codebase-wide migration without an explicit ask.
 - `src/global.css` — global resets, font @font-face declarations. Will be cleaned up as the redesign lands.
 - `src-tauri/` — Rust backend.
 - `.design/<feature-slug>/` — design briefs per feature. Foundation lives at `.design/foundation/`.
