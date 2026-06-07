@@ -165,7 +165,7 @@ function isInsideCodeBlockFromDom(target: HTMLElement): boolean {
  * PRD section 08.
  */
 function isActiveSelectionInsideCodeBlock(editor: ReturnType<typeof useLexicalComposerContext>[0]): boolean {
-  return editor.getEditorState().read(() => {
+  return editor.read(() => {
     const selection = $getSelection();
     if (!$isRangeSelection(selection)) return false;
     return isInsideCodeBlock(selection.anchor.getNode());
@@ -183,7 +183,8 @@ function isActiveSelectionInsideCodeBlock(editor: ReturnType<typeof useLexicalCo
  * horizontal bounds (content + gutter), so drags that land in whitespace or
  * beside the text column still resolve correctly.
  *
- * Must be called inside an `editor.getEditorState().read()` call.
+ * Must be called inside an `editor.read()` call so the active editor is set
+ * for any nested `$getNearestNodeFromDOMNode` resolutions.
  */
 function resolveDropByGeometry(
   clientX: number,
@@ -796,7 +797,12 @@ export function NotesBlockControlsPlugin() {
       if (hoverRafRef.current !== null) cancelAnimationFrame(hoverRafRef.current);
       hoverRafRef.current = requestAnimationFrame(() => {
         hoverRafRef.current = null;
-        editor.getEditorState().read(() => {
+        // Use editor.read (not editor.getEditorState().read) so the active
+        // editor is set before resolveBlockKeyFromDom calls
+        // $getNearestNodeFromDOMNode — the EditorState-only read passes null
+        // for the editor option, which would throw "Unable to find an active
+        // editor" and leave the drag handle invisible.
+        editor.read(() => {
           const resolved = resolveBlockKeyFromDom(target);
           if (!resolved) {
             hideControls();
@@ -836,7 +842,7 @@ export function NotesBlockControlsPlugin() {
       if (!(target instanceof HTMLElement) || !activeRoot?.contains(target)) return;
       touchStartRef.current = { x: touch.clientX, y: touch.clientY };
       touchLongPressTimerRef.current = setTimeout(() => {
-        editor.getEditorState().read(() => {
+        editor.read(() => {
           const resolved = resolveBlockKeyFromDom(target);
           if (!resolved) return;
           // Mirror the pointer-move guard: code blocks only open the menu on
@@ -1142,7 +1148,7 @@ export function NotesBlockControlsPlugin() {
 
         if ((event.ctrlKey || event.metaKey) && event.key === "/") {
           if (isActiveSelectionInsideCodeBlock(editor)) return false;
-          const block = editor.getEditorState().read(() => resolveBlockKeyFromSelection());
+          const block = editor.read(() => resolveBlockKeyFromSelection());
           if (!block) return false;
           const rect = editor.getElementByKey(block.key)?.getBoundingClientRect();
           if (!rect) return false;
@@ -1153,7 +1159,7 @@ export function NotesBlockControlsPlugin() {
 
         if (event.altKey && event.key === "Enter") {
           if (isActiveSelectionInsideCodeBlock(editor)) return false;
-          const block = editor.getEditorState().read(() => resolveBlockKeyFromSelection());
+          const block = editor.read(() => resolveBlockKeyFromSelection());
           if (!block) return false;
           event.preventDefault();
           editor.update(() => {
@@ -1164,7 +1170,7 @@ export function NotesBlockControlsPlugin() {
         }
 
         if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-          const block = editor.getEditorState().read(() => resolveBlockKeyFromSelection());
+          const block = editor.read(() => resolveBlockKeyFromSelection());
           if (!block) return false;
           event.preventDefault();
           editor.update(() => moveOne(block.key, event.key === "ArrowUp" ? "up" : "down"));
@@ -1172,7 +1178,7 @@ export function NotesBlockControlsPlugin() {
         }
 
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
-          const block = editor.getEditorState().read(() => resolveBlockKeyFromSelection());
+          const block = editor.read(() => resolveBlockKeyFromSelection());
           if (!block) return false;
           event.preventDefault();
           editor.update(() => duplicateBlock(block.key));
@@ -1190,7 +1196,7 @@ export function NotesBlockControlsPlugin() {
       KEY_BACKSPACE_COMMAND,
       (event: KeyboardEvent) => {
         if ((event.ctrlKey || event.metaKey) && event.shiftKey) {
-          const block = editor.getEditorState().read(() => resolveBlockKeyFromSelection());
+          const block = editor.read(() => resolveBlockKeyFromSelection());
           if (block && editor.isEditable()) {
             event.preventDefault();
             editor.update(() => deleteBlock(block.key));
@@ -1269,7 +1275,7 @@ export function NotesBlockControlsPlugin() {
     const root = editor.getRootElement();
     if (!root) return null;
 
-    return editor.getEditorState().read(() => {
+    return editor.read(() => {
       const keys = draggedKeysRef.current;
 
       // Primary: geometry-based resolver — works in whitespace and gutter.
@@ -1359,7 +1365,7 @@ export function NotesBlockControlsPlugin() {
     if (!hovered || isComposingRef.current || !editor.isEditable()) return;
     event.preventDefault();
     event.stopPropagation();
-    const { keys, label } = editor.getEditorState().read(() => {
+    const { keys, label } = editor.read(() => {
       const nextKeys = draggableKeysForHandle(hovered.key);
       const blockNode = $getNodeByKey(hovered.key);
       return {
@@ -1474,7 +1480,7 @@ export function NotesBlockControlsPlugin() {
       if (Math.abs(moveEvent.clientY - startY) < DRAG_THRESHOLD_PX) return;
       const target = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
       if (!(target instanceof HTMLElement)) return;
-      editor.getEditorState().read(() => {
+      editor.read(() => {
         const resolved = resolveBlockKeyFromDom(target);
         if (!resolved) return;
         const keys = siblingRange(anchorKey, resolved.key);

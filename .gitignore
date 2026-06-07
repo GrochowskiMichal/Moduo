@@ -52,3 +52,8 @@ src-tauri/*.redb.lock
 
 # Claude Code runtime files
 .claude/
+
+# Agent runtime state (hive, omo, opencode)
+.hive/
+.omo/
+.opencode/
