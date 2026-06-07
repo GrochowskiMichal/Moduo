@@ -1,0 +1,591 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.prd{max-width:680px;padding:0 0 3rem}
+.toc{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1.25rem 1.5rem;margin:1.5rem 0 2rem}
+.toc h2{font-size:13px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem}
+.toc ol{padding-left:1.25rem}
+.toc li{margin:.25rem 0}
+.toc a{font-size:13px;color:var(--color-text-info);text-decoration:none}
+.toc a:hover{text-decoration:underline}
+.toc .sub{padding-left:1rem;margin:.15rem 0}
+.toc .sub a{color:var(--color-text-secondary)}
+
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:2rem}
+.badge{font-size:11px;font-weight:500;padding:3px 10px;border-radius:999px;border:0.5px solid var(--color-border-secondary);color:var(--color-text-secondary)}
+.badge.v{background:var(--color-background-info);color:var(--color-text-info);border-color:transparent}
+.badge.s{background:var(--color-background-success);color:var(--color-text-success);border-color:transparent}
+
+h1.prd-title{font-size:22px;font-weight:500;color:var(--color-text-primary);line-height:1.3;margin-bottom:.5rem}
+.prd-sub{font-size:14px;color:var(--color-text-secondary);margin-bottom:1.5rem;line-height:1.6}
+
+.section{margin:2.5rem 0}
+.section-header{display:flex;align-items:baseline;gap:.75rem;padding-bottom:.5rem;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:1.25rem}
+.section-num{font-size:11px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+h2.sh{font-size:18px;font-weight:500;color:var(--color-text-primary)}
+h3.sh3{font-size:15px;font-weight:500;color:var(--color-text-primary);margin:1.25rem 0 .5rem}
+h4.sh4{font-size:13px;font-weight:500;color:var(--color-text-secondary);margin:.9rem 0 .3rem;text-transform:uppercase;letter-spacing:.04em}
+
+p.body{font-size:14px;line-height:1.75;color:var(--color-text-primary);margin:.5rem 0}
+p.muted{font-size:13px;line-height:1.7;color:var(--color-text-secondary);margin:.4rem 0}
+
+.scenario{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:1rem 1.25rem;margin:.75rem 0}
+.scenario-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary);margin-bottom:.5rem}
+.scenario-body{font-size:13px;line-height:1.7;color:var(--color-text-primary)}
+.scenario-body b{font-weight:500}
+
+.do-dont{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:.75rem 0}
+.do-dont-box{border-radius:var(--border-radius-md);padding:.75rem 1rem}
+.do{background:var(--color-background-success);border:0.5px solid var(--color-border-success)}
+.dont{background:var(--color-background-danger);border:0.5px solid var(--color-border-danger)}
+.do-label{font-size:11px;font-weight:500;color:var(--color-text-success);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem}
+.dont-label{font-size:11px;font-weight:500;color:var(--color-text-danger);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem}
+.dd-text{font-size:13px;line-height:1.6;color:var(--color-text-primary)}
+
+ul.spec{list-style:none;padding:0;margin:.4rem 0}
+ul.spec li{font-size:13px;line-height:1.7;color:var(--color-text-primary);padding:.2rem 0 .2rem 1.1rem;position:relative}
+ul.spec li::before{content:"–";position:absolute;left:0;color:var(--color-text-tertiary)}
+
+.table-wrap{overflow-x:auto;margin:.75rem 0}
+table.spec-t{width:100%;border-collapse:collapse;font-size:13px}
+table.spec-t th{text-align:left;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-secondary);padding:.5rem .75rem;border-bottom:0.5px solid var(--color-border-secondary)}
+table.spec-t td{padding:.5rem .75rem;border-bottom:0.5px solid var(--color-border-tertiary);vertical-align:top;color:var(--color-text-primary);line-height:1.6}
+table.spec-t tr:last-child td{border-bottom:none}
+table.spec-t td.mono{font-family:var(--font-mono);font-size:12px;color:var(--color-text-secondary)}
+
+.callout{display:flex;gap:.75rem;padding:.75rem 1rem;border-radius:var(--border-radius-md);margin:.75rem 0;align-items:flex-start}
+.callout.warn{background:var(--color-background-warning);border:0.5px solid var(--color-border-warning)}
+.callout.info{background:var(--color-background-info);border:0.5px solid var(--color-border-info)}
+.callout i{font-size:16px;margin-top:1px;flex-shrink:0}
+.callout.warn i{color:var(--color-text-warning)}
+.callout.info i{color:var(--color-text-info)}
+.callout-text{font-size:13px;line-height:1.65;color:var(--color-text-primary)}
+
+.nav{position:sticky;top:0;background:var(--color-background-primary);border-bottom:0.5px solid var(--color-border-tertiary);display:flex;gap:4px;overflow-x:auto;padding:.5rem 0;margin:0 0 1rem;z-index:10;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav-btn{background:none;border:0.5px solid transparent;border-radius:var(--border-radius-md);padding:4px 10px;font-size:12px;color:var(--color-text-secondary);cursor:pointer;white-space:nowrap;transition:all .15s}
+.nav-btn:hover,.nav-btn.active{background:var(--color-background-secondary);color:var(--color-text-primary);border-color:var(--color-border-tertiary)}
+
+.divider{height:0.5px;background:var(--color-border-tertiary);margin:2rem 0}
+
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:.5rem 0}
+@media(max-width:500px){.two-col,.do-dont{grid-template-columns:1fr}}
+
+.inline-code{font-family:var(--font-mono);font-size:12px;background:var(--color-background-secondary);padding:1px 5px;border-radius:4px;color:var(--color-text-secondary)}
+
+.test-row{display:flex;gap:.5rem;align-items:flex-start;padding:.4rem 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.test-row:last-child{border-bottom:none}
+.test-cat{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-tertiary);min-width:72px;padding-top:2px}
+.test-desc{font-size:13px;line-height:1.6;color:var(--color-text-primary)}
+</style>
+
+<div class="prd">
+<div class="nav" id="nav">
+  <button class="nav-btn active" onclick="show('overview')">Overview</button>
+  <button class="nav-btn" onclick="show('blocks')">Block types</button>
+  <button class="nav-btn" onclick="show('gutter')">Gutter controls</button>
+  <button class="nav-btn" onclick="show('dnd')">Drag & drop</button>
+  <button class="nav-btn" onclick="show('menu')">Block menu</button>
+  <button class="nav-btn" onclick="show('multisel')">Multi-select</button>
+  <button class="nav-btn" onclick="show('edge')">Edge cases</button>
+  <button class="nav-btn" onclick="show('persist')">Persistence</button>
+  <button class="nav-btn" onclick="show('a11y')">Accessibility</button>
+  <button class="nav-btn" onclick="show('tests')">Test plan</button>
+  <button class="nav-btn" onclick="show('outscope')">Out of scope</button>
+</div>
+
+<div id="s-overview" class="section-wrap">
+<h1 class="prd-title">Block management — Notes editor (Notion parity)</h1>
+<p class="prd-sub">Product requirements document for the <span class="inline-code">NotesBlockControlsPlugin</span> layer on top of the existing Lexical/Yjs editor. Covers every user-facing behavior, interaction constraint, edge case, and acceptance criterion for v1.</p>
+<div class="meta">
+  <span class="badge v">v1.0 — draft</span>
+  <span class="badge s">In scope: text, lists, toggles, code, tables</span>
+  <span class="badge">Stack: Lexical · Yjs · React</span>
+  <span class="badge">Lexical DraggableBlockPlugin baseline</span>
+</div>
+
+<div class="section">
+  <div class="section-header"><span class="section-num">01</span><h2 class="sh">Goal & scope</h2></div>
+  <p class="body">Users should be able to freely reorder, convert, duplicate, and delete editor blocks using pointer and keyboard interactions that feel identical to Notion's desktop experience. The implementation stays entirely within the existing Lexical + Yjs stack so collaboration and persistence require zero schema changes.</p>
+  <p class="body">"Deep parity" for v1 means: every text-like block type (paragraphs, headings, lists, todos, quotes, code, toggles, dividers, tables) is draggable and has a contextual action menu. It does not mean Notion databases, embeds, synced blocks, AI, columns, or full Notion mobile drag.</p>
+</div>
+
+<div class="section">
+  <div class="section-header"><span class="section-num">02</span><h2 class="sh">User stories</h2></div>
+  <ul class="spec">
+    <li>As a writer, I can drag any block to reorder it without losing focus or undo history.</li>
+    <li>As a writer, I can click the six-dot handle to open an action menu for the hovered block.</li>
+    <li>As a writer, I can click <span class="inline-code">+</span> to insert a new block below the current one and immediately open the block picker.</li>
+    <li>As a writer, I can convert a paragraph into a heading, list, quote, or code block without retyping content.</li>
+    <li>As a writer, I can select multiple contiguous blocks and drag or delete them as a group.</li>
+    <li>As a writer using a keyboard, I can move any block up or down via a shortcut without using a mouse.</li>
+    <li>As a collaborator, block reorders made by one user are immediately reflected for all other connected users.</li>
+    <li>As a reader with a read-only note, I see no gutter controls at all.</li>
+  </ul>
+</div>
+</div>
+
+<div id="s-blocks" class="section-wrap" style="display:none">
+<div class="section">
+  <div class="section-header"><span class="section-num">03</span><h2 class="sh">Block type registry</h2></div>
+  <p class="body">Each block type has a defined draggability, convertibility, and menu surface. The table is the authoritative source for what is and isn't allowed per type.</p>
+  <div class="table-wrap">
+  <table class="spec-t">
+    <thead><tr><th>Block type</th><th>Draggable unit</th><th>Can convert to</th><th>Menu actions</th></tr></thead>
+    <tbody>
+      <tr><td>Paragraph</td><td>Self</td><td>H1 H2 H3 · bullet · number · todo · quote · code · toggle</td><td>Full</td></tr>
+      <tr><td>Heading (H1/H2/H3)</td><td>Self</td><td>Paragraph · other headings · bullet · number · quote</td><td>Full</td></tr>
+      <tr><td>Bullet list item</td><td>Own item (resolves up to item, not whole list)</td><td>Paragraph · number · todo · quote</td><td>Full, except "turn into code"</td></tr>
+      <tr><td>Numbered list item</td><td>Own item</td><td>Paragraph · bullet · todo · quote</td><td>Full, except "turn into code"</td></tr>
+      <tr><td>Todo (checklist item)</td><td>Own item</td><td>Paragraph · bullet · number · quote</td><td>Full</td></tr>
+      <tr><td>Quote</td><td>Self</td><td>Paragraph · bullet · number</td><td>Full</td></tr>
+      <tr><td>Code block</td><td>Self (whole block)</td><td>Paragraph only</td><td>No slash/picker from inside code text; handle on shell only</td></tr>
+      <tr><td>Toggle (closed)</td><td>Whole subtree</td><td>Paragraph · H1 H2 H3</td><td>Full on shell</td></tr>
+      <tr><td>Toggle (open) — shell</td><td>Whole subtree</td><td>Paragraph · H1 H2 H3</td><td>Full on shell</td></tr>
+      <tr><td>Toggle (open) — child block</td><td>Child only (within same toggle)</td><td>Same as paragraph</td><td>Full, but "move up/down" is scoped to siblings inside toggle</td></tr>
+      <tr><td>Divider</td><td>Self</td><td>Cannot convert</td><td>Delete, duplicate, move up/down only</td></tr>
+      <tr><td>Table</td><td>Whole table as one block</td><td>Cannot convert</td><td>Delete, duplicate, move up/down only</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 class="sh3">Block resolution rules</h3>
+  <p class="body">When the user's pointer enters a block region, the system must resolve which node to treat as the draggable unit:</p>
+  <ul class="spec">
+    <li>For top-level paragraphs, headings, quotes, code blocks, dividers, and tables: the hovered DOM node itself.</li>
+    <li>For list items (bullet/number/todo): walk up from the cursor until the nearest list item ancestor. Never resolve to the whole list wrapper.</li>
+    <li>For a block inside an open toggle: resolve to that child block, not the toggle shell — unless the cursor is on the toggle label line itself.</li>
+    <li>For a collapsed toggle: always resolve to the toggle shell regardless of cursor position.</li>
+    <li>If resolution is ambiguous (e.g. cursor exactly on the border between two items), prefer the block whose vertical midpoint is closest to the cursor.</li>
+  </ul>
+</div>
+</div>
+
+<div id="s-gutter" class="section-wrap" style="display:none">
+<div class="section">
+  <div class="section-header"><span class="section-num">04</span><h2 class="sh">Gutter controls</h2></div>
+  <p class="body">A fixed-width gutter (32 px) sits to the left of the editor content area. Controls appear on hover of any block and contain exactly two affordances: a <span class="inline-code">+</span> insert button and a <span class="inline-code">⋮⋮</span> six-dot drag handle.</p>
+
+  <h3 class="sh3">Visibility rules</h3>
+  <ul class="spec">
+    <li>Controls are hidden by default and appear when the cursor enters a block's bounding box.</li>
+    <li>Controls remain visible while the cursor is anywhere inside the gutter or inside the hovered block.</li>
+    <li>Controls disappear when the cursor exits both the gutter and the block, with a 120 ms fade-out delay to prevent flickering on fast cursor movement.</li>
+    <li>Controls are never shown in read-only mode.</li>
+    <li>Controls are never shown during an active drag operation (they reappear after drop).</li>
+    <li>On mobile (touch-only) devices, controls are replaced by a long-press gesture that opens the block menu directly.</li>
+  </ul>
+
+  <h3 class="sh3">Plus (+) button</h3>
+  <div class="scenario"><div class="scenario-label">Scenario — normal insert</div><div class="scenario-body">User hovers over a paragraph. The <b>+</b> button appears in the gutter aligned to the block's top line. User clicks <b>+</b>. A new empty paragraph is inserted immediately below the hovered block, focus moves to it, and the slash/block picker opens automatically as if the user had typed <b>/</b>. The hovered block is not modified.</div></div>
+  <div class="scenario"><div class="scenario-label">Scenario — insert after last block</div><div class="scenario-body">User hovers over the last block in the note. Clicking <b>+</b> inserts a new paragraph at the end of the document and opens the picker. Behavior is identical to inserting below any other block.</div></div>
+  <div class="scenario"><div class="scenario-label">Scenario — insert adjacent to a list</div><div class="scenario-body">User hovers over a bullet list item. Clicking <b>+</b> inserts a new paragraph <em>after the entire list group</em> (i.e. below the last item in the same list), not between list items. This avoids accidentally fragmenting a list. Focus and picker open as normal.</div></div>
+  <div class="do-dont">
+    <div class="do-dont-box do"><div class="do-label">Do</div><div class="dd-text">Insert a clean paragraph node after the block's parent list if the hovered block is a list item.</div></div>
+    <div class="do-dont-box dont"><div class="dont-label">Don't</div><div class="dd-text">Insert the new block between two list items, which would split the list.</div></div>
+  </div>
+  <ul class="spec">
+    <li>Tooltip text: "Click to add a block below" (shown after 400 ms hover).</li>
+    <li>Keyboard: <span class="inline-code">Alt+Enter</span> (Windows/Linux) / <span class="inline-code">Opt+Enter</span> (macOS) when a block is focused inserts below and opens picker — same behavior as clicking <b>+</b>.</li>
+  </ul>
+
+  <h3 class="sh3">Six-dot drag handle</h3>
+  <ul class="spec">
+    <li>Visual: six dots in a 2×3 grid, 14 px high, color <span class="inline-code">--color-text-tertiary</span> at rest, <span class="inline-code">--color-text-secondary</span> on hover.</li>
+    <li>Tooltip (400 ms delay): "Drag to move · Click for options"</li>
+    <li>Click (no drag): opens the block action menu anchored to the handle position.</li>
+    <li>Pointer-down + move ≥ 4 px: initiates drag. Menu does not open if drag was initiated.</li>
+    <li>Cursor changes to <span class="inline-code">grab</span> on hover, <span class="inline-code">grabbing</span> while dragging.</li>
+  </ul>
+</div>
+</div>
+
+<div id="s-dnd" class="section-wrap" style="display:none">
+<div class="section">
+  <div class="section-header"><span class="section-num">05</span><h2 class="sh">Drag & drop behavior</h2></div>
+
+  <h3 class="sh3">Drag initiation</h3>
+  <ul class="spec">
+    <li>Drag starts only from the six-dot handle, never from block content itself.</li>
+    <li>Threshold: pointer must move ≥ 4 px before drag state is committed (prevents accidental drags on click).</li>
+    <li>On drag start: the dragged block (or block group) gets a semi-transparent drag preview rendered via a cloned DOM node. The original block collapses to a placeholder with a dashed border and 40% opacity.</li>
+    <li>All other editor controls (toolbar, slash picker, gutter) are hidden for the duration of the drag.</li>
+    <li>Text selection is cleared on drag start.</li>
+  </ul>
+
+  <h3 class="sh3">Drop target & indicator</h3>
+  <ul class="spec">
+    <li>A 2 px horizontal blue line (<span class="inline-code">--color-border-info</span>) shows the insertion point between blocks as the dragged item moves.</li>
+    <li>The drop line appears only between valid sibling targets. It never appears inside a code block, inside a table cell, or as a child of an incompatible parent.</li>
+    <li>When the drag enters an invalid zone, the drop line disappears and the cursor shows <span class="inline-code">no-drop</span>.</li>
+    <li>Drop line position snaps to block boundaries; it does not float freely between arbitrary pixel rows.</li>
+  </ul>
+
+  <div class="callout warn"><i class="ti ti-alert-triangle" aria-hidden="true"></i><div class="callout-text">The drop line must never appear inside a collapsed toggle's hidden children area, since that region is not rendered and drops there would silently fail.</div></div>
+
+  <h3 class="sh3">Valid drop zones</h3>
+  <div class="table-wrap">
+  <table class="spec-t">
+    <thead><tr><th>Dragged block</th><th>Valid drop targets</th><th>Invalid targets</th></tr></thead>
+    <tbody>
+      <tr><td>Top-level paragraph / heading / quote / divider</td><td>Between any top-level blocks; between open toggle children</td><td>Inside table; inside code block; inside collapsed toggle</td></tr>
+      <tr><td>List item (bullet / number / todo)</td><td>Between sibling list items of same type; top-level position (converts to paragraph on drop); between items of different list type (converts type)</td><td>Inside table; inside code block; inside a toggle that is collapsed</td></tr>
+      <tr><td>Toggle subtree</td><td>Between top-level blocks only</td><td>Inside another toggle; inside table; inside code block</td></tr>
+      <tr><td>Table (whole)</td><td>Between top-level blocks only</td><td>Inside toggle; inside code block; nested inside another table</td></tr>
+      <tr><td>Code block</td><td>Between top-level blocks</td><td>Inside toggle; inside table</td></tr>
+      <tr><td>Child inside open toggle</td><td>Between siblings in same toggle; top-level (converts to top-level paragraph on drop)</td><td>Into a different toggle; into table; into code</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 class="sh3">Drop execution</h3>
+  <ul class="spec">
+    <li>On valid drop: Lexical editor update runs synchronously; the block is removed from source position and inserted at target position in one atomic transaction so Yjs sees a single patch.</li>
+    <li>On invalid drop or on Escape: the dragged block snaps back to its original position with a 150 ms ease-in animation. No document mutation occurs.</li>
+    <li>After a successful drop, focus moves to the dropped block and an undo entry is recorded as "Moved block".</li>
+    <li>If the user drops a list item outside its list, the item is converted to a paragraph at the top-level position. This conversion is part of the same undo entry.</li>
+    <li>Dropping a block onto itself (same position) is a no-op with no undo entry.</li>
+  </ul>
+
+  <div class="scenario"><div class="scenario-label">Scenario — reorder headings</div><div class="scenario-body">Document has: H2 "Section A", paragraph, H2 "Section B", paragraph. User drags the handle of "Section B" and drops it above "Section A". Result: H2 "Section B" is now first, followed by its original paragraph, then "Section A" and its paragraph. Only the H2 block itself moves; adjacent paragraphs are unaffected.</div></div>
+
+  <div class="scenario"><div class="scenario-label">Scenario — drag list item out of list</div><div class="scenario-body">A bullet list has three items. User drags item 2 out of the list and drops it between two top-level headings. Item 2 is removed from the list (items 1 and 3 remain as a valid list), and a new paragraph block containing item 2's text is inserted between the two headings. Undo reverses both the conversion and the position change.</div></div>
+
+  <div class="scenario"><div class="scenario-label">Scenario — drag table to invalid zone</div><div class="scenario-body">User begins dragging a table. They move it over a code block. The drop line disappears and the cursor shows <span class="inline-code">no-drop</span>. User releases. The table snaps back to its original position. No editor state change.</div></div>
+
+  <h3 class="sh3">Touch / mobile drag fallback</h3>
+  <ul class="spec">
+    <li>Touch devices do not support pointer drag in v1.</li>
+    <li>Long-press (500 ms hold) on any block opens the block menu with "Move up" and "Move down" actions instead.</li>
+    <li>A visual ripple or haptic (where available) confirms long-press recognition.</li>
+    <li>The gutter <b>+</b> button is accessible via tap on touch devices.</li>
+  </ul>
+</div>
+</div>
+
+<div id="s-menu" class="section-wrap" style="display:none">
+<div class="section">
+  <div class="section-header"><span class="section-num">06</span><h2 class="sh">Block action menu</h2></div>
+  <p class="body">The menu is a floating panel anchored to the six-dot handle. It is triggered by clicking the handle (not dragging) or by a keyboard shortcut.</p>
+
+  <h3 class="sh3">Menu structure</h3>
+  <div class="table-wrap">
+  <table class="spec-t">
+    <thead><tr><th>Section</th><th>Actions</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Turn into</td><td>Text · Heading 1 · Heading 2 · Heading 3 · Bulleted list · Numbered list · To-do · Quote · Code · Toggle</td><td>Only shows types the current block can convert to (see registry). Active type is highlighted.</td></tr>
+      <tr><td>Actions</td><td>Duplicate · Copy block text · Delete</td><td>Always shown.</td></tr>
+      <tr><td>Move</td><td>Move up · Move down</td><td>Move up disabled if block is first; move down disabled if block is last. For list items, moves within the list.</td></tr>
+      <tr><td>Insert</td><td>Insert block above · Insert block below</td><td>Both open the slash picker in the newly created empty paragraph.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 class="sh3">Menu behavior</h3>
+  <ul class="spec">
+    <li>Menu opens with a 120 ms ease-out scale animation from the handle anchor point.</li>
+    <li>Clicking anywhere outside the menu or pressing <span class="inline-code">Escape</span> closes it with no action taken.</li>
+    <li>The menu closes immediately after any action is selected.</li>
+    <li>Menu width: 220 px fixed. If anchored position would clip the viewport edge, the panel flips to the opposite side.</li>
+    <li>Keyboard navigation: <span class="inline-code">ArrowUp</span> / <span class="inline-code">ArrowDown</span> to move between items; <span class="inline-code">Enter</span> or <span class="inline-code">Space</span> to select; <span class="inline-code">Escape</span> to close and return focus to the block.</li>
+    <li>Keyboard shortcut to open menu while a block is focused: <span class="inline-code">Ctrl+/</span> (Windows/Linux) / <span class="inline-code">Cmd+/</span> (macOS).</li>
+  </ul>
+
+  <h3 class="sh3">Turn into — conversion rules</h3>
+  <ul class="spec">
+    <li>All inline formatting (bold, italic, code spans, links) is preserved during conversion unless the target type does not support inline formatting (code block: content becomes plain text).</li>
+    <li>Converting a paragraph to a toggle: the paragraph text becomes the toggle label; a new empty child paragraph is created inside the toggle.</li>
+    <li>Converting a toggle to a paragraph: the toggle label becomes a paragraph; child blocks are moved to top-level immediately after the new paragraph, in their original order.</li>
+    <li>Converting a list item to a non-list type removes it from the list. If it was the only item, the empty list wrapper is also removed. If it was the first or last item, the list is trimmed. If it was a middle item, the list is split into two separate lists.</li>
+    <li>Converting a paragraph to a list type: the paragraph becomes the first item in a new list. If the block immediately above or below is an existing list of the same type, the new item is merged into that list instead of creating an isolated single-item list.</li>
+    <li>Converting a code block: all formatting is stripped; the result is one or more paragraphs split at newlines.</li>
+    <li>Converting a heading with no text: the heading becomes an empty paragraph with no error.</li>
+  </ul>
+
+  <div class="scenario"><div class="scenario-label">Scenario — turn list item into heading</div><div class="scenario-body">A bullet list has 4 items. User opens the menu on item 3 and selects "Heading 2". Item 3 is removed from the bullet list; the list is split — items 1 & 2 form one bullet list, items 4 forms another (or a single-item list). The new H2 block is inserted between the two lists. Undo restores the original 4-item list.</div></div>
+
+  <h3 class="sh3">Delete action</h3>
+  <ul class="spec">
+    <li>Deletes the block immediately with no confirmation dialog.</li>
+    <li>If the deleted block is the only block in the document, it is replaced by an empty paragraph instead of leaving an empty editor. The undo entry still exists so the user can recover the content.</li>
+    <li>After deletion, focus moves to the block immediately above; if none exists, to the block below; if none exists (document is now empty), to the new empty paragraph.</li>
+    <li>Deleting a toggle with open children also deletes all children. Undo restores the toggle and its children.</li>
+    <li>Deleting a list item follows the same list-splitting rules as conversion (above).</li>
+  </ul>
+
+  <h3 class="sh3">Duplicate action</h3>
+  <ul class="spec">
+    <li>Inserts an identical copy of the block (including all formatting, children for toggles, and checked state for todos) immediately below the source block.</li>
+    <li>For tables: the full table structure and all cell content is duplicated.</li>
+    <li>For toggles: children are duplicated but the open/closed state of the duplicate starts closed.</li>
+    <li>After duplication, focus and selection move to the duplicated block.</li>
+    <li>Undo removes the duplicate.</li>
+  </ul>
+
+  <h3 class="sh3">Copy block text action</h3>
+  <ul class="spec">
+    <li>Copies the block's plain text content (no formatting) to the system clipboard.</li>
+    <li>For toggles: copies the toggle label text only, not child content.</li>
+    <li>For tables: copies a tab-separated representation (rows separated by newline, cells by tab).</li>
+    <li>A transient toast "Copied" appears for 1.5 s near the menu anchor. No editor state changes.</li>
+  </ul>
+</div>
+</div>
+
+<div id="s-multisel" class="section-wrap" style="display:none">
+<div class="section">
+  <div class="section-header"><span class="section-num">07</span><h2 class="sh">Multi-block selection</h2></div>
+
+  <h3 class="sh3">Selection mechanics</h3>
+  <ul class="spec">
+    <li>Multi-block selection is created by clicking a block's gutter region and then Shift-clicking another block's gutter, selecting all blocks between them (inclusive).</li>
+    <li>Alternatively, clicking and dragging in the gutter (not on the handle itself) draws a lasso selection over the blocks it passes through.</li>
+    <li>Selected blocks get a blue left border accent and a subtle background tint (<span class="inline-code">--color-background-info</span> at 30% opacity).</li>
+    <li>A floating mini-toolbar appears above the selection with: "Delete selected", "Duplicate selected", "Move up", "Move down".</li>
+    <li>Pressing <span class="inline-code">Escape</span> clears multi-selection.</li>
+  </ul>
+
+  <h3 class="sh3">Valid multi-select groups</h3>
+  <ul class="spec">
+    <li>All selected blocks must share the same parent. Selecting blocks across two different toggle containers is not allowed and the selection snaps to the parent of the first selected block.</li>
+    <li>A group may span mixed types (e.g. paragraph + heading + list item) as long as they share a parent.</li>
+    <li>A collapsed toggle counts as a single selectable unit; its children cannot be individually selected while collapsed.</li>
+    <li>Tables and code blocks may be part of a multi-selection group but cannot be selected partially (i.e. selecting some rows of a table is not supported in this layer).</li>
+  </ul>
+
+  <h3 class="sh3">Dragging a multi-select group</h3>
+  <ul class="spec">
+    <li>Initiating drag on any handle within a multi-block selection drags the entire group.</li>
+    <li>The drag preview shows a stacked representation: the first block's text, then "and N more" label.</li>
+    <li>Drop rules follow the strictest constraint in the group. If any block in the group has an invalid target, the entire drop is rejected.</li>
+    <li>On successful drop: blocks are inserted at the target in their original relative order, as a single undo entry.</li>
+  </ul>
+
+  <div class="callout info"><i class="ti ti-info-circle" aria-hidden="true"></i><div class="callout-text">Dragging a multi-selection that spans different list groups is rejected entirely. The user must move items one at a time in that case.</div></div>
+
+  <div class="scenario"><div class="scenario-label">Scenario — delete multiple blocks</div><div class="scenario-body">User Shift-clicks three paragraphs. The mini-toolbar appears. User clicks "Delete selected". All three paragraphs are deleted in one operation. If these were the only blocks in the document, a single empty paragraph is left. Undo restores all three in their original positions.</div></div>
+
+  <div class="scenario"><div class="scenario-label">Scenario — cross-parent selection rejected</div><div class="scenario-body">User clicks the gutter of a paragraph at top level, then Shift-clicks a block inside an open toggle. The selection is clamped: only top-level blocks between the first click and the toggle's shell are selected. The block inside the toggle is not included. A brief tooltip reads "Can't select across containers".</div></div>
+</div>
+</div>
+
+<div id="s-edge" class="section-wrap" style="display:none">
+<div class="section">
+  <div class="section-header"><span class="section-num">08</span><h2 class="sh">Edge cases & constraints</h2></div>
+
+  <h3 class="sh3">Empty document protection</h3>
+  <ul class="spec">
+    <li>The document must always contain at least one block node. Any action (delete, drag, convert) that would result in a completely empty document must instead leave an empty paragraph.</li>
+    <li>This check runs inside the Lexical editor update callback, not as a post-hoc patch.</li>
+  </ul>
+
+  <h3 class="sh3">Code block interior</h3>
+  <div class="do-dont">
+    <div class="do-dont-box do"><div class="do-label">Do</div><div class="dd-text">Show the drag handle on the code block's outer shell. Allow the whole code block to be dragged as a unit.</div></div>
+    <div class="do-dont-box dont"><div class="dont-label">Don't</div><div class="dd-text">Show the slash picker, block menu, or gutter controls while the cursor is inside code text. Code blocks manage their own internal cursor.</div></div>
+  </div>
+  <ul class="spec">
+    <li>Detecting "inside code text": check if the active Lexical selection anchor is a descendant of a CodeNode. If so, suppress all block control events.</li>
+  </ul>
+
+  <h3 class="sh3">Collapsed toggles</h3>
+  <ul class="spec">
+    <li>A collapsed toggle is treated as a single indivisible block for all drag and menu purposes.</li>
+    <li>Dropping another block between the toggle shell and its hidden children is impossible — the children are not in the rendered DOM.</li>
+    <li>Opening a toggle that is being dragged cancels the drag.</li>
+  </ul>
+
+  <h3 class="sh3">Tables</h3>
+  <ul class="spec">
+    <li>Tables can only be moved as a whole. There is no row or column drag in this feature scope.</li>
+    <li>The drag handle for a table appears on the table's top-left corner region, not on individual rows.</li>
+    <li>The "Turn into" submenu is absent from the table block menu (only Delete, Duplicate, Move, Insert available).</li>
+  </ul>
+
+  <h3 class="sh3">Undo / redo</h3>
+  <ul class="spec">
+    <li>Every block action (move, convert, duplicate, delete, insert) must produce exactly one undo entry.</li>
+    <li>Multi-block operations produce a single undo entry covering the entire group operation.</li>
+    <li>Undoing a block move restores the block to its exact prior position, including within lists and toggles.</li>
+    <li>Undoing a "turn into" restores the original type, including re-merging list items back into their original list if they were split.</li>
+    <li>Rapid sequential operations (e.g. moving a block up 5 times quickly) produce 5 separate undo entries, not one merged entry.</li>
+  </ul>
+
+  <h3 class="sh3">Collaborative editing</h3>
+  <div class="scenario"><div class="scenario-label">Scenario — concurrent move conflict</div><div class="scenario-body">User A drags block X from position 2 to position 4. Simultaneously, User B deletes block X. Yjs CRDT resolves this: User A's move will either succeed (if deletion hasn't propagated) or result in a no-op once the deletion is applied. The editor must not crash or produce duplicate nodes. The resulting state may differ from what either user intended; no explicit conflict UI is shown in v1.</div></div>
+  <ul class="spec">
+    <li>All mutations go through Lexical editor updates — Yjs automatically handles CRDT merging of the resulting document state.</li>
+    <li>No additional collaboration conflict UI is required for v1.</li>
+  </ul>
+
+  <h3 class="sh3">Drag during IME / composition</h3>
+  <ul class="spec">
+    <li>If an IME composition session is active (user typing CJK/Korean/etc. characters), the drag handle is non-interactive until composition ends.</li>
+    <li>Drag initiation clears any pending composition.</li>
+  </ul>
+
+  <h3 class="sh3">Very long documents</h3>
+  <ul class="spec">
+    <li>Gutter controls must not cause layout thrash on documents with 500+ blocks. Controls are positioned absolutely relative to the editor container, not rerendered per-scroll.</li>
+    <li>Drag-over detection uses a throttled pointer-move handler (max once per 16 ms / ~60 fps).</li>
+    <li>Block resolution on hover uses a cached block-to-DOM map invalidated only on Lexical editor updates, not on every pointer move.</li>
+  </ul>
+
+  <h3 class="sh3">Selection state preservation</h3>
+  <ul class="spec">
+    <li>After a successful block move, the cursor/caret returns to the same relative character offset within the moved block.</li>
+    <li>After delete: cursor moves to the block above (or below if none).</li>
+    <li>After duplicate: cursor moves to the start of the duplicate.</li>
+    <li>After convert: cursor stays at the same character offset within the converted block.</li>
+    <li>None of these actions should collapse a range selection to a caret unintentionally.</li>
+  </ul>
+</div>
+</div>
+
+<div id="s-persist" class="section-wrap" style="display:none">
+<div class="section">
+  <div class="section-header"><span class="section-num">09</span><h2 class="sh">Persistence & data model</h2></div>
+  <p class="body">The block management layer makes no changes to the persistence layer for v1. All mutations happen through Lexical editor state; Yjs serialises the resulting document automatically.</p>
+  <ul class="spec">
+    <li>No new Supabase tables, columns, or migrations required.</li>
+    <li>No Tauri IPC changes required.</li>
+    <li>Block order is fully encoded in the Lexical document tree, which Yjs treats as a Y.XmlFragment. Reorders are represented as Yjs move operations on the underlying XML nodes.</li>
+    <li>A full page reload should restore the exact block order as it was before reload, including any reorders made before the previous session ended.</li>
+    <li>The read-only flag checked to suppress gutter controls must come from the existing note access-level mechanism, not a new property.</li>
+  </ul>
+
+  <div class="callout info"><i class="ti ti-info-circle" aria-hidden="true"></i><div class="callout-text">Collaboration integrity check: after any drag-and-drop involving two simultaneous connected clients, reload both clients and confirm the resulting document is identical in both (same block order, no duplicates, no missing blocks).</div></div>
+</div>
+</div>
+
+<div id="s-a11y" class="section-wrap" style="display:none">
+<div class="section">
+  <div class="section-header"><span class="section-num">10</span><h2 class="sh">Accessibility & keyboard</h2></div>
+
+  <h3 class="sh3">ARIA roles</h3>
+  <ul class="spec">
+    <li>The drag handle button has <span class="inline-code">role="button"</span>, <span class="inline-code">aria-label="Block options"</span>, and <span class="inline-code">tabIndex={0}</span>.</li>
+    <li>The <b>+</b> button has <span class="inline-code">aria-label="Insert block below"</span>.</li>
+    <li>The block action menu uses <span class="inline-code">role="menu"</span> with <span class="inline-code">role="menuitem"</span> children.</li>
+    <li>During drag, the drag region has <span class="inline-code">aria-grabbed="true"</span> and drop targets have <span class="inline-code">aria-dropeffect="move"</span>.</li>
+  </ul>
+
+  <h3 class="sh3">Keyboard shortcut table</h3>
+  <div class="table-wrap">
+  <table class="spec-t">
+    <thead><tr><th>Action</th><th>macOS</th><th>Windows / Linux</th></tr></thead>
+    <tbody>
+      <tr><td>Open block menu</td><td class="mono">Cmd+/</td><td class="mono">Ctrl+/</td></tr>
+      <tr><td>Insert block below</td><td class="mono">Opt+Enter</td><td class="mono">Alt+Enter</td></tr>
+      <tr><td>Move block up</td><td class="mono">Cmd+Shift+↑</td><td class="mono">Ctrl+Shift+↑</td></tr>
+      <tr><td>Move block down</td><td class="mono">Cmd+Shift+↓</td><td class="mono">Ctrl+Shift+↓</td></tr>
+      <tr><td>Delete block</td><td class="mono">Cmd+Shift+Backspace</td><td class="mono">Ctrl+Shift+Backspace</td></tr>
+      <tr><td>Duplicate block</td><td class="mono">Cmd+D</td><td class="mono">Ctrl+D</td></tr>
+      <tr><td>Dismiss menu / cancel drag</td><td class="mono">Escape</td><td class="mono">Escape</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="muted">All keyboard shortcuts apply to the block that currently has caret focus (or the selection group). Shortcuts should not conflict with browser defaults or existing editor shortcuts — audit against the existing Lexical keymap before shipping.</p>
+
+  <h3 class="sh3">Reduced motion</h3>
+  <ul class="spec">
+    <li>When <span class="inline-code">prefers-reduced-motion: reduce</span> is set: all drag animations, block placeholder transitions, menu open/close animations, and drop line fade-ins are replaced with instant state changes (no transitions).</li>
+    <li>The snap-back animation on invalid drop is also suppressed under reduced motion.</li>
+  </ul>
+
+  <h3 class="sh3">Focus management</h3>
+  <ul class="spec">
+    <li>Opening the block menu via keyboard must trap focus inside the menu panel until it closes.</li>
+    <li>Closing the menu returns focus to the block's editable area (not the handle button), so the user can immediately continue typing.</li>
+    <li>The <b>+</b> button is reachable by Tab when a block is focused (it should be adjacent in the tab order to the block it belongs to).</li>
+  </ul>
+</div>
+</div>
+
+<div id="s-tests" class="section-wrap" style="display:none">
+<div class="section">
+  <div class="section-header"><span class="section-num">11</span><h2 class="sh">Test plan</h2></div>
+
+  <h3 class="sh3">Unit tests (pure helpers)</h3>
+  <div class="test-row"><div class="test-cat">Resolver</div><div class="test-desc">Given a DOM node inside a list item, resolving the draggable block returns the list item ancestor, not the list wrapper or the editor root.</div></div>
+  <div class="test-row"><div class="test-cat">Resolver</div><div class="test-desc">Given a DOM node inside a collapsed toggle, resolving returns the toggle shell.</div></div>
+  <div class="test-row"><div class="test-cat">Resolver</div><div class="test-desc">Given a DOM node inside a code block, resolving returns null (no draggable).</div></div>
+  <div class="test-row"><div class="test-cat">Drop logic</div><div class="test-desc">Dropping a table onto a code block position returns <span class="inline-code">invalid</span>.</div></div>
+  <div class="test-row"><div class="test-cat">Drop logic</div><div class="test-desc">Dropping a list item into a sibling position within the same list returns <span class="inline-code">valid</span>.</div></div>
+  <div class="test-row"><div class="test-cat">Drop logic</div><div class="test-desc">Dropping a list item to a top-level position returns <span class="inline-code">valid</span> with a <span class="inline-code">convertToParagraph</span> flag.</div></div>
+  <div class="test-row"><div class="test-cat">Multi-sel</div><div class="test-desc">Selecting blocks across two toggle containers clamps to the first container's top-level children only.</div></div>
+  <div class="test-row"><div class="test-cat">Multi-sel</div><div class="test-desc">A drag initiated on a handle inside a multi-selection includes all selected blocks.</div></div>
+  <div class="test-row"><div class="test-cat">Delete</div><div class="test-desc">Deleting the only block in a document leaves exactly one empty paragraph.</div></div>
+  <div class="test-row"><div class="test-cat">Convert</div><div class="test-desc">Converting a middle list item to a heading splits the list into two lists with the heading between them.</div></div>
+  <div class="test-row"><div class="test-cat">Convert</div><div class="test-desc">Converting a paragraph to a bulleted list when the block above is already a bulleted list merges the new item into that list.</div></div>
+
+  <h3 class="sh3">Integration tests (Testing Library + Vitest)</h3>
+  <div class="test-row"><div class="test-cat">Hover</div><div class="test-desc">Hovering a paragraph block reveals the gutter controls; moving off hides them after 120 ms.</div></div>
+  <div class="test-row"><div class="test-cat">Insert</div><div class="test-desc">Clicking <b>+</b> on a paragraph inserts a new block below and opens the slash picker.</div></div>
+  <div class="test-row"><div class="test-cat">Menu</div><div class="test-desc">Clicking the handle opens the action menu; pressing Escape closes it and returns focus to the block.</div></div>
+  <div class="test-row"><div class="test-cat">DnD</div><div class="test-desc">Dragging a top-level block to a new position reorders the Lexical document tree correctly.</div></div>
+  <div class="test-row"><div class="test-cat">DnD</div><div class="test-desc">Dragging a list item outside its list converts it to a paragraph at the drop position.</div></div>
+  <div class="test-row"><div class="test-cat">DnD</div><div class="test-desc">Dropping a block onto an invalid target (code block interior) results in no document change.</div></div>
+  <div class="test-row"><div class="test-cat">Multi</div><div class="test-desc">Shift-clicking two blocks then clicking "Delete selected" removes both in one undo entry.</div></div>
+  <div class="test-row"><div class="test-cat">Read-only</div><div class="test-desc">Gutter controls are not rendered when the editor is in read-only mode.</div></div>
+
+  <h3 class="sh3">Manual / browser acceptance</h3>
+  <ul class="spec">
+    <li>Desktop: drag with mouse, verify smooth animation, correct reorder, and undo.</li>
+    <li>Keyboard: move a block up/down via shortcut, open menu, convert type, delete.</li>
+    <li>Touch (mobile): long-press opens menu with Move up/Move down; <b>+</b> tap inserts block.</li>
+    <li>Collaboration: open same note in two browser windows, reorder blocks in one, confirm the second reflects changes without reload.</li>
+    <li>Persistence: reload the page after several reorders; confirm block order matches pre-reload state.</li>
+    <li>Reduced motion: enable <span class="inline-code">prefers-reduced-motion</span> in OS; confirm no animations play.</li>
+    <li>Read-only: view a note in read-only mode; confirm no gutter controls appear and no keyboard shortcuts trigger block actions.</li>
+  </ul>
+
+  <h3 class="sh3">Commands to run</h3>
+  <ul class="spec">
+    <li><span class="inline-code">bun run typecheck</span> — zero type errors required.</li>
+    <li><span class="inline-code">bun run test src/features/notes</span> — all focused notes tests pass.</li>
+    <li><span class="inline-code">bun run lint</span> — no new lint warnings in block controls files.</li>
+  </ul>
+</div>
+</div>
+
+<div id="s-outscope" class="section-wrap" style="display:none">
+<div class="section">
+  <div class="section-header"><span class="section-num">12</span><h2 class="sh">Out of scope for v1</h2></div>
+  <ul class="spec">
+    <li>Notion databases, relations, rollups, or filtered views.</li>
+    <li>Synced blocks or block references.</li>
+    <li>AI-generated blocks or AI block actions.</li>
+    <li>Column / side-by-side layouts.</li>
+    <li>Embedded media (video, audio, file embeds) — these may be draggable if they exist as opaque block nodes, but no media-specific behavior is specified.</li>
+    <li>Row or column drag within tables.</li>
+    <li>Pixel-perfect Notion mobile drag (touch drag is replaced by the long-press menu fallback).</li>
+    <li>Block comments or inline comments anchored to specific blocks.</li>
+    <li>Version history or block-level history diffing.</li>
+    <li>Supabase schema changes or Tauri IPC changes.</li>
+    <li>Drag across different notes (copy/paste is out of scope; this is single-document block management only).</li>
+    <li>Nested list dragging beyond the rules defined in the block registry (e.g. dragging sub-bullets independently of their parent).</li>
+    <li>Block-level permissions or per-block access control.</li>
+  </ul>
+
+  <div class="divider"></div>
+  <p class="muted">End of PRD v1.0. Next step: review with engineering lead, confirm shortcut keybindings against existing keymap, and mark this document approved before implementation begins.</p>
+</div>
+</div>
+
+</div>
+
+<script>
+const sections = ['overview','blocks','gutter','dnd','menu','multisel','edge','persist','a11y','tests','outscope'];
+function show(id){
+  sections.forEach(s=>{
+    const el = document.getElementById('s-'+s);
+    if(el) el.style.display = s===id?'':'none';
+  });
+  document.querySelectorAll('.nav-btn').forEach((b,i)=>{
+    b.classList.toggle('active', sections[i]===id);
+  });
+  window.scrollTo({top:0});
+}
+</script>

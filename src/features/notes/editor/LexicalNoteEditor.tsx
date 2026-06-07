@@ -26,6 +26,7 @@ import { NotesListTabIndentationPlugin } from "./plugins/ListPlugins";
 import { NotesToggleInteractionPlugin, NotesToggleEscapePlugin, NotesToggleTabPlugin } from "./plugins/TogglePlugins";
 import { NotesCodeBlockEscapePlugin } from "./plugins/CodeBlockPlugins";
 import { NotesChildLinkPlugin } from "./plugins/ChildLinkPlugin";
+import { NotesBlockControlsPlugin } from "./plugins/NotesBlockControlsPlugin";
 import { ToggleNode } from "./nodes/ToggleNode";
 
 type Props = {
@@ -53,6 +54,14 @@ function SyncFromYjsPlugin({ doc }: { doc: Y.Doc }) {
     }, 0);
     return () => clearTimeout(id);
   }, [editor, doc]); // doc dep so re-runs when session changes (e.g. tab switch)
+  return null;
+}
+
+function NotesEditableStatePlugin({ editable }: { editable: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    editor.setEditable(editable);
+  }, [editor, editable]);
   return null;
 }
 
@@ -183,6 +192,8 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
               <NotesToggleTabPlugin />
               <NotesCodeBlockEscapePlugin />
               <NotesChildLinkPlugin noteId={noteId} />
+              <NotesEditableStatePlugin editable={editable} />
+              {editable ? <NotesBlockControlsPlugin /> : null}
               <NotesCodeHighlightPlugin />
               <LinkPlugin />
               <TablePlugin />

@@ -15,6 +15,7 @@ import {
   $isRangeSelection,
   $isTextNode,
   COMMAND_PRIORITY_HIGH,
+  createCommand,
   KEY_ARROW_DOWN_COMMAND,
   KEY_ARROW_UP_COMMAND,
   KEY_ENTER_COMMAND,
@@ -23,6 +24,7 @@ import {
   type NodeKey,
 } from "lexical";
 import type { SlashCommand } from "../../types";
+import { isInsideCodeBlock } from "./BlockRegistry";
 import { $createToggleNode } from "../nodes/ToggleNode";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -36,9 +38,15 @@ type SlashMenuState = {
   left: number;
 };
 
+/**
+ * Command dispatched to open the slash picker on a specific paragraph node.
+ * The plugin listens for this and shows the picker with an empty query.
+ */
+export const OPEN_PICKER_FOR_NODE_COMMAND = createCommand<NodeKey>("OPEN_PICKER_FOR_NODE");
+
 // ─── Command Definitions ─────────────────────────────────────────────────────
 
-const COMMANDS: SlashCommand[] = [
+export const NOTES_BLOCK_COMMANDS: SlashCommand[] = [
   { id: "paragraph", title: "Paragraph", keywords: ["text", "normal"], group: "Basic" },
   { id: "h1", title: "Heading 1", keywords: ["title", "h1"], group: "Basic" },
   { id: "h2", title: "Heading 2", keywords: ["subtitle", "h2"], group: "Basic" },
@@ -152,17 +160,17 @@ function TableSizePicker({ onPick }: TablePickerProps) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function filterCommands(query: string): SlashCommand[] {
+export function filterNotesBlockCommands(query: string): SlashCommand[] {
   const normalized = query.trim().toLowerCase();
-  if (!normalized) return COMMANDS;
+  if (!normalized) return NOTES_BLOCK_COMMANDS;
 
-  return COMMANDS.filter((command) => {
+  return NOTES_BLOCK_COMMANDS.filter((command) => {
     if (command.title.toLowerCase().includes(normalized)) return true;
     return command.keywords.some((keyword) => keyword.toLowerCase().includes(normalized));
   });
 }
 
-function runCommand(command: SlashCommand, tableSize?: { rows: number; cols: number }): void {
+export function runNotesBlockCommand(command: SlashCommand, tableSize?: { rows: number; cols: number }): void {
   const selection = $getSelection();
   if (!$isRangeSelection(selection)) return;
 
@@ -240,7 +248,7 @@ function removeSlashToken(menu: SlashMenuState): void {
   selection.setTextNodeRange(node, menu.startOffset, node, menu.startOffset);
 }
 
-function resolveSlashMenuState(editor: LexicalEditor): SlashMenuState | null {
+export function resolveSlashMenuState(editor: LexicalEditor): SlashMenuState | null {
   return editor.getEditorState().read(() => {
     const selection = $getSelection();
     if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
@@ -250,6 +258,9 @@ function resolveSlashMenuState(editor: LexicalEditor): SlashMenuState | null {
 
     const node = anchor.getNode();
     if (!$isTextNode(node) || !node.isSimpleText()) return null;
+
+    // Guard: suppress slash menu when cursor is inside a code block.
+    if (isInsideCodeBlock(node)) return null;
 
     const textBefore = node.getTextContent().slice(0, anchor.offset);
     const match = textBefore.match(/(?:^|\s)\/([^\s/]*)$/);
@@ -333,7 +344,7 @@ export function SlashCommandPlugin() {
   menuRef.current = menu;
   tablePickerOpenRef.current = tablePickerOpen;
 
-  const commands = useMemo(() => filterCommands(menu?.query ?? ""), [menu?.query]);
+  const commands = useMemo(() => filterNotesBlockCommands(menu?.query ?? ""), [menu?.query]);
   commandsRef.current = commands;
   selectedIndexRef.current = selectedIndex;
 
@@ -349,6 +360,31 @@ export function SlashCommandPlugin() {
     }
     setSelectedIndex((current) => Math.min(current, Math.max(0, commands.length - 1)));
   }, [commands.length, menu]);
+
+  // ── Open picker on command (for insert-and-open-picker flow) ───────────────
+  useEffect(() => {
+    return editor.registerCommand(
+      OPEN_PICKER_FOR_NODE_COMMAND,
+      (nodeKey: NodeKey) => {
+        const element = editor.getElementByKey(nodeKey);
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const viewportH = window.innerHeight;
+        const menuMaxHeight = 420;
+        const margin = 12;
+        let top = rect.bottom + 8;
+        if (top + menuMaxHeight > viewportH - margin) {
+          top = Math.max(margin, rect.top - 8 - menuMaxHeight);
+        }
+        top = Math.min(top, Math.max(margin, viewportH - margin - menuMaxHeight));
+        const maxLeft = Math.max(margin, window.innerWidth - 280 - margin);
+        const left = Math.max(margin, Math.min(rect.left, maxLeft));
+        setMenu({ query: "", nodeKey, startOffset: 0, endOffset: 0, top, left });
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+  }, [editor]);
 
   // ── Detect slash token in the editor ──────────────────────────────────────
   useEffect(() => {
@@ -395,7 +431,7 @@ export function SlashCommandPlugin() {
     editor.focus();
     editor.update(() => {
       removeSlashToken(activeMenu);
-      runCommand(command, tableSize);
+      runNotesBlockCommand(command, tableSize);
     });
   };
 
