@@ -101,6 +101,7 @@ Format follows the existing project style (concise present-tense imperative). Si
 
 Branching model and PR direction live in [CONTRIBUTING.md](./CONTRIBUTING.md). Short version for LLM agents:
 
+- **Cut the task branch before editing any files.** The moment a task is more than a one-off question, create `t/<owner>/<short-kebab-case>` off the personal branch *first* — do not start editing on `maciej`/`mike` and move the work later.
 - Default base for new task branches is the user's personal branch (`maciej` or `mike`). Never branch from `main`. Never branch from `develop` unless explicitly told.
 - Never push directly to `main` or `develop`. Never merge or close PRs without explicit authorization.
 - Force-push only on your own task branches, only with `--force-with-lease`.
