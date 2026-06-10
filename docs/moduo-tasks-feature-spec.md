@@ -41,14 +41,17 @@ Toggled at the **top of the left panel**. The split is the heart of the module: 
 **Left panel:**
 - Mode toggle (Plan / Execute) at the very top.
 - Bucket list: name + task count. One bucket open by default; all expandable.
-- Per-bucket **drift indicator** — ambient, soft, **numbers-only** (a small dot + drift count, with the open count; the word "drifted" lives in the hover tooltip). Never red, never "overdue". Click → batch-triage for that bucket (reschedule / archive / ignore).
+- Per-bucket **drift indicator** — ambient, soft, **numbers-only** (a small dot + drift count, with the open count; the word "drifted" lives in the hover tooltip). Never red, never "overdue". Click the count → **batch-triage** for that bucket, with both batch ("apply to all") and per-task escape hatches:
+  - **Reschedule** — push the scheduled time into the future (Tomorrow / Next week), keeping the original clock time. Clears the drift by moving it forward.
+  - **Archive** — terminal status; removes it from open lists.
+  - **Ignore** — clears the stale scheduled time but **keeps the task**. (Drift is computed from `scheduled_at < now`, not stored, so "ignore" = drop the past time rather than acknowledge-and-keep-it. If a true "dismiss without unscheduling" is ever wanted, it needs a stored `drift_acknowledged_at` — deferred until dogfooding asks for it.)
 - Add-bucket — instant, no cooldown; a hover **"+"** on the "Buckets" header (Notion-style), not a standalone button.
 - A cross-bucket "All" selection, a **"Today"** selection (today's commit queue, ordered), and the reserved "Inbox" bucket.
 
 **Center panel:**
 - View switcher: **List | Board** (Gantt deferred).
 - **List view** — modeled on Linear: keyboard-first, dense-but-scannable rows, grouping (status/priority/bucket), inline quick-edit (no modals), command-palette speed. Row shows: complete-checkbox, title, scheduled time (if any), due-date marker (if any), bucket tag.
-- **Board view** — kanban columns; groupable by status (or bucket in the "All" selection).
+- **Board view** — kanban columns; groupable by status (or bucket in the "All" selection). Status columns are **Todo → In progress → Done** (left→right flow; Archived is never a column). Drag a card to another column to change its status (or bucket, in the bucket-grouped "All" board) — dragging to **Done** completes it. Cross-column drag is the v1 action; manual **within-column reordering is deferred** (a moved card appends to the destination column). Today renders status columns of the committed set (uniform with other scopes; no special-casing).
 - **Commit action** on a task → adds it to **today's commit queue** (ordered). Deliberate, visually distinct. Means "doing this today", not "scheduled at a specific time".
 
 ### Execute Mode
@@ -117,6 +120,17 @@ Anti-patterns: required-field forms before submit, triage queues, multi-step wiz
 2. No time-blocks → last-opened bucket.
 3. Open in last-used view (List/Board).
 4. Never the full cross-bucket list first.
+
+**Time-blocks (how they're defined).** A bucket is mapped to a coarse time-of-day
+slot — **Morning** (05:00–11:59), **Afternoon** (12:00–17:59), **Evening**
+(18:00–04:59, wraps midnight) — via that bucket's **"…" → "Open at"** menu in the
+rail. At most one bucket per slot (assigning a slot evicts the prior holder). The
+mapping is a per-workspace **view preference** (localStorage, like mode / selection
+/ grouping), not synced data. Coverage is total, so a slot always resolves; if its
+mapped bucket was deleted, resolution falls through to the last-opened bucket, then
+Inbox. There's no separate time-blocks editor surface — the per-bucket menu is the
+whole control (quiet until used). The resolution itself is one-shot per workspace
+on open and never overrides later in-session navigation.
 
 ---
 

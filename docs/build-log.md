@@ -6,6 +6,89 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Session 4 — Board view + drift triage + default-view (2026-06-06)
+
+Branch `maciej`. Filled in the remaining Plan-mode surface: the three items
+deferred at the end of Session 3.
+
+**Board view** ([ui/task-board-view.tsx](../src/features/tasks/ui/task-board-view.tsx),
+[ui/task-card.tsx](../src/features/tasks/ui/task-card.tsx)): kanban columns via
+`@dnd-kit/core` (already a dep; same `PointerSensor` distance-8 + `DragOverlay`
+pattern as the dashboard grid). Columns group by **status** (Todo → In progress →
+Done, left→right; Archived excluded) or by **bucket** when in the "All" selection
+(a Columns: Status/Bucket control appears only there). **Cross-column drag** is the
+kanban action — drop changes `status` (or `bucketId`) and appends to the
+destination column's end (`endPosition`); dragging to Done completes the task.
+Columns are `useDroppable`, cards are `useDraggable` (single `onDragEnd`, no
+live-cross-container move → robust, no flicker). Within-column manual reordering is
+**deferred** (consistent with the already-deferred Today-queue drag). The card
+reuses `CompleteToggle` / `LevelDots` (now exported from `task-row`) and has a
+compact self-contained context menu (done, commit, move-to-bucket, priority,
+energy, delete).
+
+**View switcher + shared header** ([ui/plan-view-header.tsx](../src/features/tasks/ui/plan-view-header.tsx)):
+List/Board segmented toggle (mirrors the rail's Plan/Execute toggle styling),
+plus a `PlanViewHeader` (title · group control · switcher · New task) now used by
+**both** List and Board so they're visually identical above the fold. `view`
+persisted per workspace; `boardGroupBy` persisted separately from List's `groupBy`
+so each view keeps its own grouping.
+
+**Drift batch-triage** ([ui/drift-triage-dialog.tsx](../src/features/tasks/ui/drift-triage-dialog.tsx)):
+the per-bucket drift count in the rail is now a **button** (`(3)` → opens triage;
+tooltip "N open · M drifted — click to triage"); also reachable from the bucket
+"…" menu ("Triage N drifted…"). Dialog is soft/pressure-free (factual copy, never
+red/overdue) with batch ("apply to all") and per-task actions: **Reschedule**
+(Tomorrow / Next week, keeps clock time → `rescheduleScheduledAt`), **Archive**
+(`archiveTask`), **Ignore** (clears `scheduledAt`, keeps the task). The list
+recomputes live so it empties as you triage. New hook helpers: `archiveTask`,
+`rescheduleScheduledAt`.
+
+**Default-view logic** ([default-view.ts](../src/features/tasks/default-view.ts)):
+on open, resolve **time-block bucket → last-opened bucket → Inbox**, in the
+**last-used view** (spec §9). Never opens on "All"/"Today" (last bucket is tracked
+separately from the live selection; resolution is one-shot per workspace after the
+bundle loads, so it never fights in-session navigation). **Time-blocks** are
+defined per-bucket via the rail's **"…" → "Open at"** submenu (Morning 05–12 /
+Afternoon 12–18 / Evening 18–05, wrapping; one bucket per slot), stored per
+workspace in localStorage as a view preference — no separate editor surface
+(quiet until used). Pure resolver + slot logic covered by **14 unit tests**
+([default-view.test.ts](../src/features/tasks/default-view.test.ts)).
+
+**Decisions / spec sync (updated spec first, then code):**
+- §4 — drift "Ignore" defined as *clear the stale time, keep the task* (drift is
+  computed, not stored, so there's no acknowledge-and-keep without a new
+  `drift_acknowledged_at` field — deferred until asked).
+- §9 — documented how time-blocks are defined (per-bucket "Open at" menu, 3 slots,
+  localStorage, one-shot resolution).
+- §4 — documented Board column order / drag semantics / within-column-reorder
+  deferral / Today-as-status-columns.
+
+**Verified:** `bun run typecheck` clean; `bun run lint:tw` clean; `lint:css`
+unchanged (0 errors; same 5 pre-existing `global.css` warnings); `vitest`
+default-view 14/14; **web production build** compiles. Dev server boots clean (no
+errors). **Not interactively hand-dogfooded:** the web path is gated behind
+Supabase magic-code auth (can't log in headlessly — same gap as Sessions 2–3); a
+real run needs the desktop app or a logged-in session.
+
+**Flags for Maciej (spec tensions surfaced while building):**
+- **"Ignore" UX** — current behavior unschedules the task. If you expect "ignore"
+  to keep the past time but stop counting it, that needs the stored ack flag above.
+  Worth a dogfood gut-check on which feels right.
+- **Board on Today** — I let Board render status columns of the committed set for
+  uniformity. Spec says "Today is never grouped (queue order)"; if Today-as-board
+  feels wrong, we can force List when Today is selected (one-line change).
+- **Time-block editor placement** — the per-bucket "Open at" menu is intentionally
+  minimal/discoverable, but it's a provisional home. If you want a dedicated
+  time-blocks surface (e.g. a settings card with a visual day strip), say so.
+- **Time-blocks are local-only** (not synced). Fine for a single-device dogfood;
+  flag if you want them to follow the workspace across devices.
+
+**Deferred:** within-column drag reorder on the board; true drift "acknowledge"
+(stored flag); synced time-blocks; right-panel content; live cloud-sync of the
+redb↔postgres tables. Calendar module remains separate/unbuilt.
+
+---
+
 ## Session 3 — Commit + Execute loop (2026-06-06)
 
 Branch `t/maciej/tasks-commit-execute` off `maciej` (which now includes the

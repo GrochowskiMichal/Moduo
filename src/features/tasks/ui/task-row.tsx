@@ -261,7 +261,7 @@ export function TaskRow({
 
 // ── complete toggle (bespoke; checkbox is not an enumerated shadcn primitive) ──
 
-function CompleteToggle({
+export function CompleteToggle({
   done,
   disabled,
   onToggle,
@@ -330,7 +330,7 @@ function TitleEditor({
 
 // ── energy / priority dots (ambient, never alarming) ──────────────────────────
 
-function LevelDots({ task }: { task: Task }) {
+export function LevelDots({ task }: { task: Task }) {
   if (!task.priority && !task.energyLevel) return null;
   return (
     <div className="flex items-center gap-1">

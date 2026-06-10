@@ -13,12 +13,15 @@ import { cn } from "../../../lib/utils";
 import { groupTasks, type GroupBy } from "../helpers";
 import type { Bucket, Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { PlanViewHeader, type PlanView } from "./plan-view-header";
 import { TaskRow, type RowCommand } from "./task-row";
 
 type Props = {
   tasks: Task[];
   scopeTitle: string;
   selection: string; // "all" | "inbox" | bucketId
+  view: PlanView;
+  onViewChange: (view: PlanView) => void;
   groupBy: GroupBy;
   onGroupByChange: (next: GroupBy) => void;
   buckets: Bucket[];
@@ -41,6 +44,8 @@ export function TaskListView({
   tasks,
   scopeTitle,
   selection,
+  view,
+  onViewChange,
   groupBy,
   onGroupByChange,
   buckets,
@@ -169,10 +174,13 @@ export function TaskListView({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* header */}
-      <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
-        <h1 className="truncate font-display text-lg text-foreground">{scopeTitle}</h1>
-        <div className="flex items-center gap-2">
+      <PlanViewHeader
+        title={scopeTitle}
+        view={view}
+        onViewChange={onViewChange}
+        canEdit={canEdit}
+        onRequestCapture={onRequestCapture}
+        groupControl={
           <div className="flex items-center gap-1.5">
             <span className="font-display text-xs text-muted-foreground">Group</span>
             <Select value={groupBy} onValueChange={(v) => onGroupByChange(v as GroupBy)}>
@@ -188,12 +196,8 @@ export function TaskListView({
               </SelectContent>
             </Select>
           </div>
-          <Button size="sm" onClick={onRequestCapture} disabled={!canEdit}>
-            <Plus className="size-4" aria-hidden />
-            New task
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* list */}
       <div

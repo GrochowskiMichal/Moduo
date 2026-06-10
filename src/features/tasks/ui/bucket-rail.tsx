@@ -6,7 +6,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import {
@@ -15,6 +20,11 @@ import {
   TooltipTrigger,
 } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
+import {
+  TIME_BLOCK_LABELS,
+  TIME_BLOCK_SLOTS,
+  type TimeBlockSlot,
+} from "../default-view";
 import type { Bucket } from "../model";
 
 export type TasksMode = "plan" | "execute";
@@ -38,6 +48,12 @@ type Props = {
   onCreateBucket: (name: string) => void;
   onRenameBucket: (id: string, name: string) => void;
   onDeleteBucket: (id: string) => void;
+  /** Open batch-triage for a bucket's drifted tasks. */
+  onTriageBucket: (bucketId: string) => void;
+  /** Which time-block slot (if any) each bucket is mapped to. */
+  timeBlockByBucket: Map<string, TimeBlockSlot>;
+  /** Assign a bucket to a slot, or clear it (slot = null). */
+  onSetTimeBlock: (bucketId: string, slot: TimeBlockSlot | null) => void;
 };
 
 export function BucketRail({
@@ -55,6 +71,9 @@ export function BucketRail({
   onCreateBucket,
   onRenameBucket,
   onDeleteBucket,
+  onTriageBucket,
+  timeBlockByBucket,
+  onSetTimeBlock,
 }: Props) {
   const [adding, setAdding] = useState(false);
 
@@ -89,6 +108,7 @@ export function BucketRail({
               active={selection === "inbox" || selection === inbox.id}
               reserveAction={canEdit}
               onClick={() => onSelect("inbox")}
+              onTriage={() => onTriageBucket(inbox.id)}
             />
           ) : null}
 
@@ -119,9 +139,12 @@ export function BucketRail({
               drift={driftCountByBucket.get(bucket.id) ?? 0}
               active={selection === bucket.id}
               canEdit={canEdit}
+              timeBlock={timeBlockByBucket.get(bucket.id) ?? null}
               onClick={() => onSelect(bucket.id)}
               onRename={(name) => onRenameBucket(bucket.id, name)}
               onDelete={() => onDeleteBucket(bucket.id)}
+              onTriage={() => onTriageBucket(bucket.id)}
+              onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
             />
           ))}
         </nav>
@@ -170,24 +193,49 @@ function ModeToggle({
 
 // ── meta (counts + drift) — secondary font, numbers only ──────────────────────
 
-function CountDrift({ count, drift }: { count: number; drift?: number }) {
+function CountDrift({
+  count,
+  drift,
+  onTriage,
+}: {
+  count: number;
+  drift?: number;
+  /** Clicking the drift number opens batch-triage. */
+  onTriage?: () => void;
+}) {
   const hasDrift = !!drift && drift > 0;
   if (count === 0 && !hasDrift) return null;
-  // X (Y): X = open count, Y = drifted (parenthesised). Word lives in the tooltip.
-  const body = (
-    <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground/70">
-      {count}
-      {hasDrift ? <span className="text-muted-foreground/50"> ({drift})</span> : null}
-    </span>
-  );
-  if (!hasDrift) return body;
+  // X (Y): X = open count, Y = drifted (parenthesised, click to triage). The
+  // word "drifted" lives in the tooltip — the rail itself stays numbers-only.
+  if (!hasDrift) {
+    return (
+      <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground/70">
+        {count}
+      </span>
+    );
+  }
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{body}</TooltipTrigger>
-      <TooltipContent>
-        {count} open · {drift} drifted
-      </TooltipContent>
-    </Tooltip>
+    <span className="flex shrink-0 items-center font-sans text-xs tabular-nums text-muted-foreground/70">
+      {count}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Triage ${drift} drifted`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTriage?.();
+            }}
+            className="ml-0.5 rounded px-0.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+          >
+            ({drift})
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {count} open · {drift} drifted — click to triage
+        </TooltipContent>
+      </Tooltip>
+    </span>
   );
 }
 
@@ -201,6 +249,7 @@ function SelectionRow({
   active,
   reserveAction,
   onClick,
+  onTriage,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -210,6 +259,7 @@ function SelectionRow({
   /** Reserve a trailing slot so counts align with bucket rows' hover "…". */
   reserveAction?: boolean;
   onClick: () => void;
+  onTriage?: () => void;
 }) {
   return (
     <div
@@ -228,7 +278,7 @@ function SelectionRow({
         <span className="shrink-0">{icon}</span>
         <span className="min-w-0 flex-1 truncate font-display">{label}</span>
       </button>
-      <CountDrift count={count} drift={drift} />
+      <CountDrift count={count} drift={drift} onTriage={onTriage} />
       {reserveAction ? <span className="size-5 shrink-0" aria-hidden /> : null}
     </div>
   );
@@ -240,18 +290,24 @@ function BucketRow({
   drift,
   active,
   canEdit,
+  timeBlock,
   onClick,
   onRename,
   onDelete,
+  onTriage,
+  onSetTimeBlock,
 }: {
   bucket: Bucket;
   count: number;
   drift: number;
   active: boolean;
   canEdit: boolean;
+  timeBlock: TimeBlockSlot | null;
   onClick: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
+  onTriage: () => void;
+  onSetTimeBlock: (slot: TimeBlockSlot | null) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [value, setValue] = useState(bucket.name);
@@ -306,7 +362,7 @@ function BucketRow({
       >
         <span className="min-w-0 flex-1 truncate font-display">{bucket.name}</span>
       </button>
-      <CountDrift count={count} drift={drift} />
+      <CountDrift count={count} drift={drift} onTriage={onTriage} />
       {canEdit ? (
         // reserves its slot always (no layout shift); just fades in on hover
         <DropdownMenu>
@@ -321,6 +377,27 @@ function BucketRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => setRenaming(true)}>Rename</DropdownMenuItem>
+            {drift > 0 ? (
+              <DropdownMenuItem onSelect={onTriage}>Triage {drift} drifted…</DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Open at</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuRadioGroup
+                  value={timeBlock ?? "none"}
+                  onValueChange={(v) =>
+                    onSetTimeBlock(v === "none" ? null : (v as TimeBlockSlot))
+                  }
+                >
+                  <DropdownMenuRadioItem value="none">No default</DropdownMenuRadioItem>
+                  {TIME_BLOCK_SLOTS.map((slot) => (
+                    <DropdownMenuRadioItem key={slot} value={slot}>
+                      {TIME_BLOCK_LABELS[slot]}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={onDelete}>
               Delete bucket

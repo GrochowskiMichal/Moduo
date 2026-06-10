@@ -1,13 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { onCreateNew } from "../../../components/app/create-events";
 import { Button } from "../../../components/ui/button";
+import {
+  readTimeBlocks,
+  resolveDefaultSelection,
+  setBucketTimeBlock,
+  timeBlockByBucket as invertTimeBlocks,
+  writeTimeBlocks,
+  type TimeBlockMap,
+  type TimeBlockSlot,
+} from "../default-view";
 import type { GroupBy } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { isDrifted } from "../model";
 import { BucketRail, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
+import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
+import type { PlanView } from "./plan-view-header";
+import { TaskBoardView, type BoardGroupBy } from "./task-board-view";
 import { TaskListView } from "./task-list-view";
 
 type Props = {
@@ -15,8 +28,8 @@ type Props = {
   workspaceId: string;
 };
 
-// Per-workspace UI state (selection / mode / grouping) persisted locally — these
-// are view preferences, not synced data.
+// Per-workspace UI state (selection / mode / view / grouping) persisted locally —
+// these are view preferences, not synced data.
 function lsKey(workspaceId: string, part: string): string {
   return `moduo:tasks:${part}:${workspaceId}`;
 }
@@ -43,29 +56,71 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   const [mode, setMode] = useState<TasksMode>(
     () => (readLS(workspaceId, "mode") === "execute" ? "execute" : "plan"),
   );
+  const [view, setView] = useState<PlanView>(
+    () => (readLS(workspaceId, "view") === "board" ? "board" : "list"),
+  );
+  // Provisional selection (last-opened bucket, never "all"); the time-block-aware
+  // default is resolved once the bucket bundle has loaded (see effect below).
   const [selection, setSelection] = useState<string>(
-    () => readLS(workspaceId, "selection") ?? "inbox",
+    () => readLS(workspaceId, "lastBucket") ?? "inbox",
   );
   const [groupBy, setGroupBy] = useState<GroupBy>(
     () => (readLS(workspaceId, "groupBy") as GroupBy) ?? "none",
   );
+  const [boardGroupBy, setBoardGroupBy] = useState<BoardGroupBy>(
+    () => (readLS(workspaceId, "boardGroupBy") === "bucket" ? "bucket" : "status"),
+  );
+  const [timeBlocks, setTimeBlocks] = useState<TimeBlockMap>(() => readTimeBlocks(workspaceId));
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
 
   // Persist preferences.
   useEffect(() => writeLS(workspaceId, "mode", mode), [workspaceId, mode]);
-  useEffect(() => writeLS(workspaceId, "selection", selection), [workspaceId, selection]);
+  useEffect(() => writeLS(workspaceId, "view", view), [workspaceId, view]);
   useEffect(() => writeLS(workspaceId, "groupBy", groupBy), [workspaceId, groupBy]);
+  useEffect(() => writeLS(workspaceId, "boardGroupBy", boardGroupBy), [workspaceId, boardGroupBy]);
+
+  // Remember the last concrete bucket scope (never "all" / "today") so the next
+  // open can land back on it (spec §9.2).
+  useEffect(() => {
+    if (selection === "all" || selection === "today") return;
+    writeLS(workspaceId, "lastBucket", selection);
+  }, [workspaceId, selection]);
+
+  // Time-blocks are per-workspace; reload when the workspace changes.
+  useEffect(() => {
+    setTimeBlocks(readTimeBlocks(workspaceId));
+  }, [workspaceId]);
+
+  const inboxId = inbox?.id ?? null;
+
+  // Default-view resolution (spec §9), run once per workspace after the bundle
+  // loads: time-block bucket → last-opened bucket → Inbox. Never the full list.
+  const resolvedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (api.loading) return;
+    if (resolvedForRef.current === workspaceId) return;
+    resolvedForRef.current = workspaceId;
+    const bucketIds = [inboxId, ...buckets.map((b) => b.id)].filter(Boolean) as string[];
+    setSelection(
+      resolveDefaultSelection({
+        timeBlocks,
+        lastBucket: readLS(workspaceId, "lastBucket"),
+        bucketIds,
+        inboxId,
+      }),
+    );
+  }, [api.loading, workspaceId, inboxId, buckets, timeBlocks]);
 
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
-  const inboxId = inbox?.id ?? null;
   useEffect(() => {
     if (selection === "all" || selection === "inbox" || selection === "today") return;
     if (inboxId && selection === inboxId) return;
     if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
   }, [selection, buckets, inboxId]);
 
-  // "All" implies bucket grouping; a single bucket flattens it. Nudge groupBy on
-  // scope changes so the control stays meaningful (the user can still override).
+  // "All" implies bucket grouping in List; a single bucket flattens it. Nudge
+  // groupBy on scope changes so the control stays meaningful (user can override).
   const isAll = selection === "all";
   useEffect(() => {
     if (isAll && groupBy === "none") setGroupBy("bucket");
@@ -92,7 +147,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   const scopeTitle =
     isAll ? "All" : selection === "today" ? "Today" : selection === "inbox" ? "Inbox" : bucketNameById(selection);
 
-  // The commit queue is inherently ordered, so Today is never grouped.
+  // The commit queue is inherently ordered, so Today List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : groupBy;
 
   // Where a captured task lands: the selected bucket, else Inbox.
@@ -104,6 +159,26 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     [tasks],
   );
   const committedCount = api.committedTasks.length;
+
+  const timeBlocksByBucket = useMemo(() => invertTimeBlocks(timeBlocks), [timeBlocks]);
+  const handleSetTimeBlock = useCallback(
+    (bucketId: string, slot: TimeBlockSlot | null) => {
+      setTimeBlocks((prev) => {
+        const next = setBucketTimeBlock(prev, bucketId, slot);
+        writeTimeBlocks(workspaceId, next);
+        return next;
+      });
+    },
+    [workspaceId],
+  );
+
+  // Drifted tasks for the bucket currently being triaged (recomputed live so the
+  // dialog empties as the user triages).
+  const driftTasks = useMemo(() => {
+    if (!triageBucketId) return [];
+    const now = new Date();
+    return tasks.filter((t) => t.bucketId === triageBucketId && isDrifted(t, now));
+  }, [triageBucketId, tasks]);
 
   const openCapture = useCallback(() => {
     if (canEdit) setCaptureOpen(true);
@@ -130,8 +205,25 @@ export function TasksPlanView({ api, workspaceId }: Props) {
       onCreateBucket={api.createBucket}
       onRenameBucket={api.renameBucket}
       onDeleteBucket={api.deleteBucket}
+      onTriageBucket={setTriageBucketId}
+      timeBlockByBucket={timeBlocksByBucket}
+      onSetTimeBlock={handleSetTimeBlock}
     />
   );
+
+  const sharedViewProps = {
+    tasks: scopeTasks,
+    scopeTitle,
+    selection,
+    view,
+    onViewChange: setView,
+    buckets,
+    inbox,
+    bucketNameById,
+    canEdit,
+    onRequestCapture: openCapture,
+    api,
+  };
 
   // Execute mode is enclosed in the center panel (rails stay visible).
   const body =
@@ -144,19 +236,17 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         onDoLast={api.doLast}
         onExit={exitExecute}
       />
+    ) : view === "board" ? (
+      <TaskBoardView
+        {...sharedViewProps}
+        boardGroupBy={boardGroupBy}
+        onBoardGroupByChange={setBoardGroupBy}
+      />
     ) : (
       <TaskListView
-        tasks={scopeTasks}
-        scopeTitle={scopeTitle}
-        selection={selection}
+        {...sharedViewProps}
         groupBy={effectiveGroupBy}
         onGroupByChange={setGroupBy}
-        buckets={buckets}
-        inbox={inbox}
-        bucketNameById={bucketNameById}
-        canEdit={canEdit}
-        onRequestCapture={openCapture}
-        api={api}
       />
     );
 
@@ -208,6 +298,16 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         inbox={inbox}
         defaultBucketId={captureBucketId}
         onCreate={api.createTask}
+      />
+      <DriftTriageDialog
+        open={triageBucketId !== null}
+        onOpenChange={(o) => !o && setTriageBucketId(null)}
+        bucketName={triageBucketId ? bucketNameById(triageBucketId) : ""}
+        tasks={driftTasks}
+        canEdit={canEdit}
+        onReschedule={(id, days) => api.rescheduleScheduledAt(id, days)}
+        onArchive={api.archiveTask}
+        onIgnore={(id) => api.patchTask(id, { scheduledAt: null })}
       />
     </>
   );

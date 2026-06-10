@@ -195,6 +195,30 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [patchTask],
   );
 
+  /** Archive a task — terminal, removes it from open lists (used by drift triage). */
+  const archiveTask = useCallback(
+    (id: string) => patchTask(id, { status: "archived" }),
+    [patchTask],
+  );
+
+  /**
+   * Push a scheduled task's time `days` into the future, preserving its clock
+   * time. Clears the drift (drift = scheduled time in the past). No-op if the
+   * task has no scheduled time.
+   */
+  const rescheduleScheduledAt = useCallback(
+    (id: string, days: number, now: Date = new Date()) => {
+      const existing = bundle.tasks.find((t) => t.id === id);
+      if (!existing?.scheduledAt) return;
+      const orig = new Date(existing.scheduledAt);
+      const next = new Date(now);
+      next.setDate(next.getDate() + days);
+      next.setHours(orig.getHours(), orig.getMinutes(), 0, 0);
+      patchTask(id, { scheduledAt: next.toISOString() });
+    },
+    [bundle.tasks, patchTask],
+  );
+
   /** Toggle a task in/out of today's commit queue (commit = "doing this today"). */
   const toggleCommit = useCallback(
     (id: string) => {
@@ -337,6 +361,8 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     patchTask,
     toggleDone,
     markDone,
+    archiveTask,
+    rescheduleScheduledAt,
     toggleCommit,
     rescheduleFromToday,
     doLast,
