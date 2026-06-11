@@ -6,6 +6,10 @@ Project context for Claude Code. Always loaded.
 
 Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind CSS v4. Redb for local-first persistence. Lexical for rich text. Yjs for collaboration. XYFlow for the mindmap. Storybook 8 for component dev. Vitest + Playwright for tests. Bun for the package manager.
 
+## Active plan
+
+A multi-session improvement plan lives at [docs/improvement-plan.md](./docs/improvement-plan.md). At session start, read it (plus the docs it links) and continue the **next unchecked session** unless the user directs otherwise. Check off completed items and keep it current — when a decision there changes, edit the plan first, then code. Remove this section when the plan is done.
+
 ## Build / dev
 
 - `bun run dev:web` — web dev server, http://127.0.0.1:8081
