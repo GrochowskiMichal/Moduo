@@ -86,9 +86,10 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       (b) when does `mike` → `develop` sync? Sequence the migration apply
       around his answers.
 - [ ] Apply the hosted Supabase migrations (web Tasks currently 404s), in
-      timestamp order including Mike's if unapplied. The repo has **no
-      supabase config/project-ref** — this is a manual dashboard or
-      `supabase link` step that needs Maciej's credentials.
+      timestamp order including Mike's if unapplied. Use the **Supabase MCP
+      server** (`.mcp.json`, added 2026-06-11, project_ref `wtoonrvuqumihpkbvwvs`)
+      — the session user must have authenticated it via `/mcp` first; fall
+      back to the dashboard SQL editor if the MCP is unauthenticated.
 - [ ] Desktop app → Supabase runtime for **auth + workspaces + tasks**
       (supabase-js session in the Tauri webview, same code path as web);
       pause redb for those modules (keep code for the lite version).
