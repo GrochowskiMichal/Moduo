@@ -69,12 +69,41 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       (`scripts/density-snapshots.mjs` + a density/text-size Storybook toolbar).
 
 ### ☐ 2 — Cloud consolidation *(platform · unblocks every schema change after it)*
-- [ ] Apply the hosted Supabase migrations (web Tasks currently 404s).
-- [ ] Desktop app → Supabase runtime (auth/session in the Tauri webview);
-      pause redb (keep code for the lite version).
-- [ ] Migrate **time-blocks** from localStorage to a workspace-scoped table.
+
+> **Scope check 2026-06-11** (pre-session investigation, see build-log):
+> desktop **notes stay on redb this session** — Mike's unsynced notes work
+> (`origin/mike`: 14 commits incl. `commands/notes.rs` + six notes migrations
+> dated 2026-06-05, *earlier* than our tasks migrations) owns that surface.
+> Desktop→Supabase is a runtime **composition, not a swap**: email,
+> time-tracking, calendar OAuth, integrations, and graph remain
+> Tauri-invoke + redb (they have no Supabase path). The legacy sync engine is
+> a skeleton (tasks tables absent, no case mappers, outbox never populated,
+> and the `auth_link_to_cloud` Rust commands it depends on were never built) —
+> do **not** finish it; go Supabase-direct in the webview.
+
+- [ ] **Coordinate with Mike before touching hosted** (shared state): (a) has
+      he applied his six `20260605*` notes migrations to the hosted project?
+      (b) when does `mike` → `develop` sync? Sequence the migration apply
+      around his answers.
+- [ ] Apply the hosted Supabase migrations (web Tasks currently 404s), in
+      timestamp order including Mike's if unapplied. The repo has **no
+      supabase config/project-ref** — this is a manual dashboard or
+      `supabase link` step that needs Maciej's credentials.
+- [ ] Desktop app → Supabase runtime for **auth + workspaces + tasks**
+      (supabase-js session in the Tauri webview, same code path as web);
+      pause redb for those modules (keep code for the lite version).
+      Desktop **notes** follow in a later session, after Mike's branch lands
+      in develop and is pulled into `maciej`.
+- [ ] Migrate **time-blocks** from localStorage to a workspace-scoped table
+      (today desktop can't persist them at all).
+- [ ] Cleanup: remove the dead `auth_link_to_cloud` / `auth_sign_in_cloud`
+      invokes in `runtime.tauri.ts` (the Rust commands never existed); note
+      the orphaned `notes_outbox` / `notes_oplog` redb tables for the lite
+      story.
 - [ ] Sync docs with the pivot: spec, vocabulary, CLAUDE.md stack line
-      ("Redb for local-first persistence" is no longer true), build-log.
+      ("Redb for local-first persistence" is no longer true), build-log, and
+      **retire/annotate `docs/web+desktop_plan.md`** (it specs the never-built
+      auth-link hybrid and would mislead future sessions).
 
 ### ☐ 3 — Task detail panel + ambient mirrors *(tasks)*
 - [ ] Right rail = task-detail-on-select: editable description, all properties,

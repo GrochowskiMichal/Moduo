@@ -6,6 +6,44 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Interlude — Session 1 merged · Session 2 scope check (2026-06-11)
+
+Session 1 fast-forwarded into `maciej` (`0775a21`) and pushed; task branch
+deleted per CONTRIBUTING. Before starting Session 2, Maciej asked whether the
+plan matches the actual cloud/persistence state (the area is traditionally
+Mike's). Investigation findings (two read-only sweeps: codebase + git):
+
+- **Desktop has no Supabase session.** `runtime.tauri.ts:237-258` invokes
+  `auth_link_to_cloud` / `auth_sign_in_cloud`, but those Rust commands don't
+  exist. The sync engine (`src-tauri/src/sync/mod.rs`) covers only
+  `notes_meta` + `calendar_events`; the tasks tables are absent from
+  `SYNC_TABLES`/`PULL_TABLES`, no write ever enqueues, there are no
+  camelCase↔snake_case mappers, and even the notes outbox is never populated.
+  → Finishing sync would mean *building* the paused local-first architecture;
+  Supabase-direct in the webview (reusing `runtime.web.ts` paths) is the
+  cheaper, validated option.
+- **Composition, not swap.** Email, time-tracking, calendar OAuth,
+  integrations, and graph are Rust/redb-only (web stubs them "Desktop only").
+  Desktop keeps Tauri-invoke for those; only auth/workspaces/tasks go
+  Supabase-direct in Session 2.
+- **Mike's state**: his May cloud/billing/runtime-split infra is already in
+  `main`. His active branch (`origin/mike`, forked off develop 2026-05-14,
+  never pulled since, last push 2026-06-07) is notes-only — 14 commits
+  touching `commands/notes.rs` + NotesSplitView restructuring + **six notes
+  migrations dated 2026-06-05**, i.e. earlier timestamps than our tasks
+  migrations (2026-06-06). He never touched tasks files post-fork (his branch
+  still carries the deleted legacy tasks model; a future develop sync deletes
+  it cleanly). Conflict risk concentrates in notes at his next sync.
+- Plan Session 2 amended accordingly: Mike-coordination item first, desktop
+  notes phased out of scope, `web+desktop_plan.md` retirement added (it specs
+  the never-built auth-link hybrid), dead-invoke cleanup added.
+
+**Open inputs for Session 2** (gather before/at session start): Mike's two
+answers — hosted notes migrations applied? `mike` → `develop` timing? — and
+Supabase project access (dashboard or `supabase link`) for the hosted apply.
+
+---
+
 ## Improvement-plan Session 1 — Density & type-scale pass (2026-06-11)
 
 Branch `t/maciej/density-type-scale` off `maciej`. First session of the 2026-06
