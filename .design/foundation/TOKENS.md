@@ -12,7 +12,7 @@ Every customization axis is a single `data-*` attribute on `<html>`. They compos
 | --- | --- | --- | --- | --- |
 | Theme | `data-theme` | `dark`, `light` | `dark` | `--background`, `--foreground`, `--card`, `--popover`, `--muted`, `--border`, all shadows |
 | Accent | `data-accent` | `pink`, `violet`, `blue`, `green`, `amber`, `red`, `teal`, `mono` | `pink` | `--primary`, `--primary-hover`, `--primary-active`, `--ring` |
-| Density | `data-density` | `comfortable`, `compact` | `comfortable` | `--row-h`, `--ctrl-h`, `--pad-x`, `--pad-y` (and size variants) |
+| Density | `data-density` | `comfortable`, `compact`, `dense` | `comfortable` | `--row-h`, `--ctrl-h`, `--pad-x`, `--pad-y` (and size variants) |
 | Radius | `data-radius` | `sharp`, `soft`, `round` | `soft` | `--radius`, `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl` |
 | Display font | `data-font-display` | `pilat`, `geist`, `cal`, `fraunces` | `pilat` | `--font-display` |
 | Body font | `data-font-body` | `geist`, `inter`, `serif`, `mono` | `geist` | `--font-body` (Tailwind's `font-sans` resolves here) |
@@ -67,17 +67,21 @@ Use Tailwind utilities (`p-4`, `gap-2`, etc.) — they map to these tokens via t
 
 ## Density — row/control sizing
 
-Density doesn't change the spacing scale. It changes the **per-instance dimensions** of components.
+Density doesn't change the spacing scale. It changes the **per-instance dimensions** of components. Three steps on an even 4px row ladder; the dense end matches Linear/Notion chrome (pair with text-size `small` for the full Linear feel).
 
-| Token | Comfortable | Compact | Use for |
-| --- | --- | --- | --- |
-| `--row-h` | 36px | 28px | Sidebar tree items, list rows |
-| `--row-h-sm` | 28px | 24px | Nested rows |
-| `--ctrl-h` | 32px | 28px | Buttons, inputs (default size) |
-| `--ctrl-h-sm` | 26px | 24px | Small buttons |
-| `--ctrl-h-lg` | 40px | 34px | Large buttons |
-| `--pad-x` | 16px | 12px | Primary horizontal padding |
-| `--pad-y` | 10px | 6px | Primary vertical padding |
+| Token | Comfortable | Compact | Dense | Use for |
+| --- | --- | --- | --- | --- |
+| `--row-h` | 36px | 32px | 28px | Sidebar tree items, list rows |
+| `--row-h-sm` | 28px | 26px | 24px | Nested rows |
+| `--ctrl-h` | 32px | 30px | 26px | Buttons, inputs (default size) |
+| `--ctrl-h-sm` | 26px | 24px | 22px | Small buttons |
+| `--ctrl-h-lg` | 40px | 36px | 32px | Large buttons |
+| `--pad-x` | 16px | 14px | 12px | Primary horizontal padding |
+| `--pad-y` | 10px | 8px | 6px | Primary vertical padding |
+| `--pad-x-sm` | 12px | 10px | 8px | Rail / nested horizontal padding |
+| `--pad-y-sm` | 6px | 5px | 4px | Rail / nested vertical padding |
+
+Rows consume `--row-h` as a `min-height` (with a small fixed `py` as a multiline guard) so single-line rows track density exactly and wrapped content can still grow.
 
 Component primitives consume these via inline `height: var(--ctrl-h)` or CSS. Tailwind utility classes for size (`h-9`, etc.) bypass density — so primitives must reach for the variable, not the literal class.
 
@@ -110,13 +114,13 @@ Default usage:
 
 Tailwind's `font-display` utility resolves to `--font-display`. Tailwind's `font-sans` resolves to `--font-body`. `font-mono` is always mono.
 
-### Type scale (15px base)
+### Type scale (14px base)
 | Token | Default size | Use for |
 | --- | --- | --- |
 | `--text-xs` | 12 | Captions, micro-labels |
 | `--text-sm` | 13 | Secondary UI text |
-| `--text-base` | 15 | **Body** — paragraphs, default UI |
-| `--text-md` | 16 | Emphasised body |
+| `--text-base` | 14 | **Body** — paragraphs, default UI |
+| `--text-md` | 15 | Emphasised body |
 | `--text-lg` | 18 | Small headings |
 | `--text-xl` | 20 | Section headings |
 | `--text-2xl` | 24 | Page headings (H1 on most pages) |
@@ -127,12 +131,15 @@ Tailwind's `font-display` utility resolves to `--font-display`. Tailwind's `font
 ### Text-size variants
 User-selectable. Only the **body tier** (xs/sm/base/md) shifts — display sizes (lg+) stay fixed so page titles don't change with this preference.
 
+The base ladder is 13 / 14 / 16 — small ≈ Linear UI text, normal ≈ Notion
+chrome, large stays generous.
+
 | | Small | Normal | Large |
 | --- | --- | --- | --- |
 | `--text-xs` | 11 | 12 | 13 |
 | `--text-sm` | 12 | 13 | 14 |
-| `--text-base` | 13 | 15 | 17 |
-| `--text-md` | 15 | 16 | 18 |
+| `--text-base` | 13 | 14 | 16 |
+| `--text-md` | 14 | 15 | 17 |
 
 ### Line height & tracking
 - `--leading-tight` 1.2 — display

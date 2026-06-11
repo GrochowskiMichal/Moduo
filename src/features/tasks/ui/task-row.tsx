@@ -93,10 +93,12 @@ export function TaskRow({
       aria-selected={selected}
       onClick={onSelect}
       className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+        "group flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
         "border border-transparent cursor-default select-none",
         selected ? "bg-accent" : "hover:bg-accent/60",
       )}
+      // height rides the density setting; py is only a multiline guard
+      style={{ minHeight: "var(--row-h)" }}
     >
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(task)} />
 

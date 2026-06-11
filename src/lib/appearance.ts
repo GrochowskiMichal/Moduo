@@ -3,7 +3,7 @@ import { runtime } from "./runtime";
 
 export type Theme = "dark" | "light";
 export type Accent = "pink" | "violet" | "blue" | "green" | "amber" | "red" | "teal" | "mono";
-export type Density = "comfortable" | "compact";
+export type Density = "comfortable" | "compact" | "dense";
 export type Radius = "sharp" | "soft" | "round";
 export type DisplayFont = "pilat" | "geist" | "cal" | "fraunces";
 export type BodyFont = "geist" | "inter" | "serif" | "mono";
@@ -50,7 +50,7 @@ const DATA_ATTR_MAP: Record<keyof Appearance, string> = {
 const VALID_VALUES: Record<keyof Appearance, ReadonlyArray<string>> = {
   theme: ["dark", "light"],
   accent: ["pink", "violet", "blue", "green", "amber", "red", "teal", "mono"],
-  density: ["comfortable", "compact"],
+  density: ["comfortable", "compact", "dense"],
   radius: ["sharp", "soft", "round"],
   fontDisplay: ["pilat", "geist", "cal", "fraunces"],
   fontBody: ["geist", "inter", "serif", "mono"],

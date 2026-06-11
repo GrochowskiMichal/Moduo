@@ -264,11 +264,12 @@ function SelectionRow({
   return (
     <div
       className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+        "group flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
         active
           ? "bg-accent text-foreground"
           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
       )}
+      style={{ minHeight: "var(--row-h)" }}
     >
       <button
         type="button"
@@ -348,11 +349,12 @@ function BucketRow({
   return (
     <div
       className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+        "group flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
         active
           ? "bg-accent text-foreground"
           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
       )}
+      style={{ minHeight: "var(--row-h)" }}
     >
       <button
         type="button"

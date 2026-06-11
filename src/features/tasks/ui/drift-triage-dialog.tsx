@@ -144,7 +144,10 @@ function TriageRow({
 }) {
   const when = formatScheduled(task.scheduledAt);
   return (
-    <div className="flex items-center gap-2 rounded-md px-1 py-1.5 hover:bg-accent/60">
+    <div
+      className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-accent/60"
+      style={{ minHeight: "var(--row-h)" }}
+    >
       <div className="min-w-0 flex-1">
         <p className="truncate font-display text-sm text-foreground">{task.title || "Untitled"}</p>
         {when ? (

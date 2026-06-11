@@ -243,9 +243,10 @@ function Queue({ tasks, bucketNameById }: { tasks: Task[]; bucketNameById: (id: 
         <div
           key={task.id}
           className={cn(
-            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+            "flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
             i >= 2 ? "opacity-50" : "opacity-100",
           )}
+          style={{ minHeight: "var(--row-h)" }}
         >
           <span className="size-1.5 rounded-full bg-muted-foreground/50" aria-hidden />
           <span className="min-w-0 flex-1 truncate font-display text-foreground">{task.title || "Untitled"}</span>

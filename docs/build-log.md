@@ -6,6 +6,74 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Improvement-plan Session 1 — Density & type-scale pass (2026-06-11)
+
+Branch `t/maciej/density-type-scale` off `maciej`. First session of the 2026-06
+improvement plan ([improvement-plan.md](./improvement-plan.md)): make density +
+text-size a real, well-tuned customization range whose dense end ≈ Linear/Notion.
+
+**Third density step** ([tokens.css](../src/styles/tokens.css) §7,
+[appearance.ts](../src/lib/appearance.ts),
+[density-picker.tsx](../src/features/settings/appearance/density-picker.tsx)):
+`data-density` is now `comfortable | compact | dense` on an even 4px row ladder —
+rows 36 / 32 / 28, controls 32 / 30 / 26 (sm 26 / 24 / 22, lg 40 / 36 / 32),
+pads 16·10 / 14·8 / 12·6 (sm 12·6 / 10·5 / 8·4). **Dense** is the Linear/Notion
+end (28px rows ≈ Linear sidebar / Notion list); comfortable is untouched, and
+compact moved from the old near-dense values (28px rows) to the true middle
+(32px). Old `compact` users land between their old feel and the new dense option.
+
+**Type-scale retune** (tokens.css §9): body-tier base ladder is now
+**13 / 14 / 16 px** across small / normal / large (was 13 / 15 / 17) — small ≈
+Linear UI text, normal ≈ Notion chrome (default drops 15→14, addressing the
+"app reads larger than Notion/Linear" feedback), large stays generous. `--text-md`
+follows at +1 (14 / 15 / 17). Display sizes (lg+) stay fixed, as documented.
+Notes *content* is unaffected (the Lexical editor hardcodes 16px — pre-redesign
+file, untouched per the tw-shim rule).
+
+**Rows actually respond now** — the real reason "compact" never read as compact:
+module rows hardcoded `py-1.5` and ignored `--row-h`. Task rows
+([task-row.tsx](../src/features/tasks/ui/task-row.tsx)), bucket-rail rows
+([bucket-rail.tsx](../src/features/tasks/ui/bucket-rail.tsx)), Execute queue rows
+([execute-view.tsx](../src/features/tasks/ui/execute-view.tsx)) and drift-triage
+rows ([drift-triage-dialog.tsx](../src/features/tasks/ui/drift-triage-dialog.tsx))
+now take `min-height: var(--row-h)` (same idiom as notes/settings) with `py-0.5`
+kept only as a multiline guard. Buttons/inputs/selects already rode `--ctrl-h*`;
+FeaturePanelsShell already rode `--pad-*`. Board cards and the drag ghost stay
+fixed (cards, not rows).
+
+**Storybook appearance toolbar** ([.storybook/preview.tsx](../.storybook/preview.tsx)):
+new Density and Text-size toolbar globals apply `data-density` / `data-text-size`
+to the document, mirroring `useAppearance`. Spot-check script
+[scripts/density-snapshots.mjs](../scripts/density-snapshots.mjs) (Playwright
+against Storybook) screenshots shell/button/input across the range and prints
+the resolved `--row-h`/`--ctrl-h`/`--text-base` per combo.
+
+**Docs synced first:** `DESIGN_SYSTEM.md` attribute table;
+`.design/foundation/TOKENS.md` density table (3 columns + pad-sm rows + the
+min-height row recipe) and type-scale tables (14px base).
+
+**Verified:** typecheck ✓, lint:tw ✓, lint:css unchanged (same 5 pre-existing
+`global.css` warnings), vitest 24/24 (incl. default-view 14/14), web production
+build ✓. Visual spot-check via the snapshot script: token cascade confirmed
+end-to-end (36/32/28 rows, 14→13px base at small) on shell, buttons, inputs at
+all three densities. **Not hand-dogfooded** in the real app (same Supabase
+auth gap as Sessions 2–4); the Tasks-row wiring uses the proven notes idiom but
+deserves a desktop-run gut check on feel.
+
+**Flags for Maciej:**
+- **Default got 1px smaller** (`--text-base` 15→14). Intentional per your
+  density feedback, but it shifts the whole app's default voice — eyeball it.
+- **Compact loosened numerically** (rows 28→32) while becoming *visually*
+  denser in Tasks (rows previously ignored the token). If you had muscle-memory
+  for old compact, **dense** is your setting now.
+- Density still doesn't shift line-height (TOKENS.md open question stands —
+  revisit if dense+small feels cramped).
+
+**Deferred:** none for this session. (Launch config gained a `storybook` entry
+on port 6106 — 6006 was busy on this machine.)
+
+---
+
 ## Session 4 — Board view + drift triage + default-view (2026-06-06)
 
 Branch `maciej`. Filled in the remaining Plan-mode surface: the three items

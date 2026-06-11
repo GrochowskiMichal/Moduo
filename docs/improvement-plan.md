@@ -56,13 +56,17 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 
 ## Sessions
 
-### ☐ 1 — Density & type-scale pass *(design · no schema · parallelizable)*
-- [ ] Retune `--text-*`, `--ctrl-h*`, `--row-h`, `--pad-*` in `tokens.css` so
+### ☑ 1 — Density & type-scale pass *(design · no schema · parallelizable)*
+- [x] Retune `--text-*`, `--ctrl-h*`, `--row-h`, `--pad-*` in `tokens.css` so
       density + text-size settings span a wider, well-tuned range (densest end
       ≈ Linear/Notion).
-- [ ] Consider a third density step; make "compact" actually compact.
-- [ ] Verify all module surfaces respond (FeaturePanelsShell, rails, rows,
-      Settings preview); Storybook spot-check + visual snapshots.
+- [x] Consider a third density step; make "compact" actually compact.
+      *(Added `dense`: comfortable 36 / compact 32 / dense 28 row ladder;
+      "compact actually compact" landed as wiring the rows that ignored the
+      tokens, see build log.)*
+- [x] Verify all module surfaces respond (FeaturePanelsShell, rails, rows,
+      Settings preview); Storybook spot-check + visual snapshots
+      (`scripts/density-snapshots.mjs` + a density/text-size Storybook toolbar).
 
 ### ☐ 2 — Cloud consolidation *(platform · unblocks every schema change after it)*
 - [ ] Apply the hosted Supabase migrations (web Tasks currently 404s).

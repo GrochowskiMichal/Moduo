@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { Decorator, Preview } from "@storybook/react";
 import {
   Outlet,
@@ -96,8 +96,60 @@ const withAppProviders: Decorator = (Story, context) => {
   );
 };
 
+// Mirrors the app's Appearance settings (src/lib/appearance.ts) so density and
+// text-size can be spot-checked per story from the toolbar.
+function AppearanceSync({
+  density,
+  textSize,
+  children,
+}: {
+  density: string;
+  textSize: string;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-density", density);
+    root.setAttribute("data-text-size", textSize);
+  }, [density, textSize]);
+  return <>{children}</>;
+}
+
+const withAppearance: Decorator = (Story, context) => (
+  <AppearanceSync
+    density={(context.globals.density as string) ?? "comfortable"}
+    textSize={(context.globals.textSize as string) ?? "normal"}
+  >
+    <Story />
+  </AppearanceSync>
+);
+
 const preview: Preview = {
-  decorators: [withAppProviders],
+  decorators: [withAppearance, withAppProviders],
+  globalTypes: {
+    density: {
+      description: "Appearance → density",
+      toolbar: {
+        title: "Density",
+        icon: "ruler",
+        items: ["comfortable", "compact", "dense"],
+        dynamicTitle: true,
+      },
+    },
+    textSize: {
+      description: "Appearance → body text size",
+      toolbar: {
+        title: "Text size",
+        icon: "paragraph",
+        items: ["small", "normal", "large"],
+        dynamicTitle: true,
+      },
+    },
+  },
+  initialGlobals: {
+    density: "comfortable",
+    textSize: "normal",
+  },
   parameters: {
     actions: { argTypesRegex: "^on[A-Z].*" },
     controls: {
