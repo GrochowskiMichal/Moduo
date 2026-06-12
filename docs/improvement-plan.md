@@ -196,10 +196,27 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       frontier; committing a blocked task offers the frontier (quiet dialog,
       commit-anyway escape hatch; un-commit never intercepted).
 
-### ☐ 7 — Recurrence engine *(tasks · ADHD-critical)*
-- [ ] Advance-on-done; **missed occurrences don't exist** (no backfill, no
-      "7 overdue" — there is only the next occurrence).
-- [ ] Catch-up semantics on app open; skip-occurrence affordance.
+### ☑ 7 — Recurrence engine *(tasks · ADHD-critical)*
+
+> **Done 2026-06-12** (Fable, branch `t/maciej/session7-recurrence`, stacked on
+> Session 6's branch while PR #16 is open). **Single-row model** (spec **§5d**):
+> one task row cycles; `scheduledAt` carries the current occurrence,
+> `recurrence.nextOccurrence` is the stored pointer. **Zero schema change**
+> (the jsonb column + Rust parity existed since the first tasks migration).
+> Completion stays visibly done for the day (Execute n/m intact); catch-up on
+> open reopens/collapses. Skip ≠ reschedule (no counter). Live-verified
+> end-to-end against hosted incl. a backdated catch-up + idempotency probe.
+> See build log.
+
+- [x] Advance-on-done; **missed occurrences don't exist** (no backfill, no
+      "7 overdue" — there is only the next occurrence). *(Pointer advances
+      from `max(now, scheduledAt)` — completing early skips the pending
+      occurrence; quiet "Done — next …" toast.)*
+- [x] Catch-up semantics on app open; skip-occurrence affordance. *(One
+      idempotent pass per bundle load: done+pointer-arrived → reopen at the
+      latest occurrence ≤ now, stale commit cleared; open+missed → collapse
+      forward to one quiet drift. Skip lives in the detail panel + row/card
+      context menus; the panel gained an editable Repeat preset field.)*
 
 ### ☐ 8 — Intent ops + activity *(platform · per-module contract, Tasks first)*
 - [ ] Define the module contract (ops naming, actor field, activity table,
