@@ -7,6 +7,7 @@
  *
  * Variant attributes on <html>:
  *   data-theme=dark|light             (default: dark)
+ *   data-shade=black|warm|cool|slate|plum|forest   (default: black, dark only)
  *   data-accent=pink|violet|blue|green|amber|red|teal|mono   (default: pink)
  *   data-density=comfortable|compact|dense   (default: comfortable)
  *   data-radius=sharp|soft|round      (default: soft)
@@ -192,6 +193,102 @@
   :root:not([data-theme="light"]) {
     /* Inherits the default :root values which are dark.   */
   }
+}
+
+/* ============================================================================
+ * 4b. Shade variants — user-selectable tinted-dark surface presets
+ *     (Discord-style app-wide tint). Each preset re-tints the dark surface
+ *     ladder with one hue at low chroma; foregrounds stay near-white except
+ *     --muted-foreground, which takes a faint matching tint so secondary text
+ *     harmonizes with the tinted surfaces. Status colors, accents, and label
+ *     hues are untouched.
+ *
+ *     "black" is the default — the achromatic pure-black ladder above; it has
+ *     no override block. Tinted presets lift --background slightly off pure
+ *     black (a tint needs lightness to be visible) while keeping the
+ *     card → popover → border elevation steps.
+ *
+ *     Guarded with :not([data-theme="light"]) — shades are a dark-theme axis;
+ *     light mode keeps its placeholder ladder untinted. Same cascade
+ *     mechanism as data-accent (§5).
+ * ==========================================================================*/
+
+/* "black" restates the §3 defaults so a scoped data-shade="black" (e.g. a
+   Settings swatch) previews correctly inside a tinted page. */
+[data-shade="black"]:not([data-theme="light"]) {
+  --background:       oklch(0 0 0);
+  --card:             var(--neutral-900);
+  --popover:          var(--neutral-850);
+  --muted:            var(--neutral-850);
+  --input:            var(--neutral-850);
+  --accent:           var(--neutral-800);
+  --secondary:        var(--neutral-800);
+  --border:           var(--neutral-800);
+  --muted-foreground: var(--neutral-400);
+}
+
+/* Chroma is tuned per hue (live-verified on the Tasks shell): warm hues need
+   more chroma to read than blues/greens at the same lightness; slate is
+   deliberately the quietest preset. */
+
+[data-shade="warm"]:not([data-theme="light"]) {
+  --background:       oklch(0.13  0.020 60);
+  --card:             oklch(0.185 0.026 60);
+  --popover:          oklch(0.225 0.029 60);
+  --muted:            oklch(0.225 0.029 60);
+  --input:            oklch(0.225 0.029 60);
+  --accent:           oklch(0.27  0.032 60);
+  --secondary:        oklch(0.27  0.032 60);
+  --border:           oklch(0.27  0.032 60);
+  --muted-foreground: oklch(0.72  0.035 60);
+}
+
+[data-shade="cool"]:not([data-theme="light"]) {
+  --background:       oklch(0.13  0.018 245);
+  --card:             oklch(0.185 0.024 245);
+  --popover:          oklch(0.225 0.026 245);
+  --muted:            oklch(0.225 0.026 245);
+  --input:            oklch(0.225 0.026 245);
+  --accent:           oklch(0.27  0.028 245);
+  --secondary:        oklch(0.27  0.028 245);
+  --border:           oklch(0.27  0.028 245);
+  --muted-foreground: oklch(0.72  0.030 245);
+}
+
+[data-shade="slate"]:not([data-theme="light"]) {
+  --background:       oklch(0.13  0.010 260);
+  --card:             oklch(0.185 0.013 260);
+  --popover:          oklch(0.225 0.015 260);
+  --muted:            oklch(0.225 0.015 260);
+  --input:            oklch(0.225 0.015 260);
+  --accent:           oklch(0.27  0.016 260);
+  --secondary:        oklch(0.27  0.016 260);
+  --border:           oklch(0.27  0.016 260);
+  --muted-foreground: oklch(0.72  0.014 260);
+}
+
+[data-shade="plum"]:not([data-theme="light"]) {
+  --background:       oklch(0.13  0.018 325);
+  --card:             oklch(0.185 0.024 325);
+  --popover:          oklch(0.225 0.027 325);
+  --muted:            oklch(0.225 0.027 325);
+  --input:            oklch(0.225 0.027 325);
+  --accent:           oklch(0.27  0.030 325);
+  --secondary:        oklch(0.27  0.030 325);
+  --border:           oklch(0.27  0.030 325);
+  --muted-foreground: oklch(0.72  0.028 325);
+}
+
+[data-shade="forest"]:not([data-theme="light"]) {
+  --background:       oklch(0.13  0.014 160);
+  --card:             oklch(0.185 0.019 160);
+  --popover:          oklch(0.225 0.022 160);
+  --muted:            oklch(0.225 0.022 160);
+  --input:            oklch(0.225 0.022 160);
+  --accent:           oklch(0.27  0.024 160);
+  --secondary:        oklch(0.27  0.024 160);
+  --border:           oklch(0.27  0.024 160);
+  --muted-foreground: oklch(0.72  0.025 160);
 }
 
 /* ============================================================================

@@ -6,6 +6,70 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Improvement-plan Session 10 — Theme shades + tokenization deepening (2026-06-13)
+
+Branch `t/maciej/session10-theme-shades` off `maciej` (Fable). Sessions 8/9
+live on still-open PRs #18/#19 — Session 10 is design-only and parallelizable,
+so it branches from `maciej` directly. Zero schema, zero runtime semantics.
+
+**`data-shade` axis (tokens.css §4b).** Six curated presets: **black**
+(default — the existing achromatic pure-black ladder) plus **warm / cool /
+slate / plum / forest**. Each tinted preset re-tints only the dark surface
+ladder (`--background --card --popover --muted --input --accent --secondary
+--border` + a faint matching tint on `--muted-foreground`); accents, status
+colors, label hues, and all foregrounds stay untouched, so `data-shade`
+composes orthogonally with `data-accent` exactly as the shades memory/plan
+wanted. Guarded with `:not([data-theme="light"])` — inert in light mode.
+An explicit `[data-shade="black"]` block restates the defaults so the
+Settings swatches (scoped `data-shade` on the buttons, accent-picker pattern)
+preview correctly inside a tinted page. **Chroma was hand-tuned live** against
+the running Tasks shell — the first-pass values (chroma 0.008–0.020) were
+imperceptible; shipped values lift the canvas to L 0.13 and run chroma
+0.010–0.035 tuned per hue (warm needs more chroma than blue/green to read;
+slate is deliberately the quietest).
+
+**Wiring.** `appearance.ts`: `shade` field (type, default `black`,
+validation, `data-shade` in the attr map, `setShade`) — `sanitize()` defaults
+old persisted blobs, `main.tsx`'s pre-paint `applyAppearance` covers boot
+automatically. Settings: new `shade-picker.tsx` between Theme and Accent
+(radiogroup of swatch circles, same a11y pattern as the accent picker).
+Storybook: Shade toolbar entry + `AppearanceSync` mirror, alongside
+density/text-size. Docs: DESIGN_SYSTEM.md attr table + TOKENS.md axis table.
+
+**Token-bypass audit.** Anchor surfaces (tasks, settings, ui primitives,
+app shell, layouts) were already clean except: `root-error-boundary.tsx`
+(zinc-\* → semantic tokens; it renders inside the normal CSS pipeline, so
+tokens are safe there) and global.css's mindmap dot fallbacks
+(`#ffffff`/`#141414` → `var(--foreground)`/`var(--card)`) + one `rgba()`
+alias — **stylelint is now at 0 warnings** (was 5). Catalogued-but-left
+(legacy, parked per CLAUDE.md): dashboard widgets (heaviest — hex +
+arbitrary sizes throughout), `email-workspace.tsx` (red-\*/white),
+`onboarding-page.tsx` + `paywall-page.tsx` (amber-\*/white), mindmap
+toolbar/nodes, `feature-empty-page.tsx`, `grid-page.tsx`, `src/tw/` shim.
+These all predate the token system; fold fixes into Session 11's restyle or
+each module's migration. `integrations-section.tsx`'s `#4285f4` is a Google
+Calendar brand fallback for runtime calendar data, not a design-system
+bypass — left as data.
+
+**Verified (local):** typecheck ✓, vitest 81/81 ✓ (`bun run test`; bare
+`bun test` also picks up non-vitest files and fails pre-existingly — use the
+script), lint:css **0 problems** ✓, lint:tw ✓, build:web ✓.
+**Live-verified on web** (worktree rsbuild `:8097` + Chrome MCP + hosted test
+account): boot applies `data-shade` pre-paint; Settings → Shade picker
+renders six previewing swatches; clicking Warm re-tints the whole shell
+(espresso cast over rail/canvas/rows), persists (`moduo.appearance.shade`),
+and survives reload; plum/slate/forest/cool all resolve to distinct tinted
+ladders (computed-style probe); light+warm probe = `lab(98% 0 0)` (guard
+holds); round-trip back to Black restores pure black; no console errors.
+
+**Deferred:** desktop (Tauri) visual spot-check (same webview code path);
+shade-aware Storybook visual snapshots (`density-snapshots.mjs` could gain a
+shade matrix); light-mode shades (waits for the light palette);
+`data-shade`-aware `--shadow-*` (shadows stay pure black — fine on tinted
+surfaces, revisit if a preset ever goes lighter than L 0.15).
+
+---
+
 ## Improvement-plan Session 9 — MCP connector v1 (2026-06-12)
 
 Branch `t/maciej/session9-mcp-connector` off `t/maciej/session8-intent-ops`

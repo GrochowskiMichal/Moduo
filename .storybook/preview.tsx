@@ -101,17 +101,20 @@ const withAppProviders: Decorator = (Story, context) => {
 function AppearanceSync({
   density,
   textSize,
+  shade,
   children,
 }: {
   density: string;
   textSize: string;
+  shade: string;
   children: React.ReactNode;
 }) {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-density", density);
     root.setAttribute("data-text-size", textSize);
-  }, [density, textSize]);
+    root.setAttribute("data-shade", shade);
+  }, [density, textSize, shade]);
   return <>{children}</>;
 }
 
@@ -119,6 +122,7 @@ const withAppearance: Decorator = (Story, context) => (
   <AppearanceSync
     density={(context.globals.density as string) ?? "comfortable"}
     textSize={(context.globals.textSize as string) ?? "normal"}
+    shade={(context.globals.shade as string) ?? "black"}
   >
     <Story />
   </AppearanceSync>
@@ -145,10 +149,20 @@ const preview: Preview = {
         dynamicTitle: true,
       },
     },
+    shade: {
+      description: "Appearance → dark-surface shade",
+      toolbar: {
+        title: "Shade",
+        icon: "paintbrush",
+        items: ["black", "warm", "cool", "slate", "plum", "forest"],
+        dynamicTitle: true,
+      },
+    },
   },
   initialGlobals: {
     density: "comfortable",
     textSize: "normal",
+    shade: "black",
   },
   parameters: {
     actions: { argTypesRegex: "^on[A-Z].*" },

@@ -276,10 +276,21 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       follow without redesign. Local-LLM/offline MCP stays deferred to the
       lite version. *(docs/moduo-mcp-connector.md.)*
 
-### ☐ 10 — Theme shades + tokenization deepening *(design · anytime after 1)*
-- [ ] `data-shade` axis: curated tinted-dark presets (warm/cool/slate/…),
+### ☑ 10 — Theme shades + tokenization deepening *(design · anytime after 1)*
+
+> **Done 2026-06-13** (Fable, branch `t/maciej/session10-theme-shades`).
+> Six presets (black default + warm/cool/slate/plum/forest), tokens.css §4b,
+> dark-theme-only (`:not([data-theme="light"])` guard), chroma hand-tuned
+> live against the Tasks shell. Settings picker between Theme and Accent;
+> Storybook Shade toolbar. Audit: anchor surfaces were already token-clean
+> except the root error boundary (zinc→tokens) and the mindmap dot/glow
+> hex fallbacks in global.css (→ tokens; stylelint now 0 warnings).
+> Legacy bypass inventory (dashboard widgets, email, onboarding/paywall,
+> mindmap) catalogued in the build log for Session 11. Live-verified on web.
+
+- [x] `data-shade` axis: curated tinted-dark presets (warm/cool/slate/…),
       Settings picker, same cascade mechanism as `data-accent`.
-- [ ] Audit for token bypasses while in there.
+- [x] Audit for token bypasses while in there.
 
 ### ☐ 11 — Tasks UI/UX pass *(design · scope TBD with Maciej)*
 

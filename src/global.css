@@ -544,7 +544,7 @@ body,
 .react-flow__edge.mindmap-edge-selected .react-flow__edge-path {
   stroke-width: calc(var(--xy-edge-stroke-width, 2px) + 1.4px) !important;
   stroke-opacity: 1 !important;
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.78)) drop-shadow(0 0 16px rgba(255, 255, 255, 0.45));
+  filter: drop-shadow(0 0 8px rgb(255 255 255 / 0.78)) drop-shadow(0 0 16px rgb(255 255 255 / 0.45));
   animation: mindmapEdgeSelectPulse 0.75s ease-in-out infinite !important;
 }
 
@@ -584,8 +584,8 @@ body,
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: var(--dot-color, #ffffff);
-  border: 1px solid var(--dot-border, #141414);
+  background: var(--dot-color, var(--foreground));
+  border: 1px solid var(--dot-border, var(--card));
   opacity: 0;
   transition: opacity 150ms ease;
   pointer-events: none;

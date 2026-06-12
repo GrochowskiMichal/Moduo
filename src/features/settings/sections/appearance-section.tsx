@@ -3,6 +3,7 @@ import { AccentPicker } from "../appearance/accent-picker";
 import { DensityPicker } from "../appearance/density-picker";
 import { FontPicker } from "../appearance/font-picker";
 import { RadiusPicker } from "../appearance/radius-picker";
+import { ShadePicker } from "../appearance/shade-picker";
 import { TabsPicker } from "../appearance/tabs-picker";
 import { TextSizePicker } from "../appearance/text-size-picker";
 import { ThemePicker } from "../appearance/theme-picker";
@@ -13,6 +14,7 @@ export function AppearanceSection() {
   const {
     appearance,
     setTheme,
+    setShade,
     setAccent,
     setDensity,
     setRadius,
@@ -25,10 +27,11 @@ export function AppearanceSection() {
   return (
     <SettingsSectionShell
       title="Appearance"
-      description="Theme, accent, density, radius, and typography. Changes preview live against the app behind this modal."
+      description="Theme, shade, accent, density, radius, and typography. Changes preview live against the app behind this modal."
     >
       <section className="flex flex-col rounded-lg border border-border bg-card px-6 pb-6 pt-5">
         <ThemePicker value={appearance.theme} onChange={setTheme} />
+        <ShadePicker value={appearance.shade} onChange={setShade} />
         <AccentPicker value={appearance.accent} onChange={setAccent} />
         <DensityPicker value={appearance.density} onChange={setDensity} />
         <RadiusPicker value={appearance.radius} onChange={setRadius} />
