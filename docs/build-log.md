@@ -6,6 +6,84 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Improvement-plan Session 9 — MCP connector v1 (2026-06-12, hosted steps pending)
+
+Branch `t/maciej/session9-mcp-connector` off `t/maciej/session8-intent-ops`
+(Fable; stacked while PR #18 is open). One Moduo MCP server with per-module
+registration — Tasks is module #1. New anchor doc
+**[moduo-mcp-connector.md](./moduo-mcp-connector.md)** (shape, key model,
+actor path, tool table, and the "onboard a module to MCP" recipe).
+
+**Status: implementation + docs complete, local gates green. The hosted
+apply/deploy hit the auto-mode classifier gate (same as Sessions 4/5/8) —
+waiting on Maciej.** Remaining: apply `20260612160000`, deploy `moduo-mcp`
+(**must be `verify_jwt = false`** — MCP clients send a Moduo key, not a
+Supabase JWT), live MCP probes, Settings-UI live verify, advisors run.
+
+**Connector — [supabase/functions/moduo-mcp/](../supabase/functions/moduo-mcp/).**
+Stateless MCP Streamable HTTP (hand-rolled JSON-RPC: initialize / ping /
+tools/list / tools/call; notifications → 202; no SSE, no session state, no
+SDK). `Authorization: Bearer moduo_sk_…` sha256-verified against
+`workspace_api_keys`; the key pins the workspace — tools never take a
+workspace arg. `registry.ts` is the connector-side module registry
+(`connectorModules`); `modules/tasks.ts` contributes 8 read tools
+(buckets / list / today / drift / tags / search / get / activity, all with
+computed drifted+blocked, served only at `view`+) and 7 write tools = the
+Session 8 intent ops minus `catch_up` (app-lifecycle pass, not an agent
+intent; deliberately not granted to service_role). `recurrence.ts` is a
+marked port of the two engine functions the connector needs (agents never
+compute rrule pointers; ops still enforce structure, so port drift degrades
+to a rejected call). Known accepted duplication: Deno can't import the app's
+extensionless modules — manifest summaries are copied; unify when module #2
+lands (recipe step 4 note).
+
+**Schema — [20260612160000_workspace_api_keys_mcp.sql](../supabase/migrations/20260612160000_workspace_api_keys_mcp.sql).**
+- `workspace_api_keys`: name, `key_prefix` (display stub), unique sha256
+  `key_hash` (secret never stored; column-level grant keeps the hash
+  unreadable by clients), `scopes` jsonb on the none/view/edit ladder (view
+  default, admin never key-grantable), revoked_at, throttled last_used_at.
+  RLS: owner/admin SELECT (`workspace_api_keys_can_manage`); no write
+  policies — create/revoke via SECURITY DEFINER RPCs
+  (`workspace_api_keys_create` returns the secret exactly once; 20-live-keys
+  cap; anon explicitly revoked per the Session 8 lesson).
+- **Actor path (the Session 8 reserved slot):** `module_api_key_id()` reads
+  the `x-moduo-key-id` request header **only under a service_role JWT** —
+  clients can send the header but never the role; the secret never reaches
+  Postgres. `module_activity_log()` gains the `api_key` branch (key id +
+  name snapshot; user keeps precedence; neither context → loud failure).
+  `tasks_module_permission()` resolves key calls to the key's tasks scope, so
+  `tasks_op__guard`'s edit+ check applies to keys with zero op changes.
+- Grants: the 7 agent-facing ops → service_role.
+
+**Runtime & UI.** `runtime.workspace` gains `listApiKeys` / `createApiKey` /
+`revokeApiKey` / `getMcpEndpoint` (web; desktop rides the same object
+verbatim). [workspace-settings-modal.tsx](../src/components/workspace-settings-modal.tsx)
+gains an **API keys · MCP** section (owner/admin modal): endpoint row with
+copy, name input + View/Edit scope picker + Create, reveal-once secret banner
+(copy + dismiss), key rows (name, prefix, last-used, scope badge, revoke).
+New `WorkspaceApiKey` type in runtime.types.
+
+**Docs.** Connector doc (above) incl. the onboarding recipe; contract doc's
+three "arrives in Session 9" passages resolved to the real mechanism; spec
+§11b actor sentence updated; vocabulary gained "MCP connector / API key";
+plan Session 9 header note.
+
+**Verified (local):** typecheck ✓, vitest **91/91** ✓, lint:tw ✓, lint:css 0
+errors (same 5 pre-existing global.css warnings). (`bun test` ≠ `bun run
+test` — bun's own runner reports phantom failures; vitest is the gate.)
+No deno locally — the edge function validates at deploy.
+
+**Live-verify checklist for the post-approval pass:** initialize +
+instructions string; tools/list = 8 tools on a view key, 15 on edit;
+view-key write call → quiet scope refusal; edit-key `tasks_commit` →
+row updated + trail "An API client committed this…" (`actor_type='api_key'`,
+label = key name); `tasks_set_status done` on a recurring task → pointer
+advanced by the port; revoked key → 401; bogus/absent bearer → 401;
+authenticated client sending `x-moduo-key-id` → still attributed as user;
+Settings UI create→copy→revoke round-trip; advisors clean.
+
+---
+
 ## Improvement-plan Session 8 — Intent ops + activity (2026-06-12)
 
 Branch `t/maciej/session8-intent-ops` off `maciej` (Fable). The per-module
