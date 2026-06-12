@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Inbox, Layers, MoreHorizontal, Plus, Sunrise } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Inbox,
+  Layers,
+  MoreHorizontal,
+  Plus,
+  Sunrise,
+} from "lucide-react";
 
 import { Input } from "../../../components/ui/input";
 import {
@@ -25,6 +33,7 @@ import {
   TIME_BLOCK_SLOTS,
   type TimeBlockSlot,
 } from "../default-view";
+import { bucketSections } from "../helpers";
 import type { Bucket } from "../model";
 
 export type TasksMode = "plan" | "execute";
@@ -54,6 +63,8 @@ type Props = {
   timeBlockByBucket: Map<string, TimeBlockSlot>;
   /** Assign a bucket to a slot, or clear it (slot = null). */
   onSetTimeBlock: (bucketId: string, slot: TimeBlockSlot | null) => void;
+  /** Assign a bucket to a presentational section, or clear it (group = null). */
+  onSetBucketGroup: (bucketId: string, group: string | null) => void;
 };
 
 export function BucketRail({
@@ -74,8 +85,20 @@ export function BucketRail({
   onTriageBucket,
   timeBlockByBucket,
   onSetTimeBlock,
+  onSetBucketGroup,
 }: Props) {
   const [adding, setAdding] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
+  const { ungrouped, sections } = bucketSections(buckets);
+  const groupNames = sections.map((s) => s.name);
+  const toggleSection = (name: string) =>
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -131,7 +154,8 @@ export function BucketRail({
             <BucketAddInput onCreate={onCreateBucket} onClose={() => setAdding(false)} />
           ) : null}
 
-          {buckets.map((bucket) => (
+          {/* Ungrouped buckets render flat, first. */}
+          {ungrouped.map((bucket) => (
             <BucketRow
               key={bucket.id}
               bucket={bucket}
@@ -140,13 +164,82 @@ export function BucketRail({
               active={selection === bucket.id}
               canEdit={canEdit}
               timeBlock={timeBlockByBucket.get(bucket.id) ?? null}
+              groupNames={groupNames}
               onClick={() => onSelect(bucket.id)}
               onRename={(name) => onRenameBucket(bucket.id, name)}
               onDelete={() => onDeleteBucket(bucket.id)}
               onTriage={() => onTriageBucket(bucket.id)}
               onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
+              onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
             />
           ))}
+
+          {/* Collapsible sections (two levels max: section → bucket). */}
+          {sections.map((section) => {
+            const collapsed = collapsedSections.has(section.name);
+            const openCount = section.buckets.reduce(
+              (n, b) => n + (openCountByBucket.get(b.id) ?? 0),
+              0,
+            );
+            // Aggregate drift so a collapsed section still surfaces it ambiently
+            // (the per-bucket badges are hidden while collapsed).
+            const driftCount = section.buckets.reduce(
+              (n, b) => n + (driftCountByBucket.get(b.id) ?? 0),
+              0,
+            );
+            return (
+              <div key={section.name} className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => toggleSection(section.name)}
+                  aria-expanded={!collapsed}
+                  className="group/sec flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-muted-foreground hover:text-foreground"
+                >
+                  {collapsed ? (
+                    <ChevronRight className="size-3.5 shrink-0" aria-hidden />
+                  ) : (
+                    <ChevronDown className="size-3.5 shrink-0" aria-hidden />
+                  )}
+                  <span className="min-w-0 flex-1 truncate font-display text-2xs font-medium uppercase tracking-wide">
+                    {section.name}
+                  </span>
+                  <span className="flex shrink-0 items-center font-sans text-xs tabular-nums text-muted-foreground/60">
+                    {openCount}
+                    {collapsed && driftCount > 0 ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="ml-0.5 text-muted-foreground/50">({driftCount})</span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {driftCount} drifted in {section.name} — expand to triage
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                  </span>
+                </button>
+                {!collapsed
+                  ? section.buckets.map((bucket) => (
+                      <BucketRow
+                        key={bucket.id}
+                        bucket={bucket}
+                        count={openCountByBucket.get(bucket.id) ?? 0}
+                        drift={driftCountByBucket.get(bucket.id) ?? 0}
+                        active={selection === bucket.id}
+                        canEdit={canEdit}
+                        timeBlock={timeBlockByBucket.get(bucket.id) ?? null}
+                        groupNames={groupNames}
+                        onClick={() => onSelect(bucket.id)}
+                        onRename={(name) => onRenameBucket(bucket.id, name)}
+                        onDelete={() => onDeleteBucket(bucket.id)}
+                        onTriage={() => onTriageBucket(bucket.id)}
+                        onSetTimeBlock={(slot) => onSetTimeBlock(bucket.id, slot)}
+                        onSetGroup={(group) => onSetBucketGroup(bucket.id, group)}
+                      />
+                    ))
+                  : null}
+              </div>
+            );
+          })}
         </nav>
       </div>
     </div>
@@ -292,11 +385,13 @@ function BucketRow({
   active,
   canEdit,
   timeBlock,
+  groupNames,
   onClick,
   onRename,
   onDelete,
   onTriage,
   onSetTimeBlock,
+  onSetGroup,
 }: {
   bucket: Bucket;
   count: number;
@@ -304,13 +399,16 @@ function BucketRow({
   active: boolean;
   canEdit: boolean;
   timeBlock: TimeBlockSlot | null;
+  groupNames: string[];
   onClick: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
   onTriage: () => void;
   onSetTimeBlock: (slot: TimeBlockSlot | null) => void;
+  onSetGroup: (group: string | null) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
+  const [addingSection, setAddingSection] = useState(false);
   const [value, setValue] = useState(bucket.name);
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -343,6 +441,18 @@ function BucketRow({
           className="h-7 px-1.5 py-0 text-sm"
         />
       </div>
+    );
+  }
+
+  if (addingSection) {
+    return (
+      <SectionNameInput
+        onCommit={(name) => {
+          if (name) onSetGroup(name);
+          setAddingSection(false);
+        }}
+        onCancel={() => setAddingSection(false)}
+      />
     );
   }
 
@@ -400,6 +510,27 @@ function BucketRow({
                 </DropdownMenuRadioGroup>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Section</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuRadioGroup
+                  value={bucket.group ?? "none"}
+                  onValueChange={(v) => onSetGroup(v === "none" ? null : v)}
+                >
+                  <DropdownMenuRadioItem value="none">No section</DropdownMenuRadioItem>
+                  {groupNames.map((name) => (
+                    <DropdownMenuRadioItem key={name} value={name}>
+                      {name}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setAddingSection(true)}>
+                  <Plus className="size-4" aria-hidden />
+                  New section…
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={onDelete}>
               Delete bucket
@@ -449,6 +580,49 @@ function BucketAddInput({
           }
         }}
         onBlur={() => commit(false)}
+        className="h-7 px-1.5 py-0 text-sm"
+      />
+    </div>
+  );
+}
+
+// ── new section (inline; assigns the bucket to a fresh section) ────────────────
+
+function SectionNameInput({
+  onCommit,
+  onCancel,
+}: {
+  onCommit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState("");
+  const ref = useRef<HTMLInputElement>(null);
+  const committed = useRef(false);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  const commit = () => {
+    if (committed.current) return;
+    committed.current = true;
+    onCommit(value.trim());
+  };
+
+  return (
+    <div className="px-2 py-0.5">
+      <Input
+        ref={ref}
+        value={value}
+        placeholder="Section name — Enter"
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          else if (e.key === "Escape") {
+            committed.current = true;
+            onCancel();
+          }
+        }}
+        onBlur={commit}
         className="h-7 px-1.5 py-0 text-sm"
       />
     </div>

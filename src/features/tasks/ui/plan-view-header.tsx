@@ -21,6 +21,8 @@ export function PlanViewHeader({
   view,
   onViewChange,
   groupControl,
+  filterControl,
+  activeFilters,
   canEdit,
   onRequestCapture,
 }: {
@@ -28,20 +30,28 @@ export function PlanViewHeader({
   view: PlanView;
   onViewChange: (view: PlanView) => void;
   groupControl?: ReactNode;
+  /** Tag-filter trigger, sits next to the group control (both views). */
+  filterControl?: ReactNode;
+  /** Active filter chips — a quiet second row under the header when present. */
+  activeFilters?: ReactNode;
   canEdit: boolean;
   onRequestCapture: () => void;
 }) {
   return (
-    <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
-      <h1 className="truncate font-display text-lg text-foreground">{title}</h1>
-      <div className="flex items-center gap-2">
-        {groupControl}
-        <ViewSwitcher view={view} onViewChange={onViewChange} />
-        <Button size="sm" onClick={onRequestCapture} disabled={!canEdit}>
-          <Plus className="size-4" aria-hidden />
-          New task
-        </Button>
+    <div className="mb-3 shrink-0 space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="truncate font-display text-lg text-foreground">{title}</h1>
+        <div className="flex items-center gap-2">
+          {groupControl}
+          {filterControl}
+          <ViewSwitcher view={view} onViewChange={onViewChange} />
+          <Button size="sm" onClick={onRequestCapture} disabled={!canEdit}>
+            <Plus className="size-4" aria-hidden />
+            New task
+          </Button>
+        </div>
       </div>
+      {activeFilters ? <div className="flex flex-wrap items-center gap-1.5">{activeFilters}</div> : null}
     </div>
   );
 }

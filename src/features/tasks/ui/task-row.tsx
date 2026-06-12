@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Check, Clock, Inbox, Repeat, Sunrise } from "lucide-react";
 
 import { Badge } from "../../../components/ui/badge";
+import { TagChipList } from "../../../components/tag-chip";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -56,6 +57,8 @@ type Props = {
   onEndEdit: () => void;
   onClearCommand: () => void;
   onRequestCommand: (command: RowCommand) => void;
+  /** Click a tag chip to toggle it in the view filter. */
+  onTagFilter?: (tagId: string) => void;
   api: TasksModuleApi;
 };
 
@@ -74,6 +77,7 @@ export function TaskRow({
   onEndEdit,
   onClearCommand,
   onRequestCommand,
+  onTagFilter,
   api,
 }: Props) {
   const done = task.status === "done";
@@ -81,6 +85,7 @@ export function TaskRow({
   const committed = !!task.committedFor && task.committedFor === api.today;
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
+  const tags = api.tagsByTask.get(task.id) ?? [];
 
   const row = (
     <div
@@ -101,8 +106,8 @@ export function TaskRow({
       ) : null}
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(task)} />
 
-      <div className="min-w-0 flex-1">
-        {editing ? (
+      {editing ? (
+        <div className="min-w-0 flex-1">
           <TitleEditor
             initial={task.title}
             onCommit={(value) => {
@@ -112,11 +117,14 @@ export function TaskRow({
             }}
             onCancel={onEndEdit}
           />
-        ) : (
+        </div>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <button
             type="button"
             className={cn(
-              "block max-w-full truncate text-left font-display",
+              // flex-1 so the title keeps priority; chips shrink/truncate first
+              "min-w-0 flex-1 truncate text-left font-display",
               done ? "text-muted-foreground line-through" : "text-foreground",
             )}
             onClick={(e) => {
@@ -130,8 +138,9 @@ export function TaskRow({
           >
             {task.title || "Untitled"}
           </button>
-        )}
-      </div>
+          <TagChipList tags={tags} max={3} onTagClick={onTagFilter} className="min-w-0 shrink" />
+        </div>
+      )}
 
       {/* meta cluster — quiet, right-aligned */}
       <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">

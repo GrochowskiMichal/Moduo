@@ -2,6 +2,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CalendarDays, Clock, GripVertical, Inbox, Repeat, Sunrise } from "lucide-react";
 
 import { Badge } from "../../../components/ui/badge";
+import { TagChipList } from "../../../components/tag-chip";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -36,6 +37,8 @@ type Props = {
   /** Selection drives the detail rail; available to view-only users too. */
   selected: boolean;
   onSelect: () => void;
+  /** Click a tag chip to toggle it in the view filter. */
+  onTagFilter?: (tagId: string) => void;
   api: TasksModuleApi;
 };
 
@@ -49,6 +52,7 @@ export function TaskCard({
   canEdit,
   selected,
   onSelect,
+  onTagFilter,
   api,
 }: Props) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -85,6 +89,7 @@ export function TaskCard({
         inboxId={inboxId}
         showBucket={showBucket}
         canEdit={canEdit}
+        onTagFilter={onTagFilter}
         api={api}
       />
     </div>
@@ -175,6 +180,7 @@ export function CardBody({
   inboxId,
   showBucket,
   canEdit,
+  onTagFilter,
   api,
 }: {
   task: Task;
@@ -182,6 +188,7 @@ export function CardBody({
   inboxId: string | null;
   showBucket: boolean;
   canEdit: boolean;
+  onTagFilter?: (tagId: string) => void;
   api: TasksModuleApi;
 }) {
   const done = task.status === "done";
@@ -189,7 +196,9 @@ export function CardBody({
   const committed = !!task.committedFor && task.committedFor === api.today;
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
-  const hasMeta = committed || task.recurrence || scheduled || due || task.priority || task.energyLevel;
+  const tags = api.tagsByTask.get(task.id) ?? [];
+  const hasMeta =
+    committed || task.recurrence || scheduled || due || task.priority || task.energyLevel || tags.length > 0;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -248,6 +257,7 @@ export function CardBody({
               {bucketName}
             </Badge>
           ) : null}
+          <TagChipList tags={tags} max={4} onTagClick={onTagFilter} />
         </div>
       ) : null}
     </div>

@@ -90,6 +90,7 @@ fn ensure_inbox_bucket(
         owner_id: owner_id.to_string(),
         name: INBOX_NAME.to_string(),
         is_system: true,
+        group: None,
         // Sort first; lexorank "a0" is a low anchor.
         position: "a0".to_string(),
         created_at: now.clone(),

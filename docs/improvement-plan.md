@@ -140,12 +140,29 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 - [x] Distinct selected-row state (vs hover); teaching empty states
       ("Press `c` to capture").
 
-### ☐ 4 — Organization layer: rail sections + tags v1 *(tasks + shared)*
-- [ ] Bucket sections: optional `group` label → collapsible rail sections;
-      presentational only, capture untouched, two levels max.
-- [ ] Tags v1: **shared workspace-level** TagPicker in `src/components/`
+### ☑ 4 — Organization layer: rail sections + tags v1 *(tasks + shared)*
+
+> **Done 2026-06-12** (Opus, branch `t/maciej/session4-org-tags`). Tags' data
+> layer already existed (tables + runtime CRUD from Session 1–2); this session is
+> the UI + one additive schema change (`buckets.group_label`). Decisions locked
+> with Maciej: header **Filter** control + click-chip-to-filter (OR/union);
+> chips **always shown, quiet** on rows/cards; **inline create + auto color**
+> (recolorable). New shared `TagPicker` + `TagChip`/`TagChipList` +
+> `tag-colors.ts` in `src/components/` (cross-module); label palette in
+> tokens.css §13b (`data-label`) + `.tag-chip`/`.tag-dot` in global.css.
+> Migration `20260612120000_buckets_add_group.sql` **applied to hosted** (Maciej's
+> go-ahead) and **live-verified on web** (section + tags + filter, DB-confirmed;
+> see build log). Next: Fable `/code-review` before merge.
+
+- [x] Bucket sections: optional `group` label → collapsible rail sections;
+      presentational only, capture untouched, two levels max. *(`group` on
+      Bucket — TS/Rust/SQL; `bucketSections` helper; rail renders ungrouped
+      flat then collapsible sections; assign via bucket "…" → Section.)*
+- [x] Tags v1: **shared workspace-level** TagPicker in `src/components/`
       (cross-module contract — Mail/Notes adopt the same component later);
-      label-color token palette; chips + filter in Tasks.
+      label-color token palette; chips + filter in Tasks. *(TagPicker:
+      search/toggle/create/recolor/delete; detail-panel Tags field; quiet chips
+      on rows+cards; header tag filter, click-chip-to-filter, union semantics.)*
 
 ### ☐ 5 — Subtasks, one level *(tasks)*
 - [ ] `parentId` on Task, recursion forbidden; ordered under the parent in the

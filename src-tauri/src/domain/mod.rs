@@ -180,6 +180,11 @@ pub struct Bucket {
     pub name: String,
     #[serde(default)]
     pub is_system: bool,
+    /// Optional, presentational section label. Buckets sharing a `group` render
+    /// under a collapsible rail section (improvement-plan Session 4). Stored in
+    /// the `group_label` column on the cloud side (reserved-word avoidance).
+    #[serde(default)]
+    pub group: Option<String>,
     /// Lexorank-style ordering string.
     pub position: String,
     pub created_at: String,

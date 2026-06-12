@@ -40,6 +40,13 @@ export type Bucket = {
   ownerId: string;
   name: string;
   isSystem: boolean;
+  /**
+   * Optional, presentational section label. Buckets that share a `group` render
+   * under a collapsible rail section (two levels max). Unset by default — the
+   * rail stays flat until a bucket is assigned one. Stored as `group_label` on
+   * the cloud side (reserved-word avoidance).
+   */
+  group: string | null;
   /** Lexorank-style ordering string. */
   position: string;
   createdAt: string;

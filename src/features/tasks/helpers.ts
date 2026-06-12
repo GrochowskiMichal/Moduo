@@ -3,6 +3,7 @@
 // grouping logic for the List view. No React, no IO — easy to unit-test.
 
 import type {
+  Bucket,
   EnergyLevel,
   PriorityLevel,
   Task,
@@ -272,4 +273,61 @@ function groupLabel(by: GroupBy, key: string, ctx: GroupContext): string {
   if (by === "energy") return key === "unset" ? UNSET_LABEL : ENERGY_LABELS[key as EnergyLevel];
   if (by === "priority") return key === "unset" ? UNSET_LABEL : PRIORITY_LABELS[key as PriorityLevel];
   return key;
+}
+
+// ── Organization: rail sections + tag filter (Session 4) ─────────────────────
+
+export type BucketSection = { name: string; buckets: Bucket[] };
+
+export type BucketLayout = {
+  /** Buckets with no section — rendered flat, first (presentational). */
+  ungrouped: Bucket[];
+  /** Sections in first-appearance order; buckets keep their incoming order. */
+  sections: BucketSection[];
+};
+
+/**
+ * Partition position-sorted buckets into the flat (ungrouped) set and the
+ * collapsible sections, by their optional `group` label. Two levels max:
+ * section → bucket, never nested. Pure / presentational — capture and task
+ * assignment never touch this. A blank/whitespace group counts as ungrouped.
+ */
+export function bucketSections(buckets: Bucket[]): BucketLayout {
+  const ungrouped: Bucket[] = [];
+  const order: string[] = [];
+  const byName = new Map<string, Bucket[]>();
+  for (const bucket of buckets) {
+    const name = bucket.group?.trim();
+    if (!name) {
+      ungrouped.push(bucket);
+      continue;
+    }
+    const list = byName.get(name);
+    if (list) {
+      list.push(bucket);
+    } else {
+      byName.set(name, [bucket]);
+      order.push(name);
+    }
+  }
+  return { ungrouped, sections: order.map((name) => ({ name, buckets: byName.get(name) ?? [] })) };
+}
+
+/** Existing section names (first-appearance order) — for the "move to section" menu. */
+export function bucketGroupNames(buckets: Bucket[]): string[] {
+  return bucketSections(buckets).sections.map((s) => s.name);
+}
+
+/**
+ * Tag filter predicate (OR / union): a task matches when no tags are selected,
+ * or it carries at least one of them. Union is the intuitive "show me #x or #y";
+ * the dominant single-tag case is identical under either rule.
+ */
+export function taskMatchesTagFilter(taskTagIds: Iterable<string>, filterTagIds: string[]): boolean {
+  if (filterTagIds.length === 0) return true;
+  const wanted = new Set(filterTagIds);
+  for (const id of taskTagIds) {
+    if (wanted.has(id)) return true;
+  }
+  return false;
 }

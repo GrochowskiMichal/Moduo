@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
@@ -33,6 +33,11 @@ type Props = {
   /** Lifted task selection — drives the keyboard cursor and the detail rail. */
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
+  /** Tag-filter header control + active-chip row (built by the parent). */
+  tagFilterControl?: ReactNode;
+  activeTagFilters?: ReactNode;
+  /** Click a row's tag chip to toggle it in the filter. */
+  onTagFilter?: (tagId: string) => void;
   api: TasksModuleApi;
 };
 
@@ -59,6 +64,9 @@ export function TaskListView({
   onRequestCapture,
   selectedTaskId,
   onSelectTask,
+  tagFilterControl,
+  activeTagFilters,
+  onTagFilter,
   api,
 }: Props) {
   // Selection is owned by the parent (shared with the detail rail); these aliases
@@ -189,6 +197,8 @@ export function TaskListView({
         onViewChange={onViewChange}
         canEdit={canEdit}
         onRequestCapture={onRequestCapture}
+        filterControl={tagFilterControl}
+        activeFilters={activeTagFilters}
         groupControl={
           <div className="flex items-center gap-1.5">
             <span className="font-display text-xs text-muted-foreground">Group</span>
@@ -264,6 +274,7 @@ export function TaskListView({
                           containerRef.current?.focus();
                         }}
                         onRequestCommand={(kind) => setCommand({ taskId: task.id, kind })}
+                        onTagFilter={onTagFilter}
                         api={api}
                       />
                     ))

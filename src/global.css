@@ -170,6 +170,24 @@ body,
   }
 }
 
+/* ═══ Tag chips (cross-module) — token-driven ═══
+   Color is routed through the label tokens in tokens.css (§13b): the element
+   carries data-label="<hue>", which sets --label / --label-surface; these
+   classes only consume those vars (no raw color), so the chip stays
+   design-system-compliant. Layout/spacing/radius come from Tailwind utilities
+   on the element. .tag-dot inherits --label from its chip ancestor. */
+.tag-chip {
+  background-color: var(--label-surface);
+}
+
+.tag-chip-outline {
+  border-color: var(--label);
+}
+
+.tag-dot {
+  background-color: var(--label);
+}
+
 /* ═══ Notes: Lexical theme — token-driven ═══ */
 
 .notes-p {

@@ -539,6 +539,32 @@
 }
 
 /* ============================================================================
+ * 13b. Label colors — tag chips (cross-module).
+ *      Eight named hues reusing the raw accent palette bases. Each
+ *      [data-label="…"] sets two vars consumed by .tag-chip / .tag-dot
+ *      (global.css): `--label` (solid hue → the dot + ring) and
+ *      `--label-surface` (a faint tint → the chip background). Surfaces are
+ *      precomputed oklch-with-alpha (kept here, the sanctioned color file, so
+ *      component code stays hex/arbitrary-free per the design-system rules).
+ *      `gray` is the default / fallback when a tag has no stored color.
+ * ==========================================================================*/
+
+:root {
+  /* fallbacks when no [data-label] is set */
+  --label:         var(--neutral-400);
+  --label-surface: oklch(0.70 0 0 / 0.16);
+}
+
+[data-label="gray"]   { --label: var(--neutral-400); --label-surface: oklch(0.70 0    0   / 0.16); }
+[data-label="blue"]   { --label: var(--blue-base);    --label-surface: oklch(0.66 0.18 245 / 0.18); }
+[data-label="green"]  { --label: var(--green-base);   --label-surface: oklch(0.72 0.17 150 / 0.18); }
+[data-label="amber"]  { --label: var(--amber-base);   --label-surface: oklch(0.80 0.16 75  / 0.18); }
+[data-label="red"]    { --label: var(--red-base);     --label-surface: oklch(0.66 0.22 25  / 0.18); }
+[data-label="violet"] { --label: var(--violet-base);  --label-surface: oklch(0.66 0.20 295 / 0.18); }
+[data-label="teal"]   { --label: var(--teal-base);    --label-surface: oklch(0.72 0.13 200 / 0.18); }
+[data-label="pink"]   { --label: var(--pink-base);    --label-surface: oklch(0.71 0.20 350 / 0.18); }
+
+/* ============================================================================
  * 14. Tailwind v4 @theme mapping
  *     Exposes our semantic tokens as Tailwind utilities:
  *     bg-background, text-foreground, rounded-md, font-display, etc.
