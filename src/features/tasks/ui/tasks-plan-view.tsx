@@ -204,6 +204,17 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     [selectedTaskId, tasks],
   );
 
+  // Scope-level selection validity (the state lives here, so its backstop does
+  // too): when the selected task leaves the scope (archived, moved, deleted,
+  // scope/workspace switch), fall back to the first task in scope. The List view
+  // refines this against its collapse-aware visible rows; Board has no own logic
+  // and relies on this entirely.
+  useEffect(() => {
+    if (api.loading) return;
+    if (selectedTaskId && scopeTasks.some((t) => t.id === selectedTaskId)) return;
+    setSelectedTaskId(scopeTasks[0]?.id ?? null);
+  }, [api.loading, selectedTaskId, scopeTasks]);
+
   const sharedViewProps = {
     tasks: scopeTasks,
     scopeTitle,

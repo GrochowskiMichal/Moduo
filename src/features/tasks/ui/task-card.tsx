@@ -20,16 +20,10 @@ import {
   TooltipTrigger,
 } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
-import { formatDue, formatScheduled } from "../helpers";
+import { formatDue, formatScheduled, LEVEL_OPTIONS } from "../helpers";
 import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { CompleteToggle, LevelDots } from "./task-row";
-
-const LEVELS: Array<{ value: EnergyLevel | PriorityLevel; label: string }> = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
 
 type Props = {
   task: Task;
@@ -139,7 +133,7 @@ export function TaskCard({
               }
             >
               <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVELS.map((l) => (
+              {LEVEL_OPTIONS.map((l) => (
                 <ContextMenuRadioItem key={l.value} value={l.value}>
                   {l.label}
                 </ContextMenuRadioItem>
@@ -157,7 +151,7 @@ export function TaskCard({
               }
             >
               <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVELS.map((l) => (
+              {LEVEL_OPTIONS.map((l) => (
                 <ContextMenuRadioItem key={l.value} value={l.value}>
                   {l.label}
                 </ContextMenuRadioItem>

@@ -14,6 +14,7 @@ import { groupTasks, type GroupBy } from "../helpers";
 import type { Bucket, Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { PlanViewHeader, type PlanView } from "./plan-view-header";
+import { Kbd } from "./task-detail-panel";
 import { TaskRow, type RowCommand } from "./task-row";
 
 type Props = {
@@ -293,9 +294,7 @@ function EmptyState({
             Add a task
           </Button>
           <p className="text-2xs text-muted-foreground/70">
-            or press{" "}
-            <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-2xs">c</kbd>{" "}
-            to capture
+            or press <Kbd>c</Kbd> to capture
           </p>
         </>
       ) : null}

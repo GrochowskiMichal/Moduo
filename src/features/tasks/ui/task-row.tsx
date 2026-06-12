@@ -30,6 +30,7 @@ import {
   ENERGY_LABELS,
   formatDue,
   formatScheduled,
+  LEVEL_OPTIONS,
   PRIORITY_LABELS,
   toDateInputValue,
   toLocalInputValue,
@@ -57,12 +58,6 @@ type Props = {
   onRequestCommand: (command: RowCommand) => void;
   api: TasksModuleApi;
 };
-
-const LEVELS: Array<{ value: EnergyLevel | PriorityLevel; label: string }> = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
 
 export function TaskRow({
   task,
@@ -227,7 +222,7 @@ export function TaskRow({
               }
             >
               <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVELS.map((l) => (
+              {LEVEL_OPTIONS.map((l) => (
                 <ContextMenuRadioItem key={l.value} value={l.value}>
                   {l.label}
                 </ContextMenuRadioItem>
@@ -245,7 +240,7 @@ export function TaskRow({
               }
             >
               <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVELS.map((l) => (
+              {LEVEL_OPTIONS.map((l) => (
                 <ContextMenuRadioItem key={l.value} value={l.value}>
                   {l.label}
                 </ContextMenuRadioItem>

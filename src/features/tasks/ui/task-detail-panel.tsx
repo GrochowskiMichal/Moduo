@@ -19,8 +19,8 @@ import {
 import { Separator } from "../../../components/ui/separator";
 import { Textarea } from "../../../components/ui/textarea";
 import {
-  ENERGY_LABELS,
-  PRIORITY_LABELS,
+  formatTimestamp,
+  LEVEL_OPTIONS,
   STATUS_LABELS,
   toDateInputValue,
   toLocalInputValue,
@@ -44,23 +44,9 @@ type Props = {
   api: TasksModuleApi;
 };
 
+// Lifecycle order for the status picker (distinct from helpers' STATUS_ORDER,
+// which is the open-work-first grouping order).
 const STATUS_OPTIONS: TaskStatus[] = ["todo", "in_progress", "done", "archived"];
-const LEVELS: Array<EnergyLevel | PriorityLevel> = ["low", "medium", "high"];
-const NONE = "none";
-
-const META_FMT = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-function formatTimestamp(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : META_FMT.format(d);
-}
 
 export function TaskDetailPanel({ task, buckets, inbox, canEdit, onRequestCapture, api }: Props) {
   if (!task) return <DetailEmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />;
@@ -85,6 +71,8 @@ function DetailBody({
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [duration, setDuration] = useState(task.durationMinutes != null ? String(task.durationMinutes) : "");
+  const [scheduled, setScheduled] = useState(toLocalInputValue(task.scheduledAt));
+  const [due, setDue] = useState(toDateInputValue(task.dueDate));
 
   const drifted = isDrifted(task);
   const committed = !!task.committedFor && task.committedFor === api.today;
@@ -102,6 +90,16 @@ function DetailBody({
     const n = Number.parseInt(duration, 10);
     const next = Number.isFinite(n) && n > 0 ? n : null;
     if (next !== task.durationMinutes) api.patchTask(task.id, { durationMinutes: next });
+  };
+  // Date fields commit on blur (not per segment-change — each patch is a network
+  // upsert) and tolerate clearing: empty input → null.
+  const commitScheduled = () => {
+    const next = scheduled ? new Date(scheduled).toISOString() : null;
+    if (next !== task.scheduledAt) api.patchTask(task.id, { scheduledAt: next });
+  };
+  const commitDue = () => {
+    const next = due ? new Date(`${due}T00:00:00`).toISOString() : null;
+    if (next !== task.dueDate) api.patchTask(task.id, { dueDate: next });
   };
 
   return (
@@ -190,24 +188,20 @@ function DetailBody({
               <Input
                 type="datetime-local"
                 disabled={!canEdit}
-                defaultValue={toLocalInputValue(task.scheduledAt)}
+                value={scheduled}
                 className="h-8"
-                onChange={(e) => {
-                  const v = e.target.value;
-                  api.patchTask(task.id, { scheduledAt: v ? new Date(v).toISOString() : null });
-                }}
+                onChange={(e) => setScheduled(e.target.value)}
+                onBlur={commitScheduled}
               />
             </Field>
             <Field label="Due">
               <Input
                 type="date"
                 disabled={!canEdit}
-                defaultValue={toDateInputValue(task.dueDate)}
+                value={due}
                 className="h-8"
-                onChange={(e) => {
-                  const v = e.target.value;
-                  api.patchTask(task.id, { dueDate: v ? new Date(`${v}T00:00:00`).toISOString() : null });
-                }}
+                onChange={(e) => setDue(e.target.value)}
+                onBlur={commitDue}
               />
             </Field>
           </div>
@@ -217,7 +211,6 @@ function DetailBody({
               <LevelSelect
                 value={task.priority}
                 disabled={!canEdit}
-                labels={PRIORITY_LABELS}
                 onChange={(v) => api.patchTask(task.id, { priority: v })}
               />
             </Field>
@@ -225,7 +218,6 @@ function DetailBody({
               <LevelSelect
                 value={task.energyLevel}
                 disabled={!canEdit}
-                labels={ENERGY_LABELS}
                 onChange={(v) => api.patchTask(task.id, { energyLevel: v })}
               />
             </Field>
@@ -235,7 +227,7 @@ function DetailBody({
             <div className="flex items-center gap-2">
               <Input
                 type="number"
-                min={0}
+                min={1}
                 inputMode="numeric"
                 disabled={!canEdit}
                 value={duration}
@@ -283,8 +275,7 @@ function DetailBody({
               ) : null}
               {task.rescheduleCount > 0 ? (
                 <Mirror icon={<RotateCcw className="size-3.5" aria-hidden />}>
-                  Rescheduled {task.rescheduleCount}
-                  {"×"}
+                  Rescheduled {task.rescheduleCount}×
                 </Mirror>
               ) : null}
             </div>
@@ -353,28 +344,26 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function LevelSelect({
   value,
   disabled,
-  labels,
   onChange,
 }: {
   value: EnergyLevel | PriorityLevel | null;
   disabled: boolean;
-  labels: Record<EnergyLevel | PriorityLevel, string>;
   onChange: (next: EnergyLevel | PriorityLevel | null) => void;
 }) {
   return (
     <Select
-      value={value ?? NONE}
+      value={value ?? "none"}
       disabled={disabled}
-      onValueChange={(v) => onChange(v === NONE ? null : (v as EnergyLevel | PriorityLevel))}
+      onValueChange={(v) => onChange(v === "none" ? null : (v as EnergyLevel | PriorityLevel))}
     >
       <SelectTrigger size="sm" className="w-full font-display">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={NONE}>None</SelectItem>
-        {LEVELS.map((l) => (
-          <SelectItem key={l} value={l}>
-            {labels[l]}
+        <SelectItem value="none">None</SelectItem>
+        {LEVEL_OPTIONS.map((l) => (
+          <SelectItem key={l.value} value={l.value}>
+            {l.label}
           </SelectItem>
         ))}
       </SelectContent>
@@ -410,7 +399,7 @@ function Meta({
   );
 }
 
-function Kbd({ children }: { children: React.ReactNode }) {
+export function Kbd({ children }: { children: React.ReactNode }) {
   return (
     <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-2xs text-muted-foreground">
       {children}

@@ -60,8 +60,18 @@ worktree (1.4s, hardlinked) + a local `web-s3` launch config on `:8091`
 (`.claude/launch.json`, gitignored), driven via the Chrome MCP. Display is
 high-DPI (innerWidth 2207); full-frame screenshots need the left rail collapsed.
 
-**Next per plan:** a Fable `/code-review` pass on this branch before merge
-(Opus-session policy). Not merged — awaiting review + authorization.
+**Fable `/code-review` pass (same day, per the Opus-session policy):** 8
+findings, none merge-blocking; fixed in a follow-up commit: (1) selection
+validity moved to where the state lives — a scope-level backstop effect in
+tasks-plan-view (Board/Execute previously kept stale selections and never
+auto-selected; live-verified: empty-scope switch clears the rail, switching
+back auto-reselects, Board renders the selected card); (2) rail Scheduled/Due
+became draft-state commit-on-blur (was: uncontrolled + a Supabase upsert per
+date-segment keystroke); (3) `LEVEL_OPTIONS` + `formatTimestamp` hoisted to
+helpers (were triplicated/duplicated); (4) `Kbd` shared between the two empty
+states; (5) duration input `min={1}` to match the 0→null commit logic. Known
+minor, accepted: title/description drafts don't refresh if the selected task
+is renamed elsewhere mid-edit (key-on-id pattern; revisit if it bites).
 
 **Deferred:** title/description are the only inline-edit *text* fields; board
 within-column reorder + insertion indicators and ⌘K task actions stay in the
