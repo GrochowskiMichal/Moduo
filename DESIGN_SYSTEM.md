@@ -71,6 +71,7 @@ User preferences map to `data-*` attributes on `<html>`. The cascade does the wo
 | Attribute | Values | Default |
 | --- | --- | --- |
 | `data-theme` | `dark`, `light` | `dark` |
+| `data-shade` | `black`, `warm`, `cool`, `slate`, `plum`, `forest` | `black` |
 | `data-accent` | `pink`, `violet`, `blue`, `green`, `amber`, `red`, `teal`, `mono` | `pink` |
 | `data-density` | `comfortable`, `compact`, `dense` | `comfortable` |
 | `data-radius` | `sharp`, `soft`, `round` | `soft` |

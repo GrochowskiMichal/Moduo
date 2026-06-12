@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { runtime } from "./runtime";
 
 export type Theme = "dark" | "light";
+export type Shade = "black" | "warm" | "cool" | "slate" | "plum" | "forest";
 export type Accent = "pink" | "violet" | "blue" | "green" | "amber" | "red" | "teal" | "mono";
 export type Density = "comfortable" | "compact" | "dense";
 export type Radius = "sharp" | "soft" | "round";
@@ -12,6 +13,7 @@ export type Tabs = "auto" | "icons";
 
 export interface Appearance {
   theme: Theme;
+  shade: Shade;
   accent: Accent;
   density: Density;
   radius: Radius;
@@ -23,6 +25,7 @@ export interface Appearance {
 
 export const DEFAULT_APPEARANCE: Appearance = {
   theme: "dark",
+  shade: "black",
   accent: "pink",
   density: "comfortable",
   radius: "soft",
@@ -38,6 +41,7 @@ const TAURI_KEY = "settings";
 
 const DATA_ATTR_MAP: Record<keyof Appearance, string> = {
   theme: "data-theme",
+  shade: "data-shade",
   accent: "data-accent",
   density: "data-density",
   radius: "data-radius",
@@ -49,6 +53,7 @@ const DATA_ATTR_MAP: Record<keyof Appearance, string> = {
 
 const VALID_VALUES: Record<keyof Appearance, ReadonlyArray<string>> = {
   theme: ["dark", "light"],
+  shade: ["black", "warm", "cool", "slate", "plum", "forest"],
   accent: ["pink", "violet", "blue", "green", "amber", "red", "teal", "mono"],
   density: ["comfortable", "compact", "dense"],
   radius: ["sharp", "soft", "round"],
@@ -130,6 +135,7 @@ async function writePersisted(appearance: Appearance): Promise<void> {
 export interface UseAppearance {
   appearance: Appearance;
   setTheme: (value: Theme) => void;
+  setShade: (value: Shade) => void;
   setAccent: (value: Accent) => void;
   setDensity: (value: Density) => void;
   setRadius: (value: Radius) => void;
@@ -170,6 +176,7 @@ export function useAppearance(): UseAppearance {
   return {
     appearance,
     setTheme: (value) => update({ theme: value }),
+    setShade: (value) => update({ shade: value }),
     setAccent: (value) => update({ accent: value }),
     setDensity: (value) => update({ density: value }),
     setRadius: (value) => update({ radius: value }),

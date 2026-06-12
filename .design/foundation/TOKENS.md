@@ -11,6 +11,7 @@ Every customization axis is a single `data-*` attribute on `<html>`. They compos
 | Axis | Attribute | Values | Default | What it swaps |
 | --- | --- | --- | --- | --- |
 | Theme | `data-theme` | `dark`, `light` | `dark` | `--background`, `--foreground`, `--card`, `--popover`, `--muted`, `--border`, all shadows |
+| Shade | `data-shade` | `black`, `warm`, `cool`, `slate`, `plum`, `forest` | `black` | Dark-theme surface ladder only: `--background`, `--card`, `--popover`, `--muted`, `--input`, `--accent`, `--secondary`, `--border`, `--muted-foreground`. Inert in light mode (`:not([data-theme="light"])` guard); accents, status, and label hues untouched |
 | Accent | `data-accent` | `pink`, `violet`, `blue`, `green`, `amber`, `red`, `teal`, `mono` | `pink` | `--primary`, `--primary-hover`, `--primary-active`, `--ring` |
 | Density | `data-density` | `comfortable`, `compact`, `dense` | `comfortable` | `--row-h`, `--ctrl-h`, `--pad-x`, `--pad-y` (and size variants) |
 | Radius | `data-radius` | `sharp`, `soft`, `round` | `soft` | `--radius`, `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl` |
