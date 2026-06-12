@@ -47,11 +47,12 @@ Postgres RPC implementing an op is `<module>_op_<name>`
 6. returns the updated row(s) so optimistic clients can reconcile.
 
 **Implementation.** `SECURITY DEFINER` plpgsql functions, `SET search_path =
-public`, `REVOKE ... FROM PUBLIC`, `GRANT EXECUTE TO authenticated` (the
-service-role / API-key grant arrives with Session 9's key model). SECURITY
-DEFINER is what lets ops write the append-only activity table that clients
-cannot touch directly; the explicit permission check in step 1 replaces RLS
-*inside* the op.
+public`, `REVOKE ... FROM PUBLIC`, `GRANT EXECUTE TO authenticated`; the
+agent-meaningful ops are additionally granted to `service_role` for the MCP
+connector (Session 9 — `tasks.catch_up` deliberately excluded, it's an
+app-lifecycle pass, not an agent intent). SECURITY DEFINER is what lets ops
+write the append-only activity table that clients cannot touch directly; the
+explicit permission check in step 1 replaces RLS *inside* the op.
 
 **What must be an op vs. a plain field edit.** Anything with a cross-field or
 cross-row invariant is an op: queue membership + ordering, counters, computed
@@ -83,11 +84,13 @@ Every activity row records *who*:
 | `actor_label` | display snapshot at write time (`profiles.display_name` for users) |
 
 The actor is **derived server-side from the auth context** — never accepted
-from the client (a client-supplied actor would be spoofable). v1 ops are
-granted to `authenticated` only, so `actor_type` is always `'user'`; the
-`agent` / `api_key` values are reserved and CHECK-allowed so Session 9's
-scoped-key model needs no schema change (it will derive actor identity from
-key claims, same rule: server-derived, never client-passed).
+from the client (a client-supplied actor would be spoofable). Signed-in calls
+resolve to `'user'` via `auth.uid()`. MCP-connector calls (Session 9) resolve
+to `'api_key'`: the connector verifies the key's secret hash, then calls as
+`service_role` with an `x-moduo-key-id` header that `module_api_key_id()`
+trusts **only under a service_role JWT** — same rule, server-derived, never
+client-passed (see [moduo-mcp-connector.md](./moduo-mcp-connector.md)). A call
+with neither context fails loudly. `'agent'` (in-app agents) stays reserved.
 
 ---
 
@@ -143,8 +146,11 @@ Per module, one SQL helper:
 - otherwise `'none'`.
 
 Ops require `edit`+. This moves permission enforcement **server-side** (RLS
-alone only checks membership, not level). Agent/API-key scopes (Session 9) map
-onto the same ladder and are **read-only (`view`) by default**.
+alone only checks membership, not level). API-key scopes (Session 9,
+`workspace_api_keys.scopes`) map onto the same ladder — **read-only (`view`)
+by default, `admin` never key-grantable** — resolved by the same
+`<module>_module_permission()` helper, so the ops' guards apply to keys
+unchanged.
 
 ---
 
@@ -159,8 +165,8 @@ static, typed manifest — onboarding module N+1 is additive:
 - one manifest per module, next to the feature
   ([`src/features/tasks/ops-manifest.ts`](../src/features/tasks/ops-manifest.ts));
 - the registry ([`src/lib/module-registry.ts`](../src/lib/module-registry.ts))
-  is the single list the connector iterates. Session 9 adds the "onboard a
-  module to MCP" recipe on top of it.
+  is the single list the connector iterates. The "onboard a module to MCP"
+  recipe lives in [moduo-mcp-connector.md](./moduo-mcp-connector.md) (Session 9).
 
 ---
 

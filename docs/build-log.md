@@ -6,6 +6,105 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Improvement-plan Session 9 — MCP connector v1 (2026-06-12)
+
+Branch `t/maciej/session9-mcp-connector` off `t/maciej/session8-intent-ops`
+(Fable; stacked while PR #18 is open — PR #19, retarget to `maciej` after #18
+merges). One Moduo MCP server with per-module registration — Tasks is module
+#1. New anchor doc **[moduo-mcp-connector.md](./moduo-mcp-connector.md)**
+(shape, key model, actor path, tool table, and the "onboard a module to MCP"
+recipe).
+
+**Status:** the auto-mode classifier gated the hosted apply mid-session
+(same as Sessions 4/5/8); **Maciej approved (apply + deploy)**. Migrations
+`20260612160000` + `…161000` applied, `moduo-mcp` deployed with
+**`verify_jwt = false`** (MCP clients send a Moduo key, not a Supabase JWT —
+keep this flag on redeploys), full live-verify below.
+
+**Connector — [supabase/functions/moduo-mcp/](../supabase/functions/moduo-mcp/).**
+Stateless MCP Streamable HTTP (hand-rolled JSON-RPC: initialize / ping /
+tools/list / tools/call; notifications → 202; no SSE, no session state, no
+SDK). `Authorization: Bearer moduo_sk_…` sha256-verified against
+`workspace_api_keys`; the key pins the workspace — tools never take a
+workspace arg. `registry.ts` is the connector-side module registry
+(`connectorModules`); `modules/tasks.ts` contributes 8 read tools
+(buckets / list / today / drift / tags / search / get / activity, all with
+computed drifted+blocked, served only at `view`+) and 7 write tools = the
+Session 8 intent ops minus `catch_up` (app-lifecycle pass, not an agent
+intent; deliberately not granted to service_role). `recurrence.ts` is a
+marked port of the two engine functions the connector needs (agents never
+compute rrule pointers; ops still enforce structure, so port drift degrades
+to a rejected call). Known accepted duplication: Deno can't import the app's
+extensionless modules — manifest summaries are copied; unify when module #2
+lands (recipe step 4 note).
+
+**Schema — [20260612160000_workspace_api_keys_mcp.sql](../supabase/migrations/20260612160000_workspace_api_keys_mcp.sql).**
+- `workspace_api_keys`: name, `key_prefix` (display stub), unique sha256
+  `key_hash` (secret never stored; column-level grant keeps the hash
+  unreadable by clients), `scopes` jsonb on the none/view/edit ladder (view
+  default, admin never key-grantable), revoked_at, throttled last_used_at.
+  RLS: owner/admin SELECT (`workspace_api_keys_can_manage`); no write
+  policies — create/revoke via SECURITY DEFINER RPCs
+  (`workspace_api_keys_create` returns the secret exactly once; 20-live-keys
+  cap; anon explicitly revoked per the Session 8 lesson).
+- **Actor path (the Session 8 reserved slot):** `module_api_key_id()` reads
+  the `x-moduo-key-id` request header **only under a service_role JWT** —
+  clients can send the header but never the role; the secret never reaches
+  Postgres. `module_activity_log()` gains the `api_key` branch (key id +
+  name snapshot; user keeps precedence; neither context → loud failure).
+  `tasks_module_permission()` resolves key calls to the key's tasks scope, so
+  `tasks_op__guard`'s edit+ check applies to keys with zero op changes.
+- Grants: the 7 agent-facing ops → service_role.
+
+**Runtime & UI.** `runtime.workspace` gains `listApiKeys` / `createApiKey` /
+`revokeApiKey` / `getMcpEndpoint` (web; desktop rides the same object
+verbatim). [workspace-settings-modal.tsx](../src/components/workspace-settings-modal.tsx)
+gains an **API keys · MCP** section (owner/admin modal): endpoint row with
+copy, name input + View/Edit scope picker + Create, reveal-once secret banner
+(copy + dismiss), key rows (name, prefix, last-used, scope badge, revoke).
+New `WorkspaceApiKey` type in runtime.types.
+
+**Docs.** Connector doc (above) incl. the onboarding recipe; contract doc's
+three "arrives in Session 9" passages resolved to the real mechanism; spec
+§11b actor sentence updated; vocabulary gained "MCP connector / API key";
+plan Session 9 header note.
+
+**Verified (local):** typecheck ✓, vitest **91/91** ✓, lint:tw ✓, lint:css 0
+errors (same 5 pre-existing global.css warnings). (`bun test` ≠ `bun run
+test` — bun's own runner reports phantom failures; vitest is the gate.)
+No deno locally — the edge function validated at deploy.
+
+**Live-verified against hosted** (test account; probe keys inserted by hash,
+JSON-RPC via curl; UI via `:8096` worktree rsbuild + Chrome MCP):
+(1) `initialize` → echoes protocol 2025-06-18, instructions name the
+workspace, key and scopes. (2) **Scope gating:** tools/list = 8 tools on a
+view key, 15 on edit; view-key `tasks_commit` → quiet isError refusal.
+(3) Edit-key `tasks_commit` → row committed, `module_activity` row
+`actor_type='api_key'`, actor_id = key id, label "Probe edit key".
+(4) **Engine port:** `tasks_set_status done` on daily-recurring Water plants
+(pending Jun 13) → pointer Jun 14 (advance-from-pending); reopen recomputes
+same; `tasks_skip_occurrence` → Jun 13→Jun 14, pointer Jun 15, forward-only.
+(5) **Auth:** no/bogus bearer 401; revoked key 401 (probed twice, SQL- and
+UI-revoked); GET 405; notification 202. (6) **Spoof:** authenticated user
+calling an op with a forged `x-moduo-key-id` header → attributed **user**
+(uid precedence); anon op call → permission denied. (7) **Key RPCs:** create
+as owner → secret returned once (view default); `select *` → column-grant
+denial (key_hash unreadable); explicit columns OK; `scopes:{tasks:'admin'}`
+rejected; revoke 204. (8) **Settings UI** (workspace modal): section renders
+endpoint+copy, create "UI round-trip key" with Edit scope → reveal-once
+banner; that key called `tasks_today` live; UI revoke × → row gone → key 401.
+(9) **In-app trail** renders "Probe edit key committed this for Jun 12"
+between the user rows — agents are named, never silent. No console errors.
+(10) Advisors: one new WARN (`module_api_key_id` mutable search_path) →
+fixed in `20260612161000`; the SECURITY-DEFINER-executable WARNs on the new
+RPCs are the same intentional pattern as all `tasks_op_*`; anon got nothing
+(Session 8's lesson held). **All probe keys revoked** (secrets appeared in
+the session transcript — none left live). Demo-data drift: Water plants now
+todo Jun 14 9:00 (pointer Jun 15); probe task restored (uncommitted, trail
+gained 3 rows incl. the api_key one).
+
+---
+
 ## Improvement-plan Session 8 — Intent ops + activity (2026-06-12)
 
 Branch `t/maciej/session8-intent-ops` off `maciej` (Fable). The per-module

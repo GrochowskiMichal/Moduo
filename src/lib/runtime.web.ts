@@ -384,6 +384,54 @@ export const webRuntime: ModuoRuntime = {
       if (!user) return;
       await supabaseClient.from("workspace_notifications").update({ read_at: new Date().toISOString() }).eq("user_id", user.id).is("read_at", null);
     },
+
+    // MCP connector keys (docs/moduo-mcp-connector.md). Explicit column list —
+    // key_hash is never client-readable (column-level grant excludes it).
+    async listApiKeys(workspaceId) {
+      const { data, error } = await supabaseClient
+        .from("workspace_api_keys")
+        .select("id, workspace_id, name, key_prefix, scopes, created_at, last_used_at")
+        .eq("workspace_id", workspaceId)
+        .is("revoked_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        workspaceId: row.workspace_id,
+        name: row.name,
+        keyPrefix: row.key_prefix,
+        scopes: (row.scopes ?? {}) as Record<string, string>,
+        createdAt: row.created_at,
+        lastUsedAt: row.last_used_at ?? null,
+      }));
+    },
+    async createApiKey({ workspaceId, name, scopes }) {
+      const { data, error } = await supabaseClient.rpc("workspace_api_keys_create", {
+        p_workspace_id: workspaceId,
+        p_name: name,
+        p_scopes: scopes,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("Key creation returned nothing.");
+      return {
+        id: row.id,
+        workspaceId,
+        name: row.name,
+        keyPrefix: row.key_prefix,
+        scopes: (row.scopes ?? {}) as Record<string, string>,
+        createdAt: row.created_at,
+        lastUsedAt: null,
+        secret: row.secret,
+      };
+    },
+    async revokeApiKey(keyId) {
+      const { error } = await supabaseClient.rpc("workspace_api_keys_revoke", { p_key_id: keyId });
+      if (error) throw new Error(error.message);
+    },
+    getMcpEndpoint() {
+      return `${SUPABASE_URL}/functions/v1/moduo-mcp`;
+    },
   },
 
   notes: {

@@ -17,6 +17,7 @@ export type {
   RuntimeCapabilities,
   RuntimeResult,
   RuntimeSession,
+  WorkspaceApiKey,
 } from "./runtime.types";
 
 function isTauriRuntime(): boolean {
