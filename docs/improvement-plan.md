@@ -218,30 +218,32 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       forward to one quiet drift. Skip lives in the detail panel + row/card
       context menus; the panel gained an editable Repeat preset field.)*
 
-### ☐ 8 — Intent ops + activity *(platform · per-module contract, Tasks first)*
+### ☑ 8 — Intent ops + activity *(platform · per-module contract, Tasks first)*
 
-> **Code complete 2026-06-12** (Fable, branch `t/maciej/session8-intent-ops`).
-> New [docs/moduo-module-contract.md](./moduo-module-contract.md) (the four
-> pillars + Tasks reference table); spec gained **§11b**, vocabulary gained
-> "Intent op" + "Activity". Migration
-> `20260612150000_module_activity_intent_ops.sql` (module_activity table,
-> `tasks_module_permission()` ladder, 8 `tasks_op_*` RPCs) is **written but NOT
-> yet applied to hosted** — the auto-mode classifier gated the apply (same as
-> Sessions 4/5); awaiting Maciej's go-ahead, then live-verify. All local gates
-> green (typecheck, vitest 91/91, lints, cargo, build:web).
+> **Done 2026-06-12** (Fable, branch `t/maciej/session8-intent-ops`). New
+> anchor doc [docs/moduo-module-contract.md](./moduo-module-contract.md) (the
+> four pillars + Tasks reference table); spec gained **§11b**, vocabulary
+> gained "Intent op" + "Activity". Migrations
+> `20260612150000_module_activity_intent_ops.sql` +
+> `…151000_intent_ops_revoke_anon.sql` **applied to hosted** (Maciej's
+> go-ahead after the classifier gate, same as Sessions 4/5) and live-verified
+> end-to-end incl. security probes (forged activity INSERT rejected; anon RPC
+> rejected). Incidental token fix: `--z-dropdown` 40 → 70 (dropdowns inside
+> dialogs were unclickable app-wide). See build log.
 
 - [x] Define the module contract (ops naming, actor field, activity table,
       registration shape) — see Cross-module AI-readiness above.
       *(`docs/moduo-module-contract.md`; registration = typed manifests:
       `src/lib/module-manifest.ts` + `module-registry.ts` +
       `src/features/tasks/ops-manifest.ts`.)*
-- [ ] Implement for Tasks: commit/reschedule/triage/recurrence invariants move
-      from the React hook into backend RPCs. *(Code + migration done — commit/
+- [x] Implement for Tasks: commit/reschedule/triage/recurrence invariants move
+      from the React hook into backend RPCs. *(8 `tasks_op_*` RPCs: commit/
       uncommit/skip-today/set-status/reschedule/unschedule/skip-occurrence/
-      batched catch-up; server-side edit-permission enforcement included.
-      Pending: hosted apply + live verify.)*
-- [ ] Activity trail rendered in the task detail panel. *(Built — quiet
-      newest-first trail + actor attribution. Pending live verify.)*
+      batched catch-up — each checks edit permission server-side (new
+      `tasks_module_permission()` ladder; RLS alone only checked membership),
+      enforces invariants, and logs attributed activity in one transaction.)*
+- [x] Activity trail rendered in the task detail panel. *(Quiet newest-first
+      trail, actor attribution, op→sentence vocabulary in `activity.ts`.)*
 
 ### ☐ 9 — MCP connector v1 *(platform · cloud)*
 - [ ] One Moduo MCP server with per-module registration; Tasks is module #1.

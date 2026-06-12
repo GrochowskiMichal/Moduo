@@ -6,7 +6,7 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
-## Improvement-plan Session 8 — Intent ops + activity (2026-06-12, code complete; hosted apply pending)
+## Improvement-plan Session 8 — Intent ops + activity (2026-06-12)
 
 Branch `t/maciej/session8-intent-ops` off `maciej` (Fable). The per-module
 AI-readiness contract, with Tasks as the reference implementation. New anchor
@@ -15,12 +15,14 @@ four pillars — intent ops, actor attribution, activity, permission mapping —
 plus the registration shape for Session 9's MCP connector. Spec gained
 **§11b**; vocabulary gained "Intent op" + "Activity (trail)".
 
-**⚠ Status:** all code + docs landed and locally green, but the hosted
-migration apply was **gated by the auto-mode classifier** (same as Sessions
-4/5 — it wants Maciej's explicit go-ahead for hosted DDL). **Not yet applied;
-not yet live-verified.** Next step: Maciej approves → apply
-`20260612150000_module_activity_intent_ops.sql` → live-verify → check the
-remaining plan boxes.
+**Status:** the auto-mode classifier gated the hosted apply mid-session (same
+as Sessions 4/5); **Maciej approved**, both migrations applied, full
+live-verify done (below). Note for future sessions: Supabase's
+`ALTER DEFAULT PRIVILEGES` grants EXECUTE on **new functions to `anon`** —
+`REVOKE … FROM PUBLIC` alone is not enough; the security advisor caught it and
+the follow-up migration
+[20260612151000_intent_ops_revoke_anon.sql](../supabase/migrations/20260612151000_intent_ops_revoke_anon.sql)
+revokes anon explicitly (probe-confirmed denied).
 
 **Schema —
 [20260612150000_module_activity_intent_ops.sql](../supabase/migrations/20260612150000_module_activity_intent_ops.sql).**
@@ -76,20 +78,46 @@ the trail never lies by omission). Detail panel gains an **Activity** section
 refetches on selection and on `activityStamp` bumps; creation is anchored by
 the existing Created metadata, no synthetic row). Mirrors, never walls.
 
+**Incidental find + token fix:** the drift-triage per-task menus were
+**unclickable** — `--z-dropdown: 40` sat below `--z-overlay: 50` /
+`--z-dialog: 60`, so any dropdown spawned inside any dialog rendered under the
+overlay (pre-existing, app-wide). Fixed at the token layer per CLAUDE.md:
+`--z-dropdown: 70` (layers with popovers) in tokens.css §13.
+
 **Verified (local):** typecheck ✓, vitest **91/91** ✓ (10 new in
 `activity.test.ts`: actor naming, op sentences, catch-up item shaping),
 lint:tw ✓, lint:css 0 errors (same 5 pre-existing global.css warnings),
 `cargo check` + `cargo test --lib domain` 5/5 ✓, `build:web` ✓.
-**Live-verify deferred** until the hosted migration lands (blocked on
-go-ahead, see status above). Plan: commit → trail line; Execute Skip →
-counter + trail; triage ops; recurring done → pointer + trail; reload →
-single batched catch-up RPC; view-only member rejected by an op (new
-server-side enforcement); `module_activity` INSERT as authenticated rejected.
+**Live-verified on web** against hosted (test account, `:8095` worktree
+rsbuild via Chrome MCP): (1) new "Session 8 ops probe" task → panel shows
+**Activity / "Nothing yet."**; **Commit to today** → trail "You committed
+this for Jun 12". (2) Execute → **Skip** → "Rescheduled 1×" mirror + "You
+skipped this for the day" (atomic server-side counter). (3) Done → undone
+checkbox → "You completed this" / "You reopened this". (4) Drift triage
+(probe REST-backdated to drift): per-task **Reschedule tomorrow** → DB
+scheduled_at +1 day clock-preserved, `reschedule_count` untouched; **Ignore**
+on Water plants → scheduled_at null, rule intact. (5) Reload → **catch-up
+adopt** via one batched `tasks_op_catch_up`: Water plants self-healed to
+today 9:00, pointer tomorrow, trail "You scheduled its occurrence, 9:00 AM
+(recurrence)". (6) Panel **skip-occurrence** → toast "Skipped — next Jun 13,
+9:00 AM", DB forward move + pointer Jun 14. (7) Second reload → **zero
+writes** (8 activity rows, updated_at unchanged). (8) DB dump of
+`module_activity`: 8 rows, all ops, `actor_type='user'`, `actor_label`
+"Claude Test S2" snapshotted, payloads correct. (9) Security probes: anon
+INSERT → 401 RLS; **authenticated forge INSERT → 403 RLS** (append-only
+holds); anon RPC → 401 permission denied. No new console errors (only the
+pre-existing web email `syncNow` desktop-only noise). Left as demo data: the
+probe task (todo, Jun 13 8:00, count 1, full trail) and Water plants (todo,
+Jun 13 9:00, pointer Jun 14).
 
 **Deferred:** ops for capture/plain edits/tags/relations (contract documents
 the v1 boundary); Session 9 wires service-role/API-key grants + the MCP
 connector onto the same registry; a workspace-level activity feed (the
-`module_activity_workspace_idx` index anticipates it).
+`module_activity_workspace_idx` index anticipates it); view-only-member op
+rejection not live-probed (no second member on the test workspace — covered
+by the permission helper's SQL + the anon probes); row/card context menus
+didn't open via the Chrome extension's synthetic right-click (extension
+limitation, not a regression — panel affordances verified).
 
 ---
 
