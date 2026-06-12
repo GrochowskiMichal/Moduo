@@ -20,6 +20,8 @@ const DURATION_FALLBACK_MIN = 25;
 type Props = {
   committedTasks: Task[];
   bucketNameById: (id: string) => string;
+  /** Parent title for committed subtasks — quiet "part of …" context. */
+  parentTitleFor: (task: Task) => string | null;
   onMarkDone: (id: string) => void;
   onSkip: (id: string) => void;
   onDoLast: (id: string) => void;
@@ -29,6 +31,7 @@ type Props = {
 export function ExecuteView({
   committedTasks,
   bucketNameById,
+  parentTitleFor,
   onMarkDone,
   onSkip,
   onDoLast,
@@ -59,13 +62,14 @@ export function ExecuteView({
             <NowCard
               task={current}
               bucketName={bucketNameById(current.bucketId)}
+              parentTitle={parentTitleFor(current)}
               onMarkDone={() => onMarkDone(current.id)}
               onSkip={() => onSkip(current.id)}
               onDoLast={() => onDoLast(current.id)}
               canDoLast={upcoming.length > 0}
             />
             <RelationsPlaceholder />
-            <Queue tasks={upcoming} bucketNameById={bucketNameById} />
+            <Queue tasks={upcoming} bucketNameById={bucketNameById} parentTitleFor={parentTitleFor} />
           </div>
         )}
       </div>
@@ -105,6 +109,7 @@ function EndSummary({
 function NowCard({
   task,
   bucketName,
+  parentTitle,
   onMarkDone,
   onSkip,
   onDoLast,
@@ -112,6 +117,7 @@ function NowCard({
 }: {
   task: Task;
   bucketName: string;
+  parentTitle: string | null;
   onMarkDone: () => void;
   onSkip: () => void;
   onDoLast: () => void;
@@ -123,6 +129,8 @@ function NowCard({
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
   const meta = [
+    // committed subtask: quiet context for which bigger thing this serves
+    parentTitle ? `Part of ${parentTitle}` : null,
     bucketName,
     task.priority ? PRIORITY_LABELS[task.priority] : null,
     task.energyLevel ? ENERGY_LABELS[task.energyLevel] : null,
@@ -230,7 +238,15 @@ function RelationsPlaceholder() {
 
 // ── queue ─────────────────────────────────────────────────────────────────────
 
-function Queue({ tasks, bucketNameById }: { tasks: Task[]; bucketNameById: (id: string) => string }) {
+function Queue({
+  tasks,
+  bucketNameById,
+  parentTitleFor,
+}: {
+  tasks: Task[];
+  bucketNameById: (id: string) => string;
+  parentTitleFor: (task: Task) => string | null;
+}) {
   if (tasks.length === 0) {
     return <p className="text-center font-sans text-sm text-muted-foreground">Last one — nothing else queued.</p>;
   }
@@ -250,6 +266,11 @@ function Queue({ tasks, bucketNameById }: { tasks: Task[]; bucketNameById: (id: 
         >
           <span className="size-1.5 rounded-full bg-muted-foreground/50" aria-hidden />
           <span className="min-w-0 flex-1 truncate font-display text-foreground">{task.title || "Untitled"}</span>
+          {parentTitleFor(task) ? (
+            <span className="min-w-0 shrink truncate font-sans text-xs text-muted-foreground/70">
+              ↳ {parentTitleFor(task)}
+            </span>
+          ) : null}
           <span className="shrink-0 font-sans text-xs text-muted-foreground">{bucketNameById(task.bucketId)}</span>
         </div>
       ))}

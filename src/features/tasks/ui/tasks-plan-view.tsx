@@ -210,6 +210,16 @@ export function TasksPlanView({ api, workspaceId }: Props) {
 
   const exitExecute = useCallback(() => setMode("plan"), []);
 
+  // Quiet "↳ parent" context for committed subtasks in the Execute queue.
+  const parentTitleFor = useCallback(
+    (task: { parentId: string | null }) => {
+      if (!task.parentId) return null;
+      const parent = tasks.find((t) => t.id === task.parentId);
+      return parent ? parent.title || "Untitled" : null;
+    },
+    [tasks],
+  );
+
   const left = (
     <BucketRail
       mode={mode}
@@ -244,12 +254,15 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   // too): when the selected task leaves the scope (archived, moved, deleted,
   // scope/workspace switch), fall back to the first task in scope. The List view
   // refines this against its collapse-aware visible rows; Board has no own logic
-  // and relies on this entirely.
+  // and relies on this entirely. A subtask whose *parent* is in scope also
+  // counts as in-scope — it can be selected from under the parent (expanded
+  // list rows, the detail panel's subtask list) even from another bucket.
   useEffect(() => {
     if (api.loading) return;
     if (selectedTaskId && scopeTasks.some((t) => t.id === selectedTaskId)) return;
+    if (selectedTask?.parentId && scopeTasks.some((t) => t.id === selectedTask.parentId)) return;
     setSelectedTaskId(scopeTasks[0]?.id ?? null);
-  }, [api.loading, selectedTaskId, scopeTasks]);
+  }, [api.loading, selectedTaskId, selectedTask, scopeTasks]);
 
   // Tag-filter header control + active-chip row, passed to both views as nodes so
   // List/Board stay unaware of the filter machinery.
@@ -299,6 +312,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
       <ExecuteView
         committedTasks={api.committedTasks}
         bucketNameById={bucketNameById}
+        parentTitleFor={parentTitleFor}
         onMarkDone={api.markDone}
         onSkip={api.rescheduleFromToday}
         onDoLast={api.doLast}
@@ -350,6 +364,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
       inbox={inbox}
       canEdit={canEdit}
       onRequestCapture={openCapture}
+      onSelectTask={setSelectedTaskId}
       api={api}
     />
   );

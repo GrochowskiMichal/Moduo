@@ -6,6 +6,104 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Improvement-plan Session 5 — Subtasks, one level (2026-06-12)
+
+Branch `t/maciej/session5-subtasks` off `maciej` (Fable). Subtasks are **full
+tasks with a `parentId`**, exactly one level deep — not checklist items. Spec
+gained **§5b** (written first, then code); vocabulary gained a "Subtask" entry.
+
+**Schema —
+[20260612130000_tasks_add_parent.sql](../supabase/migrations/20260612130000_tasks_add_parent.sql).**
+`parent_id uuid REFERENCES tasks ON DELETE SET NULL` + partial index + a
+`CHECK (parent_id <> id)` + a BEFORE INSERT/UPDATE trigger enforcing one level
+both directions (parent must be top-level & same-workspace; a task with live
+subtasks can't become one). The trigger deliberately does **not** require the
+parent to be un-deleted — children of a soft-deleted parent must keep accepting
+writes (clients treat an unresolvable `parentId` as unset). Fuller server-side
+invariants are Session 8's intent-op RPCs; this is the cheap corruption guard.
+**Applied to hosted** (2026-06-12, Maciej's explicit go-ahead — the auto-mode
+classifier had gated the first attempt, same as Session 4; `list_migrations`
+now shows `tasks_add_parent` and the column is confirmed live).
+
+**Model & runtime.** `parentId` on the TS `Task`, `makeTask`, the web
+row⇄model mappers, and the Rust struct (`#[serde(default)]`, parity only —
+desktop tasks ride the web runtime since Session 2). **Deleting a parent
+promotes its children** (optimistic in the hook; mirrored in `runtime.web`
+`deleteTask` and the Rust command) — work is never silently lost.
+
+**Hook ([use-tasks-module.ts](../src/features/tasks/hooks/use-tasks-module.ts)).**
+Derived `subtasksByParent` (live, non-archived children; unresolvable parents
+ignored) + `subtaskProgressByTask` (n/m; archived counts toward neither side).
+New `addSubtask(parentId, title)` (creates in the parent's bucket via the
+existing `createTask` path) and `setTaskParent(id, parentId|null)` (attach /
+detach-"promote"), both enforcing one-level + temp-id guards with quiet toasts.
+No new write paths — everything lands in `upsertTask`.
+
+**The load-bearing rendering rule:** a subtask is hidden from the top level
+*only when its parent is in the same rendered set* (`nestedSubtaskIds()` in
+[helpers.ts](../src/features/tasks/helpers.ts)); otherwise it renders as a
+normal top-level row. Parent in another bucket / filtered out / deleted ⇒ the
+subtask is still reachable. **Today is always flat** — the commit queue is
+ordered, and subtasks are individually committable (the whole point: start a
+scary task via its smallest step).
+
+**Surfaces.**
+- **List** ([task-list-view.tsx](../src/features/tasks/ui/task-list-view.tsx)):
+  parents get a chevron expand affordance (collapsed by default), children
+  render indented; the chevron gutter only appears when the scope actually
+  nests something (quiet until used). Keyboard: `→` expand, `←` collapse /
+  jump to parent; j/k order = visual order (expanded children included). The
+  selection backstop expands a collapsed parent into view rather than stealing
+  a panel-driven subtask selection.
+- **Row** ([task-row.tsx](../src/features/tasks/ui/task-row.tsx)): quiet
+  `n/m` after the parent title; flat-rendered subtasks get a `↳ parent`
+  caption; context menu gains "Detach from parent".
+- **Board** ([task-board-view.tsx](../src/features/tasks/ui/task-board-view.tsx)):
+  columns hide subtasks whose parent is on the board (the parent card carries
+  the n/m; the detail panel is the affordance); Today board stays flat with
+  parent captions on cards.
+- **Detail panel** ([task-detail-panel.tsx](../src/features/tasks/ui/task-detail-panel.tsx)):
+  parents get a **Subtasks** field — n/m in the label, ordered child rows
+  (complete-toggle, click-to-select, hover Sunrise = commit-to-today) and a
+  quiet "+ Add subtask" inline input (Enter = rapid entry). Subtasks get a
+  "Sub-task of <parent>" breadcrumb (click → select parent) + **Detach**. New
+  `onSelectTask` prop threaded from the plan view.
+- **Execute** ([execute-view.tsx](../src/features/tasks/ui/execute-view.tsx)):
+  Now card shows "Part of <parent>" in its meta line; queue rows show `↳ parent`.
+- Plan-view selection backstop now also accepts a selected subtask whose
+  parent is in scope (cross-bucket children stay selectable).
+
+**No automagic:** completing all subtasks never auto-completes the parent —
+the mirror surfaces it, the user decides (principles 2, 4, 5).
+
+**Verified (local):** typecheck ✓, vitest **45/45** ✓ (8 new in
+`subtasks.test.ts`), lint:tw ✓, lint:css 0 errors (same 5 pre-existing
+global.css warnings), `cargo check` ✓ + `cargo test domain` 5/5 ✓, `build:web` ✓.
+**Live-verified on web** against hosted (disposable account, `:8093` local
+rsbuild via Chrome MCP — the worktree recipe): (1) detail-panel **Add subtask**
+created "Draft the outline" + "Write the first section" under the Inbox task
+(rapid entry, Enter-keeps-input); the list showed the parent with a quiet
+**0/2** and the children hidden by default. (2) Chevron expand → both children
+indented under the parent; toggling one done updated the mirror to **1/2**
+(row + panel) and did **not** auto-complete the parent. (3) Selecting a
+subtask showed the "Sub-task of …" breadcrumb + Detach + Commit-to-today;
+committing it made **Today** render it flat with the ↳ parent caption, and
+**Execute**'s Now card read "Part of Verify cloud consolidation end-to-end"
+(0/1 queue). (4) DB confirmed both `parent_id` rows + the `committed_for`
+date; a direct SQL attempt to nest a subtask under a subtask was **rejected by
+the trigger** ("Subtasks are one level…"). (5) Full reload from hosted
+round-tripped (1/2, children collapsed); no console errors. Left as demo data:
+the two subtasks (one done, one committed-for-2026-06-12 — goes stale
+harmlessly tomorrow).
+
+**Deferred:** sibling reorder UI (children keep position order; same deferral
+as board reorder); "make subtask of…" attach-existing picker (create-new +
+detach shipped); capture-time subtask creation (capture stays frictionless by
+design); auto-moving children when a parent changes bucket (the never-invisible
+rule makes divergence safe).
+
+---
+
 ## Improvement-plan Session 4 — Organization layer: rail sections + tags v1 (2026-06-12)
 
 Branch `t/maciej/session4-org-tags` off `maciej`. Two organizing layers land:

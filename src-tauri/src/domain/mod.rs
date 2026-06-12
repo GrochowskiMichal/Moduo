@@ -202,6 +202,11 @@ pub struct Task {
     pub owner_id: String,
     /// Required: the bucket this task belongs to (Inbox as fallback).
     pub bucket_id: String,
+    /// Optional parent task — subtasks are exactly one level deep (a task with
+    /// a parent is never itself a parent). `serde(default)` keeps existing redb
+    /// rows (written before this field) deserializable.
+    #[serde(default)]
+    pub parent_id: Option<String>,
     pub title: String,
     #[serde(default)]
     pub description: String,
@@ -434,6 +439,7 @@ mod tests {
             workspace_id: "w1".into(),
             owner_id: "u1".into(),
             bucket_id: "b1".into(),
+            parent_id: None,
             title: "x".into(),
             description: String::new(),
             due_date: None,

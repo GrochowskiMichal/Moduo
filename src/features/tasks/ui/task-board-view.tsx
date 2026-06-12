@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
-import { endPosition, STATUS_LABELS } from "../helpers";
+import { endPosition, nestedSubtaskIds, STATUS_LABELS } from "../helpers";
 import type { Bucket, Task, TaskStatus } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { PlanView } from "./plan-view-header";
@@ -81,6 +81,19 @@ export function TaskBoardView({
   const groupDim: BoardGroupBy = selection === "all" ? boardGroupBy : "status";
   const showBucketTag = groupDim === "status" && (selection === "all" || selection === "today");
 
+  // Subtasks whose parent is on this board stay off it — the parent card
+  // carries the quiet n/m mirror and the detail panel lists them. Today stays
+  // flat (committed subtasks are first-class queue items), and a subtask whose
+  // parent isn't on the board renders as a normal card (never invisible).
+  const nestedIds = useMemo(
+    () => nestedSubtaskIds(tasks, selection !== "today"),
+    [tasks, selection],
+  );
+  const boardTasks = useMemo(
+    () => (nestedIds.size === 0 ? tasks : tasks.filter((t) => !nestedIds.has(t.id))),
+    [tasks, nestedIds],
+  );
+
   const columns = useMemo<Column[]>(() => {
     if (groupDim === "bucket") {
       const ordered: Bucket[] = inbox ? [inbox, ...buckets] : buckets;
@@ -89,7 +102,7 @@ export function TaskBoardView({
         label: bucketNameById(b.id),
         dim: "bucket" as const,
         value: b.id,
-        tasks: tasks.filter((t) => t.bucketId === b.id),
+        tasks: boardTasks.filter((t) => t.bucketId === b.id),
       }));
     }
     return BOARD_STATUS_ORDER.map((s) => ({
@@ -97,9 +110,9 @@ export function TaskBoardView({
       label: STATUS_LABELS[s],
       dim: "status" as const,
       value: s,
-      tasks: tasks.filter((t) => t.status === s),
+      tasks: boardTasks.filter((t) => t.status === s),
     }));
-  }, [groupDim, tasks, buckets, inbox, bucketNameById]);
+  }, [groupDim, boardTasks, buckets, inbox, bucketNameById]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),

@@ -164,10 +164,18 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       search/toggle/create/recolor/delete; detail-panel Tags field; quiet chips
       on rows+cards; header tag filter, click-chip-to-filter, union semantics.)*
 
-### ☐ 5 — Subtasks, one level *(tasks)*
-- [ ] `parentId` on Task, recursion forbidden; ordered under the parent in the
+### ☑ 5 — Subtasks, one level *(tasks)*
+
+> **Done 2026-06-12** (Fable, branch `t/maciej/session5-subtasks`). Migration
+> `20260612130000_tasks_add_parent.sql` (parent_id + one-level trigger)
+> **applied to hosted** (Maciej's go-ahead) and **live-verified on web**
+> end-to-end (add → n/m mirror → expand → commit subtask → Today/Execute flat
+> with parent captions; trigger blocks nesting; DB-confirmed). Spec §5b added.
+> See build log. Next: `/code-review` before merge.
+
+- [x] `parentId` on Task, recursion forbidden; ordered under the parent in the
       detail panel; hidden from top-level lists by default (expand affordance).
-- [ ] Individually committable to Today (start a scary task via its smallest
+- [x] Individually committable to Today (start a scary task via its smallest
       step); parent shows quiet n/m progress.
 
 ### ☐ 6 — Blocked-by dependencies *(tasks · design check-in first)*
@@ -202,6 +210,20 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 - [ ] `data-shade` axis: curated tinted-dark presets (warm/cool/slate/…),
       Settings picker, same cascade mechanism as `data-accent`.
 - [ ] Audit for token bypasses while in there.
+
+### ☐ 11 — Tasks UI/UX pass *(design · scope TBD with Maciej)*
+
+> Added 2026-06-12: Maciej isn't happy with how Tasks looks overall and wants
+> visual modifications — deferred while features land. No other session covers
+> this (1 was density, 10 is shades/tokens; the polish backlog is small
+> mechanics, not look-and-feel). Start with a design critique / brief session
+> with Maciej (what specifically reads wrong: hierarchy? chrome? spacing?
+> typography?), then restyle the Tasks surfaces against it. Natural pairing:
+> run alongside or right after 10, since both touch the token layer.
+
+- [ ] Collect the critique → brief (`.design/` doc) with Maciej.
+- [ ] Restyle Tasks surfaces (rail, rows, cards, detail panel, Execute)
+      against the brief; fold in the polish backlog items that fit.
 
 ## Model assignment (decided with Maciej, 2026-06-12)
 

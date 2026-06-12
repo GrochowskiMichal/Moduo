@@ -1,5 +1,13 @@
 import { useDraggable } from "@dnd-kit/core";
-import { CalendarDays, Clock, GripVertical, Inbox, Repeat, Sunrise } from "lucide-react";
+import {
+  CalendarDays,
+  Clock,
+  CornerDownRight,
+  GripVertical,
+  Inbox,
+  Repeat,
+  Sunrise,
+} from "lucide-react";
 
 import { Badge } from "../../../components/ui/badge";
 import { TagChipList } from "../../../components/tag-chip";
@@ -197,8 +205,20 @@ export function CardBody({
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
   const tags = api.tagsByTask.get(task.id) ?? [];
+  // Quiet subtask mirrors: n/m progress on a parent; a parent caption on a
+  // subtask card rendered flat (Today, or its parent is off this board).
+  const progress = api.subtaskProgressByTask.get(task.id) ?? null;
+  const parent = task.parentId ? api.tasks.find((t) => t.id === task.parentId) ?? null : null;
   const hasMeta =
-    committed || task.recurrence || scheduled || due || task.priority || task.energyLevel || tags.length > 0;
+    committed ||
+    task.recurrence ||
+    scheduled ||
+    due ||
+    task.priority ||
+    task.energyLevel ||
+    tags.length > 0 ||
+    (progress?.total ?? 0) > 0 ||
+    !!parent;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -218,6 +238,17 @@ export function CardBody({
 
       {hasMeta ? (
         <div className="flex flex-wrap items-center gap-1.5 pl-6 text-xs text-muted-foreground">
+          {progress && progress.total > 0 ? (
+            <span className="tabular-nums" aria-label={`${progress.done} of ${progress.total} subtasks done`}>
+              {progress.done}/{progress.total}
+            </span>
+          ) : null}
+          {parent ? (
+            <span className="flex min-w-0 items-center gap-1">
+              <CornerDownRight className="size-3 shrink-0 opacity-70" aria-hidden />
+              <span className="truncate">{parent.title || "Untitled"}</span>
+            </span>
+          ) : null}
           {committed ? (
             <Tooltip>
               <TooltipTrigger asChild>

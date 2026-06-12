@@ -79,6 +79,31 @@ Exclusive (one task = one bucket). No cooldown. Inbox is reserved/undeletable. T
 
 Example buckets: Junction, Fitness, Diet, Money, Moduo, Plugin Client, EP, Hangout Realm, Godot Game, Inbox.
 
+## 5b. Subtasks (one level)
+
+Subtasks are **full tasks** with a `parent_id` — not checklist items. Exactly one
+level: a task with a parent is never itself a parent (recursion forbidden;
+enforced app-side and by a DB trigger until Session 8's intent ops).
+
+- **Hidden from top-level lists by default.** In List view they nest under the
+  parent behind a chevron expand affordance (collapsed by default — quiet until
+  asked); the parent row carries a quiet **n/m** progress count (mirror, never a
+  wall; archived subtasks count toward neither side). Board columns hide
+  subtasks whose parent is on the board — the parent card carries the n/m and
+  the detail panel lists them.
+- **Individually committable to Today** — start a scary task via its smallest
+  step. Today (list, board, Execute queue) stays a **flat** ordered queue:
+  committed subtasks render as first-class items with a quiet "↳ parent"
+  caption (Execute's Now card says "Part of <parent>").
+- **Never invisible.** A subtask whose parent isn't in the rendered scope
+  (other bucket, filtered out, deleted) renders as a normal top-level row.
+  Deleting a parent **promotes** its subtasks to top-level.
+- **Created in the detail panel** ("Add subtask" — lands in the parent's
+  bucket); capture stays subtask-free (friction behind the dump). Detach
+  ("promote to task") from the detail panel or the row context menu.
+- **No automagic:** completing all subtasks never auto-completes the parent —
+  the n/m mirror surfaces it; the user decides.
+
 ---
 
 ## 6. Capture
@@ -150,7 +175,8 @@ on open and never overrides later in-session navigation.
 
 ## 11. Data Model (suggested — adjust to codebase)
 
-**Task:** `id`, `workspace_id`, `bucket_id` (req), `title`, `description`, `due_date?`, `scheduled_at?`, `duration_minutes?` (default-on-drop, resizable), `recurrence?` (rrule), `energy_level?` (low/med/high), `priority?` (low/med/high), `status` (todo/in_progress/done/archived), `committed_for?` (date), `commit_order?` (int), `reschedule_count` (int, ambient), `created_at`, `updated_at`, `drifted` (computed: `scheduled_at < now() AND status NOT IN (done, archived)`).
+**Task:** `id`, `workspace_id`, `bucket_id` (req), `parent_id?` (subtasks §5b —
+one level, never recursive; an unresolvable `parent_id` reads as unset), `title`, `description`, `due_date?`, `scheduled_at?`, `duration_minutes?` (default-on-drop, resizable), `recurrence?` (rrule), `energy_level?` (low/med/high), `priority?` (low/med/high), `status` (todo/in_progress/done/archived), `committed_for?` (date), `commit_order?` (int), `reschedule_count` (int, ambient), `created_at`, `updated_at`, `drifted` (computed: `scheduled_at < now() AND status NOT IN (done, archived)`).
 
 **Energy vs. priority (two distinct optional axes).** `energy_level` = *how demanding* a task is (the cost to do it); `priority` = *how important* it is to get done (its weight in time). Both are optional, unset by default, and rendered **ambiently** — never red, never alarming (principles 4 & 5). Both are offered as opt-in group-by dimensions in List view alongside None / Status / Bucket. `priority` uses low/med/high to mirror `energy_level`; an `urgent` tier is a non-breaking future enum extension if dogfooding wants it.
 

@@ -64,6 +64,13 @@ export type Task = {
   ownerId: string;
   /** Required: the bucket this task belongs to (Inbox as fallback). */
   bucketId: string;
+  /**
+   * Optional parent task — subtasks are exactly one level deep (a task with a
+   * parent is never itself a parent; recursion forbidden). A `parentId` that no
+   * longer resolves to a live task is treated as unset (the task renders
+   * top-level), so children of a deleted parent are never lost.
+   */
+  parentId: string | null;
   title: string;
   description: string;
   /** When the task is due. */

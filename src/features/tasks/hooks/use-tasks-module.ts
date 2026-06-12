@@ -12,6 +12,8 @@ import { setBucketTimeBlock } from "../default-view";
 import {
   endPosition,
   makeTask,
+  subtaskProgress,
+  subtasksByParent as computeSubtasksByParent,
   todayStr,
   type NewTaskFields,
 } from "../helpers";
@@ -112,6 +114,24 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     }
     return counts;
   }, [liveTasks]);
+
+  // ── subtasks (one level) ─────────────────────────────────────────────────────
+  /** Live, non-archived children keyed by parent id (position order). Archived
+   * is terminal — out of open lists and the n/m mirror. Unresolvable parents
+   * are ignored — those tasks read as top-level (children are never lost). */
+  const subtasksByParent = useMemo(
+    () => computeSubtasksByParent(liveTasks.filter((t) => t.status !== "archived")),
+    [liveTasks],
+  );
+
+  /** Quiet n/m per parent — the ambient progress mirror on rows/cards/panel. */
+  const subtaskProgressByTask = useMemo(() => {
+    const map = new Map<string, { done: number; total: number }>();
+    for (const [parentId, children] of subtasksByParent) {
+      map.set(parentId, subtaskProgress(children));
+    }
+    return map;
+  }, [subtasksByParent]);
 
   /** Soft, ambient per-bucket drift counts (scheduled-and-passed, still open). */
   const driftCountByBucket = useMemo(() => {
@@ -317,12 +337,75 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     (id: string) => {
       const existing = bundle.tasks.find((t) => t.id === id);
       if (!existing) return;
-      setBundle((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== id) }));
+      // Deleting a parent promotes its subtasks to top-level (mirrored in the
+      // runtime) so they stay visible — work is never silently lost.
+      setBundle((prev) => ({
+        ...prev,
+        tasks: prev.tasks
+          .filter((t) => t.id !== id)
+          .map((t) => (t.parentId === id ? { ...t, parentId: null } : t)),
+      }));
       guard(async () => {
         await runtime!.tasks.deleteTask({ workspaceId: workspaceId!, taskId: id });
       });
     },
     [bundle.tasks, guard, runtime, workspaceId],
+  );
+
+  // ── subtask mutations (one level — spec §11) ─────────────────────────────────
+
+  /** Create a new subtask under `parentId`, in the parent's bucket. */
+  const addSubtask = useCallback(
+    (parentId: string, title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      if (isTempId(parentId)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
+      const parent = liveTasks.find((t) => t.id === parentId);
+      if (!parent) return;
+      // One level: a task that is itself a subtask can't get children.
+      if (parent.parentId && liveTasks.some((t) => t.id === parent.parentId)) {
+        toast.error("Subtasks are one level — this task is already a subtask.");
+        return;
+      }
+      createTask({ bucketId: parent.bucketId, title: trimmed, parentId });
+    },
+    [liveTasks, createTask],
+  );
+
+  /**
+   * Attach a task under a parent, or detach it (`parentId = null`, "promote to
+   * task"). Enforces the one-level rule in both directions; the DB trigger is
+   * the backstop.
+   */
+  const setTaskParent = useCallback(
+    (id: string, parentId: string | null) => {
+      const existing = liveTasks.find((t) => t.id === id);
+      if (!existing) return;
+      const next = parentId ?? null;
+      if ((existing.parentId ?? null) === next) return;
+      if (next) {
+        if (isTempId(id) || isTempId(next)) {
+          toast.error("Still saving that task — try again in a moment.");
+          return;
+        }
+        if (next === id) return;
+        const parent = liveTasks.find((t) => t.id === next);
+        if (!parent) return;
+        if (parent.parentId && liveTasks.some((t) => t.id === parent.parentId)) {
+          toast.error("Subtasks are one level — that task is already a subtask.");
+          return;
+        }
+        if ((subtasksByParent.get(id)?.length ?? 0) > 0) {
+          toast.error("Subtasks are one level — this task has subtasks of its own.");
+          return;
+        }
+      }
+      patchTask(id, { parentId: next });
+    },
+    [liveTasks, subtasksByParent, patchTask],
   );
 
   // ── bucket mutations ─────────────────────────────────────────────────────────
@@ -655,6 +738,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     rescheduleFromToday,
     doLast,
     deleteTask,
+    subtasksByParent,
+    subtaskProgressByTask,
+    addSubtask,
+    setTaskParent,
     createBucket,
     renameBucket,
     deleteBucket,
