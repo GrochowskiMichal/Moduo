@@ -167,9 +167,11 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 ### ☑ 5 — Subtasks, one level *(tasks)*
 
 > **Done 2026-06-12** (Fable, branch `t/maciej/session5-subtasks`). Migration
-> `20260612130000_tasks_add_parent.sql` (parent_id + one-level trigger) —
-> **hosted apply pending Maciej's go-ahead** (auto-mode gated it, same as
-> Session 4); live verify blocked on that. Spec §5b added. See build log.
+> `20260612130000_tasks_add_parent.sql` (parent_id + one-level trigger)
+> **applied to hosted** (Maciej's go-ahead) and **live-verified on web**
+> end-to-end (add → n/m mirror → expand → commit subtask → Today/Execute flat
+> with parent captions; trigger blocks nesting; DB-confirmed). Spec §5b added.
+> See build log. Next: `/code-review` before merge.
 
 - [x] `parentId` on Task, recursion forbidden; ordered under the parent in the
       detail panel; hidden from top-level lists by default (expand affordance).

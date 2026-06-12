@@ -21,10 +21,9 @@ subtasks can't become one). The trigger deliberately does **not** require the
 parent to be un-deleted — children of a soft-deleted parent must keep accepting
 writes (clients treat an unresolvable `parentId` as unset). Fuller server-side
 invariants are Session 8's intent-op RPCs; this is the cheap corruption guard.
-**⚠ Hosted apply pending** — the auto-mode classifier gated `apply_migration`
-(same as Session 4); needs Maciej's explicit go-ahead. Until applied, web task
-*writes* against hosted will fail (`parent_id` unknown to PostgREST), so the
-live-verify gate is parked too.
+**Applied to hosted** (2026-06-12, Maciej's explicit go-ahead — the auto-mode
+classifier had gated the first attempt, same as Session 4; `list_migrations`
+now shows `tasks_add_parent` and the column is confirmed live).
 
 **Model & runtime.** `parentId` on the TS `Task`, `makeTask`, the web
 row⇄model mappers, and the Rust struct (`#[serde(default)]`, parity only —
@@ -80,9 +79,22 @@ the mirror surfaces it, the user decides (principles 2, 4, 5).
 **Verified (local):** typecheck ✓, vitest **45/45** ✓ (8 new in
 `subtasks.test.ts`), lint:tw ✓, lint:css 0 errors (same 5 pre-existing
 global.css warnings), `cargo check` ✓ + `cargo test domain` 5/5 ✓, `build:web` ✓.
-**Live verify on hosted: pending the migration go-ahead** (next session or a
-quick follow-up: apply `20260612130000`, then the Session 2 disposable-account
-+ local-rsbuild + Chrome MCP recipe).
+**Live-verified on web** against hosted (disposable account, `:8093` local
+rsbuild via Chrome MCP — the worktree recipe): (1) detail-panel **Add subtask**
+created "Draft the outline" + "Write the first section" under the Inbox task
+(rapid entry, Enter-keeps-input); the list showed the parent with a quiet
+**0/2** and the children hidden by default. (2) Chevron expand → both children
+indented under the parent; toggling one done updated the mirror to **1/2**
+(row + panel) and did **not** auto-complete the parent. (3) Selecting a
+subtask showed the "Sub-task of …" breadcrumb + Detach + Commit-to-today;
+committing it made **Today** render it flat with the ↳ parent caption, and
+**Execute**'s Now card read "Part of Verify cloud consolidation end-to-end"
+(0/1 queue). (4) DB confirmed both `parent_id` rows + the `committed_for`
+date; a direct SQL attempt to nest a subtask under a subtask was **rejected by
+the trigger** ("Subtasks are one level…"). (5) Full reload from hosted
+round-tripped (1/2, children collapsed); no console errors. Left as demo data:
+the two subtasks (one done, one committed-for-2026-06-12 — goes stale
+harmlessly tomorrow).
 
 **Deferred:** sibling reorder UI (children keep position order; same deferral
 as board reorder); "make subtask of…" attach-existing picker (create-new +
