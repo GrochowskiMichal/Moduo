@@ -109,7 +109,14 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 - [x] Docs synced: spec §9 time-blocks wording, CLAUDE.md stack line,
       `web+desktop_plan.md` retired with a banner, build-log entry.
 
-### ☐ 3 — Task detail panel + ambient mirrors *(tasks)*
+### ☑ 3 — Task detail panel + ambient mirrors *(tasks)*
+
+> **Done 2026-06-12** (Opus, branch `t/maciej/session3-task-detail`). New
+> `task-detail-panel.tsx`; selection lifted to `tasks-plan-view.tsx` as
+> `selectedTaskId` and threaded to List (controlled cursor) + Board
+> (select-on-click). `rescheduleCount` mirror live-verified end-to-end
+> (commit → Execute → Skip → "Rescheduled 1×"). See build-log. Next: Fable
+> `/code-review` before merge.
 
 > **Pre-flight (Fable, 2026-06-12)** — for whichever model runs this:
 > (a) The right-rail placeholder to replace is the "Context" panel in
@@ -126,11 +133,11 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 > `api.patchTask` (optimistic; do not add new write paths). (e) Detail panel is
 > a feature component (`src/features/tasks/ui/`) — no Storybook story required,
 > but any new shadcn primitive goes through the CLI per CLAUDE.md rule 4.
-- [ ] Right rail = task-detail-on-select: editable description, all properties,
+- [x] Right rail = task-detail-on-select: editable description, all properties,
       created/updated, drift info.
-- [ ] **Render `rescheduleCount`** (first actual mirror — incremented today but
+- [x] **Render `rescheduleCount`** (first actual mirror — incremented today but
       shown nowhere).
-- [ ] Distinct selected-row state (vs hover); teaching empty states
+- [x] Distinct selected-row state (vs hover); teaching empty states
       ("Press `c` to capture").
 
 ### ☐ 4 — Organization layer: rail sections + tags v1 *(tasks + shared)*

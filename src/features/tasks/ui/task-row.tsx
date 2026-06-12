@@ -93,13 +93,17 @@ export function TaskRow({
       aria-selected={selected}
       onClick={onSelect}
       className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
+        "group relative flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
         "border border-transparent cursor-default select-none",
         selected ? "bg-accent" : "hover:bg-accent/60",
       )}
       // height rides the density setting; py is only a multiline guard
       style={{ minHeight: "var(--row-h)" }}
     >
+      {/* selected marker — a quiet accent bar, distinct from the lighter hover fill */}
+      {selected ? (
+        <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
+      ) : null}
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(task)} />
 
       <div className="min-w-0 flex-1">

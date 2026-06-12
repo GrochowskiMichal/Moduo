@@ -41,6 +41,8 @@ type Props = {
   bucketNameById: (id: string) => string;
   canEdit: boolean;
   onRequestCapture: () => void;
+  selectedTaskId: string | null;
+  onSelectTask: (id: string | null) => void;
   api: TasksModuleApi;
 };
 
@@ -63,6 +65,8 @@ export function TaskBoardView({
   bucketNameById,
   canEdit,
   onRequestCapture,
+  selectedTaskId,
+  onSelectTask,
   api,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -158,6 +162,8 @@ export function TaskBoardView({
               buckets={buckets}
               inbox={inbox}
               bucketNameById={bucketNameById}
+              selectedTaskId={selectedTaskId}
+              onSelectTask={onSelectTask}
               api={api}
             />
           ))}
@@ -194,6 +200,8 @@ function BoardColumn({
   buckets,
   inbox,
   bucketNameById,
+  selectedTaskId,
+  onSelectTask,
   api,
 }: {
   column: Column;
@@ -202,6 +210,8 @@ function BoardColumn({
   buckets: Bucket[];
   inbox: Bucket | null;
   bucketNameById: (id: string) => string;
+  selectedTaskId: string | null;
+  onSelectTask: (id: string | null) => void;
   api: TasksModuleApi;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id, disabled: !canEdit });
@@ -237,6 +247,8 @@ function BoardColumn({
               inboxId={inbox?.id ?? null}
               showBucket={showBucketTag}
               canEdit={canEdit}
+              selected={task.id === selectedTaskId}
+              onSelect={() => onSelectTask(task.id)}
               api={api}
             />
           ))
