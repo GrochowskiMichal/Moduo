@@ -290,8 +290,10 @@ The **activity trail** renders in the task detail panel: quiet, factual,
 newest-first ("You committed this for today · 2:14 PM"); creation needs no
 activity row (the panel's Created metadata anchors it) — an ambient mirror
 (principles 1, 4, 5), never a wall. Actors
-are recorded server-side (`user` today; `agent` / `api_key` when the MCP
-connector lands in Session 9).
+are recorded server-side: `user` for signed-in calls, `api_key` for MCP
+connector calls (`docs/moduo-mcp-connector.md` — workspace-scoped keys on the
+none/view/edit ladder, read-only by default; writes go through the same
+intent ops). `agent` stays reserved for in-app agents.
 
 ---
 

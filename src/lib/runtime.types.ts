@@ -61,6 +61,23 @@ export type IntegrationStatusItem = {
   connected: boolean;
 };
 
+/**
+ * A workspace-scoped API key for the Moduo MCP connector
+ * (docs/moduo-mcp-connector.md). The secret is returned exactly once from
+ * `createApiKey` and never readable again — only the prefix is stored in
+ * clear. `scopes` maps module → "none" | "view" | "edit" (view by default;
+ * admin is never key-grantable).
+ */
+export type WorkspaceApiKey = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  keyPrefix: string;
+  scopes: Record<string, string>;
+  createdAt: string;
+  lastUsedAt: string | null;
+};
+
 export type ModuoRuntime = {
   capabilities: RuntimeCapabilities;
 
@@ -141,6 +158,17 @@ export type ModuoRuntime = {
     listNotifications(): Promise<any[]>;
     markNotificationRead(notificationId: string): Promise<void>;
     markAllNotificationsRead(): Promise<void>;
+    /** Live (unrevoked) MCP connector keys. Owner/admin only (RLS-enforced). */
+    listApiKeys(workspaceId: string): Promise<WorkspaceApiKey[]>;
+    /** Create a key; the returned `secret` is shown once and never again. */
+    createApiKey(input: {
+      workspaceId: string;
+      name: string;
+      scopes: Record<string, string>;
+    }): Promise<WorkspaceApiKey & { secret: string }>;
+    revokeApiKey(keyId: string): Promise<void>;
+    /** The Moduo MCP connector URL agents connect to (same on web + desktop). */
+    getMcpEndpoint(): string;
   };
 
   notes: {

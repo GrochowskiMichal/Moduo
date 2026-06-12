@@ -82,6 +82,17 @@ Activity row in one transaction. The full contract lives in
 `moduo-module-contract.md`. Agents and API clients (MCP connector) get *only*
 intent ops, never raw row writes.
 
+### MCP connector / API key
+The **MCP connector** is Moduo's single agent-facing surface (`moduo-mcp` edge
+function, `moduo-mcp-connector.md`): one stateless MCP server that every
+module registers its read tools and intent ops onto — onboarding a module is a
+registration entry, not architecture. An **API key** (`workspace_api_keys`,
+`moduo_sk_…`) is the connector's caller identity: workspace-scoped, named,
+secret shown once and stored hashed, with per-module scopes on the
+none/view/edit ladder (view by default; admin never key-grantable). Key
+mutations run through the same intent ops and are attributed in Activity as
+`api_key` with the key's name — an agent acting through a key is never silent.
+
 ### Activity (trail)
 The append-only, per-workspace record of intent ops: *who* (user, agent, API
 key — the actor) did *what* (the op) to *which entity*, *when*. One shared
