@@ -6,19 +6,20 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
-## Improvement-plan Session 9 — MCP connector v1 (2026-06-12, hosted steps pending)
+## Improvement-plan Session 9 — MCP connector v1 (2026-06-12)
 
 Branch `t/maciej/session9-mcp-connector` off `t/maciej/session8-intent-ops`
-(Fable; stacked while PR #18 is open). One Moduo MCP server with per-module
-registration — Tasks is module #1. New anchor doc
-**[moduo-mcp-connector.md](./moduo-mcp-connector.md)** (shape, key model,
-actor path, tool table, and the "onboard a module to MCP" recipe).
+(Fable; stacked while PR #18 is open — PR #19, retarget to `maciej` after #18
+merges). One Moduo MCP server with per-module registration — Tasks is module
+#1. New anchor doc **[moduo-mcp-connector.md](./moduo-mcp-connector.md)**
+(shape, key model, actor path, tool table, and the "onboard a module to MCP"
+recipe).
 
-**Status: implementation + docs complete, local gates green. The hosted
-apply/deploy hit the auto-mode classifier gate (same as Sessions 4/5/8) —
-waiting on Maciej.** Remaining: apply `20260612160000`, deploy `moduo-mcp`
-(**must be `verify_jwt = false`** — MCP clients send a Moduo key, not a
-Supabase JWT), live MCP probes, Settings-UI live verify, advisors run.
+**Status:** the auto-mode classifier gated the hosted apply mid-session
+(same as Sessions 4/5/8); **Maciej approved (apply + deploy)**. Migrations
+`20260612160000` + `…161000` applied, `moduo-mcp` deployed with
+**`verify_jwt = false`** (MCP clients send a Moduo key, not a Supabase JWT —
+keep this flag on redeploys), full live-verify below.
 
 **Connector — [supabase/functions/moduo-mcp/](../supabase/functions/moduo-mcp/).**
 Stateless MCP Streamable HTTP (hand-rolled JSON-RPC: initialize / ping /
@@ -71,16 +72,36 @@ plan Session 9 header note.
 **Verified (local):** typecheck ✓, vitest **91/91** ✓, lint:tw ✓, lint:css 0
 errors (same 5 pre-existing global.css warnings). (`bun test` ≠ `bun run
 test` — bun's own runner reports phantom failures; vitest is the gate.)
-No deno locally — the edge function validates at deploy.
+No deno locally — the edge function validated at deploy.
 
-**Live-verify checklist for the post-approval pass:** initialize +
-instructions string; tools/list = 8 tools on a view key, 15 on edit;
-view-key write call → quiet scope refusal; edit-key `tasks_commit` →
-row updated + trail "An API client committed this…" (`actor_type='api_key'`,
-label = key name); `tasks_set_status done` on a recurring task → pointer
-advanced by the port; revoked key → 401; bogus/absent bearer → 401;
-authenticated client sending `x-moduo-key-id` → still attributed as user;
-Settings UI create→copy→revoke round-trip; advisors clean.
+**Live-verified against hosted** (test account; probe keys inserted by hash,
+JSON-RPC via curl; UI via `:8096` worktree rsbuild + Chrome MCP):
+(1) `initialize` → echoes protocol 2025-06-18, instructions name the
+workspace, key and scopes. (2) **Scope gating:** tools/list = 8 tools on a
+view key, 15 on edit; view-key `tasks_commit` → quiet isError refusal.
+(3) Edit-key `tasks_commit` → row committed, `module_activity` row
+`actor_type='api_key'`, actor_id = key id, label "Probe edit key".
+(4) **Engine port:** `tasks_set_status done` on daily-recurring Water plants
+(pending Jun 13) → pointer Jun 14 (advance-from-pending); reopen recomputes
+same; `tasks_skip_occurrence` → Jun 13→Jun 14, pointer Jun 15, forward-only.
+(5) **Auth:** no/bogus bearer 401; revoked key 401 (probed twice, SQL- and
+UI-revoked); GET 405; notification 202. (6) **Spoof:** authenticated user
+calling an op with a forged `x-moduo-key-id` header → attributed **user**
+(uid precedence); anon op call → permission denied. (7) **Key RPCs:** create
+as owner → secret returned once (view default); `select *` → column-grant
+denial (key_hash unreadable); explicit columns OK; `scopes:{tasks:'admin'}`
+rejected; revoke 204. (8) **Settings UI** (workspace modal): section renders
+endpoint+copy, create "UI round-trip key" with Edit scope → reveal-once
+banner; that key called `tasks_today` live; UI revoke × → row gone → key 401.
+(9) **In-app trail** renders "Probe edit key committed this for Jun 12"
+between the user rows — agents are named, never silent. No console errors.
+(10) Advisors: one new WARN (`module_api_key_id` mutable search_path) →
+fixed in `20260612161000`; the SECURITY-DEFINER-executable WARNs on the new
+RPCs are the same intentional pattern as all `tasks_op_*`; anon got nothing
+(Session 8's lesson held). **All probe keys revoked** (secrets appeared in
+the session transcript — none left live). Demo-data drift: Water plants now
+todo Jun 14 9:00 (pointer Jun 15); probe task restored (uncommitted, trail
+gained 3 rows incl. the api_key one).
 
 ---
 

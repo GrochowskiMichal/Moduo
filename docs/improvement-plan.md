@@ -245,30 +245,36 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 - [x] Activity trail rendered in the task detail panel. *(Quiet newest-first
       trail, actor attribution, op→sentence vocabulary in `activity.ts`.)*
 
-### ◐ 9 — MCP connector v1 *(platform · cloud)*
+### ☑ 9 — MCP connector v1 *(platform · cloud)*
 
-> **Built 2026-06-12** (Fable, branch `t/maciej/session9-mcp-connector`,
+> **Done 2026-06-12** (Fable, branch `t/maciej/session9-mcp-connector`,
 > stacked on Session 8's branch while PR #18 is open). New anchor doc
 > **[docs/moduo-mcp-connector.md](./moduo-mcp-connector.md)**. One stateless
 > edge function (`supabase/functions/moduo-mcp/`, hand-rolled MCP Streamable
 > HTTP — 8 read tools, 7 intent-op write tools, recurrence-engine port) +
-> `workspace_api_keys` migration (`20260612160000`) + Settings UI (workspace
-> modal → API keys: create / reveal-once / revoke, view default). Local gates
-> green (typecheck, vitest 91/91, lints).
-> **⚠ Hosted steps pending Maciej's approval** (auto-mode classifier gate,
-> same as Session 8): apply the migration, deploy `moduo-mcp` with
-> `verify_jwt = false`, then the live MCP probes (tools/list scope gating,
-> write op via edit key, view-scope + revoked-key rejection, `api_key`
-> attribution in the trail) + Settings-UI live verify. Boxes get checked
-> after that pass.
+> `workspace_api_keys` migration (`20260612160000` + search_path follow-up
+> `…161000`) + Settings UI (workspace modal → API keys: create /
+> reveal-once / revoke, view default). The auto-mode gate blocked the hosted
+> steps mid-session (same as Session 8); **Maciej approved**, migration
+> applied + `moduo-mcp` deployed (`verify_jwt = false`) and the full live
+> probe checklist passed, incl. the header-spoof and revoked-key rejections
+> and "Probe edit key committed this…" rendering in the app trail. See
+> build log.
 
-- [ ] One Moduo MCP server with per-module registration; Tasks is module #1.
-- [ ] Read-only resources first (buckets, tasks, queue, drift, tags, search).
-- [ ] Writes exclusively via Session 8 intent ops; scoped API keys on the
-      none/view/edit permission model.
-- [ ] Document the "onboard a module to MCP" recipe so Notes/Mail/Calendar
+- [x] One Moduo MCP server with per-module registration; Tasks is module #1.
+      *(`moduo-mcp` edge fn; connector registry + `modules/tasks.ts`;
+      key-pinned workspace, no workspace args on tools.)*
+- [x] Read-only resources first (buckets, tasks, queue, drift, tags, search).
+      *(8 view-scope tools incl. `tasks_get` + `tasks_activity`, computed
+      drifted/blocked.)*
+- [x] Writes exclusively via Session 8 intent ops; scoped API keys on the
+      none/view/edit permission model. *(7 ops, `catch_up` excluded;
+      `workspace_api_keys` hashed secrets, view default, admin never
+      key-grantable; `actor_type='api_key'` via the service-role-only
+      header path.)*
+- [x] Document the "onboard a module to MCP" recipe so Notes/Mail/Calendar
       follow without redesign. Local-LLM/offline MCP stays deferred to the
-      lite version.
+      lite version. *(docs/moduo-mcp-connector.md.)*
 
 ### ☐ 10 — Theme shades + tokenization deepening *(design · anytime after 1)*
 - [ ] `data-shade` axis: curated tinted-dark presets (warm/cool/slate/…),
