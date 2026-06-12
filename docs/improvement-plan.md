@@ -110,6 +110,22 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       `web+desktop_plan.md` retired with a banner, build-log entry.
 
 ### ☐ 3 — Task detail panel + ambient mirrors *(tasks)*
+
+> **Pre-flight (Fable, 2026-06-12)** — for whichever model runs this:
+> (a) The right-rail placeholder to replace is the "Context" panel in
+> `tasks-plan-view.tsx` (~line 262). (b) Task-level selection already exists
+> but is **local to `task-list-view.tsx`** (`selectedId`, keyboard-driven,
+> ~line 58; rows already render `selected ? "bg-accent" : "hover:bg-accent/60"`)
+> — it must be lifted to `tasks-plan-view.tsx` so the rail can bind to it.
+> Careful: `selection` in tasks-plan-view already means *bucket scope*; pick a
+> distinct name (`selectedTaskId`). Board view needs its own select-on-click.
+> (c) `rescheduleCount` is at `model.ts:79`, incremented in
+> `use-tasks-module.ts` (`rescheduleFromToday`), rendered nowhere — it's an
+> *ambient mirror*: muted-foreground, factual ("Rescheduled 3×"), never
+> red/warning (spec design principles 4–5). (d) Mutations go through
+> `api.patchTask` (optimistic; do not add new write paths). (e) Detail panel is
+> a feature component (`src/features/tasks/ui/`) — no Storybook story required,
+> but any new shadcn primitive goes through the CLI per CLAUDE.md rule 4.
 - [ ] Right rail = task-detail-on-select: editable description, all properties,
       created/updated, drift info.
 - [ ] **Render `rescheduleCount`** (first actual mirror — incremented today but
@@ -162,6 +178,18 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 - [ ] `data-shade` axis: curated tinted-dark presets (warm/cool/slate/…),
       Settings picker, same cascade mechanism as `data-accent`.
 - [ ] Audit for token bypasses while in there.
+
+## Model assignment (decided with Maciej, 2026-06-12)
+
+- **Opus-tier sessions** (UI on existing surfaces, strong guardrails):
+  **3, 4, 10**. After each, a Fable `/code-review` pass on the branch before
+  merge — review is cheap relative to authoring.
+- **Fable-tier sessions** (semantics / platform / security): **7, 8, 9** —
+  recurrence edge cases, server-side invariants, API-key scopes. **5/6**
+  borderline; 6 starts with a Maciej design check-in either way.
+- Either way the session protocol's verification gates (typecheck, vitest,
+  lints, live verify against hosted — test account in build-log Session 2)
+  are mandatory; they are the model-agnostic safety net.
 
 ## Ordering notes
 
