@@ -4,12 +4,16 @@
  */
 
 import type {
+  ActivityEntry,
   Bucket,
+  RecurrenceRule,
   Tag,
   TagLink,
   Task,
   TaskRelation,
+  TasksCatchUpItem,
   TasksModuleBundle,
+  TaskStatus,
   TimeBlockMap,
 } from "../features/tasks/model";
 
@@ -293,5 +297,44 @@ export type ModuoRuntime = {
     /** Workspace-scoped time-of-day slot → bucket map (one row per workspace). */
     getTimeBlocks(workspaceId: string): Promise<TimeBlockMap>;
     setTimeBlocks(input: { workspaceId: string; blocks: TimeBlockMap }): Promise<TimeBlockMap>;
+
+    /**
+     * Intent ops (docs/moduo-module-contract.md): named, invariant-keeping
+     * mutations via `tasks_op_*` RPCs — server-side permission check,
+     * invariants, write, and an attributed activity row in one transaction.
+     * Each returns the updated row(s) for optimistic reconciliation.
+     */
+    opCommit(input: { workspaceId: string; taskId: string; forDate: string }): Promise<Task>;
+    opUncommit(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    opSkipToday(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    opSetStatus(input: {
+      workspaceId: string;
+      taskId: string;
+      status: TaskStatus;
+      recurrence?: RecurrenceRule | null;
+      position?: string;
+    }): Promise<Task>;
+    opReschedule(input: {
+      workspaceId: string;
+      taskId: string;
+      scheduledAt: string;
+      days?: number;
+    }): Promise<Task>;
+    opUnschedule(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    opSkipOccurrence(input: {
+      workspaceId: string;
+      taskId: string;
+      scheduledAt: string;
+      recurrence: RecurrenceRule;
+      releaseCommit: boolean;
+    }): Promise<Task>;
+    opCatchUp(input: { workspaceId: string; items: TasksCatchUpItem[] }): Promise<Task[]>;
+    /** Read the entity's quiet activity trail (newest first). */
+    listActivity(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+      limit?: number;
+    }): Promise<ActivityEntry[]>;
   };
 };

@@ -271,6 +271,30 @@ one level, never recursive; an unresolvable `parent_id` reads as unset), `title`
 
 ---
 
+## 11b. Intent ops + activity (platform contract)
+
+Tasks is the reference implementation of the per-module AI-readiness contract
+(`docs/moduo-module-contract.md` — read it before touching mutation paths).
+The invariant-bearing mutations — commit/uncommit, skip-out-of-today (the
+`reschedule_count` mirror), drift-triage reschedule/ignore, status changes with
+their recurrence pointer ride-along, skip-occurrence, and the catch-up pass —
+go through `tasks_op_*` Postgres RPCs (intent ops), which enforce edit
+permission and the op's invariants server-side and append an attributed
+`module_activity` row in the same transaction. Plain single-field edits (title,
+description, priority, …) remain raw upserts for now. Occurrence math stays in
+the client engine (`recurrence-engine.ts`); ops enforce the structural
+invariants (forward-only moves, recurring-only, commit release, atomic
+counters).
+
+The **activity trail** renders in the task detail panel: quiet, factual,
+newest-first ("You committed this for today · 2:14 PM"); creation needs no
+activity row (the panel's Created metadata anchors it) — an ambient mirror
+(principles 1, 4, 5), never a wall. Actors
+are recorded server-side (`user` today; `agent` / `api_key` when the MCP
+connector lands in Session 9).
+
+---
+
 ## 12. Deferred (not v1)
 
 Right panel content for Tasks; all AI (capture inference, "Stuck?" breakdown, suggestions); Gantt view; weekly review / accuracy charts; team & collaboration; two-way calendar sync (read-only only); native events UI (model can anticipate).

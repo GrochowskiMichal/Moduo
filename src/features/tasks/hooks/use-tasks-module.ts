@@ -22,6 +22,7 @@ import {
   type NewTaskFields,
 } from "../helpers";
 import {
+  catchUpItem,
   catchUpPatch,
   recurrenceOnStatusChange,
   skipOccurrencePatch,
@@ -29,11 +30,14 @@ import {
 import {
   INBOX_BUCKET_NAME,
   isDrifted,
+  type ActivityEntry,
   type Bucket,
+  type RecurrenceRule,
   type Tag,
   type TagLink,
   type Task,
   type TaskRelation,
+  type TasksCatchUpItem,
   type TasksModuleBundle,
   type TimeBlockMap,
   type TimeBlockSlot,
@@ -276,6 +280,56 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     }));
   }, []);
 
+  // ── intent ops (docs/moduo-module-contract.md) ──────────────────────────────
+  /** Bumped after every successful op — the detail panel's trail refetch cue. */
+  const [activityStamp, setActivityStamp] = useState(0);
+
+  /**
+   * Run a single-task intent op: optimistic local patch, then the RPC (which
+   * checks permission, enforces invariants, and logs attributed activity in
+   * one transaction); swap in the returned row, or reload on error.
+   */
+  const applyOp = useCallback(
+    (id: string, optimistic: Partial<Task>, op: () => Promise<Task>) => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      if (isTempId(id)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
+      patchTaskLocal(id, { ...optimistic, updatedAt: new Date().toISOString() });
+      void op()
+        .then((saved) => {
+          setBundle((prev) => ({
+            ...prev,
+            tasks: prev.tasks.map((t) => (t.id === id ? saved : t)),
+          }));
+          setActivityStamp((s) => s + 1);
+        })
+        .catch((e) => {
+          toast.error(e instanceof Error ? e.message : "Something went wrong.");
+          void load();
+        });
+    },
+    [runtime, workspaceId, canEdit, patchTaskLocal, load],
+  );
+
+  /** Fetch a task's quiet activity trail (newest first). */
+  const loadActivity = useCallback(
+    async (taskId: string): Promise<ActivityEntry[]> => {
+      if (!runtime || !workspaceId || !canRead || isTempId(taskId)) return [];
+      return runtime.tasks.listActivity({
+        workspaceId,
+        entityType: "task",
+        entityId: taskId,
+        limit: 50,
+      });
+    },
+    [runtime, workspaceId, canRead],
+  );
+
   // ── task mutations ───────────────────────────────────────────────────────────
   const createTask = useCallback(
     (fields: Omit<NewTaskFields, "workspaceId" | "position">) => {
@@ -322,6 +376,28 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           }
         }
       }
+      // Status changes are an intent op (tasks.set_status): the RPC enforces
+      // the invariants server-side and logs attributed activity. Only the
+      // status cluster (status / recurrence ride-along / board position) goes
+      // that way — plain field edits below stay raw upserts (contract §1).
+      if (
+        patch.status &&
+        Object.keys(patch).every((k) => k === "status" || k === "recurrence" || k === "position")
+      ) {
+        const status = patch.status;
+        const recurrence = patch.recurrence;
+        const position = patch.position;
+        applyOp(id, patch, () =>
+          runtime!.tasks.opSetStatus({
+            workspaceId: workspaceId!,
+            taskId: id,
+            status,
+            recurrence,
+            position,
+          }),
+        );
+        return;
+      }
       const updated: Task = { ...existing, ...patch, updatedAt: new Date().toISOString() };
       patchTaskLocal(id, { ...patch, updatedAt: updated.updatedAt });
       guard(async () => {
@@ -329,7 +405,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? saved : t)) }));
       });
     },
-    [bundle.tasks, patchTaskLocal, guard, runtime],
+    [bundle.tasks, patchTaskLocal, guard, runtime, workspaceId, applyOp],
   );
 
   // ── recurrence catch-up (spec §5d) ──────────────────────────────────────────
@@ -338,17 +414,38 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   // forward (no backfill — there is only the next occurrence). The stamp ref
   // keeps re-renders from re-running it; view-only sessions skip it (no write
   // access — stale rows just read as quiet drift).
+  // The whole pass is one batched intent op (tasks.catch_up): optimistic local
+  // patches, a single RPC that enforces structure + logs per-task activity,
+  // then reconcile with the returned rows.
   const caughtUpRef = useRef(0);
   useEffect(() => {
     if (loadStamp === 0 || caughtUpRef.current === loadStamp || !canEdit) return;
+    if (!runtime || !workspaceId) return;
     caughtUpRef.current = loadStamp;
     const now = new Date();
+    const items: TasksCatchUpItem[] = [];
     for (const t of bundle.tasks) {
       if (isTempId(t.id)) continue;
       const patch = catchUpPatch(t, now);
-      if (patch) patchTask(t.id, patch);
+      if (!patch) continue;
+      items.push(catchUpItem(t, patch));
+      patchTaskLocal(t.id, { ...patch, updatedAt: now.toISOString() });
     }
-  }, [loadStamp, canEdit, bundle.tasks, patchTask]);
+    if (items.length === 0) return;
+    void runtime.tasks
+      .opCatchUp({ workspaceId, items })
+      .then((saved) => {
+        const byId = new Map(saved.map((t) => [t.id, t]));
+        setBundle((prev) => ({
+          ...prev,
+          tasks: prev.tasks.map((t) => byId.get(t.id) ?? t),
+        }));
+        setActivityStamp((s) => s + 1);
+      })
+      .catch(() => {
+        void load(); // quiet — catch-up retries on the next reload
+      });
+  }, [loadStamp, canEdit, runtime, workspaceId, bundle.tasks, patchTaskLocal, load]);
 
   const toggleDone = useCallback(
     (task: Task) => {
@@ -381,9 +478,22 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       const next = new Date(now);
       next.setDate(next.getDate() + days);
       next.setHours(orig.getHours(), orig.getMinutes(), 0, 0);
-      patchTask(id, { scheduledAt: next.toISOString() });
+      const scheduledAt = next.toISOString();
+      applyOp(id, { scheduledAt }, () =>
+        runtime!.tasks.opReschedule({ workspaceId: workspaceId!, taskId: id, scheduledAt, days }),
+      );
     },
-    [bundle.tasks, patchTask],
+    [bundle.tasks, applyOp, runtime, workspaceId],
+  );
+
+  /** Drift-triage Ignore: clear the stale scheduled time, keep the task. */
+  const unscheduleTask = useCallback(
+    (id: string) => {
+      applyOp(id, { scheduledAt: null }, () =>
+        runtime!.tasks.opUnschedule({ workspaceId: workspaceId!, taskId: id }),
+      );
+    },
+    [applyOp, runtime, workspaceId],
   );
 
   /** Toggle a task in/out of today's commit queue (commit = "doing this today"). */
@@ -392,27 +502,37 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       const existing = bundle.tasks.find((t) => t.id === id);
       if (!existing) return;
       if (existing.committedFor === today) {
-        patchTask(id, { committedFor: null, commitOrder: null });
+        applyOp(id, { committedFor: null, commitOrder: null }, () =>
+          runtime!.tasks.opUncommit({ workspaceId: workspaceId!, taskId: id }),
+        );
         return;
       }
+      // Optimistic order; the op recomputes it under a row lock (race-safe).
       const maxOrder = committedTasks.reduce((m, t) => Math.max(m, t.commitOrder ?? 0), 0);
-      patchTask(id, { committedFor: today, commitOrder: maxOrder + 1 });
+      applyOp(id, { committedFor: today, commitOrder: maxOrder + 1 }, () =>
+        runtime!.tasks.opCommit({ workspaceId: workspaceId!, taskId: id, forDate: today }),
+      );
     },
-    [bundle.tasks, today, committedTasks, patchTask],
+    [bundle.tasks, today, committedTasks, applyOp, runtime, workspaceId],
   );
 
-  /** Skip: reschedule a committed task out of today — ambient count++ (no wall). */
+  /** Skip: reschedule a committed task out of today — ambient count++ (no wall).
+   * The op clears the commit and increments the counter atomically. */
   const rescheduleFromToday = useCallback(
     (id: string) => {
       const existing = bundle.tasks.find((t) => t.id === id);
       if (!existing) return;
-      patchTask(id, {
-        committedFor: null,
-        commitOrder: null,
-        rescheduleCount: existing.rescheduleCount + 1,
-      });
+      applyOp(
+        id,
+        {
+          committedFor: null,
+          commitOrder: null,
+          rescheduleCount: existing.rescheduleCount + 1,
+        },
+        () => runtime!.tasks.opSkipToday({ workspaceId: workspaceId!, taskId: id }),
+      );
     },
-    [bundle.tasks, patchTask],
+    [bundle.tasks, applyOp, runtime, workspaceId],
   );
 
   /**
@@ -425,22 +545,32 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       const existing = bundle.tasks.find((t) => t.id === id);
       if (!existing) return;
       const patch = skipOccurrencePatch(existing, new Date());
-      if (!patch) return;
-      patchTask(id, patch);
-      if (patch.scheduledAt) {
-        toast.success(`Skipped — next ${formatScheduled(patch.scheduledAt)}`);
-      }
+      if (!patch?.scheduledAt || !patch.recurrence) return;
+      const scheduledAt = patch.scheduledAt;
+      const recurrence = patch.recurrence as RecurrenceRule;
+      applyOp(id, patch, () =>
+        runtime!.tasks.opSkipOccurrence({
+          workspaceId: workspaceId!,
+          taskId: id,
+          scheduledAt,
+          recurrence,
+          releaseCommit: "committedFor" in patch,
+        }),
+      );
+      toast.success(`Skipped — next ${formatScheduled(scheduledAt)}`);
     },
-    [bundle.tasks, patchTask],
+    [bundle.tasks, applyOp, runtime, workspaceId],
   );
 
-  /** Do last: keep it committed but send it to the end of today's queue. */
+  /** Do last: send it to the end of today's queue (the commit op reorders). */
   const doLast = useCallback(
     (id: string) => {
       const maxOrder = committedTasks.reduce((m, t) => Math.max(m, t.commitOrder ?? 0), 0);
-      patchTask(id, { commitOrder: maxOrder + 1 });
+      applyOp(id, { commitOrder: maxOrder + 1 }, () =>
+        runtime!.tasks.opCommit({ workspaceId: workspaceId!, taskId: id, forDate: today }),
+      );
     },
-    [committedTasks, patchTask],
+    [committedTasks, applyOp, runtime, workspaceId, today],
   );
 
   const deleteTask = useCallback(
@@ -921,11 +1051,15 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     markDone,
     archiveTask,
     rescheduleScheduledAt,
+    unscheduleTask,
     toggleCommit,
     rescheduleFromToday,
     skipOccurrence,
     doLast,
     deleteTask,
+    loadActivity,
+    activityStamp,
+    currentUserId: userId,
     subtasksByParent,
     subtaskProgressByTask,
     addSubtask,

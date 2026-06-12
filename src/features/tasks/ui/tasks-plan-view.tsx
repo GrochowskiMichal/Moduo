@@ -444,7 +444,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         canEdit={canEdit}
         onReschedule={(id, days) => api.rescheduleScheduledAt(id, days)}
         onArchive={api.archiveTask}
-        onIgnore={(id) => api.patchTask(id, { scheduledAt: null })}
+        onIgnore={api.unscheduleTask}
       />
       <FrontierOfferDialog
         open={frontierOfferTaskId !== null}

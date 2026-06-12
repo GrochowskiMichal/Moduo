@@ -60,8 +60,10 @@ import {
   toLocalInputValue,
   wouldCreateCycle,
 } from "../helpers";
+import { activityActorName, activityLine } from "../activity";
 import {
   isDrifted,
+  type ActivityEntry,
   type Bucket,
   type EnergyLevel,
   type PriorityLevel,
@@ -519,6 +521,57 @@ function DetailBody({
             {formatTimestamp(task.updatedAt)}
           </Meta>
         </div>
+
+        <Separator />
+
+        {/* activity trail — attributed intent ops, an ambient mirror
+            (docs/moduo-module-contract.md Pillar 3). Quiet, factual, newest
+            first; never a wall. */}
+        <ActivitySection task={task} api={api} />
+      </div>
+    </div>
+  );
+}
+
+// ── activity trail (module contract Pillar 3) ──────────────────────────────────
+
+function ActivitySection({ task, api }: { task: Task; api: TasksModuleApi }) {
+  const [entries, setEntries] = useState<ActivityEntry[] | null>(null);
+  const { loadActivity, activityStamp } = api;
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadActivity(task.id)
+      .then((rows) => {
+        if (!cancelled) setEntries(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setEntries([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [task.id, activityStamp, loadActivity]);
+
+  return (
+    <div className="space-y-1">
+      <span className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        Activity
+      </span>
+      <div className="space-y-1 text-2xs text-muted-foreground/80">
+        {(entries ?? []).map((entry) => (
+          <div key={entry.id} className="flex items-baseline justify-between gap-2">
+            <span className="min-w-0">
+              {activityActorName(entry, api.currentUserId)} {activityLine(entry)}
+            </span>
+            <span className="shrink-0 tabular-nums">{formatTimestamp(entry.createdAt)}</span>
+          </div>
+        ))}
+        {entries && entries.length === 0 ? (
+          // creation needs no activity row (contract §3) — the metadata above
+          // already anchors it
+          <span>Nothing yet.</span>
+        ) : null}
       </div>
     </div>
   );
