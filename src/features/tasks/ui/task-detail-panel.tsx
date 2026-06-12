@@ -9,6 +9,8 @@ import { CalendarClock, Clock, Hourglass, Inbox, Repeat, RotateCcw, Sunrise } fr
 
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
+import { TagChip } from "../../../components/tag-chip";
+import { TagPicker } from "../../../components/tag-picker";
 import {
   Select,
   SelectContent,
@@ -77,6 +79,7 @@ function DetailBody({
   const drifted = isDrifted(task);
   const committed = !!task.committedFor && task.committedFor === api.today;
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
+  const taskTags = api.tagsByTask.get(task.id) ?? [];
 
   const commitTitle = () => {
     const next = title.trim();
@@ -248,6 +251,32 @@ function DetailBody({
               </span>
             </Field>
           ) : null}
+
+          <Field label="Tags">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {taskTags.map((t) => (
+                <TagChip
+                  key={t.id}
+                  name={t.name}
+                  color={t.color}
+                  onRemove={canEdit ? () => api.toggleTaskTag(task.id, t.id) : undefined}
+                />
+              ))}
+              {canEdit ? (
+                <TagPicker
+                  tags={api.tags}
+                  selectedIds={taskTags.map((t) => t.id)}
+                  canEdit={canEdit}
+                  onToggle={(tagId) => api.toggleTaskTag(task.id, tagId)}
+                  onCreate={(name) => api.createTagForTask(name, task.id)}
+                  onRecolor={(tagId, color) => api.setTagColor(tagId, color)}
+                  onDelete={(tagId) => api.deleteTag(tagId)}
+                />
+              ) : taskTags.length === 0 ? (
+                <span className="text-xs text-muted-foreground">No tags</span>
+              ) : null}
+            </div>
+          </Field>
 
           {canEdit ? (
             <Button

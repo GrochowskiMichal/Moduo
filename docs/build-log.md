@@ -6,7 +6,90 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
-## Improvement-plan Session 3 — Task detail panel + ambient mirrors (2026-06-12)
+## Improvement-plan Session 4 — Organization layer: rail sections + tags v1 (2026-06-12)
+
+Branch `t/maciej/session4-org-tags` off `maciej`. Two organizing layers land:
+presentational **bucket sections** in the rail, and **workspace tags v1** with a
+shared, cross-module `TagPicker`. The tags *data* layer already existed (tables +
+runtime CRUD from Sessions 1–2, hosted `tags`/`tag_links` empty) — this session is
+almost entirely UI, plus one additive schema change.
+
+**Decisions locked with Maciej (3 questions up front):** (1) tag filter = a quiet
+header **Filter** control + click-a-chip-to-filter, active filters shown as
+removable chips, **OR/union** semantics; (2) chips **always shown, quiet** (a
+hue dot + `#name`, faint tint) on rows *and* cards; (3) tag create = **inline
+`Create #name` with an auto-assigned color**, recolorable later (friction behind
+the dump). Recommendation taken on (3).
+
+**Schema — `buckets.group` (one additive column).** `group_label text` on
+`buckets` (named `group_label` to dodge the SQL reserved word; mapped to the
+camelCase model field `group`). Migration
+[20260612120000_buckets_add_group.sql](../supabase/migrations/20260612120000_buckets_add_group.sql).
+Added to the Rust `Bucket` struct (`#[serde(default)] group: Option<String>` —
+redb stores Bucket as JSON, so old rows default to `None`, no redb migration),
+the TS model, and the web row⇄model mappers (`group` ⇄ `group_label`). **Applied
+to hosted** (2026-06-12, with Maciej's explicit go-ahead — the auto-mode
+classifier had gated the first unprompted attempt; `list_migrations` now shows
+`20260612120000`).
+
+**Bucket sections (presentational, two levels max).** `bucketSections()` /
+`bucketGroupNames()` pure helpers ([helpers.ts](../src/features/tasks/helpers.ts),
+unit-tested). [bucket-rail.tsx](../src/features/tasks/ui/bucket-rail.tsx) renders
+ungrouped buckets flat first, then collapsible section headers (open-count, local
+collapse state) — never nested. Assign via the bucket "…" → **Section** submenu
+(radio of existing sections + "No section" + inline "New section…"). Capture and
+task→bucket assignment untouched. `api.setBucketGroup` is optimistic.
+
+**Tags v1 — shared cross-module surface.**
+- **Label palette** ([tokens.css](../src/styles/tokens.css) §13b): 8 hues reusing
+  the accent palette bases, keyed by `data-label="…"` → `--label` / `--label-surface`
+  (surfaces precomputed oklch-with-alpha so component code stays hex/arbitrary-free
+  per the design-system rules). Structural `.tag-chip` / `.tag-dot` /
+  `.tag-chip-outline` in [global.css](../src/global.css) consume only those vars.
+  A tag's `color` stores the **hue name** (not a hex) → fully token-routed,
+  theme-safe (survives the future `data-shade` work).
+- **Shared components** (`src/components/`, so Mail/Notes adopt them later):
+  [tag-colors.ts](../src/components/tag-colors.ts) (`LABEL_COLORS`,
+  `normalizeLabelColor`, deterministic `pickTagColor` — unit-tested),
+  [tag-chip.tsx](../src/components/tag-chip.tsx) (`TagChip` + capped `TagChipList`),
+  [tag-picker.tsx](../src/components/tag-picker.tsx) (Popover + shadcn Command:
+  search, toggle, inline create w/ auto-color, inline recolor swatch strip,
+  delete) + a Storybook story.
+- **Hook** ([use-tasks-module.ts](../src/features/tasks/hooks/use-tasks-module.ts)):
+  derived `tags` (live, name-sorted), `tagsByTask`, `openTaskCountByTag`; optimistic
+  `toggleTaskTag` / `createTagForTask` (create→reconcile temp id→attach, name-dedupe)
+  / `setTagColor` / `deleteTag`. All writes go through the existing
+  `runtime.tasks.upsertTag/attachTag/detachTag/deleteTag` — no new write paths.
+- **Surfaces**: detail panel gains a **Tags** field (chips + TagPicker); quiet
+  chips render on list rows (hug the title, cap 3 + "+N") and board cards (cap 4);
+  clicking a chip toggles it in the filter. Header **Filter** control
+  ([task-tag-filter.tsx](../src/features/tasks/ui/task-tag-filter.tsx)) + active-chip
+  row, threaded to both views via new `PlanViewHeader` `filterControl`/`activeFilters`
+  slots. Filter narrows the center list/board only — rail bucket counts stay whole;
+  state is in-memory and resets per workspace.
+
+**Verified (local):** typecheck ✓, vitest **37/37** ✓ (13 new:
+`organization.test.ts` + `tag-colors.test.ts`), lint:tw ✓ (token-clean — colors via
+`data-label`, no arbitrary values), lint:css 0 errors (same 5 pre-existing
+global.css warnings), `cargo check` ✓ + `cargo test domain::tests` 5/5 ✓,
+`build:web` ✓. **Live-verified on web** against hosted with the Session 2
+disposable account (`/tasks`, `:8092` local rsbuild driven via Chrome MCP — the
+worktree live-verify recipe): (1) bucket "Deep Work" → "…" → **Section → New
+section "Focus areas"** rendered a collapsible "FOCUS AREAS" header with Deep
+Work nested under it; DB confirmed `buckets.group_label = 'Focus areas'`. (2)
+On the Inbox task, the detail-panel **TagPicker** created `#deep-work` then
+`#waiting-on` — **auto-colored blue then green** (deterministic palette order),
+chips rendered on the row + detail panel; DB confirmed two `tags` rows + two
+`tag_links`. (3) Added a second untagged task, opened the header **Filter**,
+selected `#deep-work` → list narrowed to **1 of 2** with a removable active chip;
+**Clear** restored both. No tag/bucket/migration errors in the console (only the
+pre-existing web-only `syncNow` "desktop app" redb-stub noise). Left as demo
+data: the "Focus areas" section + the two tags; the throwaway untagged task and
+filter state were cleared.
+
+**Deferred:** capture-time tagging (kept tag-free by design); tag rename (recolor +
+delete shipped; rename is a small follow-up); a dedicated "manage tags" surface
+(picker covers it for now); AND/multi-tag filter semantics (union shipped).
 
 Branch `t/maciej/session3-task-detail` off `maciej`. The right rail stops being a
 "Context" placeholder and becomes a live task inspector; the first ambient mirror

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -43,6 +43,9 @@ type Props = {
   onRequestCapture: () => void;
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
+  tagFilterControl?: ReactNode;
+  activeTagFilters?: ReactNode;
+  onTagFilter?: (tagId: string) => void;
   api: TasksModuleApi;
 };
 
@@ -67,6 +70,9 @@ export function TaskBoardView({
   onRequestCapture,
   selectedTaskId,
   onSelectTask,
+  tagFilterControl,
+  activeTagFilters,
+  onTagFilter,
   api,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -147,6 +153,8 @@ export function TaskBoardView({
         view={view}
         onViewChange={onViewChange}
         groupControl={groupControl}
+        filterControl={tagFilterControl}
+        activeFilters={activeTagFilters}
         canEdit={canEdit}
         onRequestCapture={onRequestCapture}
       />
@@ -164,6 +172,7 @@ export function TaskBoardView({
               bucketNameById={bucketNameById}
               selectedTaskId={selectedTaskId}
               onSelectTask={onSelectTask}
+              onTagFilter={onTagFilter}
               api={api}
             />
           ))}
@@ -202,6 +211,7 @@ function BoardColumn({
   bucketNameById,
   selectedTaskId,
   onSelectTask,
+  onTagFilter,
   api,
 }: {
   column: Column;
@@ -212,6 +222,7 @@ function BoardColumn({
   bucketNameById: (id: string) => string;
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
+  onTagFilter?: (tagId: string) => void;
   api: TasksModuleApi;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id, disabled: !canEdit });
@@ -249,6 +260,7 @@ function BoardColumn({
               canEdit={canEdit}
               selected={task.id === selectedTaskId}
               onSelect={() => onSelectTask(task.id)}
+              onTagFilter={onTagFilter}
               api={api}
             />
           ))

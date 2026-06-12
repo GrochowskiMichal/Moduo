@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { pickTagColor } from "../../../components/tag-colors";
 import { setBucketTimeBlock } from "../default-view";
 import {
   endPosition,
@@ -18,6 +19,8 @@ import {
   INBOX_BUCKET_NAME,
   isDrifted,
   type Bucket,
+  type Tag,
+  type TagLink,
   type Task,
   type TasksModuleBundle,
   type TimeBlockMap,
@@ -116,6 +119,45 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     }
     return counts;
   }, [liveTasks]);
+
+  // ── tags (workspace-level, cross-cutting) ────────────────────────────────────
+  const liveTags = useMemo(
+    () =>
+      bundle.tags
+        .filter((t) => !t.deletedAt)
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [bundle.tags],
+  );
+
+  /** Tags attached to each task (entityType "task"), name-sorted. */
+  const tagsByTask = useMemo(() => {
+    const byId = new Map(liveTags.map((t) => [t.id, t]));
+    const map = new Map<string, Tag[]>();
+    for (const link of bundle.tagLinks) {
+      if (link.entityType !== "task") continue;
+      const tag = byId.get(link.tagId);
+      if (!tag) continue;
+      const list = map.get(link.entityId);
+      if (list) list.push(tag);
+      else map.set(link.entityId, [tag]);
+    }
+    for (const list of map.values()) list.sort((a, b) => a.name.localeCompare(b.name));
+    return map;
+  }, [bundle.tagLinks, liveTags]);
+
+  /** Open-task count per tag — drives the filter menu (counts, hides empties). */
+  const openTaskCountByTag = useMemo(() => {
+    const openIds = new Set(
+      liveTasks.filter((t) => t.status !== "done" && t.status !== "archived").map((t) => t.id),
+    );
+    const counts = new Map<string, number>();
+    for (const link of bundle.tagLinks) {
+      if (link.entityType !== "task" || !openIds.has(link.entityId)) continue;
+      counts.set(link.tagId, (counts.get(link.tagId) ?? 0) + 1);
+    }
+    return counts;
+  }, [bundle.tagLinks, liveTasks]);
 
   // ── today's commit queue ─────────────────────────────────────────────────────
   const today = todayStr();
@@ -295,6 +337,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         ownerId: userId ?? "",
         name: trimmed,
         isSystem: false,
+        group: null,
         position,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -324,6 +367,27 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       const existing = bundle.buckets.find((b) => b.id === id);
       if (!existing || !trimmed || trimmed === existing.name) return;
       const updated = { ...existing, name: trimmed, updatedAt: new Date().toISOString() };
+      setBundle((prev) => ({ ...prev, buckets: prev.buckets.map((b) => (b.id === id ? updated : b)) }));
+      guard(async () => {
+        const saved = await runtime!.tasks.upsertBucket(updated);
+        setBundle((prev) => ({ ...prev, buckets: prev.buckets.map((b) => (b.id === id ? saved : b)) }));
+      });
+    },
+    [bundle.buckets, guard, runtime],
+  );
+
+  /**
+   * Assign a bucket to a presentational section (or clear it with `group = null`).
+   * Presentational only — capture and task→bucket assignment are untouched
+   * (Session 4). Optimistic; persisted on the bucket row.
+   */
+  const setBucketGroup = useCallback(
+    (id: string, group: string | null) => {
+      const existing = bundle.buckets.find((b) => b.id === id);
+      if (!existing) return;
+      const next = group?.trim() ? group.trim() : null;
+      if (next === (existing.group ?? null)) return;
+      const updated = { ...existing, group: next, updatedAt: new Date().toISOString() };
       setBundle((prev) => ({ ...prev, buckets: prev.buckets.map((b) => (b.id === id ? updated : b)) }));
       guard(async () => {
         const saved = await runtime!.tasks.upsertBucket(updated);
@@ -369,6 +433,171 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [bundle.buckets, inbox, guard, runtime, workspaceId, load],
   );
 
+  // ── tag mutations (optimistic) ───────────────────────────────────────────────
+
+  /** Attach or detach an existing tag on a task. */
+  const toggleTaskTag = useCallback(
+    (taskId: string, tagId: string) => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      const rt = runtime;
+      const wsId = workspaceId;
+      const existing = bundle.tagLinks.find(
+        (l) => l.entityType === "task" && l.entityId === taskId && l.tagId === tagId,
+      );
+      if (existing) {
+        setBundle((prev) => ({ ...prev, tagLinks: prev.tagLinks.filter((l) => l.id !== existing.id) }));
+        void rt.tasks
+          .detachTag({ workspaceId: wsId, tagId, entityType: "task", entityId: taskId })
+          .catch((e) => {
+            toast.error(e instanceof Error ? e.message : "Couldn't remove tag.");
+            void load();
+          });
+        return;
+      }
+      const tempId = `tmp-${crypto.randomUUID()}`;
+      const optimistic: TagLink = {
+        id: tempId,
+        workspaceId: wsId,
+        tagId,
+        entityType: "task",
+        entityId: taskId,
+        createdAt: new Date().toISOString(),
+      };
+      setBundle((prev) => ({ ...prev, tagLinks: [...prev.tagLinks, optimistic] }));
+      void rt.tasks
+        .attachTag({ workspaceId: wsId, tagId, entityType: "task", entityId: taskId })
+        .then((saved) =>
+          setBundle((prev) => ({
+            ...prev,
+            tagLinks: prev.tagLinks.map((l) => (l.id === tempId ? saved : l)),
+          })),
+        )
+        .catch((e) => {
+          setBundle((prev) => ({ ...prev, tagLinks: prev.tagLinks.filter((l) => l.id !== tempId) }));
+          toast.error(e instanceof Error ? e.message : "Couldn't add tag.");
+        });
+    },
+    [runtime, workspaceId, canEdit, bundle.tagLinks, load],
+  );
+
+  /**
+   * Create a workspace tag (auto-colored) and attach it to a task. If a tag with
+   * the same name already exists, attach that one instead of duplicating.
+   */
+  const createTagForTask = useCallback(
+    (name: string, taskId: string) => {
+      const trimmed = name.trim();
+      if (!trimmed || !runtime || !workspaceId || !canEdit) {
+        if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      const rt = runtime;
+      const wsId = workspaceId;
+      const dupe = bundle.tags.find(
+        (t) => !t.deletedAt && t.name.trim().toLowerCase() === trimmed.toLowerCase(),
+      );
+      if (dupe) {
+        const linked = bundle.tagLinks.some(
+          (l) => l.entityType === "task" && l.entityId === taskId && l.tagId === dupe.id,
+        );
+        if (!linked) toggleTaskTag(taskId, dupe.id);
+        return;
+      }
+      const now = new Date().toISOString();
+      const color = pickTagColor(bundle.tags.filter((t) => !t.deletedAt));
+      const tempTagId = `tmp-${crypto.randomUUID()}`;
+      const tempLinkId = `tmp-${crypto.randomUUID()}`;
+      const optimisticTag: Tag = {
+        id: tempTagId,
+        workspaceId: wsId,
+        ownerId: userId ?? "",
+        name: trimmed,
+        color,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      };
+      const optimisticLink: TagLink = {
+        id: tempLinkId,
+        workspaceId: wsId,
+        tagId: tempTagId,
+        entityType: "task",
+        entityId: taskId,
+        createdAt: now,
+      };
+      setBundle((prev) => ({
+        ...prev,
+        tags: [...prev.tags, optimisticTag],
+        tagLinks: [...prev.tagLinks, optimisticLink],
+      }));
+      void (async () => {
+        try {
+          const savedTag = await rt.tasks.upsertTag({ ...optimisticTag, id: "" });
+          setBundle((prev) => ({
+            ...prev,
+            tags: prev.tags.map((t) => (t.id === tempTagId ? savedTag : t)),
+            tagLinks: prev.tagLinks.map((l) =>
+              l.tagId === tempTagId ? { ...l, tagId: savedTag.id } : l,
+            ),
+          }));
+          const savedLink = await rt.tasks.attachTag({
+            workspaceId: wsId,
+            tagId: savedTag.id,
+            entityType: "task",
+            entityId: taskId,
+          });
+          setBundle((prev) => ({
+            ...prev,
+            tagLinks: prev.tagLinks.map((l) => (l.id === tempLinkId ? savedLink : l)),
+          }));
+        } catch (e) {
+          setBundle((prev) => ({
+            ...prev,
+            tags: prev.tags.filter((t) => t.id !== tempTagId),
+            tagLinks: prev.tagLinks.filter((l) => l.id !== tempLinkId && l.tagId !== tempTagId),
+          }));
+          toast.error(e instanceof Error ? e.message : "Couldn't create tag.");
+        }
+      })();
+    },
+    [runtime, workspaceId, canEdit, bundle.tags, bundle.tagLinks, userId, toggleTaskTag],
+  );
+
+  /** Recolor a workspace tag (label-palette hue name). */
+  const setTagColor = useCallback(
+    (tagId: string, color: string) => {
+      const existing = bundle.tags.find((t) => t.id === tagId);
+      if (!existing || existing.color === color) return;
+      const updated = { ...existing, color, updatedAt: new Date().toISOString() };
+      setBundle((prev) => ({ ...prev, tags: prev.tags.map((t) => (t.id === tagId ? updated : t)) }));
+      guard(async () => {
+        const saved = await runtime!.tasks.upsertTag(updated);
+        setBundle((prev) => ({ ...prev, tags: prev.tags.map((t) => (t.id === tagId ? saved : t)) }));
+      });
+    },
+    [bundle.tags, guard, runtime],
+  );
+
+  /** Delete a workspace tag — soft-deletes the tag and drops all its links. */
+  const deleteTag = useCallback(
+    (tagId: string) => {
+      const existing = bundle.tags.find((t) => t.id === tagId);
+      if (!existing) return;
+      setBundle((prev) => ({
+        ...prev,
+        tags: prev.tags.filter((t) => t.id !== tagId),
+        tagLinks: prev.tagLinks.filter((l) => l.tagId !== tagId),
+      }));
+      guard(async () => {
+        await runtime!.tasks.deleteTag({ workspaceId: workspaceId!, tagId });
+      });
+    },
+    [bundle.tags, guard, runtime, workspaceId],
+  );
+
   return {
     loading,
     error,
@@ -377,7 +606,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     buckets,
     inbox,
     tasks: liveTasks,
-    tags: bundle.tags,
+    tags: liveTags,
+    tagsByTask,
+    openTaskCountByTag,
     openTaskCountByBucket,
     driftCountByBucket,
     timeBlocks,
@@ -398,6 +629,11 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     createBucket,
     renameBucket,
     deleteBucket,
+    setBucketGroup,
+    toggleTaskTag,
+    createTagForTask,
+    setTagColor,
+    deleteTag,
     INBOX_BUCKET_NAME,
   };
 }

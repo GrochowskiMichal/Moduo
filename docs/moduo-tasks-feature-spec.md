@@ -75,6 +75,8 @@ Typography/casing/density follow `DESIGN_SYSTEM.md` (primary = display font for 
 
 Exclusive (one task = one bucket). No cooldown. Inbox is reserved/undeletable. Tags are a separate, workspace-level cross-cutting concept.
 
+**Sections (presentational).** A bucket may carry an optional `group` label; buckets sharing a label collapse under a section header in the rail (two levels max: section → bucket, never nested). Sections are purely presentational — capture and task→bucket assignment never depend on them, and the rail stays flat until a bucket is assigned one (quiet until used). Assigned/created via the bucket's "…" → "Section" menu.
+
 Example buckets: Junction, Fitness, Diet, Money, Moduo, Plugin Client, EP, Hangout Realm, Godot Game, Inbox.
 
 ---
@@ -87,7 +89,7 @@ New-task modal — **Linear-style**: a natural-language title line on top, a des
 
 Bucket defaults to selected/last-used. **Title is the only thing needed** — Enter on the title alone files immediately to the default bucket. `⌘↵` submits from anywhere (e.g. the description). A "Create more" toggle keeps the modal open for rapid entry. **Land directly, fix lazily** — a confirmation toast shows the parse ("Take vitamins — recurs daily at 8:00 AM").
 
-This is *not* a required-field form: the pills are optional, never block submit, and default to sensible values. Tags are deferred (own surface).
+This is *not* a required-field form: the pills are optional, never block submit, and default to sensible values. Tags are applied **after** capture, in the task detail panel via the shared workspace-level TagPicker — the capture modal stays tag-free so the dump stays frictionless (friction behind the dump, not in front of it).
 
 Anti-patterns: required-field forms before submit, triage queues, multi-step wizards, forced bucket dropdowns.
 
@@ -152,9 +154,9 @@ on open and never overrides later in-session navigation.
 
 **Energy vs. priority (two distinct optional axes).** `energy_level` = *how demanding* a task is (the cost to do it); `priority` = *how important* it is to get done (its weight in time). Both are optional, unset by default, and rendered **ambiently** — never red, never alarming (principles 4 & 5). Both are offered as opt-in group-by dimensions in List view alongside None / Status / Bucket. `priority` uses low/med/high to mirror `energy_level`; an `urgent` tier is a non-breaking future enum extension if dogfooding wants it.
 
-**Bucket:** `id`, `workspace_id`, `name`, `is_system` (Inbox), `created_at`. No cooldown field.
+**Bucket:** `id`, `workspace_id`, `name`, `is_system` (Inbox), `group?` (optional, presentational section label; `group_label` column), `position`, `created_at`. No cooldown field.
 
-**Tag:** `id`, `workspace_id`, `name`, polymorphic association.
+**Tag:** `id`, `workspace_id`, `name`, `color` (a label-palette hue name — token-routed, not a hex), polymorphic association via `tag_links` (`entity_type` "task" | "note" | "email" | …). Workspace-level; shared `TagPicker` (`src/components/`) is the cross-module surface.
 
 **Event** (Calendar module — here for completeness): fixed-time, no completion, native or read-only feed.
 

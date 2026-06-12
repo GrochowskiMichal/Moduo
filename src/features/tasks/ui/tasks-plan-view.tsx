@@ -7,7 +7,7 @@ import {
   resolveDefaultSelection,
   timeBlockByBucket as invertTimeBlocks,
 } from "../default-view";
-import type { GroupBy } from "../helpers";
+import { taskMatchesTagFilter, type GroupBy } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted } from "../model";
 import { BucketRail, type TasksMode } from "./bucket-rail";
@@ -18,6 +18,7 @@ import type { PlanView } from "./plan-view-header";
 import { TaskBoardView, type BoardGroupBy } from "./task-board-view";
 import { TaskDetailPanel } from "./task-detail-panel";
 import { TaskListView } from "./task-list-view";
+import { ActiveTagFilters, TagFilterButton } from "./task-tag-filter";
 
 type Props = {
   api: TasksModuleApi;
@@ -71,6 +72,18 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   // Task-level selection (distinct from `selection`, which is the bucket scope).
   // Lifted here so the right-rail detail panel can bind to it across List/Board.
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // Tag filter — narrows the center list/board (rail counts stay whole). Held in
+  // memory (a transient view state, not a persisted preference); reset per
+  // workspace so a filter never bleeds across workspaces.
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
+  useEffect(() => setFilterTagIds([]), [workspaceId]);
+  const toggleTagFilter = useCallback(
+    (tagId: string) =>
+      setFilterTagIds((prev) =>
+        prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
+      ),
+    [],
+  );
 
   // Persist preferences.
   useEffect(() => writeLS(workspaceId, "mode", mode), [workspaceId, mode]);
@@ -132,13 +145,25 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     [buckets, inbox],
   );
 
-  const scopeTasks = useMemo(() => {
+  const scopeTasksAll = useMemo(() => {
     if (selection === "today") return api.committedTasks;
     if (selection === "all") return tasks.filter((t) => t.status !== "archived");
     const bucketId = selection === "inbox" ? inboxId : selection;
     if (!bucketId) return [];
     return tasks.filter((t) => t.bucketId === bucketId && t.status !== "archived");
   }, [selection, tasks, inboxId, api.committedTasks]);
+
+  // Apply the tag filter on top of the bucket scope (center only; rail counts
+  // stay whole). OR/union — a task matches if it carries any selected tag.
+  const scopeTasks = useMemo(() => {
+    if (filterTagIds.length === 0) return scopeTasksAll;
+    return scopeTasksAll.filter((t) =>
+      taskMatchesTagFilter(
+        (api.tagsByTask.get(t.id) ?? []).map((tag) => tag.id),
+        filterTagIds,
+      ),
+    );
+  }, [scopeTasksAll, filterTagIds, api.tagsByTask]);
 
   const scopeTitle =
     isAll ? "All" : selection === "today" ? "Today" : selection === "inbox" ? "Inbox" : bucketNameById(selection);
@@ -194,6 +219,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
       onTriageBucket={setTriageBucketId}
       timeBlockByBucket={timeBlocksByBucket}
       onSetTimeBlock={api.setTimeBlock}
+      onSetBucketGroup={api.setBucketGroup}
     />
   );
 
@@ -215,6 +241,29 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     setSelectedTaskId(scopeTasks[0]?.id ?? null);
   }, [api.loading, selectedTaskId, scopeTasks]);
 
+  // Tag-filter header control + active-chip row, passed to both views as nodes so
+  // List/Board stay unaware of the filter machinery.
+  const tagFilterControl =
+    api.tags.length > 0 ? (
+      <TagFilterButton
+        tags={api.tags}
+        filterTagIds={filterTagIds}
+        countByTag={api.openTaskCountByTag}
+        onToggle={toggleTagFilter}
+      />
+    ) : undefined;
+  const activeTagFilters =
+    filterTagIds.length > 0 ? (
+      <ActiveTagFilters
+        tags={api.tags}
+        filterTagIds={filterTagIds}
+        matchCount={scopeTasks.length}
+        scopeCount={scopeTasksAll.length}
+        onToggle={toggleTagFilter}
+        onClear={() => setFilterTagIds([])}
+      />
+    ) : undefined;
+
   const sharedViewProps = {
     tasks: scopeTasks,
     scopeTitle,
@@ -228,6 +277,9 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     onRequestCapture: openCapture,
     selectedTaskId,
     onSelectTask: setSelectedTaskId,
+    tagFilterControl,
+    activeTagFilters,
+    onTagFilter: toggleTagFilter,
     api,
   };
 
