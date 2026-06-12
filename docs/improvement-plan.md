@@ -211,6 +211,20 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       Settings picker, same cascade mechanism as `data-accent`.
 - [ ] Audit for token bypasses while in there.
 
+### ☐ 11 — Tasks UI/UX pass *(design · scope TBD with Maciej)*
+
+> Added 2026-06-12: Maciej isn't happy with how Tasks looks overall and wants
+> visual modifications — deferred while features land. No other session covers
+> this (1 was density, 10 is shades/tokens; the polish backlog is small
+> mechanics, not look-and-feel). Start with a design critique / brief session
+> with Maciej (what specifically reads wrong: hierarchy? chrome? spacing?
+> typography?), then restyle the Tasks surfaces against it. Natural pairing:
+> run alongside or right after 10, since both touch the token layer.
+
+- [ ] Collect the critique → brief (`.design/` doc) with Maciej.
+- [ ] Restyle Tasks surfaces (rail, rows, cards, detail panel, Execute)
+      against the brief; fold in the polish backlog items that fit.
+
 ## Model assignment (decided with Maciej, 2026-06-12)
 
 - **Opus-tier sessions** (UI on existing surfaces, strong guardrails):
