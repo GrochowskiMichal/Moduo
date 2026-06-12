@@ -6,6 +6,97 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Improvement-plan Session 7 — Recurrence engine (2026-06-12)
+
+Branch `t/maciej/session7-recurrence` (Fable), **stacked on Session 6's branch**
+(`t/maciej/session6-blocked-by`, PR #16 still open — recurrence touches the
+same done/commit semantics; retarget to `maciej` after #16 merges). Spec gained
+**§5d** (written first), vocabulary gained "Occurrence / Catch-up".
+
+**The model — single-row engine.** A recurring task is **one row that cycles**,
+never a template spawning occurrence rows. `scheduledAt` always carries the
+*current occurrence* (so rows, drift, commit, board, and the future Calendar
+work unchanged); `recurrence.nextOccurrence` is the stored pointer for when a
+completed task comes back. Missed occurrences **don't exist**: no backfill, no
+"7 overdue" — at any moment exactly one live occurrence (principle 4).
+**Zero schema change**: the `tasks.recurrence` jsonb column and the Rust
+`RecurrenceRule` parity struct have existed since the first tasks migration;
+this session built the engine that finally moves the pointer.
+
+**Key decision — done stays done for the day.** Completing a recurring task
+does *not* instantly reset it to todo (that would erase Execute's n/m credit
+and the Done column's meaning). Instead completion **advances the pointer**
+(first occurrence after `max(now, scheduledAt)` — completing early skips the
+pending occurrence, completing late never backfills) with a quiet
+"Done — next …" toast, and **catch-up** does the reopening when the pointer
+arrives. Un-completing recomputes the pointer the same way. An exhausted rule
+(COUNT/UNTIL) advances to a null pointer — the task simply stays done.
+
+**Engine ([recurrence-engine.ts](../src/features/tasks/recurrence-engine.ts))
+— pure, 22 tests.** `occurrenceAfter` / `currentOccurrence` (defensive rrule
+parsing; invalid rules are inert), `recurrenceOnStatusChange` (advance-on-done),
+`catchUpPatch` (idempotent: done + pointer-arrived → reopen at the *latest*
+occurrence ≤ now, pointer → first future, **stale commit cleared**, never
+auto-commits; open + missed ≥1 full occurrence → collapse `scheduledAt` forward
+to one quiet drift; open + no `scheduledAt` → adopt the live occurrence —
+self-heals pre-engine rows; drift *within* the current occurrence is left
+alone — still actionable today), `skipOccurrencePatch` (jump past the pending
+occurrence, release today's commit when the new occurrence isn't today).
+
+**Hook ([use-tasks-module.ts](../src/features/tasks/hooks/use-tasks-module.ts)).**
+`patchTask` is the one chokepoint: any status change on a recurring task
+refreshes the pointer (covers row/card/list toggles, board drag-to-Done, the
+panel status select, Execute's "Done, next") unless the patch already carries
+`recurrence` (catch-up/skip pass it explicitly). Catch-up runs **once per
+successful load** (a `loadStamp` + ref guard; edit permission required —
+view-only sessions just see quiet drift). New `skipOccurrence` mutation —
+deliberately does **not** touch `rescheduleCount` (a skipped occurrence is a
+decision, not a slip; Execute's *Skip* = leave today's queue stays a separate
+op — the occurrence remains live and doable later today).
+
+**Surfaces.** Detail panel: the read-only raw-RRULE field became an editable
+**Repeat** preset select (capture's vocabulary; an out-of-vocabulary parsed
+rule reads as its human label; clearing keeps the task one-off; setting a rule
+on an unscheduled task adopts the first occurrence) + a tooltipped
+**skip-occurrence** button; the Scheduled draft now follows external moves
+(skip/catch-up). Rows/cards: context-menu "Skip occurrence" (open recurring
+tasks only); tooltips humanized (`recurrenceLabel` instead of raw RRULE).
+Capture: a recurring capture **materializes `scheduledAt`** from the rule's
+first occurrence (was: recurring captures had no scheduled time and were
+invisible to drift).
+
+**Verified (local):** typecheck ✓, vitest **81/81** ✓ (22 new in
+`recurrence-engine.test.ts`: advance/early-complete/exhausted, reopen/collapse/
+within-occurrence/deliberate-future, adopt, idempotency, skip semantics),
+lint:tw ✓, lint:css 0 errors (same 5 pre-existing global.css warnings),
+`cargo check` + `cargo test --lib domain` 5/5 ✓, `build:web` ✓.
+**Live-verified on web** against hosted (test account, `:8094` worktree rsbuild
+via Chrome MCP): (1) captured "Water plants every day" → Repeat pill parsed,
+row shows repeat marker + **Jun 13, 9:00 AM** (scheduledAt materialized);
+panel Repeat reads "Every day" (preset mapping). (2) **Skip** → toast
+"Skipped — next Jun 14, 9:00 AM", panel Scheduled input synced. (3) **Done**
+→ row stays struck-through, toast "Done — next Jun 15, 9:00 AM" (advanced from
+the pending occurrence); DB: pointer `2026-06-15T07:00Z`, rescheduleCount 0.
+(4) **Catch-up**: backdated the done row via the test user's own RLS-scoped
+REST write (completed Jun 9, pointer Jun 10, stale commit Jun 9) → reload →
+reopened `todo` at **today 9:00** (latest ≤ now; Jun 10/11 misses collapsed),
+pointer tomorrow, commit cleared — DB-confirmed; bucket showed exactly **one**
+quiet drift. (5) Second reload → **zero writes** (updated_at unchanged).
+(6) Row context menu shows "Skip occurrence". No console errors. Left as demo
+data: the "Water plants" daily task (todo, today 9:00).
+
+**Note:** the auto-mode classifier denied a service-role `UPDATE` for the
+backdating probe — rerouted through the test account's own authenticated REST
+write (RLS-enforced, same surface as the app), which is the better probe anyway.
+
+**Deferred:** auto-commit of reopened occurrences (violates no-automagic for
+now; revisit if dogfooding wants "recurring into Today"); a skip affordance in
+drift triage for recurring tasks; sub-daily rules (vocabulary is ≥ daily);
+local-time DST shift on rrule occurrences (existing parser behavior, ~1h drift
+across transitions; revisit with Calendar).
+
+---
+
 ## Improvement-plan Session 6 — Blocked-by dependencies (2026-06-12)
 
 Branch `t/maciej/session6-blocked-by` off `maciej` (Fable). Dependencies are

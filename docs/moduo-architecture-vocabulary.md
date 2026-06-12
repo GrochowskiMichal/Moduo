@@ -62,6 +62,17 @@ A **full task** with a `parent_id` — not a checklist item. Exactly one level d
 ### Blocked / Frontier
 **Blocked** is a *computed* read-time state (like Drift), never a stored status: a task with at least one live, open blocker via a `task_relations` edge (blocker → blocked). Renders dim/quiet — never red, never a wall: a blocked task stays editable, completable, committable. The **frontier** of a blocked task is the set of open, unblocked tasks found by walking up its blocker chain — "what's actually next." Committing a blocked task offers the frontier (with a Commit-anyway escape hatch). The edge graph is a DAG; cycles are forbidden at the DB level.
 
+### Occurrence / Catch-up
+A recurring task is **one task row that cycles** (never a template spawning
+copies); its **occurrence** is the single live instance, carried in
+`scheduled_at`, with the rule's stored `nextOccurrence` pointer marking when it
+comes back. **Advance-on-done** moves the pointer when the task is completed;
+**catch-up** (on app open / reload) reopens done recurring tasks whose pointer
+has arrived and collapses missed occurrences forward — missed occurrences
+don't exist: no backfill, no "7 overdue", only the next occurrence.
+**Skip-occurrence** jumps to the next occurrence without done-credit (and
+without counting as a reschedule).
+
 ### Commit
 The act of adding a task to **today's queue** in Plan mode. Commit means "I'm doing this today," in priority order. It is NOT the same as scheduling a specific time — committing builds the queue; scheduling assigns a clock time (optional, and a Calendar-module concern).
 

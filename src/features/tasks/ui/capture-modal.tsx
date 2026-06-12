@@ -136,7 +136,9 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
       title,
       description: description.trim() || undefined,
       dueDate: effDue,
-      scheduledAt: effScheduled,
+      // A recurring capture materializes its first occurrence as the scheduled
+      // time (spec §5d) — the occurrence IS scheduledAt in the single-row model.
+      scheduledAt: effScheduled ?? effRecurrence?.nextOccurrence ?? null,
       recurrence: effRecurrence,
       priority,
       energyLevel: energy,

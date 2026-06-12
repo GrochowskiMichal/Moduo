@@ -4,7 +4,7 @@
 // no new write paths. Mirrors, never walls: ambient info is factual and quiet,
 // never red / alarming (spec §10 design principles 4 & 5).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CalendarClock,
   CircleDashed,
@@ -15,6 +15,7 @@ import {
   Plus,
   Repeat,
   RotateCcw,
+  SkipForward,
   Sunrise,
   X,
 } from "lucide-react";
@@ -67,6 +68,12 @@ import {
   type Task,
   type TaskStatus,
 } from "../model";
+import {
+  RECURRENCE_PRESETS,
+  recurrenceFromPreset,
+  recurrenceLabel,
+  type RecurrencePreset,
+} from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { CompleteToggle } from "./task-row";
 
@@ -131,6 +138,12 @@ function DetailBody({
   const [scheduled, setScheduled] = useState(toLocalInputValue(task.scheduledAt));
   const [due, setDue] = useState(toDateInputValue(task.dueDate));
 
+  // The scheduled time also moves outside this input (skip-occurrence,
+  // recurrence catch-up) — keep the draft in step with the task.
+  useEffect(() => {
+    setScheduled(toLocalInputValue(task.scheduledAt));
+  }, [task.scheduledAt]);
+
   const drifted = isDrifted(task);
   const committed = !!task.committedFor && task.committedFor === api.today;
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
@@ -167,6 +180,29 @@ function DetailBody({
   const commitDue = () => {
     const next = due ? new Date(`${due}T00:00:00`).toISOString() : null;
     if (next !== task.dueDate) api.patchTask(task.id, { dueDate: next });
+  };
+
+  // Recurrence (spec §5d): the current rule mapped back to a preset for the
+  // picker; a parsed rule outside the vocabulary reads as "custom".
+  const recurrencePreset: string = task.recurrence
+    ? RECURRENCE_PRESETS.find(
+        (p) => recurrenceFromPreset(p.value, task.scheduledAt).rrule === task.recurrence?.rrule,
+      )?.value ?? "custom"
+    : "none";
+  const setRecurrencePreset = (v: string) => {
+    if (v === "custom" || v === recurrencePreset) return;
+    if (v === "none") {
+      // Clearing the rule keeps the task and its current occurrence (one-off).
+      api.patchTask(task.id, { recurrence: null });
+      return;
+    }
+    const rec = recurrenceFromPreset(v as RecurrencePreset, task.scheduledAt);
+    // A task without a scheduled time adopts the rule's first occurrence —
+    // the occurrence IS the scheduled time in the single-row model.
+    api.patchTask(
+      task.id,
+      task.scheduledAt ? { recurrence: rec } : { recurrence: rec, scheduledAt: rec.nextOccurrence },
+    );
   };
 
   return (
@@ -331,14 +367,51 @@ function DetailBody({
             </div>
           </Field>
 
-          {task.recurrence ? (
-            <Field label="Recurrence">
-              <span className="flex items-center gap-1.5 text-sm text-foreground">
-                <Repeat className="size-3.5 text-muted-foreground" aria-hidden />
-                {task.recurrence.rrule}
-              </span>
-            </Field>
-          ) : null}
+          {/* recurrence — the single-row engine (spec §5d): preset vocabulary
+              only (no complex picker), plus the skip-occurrence affordance */}
+          <Field label="Repeat">
+            <div className="flex items-center gap-2">
+              <Select
+                value={recurrencePreset}
+                disabled={!canEdit}
+                onValueChange={setRecurrencePreset}
+              >
+                <SelectTrigger size="sm" className="w-full font-display">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Repeat className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                    <SelectValue />
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Doesn’t repeat</SelectItem>
+                  {RECURRENCE_PRESETS.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                  {recurrencePreset === "custom" && task.recurrence ? (
+                    <SelectItem value="custom">{recurrenceLabel(task.recurrence)}</SelectItem>
+                  ) : null}
+                </SelectContent>
+              </Select>
+              {canEdit && task.recurrence && task.status !== "done" && task.status !== "archived" ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => api.skipOccurrence(task.id)}
+                      aria-label="Skip this occurrence"
+                    >
+                      <SkipForward className="size-3.5" aria-hidden />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Skip this occurrence</TooltipContent>
+                </Tooltip>
+              ) : null}
+            </div>
+          </Field>
 
           <Field label="Tags">
             <div className="flex flex-wrap items-center gap-1.5">

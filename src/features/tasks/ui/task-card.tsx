@@ -31,6 +31,7 @@ import {
 import { cn } from "../../../lib/utils";
 import { formatDue, formatScheduled, LEVEL_OPTIONS } from "../helpers";
 import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../model";
+import { recurrenceLabel } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { BlockedMarker, CompleteToggle, LevelDots } from "./task-row";
 
@@ -115,6 +116,11 @@ export function TaskCard({
         <ContextMenuItem onSelect={() => api.toggleCommit(task.id)}>
           {task.committedFor === api.today ? "Remove from today" : "Commit to today"}
         </ContextMenuItem>
+        {task.recurrence && task.status !== "done" && task.status !== "archived" ? (
+          <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
+            Skip occurrence
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuSeparator />
         <ContextMenuSub>
           <ContextMenuSubTrigger>Move to bucket</ContextMenuSubTrigger>
@@ -270,7 +276,7 @@ export function CardBody({
                   <Repeat className="size-3.5" aria-hidden />
                 </span>
               </TooltipTrigger>
-              <TooltipContent>{task.recurrence.rrule}</TooltipContent>
+              <TooltipContent>{recurrenceLabel(task.recurrence)}</TooltipContent>
             </Tooltip>
           ) : null}
           {scheduled ? (
