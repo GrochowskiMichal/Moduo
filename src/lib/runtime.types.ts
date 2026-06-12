@@ -4,12 +4,16 @@
  */
 
 import type {
+  ActivityEntry,
   Bucket,
+  RecurrenceRule,
   Tag,
   TagLink,
   Task,
   TaskRelation,
+  TasksCatchUpItem,
   TasksModuleBundle,
+  TaskStatus,
   TimeBlockMap,
 } from "../features/tasks/model";
 
@@ -55,6 +59,23 @@ export type RuntimeCapabilities = {
 export type IntegrationStatusItem = {
   provider: string;
   connected: boolean;
+};
+
+/**
+ * A workspace-scoped API key for the Moduo MCP connector
+ * (docs/moduo-mcp-connector.md). The secret is returned exactly once from
+ * `createApiKey` and never readable again — only the prefix is stored in
+ * clear. `scopes` maps module → "none" | "view" | "edit" (view by default;
+ * admin is never key-grantable).
+ */
+export type WorkspaceApiKey = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  keyPrefix: string;
+  scopes: Record<string, string>;
+  createdAt: string;
+  lastUsedAt: string | null;
 };
 
 export type ModuoRuntime = {
@@ -137,6 +158,17 @@ export type ModuoRuntime = {
     listNotifications(): Promise<any[]>;
     markNotificationRead(notificationId: string): Promise<void>;
     markAllNotificationsRead(): Promise<void>;
+    /** Live (unrevoked) MCP connector keys. Owner/admin only (RLS-enforced). */
+    listApiKeys(workspaceId: string): Promise<WorkspaceApiKey[]>;
+    /** Create a key; the returned `secret` is shown once and never again. */
+    createApiKey(input: {
+      workspaceId: string;
+      name: string;
+      scopes: Record<string, string>;
+    }): Promise<WorkspaceApiKey & { secret: string }>;
+    revokeApiKey(keyId: string): Promise<void>;
+    /** The Moduo MCP connector URL agents connect to (same on web + desktop). */
+    getMcpEndpoint(): string;
   };
 
   notes: {
@@ -293,5 +325,44 @@ export type ModuoRuntime = {
     /** Workspace-scoped time-of-day slot → bucket map (one row per workspace). */
     getTimeBlocks(workspaceId: string): Promise<TimeBlockMap>;
     setTimeBlocks(input: { workspaceId: string; blocks: TimeBlockMap }): Promise<TimeBlockMap>;
+
+    /**
+     * Intent ops (docs/moduo-module-contract.md): named, invariant-keeping
+     * mutations via `tasks_op_*` RPCs — server-side permission check,
+     * invariants, write, and an attributed activity row in one transaction.
+     * Each returns the updated row(s) for optimistic reconciliation.
+     */
+    opCommit(input: { workspaceId: string; taskId: string; forDate: string }): Promise<Task>;
+    opUncommit(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    opSkipToday(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    opSetStatus(input: {
+      workspaceId: string;
+      taskId: string;
+      status: TaskStatus;
+      recurrence?: RecurrenceRule | null;
+      position?: string;
+    }): Promise<Task>;
+    opReschedule(input: {
+      workspaceId: string;
+      taskId: string;
+      scheduledAt: string;
+      days?: number;
+    }): Promise<Task>;
+    opUnschedule(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    opSkipOccurrence(input: {
+      workspaceId: string;
+      taskId: string;
+      scheduledAt: string;
+      recurrence: RecurrenceRule;
+      releaseCommit: boolean;
+    }): Promise<Task>;
+    opCatchUp(input: { workspaceId: string; items: TasksCatchUpItem[] }): Promise<Task[]>;
+    /** Read the entity's quiet activity trail (newest first). */
+    listActivity(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+      limit?: number;
+    }): Promise<ActivityEntry[]>;
   };
 };

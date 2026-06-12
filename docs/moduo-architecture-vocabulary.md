@@ -73,6 +73,33 @@ don't exist: no backfill, no "7 overdue", only the next occurrence.
 **Skip-occurrence** jumps to the next occurrence without done-credit (and
 without counting as a reschedule).
 
+### Intent op
+A named, invariant-keeping operation that is the only sanctioned way to perform
+an invariant-bearing mutation in a module — `tasks.commit`, not "set
+`committed_for`". Implemented as a `<module>_op_<name>` Postgres RPC that
+checks permission, enforces invariants, writes, and records an attributed
+Activity row in one transaction. The full contract lives in
+`moduo-module-contract.md`. Agents and API clients (MCP connector) get *only*
+intent ops, never raw row writes.
+
+### MCP connector / API key
+The **MCP connector** is Moduo's single agent-facing surface (`moduo-mcp` edge
+function, `moduo-mcp-connector.md`): one stateless MCP server that every
+module registers its read tools and intent ops onto — onboarding a module is a
+registration entry, not architecture. An **API key** (`workspace_api_keys`,
+`moduo_sk_…`) is the connector's caller identity: workspace-scoped, named,
+secret shown once and stored hashed, with per-module scopes on the
+none/view/edit ladder (view by default; admin never key-grantable). Key
+mutations run through the same intent ops and are attributed in Activity as
+`api_key` with the key's name — an agent acting through a key is never silent.
+
+### Activity (trail)
+The append-only, per-workspace record of intent ops: *who* (user, agent, API
+key — the actor) did *what* (the op) to *which entity*, *when*. One shared
+cross-module table (`module_activity`); rendered as a quiet, ambient trail in
+the entity's detail surface — a mirror, never a wall, never notification spam.
+Agents never move things silently.
+
 ### Commit
 The act of adding a task to **today's queue** in Plan mode. Commit means "I'm doing this today," in priority order. It is NOT the same as scheduling a specific time — committing builds the queue; scheduling assigns a clock time (optional, and a Calendar-module concern).
 

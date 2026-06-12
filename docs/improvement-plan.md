@@ -218,21 +218,63 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       forward to one quiet drift. Skip lives in the detail panel + row/card
       context menus; the panel gained an editable Repeat preset field.)*
 
-### ☐ 8 — Intent ops + activity *(platform · per-module contract, Tasks first)*
-- [ ] Define the module contract (ops naming, actor field, activity table,
-      registration shape) — see Cross-module AI-readiness above.
-- [ ] Implement for Tasks: commit/reschedule/triage/recurrence invariants move
-      from the React hook into backend RPCs.
-- [ ] Activity trail rendered in the task detail panel.
+### ☑ 8 — Intent ops + activity *(platform · per-module contract, Tasks first)*
 
-### ☐ 9 — MCP connector v1 *(platform · cloud)*
-- [ ] One Moduo MCP server with per-module registration; Tasks is module #1.
-- [ ] Read-only resources first (buckets, tasks, queue, drift, tags, search).
-- [ ] Writes exclusively via Session 8 intent ops; scoped API keys on the
-      none/view/edit permission model.
-- [ ] Document the "onboard a module to MCP" recipe so Notes/Mail/Calendar
+> **Done 2026-06-12** (Fable, branch `t/maciej/session8-intent-ops`). New
+> anchor doc [docs/moduo-module-contract.md](./moduo-module-contract.md) (the
+> four pillars + Tasks reference table); spec gained **§11b**, vocabulary
+> gained "Intent op" + "Activity". Migrations
+> `20260612150000_module_activity_intent_ops.sql` +
+> `…151000_intent_ops_revoke_anon.sql` **applied to hosted** (Maciej's
+> go-ahead after the classifier gate, same as Sessions 4/5) and live-verified
+> end-to-end incl. security probes (forged activity INSERT rejected; anon RPC
+> rejected). Incidental token fix: `--z-dropdown` 40 → 70 (dropdowns inside
+> dialogs were unclickable app-wide). See build log.
+
+- [x] Define the module contract (ops naming, actor field, activity table,
+      registration shape) — see Cross-module AI-readiness above.
+      *(`docs/moduo-module-contract.md`; registration = typed manifests:
+      `src/lib/module-manifest.ts` + `module-registry.ts` +
+      `src/features/tasks/ops-manifest.ts`.)*
+- [x] Implement for Tasks: commit/reschedule/triage/recurrence invariants move
+      from the React hook into backend RPCs. *(8 `tasks_op_*` RPCs: commit/
+      uncommit/skip-today/set-status/reschedule/unschedule/skip-occurrence/
+      batched catch-up — each checks edit permission server-side (new
+      `tasks_module_permission()` ladder; RLS alone only checked membership),
+      enforces invariants, and logs attributed activity in one transaction.)*
+- [x] Activity trail rendered in the task detail panel. *(Quiet newest-first
+      trail, actor attribution, op→sentence vocabulary in `activity.ts`.)*
+
+### ☑ 9 — MCP connector v1 *(platform · cloud)*
+
+> **Done 2026-06-12** (Fable, branch `t/maciej/session9-mcp-connector`,
+> stacked on Session 8's branch while PR #18 is open). New anchor doc
+> **[docs/moduo-mcp-connector.md](./moduo-mcp-connector.md)**. One stateless
+> edge function (`supabase/functions/moduo-mcp/`, hand-rolled MCP Streamable
+> HTTP — 8 read tools, 7 intent-op write tools, recurrence-engine port) +
+> `workspace_api_keys` migration (`20260612160000` + search_path follow-up
+> `…161000`) + Settings UI (workspace modal → API keys: create /
+> reveal-once / revoke, view default). The auto-mode gate blocked the hosted
+> steps mid-session (same as Session 8); **Maciej approved**, migration
+> applied + `moduo-mcp` deployed (`verify_jwt = false`) and the full live
+> probe checklist passed, incl. the header-spoof and revoked-key rejections
+> and "Probe edit key committed this…" rendering in the app trail. See
+> build log.
+
+- [x] One Moduo MCP server with per-module registration; Tasks is module #1.
+      *(`moduo-mcp` edge fn; connector registry + `modules/tasks.ts`;
+      key-pinned workspace, no workspace args on tools.)*
+- [x] Read-only resources first (buckets, tasks, queue, drift, tags, search).
+      *(8 view-scope tools incl. `tasks_get` + `tasks_activity`, computed
+      drifted/blocked.)*
+- [x] Writes exclusively via Session 8 intent ops; scoped API keys on the
+      none/view/edit permission model. *(7 ops, `catch_up` excluded;
+      `workspace_api_keys` hashed secrets, view default, admin never
+      key-grantable; `actor_type='api_key'` via the service-role-only
+      header path.)*
+- [x] Document the "onboard a module to MCP" recipe so Notes/Mail/Calendar
       follow without redesign. Local-LLM/offline MCP stays deferred to the
-      lite version.
+      lite version. *(docs/moduo-mcp-connector.md.)*
 
 ### ☑ 10 — Theme shades + tokenization deepening *(design · anytime after 1)*
 

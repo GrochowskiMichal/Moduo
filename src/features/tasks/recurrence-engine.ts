@@ -15,7 +15,7 @@
 import { RRule } from "rrule";
 
 import { todayStr } from "./helpers";
-import type { RecurrenceRule, Task, TaskStatus } from "./model";
+import type { RecurrenceRule, Task, TasksCatchUpItem, TaskStatus } from "./model";
 
 /** Build an RRule from a stored rule. Defensive: invalid input → null. */
 function toRRule(rec: RecurrenceRule, fallbackDtstart?: string | null): RRule | null {
@@ -147,6 +147,25 @@ export function catchUpPatch(task: Task, now: Date): Partial<Task> | null {
   return {
     scheduledAt,
     recurrence: { ...rec, nextOccurrence: next ? next.toISOString() : null },
+  };
+}
+
+/**
+ * Shape a {@link catchUpPatch} result for the batched `tasks.catch_up` intent
+ * op (docs/moduo-module-contract.md): the engine computed the occurrence math;
+ * the op enforces structure and writes the attributed activity row.
+ */
+export function catchUpItem(
+  task: Pick<Task, "id" | "scheduledAt">,
+  patch: Partial<Task>,
+): TasksCatchUpItem {
+  return {
+    taskId: task.id,
+    kind: patch.status ? "reopen" : task.scheduledAt ? "collapse" : "adopt",
+    status: patch.status === "todo" ? "todo" : undefined,
+    scheduledAt: patch.scheduledAt ?? undefined,
+    recurrence: patch.recurrence as RecurrenceRule,
+    clearCommit: "committedFor" in patch ? true : undefined,
   };
 }
 

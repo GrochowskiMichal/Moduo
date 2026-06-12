@@ -626,9 +626,12 @@
   --z-sticky:  10;
   --z-rail:    20;
   --z-header:  30;
-  --z-dropdown: 40;
   --z-overlay: 50;
   --z-dialog:  60;
+  /* Dropdowns layer with popovers: both are floating content that must sit
+   * above a dialog when spawned from inside one (drift triage's per-task
+   * menus were unclickable at 40 — below the dialog overlay). */
+  --z-dropdown: 70;
   --z-popover: 70;
   --z-tooltip: 80;
   --z-toast:   90;

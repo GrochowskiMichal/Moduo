@@ -70,6 +70,220 @@ surfaces, revisit if a preset ever goes lighter than L 0.15).
 
 ---
 
+## Improvement-plan Session 9 — MCP connector v1 (2026-06-12)
+
+Branch `t/maciej/session9-mcp-connector` off `t/maciej/session8-intent-ops`
+(Fable; stacked while PR #18 is open — PR #19, retarget to `maciej` after #18
+merges). One Moduo MCP server with per-module registration — Tasks is module
+#1. New anchor doc **[moduo-mcp-connector.md](./moduo-mcp-connector.md)**
+(shape, key model, actor path, tool table, and the "onboard a module to MCP"
+recipe).
+
+**Status:** the auto-mode classifier gated the hosted apply mid-session
+(same as Sessions 4/5/8); **Maciej approved (apply + deploy)**. Migrations
+`20260612160000` + `…161000` applied, `moduo-mcp` deployed with
+**`verify_jwt = false`** (MCP clients send a Moduo key, not a Supabase JWT —
+keep this flag on redeploys), full live-verify below.
+
+**Connector — [supabase/functions/moduo-mcp/](../supabase/functions/moduo-mcp/).**
+Stateless MCP Streamable HTTP (hand-rolled JSON-RPC: initialize / ping /
+tools/list / tools/call; notifications → 202; no SSE, no session state, no
+SDK). `Authorization: Bearer moduo_sk_…` sha256-verified against
+`workspace_api_keys`; the key pins the workspace — tools never take a
+workspace arg. `registry.ts` is the connector-side module registry
+(`connectorModules`); `modules/tasks.ts` contributes 8 read tools
+(buckets / list / today / drift / tags / search / get / activity, all with
+computed drifted+blocked, served only at `view`+) and 7 write tools = the
+Session 8 intent ops minus `catch_up` (app-lifecycle pass, not an agent
+intent; deliberately not granted to service_role). `recurrence.ts` is a
+marked port of the two engine functions the connector needs (agents never
+compute rrule pointers; ops still enforce structure, so port drift degrades
+to a rejected call). Known accepted duplication: Deno can't import the app's
+extensionless modules — manifest summaries are copied; unify when module #2
+lands (recipe step 4 note).
+
+**Schema — [20260612160000_workspace_api_keys_mcp.sql](../supabase/migrations/20260612160000_workspace_api_keys_mcp.sql).**
+- `workspace_api_keys`: name, `key_prefix` (display stub), unique sha256
+  `key_hash` (secret never stored; column-level grant keeps the hash
+  unreadable by clients), `scopes` jsonb on the none/view/edit ladder (view
+  default, admin never key-grantable), revoked_at, throttled last_used_at.
+  RLS: owner/admin SELECT (`workspace_api_keys_can_manage`); no write
+  policies — create/revoke via SECURITY DEFINER RPCs
+  (`workspace_api_keys_create` returns the secret exactly once; 20-live-keys
+  cap; anon explicitly revoked per the Session 8 lesson).
+- **Actor path (the Session 8 reserved slot):** `module_api_key_id()` reads
+  the `x-moduo-key-id` request header **only under a service_role JWT** —
+  clients can send the header but never the role; the secret never reaches
+  Postgres. `module_activity_log()` gains the `api_key` branch (key id +
+  name snapshot; user keeps precedence; neither context → loud failure).
+  `tasks_module_permission()` resolves key calls to the key's tasks scope, so
+  `tasks_op__guard`'s edit+ check applies to keys with zero op changes.
+- Grants: the 7 agent-facing ops → service_role.
+
+**Runtime & UI.** `runtime.workspace` gains `listApiKeys` / `createApiKey` /
+`revokeApiKey` / `getMcpEndpoint` (web; desktop rides the same object
+verbatim). [workspace-settings-modal.tsx](../src/components/workspace-settings-modal.tsx)
+gains an **API keys · MCP** section (owner/admin modal): endpoint row with
+copy, name input + View/Edit scope picker + Create, reveal-once secret banner
+(copy + dismiss), key rows (name, prefix, last-used, scope badge, revoke).
+New `WorkspaceApiKey` type in runtime.types.
+
+**Docs.** Connector doc (above) incl. the onboarding recipe; contract doc's
+three "arrives in Session 9" passages resolved to the real mechanism; spec
+§11b actor sentence updated; vocabulary gained "MCP connector / API key";
+plan Session 9 header note.
+
+**Verified (local):** typecheck ✓, vitest **91/91** ✓, lint:tw ✓, lint:css 0
+errors (same 5 pre-existing global.css warnings). (`bun test` ≠ `bun run
+test` — bun's own runner reports phantom failures; vitest is the gate.)
+No deno locally — the edge function validated at deploy.
+
+**Live-verified against hosted** (test account; probe keys inserted by hash,
+JSON-RPC via curl; UI via `:8096` worktree rsbuild + Chrome MCP):
+(1) `initialize` → echoes protocol 2025-06-18, instructions name the
+workspace, key and scopes. (2) **Scope gating:** tools/list = 8 tools on a
+view key, 15 on edit; view-key `tasks_commit` → quiet isError refusal.
+(3) Edit-key `tasks_commit` → row committed, `module_activity` row
+`actor_type='api_key'`, actor_id = key id, label "Probe edit key".
+(4) **Engine port:** `tasks_set_status done` on daily-recurring Water plants
+(pending Jun 13) → pointer Jun 14 (advance-from-pending); reopen recomputes
+same; `tasks_skip_occurrence` → Jun 13→Jun 14, pointer Jun 15, forward-only.
+(5) **Auth:** no/bogus bearer 401; revoked key 401 (probed twice, SQL- and
+UI-revoked); GET 405; notification 202. (6) **Spoof:** authenticated user
+calling an op with a forged `x-moduo-key-id` header → attributed **user**
+(uid precedence); anon op call → permission denied. (7) **Key RPCs:** create
+as owner → secret returned once (view default); `select *` → column-grant
+denial (key_hash unreadable); explicit columns OK; `scopes:{tasks:'admin'}`
+rejected; revoke 204. (8) **Settings UI** (workspace modal): section renders
+endpoint+copy, create "UI round-trip key" with Edit scope → reveal-once
+banner; that key called `tasks_today` live; UI revoke × → row gone → key 401.
+(9) **In-app trail** renders "Probe edit key committed this for Jun 12"
+between the user rows — agents are named, never silent. No console errors.
+(10) Advisors: one new WARN (`module_api_key_id` mutable search_path) →
+fixed in `20260612161000`; the SECURITY-DEFINER-executable WARNs on the new
+RPCs are the same intentional pattern as all `tasks_op_*`; anon got nothing
+(Session 8's lesson held). **All probe keys revoked** (secrets appeared in
+the session transcript — none left live). Demo-data drift: Water plants now
+todo Jun 14 9:00 (pointer Jun 15); probe task restored (uncommitted, trail
+gained 3 rows incl. the api_key one).
+
+---
+
+## Improvement-plan Session 8 — Intent ops + activity (2026-06-12)
+
+Branch `t/maciej/session8-intent-ops` off `maciej` (Fable). The per-module
+AI-readiness contract, with Tasks as the reference implementation. New anchor
+doc **[moduo-module-contract.md](./moduo-module-contract.md)** (written first):
+four pillars — intent ops, actor attribution, activity, permission mapping —
+plus the registration shape for Session 9's MCP connector. Spec gained
+**§11b**; vocabulary gained "Intent op" + "Activity (trail)".
+
+**Status:** the auto-mode classifier gated the hosted apply mid-session (same
+as Sessions 4/5); **Maciej approved**, both migrations applied, full
+live-verify done (below). Note for future sessions: Supabase's
+`ALTER DEFAULT PRIVILEGES` grants EXECUTE on **new functions to `anon`** —
+`REVOKE … FROM PUBLIC` alone is not enough; the security advisor caught it and
+the follow-up migration
+[20260612151000_intent_ops_revoke_anon.sql](../supabase/migrations/20260612151000_intent_ops_revoke_anon.sql)
+revokes anon explicitly (probe-confirmed denied).
+
+**Schema —
+[20260612150000_module_activity_intent_ops.sql](../supabase/migrations/20260612150000_module_activity_intent_ops.sql).**
+- `module_activity`: one shared, cross-module, **append-only** trail
+  (workspace, module, entity_type/entity_id, op, actor_type/actor_id/
+  actor_label, payload jsonb). SELECT for members; **no write policies** —
+  rows are written only inside the ops (SECURITY DEFINER), so clients can't
+  forge attribution. Actor derived server-side from `auth.uid()` (+
+  `profiles.display_name` snapshot); `agent`/`api_key` CHECK-reserved for
+  Session 9's scoped keys.
+- `tasks_module_permission()`: normalizes the none/view/edit/admin ladder
+  (owner → admin; legacy `'write'`/`'read'` → edit/view; null/unknown → edit).
+  Ops require edit+ — **permission level is now enforced server-side** (RLS
+  alone only checked membership; view-only members could previously write).
+- 8 `tasks_op_*` RPCs (one transaction each: guard → invariants → write → log
+  → return row): `commit` (queue order = max+1 under a row lock, race-safe;
+  recommit = move-to-end = "Do last"), `uncommit` (idempotent, never
+  intercepted), `skip_today` (clear commit + `reschedule_count++`
+  **atomically**), `set_status` (recurrence pointer ride-along, recurring-only
+  structural guard; optional board position), `reschedule` / `unschedule`
+  (drift triage; never touch the reschedule counter), `skip_occurrence`
+  (forward-only enforced), `catch_up` (**batched**: one RPC per reload instead
+  of N writes; skips backwards moves — a stale tab can't undo a fresher one;
+  per-task activity rows with `kind` reopen/collapse/adopt). Occurrence math
+  stays in the tested client engine (rrule can't live in plpgsql); ops enforce
+  the structural invariants — documented split (contract Pillar 1).
+
+**Registration (contract pillar 3).** Typed manifests:
+[module-manifest.ts](../src/lib/module-manifest.ts) (types) +
+[module-registry.ts](../src/lib/module-registry.ts) (the single list Session 9
+iterates) + [ops-manifest.ts](../src/features/tasks/ops-manifest.ts) (the
+Tasks ops/resources). Onboarding module N+1 = adding a manifest entry.
+
+**Runtime & hook.** `runtime.tasks` gains `opCommit/opUncommit/opSkipToday/
+opSetStatus/opReschedule/opUnschedule/opSkipOccurrence/opCatchUp` +
+`listActivity` (desktop rides the same web runtime — zero Rust changes).
+[use-tasks-module.ts](../src/features/tasks/hooks/use-tasks-module.ts): new
+`applyOp` chokepoint (optimistic patch → RPC → swap returned row → bump
+`activityStamp`; reload on error). `patchTask` routes **status-cluster patches
+(status/recurrence/position) through `tasks.set_status`** — covers row/card/
+list toggles, board drag-to-column, the panel select, Execute's "Done, next" —
+while plain field edits stay raw upserts (contract: ops are for invariants).
+`toggleCommit`/`doLast` → commit/uncommit ops; Execute's Skip → `skip_today`;
+triage Reschedule/Ignore → `reschedule`/`unschedule` (new `unscheduleTask`);
+skip-occurrence → its op; the catch-up pass now builds `TasksCatchUpItem[]`
+(new pure `catchUpItem`, tested) and fires **one** `tasks_op_catch_up`.
+
+**Activity trail.** [activity.ts](../src/features/tasks/activity.ts): pure
+op → quiet sentence vocabulary ("You committed this for Jun 12", "skipped an
+occurrence — next Jun 14, 9:00 AM"; unknown ops fall back to the op name —
+the trail never lies by omission). Detail panel gains an **Activity** section
+(newest-first, `text-2xs text-muted-foreground/80`, actor + sentence + time;
+refetches on selection and on `activityStamp` bumps; creation is anchored by
+the existing Created metadata, no synthetic row). Mirrors, never walls.
+
+**Incidental find + token fix:** the drift-triage per-task menus were
+**unclickable** — `--z-dropdown: 40` sat below `--z-overlay: 50` /
+`--z-dialog: 60`, so any dropdown spawned inside any dialog rendered under the
+overlay (pre-existing, app-wide). Fixed at the token layer per CLAUDE.md:
+`--z-dropdown: 70` (layers with popovers) in tokens.css §13.
+
+**Verified (local):** typecheck ✓, vitest **91/91** ✓ (10 new in
+`activity.test.ts`: actor naming, op sentences, catch-up item shaping),
+lint:tw ✓, lint:css 0 errors (same 5 pre-existing global.css warnings),
+`cargo check` + `cargo test --lib domain` 5/5 ✓, `build:web` ✓.
+**Live-verified on web** against hosted (test account, `:8095` worktree
+rsbuild via Chrome MCP): (1) new "Session 8 ops probe" task → panel shows
+**Activity / "Nothing yet."**; **Commit to today** → trail "You committed
+this for Jun 12". (2) Execute → **Skip** → "Rescheduled 1×" mirror + "You
+skipped this for the day" (atomic server-side counter). (3) Done → undone
+checkbox → "You completed this" / "You reopened this". (4) Drift triage
+(probe REST-backdated to drift): per-task **Reschedule tomorrow** → DB
+scheduled_at +1 day clock-preserved, `reschedule_count` untouched; **Ignore**
+on Water plants → scheduled_at null, rule intact. (5) Reload → **catch-up
+adopt** via one batched `tasks_op_catch_up`: Water plants self-healed to
+today 9:00, pointer tomorrow, trail "You scheduled its occurrence, 9:00 AM
+(recurrence)". (6) Panel **skip-occurrence** → toast "Skipped — next Jun 13,
+9:00 AM", DB forward move + pointer Jun 14. (7) Second reload → **zero
+writes** (8 activity rows, updated_at unchanged). (8) DB dump of
+`module_activity`: 8 rows, all ops, `actor_type='user'`, `actor_label`
+"Claude Test S2" snapshotted, payloads correct. (9) Security probes: anon
+INSERT → 401 RLS; **authenticated forge INSERT → 403 RLS** (append-only
+holds); anon RPC → 401 permission denied. No new console errors (only the
+pre-existing web email `syncNow` desktop-only noise). Left as demo data: the
+probe task (todo, Jun 13 8:00, count 1, full trail) and Water plants (todo,
+Jun 13 9:00, pointer Jun 14).
+
+**Deferred:** ops for capture/plain edits/tags/relations (contract documents
+the v1 boundary); Session 9 wires service-role/API-key grants + the MCP
+connector onto the same registry; a workspace-level activity feed (the
+`module_activity_workspace_idx` index anticipates it); view-only-member op
+rejection not live-probed (no second member on the test workspace — covered
+by the permission helper's SQL + the anon probes); row/card context menus
+didn't open via the Chrome extension's synthetic right-click (extension
+limitation, not a regression — panel affordances verified).
+
+---
+
 ## Improvement-plan Session 7 — Recurrence engine (2026-06-12)
 
 Branch `t/maciej/session7-recurrence` (Fable), **stacked on Session 6's branch**
