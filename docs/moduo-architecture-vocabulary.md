@@ -56,6 +56,9 @@ A user-defined category for tasks, within the Tasks module.
 ### Tag
 A workspace-level, cross-cutting label that can apply to items across modules (tasks, notes, emails). Not a bucket. Flat (no hierarchy) for now.
 
+### Subtask
+A **full task** with a `parent_id` — not a checklist item. Exactly one level deep (a subtask is never a parent; recursion forbidden). Hidden from top-level lists by default (expand affordance on the parent, which shows a quiet n/m progress mirror), individually committable to Today, and never invisible: if its parent isn't in the rendered scope, it renders top-level. Deleting a parent promotes its subtasks.
+
 ### Commit
 The act of adding a task to **today's queue** in Plan mode. Commit means "I'm doing this today," in priority order. It is NOT the same as scheduling a specific time — committing builds the queue; scheduling assigns a clock time (optional, and a Calendar-module concern).
 

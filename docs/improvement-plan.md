@@ -164,10 +164,16 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       search/toggle/create/recolor/delete; detail-panel Tags field; quiet chips
       on rows+cards; header tag filter, click-chip-to-filter, union semantics.)*
 
-### ☐ 5 — Subtasks, one level *(tasks)*
-- [ ] `parentId` on Task, recursion forbidden; ordered under the parent in the
+### ☑ 5 — Subtasks, one level *(tasks)*
+
+> **Done 2026-06-12** (Fable, branch `t/maciej/session5-subtasks`). Migration
+> `20260612130000_tasks_add_parent.sql` (parent_id + one-level trigger) —
+> **hosted apply pending Maciej's go-ahead** (auto-mode gated it, same as
+> Session 4); live verify blocked on that. Spec §5b added. See build log.
+
+- [x] `parentId` on Task, recursion forbidden; ordered under the parent in the
       detail panel; hidden from top-level lists by default (expand affordance).
-- [ ] Individually committable to Today (start a scary task via its smallest
+- [x] Individually committable to Today (start a scary task via its smallest
       step); parent shows quiet n/m progress.
 
 ### ☐ 6 — Blocked-by dependencies *(tasks · design check-in first)*

@@ -723,6 +723,8 @@ export const webRuntime: ModuoRuntime = {
       const now = new Date().toISOString();
       const { data, error } = await supabaseClient.from("tasks").update({ deleted_at: now, updated_at: now }).eq("id", taskId).select().single();
       if (error) throw new Error(error.message);
+      // Deleting a parent promotes its subtasks to top-level (never lose work).
+      await supabaseClient.from("tasks").update({ parent_id: null, updated_at: now }).eq("parent_id", taskId).is("deleted_at", null);
       return taskRowToModel(data);
     },
 
@@ -849,6 +851,7 @@ function taskRowToModel(r: any): Task {
     workspaceId: r.workspace_id,
     ownerId: r.owner_id ?? "",
     bucketId: r.bucket_id,
+    parentId: r.parent_id ?? null,
     title: r.title ?? "",
     description: r.description ?? "",
     dueDate: r.due_date ?? null,
@@ -874,6 +877,7 @@ function taskModelToRow(t: Task): Record<string, unknown> {
     workspace_id: t.workspaceId,
     owner_id: t.ownerId || null,
     bucket_id: t.bucketId,
+    parent_id: t.parentId ?? null,
     title: t.title,
     description: t.description ?? "",
     due_date: t.dueDate ?? null,

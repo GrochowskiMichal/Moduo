@@ -272,8 +272,20 @@ pub async fn tasks_module_delete_task(
     }
     let now = now_iso();
     task.deleted_at = Some(now.clone());
-    task.updated_at = now;
+    task.updated_at = now.clone();
     state.store.put_task(&task).map_err(|e| e.to_string())?;
+    // Deleting a parent promotes its subtasks to top-level (never lose work).
+    let children = state
+        .store
+        .list_tasks(&input.workspace_id)
+        .map_err(|e| e.to_string())?;
+    for mut child in children {
+        if child.parent_id.as_deref() == Some(task.id.as_str()) && child.deleted_at.is_none() {
+            child.parent_id = None;
+            child.updated_at = now.clone();
+            state.store.put_task(&child).map_err(|e| e.to_string())?;
+        }
+    }
     Ok(task)
 }
 

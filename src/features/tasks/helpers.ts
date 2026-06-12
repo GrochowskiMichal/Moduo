@@ -57,6 +57,8 @@ export type NewTaskFields = {
   bucketId: string;
   title: string;
   position: string;
+  /** Parent task id — makes the new task a subtask (one level, spec §11). */
+  parentId?: string | null;
   description?: string;
   dueDate?: string | null;
   scheduledAt?: string | null;
@@ -78,6 +80,7 @@ export function makeTask(fields: NewTaskFields): Task {
     workspaceId: fields.workspaceId,
     ownerId: "",
     bucketId: fields.bucketId,
+    parentId: fields.parentId ?? null,
     title: fields.title,
     description: fields.description ?? "",
     dueDate: fields.dueDate ?? null,
@@ -316,6 +319,58 @@ export function bucketSections(buckets: Bucket[]): BucketLayout {
 /** Existing section names (first-appearance order) — for the "move to section" menu. */
 export function bucketGroupNames(buckets: Bucket[]): string[] {
   return bucketSections(buckets).sections.map((s) => s.name);
+}
+
+// ── Subtasks, one level (Session 5) ──────────────────────────────────────────
+
+/**
+ * Children keyed by parent id, resolved among `tasks` (pass the *live* task
+ * set). A `parentId` that doesn't resolve to a task in the set is ignored —
+ * that task is treated as top-level (children of a deleted parent are never
+ * lost). Children keep the incoming order (position-sorted upstream).
+ */
+export function subtasksByParent(tasks: Task[]): Map<string, Task[]> {
+  const ids = new Set(tasks.map((t) => t.id));
+  const map = new Map<string, Task[]>();
+  for (const task of tasks) {
+    if (!task.parentId || !ids.has(task.parentId) || task.parentId === task.id) continue;
+    const list = map.get(task.parentId);
+    if (list) list.push(task);
+    else map.set(task.parentId, [task]);
+  }
+  return map;
+}
+
+/** Quiet n/m progress for a parent (mirror, never a wall). Archived subtasks
+ * are out of open lists, so they count toward neither side. */
+export function subtaskProgress(children: Task[]): { done: number; total: number } {
+  let done = 0;
+  let total = 0;
+  for (const child of children) {
+    if (child.status === "archived") continue;
+    total += 1;
+    if (child.status === "done") done += 1;
+  }
+  return { done, total };
+}
+
+/**
+ * The ids hidden from a scope's top level: subtasks whose parent is in the
+ * same rendered set. A subtask whose parent is *not* in the scope (other
+ * bucket, filtered out, deleted) renders as a normal top-level row instead —
+ * nothing is ever invisible. Today's queue passes `nest = false` (it is an
+ * ordered flat queue, and subtasks are individually committable).
+ */
+export function nestedSubtaskIds(scopeTasks: Task[], nest = true): Set<string> {
+  if (!nest) return new Set();
+  const scopeIds = new Set(scopeTasks.map((t) => t.id));
+  const nested = new Set<string>();
+  for (const task of scopeTasks) {
+    if (task.parentId && task.parentId !== task.id && scopeIds.has(task.parentId)) {
+      nested.add(task.id);
+    }
+  }
+  return nested;
 }
 
 /**

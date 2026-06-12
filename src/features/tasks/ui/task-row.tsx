@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, Check, Clock, Inbox, Repeat, Sunrise } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  CornerDownRight,
+  Inbox,
+  Repeat,
+  Sunrise,
+} from "lucide-react";
 
 import { Badge } from "../../../components/ui/badge";
 import { TagChipList } from "../../../components/tag-chip";
@@ -59,6 +69,22 @@ type Props = {
   onRequestCommand: (command: RowCommand) => void;
   /** Click a tag chip to toggle it in the view filter. */
   onTagFilter?: (tagId: string) => void;
+  /**
+   * Reserve the expand gutter so checkboxes stay aligned. The list turns this
+   * on only when the scope actually nests subtasks (quiet until used).
+   */
+  expandSlot?: boolean;
+  /** Subtask nesting (Session 5): this row has children → chevron + n/m mirror. */
+  expandable?: boolean;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+  /** Quiet n/m subtask progress (parents only; mirror, never a wall). */
+  progress?: { done: number; total: number } | null;
+  /** Render indented one level (the row is a nested subtask). */
+  nested?: boolean;
+  /** Parent title caption for subtasks rendered flat (Today queue, or a scope
+   * that doesn't contain the parent). */
+  parentTitle?: string | null;
   api: TasksModuleApi;
 };
 
@@ -78,6 +104,13 @@ export function TaskRow({
   onClearCommand,
   onRequestCommand,
   onTagFilter,
+  expandSlot = false,
+  expandable = false,
+  expanded = false,
+  onToggleExpand,
+  progress = null,
+  nested = false,
+  parentTitle = null,
   api,
 }: Props) {
   const done = task.status === "done";
@@ -96,6 +129,7 @@ export function TaskRow({
         "group relative flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
         "border border-transparent cursor-default select-none",
         selected ? "bg-accent" : "hover:bg-accent/60",
+        nested && "ml-6",
       )}
       // height rides the density setting; py is only a multiline guard
       style={{ minHeight: "var(--row-h)" }}
@@ -103,6 +137,33 @@ export function TaskRow({
       {/* selected marker — a quiet accent bar, distinct from the lighter hover fill */}
       {selected ? (
         <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
+      ) : null}
+      {expandSlot ? (
+        expandable ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
+                className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleExpand?.();
+                }}
+              >
+                {expanded ? (
+                  <ChevronDown className="size-3.5" aria-hidden />
+                ) : (
+                  <ChevronRight className="size-3.5" aria-hidden />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{expanded ? "Collapse subtasks" : "Expand subtasks"}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="size-4 shrink-0" aria-hidden />
+        )
       ) : null}
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(task)} />
 
@@ -138,6 +199,18 @@ export function TaskRow({
           >
             {task.title || "Untitled"}
           </button>
+          {progress && progress.total > 0 ? (
+            // quiet subtask progress — a mirror, never a wall (principles 4 & 5)
+            <span className="shrink-0 font-sans text-xs text-muted-foreground tabular-nums">
+              {progress.done}/{progress.total}
+            </span>
+          ) : null}
+          {parentTitle ? (
+            <span className="flex min-w-0 shrink items-center gap-1 truncate font-sans text-xs text-muted-foreground">
+              <CornerDownRight className="size-3 shrink-0 opacity-70" aria-hidden />
+              <span className="truncate">{parentTitle}</span>
+            </span>
+          ) : null}
           <TagChipList tags={tags} max={3} onTagClick={onTagFilter} className="min-w-0 shrink" />
         </div>
       )}
@@ -220,6 +293,11 @@ export function TaskRow({
         <ContextMenuItem onSelect={() => onRequestCommand("schedule")}>Schedule…</ContextMenuItem>
         <ContextMenuItem onSelect={() => onRequestCommand("due")}>Set due date…</ContextMenuItem>
         <ContextMenuItem onSelect={() => onRequestCommand("bucket")}>Move to bucket…</ContextMenuItem>
+        {task.parentId ? (
+          <ContextMenuItem onSelect={() => api.setTaskParent(task.id, null)}>
+            Detach from parent
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuSeparator />
         <ContextMenuSub>
           <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>

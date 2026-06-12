@@ -9,8 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { cn } from "../../../lib/utils";
-import { groupTasks, type GroupBy } from "../helpers";
+import { groupTasks, nestedSubtaskIds, type GroupBy } from "../helpers";
 import type { Bucket, Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { PlanViewHeader, type PlanView } from "./plan-view-header";
@@ -84,9 +83,32 @@ export function TaskListView({
   // Grouping by bucket only makes sense across buckets (the "All" view).
   const groupOptions = GROUP_OPTIONS.filter((o) => o.value !== "bucket" || selection === "all");
 
+  // Subtasks nest under their parent (hidden from the top level) except in
+  // Today — the commit queue is an ordered flat list, and subtasks are
+  // individually committable. A subtask whose parent isn't in this scope
+  // renders as a normal top-level row instead (never invisible).
+  const nest = selection !== "today";
+  const nestedIds = useMemo(() => nestedSubtaskIds(tasks, nest), [tasks, nest]);
+  const topLevelTasks = useMemo(
+    () => (nestedIds.size === 0 ? tasks : tasks.filter((t) => !nestedIds.has(t.id))),
+    [tasks, nestedIds],
+  );
+  // Per-parent expand state (collapsed by default — quiet until asked).
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set());
+  // Reserve the chevron gutter only when this scope actually nests something,
+  // so subtask-free lists look exactly as before.
+  const expandSlot = nestedIds.size > 0;
+  // Parent titles for subtasks rendered flat (Today, or parent out of scope).
+  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const parentTitleFor = (task: Task): string | null => {
+    if (!task.parentId || nestedIds.has(task.id)) return null;
+    const parent = taskById.get(task.parentId);
+    return parent ? parent.title || "Untitled" : null;
+  };
+
   const groups = useMemo(
-    () => groupTasks(tasks, groupBy, { bucketName: bucketNameById }),
-    [tasks, groupBy, bucketNameById],
+    () => groupTasks(topLevelTasks, groupBy, { bucketName: bucketNameById }),
+    [topLevelTasks, groupBy, bucketNameById],
   );
 
   // Reset collapse state when the scope/grouping changes. For bucket grouping,
@@ -102,19 +124,52 @@ export function TaskListView({
     } else {
       setCollapsed(new Set());
     }
+    setExpandedParents(new Set());
   }, [groupSignature, groupBy, groups]);
 
-  // Flat, visually-ordered list of navigable tasks (skips collapsed groups).
-  const visibleTasks = useMemo(
-    () => groups.filter((g) => !collapsed.has(g.key)).flatMap((g) => g.tasks),
-    [groups, collapsed],
-  );
+  const toggleExpandParent = useCallback((id: string) => {
+    setExpandedParents((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
-  // Keep the selection valid as tasks change.
+  // Flat, visually-ordered list of navigable tasks (skips collapsed groups,
+  // includes the children of expanded parents — keyboard order = visual order).
+  const visibleTasks = useMemo(() => {
+    const out: Task[] = [];
+    for (const group of groups) {
+      if (collapsed.has(group.key)) continue;
+      for (const task of group.tasks) {
+        out.push(task);
+        if (expandedParents.has(task.id)) {
+          out.push(...(api.subtasksByParent.get(task.id) ?? []));
+        }
+      }
+    }
+    return out;
+  }, [groups, collapsed, expandedParents, api.subtasksByParent]);
+
+  // Keep the selection valid as tasks change. A selected subtask under a
+  // visible-but-collapsed parent isn't stolen — its parent expands into view
+  // instead (the detail panel's subtask list navigates selection this way).
   useEffect(() => {
     if (selectedId && visibleTasks.some((t) => t.id === selectedId)) return;
+    if (selectedId) {
+      const parentId = taskById.get(selectedId)?.parentId;
+      if (parentId && visibleTasks.some((t) => t.id === parentId)) {
+        if (nest) {
+          setExpandedParents((prev) =>
+            prev.has(parentId) ? prev : new Set(prev).add(parentId),
+          );
+        }
+        return;
+      }
+    }
     setSelectedId(visibleTasks[0]?.id ?? null);
-  }, [visibleTasks, selectedId, setSelectedId]);
+  }, [visibleTasks, selectedId, setSelectedId, taskById, nest]);
 
   // Keyboard-first: focus the list once on mount so j/k work immediately —
   // unless focus is already somewhere intentional (an input, an open dialog).
@@ -171,13 +226,40 @@ export function TaskListView({
       } else if (key === "t" && selectedTask && canEdit) {
         e.preventDefault();
         api.toggleCommit(selectedTask.id);
+      } else if (e.key === "ArrowRight" && selectedTask) {
+        // expand the selected parent's subtasks
+        if ((api.subtasksByParent.get(selectedTask.id)?.length ?? 0) > 0 && nest) {
+          e.preventDefault();
+          setExpandedParents((prev) => new Set(prev).add(selectedTask.id));
+        }
+      } else if (e.key === "ArrowLeft" && selectedTask) {
+        // collapse the selected parent — or jump from a subtask to its parent
+        if (expandedParents.has(selectedTask.id)) {
+          e.preventDefault();
+          toggleExpandParent(selectedTask.id);
+        } else if (selectedTask.parentId && nestedIds.has(selectedTask.id)) {
+          e.preventDefault();
+          setSelectedId(selectedTask.parentId);
+        }
       } else if ((e.metaKey || e.ctrlKey) && (e.key === "Backspace" || e.key === "Delete")) {
         if (!selectedTask || !canEdit) return;
         e.preventDefault();
         api.deleteTask(selectedTask.id);
       }
     },
-    [editingId, move, selectedTask, canEdit, api, onRequestCapture],
+    [
+      editingId,
+      move,
+      selectedTask,
+      canEdit,
+      api,
+      onRequestCapture,
+      nest,
+      nestedIds,
+      expandedParents,
+      toggleExpandParent,
+      setSelectedId,
+    ],
   );
 
   const toggleGroup = (key: string) => {
@@ -251,33 +333,52 @@ export function TaskListView({
                 ) : null}
 
                 {!isCollapsed
-                  ? group.tasks.map((task) => (
-                      <TaskRow
-                        key={task.id}
-                        task={task}
-                        bucketName={bucketNameById(task.bucketId)}
-                        buckets={buckets}
-                        inboxId={inbox?.id ?? null}
-                        showBucket={showBucketTag}
-                        selected={task.id === selectedId}
-                        editing={task.id === editingId}
-                        command={command?.taskId === task.id ? command.kind : null}
-                        canEdit={canEdit}
-                        onSelect={() => setSelectedId(task.id)}
-                        onStartEdit={() => setEditingId(task.id)}
-                        onEndEdit={() => {
+                  ? group.tasks.map((task) => {
+                      const children = nest ? api.subtasksByParent.get(task.id) ?? [] : [];
+                      const expanded = expandedParents.has(task.id);
+                      const rowProps = (t: Task) => ({
+                        task: t,
+                        bucketName: bucketNameById(t.bucketId),
+                        buckets,
+                        inboxId: inbox?.id ?? null,
+                        showBucket: showBucketTag,
+                        selected: t.id === selectedId,
+                        editing: t.id === editingId,
+                        command: command?.taskId === t.id ? command.kind : null,
+                        canEdit,
+                        onSelect: () => setSelectedId(t.id),
+                        onStartEdit: () => setEditingId(t.id),
+                        onEndEdit: () => {
                           setEditingId(null);
                           containerRef.current?.focus();
-                        }}
-                        onClearCommand={() => {
+                        },
+                        onClearCommand: () => {
                           setCommand(null);
                           containerRef.current?.focus();
-                        }}
-                        onRequestCommand={(kind) => setCommand({ taskId: task.id, kind })}
-                        onTagFilter={onTagFilter}
-                        api={api}
-                      />
-                    ))
+                        },
+                        onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),
+                        onTagFilter,
+                        api,
+                      });
+                      return (
+                        <div key={task.id}>
+                          <TaskRow
+                            {...rowProps(task)}
+                            expandSlot={expandSlot}
+                            expandable={children.length > 0}
+                            expanded={expanded}
+                            onToggleExpand={() => toggleExpandParent(task.id)}
+                            progress={api.subtaskProgressByTask.get(task.id) ?? null}
+                            parentTitle={parentTitleFor(task)}
+                          />
+                          {expanded
+                            ? children.map((child) => (
+                                <TaskRow key={child.id} {...rowProps(child)} nested />
+                              ))
+                            : null}
+                        </div>
+                      );
+                    })
                   : null}
               </div>
             );

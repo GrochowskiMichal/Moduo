@@ -5,7 +5,17 @@
 // never red / alarming (spec §10 design principles 4 & 5).
 
 import { useState } from "react";
-import { CalendarClock, Clock, Hourglass, Inbox, Repeat, RotateCcw, Sunrise } from "lucide-react";
+import {
+  CalendarClock,
+  Clock,
+  CornerDownRight,
+  Hourglass,
+  Inbox,
+  Plus,
+  Repeat,
+  RotateCcw,
+  Sunrise,
+} from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -20,6 +30,12 @@ import {
 } from "../../../components/ui/select";
 import { Separator } from "../../../components/ui/separator";
 import { Textarea } from "../../../components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../components/ui/tooltip";
+import { cn } from "../../../lib/utils";
 import {
   formatTimestamp,
   LEVEL_OPTIONS,
@@ -36,6 +52,7 @@ import {
   type TaskStatus,
 } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { CompleteToggle } from "./task-row";
 
 type Props = {
   task: Task | null;
@@ -43,6 +60,8 @@ type Props = {
   inbox: Bucket | null;
   canEdit: boolean;
   onRequestCapture: () => void;
+  /** Move the app-level task selection (subtask ↔ parent navigation). */
+  onSelectTask: (id: string) => void;
   api: TasksModuleApi;
 };
 
@@ -50,11 +69,29 @@ type Props = {
 // which is the open-work-first grouping order).
 const STATUS_OPTIONS: TaskStatus[] = ["todo", "in_progress", "done", "archived"];
 
-export function TaskDetailPanel({ task, buckets, inbox, canEdit, onRequestCapture, api }: Props) {
+export function TaskDetailPanel({
+  task,
+  buckets,
+  inbox,
+  canEdit,
+  onRequestCapture,
+  onSelectTask,
+  api,
+}: Props) {
   if (!task) return <DetailEmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />;
   // Key on id so every local draft (title / description / duration) resets when
   // the selection changes.
-  return <DetailBody key={task.id} task={task} buckets={buckets} inbox={inbox} canEdit={canEdit} api={api} />;
+  return (
+    <DetailBody
+      key={task.id}
+      task={task}
+      buckets={buckets}
+      inbox={inbox}
+      canEdit={canEdit}
+      onSelectTask={onSelectTask}
+      api={api}
+    />
+  );
 }
 
 function DetailBody({
@@ -62,12 +99,14 @@ function DetailBody({
   buckets,
   inbox,
   canEdit,
+  onSelectTask,
   api,
 }: {
   task: Task;
   buckets: Bucket[];
   inbox: Bucket | null;
   canEdit: boolean;
+  onSelectTask: (id: string) => void;
   api: TasksModuleApi;
 }) {
   const [title, setTitle] = useState(task.title);
@@ -80,6 +119,10 @@ function DetailBody({
   const committed = !!task.committedFor && task.committedFor === api.today;
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
   const taskTags = api.tagsByTask.get(task.id) ?? [];
+  // Subtasks, one level (spec §11): a live parent makes this a subtask; only
+  // top-level tasks offer the subtask list / add affordance.
+  const parent = task.parentId ? api.tasks.find((t) => t.id === task.parentId) ?? null : null;
+  const subtasks = api.subtasksByParent.get(task.id) ?? [];
 
   const commitTitle = () => {
     const next = title.trim();
@@ -126,6 +169,30 @@ function DetailBody({
           }}
           className="border-transparent bg-transparent px-0 font-display text-base text-foreground"
         />
+
+        {/* sub-task of — quiet breadcrumb back to the parent (one level) */}
+        {parent ? (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <CornerDownRight className="size-3.5 shrink-0 opacity-70" aria-hidden />
+            <span className="shrink-0">Sub-task of</span>
+            <button
+              type="button"
+              onClick={() => onSelectTask(parent.id)}
+              className="min-w-0 truncate underline-offset-2 hover:text-foreground hover:underline"
+            >
+              {parent.title || "Untitled"}
+            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => api.setTaskParent(task.id, null)}
+                className="ml-auto shrink-0 text-muted-foreground/70 hover:text-foreground"
+              >
+                Detach
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* description */}
         <Field label="Description">
@@ -278,6 +345,17 @@ function DetailBody({
             </div>
           </Field>
 
+          {/* subtasks — one level: only top-level tasks get the list/affordance */}
+          {!parent ? (
+            <SubtasksField
+              task={task}
+              subtasks={subtasks}
+              canEdit={canEdit}
+              onSelectTask={onSelectTask}
+              api={api}
+            />
+          ) : null}
+
           {canEdit ? (
             <Button
               type="button"
@@ -323,6 +401,150 @@ function DetailBody({
           </Meta>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── subtasks (one level — spec §11) ────────────────────────────────────────────
+
+function SubtasksField({
+  task,
+  subtasks,
+  canEdit,
+  onSelectTask,
+  api,
+}: {
+  task: Task;
+  subtasks: Task[];
+  canEdit: boolean;
+  onSelectTask: (id: string) => void;
+  api: TasksModuleApi;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const progress = api.subtaskProgressByTask.get(task.id);
+
+  if (subtasks.length === 0 && !canEdit) return null;
+
+  const submit = () => {
+    const next = draft.trim();
+    if (next) api.addSubtask(task.id, next);
+    setDraft("");
+  };
+
+  return (
+    <div className="space-y-1">
+      <span className="flex items-baseline gap-1.5 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        Subtasks
+        {progress && progress.total > 0 ? (
+          // quiet n/m mirror — factual, never alarming (principles 4 & 5)
+          <span className="font-sans normal-case tracking-normal text-muted-foreground/70 tabular-nums">
+            {progress.done}/{progress.total}
+          </span>
+        ) : null}
+      </span>
+      {subtasks.length > 0 ? (
+        <div className="space-y-0.5">
+          {subtasks.map((subtask) => (
+            <SubtaskRow
+              key={subtask.id}
+              subtask={subtask}
+              canEdit={canEdit}
+              onSelect={() => onSelectTask(subtask.id)}
+              api={api}
+            />
+          ))}
+        </div>
+      ) : null}
+      {canEdit ? (
+        adding ? (
+          <Input
+            autoFocus
+            value={draft}
+            placeholder="Add a subtask…"
+            aria-label="New subtask title"
+            className="h-8 text-sm"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submit(); // stays open for rapid entry
+              } else if (e.key === "Escape") {
+                setDraft("");
+                setAdding(false);
+              }
+            }}
+            onBlur={() => {
+              submit();
+              setAdding(false);
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="flex items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Plus className="size-3.5" aria-hidden />
+            Add subtask
+          </button>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+function SubtaskRow({
+  subtask,
+  canEdit,
+  onSelect,
+  api,
+}: {
+  subtask: Task;
+  canEdit: boolean;
+  onSelect: () => void;
+  api: TasksModuleApi;
+}) {
+  const done = subtask.status === "done";
+  const committed = !!subtask.committedFor && subtask.committedFor === api.today;
+  return (
+    <div className="group flex min-h-7 items-center gap-2 rounded px-1 hover:bg-accent/60">
+      <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(subtask)} />
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          "min-w-0 flex-1 truncate text-left text-sm",
+          done ? "text-muted-foreground line-through" : "text-foreground",
+        )}
+      >
+        {subtask.title || "Untitled"}
+      </button>
+      {/* individually committable — start a scary task via its smallest step */}
+      {canEdit || committed ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              disabled={!canEdit}
+              aria-label={committed ? "Remove from today" : "Commit to today"}
+              onClick={() => api.toggleCommit(subtask.id)}
+              className={cn(
+                "flex size-5 shrink-0 items-center justify-center rounded transition-opacity",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:opacity-100",
+                committed
+                  ? "text-foreground"
+                  : "text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
+              )}
+            >
+              <Sunrise className="size-3.5" aria-hidden />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {committed ? "Committed for today — click to remove" : "Commit to today"}
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
     </div>
   );
 }
