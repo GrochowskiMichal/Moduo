@@ -137,6 +137,46 @@ export type TaskRelation = {
   createdAt: string;
 };
 
+/** Who performed an intent op (module contract Pillar 2). `agent` / `api_key`
+ * arrive with the MCP connector's scoped keys (Session 9). */
+export type ActivityActorType = "user" | "agent" | "api_key";
+
+/**
+ * One attributed intent-op record from the shared, append-only cross-module
+ * `module_activity` table (docs/moduo-module-contract.md). Written only by
+ * `<module>_op_*` RPCs — never from clients. Rendered as a quiet trail in the
+ * entity's detail surface (a mirror, never a wall).
+ */
+export type ActivityEntry = {
+  id: string;
+  workspaceId: string;
+  module: string;
+  entityType: string;
+  entityId: string;
+  /** Intent-op name, e.g. "tasks.commit". */
+  op: string;
+  actorType: ActivityActorType;
+  actorId: string | null;
+  /** Display snapshot at write time (profiles.display_name for users). */
+  actorLabel: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
+/**
+ * One engine result for the batched `tasks.catch_up` op (spec §5d): the
+ * client computes the occurrence math; the op enforces structure + attribution.
+ */
+export type TasksCatchUpItem = {
+  taskId: string;
+  kind: "reopen" | "collapse" | "adopt";
+  /** Only ever "todo" — catch-up reopens, it never completes/archives. */
+  status?: "todo";
+  scheduledAt?: string;
+  recurrence: RecurrenceRule;
+  clearCommit?: boolean;
+};
+
 /** Read bundle for the Tasks module, scoped to a workspace. */
 export type TasksModuleBundle = {
   buckets: Bucket[];

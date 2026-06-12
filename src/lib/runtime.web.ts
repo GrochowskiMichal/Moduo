@@ -9,7 +9,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
-import { sanitizeTimeBlocks, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
+import { sanitizeTimeBlocks, type ActivityEntry, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -822,10 +822,113 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
       return sanitizeTimeBlocks(data?.blocks);
     },
+
+    // ── intent ops (docs/moduo-module-contract.md) ─────────────────────────
+    // Each RPC checks permission, enforces invariants, writes, and logs an
+    // attributed module_activity row in one transaction.
+    async opCommit({ workspaceId, taskId, forDate }) {
+      return taskOpRpc("tasks_op_commit", {
+        p_workspace_id: workspaceId, p_task_id: taskId, p_for: forDate,
+      });
+    },
+
+    async opUncommit({ workspaceId, taskId }) {
+      return taskOpRpc("tasks_op_uncommit", {
+        p_workspace_id: workspaceId, p_task_id: taskId,
+      });
+    },
+
+    async opSkipToday({ workspaceId, taskId }) {
+      return taskOpRpc("tasks_op_skip_today", {
+        p_workspace_id: workspaceId, p_task_id: taskId,
+      });
+    },
+
+    async opSetStatus({ workspaceId, taskId, status, recurrence, position }) {
+      return taskOpRpc("tasks_op_set_status", {
+        p_workspace_id: workspaceId, p_task_id: taskId, p_status: status,
+        p_recurrence: recurrence ?? null, p_position: position ?? null,
+      });
+    },
+
+    async opReschedule({ workspaceId, taskId, scheduledAt, days }) {
+      return taskOpRpc("tasks_op_reschedule", {
+        p_workspace_id: workspaceId, p_task_id: taskId,
+        p_scheduled_at: scheduledAt, p_days: days ?? null,
+      });
+    },
+
+    async opUnschedule({ workspaceId, taskId }) {
+      return taskOpRpc("tasks_op_unschedule", {
+        p_workspace_id: workspaceId, p_task_id: taskId,
+      });
+    },
+
+    async opSkipOccurrence({ workspaceId, taskId, scheduledAt, recurrence, releaseCommit }) {
+      return taskOpRpc("tasks_op_skip_occurrence", {
+        p_workspace_id: workspaceId, p_task_id: taskId,
+        p_scheduled_at: scheduledAt, p_recurrence: recurrence,
+        p_release_commit: releaseCommit,
+      });
+    },
+
+    async opCatchUp({ workspaceId, items }) {
+      const { data, error } = await supabaseClient.rpc("tasks_op_catch_up", {
+        p_workspace_id: workspaceId,
+        p_items: items.map((i) => ({
+          task_id: i.taskId,
+          kind: i.kind,
+          status: i.status ?? null,
+          scheduled_at: i.scheduledAt ?? null,
+          recurrence: i.recurrence,
+          clear_commit: i.clearCommit ?? false,
+        })),
+      });
+      if (error) throw new Error(error.message);
+      return (Array.isArray(data) ? data : []).map(taskRowToModel);
+    },
+
+    async listActivity({ workspaceId, entityType, entityId, limit }) {
+      const { data, error } = await supabaseClient
+        .from("module_activity").select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("module", "tasks")
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId)
+        .order("created_at", { ascending: false })
+        .limit(limit ?? 50);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map(activityRowToModel);
+    },
   },
 };
 
 // ── Tasks module: Inbox seeding + row<->model mappers ─────────────────────────
+
+/** Call a single-task intent-op RPC and map the returned row. */
+async function taskOpRpc(fn: string, args: Record<string, unknown>): Promise<Task> {
+  const { data, error } = await supabaseClient.rpc(fn, args);
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("The operation returned nothing.");
+  return taskRowToModel(row);
+}
+
+function activityRowToModel(r: any): ActivityEntry {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    module: r.module,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    op: r.op,
+    actorType: r.actor_type ?? "user",
+    actorId: r.actor_id ?? null,
+    actorLabel: r.actor_label ?? null,
+    payload: (r.payload ?? {}) as Record<string, unknown>,
+    createdAt: r.created_at,
+  };
+}
 
 /** Ensure the workspace has its reserved Inbox bucket (idempotent). */
 async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
