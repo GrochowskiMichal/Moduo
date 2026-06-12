@@ -7,6 +7,7 @@ import type {
   EnergyLevel,
   PriorityLevel,
   Task,
+  TaskRelation,
   TaskStatus,
 } from "./model";
 
@@ -371,6 +372,98 @@ export function nestedSubtaskIds(scopeTasks: Task[], nest = true): Set<string> {
     }
   }
   return nested;
+}
+
+// ── Blocked-by dependencies (Session 6 — spec §5c) ───────────────────────────
+
+/** An open task can be worked on; done/archived can't block anything. */
+function isOpen(task: Pick<Task, "status">): boolean {
+  return task.status !== "done" && task.status !== "archived";
+}
+
+/**
+ * Computed blocked state (the drift pattern — derived on read, never stored):
+ * a task is blocked when at least one edge points at it from a *live, open*
+ * blocker in `tasks`. Edges whose blocker doesn't resolve in the set (deleted
+ * task) are inert — work is never invisibly stuck behind a ghost.
+ */
+export function blockedTaskIds(tasks: Task[], relations: TaskRelation[]): Set<string> {
+  const openIds = new Set(tasks.filter(isOpen).map((t) => t.id));
+  const blocked = new Set<string>();
+  for (const rel of relations) {
+    if (rel.blockerTaskId !== rel.blockedTaskId && openIds.has(rel.blockerTaskId)) {
+      blocked.add(rel.blockedTaskId);
+    }
+  }
+  return blocked;
+}
+
+/**
+ * The frontier walk (spec §5c): from `taskId`, "what's actually next" — walk
+ * up the blocker chain and collect the live, open blockers that aren't
+ * themselves blocked. Non-empty for any blocked task on a DAG; the visited
+ * set keeps the walk safe even if a cycle sneaks past the guards. Results in
+ * first-encountered order (nearest blockers first).
+ */
+export function frontierTasks(
+  taskId: string,
+  tasks: Task[],
+  relations: TaskRelation[],
+): Task[] {
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const blockersOf = new Map<string, string[]>();
+  for (const rel of relations) {
+    if (rel.blockerTaskId === rel.blockedTaskId) continue;
+    const list = blockersOf.get(rel.blockedTaskId);
+    if (list) list.push(rel.blockerTaskId);
+    else blockersOf.set(rel.blockedTaskId, [rel.blockerTaskId]);
+  }
+  const frontier: Task[] = [];
+  const visited = new Set<string>([taskId]);
+  const queue = [...(blockersOf.get(taskId) ?? [])];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const task = byId.get(id);
+    if (!task || !isOpen(task)) continue; // inert edge / already done
+    const ownBlockers = (blockersOf.get(id) ?? []).filter((b) => {
+      const blocker = byId.get(b);
+      return blocker ? isOpen(blocker) : false;
+    });
+    if (ownBlockers.length === 0) frontier.push(task);
+    else queue.push(...ownBlockers);
+  }
+  return frontier;
+}
+
+/**
+ * Would adding blocker → blocked close a cycle? True when `blocked` already
+ * reaches `blocker` through existing edges (or they are the same task). The
+ * UI guard before creating an edge; the DB trigger is the backstop.
+ */
+export function wouldCreateCycle(
+  blockerId: string,
+  blockedId: string,
+  relations: TaskRelation[],
+): boolean {
+  if (blockerId === blockedId) return true;
+  const downstreamOf = new Map<string, string[]>();
+  for (const rel of relations) {
+    const list = downstreamOf.get(rel.blockerTaskId);
+    if (list) list.push(rel.blockedTaskId);
+    else downstreamOf.set(rel.blockerTaskId, [rel.blockedTaskId]);
+  }
+  const visited = new Set<string>();
+  const queue = [...(downstreamOf.get(blockedId) ?? [])];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (id === blockerId) return true;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    queue.push(...(downstreamOf.get(id) ?? []));
+  }
+  return false;
 }
 
 /**

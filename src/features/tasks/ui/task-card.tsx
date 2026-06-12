@@ -32,7 +32,7 @@ import { cn } from "../../../lib/utils";
 import { formatDue, formatScheduled, LEVEL_OPTIONS } from "../helpers";
 import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { CompleteToggle, LevelDots } from "./task-row";
+import { BlockedMarker, CompleteToggle, LevelDots } from "./task-row";
 
 type Props = {
   task: Task;
@@ -205,12 +205,15 @@ export function CardBody({
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
   const tags = api.tagsByTask.get(task.id) ?? [];
+  // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
+  const blocked = api.blockedTaskIds.has(task.id);
   // Quiet subtask mirrors: n/m progress on a parent; a parent caption on a
   // subtask card rendered flat (Today, or its parent is off this board).
   const progress = api.subtaskProgressByTask.get(task.id) ?? null;
   const parent = task.parentId ? api.tasks.find((t) => t.id === task.parentId) ?? null : null;
   const hasMeta =
     committed ||
+    blocked ||
     task.recurrence ||
     scheduled ||
     due ||
@@ -229,7 +232,7 @@ export function CardBody({
         <span
           className={cn(
             "min-w-0 flex-1 break-words font-display leading-snug",
-            done ? "text-muted-foreground line-through" : "text-foreground",
+            done ? "text-muted-foreground line-through" : blocked ? "text-muted-foreground" : "text-foreground",
           )}
         >
           {task.title || "Untitled"}
@@ -249,6 +252,7 @@ export function CardBody({
               <span className="truncate">{parent.title || "Untitled"}</span>
             </span>
           ) : null}
+          {blocked ? <BlockedMarker taskId={task.id} api={api} /> : null}
           {committed ? (
             <Tooltip>
               <TooltipTrigger asChild>

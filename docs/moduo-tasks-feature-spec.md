@@ -106,6 +106,39 @@ enforced app-side and by a DB trigger until Session 8's intent ops).
 
 ---
 
+## 5c. Blocked-by dependencies
+
+Dependencies are **edges, not statuses**: a `task_relations` row (blocker →
+blocked) between two same-workspace tasks. *Blocked* is **computed at read
+time** (the drift pattern, §11) — never a stored field, never a workflow state:
+
+> blocked = at least one live, open (not done / archived) blocker exists.
+
+Completing a blocker unblocks its dependents with **zero writes** to them;
+un-completing re-blocks them the same way. An edge whose blocker no longer
+resolves (deleted) is inert — work is never invisibly stuck behind a ghost.
+
+- **Cycles forbidden, any length.** Client checks before adding an edge; a DB
+  trigger walks the edge graph (recursive CTE) as the backstop until Session
+  8's intent ops. The graph is always a DAG — the frontier walk relies on it.
+- **Blocked renders dim/quiet, never red.** Rows/cards dim the title and carry
+  a quiet icon + "Blocked by <n>" tooltip; the detail panel lists blockers
+  (click-through) and a read-only "Blocks" reverse list. Mirrors, not walls —
+  a blocked task stays fully editable, completable, and committable.
+- **The frontier walk:** from any blocked task, "what's actually next" = its
+  **unblocked frontier** — walk up the blocker chain and collect the open
+  blockers that aren't themselves blocked. Always non-empty on a DAG.
+- **Committing a blocked task offers the frontier** in a quiet dialog ("Blocked
+  by <x> — start with what unblocks it?"): commit a frontier task with one
+  click, or **Commit anyway** (never a wall — principle 5). Removing from
+  Today is never intercepted.
+- **Edges are managed in the detail panel only** (v1): a "Blocked by" field
+  with a searchable task picker; ✕ removes the edge (not the task).
+- **No automagic:** completing the last blocker never auto-commits or
+  auto-surfaces the unblocked task; the dimming just lifts.
+
+---
+
 ## 6. Capture
 
 Keyboard: `cmd+n` → new item in current module (Tasks → new-task modal). `cmd+shift+n` → numbered module selector, then `cmd+number`. `cmd+k` (separate workstream) → Spotlight-like search.
@@ -183,6 +216,8 @@ one level, never recursive; an unresolvable `parent_id` reads as unset), `title`
 **Bucket:** `id`, `workspace_id`, `name`, `is_system` (Inbox), `group?` (optional, presentational section label; `group_label` column), `position`, `created_at`. No cooldown field.
 
 **Tag:** `id`, `workspace_id`, `name`, `color` (a label-palette hue name — token-routed, not a hex), polymorphic association via `tag_links` (`entity_type` "task" | "note" | "email" | …). Workspace-level; shared `TagPicker` (`src/components/`) is the cross-module surface.
+
+**TaskRelation (§5c):** `id`, `workspace_id`, `blocker_task_id`, `blocked_task_id`, `created_at` — a directed blocker → blocked edge; unique per (workspace, blocker, blocked). `blocked` is computed at read time like `drifted`, never stored; a DB trigger forbids cycles of any length (the graph is a DAG).
 
 **Event** (Calendar module — here for completeness): fixed-time, no completion, native or read-only feed.
 

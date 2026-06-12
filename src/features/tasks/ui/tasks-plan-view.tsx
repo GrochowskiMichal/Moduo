@@ -9,11 +9,12 @@ import {
 } from "../default-view";
 import { taskMatchesTagFilter, type GroupBy } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { isDrifted } from "../model";
+import { isDrifted, type Task } from "../model";
 import { BucketRail, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
 import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
+import { FrontierOfferDialog } from "./frontier-offer-dialog";
 import type { PlanView } from "./plan-view-header";
 import { TaskBoardView, type BoardGroupBy } from "./task-board-view";
 import { TaskDetailPanel } from "./task-detail-panel";
@@ -69,6 +70,8 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   );
   const [captureOpen, setCaptureOpen] = useState(false);
   const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
+  // Committing a blocked task offers its unblocked frontier first (spec §5c).
+  const [frontierOfferTaskId, setFrontierOfferTaskId] = useState<string | null>(null);
   // Task-level selection (distinct from `selection`, which is the bucket scope).
   // Lifted here so the right-rail detail panel can bind to it across List/Board.
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -210,6 +213,58 @@ export function TasksPlanView({ api, workspaceId }: Props) {
 
   const exitExecute = useCallback(() => setMode("plan"), []);
 
+  // ── blocked-by: frontier offer on commit (spec §5c) ─────────────────────────
+  // One interception point for every commit affordance (row/card context menus,
+  // detail panel, list keyboard): committing a *blocked* task opens the quiet
+  // frontier dialog instead — with "Commit anyway" as the escape hatch (never a
+  // wall). Removing from Today always goes straight through.
+  const guardedToggleCommit = useCallback(
+    (id: string) => {
+      const task = tasks.find((t) => t.id === id);
+      if (
+        task &&
+        task.committedFor !== api.today &&
+        api.blockedTaskIds.has(id) &&
+        api.frontierFor(id).length > 0
+      ) {
+        setFrontierOfferTaskId(id);
+        return;
+      }
+      api.toggleCommit(id);
+    },
+    [tasks, api],
+  );
+  // The views see the guarded commit through an otherwise-unchanged api facade.
+  const viewApi = useMemo<TasksModuleApi>(
+    () => ({ ...api, toggleCommit: guardedToggleCommit }),
+    [api, guardedToggleCommit],
+  );
+
+  const frontierOfferTask = useMemo(
+    () => (frontierOfferTaskId ? tasks.find((t) => t.id === frontierOfferTaskId) ?? null : null),
+    [frontierOfferTaskId, tasks],
+  );
+  const frontierOffer = useMemo(
+    () => (frontierOfferTaskId ? api.frontierFor(frontierOfferTaskId) : []),
+    [frontierOfferTaskId, api],
+  );
+
+  // Quiet "waiting on …" note for blocked tasks in Execute (mirror, not a wall —
+  // a committed-anyway task stays fully actionable).
+  const blockedNoteFor = useCallback(
+    (task: Task) => {
+      if (!api.blockedTaskIds.has(task.id)) return null;
+      const open = (api.blockersByTask.get(task.id) ?? []).filter(
+        (b) => b.status !== "done" && b.status !== "archived",
+      );
+      if (open.length === 0) return null;
+      return open.length === 1
+        ? `Waiting on “${open[0].title || "Untitled"}”`
+        : `Waiting on ${open.length} tasks`;
+    },
+    [api],
+  );
+
   // Quiet "↳ parent" context for committed subtasks in the Execute queue.
   const parentTitleFor = useCallback(
     (task: { parentId: string | null }) => {
@@ -303,7 +358,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     tagFilterControl,
     activeTagFilters,
     onTagFilter: toggleTagFilter,
-    api,
+    api: viewApi,
   };
 
   // Execute mode is enclosed in the center panel (rails stay visible).
@@ -313,6 +368,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         committedTasks={api.committedTasks}
         bucketNameById={bucketNameById}
         parentTitleFor={parentTitleFor}
+        blockedNoteFor={blockedNoteFor}
         onMarkDone={api.markDone}
         onSkip={api.rescheduleFromToday}
         onDoLast={api.doLast}
@@ -365,7 +421,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
       canEdit={canEdit}
       onRequestCapture={openCapture}
       onSelectTask={setSelectedTaskId}
-      api={api}
+      api={viewApi}
     />
   );
 
@@ -389,6 +445,17 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         onReschedule={(id, days) => api.rescheduleScheduledAt(id, days)}
         onArchive={api.archiveTask}
         onIgnore={(id) => api.patchTask(id, { scheduledAt: null })}
+      />
+      <FrontierOfferDialog
+        open={frontierOfferTaskId !== null}
+        onOpenChange={(o) => !o && setFrontierOfferTaskId(null)}
+        task={frontierOfferTask}
+        frontier={frontierOffer}
+        bucketNameById={bucketNameById}
+        onCommitTask={api.toggleCommit}
+        onCommitAnyway={() => {
+          if (frontierOfferTaskId) api.toggleCommit(frontierOfferTaskId);
+        }}
       />
     </>
   );

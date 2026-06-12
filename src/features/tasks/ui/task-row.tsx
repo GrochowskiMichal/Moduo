@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  CircleDashed,
   Clock,
   CornerDownRight,
   Inbox,
@@ -119,6 +120,8 @@ export function TaskRow({
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
   const tags = api.tagsByTask.get(task.id) ?? [];
+  // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
+  const blocked = api.blockedTaskIds.has(task.id);
 
   const row = (
     <div
@@ -186,7 +189,7 @@ export function TaskRow({
             className={cn(
               // flex-1 so the title keeps priority; chips shrink/truncate first
               "min-w-0 flex-1 truncate text-left font-display",
-              done ? "text-muted-foreground line-through" : "text-foreground",
+              done ? "text-muted-foreground line-through" : blocked ? "text-muted-foreground" : "text-foreground",
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -217,6 +220,7 @@ export function TaskRow({
 
       {/* meta cluster — quiet, right-aligned */}
       <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+        {blocked ? <BlockedMarker taskId={task.id} api={api} /> : null}
         {committed ? (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -344,6 +348,28 @@ export function TaskRow({
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+// ── blocked marker (computed, ambient — dim/quiet, never red; spec §5c) ───────
+
+export function BlockedMarker({ taskId, api }: { taskId: string; api: TasksModuleApi }) {
+  const openBlockers = (api.blockersByTask.get(taskId) ?? []).filter(
+    (b) => b.status !== "done" && b.status !== "archived",
+  );
+  const label =
+    openBlockers.length === 1
+      ? `Blocked by “${openBlockers[0].title || "Untitled"}”`
+      : `Blocked by ${openBlockers.length} tasks`;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="flex items-center" aria-label={label}>
+          <CircleDashed className="size-3.5" aria-hidden />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 

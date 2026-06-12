@@ -6,6 +6,103 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Improvement-plan Session 6 — Blocked-by dependencies (2026-06-12)
+
+Branch `t/maciej/session6-blocked-by` off `maciej` (Fable). Dependencies are
+**edges, not statuses**; *blocked* is **computed at read time** (the drift
+pattern), never stored. Spec gained **§5c** (written first, then code);
+vocabulary gained a "Blocked / Frontier" entry.
+
+**Design check-in (Maciej, 4 questions up front — all recommendations taken):**
+(1) cycles forbidden at **any length** via a recursive-CTE DB trigger (the
+frontier walk relies on a DAG); (2) committing a blocked task **offers the
+frontier** in a quiet dialog with a first-class "Commit anyway" escape hatch
+(never a wall; un-commit is never intercepted); (3) edge UI lives in the
+**detail panel only** for v1; (4) hosted migration pre-approved.
+
+**Schema —
+[20260612140000_task_relations.sql](../supabase/migrations/20260612140000_task_relations.sql).**
+`task_relations` (id, workspace_id, blocker_task_id → tasks, blocked_task_id →
+tasks, created_at), unique per (workspace, blocker, blocked), `CHECK` no
+self-edge, ON DELETE CASCADE both ways, RLS via the existing
+`tasks_module_can_access_workspace` helper. The BEFORE INSERT/UPDATE trigger
+walks the blocked task's downstream closure (recursive CTE, SECURITY INVOKER —
+same-workspace rows, caller's RLS is exactly right) and rejects any edge that
+closes a cycle. **Applied to hosted** (pre-approved) and **validated by SQL
+probe**: self-edge, direct cycle (A⇄B), and transitive cycle (A→B→C→A) all
+rejected; probe edges removed. Soft-deleted tasks keep their edges — an edge
+whose blocker doesn't resolve among live tasks is **inert** client-side (the
+never-invisible rule; CASCADE cleans up on hard delete).
+
+**Model & runtime.** `TaskRelation` TS type + `taskRelations` on the bundle;
+web runtime `createTaskRelation` (idempotent, attachTag-style) /
+`deleteTaskRelation` + row⇄model mapper; bundle list fetches the table. Rust:
+parity-only `TaskRelation` struct + `#[serde(default)]` bundle field (redb has
+no relations table — desktop tasks ride the web runtime; lite-version concern).
+
+**Helpers ([helpers.ts](../src/features/tasks/helpers.ts)) — pure, tested.**
+`blockedTaskIds(tasks, relations)` — blocked = ≥1 live, *open* blocker (done /
+archived / deleted blockers don't block; zero writes to unblock, un-doing a
+blocker re-blocks the same way). `frontierTasks(taskId, …)` — the **frontier
+walk**: climb the blocker chain, collect open blockers that aren't themselves
+blocked (visited-set; cycle-safe defensively). `wouldCreateCycle(…)` — the
+client-side guard before adding an edge.
+
+**Hook ([use-tasks-module.ts](../src/features/tasks/hooks/use-tasks-module.ts)).**
+Derived `blockedTaskIds` / `blockersByTask` / `dependentsByTask` /
+`frontierFor`; mutations `addBlocker` / `removeBlocker` (optimistic, temp-id
+guards, dup no-op, cycle check with a quiet toast; removal deletes the edge,
+never the task). Raw `taskRelations` exposed for the picker's cycle filter.
+
+**Surfaces.**
+- **Row + card:** blocked title dims to `text-muted-foreground` + a quiet
+  `CircleDashed` marker with "Blocked by …" tooltip (shared `BlockedMarker`).
+  Never red (principles 4–5).
+- **Detail panel:** "Blocked by" field — related-task rows (click-through;
+  ✕ removes the edge; done blockers struck through) + an "Add blocker"
+  Popover+Command picker (open tasks only; cycle-closing candidates filtered
+  out); read-only "Blocks" reverse list; "Blocked — waiting on …" ambient
+  mirror line next to drift/reschedule.
+- **Commit interception
+  ([tasks-plan-view.tsx](../src/features/tasks/ui/tasks-plan-view.tsx)):** all
+  commit affordances (row/card context menus, panel button, list keyboard) go
+  through one guarded `toggleCommit` on a memoized api facade — committing a
+  blocked task opens
+  [frontier-offer-dialog.tsx](../src/features/tasks/ui/frontier-offer-dialog.tsx)
+  ("Blocked by another task — start with what unblocks it?"): one-click commit
+  of a frontier task, or **Commit anyway**. Un-commit always passes through.
+- **Execute:** Now card meta gains a quiet `Waiting on "…"` note for
+  blocked-but-committed-anyway tasks (mirror, not a wall).
+
+**No automagic:** completing the last blocker just lifts the dimming — nothing
+auto-commits or auto-surfaces (spec §5c).
+
+**Verified (local):** typecheck ✓, vitest **59/59** ✓ (14 new in
+`blocked-by.test.ts`: blocked computation, frontier chain/diamond/cycle-safety,
+cycle guard), lint:tw ✓, lint:css 0 errors (same 5 pre-existing global.css
+warnings), `cargo check` ✓ + `cargo test --lib domain` 5/5 ✓, `build:web` ✓.
+**Live-verified on web** against hosted (test account, `:8093` worktree rsbuild
+via Chrome MCP): (1) "Add blocker" on the Untagged filter-test task → picked
+"Verify cloud consolidation end-to-end"; DB-confirmed edge; row title dimmed +
+marker tooltip correct; panel showed the blocker row + "Blocked — waiting on …"
+mirror. (2) Blocker's panel showed the **Blocks** reverse list; its picker
+correctly **excluded** the cycle-closing candidate (offered only the open
+subtask). (3) Committing the blocked task opened the frontier dialog; **Commit**
+committed the frontier task (dialog closed, blocked task untouched); a second
+attempt via **Commit anyway** committed the blocked task. (4) Un-commit passed
+straight through (no dialog). (5) Execute Now card read `Waiting on "Verify
+cloud consolidation end-to-end"`. (6) Marking the blocker done lifted the dim +
+marker **with zero writes** to the blocked task; full reload from hosted
+round-tripped (edge persisted, done blocker struck through); un-doing re-blocked
+live. No console errors. Left as demo data: the single edge (blocker todo,
+blocked task uncommitted); the Session 5 demo subtask's stale commit was
+incidentally cleared.
+
+**Deferred:** transitive *display* (only direct blockers mark a task blocked —
+deliberate, per the computed-state model); a "Blocks…" add-affordance (reverse
+list is read-only v1); row context-menu entry for adding blockers (panel-only
+per design check-in); Execute queue-row blocked markers (Now card only).
+
 ## Improvement-plan Session 5 — Subtasks, one level (2026-06-12)
 
 Branch `t/maciej/session5-subtasks` off `maciej` (Fable). Subtasks are **full

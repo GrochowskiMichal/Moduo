@@ -178,12 +178,23 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 - [x] Individually committable to Today (start a scary task via its smallest
       step); parent shows quiet n/m progress.
 
-### ☐ 6 — Blocked-by dependencies *(tasks · design check-in first)*
-- [ ] Decide the model with Maciej. Proposal: `task_relations` edges
-      (blocker → blocked); **computed** blocked state (drift pattern); blocked
-      tasks render dim/quiet, never red; cycles forbidden.
-- [ ] The frontier walk: from any task, "what's actually next" = its unblocked
-      frontier; committing a blocked task offers the frontier instead.
+### ☑ 6 — Blocked-by dependencies *(tasks · design check-in first)*
+
+> **Done 2026-06-12** (Fable, branch `t/maciej/session6-blocked-by`). Design
+> check-in resolved with Maciej (4 questions): full transitive cycle trigger
+> (recursive CTE); commit-on-blocked = offer frontier + "Commit anyway"
+> escape hatch; edge UI in the detail panel only; hosted migration
+> pre-approved. Spec gained **§5c**; vocabulary gained "Blocked / Frontier".
+> Migration `20260612140000_task_relations.sql` applied to hosted + trigger
+> validated by SQL probe. Live-verified end-to-end. See build log.
+
+- [x] Decide the model with Maciej. Proposal taken as-is: `task_relations`
+      edges (blocker → blocked); **computed** blocked state (drift pattern);
+      blocked tasks render dim/quiet, never red; cycles forbidden (any
+      length, DB-enforced).
+- [x] The frontier walk: from any task, "what's actually next" = its unblocked
+      frontier; committing a blocked task offers the frontier (quiet dialog,
+      commit-anyway escape hatch; un-commit never intercepted).
 
 ### ☐ 7 — Recurrence engine *(tasks · ADHD-critical)*
 - [ ] Advance-on-done; **missed occurrences don't exist** (no backfill, no

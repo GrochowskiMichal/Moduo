@@ -22,6 +22,8 @@ type Props = {
   bucketNameById: (id: string) => string;
   /** Parent title for committed subtasks — quiet "part of …" context. */
   parentTitleFor: (task: Task) => string | null;
+  /** Quiet "Waiting on …" note for blocked tasks committed anyway (spec §5c). */
+  blockedNoteFor: (task: Task) => string | null;
   onMarkDone: (id: string) => void;
   onSkip: (id: string) => void;
   onDoLast: (id: string) => void;
@@ -32,6 +34,7 @@ export function ExecuteView({
   committedTasks,
   bucketNameById,
   parentTitleFor,
+  blockedNoteFor,
   onMarkDone,
   onSkip,
   onDoLast,
@@ -63,6 +66,7 @@ export function ExecuteView({
               task={current}
               bucketName={bucketNameById(current.bucketId)}
               parentTitle={parentTitleFor(current)}
+              blockedNote={blockedNoteFor(current)}
               onMarkDone={() => onMarkDone(current.id)}
               onSkip={() => onSkip(current.id)}
               onDoLast={() => onDoLast(current.id)}
@@ -110,6 +114,7 @@ function NowCard({
   task,
   bucketName,
   parentTitle,
+  blockedNote,
   onMarkDone,
   onSkip,
   onDoLast,
@@ -118,6 +123,7 @@ function NowCard({
   task: Task;
   bucketName: string;
   parentTitle: string | null;
+  blockedNote: string | null;
   onMarkDone: () => void;
   onSkip: () => void;
   onDoLast: () => void;
@@ -131,6 +137,8 @@ function NowCard({
   const meta = [
     // committed subtask: quiet context for which bigger thing this serves
     parentTitle ? `Part of ${parentTitle}` : null,
+    // blocked-but-committed-anyway: a quiet mirror, never a wall (spec §5c)
+    blockedNote,
     bucketName,
     task.priority ? PRIORITY_LABELS[task.priority] : null,
     task.energyLevel ? ENERGY_LABELS[task.energyLevel] : null,

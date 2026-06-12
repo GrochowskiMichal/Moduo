@@ -123,12 +123,27 @@ export type TagLink = {
   createdAt: string;
 };
 
+/**
+ * A directed dependency edge: `blockerTaskId` blocks `blockedTaskId` (spec §5c).
+ * *Blocked* is computed at read time from these edges — see `blockedTaskIds`
+ * in helpers — never stored on the task. The edge graph is a DAG (cycles are
+ * forbidden client-side and by a DB trigger).
+ */
+export type TaskRelation = {
+  id: string;
+  workspaceId: string;
+  blockerTaskId: string;
+  blockedTaskId: string;
+  createdAt: string;
+};
+
 /** Read bundle for the Tasks module, scoped to a workspace. */
 export type TasksModuleBundle = {
   buckets: Bucket[];
   tasks: Task[];
   tags: Tag[];
   tagLinks: TagLink[];
+  taskRelations: TaskRelation[];
 };
 
 /** Coarse time-of-day slots that a bucket can be mapped to (spec §9). */
