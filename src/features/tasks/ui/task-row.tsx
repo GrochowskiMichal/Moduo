@@ -48,6 +48,7 @@ import {
   toLocalInputValue,
 } from "../helpers";
 import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../model";
+import { recurrenceLabel } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 
 /** Which inline popover the keyboard asked to open on this row. */
@@ -239,7 +240,7 @@ export function TaskRow({
                 <Repeat className="size-3.5" aria-hidden />
               </span>
             </TooltipTrigger>
-            <TooltipContent>{task.recurrence.rrule}</TooltipContent>
+            <TooltipContent>{recurrenceLabel(task.recurrence)}</TooltipContent>
           </Tooltip>
         ) : null}
 
@@ -293,6 +294,11 @@ export function TaskRow({
         <ContextMenuItem onSelect={() => api.toggleCommit(task.id)}>
           {committed ? "Remove from today" : "Commit to today"}
         </ContextMenuItem>
+        {task.recurrence && !done && task.status !== "archived" ? (
+          <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
+            Skip occurrence
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => onRequestCommand("schedule")}>Schedule…</ContextMenuItem>
         <ContextMenuItem onSelect={() => onRequestCommand("due")}>Set due date…</ContextMenuItem>

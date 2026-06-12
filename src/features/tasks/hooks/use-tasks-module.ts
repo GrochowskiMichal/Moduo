@@ -12,6 +12,7 @@ import { setBucketTimeBlock } from "../default-view";
 import {
   blockedTaskIds as computeBlockedTaskIds,
   endPosition,
+  formatScheduled,
   frontierTasks,
   makeTask,
   subtaskProgress,
@@ -20,6 +21,11 @@ import {
   wouldCreateCycle,
   type NewTaskFields,
 } from "../helpers";
+import {
+  catchUpPatch,
+  recurrenceOnStatusChange,
+  skipOccurrencePatch,
+} from "../recurrence-engine";
 import {
   INBOX_BUCKET_NAME,
   isDrifted,
@@ -64,6 +70,8 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const reqRef = useRef(0);
+  /** Bumped on every successful load — the recurrence catch-up trigger. */
+  const [loadStamp, setLoadStamp] = useState(0);
 
   const load = useCallback(async () => {
     if (!runtime || !userId || !workspaceId || !canRead) {
@@ -85,6 +93,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         setBundle(next);
         setTimeBlocksState(blocks);
         setError(null);
+        setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
       }
     } catch (e) {
       if (reqRef.current === req) setError(e instanceof Error ? e.message : String(e));
@@ -300,6 +309,19 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     (id: string, patch: Partial<Task>) => {
       const existing = bundle.tasks.find((t) => t.id === id);
       if (!existing) return;
+      // Advance-on-done (spec §5d): a status change on a recurring task keeps
+      // the stored nextOccurrence pointer fresh — unless the caller already
+      // patched the rule itself (catch-up / skip pass it explicitly).
+      if (patch.status && patch.recurrence === undefined) {
+        const advanced = recurrenceOnStatusChange(existing, patch.status, new Date());
+        if (advanced) {
+          patch = { ...patch, recurrence: advanced };
+          if (patch.status === "done" && advanced.nextOccurrence) {
+            // Quiet, factual mirror — when this comes back (never a wall).
+            toast.success(`Done — next ${formatScheduled(advanced.nextOccurrence)}`);
+          }
+        }
+      }
       const updated: Task = { ...existing, ...patch, updatedAt: new Date().toISOString() };
       patchTaskLocal(id, { ...patch, updatedAt: updated.updatedAt });
       guard(async () => {
@@ -309,6 +331,24 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     },
     [bundle.tasks, patchTaskLocal, guard, runtime],
   );
+
+  // ── recurrence catch-up (spec §5d) ──────────────────────────────────────────
+  // One idempotent pass per successful load (app open / reload): reopen done
+  // recurring tasks whose occurrence arrived; collapse missed occurrences
+  // forward (no backfill — there is only the next occurrence). The stamp ref
+  // keeps re-renders from re-running it; view-only sessions skip it (no write
+  // access — stale rows just read as quiet drift).
+  const caughtUpRef = useRef(0);
+  useEffect(() => {
+    if (loadStamp === 0 || caughtUpRef.current === loadStamp || !canEdit) return;
+    caughtUpRef.current = loadStamp;
+    const now = new Date();
+    for (const t of bundle.tasks) {
+      if (isTempId(t.id)) continue;
+      const patch = catchUpPatch(t, now);
+      if (patch) patchTask(t.id, patch);
+    }
+  }, [loadStamp, canEdit, bundle.tasks, patchTask]);
 
   const toggleDone = useCallback(
     (task: Task) => {
@@ -371,6 +411,25 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         commitOrder: null,
         rescheduleCount: existing.rescheduleCount + 1,
       });
+    },
+    [bundle.tasks, patchTask],
+  );
+
+  /**
+   * Skip-occurrence (spec §5d): jump a recurring task to its next occurrence
+   * without done-credit. Does NOT touch rescheduleCount — a skipped occurrence
+   * is a decision, not a slip. Distinct from Execute's Skip (leave the queue).
+   */
+  const skipOccurrence = useCallback(
+    (id: string) => {
+      const existing = bundle.tasks.find((t) => t.id === id);
+      if (!existing) return;
+      const patch = skipOccurrencePatch(existing, new Date());
+      if (!patch) return;
+      patchTask(id, patch);
+      if (patch.scheduledAt) {
+        toast.success(`Skipped — next ${formatScheduled(patch.scheduledAt)}`);
+      }
     },
     [bundle.tasks, patchTask],
   );
@@ -864,6 +923,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     rescheduleScheduledAt,
     toggleCommit,
     rescheduleFromToday,
+    skipOccurrence,
     doLast,
     deleteTask,
     subtasksByParent,

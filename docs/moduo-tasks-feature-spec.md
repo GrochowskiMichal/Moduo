@@ -139,6 +139,54 @@ resolves (deleted) is inert — work is never invisibly stuck behind a ghost.
 
 ---
 
+## 5d. Recurrence (single-row engine)
+
+A recurring task is **one task row that cycles** — never a template spawning
+occurrence rows. The rule lives in `recurrence` (rrule + dtstart + a stored
+`nextOccurrence` pointer); `scheduledAt` always carries the **current
+occurrence's** datetime, so rows, drift, commit, and the future Calendar all
+work unchanged. Missed occurrences **don't exist**: there is no backfill and
+no "7 overdue" — at any moment the task has exactly one live occurrence
+(principle 4: identical behavior whether productive or crashed).
+
+- **Advance-on-done.** Completing a recurring task keeps it visibly `done` for
+  the rest of the day (Execute's n/m and the Done column keep their meaning)
+  and advances the stored pointer: `nextOccurrence` = first occurrence after
+  `max(now, scheduledAt)` (completing early advances past the pending
+  occurrence; completing late never backfills). A quiet toast mirrors the
+  parse ("Done — next Jun 13, 8:00 AM"). Un-completing recomputes the pointer
+  the same way. A rule that is exhausted (COUNT/UNTIL) advances to `null` —
+  the task simply stays done.
+- **Catch-up on app open** (and every bundle reload) is the other half of the
+  engine, one idempotent pass, client-side writes via the normal optimistic
+  patch path (edit permission required; view-only users just see quiet drift):
+  - a **done** recurring task whose pointer has arrived (`nextOccurrence ≤
+    now`) **reopens**: status `todo`, `scheduledAt` = the *latest* occurrence
+    ≤ now, pointer = first occurrence > now, stale commit cleared. Reopening
+    never auto-commits (no automagic).
+  - an **open** recurring task that missed ≥1 full occurrence collapses
+    forward: `scheduledAt` = latest occurrence ≤ now (one quiet drift, not a
+    pile); a recurring task with no `scheduledAt` adopts its live occurrence.
+  - drift *within* the current occurrence (vitamins at 10:00, occurrence was
+    8:00, next is tomorrow) is **not** caught up — it stays a normal, quiet
+    drifted task: still actionable today.
+- **Skip-occurrence affordance.** "Skip" jumps an open recurring task to the
+  occurrence after `max(now, scheduledAt)` without done-credit: `scheduledAt`
+  moves, the pointer follows, and a commit for today is released when the new
+  occurrence isn't today. Skipping does **not** increment `rescheduleCount`
+  (a skipped occurrence is a decision, not a slip) and is never offered on a
+  done task. Lives in the detail panel and the row/card context menus.
+  Distinct from Execute's *Skip* (= leave today's queue; the occurrence stays
+  live and may still be done later today).
+- **Editing.** The detail panel's "Repeat" field sets/clears recurrence from
+  the same preset vocabulary as capture (no complex picker, spec §7). Setting
+  a rule on a task without `scheduledAt` adopts the first occurrence; clearing
+  the rule keeps the task and its current `scheduledAt` (it becomes one-off).
+- **Capture parity:** a captured recurring task materializes `scheduledAt`
+  from the rule's first occurrence, so it is never invisible to drift/lists.
+
+---
+
 ## 6. Capture
 
 Keyboard: `cmd+n` → new item in current module (Tasks → new-task modal). `cmd+shift+n` → numbered module selector, then `cmd+number`. `cmd+k` (separate workstream) → Spotlight-like search.
