@@ -59,6 +59,9 @@ A workspace-level, cross-cutting label that can apply to items across modules (t
 ### Subtask
 A **full task** with a `parent_id` — not a checklist item. Exactly one level deep (a subtask is never a parent; recursion forbidden). Hidden from top-level lists by default (expand affordance on the parent, which shows a quiet n/m progress mirror), individually committable to Today, and never invisible: if its parent isn't in the rendered scope, it renders top-level. Deleting a parent promotes its subtasks.
 
+### Blocked / Frontier
+**Blocked** is a *computed* read-time state (like Drift), never a stored status: a task with at least one live, open blocker via a `task_relations` edge (blocker → blocked). Renders dim/quiet — never red, never a wall: a blocked task stays editable, completable, committable. The **frontier** of a blocked task is the set of open, unblocked tasks found by walking up its blocker chain — "what's actually next." Committing a blocked task offers the frontier (with a Commit-anyway escape hatch). The edge graph is a DAG; cycles are forbidden at the DB level.
+
 ### Commit
 The act of adding a task to **today's queue** in Plan mode. Commit means "I'm doing this today," in priority order. It is NOT the same as scheduling a specific time — committing builds the queue; scheduling assigns a clock time (optional, and a Calendar-module concern).
 

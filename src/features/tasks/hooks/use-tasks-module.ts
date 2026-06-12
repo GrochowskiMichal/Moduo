@@ -10,11 +10,14 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { pickTagColor } from "../../../components/tag-colors";
 import { setBucketTimeBlock } from "../default-view";
 import {
+  blockedTaskIds as computeBlockedTaskIds,
   endPosition,
+  frontierTasks,
   makeTask,
   subtaskProgress,
   subtasksByParent as computeSubtasksByParent,
   todayStr,
+  wouldCreateCycle,
   type NewTaskFields,
 } from "../helpers";
 import {
@@ -24,6 +27,7 @@ import {
   type Tag,
   type TagLink,
   type Task,
+  type TaskRelation,
   type TasksModuleBundle,
   type TimeBlockMap,
   type TimeBlockSlot,
@@ -35,7 +39,13 @@ type Params = {
   modulePermission?: "none" | "view" | "edit" | "admin";
 };
 
-const EMPTY_BUNDLE: TasksModuleBundle = { buckets: [], tasks: [], tags: [], tagLinks: [] };
+const EMPTY_BUNDLE: TasksModuleBundle = {
+  buckets: [],
+  tasks: [],
+  tags: [],
+  tagLinks: [],
+  taskRelations: [],
+};
 
 function byPosition<T extends { position: string }>(a: T, b: T): number {
   return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
@@ -132,6 +142,47 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     }
     return map;
   }, [subtasksByParent]);
+
+  // ── blocked-by dependencies (spec §5c) ───────────────────────────────────────
+  /** Computed blocked state (drift pattern): tasks with ≥1 live, open blocker. */
+  const blockedIds = useMemo(
+    () => computeBlockedTaskIds(liveTasks, bundle.taskRelations),
+    [liveTasks, bundle.taskRelations],
+  );
+
+  /** Live blocker tasks per blocked task (the detail panel's "Blocked by"). */
+  const blockersByTask = useMemo(() => {
+    const byId = new Map(liveTasks.map((t) => [t.id, t]));
+    const map = new Map<string, Task[]>();
+    for (const rel of bundle.taskRelations) {
+      const blocker = byId.get(rel.blockerTaskId);
+      if (!blocker) continue; // inert edge — blocker deleted
+      const list = map.get(rel.blockedTaskId);
+      if (list) list.push(blocker);
+      else map.set(rel.blockedTaskId, [blocker]);
+    }
+    return map;
+  }, [liveTasks, bundle.taskRelations]);
+
+  /** Live dependent tasks per blocker (the read-only "Blocks" reverse list). */
+  const dependentsByTask = useMemo(() => {
+    const byId = new Map(liveTasks.map((t) => [t.id, t]));
+    const map = new Map<string, Task[]>();
+    for (const rel of bundle.taskRelations) {
+      const dependent = byId.get(rel.blockedTaskId);
+      if (!dependent) continue;
+      const list = map.get(rel.blockerTaskId);
+      if (list) list.push(dependent);
+      else map.set(rel.blockerTaskId, [dependent]);
+    }
+    return map;
+  }, [liveTasks, bundle.taskRelations]);
+
+  /** The unblocked frontier of a task — "what's actually next" (spec §5c). */
+  const frontierFor = useCallback(
+    (taskId: string) => frontierTasks(taskId, liveTasks, bundle.taskRelations),
+    [liveTasks, bundle.taskRelations],
+  );
 
   /** Soft, ambient per-bucket drift counts (scheduled-and-passed, still open). */
   const driftCountByBucket = useMemo(() => {
@@ -406,6 +457,83 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       patchTask(id, { parentId: next });
     },
     [liveTasks, subtasksByParent, patchTask],
+  );
+
+  // ── blocked-by mutations (edges, not statuses — spec §5c) ────────────────────
+
+  /** Add a blocker → task edge. Cycle-checked here; the DB trigger backstops. */
+  const addBlocker = useCallback(
+    (taskId: string, blockerId: string) => {
+      if (!runtime || !workspaceId || !canEdit) {
+        toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      if (isTempId(taskId) || isTempId(blockerId)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
+      if (taskId === blockerId) return;
+      const exists = bundle.taskRelations.some(
+        (r) => r.blockerTaskId === blockerId && r.blockedTaskId === taskId,
+      );
+      if (exists) return;
+      if (wouldCreateCycle(blockerId, taskId, bundle.taskRelations)) {
+        toast.error("That would create a cycle — these tasks already depend on each other.");
+        return;
+      }
+      const rt = runtime;
+      const wsId = workspaceId;
+      const tempId = `tmp-${crypto.randomUUID()}`;
+      const optimistic: TaskRelation = {
+        id: tempId,
+        workspaceId: wsId,
+        blockerTaskId: blockerId,
+        blockedTaskId: taskId,
+        createdAt: new Date().toISOString(),
+      };
+      setBundle((prev) => ({ ...prev, taskRelations: [...prev.taskRelations, optimistic] }));
+      void rt.tasks
+        .createTaskRelation({ workspaceId: wsId, blockerTaskId: blockerId, blockedTaskId: taskId })
+        .then((saved) =>
+          setBundle((prev) => ({
+            ...prev,
+            taskRelations: prev.taskRelations.map((r) => (r.id === tempId ? saved : r)),
+          })),
+        )
+        .catch((e) => {
+          setBundle((prev) => ({
+            ...prev,
+            taskRelations: prev.taskRelations.filter((r) => r.id !== tempId),
+          }));
+          toast.error(e instanceof Error ? e.message : "Couldn't add the dependency.");
+        });
+    },
+    [runtime, workspaceId, canEdit, bundle.taskRelations],
+  );
+
+  /** Remove the blocker → task edge (removes the dependency, not the task). */
+  const removeBlocker = useCallback(
+    (taskId: string, blockerId: string) => {
+      const existing = bundle.taskRelations.find(
+        (r) => r.blockerTaskId === blockerId && r.blockedTaskId === taskId,
+      );
+      if (!existing) return;
+      if (isTempId(existing.id)) {
+        toast.error("Still saving that dependency — try again in a moment.");
+        return;
+      }
+      setBundle((prev) => ({
+        ...prev,
+        taskRelations: prev.taskRelations.filter((r) => r.id !== existing.id),
+      }));
+      guard(async () => {
+        await runtime!.tasks.deleteTaskRelation({
+          workspaceId: workspaceId!,
+          relationId: existing.id,
+        });
+      });
+    },
+    [bundle.taskRelations, guard, runtime, workspaceId],
   );
 
   // ── bucket mutations ─────────────────────────────────────────────────────────
@@ -742,6 +870,13 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     subtaskProgressByTask,
     addSubtask,
     setTaskParent,
+    blockedTaskIds: blockedIds,
+    taskRelations: bundle.taskRelations,
+    blockersByTask,
+    dependentsByTask,
+    frontierFor,
+    addBlocker,
+    removeBlocker,
     createBucket,
     renameBucket,
     deleteBucket,

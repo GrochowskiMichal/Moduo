@@ -9,7 +9,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
-import { sanitizeTimeBlocks, type Bucket, type Tag, type TagLink, type Task } from "../features/tasks/model";
+import { sanitizeTimeBlocks, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -637,19 +637,22 @@ export const webRuntime: ModuoRuntime = {
   tasks: {
     async list(workspaceId) {
       await ensureWebInbox(workspaceId);
-      const [bucketsRes, tasksRes, tagsRes, linksRes] = await Promise.all([
+      const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes] = await Promise.all([
         supabaseClient.from("buckets").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position"),
         supabaseClient.from("tasks").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position"),
         supabaseClient.from("tags").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
         supabaseClient.from("tag_links").select("*").eq("workspace_id", workspaceId),
+        supabaseClient.from("task_relations").select("*").eq("workspace_id", workspaceId),
       ]);
-      const firstError = bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error;
+      const firstError =
+        bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
         buckets: (bucketsRes.data ?? []).map(bucketRowToModel),
         tasks: (tasksRes.data ?? []).map(taskRowToModel),
         tags: (tagsRes.data ?? []).map(tagRowToModel),
         tagLinks: (linksRes.data ?? []).map(tagLinkRowToModel),
+        taskRelations: (relationsRes.data ?? []).map(taskRelationRowToModel),
       };
     },
 
@@ -774,6 +777,28 @@ export const webRuntime: ModuoRuntime = {
       const { error } = await supabaseClient.from("tag_links").delete()
         .eq("workspace_id", workspaceId).eq("tag_id", tagId)
         .eq("entity_type", entityType).eq("entity_id", entityId);
+      if (error) throw new Error(error.message);
+    },
+
+    async createTaskRelation({ workspaceId, blockerTaskId, blockedTaskId }) {
+      // Idempotent like attachTag — re-adding an existing edge returns it.
+      const { data: existing } = await supabaseClient
+        .from("task_relations").select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("blocker_task_id", blockerTaskId)
+        .eq("blocked_task_id", blockedTaskId)
+        .maybeSingle();
+      if (existing) return taskRelationRowToModel(existing);
+      const { data, error } = await supabaseClient.from("task_relations")
+        .insert({ workspace_id: workspaceId, blocker_task_id: blockerTaskId, blocked_task_id: blockedTaskId })
+        .select().single();
+      if (error) throw new Error(error.message);
+      return taskRelationRowToModel(data);
+    },
+
+    async deleteTaskRelation({ workspaceId, relationId }) {
+      const { error } = await supabaseClient.from("task_relations").delete()
+        .eq("workspace_id", workspaceId).eq("id", relationId);
       if (error) throw new Error(error.message);
     },
 
@@ -917,6 +942,16 @@ function tagLinkRowToModel(r: any): TagLink {
     tagId: r.tag_id,
     entityType: r.entity_type,
     entityId: r.entity_id,
+    createdAt: r.created_at,
+  };
+}
+
+function taskRelationRowToModel(r: any): TaskRelation {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    blockerTaskId: r.blocker_task_id,
+    blockedTaskId: r.blocked_task_id,
     createdAt: r.created_at,
   };
 }

@@ -8,6 +8,7 @@ import type {
   Tag,
   TagLink,
   Task,
+  TaskRelation,
   TasksModuleBundle,
   TimeBlockMap,
 } from "../features/tasks/model";
@@ -282,6 +283,13 @@ export type ModuoRuntime = {
       entityType: string;
       entityId: string;
     }): Promise<void>;
+    /** Blocked-by dependency edge (blocker → blocked, spec §5c). Idempotent. */
+    createTaskRelation(input: {
+      workspaceId: string;
+      blockerTaskId: string;
+      blockedTaskId: string;
+    }): Promise<TaskRelation>;
+    deleteTaskRelation(input: { workspaceId: string; relationId: string }): Promise<void>;
     /** Workspace-scoped time-of-day slot → bucket map (one row per workspace). */
     getTimeBlocks(workspaceId: string): Promise<TimeBlockMap>;
     setTimeBlocks(input: { workspaceId: string; blocks: TimeBlockMap }): Promise<TimeBlockMap>;

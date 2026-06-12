@@ -530,6 +530,9 @@ impl RedbStore {
             tasks: self.list_tasks(workspace_id)?,
             tags: self.list_tags(workspace_id)?,
             tag_links: self.list_tag_links(workspace_id)?,
+            // Blocked-by edges live in Supabase only (desktop tasks ride the
+            // web runtime); a redb table comes with the lite/offline version.
+            task_relations: Vec::new(),
         })
     }
 

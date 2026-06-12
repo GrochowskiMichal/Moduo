@@ -7,6 +7,7 @@
 import { useState } from "react";
 import {
   CalendarClock,
+  CircleDashed,
   Clock,
   CornerDownRight,
   Hourglass,
@@ -15,10 +16,24 @@ import {
   Repeat,
   RotateCcw,
   Sunrise,
+  X,
 } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "../../../components/ui/command";
 import { Input } from "../../../components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../../components/ui/popover";
 import { TagChip } from "../../../components/tag-chip";
 import { TagPicker } from "../../../components/tag-picker";
 import {
@@ -42,6 +57,7 @@ import {
   STATUS_LABELS,
   toDateInputValue,
   toLocalInputValue,
+  wouldCreateCycle,
 } from "../helpers";
 import {
   isDrifted,
@@ -123,6 +139,11 @@ function DetailBody({
   // top-level tasks offer the subtask list / add affordance.
   const parent = task.parentId ? api.tasks.find((t) => t.id === task.parentId) ?? null : null;
   const subtasks = api.subtasksByParent.get(task.id) ?? [];
+  // Blocked-by dependencies (spec §5c): edges, computed blocked state.
+  const blockers = api.blockersByTask.get(task.id) ?? [];
+  const dependents = api.dependentsByTask.get(task.id) ?? [];
+  const blocked = api.blockedTaskIds.has(task.id);
+  const openBlockers = blockers.filter((b) => b.status !== "done" && b.status !== "archived");
 
   const commitTitle = () => {
     const next = title.trim();
@@ -356,6 +377,24 @@ function DetailBody({
             />
           ) : null}
 
+          {/* blocked-by dependencies — edges, never a stored status (spec §5c) */}
+          <BlockedByField
+            task={task}
+            blockers={blockers}
+            canEdit={canEdit}
+            onSelectTask={onSelectTask}
+            api={api}
+          />
+          {dependents.length > 0 ? (
+            <Field label="Blocks">
+              <div className="space-y-0.5">
+                {dependents.map((d) => (
+                  <RelatedTaskRow key={d.id} task={d} onSelect={() => onSelectTask(d.id)} />
+                ))}
+              </div>
+            </Field>
+          ) : null}
+
           {canEdit ? (
             <Button
               type="button"
@@ -371,13 +410,20 @@ function DetailBody({
         </div>
 
         {/* ambient mirrors — quiet, factual, never alarming (principles 4 & 5) */}
-        {drifted || task.rescheduleCount > 0 ? (
+        {drifted || blocked || task.rescheduleCount > 0 ? (
           <>
             <Separator />
             <div className="space-y-1.5 text-xs text-muted-foreground">
               {drifted ? (
                 <Mirror icon={<Clock className="size-3.5" aria-hidden />}>
                   Drifted — its scheduled time has passed.
+                </Mirror>
+              ) : null}
+              {blocked ? (
+                <Mirror icon={<CircleDashed className="size-3.5" aria-hidden />}>
+                  {openBlockers.length === 1
+                    ? `Blocked — waiting on “${openBlockers[0].title || "Untitled"}”.`
+                    : `Blocked — waiting on ${openBlockers.length} tasks.`}
                 </Mirror>
               ) : null}
               {task.rescheduleCount > 0 ? (
@@ -546,6 +592,135 @@ function SubtaskRow({
         </Tooltip>
       ) : null}
     </div>
+  );
+}
+
+// ── blocked-by dependencies (spec §5c) ─────────────────────────────────────────
+
+function BlockedByField({
+  task,
+  blockers,
+  canEdit,
+  onSelectTask,
+  api,
+}: {
+  task: Task;
+  blockers: Task[];
+  canEdit: boolean;
+  onSelectTask: (id: string) => void;
+  api: TasksModuleApi;
+}) {
+  if (blockers.length === 0 && !canEdit) return null;
+  return (
+    <Field label="Blocked by">
+      {blockers.length > 0 ? (
+        <div className="space-y-0.5">
+          {blockers.map((blocker) => (
+            <RelatedTaskRow
+              key={blocker.id}
+              task={blocker}
+              onSelect={() => onSelectTask(blocker.id)}
+              onRemove={canEdit ? () => api.removeBlocker(task.id, blocker.id) : undefined}
+            />
+          ))}
+        </div>
+      ) : null}
+      {canEdit ? <BlockerPicker task={task} api={api} /> : null}
+    </Field>
+  );
+}
+
+/** A quiet related-task row: click-through title, optional ✕ (removes the
+ * edge, never the task). Done blockers render struck through — inert. */
+function RelatedTaskRow({
+  task,
+  onSelect,
+  onRemove,
+}: {
+  task: Task;
+  onSelect: () => void;
+  onRemove?: () => void;
+}) {
+  const done = task.status === "done" || task.status === "archived";
+  return (
+    <div className="group flex min-h-7 items-center gap-2 rounded px-1 hover:bg-accent/60">
+      <CircleDashed className="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden />
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          "min-w-0 flex-1 truncate text-left text-sm",
+          done ? "text-muted-foreground line-through" : "text-foreground",
+        )}
+      >
+        {task.title || "Untitled"}
+      </button>
+      {onRemove ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Remove dependency"
+              onClick={onRemove}
+              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Remove dependency (keeps the task)</TooltipContent>
+        </Tooltip>
+      ) : null}
+    </div>
+  );
+}
+
+/** Searchable picker for a new blocker: open, live tasks only; tasks that
+ * would close a cycle are filtered out (the hook + DB trigger backstop). */
+function BlockerPicker({ task, api }: { task: Task; api: TasksModuleApi }) {
+  const [open, setOpen] = useState(false);
+  const currentBlockerIds = new Set((api.blockersByTask.get(task.id) ?? []).map((b) => b.id));
+  const candidates = api.tasks.filter(
+    (t) =>
+      t.id !== task.id &&
+      t.status !== "done" &&
+      t.status !== "archived" &&
+      !currentBlockerIds.has(t.id) &&
+      !wouldCreateCycle(t.id, task.id, api.taskRelations),
+  );
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-1 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Plus className="size-3.5" aria-hidden />
+          Add blocker
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Blocked by…" />
+          <CommandList>
+            <CommandEmpty>No matching open tasks.</CommandEmpty>
+            <CommandGroup>
+              {candidates.map((t) => (
+                <CommandItem
+                  key={t.id}
+                  value={`${t.title || "Untitled"} ${t.id}`}
+                  onSelect={() => {
+                    api.addBlocker(task.id, t.id);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="min-w-0 flex-1 truncate">{t.title || "Untitled"}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
