@@ -123,7 +123,8 @@ export function TaskRow({
           <button
             type="button"
             className={cn(
-              "min-w-0 truncate text-left font-display",
+              // flex-1 so the title keeps priority; chips shrink/truncate first
+              "min-w-0 flex-1 truncate text-left font-display",
               done ? "text-muted-foreground line-through" : "text-foreground",
             )}
             onClick={(e) => {
@@ -137,7 +138,7 @@ export function TaskRow({
           >
             {task.title || "Untitled"}
           </button>
-          <TagChipList tags={tags} max={3} onTagClick={onTagFilter} className="shrink-0" />
+          <TagChipList tags={tags} max={3} onTagClick={onTagFilter} className="min-w-0 shrink" />
         </div>
       )}
 

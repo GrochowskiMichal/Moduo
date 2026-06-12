@@ -84,6 +84,16 @@ export function TasksPlanView({ api, workspaceId }: Props) {
       ),
     [],
   );
+  // Only filter by ids that still resolve to a live tag. A tag deleted while in
+  // the filter (or an optimistic `tmp-` id captured by a chip click that's since
+  // been reconciled to a real id) would otherwise apply forever — hiding every
+  // task with no chip/Clear to recover. Reading the derived set everywhere keeps
+  // the raw state harmless; it's pruned lazily on the next toggle/clear.
+  const liveFilterTagIds = useMemo(() => {
+    if (filterTagIds.length === 0) return filterTagIds;
+    const live = new Set(api.tags.map((t) => t.id));
+    return filterTagIds.filter((id) => live.has(id));
+  }, [filterTagIds, api.tags]);
 
   // Persist preferences.
   useEffect(() => writeLS(workspaceId, "mode", mode), [workspaceId, mode]);
@@ -156,14 +166,14 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   // Apply the tag filter on top of the bucket scope (center only; rail counts
   // stay whole). OR/union — a task matches if it carries any selected tag.
   const scopeTasks = useMemo(() => {
-    if (filterTagIds.length === 0) return scopeTasksAll;
+    if (liveFilterTagIds.length === 0) return scopeTasksAll;
     return scopeTasksAll.filter((t) =>
       taskMatchesTagFilter(
         (api.tagsByTask.get(t.id) ?? []).map((tag) => tag.id),
-        filterTagIds,
+        liveFilterTagIds,
       ),
     );
-  }, [scopeTasksAll, filterTagIds, api.tagsByTask]);
+  }, [scopeTasksAll, liveFilterTagIds, api.tagsByTask]);
 
   const scopeTitle =
     isAll ? "All" : selection === "today" ? "Today" : selection === "inbox" ? "Inbox" : bucketNameById(selection);
@@ -247,16 +257,16 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     api.tags.length > 0 ? (
       <TagFilterButton
         tags={api.tags}
-        filterTagIds={filterTagIds}
+        filterTagIds={liveFilterTagIds}
         countByTag={api.openTaskCountByTag}
         onToggle={toggleTagFilter}
       />
     ) : undefined;
   const activeTagFilters =
-    filterTagIds.length > 0 ? (
+    liveFilterTagIds.length > 0 ? (
       <ActiveTagFilters
         tags={api.tags}
-        filterTagIds={filterTagIds}
+        filterTagIds={liveFilterTagIds}
         matchCount={scopeTasks.length}
         scopeCount={scopeTasksAll.length}
         onToggle={toggleTagFilter}

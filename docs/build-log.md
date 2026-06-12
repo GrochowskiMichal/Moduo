@@ -87,6 +87,25 @@ pre-existing web-only `syncNow` "desktop app" redb-stub noise). Left as demo
 data: the "Focus areas" section + the two tags; the throwaway untagged task and
 filter state were cleared.
 
+**`/code-review` pass (xhigh, same day) — 5 real findings fixed in a follow-up
+commit:** (1) **ghost filter** — deleting a tag that was in `filterTagIds` left a
+stale id that hid every task with no chip/Clear to recover; fixed by reading a
+derived `liveFilterTagIds` (pruned against live tags) everywhere the filter is
+consumed, so deleted/temp ids drop out harmlessly. (2) **temp-id → uuid error** —
+toggling/recoloring/deleting a tag mid-create sent `tmp-…` to uuid columns; guarded
+all three mutations with `isTempId` (brief "still saving" toast). (3)
+**createTagForTask orphan** — `attachTag` failing after `upsertTag` succeeded left
+a created-but-unattached tag (rollback filtered by the already-swapped temp id);
+now tracks `savedTagId`, rolls it back locally and best-effort deletes it
+server-side. (4) **row layout** — a long tag name could starve the title to 0px;
+title is now `flex-1` and the chip list `shrink`s/truncates first. (5)
+**collapsed-section drift** — a collapsed rail section hid its buckets' drift
+badges; the header now shows an ambient `(N)` drift aggregate when collapsed.
+Re-verified: typecheck ✓, vitest 37/37 ✓, lint:tw/css ✓, build:web ✓. Accepted as
+minor (not fixed): dead `bucketGroupNames` export; pre-SELECT-then-write round-trip
+in the runtime (pre-existing pattern); section names are case-sensitive strings
+with no rename path (spec-sanctioned "presentational" altitude).
+
 **Deferred:** capture-time tagging (kept tag-free by design); tag rename (recolor +
 delete shipped; rename is a small follow-up); a dedicated "manage tags" surface
 (picker covers it for now); AND/multi-tag filter semantics (union shipped).

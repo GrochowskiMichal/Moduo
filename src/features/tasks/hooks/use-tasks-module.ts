@@ -39,6 +39,9 @@ function byPosition<T extends { position: string }>(a: T, b: T): number {
   return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
 }
 
+/** Optimistic placeholder id, not yet a real server uuid. */
+const isTempId = (id: string) => id.startsWith("tmp-");
+
 export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const { userId, workspaceId, modulePermission = "none" } = params;
   const canRead = modulePermission !== "none";
@@ -442,6 +445,12 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         toast.error("You don't have edit access to Tasks in this workspace.");
         return;
       }
+      // The tag is still being created (its id is a temp placeholder) — sending
+      // it to a uuid column would error. The create flow finishes in a beat.
+      if (isTempId(tagId)) {
+        toast.error("Still saving that tag — try again in a moment.");
+        return;
+      }
       const rt = runtime;
       const wsId = workspaceId;
       const existing = bundle.tagLinks.find(
@@ -534,8 +543,13 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         tagLinks: [...prev.tagLinks, optimisticLink],
       }));
       void (async () => {
+        // Track the saved tag id so a failure *after* the tag is created (but
+        // before/at attach) rolls back the now-orphan tag too — by then the temp
+        // id has been swapped out, so filtering by tempTagId alone would miss it.
+        let savedTagId: string | null = null;
         try {
           const savedTag = await rt.tasks.upsertTag({ ...optimisticTag, id: "" });
+          savedTagId = savedTag.id;
           setBundle((prev) => ({
             ...prev,
             tags: prev.tags.map((t) => (t.id === tempTagId ? savedTag : t)),
@@ -554,11 +568,18 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
             tagLinks: prev.tagLinks.map((l) => (l.id === tempLinkId ? savedLink : l)),
           }));
         } catch (e) {
+          const orphanId = savedTagId;
           setBundle((prev) => ({
             ...prev,
-            tags: prev.tags.filter((t) => t.id !== tempTagId),
-            tagLinks: prev.tagLinks.filter((l) => l.id !== tempLinkId && l.tagId !== tempTagId),
+            tags: prev.tags.filter((t) => t.id !== tempTagId && t.id !== orphanId),
+            tagLinks: prev.tagLinks.filter(
+              (l) => l.id !== tempLinkId && l.tagId !== tempTagId && l.tagId !== orphanId,
+            ),
           }));
+          // The tag was created but attaching failed — delete the orphan server-side.
+          if (orphanId) {
+            void rt.tasks.deleteTag({ workspaceId: wsId, tagId: orphanId }).catch(() => {});
+          }
           toast.error(e instanceof Error ? e.message : "Couldn't create tag.");
         }
       })();
@@ -569,6 +590,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   /** Recolor a workspace tag (label-palette hue name). */
   const setTagColor = useCallback(
     (tagId: string, color: string) => {
+      if (isTempId(tagId)) {
+        toast.error("Still saving that tag — try again in a moment.");
+        return;
+      }
       const existing = bundle.tags.find((t) => t.id === tagId);
       if (!existing || existing.color === color) return;
       const updated = { ...existing, color, updatedAt: new Date().toISOString() };
@@ -584,6 +609,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   /** Delete a workspace tag — soft-deletes the tag and drops all its links. */
   const deleteTag = useCallback(
     (tagId: string) => {
+      if (isTempId(tagId)) {
+        toast.error("Still saving that tag — try again in a moment.");
+        return;
+      }
       const existing = bundle.tags.find((t) => t.id === tagId);
       if (!existing) return;
       setBundle((prev) => ({

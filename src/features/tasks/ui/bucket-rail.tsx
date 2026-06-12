@@ -181,6 +181,12 @@ export function BucketRail({
               (n, b) => n + (openCountByBucket.get(b.id) ?? 0),
               0,
             );
+            // Aggregate drift so a collapsed section still surfaces it ambiently
+            // (the per-bucket badges are hidden while collapsed).
+            const driftCount = section.buckets.reduce(
+              (n, b) => n + (driftCountByBucket.get(b.id) ?? 0),
+              0,
+            );
             return (
               <div key={section.name} className="mt-2">
                 <button
@@ -197,8 +203,18 @@ export function BucketRail({
                   <span className="min-w-0 flex-1 truncate font-display text-2xs font-medium uppercase tracking-wide">
                     {section.name}
                   </span>
-                  <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground/60">
+                  <span className="flex shrink-0 items-center font-sans text-xs tabular-nums text-muted-foreground/60">
                     {openCount}
+                    {collapsed && driftCount > 0 ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="ml-0.5 text-muted-foreground/50">({driftCount})</span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {driftCount} drifted in {section.name} — expand to triage
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null}
                   </span>
                 </button>
                 {!collapsed
