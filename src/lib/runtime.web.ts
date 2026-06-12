@@ -9,7 +9,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
-import type { Bucket, Tag, TagLink, Task } from "../features/tasks/model";
+import { sanitizeTimeBlocks, type Bucket, type Tag, type TagLink, type Task } from "../features/tasks/model";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -85,14 +85,32 @@ export const webRuntime: ModuoRuntime = {
 
   auth: {
     async getLocalAuthState() {
-      const data: LocalAuthState = {
+      // Cloud-auth equivalent of the desktop vault state: derived from the
+      // Supabase session so display-name consumers work on every platform.
+      const empty: LocalAuthState = {
         profileExists: false,
         displayName: null,
         userId: null,
         hasPin: false,
         hasKeychainMnemonic: false,
       };
-      return { data, error: null };
+      try {
+        const { data } = await supabaseClient.auth.getSession();
+        const user = data.session?.user;
+        if (!user) return { data: empty, error: null };
+        return {
+          data: {
+            profileExists: true,
+            displayName: (user.user_metadata?.display_name as string | undefined) ?? null,
+            userId: user.id,
+            hasPin: false,
+            hasKeychainMnemonic: false,
+          },
+          error: null,
+        };
+      } catch {
+        return { data: empty, error: null };
+      }
     },
 
     async generateMnemonic() {
@@ -754,6 +772,27 @@ export const webRuntime: ModuoRuntime = {
         .eq("workspace_id", workspaceId).eq("tag_id", tagId)
         .eq("entity_type", entityType).eq("entity_id", entityId);
       if (error) throw new Error(error.message);
+    },
+
+    async getTimeBlocks(workspaceId) {
+      const { data, error } = await supabaseClient
+        .from("task_time_blocks").select("blocks")
+        .eq("workspace_id", workspaceId).maybeSingle();
+      if (error) throw new Error(error.message);
+      return sanitizeTimeBlocks(data?.blocks);
+    },
+
+    async setTimeBlocks({ workspaceId, blocks }) {
+      const clean = sanitizeTimeBlocks(blocks);
+      const { data, error } = await supabaseClient
+        .from("task_time_blocks")
+        .upsert(
+          { workspace_id: workspaceId, blocks: clean, updated_at: new Date().toISOString() },
+          { onConflict: "workspace_id" },
+        )
+        .select("blocks").single();
+      if (error) throw new Error(error.message);
+      return sanitizeTimeBlocks(data?.blocks);
     },
   },
 };

@@ -125,8 +125,10 @@ Anti-patterns: required-field forms before submit, triage queues, multi-step wiz
 slot — **Morning** (05:00–11:59), **Afternoon** (12:00–17:59), **Evening**
 (18:00–04:59, wraps midnight) — via that bucket's **"…" → "Open at"** menu in the
 rail. At most one bucket per slot (assigning a slot evicts the prior holder). The
-mapping is a per-workspace **view preference** (localStorage, like mode / selection
-/ grouping), not synced data. Coverage is total, so a slot always resolves; if its
+mapping is **workspace data** — one `task_time_blocks` row per workspace (slot →
+bucketId jsonb), shared across devices *(moved from localStorage in Session 2 of
+the 2026-06 improvement plan; mode / selection / grouping remain per-device
+localStorage view preferences)*. Coverage is total, so a slot always resolves; if its
 mapped bucket was deleted, resolution falls through to the last-opened bucket, then
 Inbox. There's no separate time-blocks editor surface — the per-bucket menu is the
 whole control (quiet until used). The resolution itself is one-shot per workspace

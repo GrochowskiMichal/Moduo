@@ -27,6 +27,8 @@ function maskedPhrase(phrase: string | null) {
 
 export function AccountSection() {
   const { runtime, userEmail } = useAuth();
+  // The recovery-key section only applies to local-vault runtimes (future lite).
+  const hasLocalKey = !!runtime?.capabilities.hasLocalMnemonic;
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const [displayName, setDisplayName] = useState("");
@@ -141,7 +143,11 @@ export function AccountSection() {
   return (
     <SettingsSectionShell
       title="Account"
-      description="Your profile and recovery key. These stay on this device."
+      description={
+        hasLocalKey
+          ? "Your profile and recovery key. These stay on this device."
+          : "Your profile and sign-in details."
+      }
     >
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-lg text-foreground">Profile</h3>
@@ -221,6 +227,7 @@ export function AccountSection() {
         </div>
       </section>
 
+      {hasLocalKey ? (
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-lg text-foreground">Login key</h3>
         <p className="mt-1 max-w-prose text-sm text-muted-foreground">
@@ -258,6 +265,7 @@ export function AccountSection() {
           </p>
         ) : null}
       </section>
+      ) : null}
     </SettingsSectionShell>
   );
 }

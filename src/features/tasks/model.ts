@@ -117,6 +117,28 @@ export type TasksModuleBundle = {
   tagLinks: TagLink[];
 };
 
+/** Coarse time-of-day slots that a bucket can be mapped to (spec §9). */
+export type TimeBlockSlot = "morning" | "afternoon" | "evening";
+
+export const TIME_BLOCK_SLOTS: TimeBlockSlot[] = ["morning", "afternoon", "evening"];
+
+/**
+ * Per-workspace slot → bucketId assignment. A bucket holds at most one slot.
+ * Persisted in the `task_time_blocks` table (one row per workspace).
+ */
+export type TimeBlockMap = Partial<Record<TimeBlockSlot, string>>;
+
+/** Keep only well-formed slot entries — used on every read from storage. */
+export function sanitizeTimeBlocks(raw: unknown): TimeBlockMap {
+  if (!raw || typeof raw !== "object") return {};
+  const out: TimeBlockMap = {};
+  for (const slot of TIME_BLOCK_SLOTS) {
+    const v = (raw as Record<string, unknown>)[slot];
+    if (typeof v === "string" && v) out[slot] = v;
+  }
+  return out;
+}
+
 /** Name of the reserved system Inbox bucket. */
 export const INBOX_BUCKET_NAME = "Inbox";
 

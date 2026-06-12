@@ -4,7 +4,7 @@ Project context for Claude Code. Always loaded.
 
 ## Stack
 
-Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind CSS v4. Redb for local-first persistence. Lexical for rich text. Yjs for collaboration. XYFlow for the mindmap. Storybook 8 for component dev. Vitest + Playwright for tests. Bun for the package manager.
+Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind CSS v4. Supabase is the source of truth (cloud-first): auth, workspaces and tasks go through the Supabase-backed runtime on **both** web and desktop. Redb persists the desktop-only modules that haven't migrated yet (notes, email, time-tracking, calendar) and is otherwise paused — kept for the future offline/lite version; never make it load-bearing for new features. Lexical for rich text. Yjs for collaboration. XYFlow for the mindmap. Storybook 8 for component dev. Vitest + Playwright for tests. Bun for the package manager.
 
 ## Active plan
 

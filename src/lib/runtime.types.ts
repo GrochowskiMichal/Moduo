@@ -9,6 +9,7 @@ import type {
   TagLink,
   Task,
   TasksModuleBundle,
+  TimeBlockMap,
 } from "../features/tasks/model";
 
 export type RuntimeSession = {
@@ -281,5 +282,8 @@ export type ModuoRuntime = {
       entityType: string;
       entityId: string;
     }): Promise<void>;
+    /** Workspace-scoped time-of-day slot → bucket map (one row per workspace). */
+    getTimeBlocks(workspaceId: string): Promise<TimeBlockMap>;
+    setTimeBlocks(input: { workspaceId: string; blocks: TimeBlockMap }): Promise<TimeBlockMap>;
   };
 };

@@ -4,13 +4,8 @@ import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell
 import { onCreateNew } from "../../../components/app/create-events";
 import { Button } from "../../../components/ui/button";
 import {
-  readTimeBlocks,
   resolveDefaultSelection,
-  setBucketTimeBlock,
   timeBlockByBucket as invertTimeBlocks,
-  writeTimeBlocks,
-  type TimeBlockMap,
-  type TimeBlockSlot,
 } from "../default-view";
 import type { GroupBy } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
@@ -70,7 +65,6 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   const [boardGroupBy, setBoardGroupBy] = useState<BoardGroupBy>(
     () => (readLS(workspaceId, "boardGroupBy") === "bucket" ? "bucket" : "status"),
   );
-  const [timeBlocks, setTimeBlocks] = useState<TimeBlockMap>(() => readTimeBlocks(workspaceId));
   const [captureOpen, setCaptureOpen] = useState(false);
   const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
 
@@ -87,10 +81,8 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     writeLS(workspaceId, "lastBucket", selection);
   }, [workspaceId, selection]);
 
-  // Time-blocks are per-workspace; reload when the workspace changes.
-  useEffect(() => {
-    setTimeBlocks(readTimeBlocks(workspaceId));
-  }, [workspaceId]);
+  // Time-blocks are workspace data, loaded with the bundle (api.timeBlocks).
+  const timeBlocks = api.timeBlocks;
 
   const inboxId = inbox?.id ?? null;
 
@@ -161,16 +153,6 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   const committedCount = api.committedTasks.length;
 
   const timeBlocksByBucket = useMemo(() => invertTimeBlocks(timeBlocks), [timeBlocks]);
-  const handleSetTimeBlock = useCallback(
-    (bucketId: string, slot: TimeBlockSlot | null) => {
-      setTimeBlocks((prev) => {
-        const next = setBucketTimeBlock(prev, bucketId, slot);
-        writeTimeBlocks(workspaceId, next);
-        return next;
-      });
-    },
-    [workspaceId],
-  );
 
   // Drifted tasks for the bucket currently being triaged (recomputed live so the
   // dialog empties as the user triages).
@@ -207,7 +189,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
       onDeleteBucket={api.deleteBucket}
       onTriageBucket={setTriageBucketId}
       timeBlockByBucket={timeBlocksByBucket}
-      onSetTimeBlock={handleSetTimeBlock}
+      onSetTimeBlock={api.setTimeBlock}
     />
   );
 

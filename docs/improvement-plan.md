@@ -68,7 +68,7 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       Settings preview); Storybook spot-check + visual snapshots
       (`scripts/density-snapshots.mjs` + a density/text-size Storybook toolbar).
 
-### ☐ 2 — Cloud consolidation *(platform · unblocks every schema change after it)*
+### ☑ 2 — Cloud consolidation *(platform · unblocks every schema change after it)*
 
 > **Scope check 2026-06-11** (pre-session investigation, see build-log):
 > desktop **notes stay on redb this session** — Mike's unsynced notes work
@@ -81,30 +81,33 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 > and the `auth_link_to_cloud` Rust commands it depends on were never built) —
 > do **not** finish it; go Supabase-direct in the webview.
 
-- [ ] **Coordinate with Mike before touching hosted** (shared state): (a) has
-      he applied his six `20260605*` notes migrations to the hosted project?
-      (b) when does `mike` → `develop` sync? Sequence the migration apply
-      around his answers.
-- [ ] Apply the hosted Supabase migrations (web Tasks currently 404s), in
-      timestamp order including Mike's if unapplied. Use the **Supabase MCP
-      server** (`.mcp.json`, added 2026-06-11, project_ref `wtoonrvuqumihpkbvwvs`)
-      — the session user must have authenticated it via `/mcp` first; fall
-      back to the dashboard SQL editor if the MCP is unauthenticated.
-- [ ] Desktop app → Supabase runtime for **auth + workspaces + tasks**
-      (supabase-js session in the Tauri webview, same code path as web);
-      pause redb for those modules (keep code for the lite version).
-      Desktop **notes** follow in a later session, after Mike's branch lands
-      in develop and is pulled into `maciej`.
-- [ ] Migrate **time-blocks** from localStorage to a workspace-scoped table
-      (today desktop can't persist them at all).
-- [ ] Cleanup: remove the dead `auth_link_to_cloud` / `auth_sign_in_cloud`
-      invokes in `runtime.tauri.ts` (the Rust commands never existed); note
-      the orphaned `notes_outbox` / `notes_oplog` redb tables for the lite
-      story.
-- [ ] Sync docs with the pivot: spec, vocabulary, CLAUDE.md stack line
-      ("Redb for local-first persistence" is no longer true), build-log, and
-      **retire/annotate `docs/web+desktop_plan.md`** (it specs the never-built
-      auth-link hybrid and would mislead future sessions).
+- [x] **Coordinate with Mike before touching hosted** — resolved empirically
+      (2026-06-12): `list_migrations` on hosted shows his six `20260605*`
+      notes migrations **already applied**. (b) `mike` → `develop` timing is
+      moot for this session (desktop notes already phased out of scope); ask
+      when desktop-notes migration is scheduled.
+- [x] Apply the hosted Supabase migrations — found **already applied**
+      (2026-06-11, hosted versions `20260611131017/131039`), plus a
+      `task_time_blocks` migration (`20260611132737`) that had no repo
+      counterpart; back-filled `supabase/migrations/20260611132737_task_time_blocks.sql`
+      from the hosted schema (hosted = ground truth).
+- [x] Desktop app → Supabase runtime for **auth + workspaces + tasks** —
+      done as a *composition*: `runtime.tauri.ts` reuses `webRuntime.auth` /
+      `.workspace` / `.tasks` verbatim; a new `auth_set_cloud_session` Rust
+      command mirrors the Supabase session into `AppState` so the
+      invoke-backed modules (notes, email, calendar, time-tracking, graph)
+      keep attributing writes. Capabilities: `hasLocalMnemonic` /
+      `hasOfflineMode` now false (vault UI flows kept, keyed to the
+      capability, for the lite version). Desktop **notes** still redb.
+- [x] Migrate **time-blocks** → `task_time_blocks` table (one row per
+      workspace, slot→bucket jsonb): `runtime.tasks.get/setTimeBlocks`,
+      loaded with the bundle in `use-tasks-module`, optimistic writes.
+- [x] Cleanup: dead `auth_link_to_cloud` / `auth_sign_in_cloud` invokes
+      removed with the rest of the invoke-auth namespace. Orphaned redb
+      tables for the lite story: `notes_outbox` / `notes_oplog` (see
+      build-log).
+- [x] Docs synced: spec §9 time-blocks wording, CLAUDE.md stack line,
+      `web+desktop_plan.md` retired with a banner, build-log entry.
 
 ### ☐ 3 — Task detail panel + ambient mirrors *(tasks)*
 - [ ] Right rail = task-detail-on-select: editable description, all properties,

@@ -1,13 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   currentTimeBlockSlot,
-  readTimeBlocks,
   resolveDefaultSelection,
   setBucketTimeBlock,
   timeBlockByBucket,
-  writeTimeBlocks,
 } from "./default-view";
+import { sanitizeTimeBlocks } from "./model";
 
 const at = (hour: number) => new Date(2026, 5, 6, hour, 30);
 
@@ -123,15 +122,16 @@ describe("resolveDefaultSelection", () => {
   });
 });
 
-describe("readTimeBlocks / writeTimeBlocks", () => {
-  beforeEach(() => window.localStorage.clear());
-
-  it("round-trips a valid map and ignores junk slots", () => {
-    writeTimeBlocks("ws1", { morning: "b1", afternoon: "b2" });
-    expect(readTimeBlocks("ws1")).toEqual({ morning: "b1", afternoon: "b2" });
+describe("sanitizeTimeBlocks", () => {
+  it("keeps valid slot entries and drops junk keys / values", () => {
+    expect(
+      sanitizeTimeBlocks({ morning: "b1", afternoon: "b2", lunch: "b3", evening: 7 }),
+    ).toEqual({ morning: "b1", afternoon: "b2" });
   });
 
-  it("returns an empty map when nothing is stored", () => {
-    expect(readTimeBlocks("ws-empty")).toEqual({});
+  it("returns an empty map for non-object input", () => {
+    expect(sanitizeTimeBlocks(null)).toEqual({});
+    expect(sanitizeTimeBlocks("nope")).toEqual({});
+    expect(sanitizeTimeBlocks(undefined)).toEqual({});
   });
 });

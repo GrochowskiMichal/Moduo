@@ -12,13 +12,14 @@
 // slot via that bucket's "…" menu in the rail. At most one bucket per slot.
 // No editor surface beyond that menu — the feature stays invisible until used.
 //
-// All state here is a *view preference*, not synced data, so it lives in
-// localStorage (per workspace), like mode / selection / grouping.
+// Time-blocks are workspace data (the `task_time_blocks` table, loaded through
+// `runtime.tasks.getTimeBlocks` alongside the bundle). The rest of the state
+// here — mode / selection / grouping — is a per-device view preference and
+// stays in localStorage.
 
-/** Coarse time-of-day slots that a bucket can be mapped to. */
-export type TimeBlockSlot = "morning" | "afternoon" | "evening";
+import { TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot } from "./model";
 
-export const TIME_BLOCK_SLOTS: TimeBlockSlot[] = ["morning", "afternoon", "evening"];
+export { TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot };
 
 export const TIME_BLOCK_LABELS: Record<TimeBlockSlot, string> = {
   morning: "Morning",
@@ -32,40 +33,6 @@ export function currentTimeBlockSlot(now: Date = new Date()): TimeBlockSlot {
   if (h >= 5 && h < 12) return "morning";
   if (h >= 12 && h < 18) return "afternoon";
   return "evening"; // 18:00–04:59
-}
-
-/** Per-workspace slot → bucketId assignment. A bucket holds at most one slot. */
-export type TimeBlockMap = Partial<Record<TimeBlockSlot, string>>;
-
-function tbKey(workspaceId: string): string {
-  return `moduo:tasks:timeblocks:${workspaceId}`;
-}
-
-export function readTimeBlocks(workspaceId: string): TimeBlockMap {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(tbKey(workspaceId));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return {};
-    const out: TimeBlockMap = {};
-    for (const slot of TIME_BLOCK_SLOTS) {
-      const v = (parsed as Record<string, unknown>)[slot];
-      if (typeof v === "string" && v) out[slot] = v;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-export function writeTimeBlocks(workspaceId: string, map: TimeBlockMap): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(tbKey(workspaceId), JSON.stringify(map));
-  } catch {
-    /* quota or storage disabled — non-fatal */
-  }
 }
 
 /**

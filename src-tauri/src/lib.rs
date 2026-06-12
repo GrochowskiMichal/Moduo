@@ -114,6 +114,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::auth::auth_set_cloud_session,
             commands::auth::auth_get_local_auth_state,
             commands::auth::auth_generate_mnemonic,
             commands::auth::auth_register_local_mnemonic,

@@ -6,6 +6,91 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Improvement-plan Session 2 — Cloud consolidation (2026-06-12)
+
+Branch `t/maciej/cloud-consolidation` off `maciej`. Desktop and web now share
+one Supabase-backed code path for auth, workspaces and tasks; time-blocks moved
+from localStorage to a workspace table. The cloud-first pivot is now *in the
+code*, not just the plan.
+
+**Hosted state surprise (resolves the Mike-coordination item).** Pre-session
+`list_migrations` on hosted (project `wtoonrvuqumihpkbvwvs`) showed Mike's six
+`20260605*` notes migrations **already applied**, and our tasks migrations
+applied too (hosted versions `20260611131017/131039`, fresh timestamps from an
+MCP apply on 2026-06-11) — plus a `task_time_blocks` migration
+(`20260611132737`) that existed on hosted but not in the repo. Treated hosted
+as ground truth and back-filled
+[20260611132737_task_time_blocks.sql](../supabase/migrations/20260611132737_task_time_blocks.sql)
+(verified column-for-column incl. `ON DELETE CASCADE` and the
+`tasks_module_can_access_workspace` RLS policy). `mike` → `develop` timing is
+only relevant when desktop notes migrate (later session).
+
+**Desktop → Supabase as composition** ([runtime.tauri.ts](../src/lib/runtime.tauri.ts)):
+`auth`, `workspace` and `tasks` are now literally `webRuntime.auth` /
+`.workspace` / `.tasks` — zero forked logic. Everything else (notes, email,
+time-tracking, calendar OAuth, integrations, graph, localStore, window) stays
+invoke-based. Because Rust commands gate on `state.session`
+(`require_user_id`), a new **`auth_set_cloud_session`** command
+([commands/auth.rs](../src-tauri/src/commands/auth.rs), registered in lib.rs)
+mirrors the Supabase session into `AppState` — pushed from runtime.tauri.ts on
+every `onAuthStateChange` (INITIAL_SESSION covers boot restore; `null` on
+sign-out also stops email IDLE workers). Capabilities: `hasLocalMnemonic` and
+`hasOfflineMode` flipped to false.
+
+**Lite-version seam (Maciej's constraint: don't block offline-then-sync).**
+The `ModuoRuntime` interface is the seam: the vault/PIN auth UI flows in
+[email-auth-panel.tsx](../src/components/auth/email-auth-panel.tsx) now key off
+`capabilities.hasLocalMnemonic` (not `isWeb`), so the future lite runtime
+re-activates them by flipping a capability — same for the Login-key section in
+[account-section.tsx](../src/features/settings/sections/account-section.tsx).
+All local-auth Rust commands and redb tables stay. Orphans parked for the lite
+story: `notes_outbox` / `notes_oplog` redb tables (sync-engine skeleton,
+never populated), `auth_register_local_mnemonic` & friends (unreachable from
+the UI until a runtime exposes `hasLocalMnemonic`).
+
+**Time-blocks → workspace data.** `runtime.tasks.getTimeBlocks/setTimeBlocks`
+(types in [runtime.types.ts](../src/lib/runtime.types.ts), impl in
+[runtime.web.ts](../src/lib/runtime.web.ts)); `TimeBlockSlot/Map` +
+`sanitizeTimeBlocks` moved to [model.ts](../src/features/tasks/model.ts)
+(default-view re-exports). [use-tasks-module.ts](../src/features/tasks/hooks/use-tasks-module.ts)
+loads them with the bundle (non-blocking on failure) and exposes
+`timeBlocks` + `setTimeBlock` (optimistic); plan-view's localStorage
+read/write deleted. Spec §9 wording updated. Mode/selection/grouping stay
+per-device localStorage.
+
+**Auth panel & profile on cloud:** web `getLocalAuthState` now derives
+profileExists/displayName/userId from the Supabase session (was an all-false
+stub), so app-chrome and Settings → Account display names work on web and
+desktop unchanged. Dead `auth_link_to_cloud` / `auth_sign_in_cloud` invokes
+went away with the replaced namespace.
+
+**Docs:** CLAUDE.md stack line rewritten (Supabase source of truth; redb =
+desktop-only leftovers + future lite); `web+desktop_plan.md` retired with a
+banner (its pending todos spec the never-built auth-link hybrid — do not
+implement); plan Session 2 checked off with findings.
+
+**Verified:** typecheck ✓, vitest 24/24 ✓ (default-view tests rewritten:
+localStorage cases → `sanitizeTimeBlocks`), `cargo check` ✓, lint:tw ✓,
+lint:css unchanged (5 pre-existing global.css warnings), `build:web` ✓.
+**Live end-to-end on web** against hosted with a disposable account
+(`grzywaczmj+moduo-s2-test@gmail.com` / workspace "Claude Test S2", left in
+place for dogfooding): trial start → onboarding workspace create → Tasks
+Inbox seed → bucket "Deep Work" → task create → **Open at → Morning** →
+reload → slot restored from `task_time_blocks` (DB row confirmed; zero
+localStorage timeblock keys). Handled Inbox-seed 409 race observed working.
+**Not live-verified: the desktop (Tauri) runtime composition** — same TS code
+path and `cargo check` passes, but `auth_set_cloud_session` + webview
+supabase-js need one `bun run dev:desktop` boot + sign-in to gut-check; flagged
+for next session / Maciej's dogfood.
+
+**Deferred:** desktop notes → Supabase (Mike's surface; after his branch
+lands); legacy sync-engine removal decision (skeleton still compiles, unused);
+`user_entitlements` 401 noise during pre-session-restore renders (pre-existing,
+web-only, self-heals) — worth a look whenever the SubscriptionGate is next
+touched.
+
+---
+
 ## Interlude — Session 1 merged · Session 2 scope check (2026-06-11)
 
 Session 1 fast-forwarded into `maciej` (`0775a21`) and pushed; task branch

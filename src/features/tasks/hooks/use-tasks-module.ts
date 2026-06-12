@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { setBucketTimeBlock } from "../default-view";
 import {
   endPosition,
   makeTask,
@@ -19,6 +20,8 @@ import {
   type Bucket,
   type Task,
   type TasksModuleBundle,
+  type TimeBlockMap,
+  type TimeBlockSlot,
 } from "../model";
 
 type Params = {
@@ -39,6 +42,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
 
   const [bundle, setBundle] = useState<TasksModuleBundle>(EMPTY_BUNDLE);
+  const [timeBlocks, setTimeBlocksState] = useState<TimeBlockMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const reqRef = useRef(0);
@@ -46,15 +50,22 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const load = useCallback(async () => {
     if (!runtime || !userId || !workspaceId || !canRead) {
       setBundle(EMPTY_BUNDLE);
+      setTimeBlocksState({});
       setLoading(false);
       return;
     }
     const req = ++reqRef.current;
     setLoading(true);
     try {
-      const next = await runtime.tasks.list(workspaceId);
+      // Time-blocks ride along with the bundle but never block it — a failed
+      // read just means the default view skips the time-block step.
+      const [next, blocks] = await Promise.all([
+        runtime.tasks.list(workspaceId),
+        runtime.tasks.getTimeBlocks(workspaceId).catch((): TimeBlockMap => ({})),
+      ]);
       if (reqRef.current === req) {
         setBundle(next);
+        setTimeBlocksState(blocks);
         setError(null);
       }
     } catch (e) {
@@ -322,6 +333,21 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [bundle.buckets, guard, runtime],
   );
 
+  /**
+   * Assign a bucket to a time-of-day slot (or clear it with `slot = null`).
+   * Optimistic; persisted per-workspace via the runtime (spec §9).
+   */
+  const setTimeBlock = useCallback(
+    (bucketId: string, slot: TimeBlockSlot | null) => {
+      const next = setBucketTimeBlock(timeBlocks, bucketId, slot);
+      setTimeBlocksState(next);
+      guard(async () => {
+        await runtime!.tasks.setTimeBlocks({ workspaceId: workspaceId!, blocks: next });
+      });
+    },
+    [timeBlocks, guard, runtime, workspaceId],
+  );
+
   const deleteBucket = useCallback(
     (id: string) => {
       const existing = bundle.buckets.find((b) => b.id === id);
@@ -354,6 +380,8 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     tags: bundle.tags,
     openTaskCountByBucket,
     driftCountByBucket,
+    timeBlocks,
+    setTimeBlock,
     today,
     committedTasks,
     reload: load,
