@@ -14,6 +14,7 @@ import { groupTasks, type GroupBy } from "../helpers";
 import type { Bucket, Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { PlanViewHeader, type PlanView } from "./plan-view-header";
+import { Kbd } from "./task-detail-panel";
 import { TaskRow, type RowCommand } from "./task-row";
 
 type Props = {
@@ -29,6 +30,9 @@ type Props = {
   bucketNameById: (id: string) => string;
   canEdit: boolean;
   onRequestCapture: () => void;
+  /** Lifted task selection — drives the keyboard cursor and the detail rail. */
+  selectedTaskId: string | null;
+  onSelectTask: (id: string | null) => void;
   api: TasksModuleApi;
 };
 
@@ -53,9 +57,14 @@ export function TaskListView({
   bucketNameById,
   canEdit,
   onRequestCapture,
+  selectedTaskId,
+  onSelectTask,
   api,
 }: Props) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Selection is owned by the parent (shared with the detail rail); these aliases
+  // keep the keyboard-cursor logic below unchanged.
+  const selectedId = selectedTaskId;
+  const setSelectedId = onSelectTask;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [command, setCommand] = useState<{ taskId: string; kind: RowCommand } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -97,7 +106,7 @@ export function TaskListView({
   useEffect(() => {
     if (selectedId && visibleTasks.some((t) => t.id === selectedId)) return;
     setSelectedId(visibleTasks[0]?.id ?? null);
-  }, [visibleTasks, selectedId]);
+  }, [visibleTasks, selectedId, setSelectedId]);
 
   // Keyboard-first: focus the list once on mount so j/k work immediately —
   // unless focus is already somewhere intentional (an input, an open dialog).
@@ -114,7 +123,7 @@ export function TaskListView({
       const nextIdx = idx < 0 ? 0 : Math.min(visibleTasks.length - 1, Math.max(0, idx + delta));
       setSelectedId(visibleTasks[nextIdx]?.id ?? null);
     },
-    [visibleTasks, selectedId],
+    [visibleTasks, selectedId, setSelectedId],
   );
 
   const selectedTask = visibleTasks.find((t) => t.id === selectedId) ?? null;
@@ -279,10 +288,15 @@ function EmptyState({
     <div className="grid h-full place-content-center gap-2 text-center text-muted-foreground">
       <p className="text-sm">Nothing here yet.</p>
       {canEdit ? (
-        <Button variant="secondary" size="sm" onClick={onRequestCapture} className="mx-auto">
-          <Plus className="size-4" aria-hidden />
-          Add a task
-        </Button>
+        <>
+          <Button variant="secondary" size="sm" onClick={onRequestCapture} className="mx-auto">
+            <Plus className="size-4" aria-hidden />
+            Add a task
+          </Button>
+          <p className="text-2xs text-muted-foreground/70">
+            or press <Kbd>c</Kbd> to capture
+          </p>
+        </>
       ) : null}
     </div>
   );

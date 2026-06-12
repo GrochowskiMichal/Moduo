@@ -6,6 +6,79 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Improvement-plan Session 3 — Task detail panel + ambient mirrors (2026-06-12)
+
+Branch `t/maciej/session3-task-detail` off `maciej`. The right rail stops being a
+"Context" placeholder and becomes a live task inspector; the first ambient mirror
+(`rescheduleCount`) finally renders.
+
+**New: the detail rail** ([task-detail-panel.tsx](../src/features/tasks/ui/task-detail-panel.tsx)).
+Binds to the selected task, resolved **live from the bundle** in
+[tasks-plan-view.tsx](../src/features/tasks/ui/tasks-plan-view.tsx) (so it follows
+edits and empties when the task is deleted). Editable title (borderless but keeps
+the focus ring — a11y) + description (commit-on-blur), and all properties as a
+compact list: status / bucket / scheduled / due / priority / energy / duration as
+shadcn `Select` + `Input`, recurrence shown **read-only** (the capture parser owns
+creation), and a Commit-to-today toggle. Every write goes through `api.patchTask`
+(optimistic) — **no new write paths**. Created/updated metadata at the bottom.
+
+**Ambient mirrors (principles 4 & 5).** `rescheduleCount` renders as
+"Rescheduled N×" (muted, factual, **never red**) only when > 0 — the first mirror
+that was being incremented but shown nowhere. Drift gets a quiet one-liner in the
+same block when `isDrifted(task)`.
+
+**Selection lifted** (pre-flight item b). The task cursor was local to
+`task-list-view.tsx`; it's now `selectedTaskId` in `tasks-plan-view.tsx` (a
+**distinct name** — `selection` there still means bucket scope) threaded to both
+views via `sharedViewProps`. List keeps its keyboard cursor (j/k) but is now
+*controlled* (the `selectedId`/`setSelectedId` aliases keep that logic intact);
+the existing auto-select-first effect means the rail is populated on entry. Board
+got **select-on-click** ([task-card.tsx](../src/features/tasks/ui/task-card.tsx) /
+[task-board-view.tsx](../src/features/tasks/ui/task-board-view.tsx)) — available to
+view-only users too, since selecting to read details isn't an edit.
+
+**Distinct selected state (pre-flight item c).** Rows already had
+`bg-accent` vs `hover:bg-accent/60` (opacity-only, easy to confuse); added a quiet
+`bg-primary` left accent bar to the selected row
+([task-row.tsx](../src/features/tasks/ui/task-row.tsx)). Board cards get
+`border-ring bg-accent` when selected. Teaching empty states: the detail rail's
+empty state and the list's empty state both surface "press `c` to capture".
+
+**Verified:** typecheck ✓, lint:tw ✓ (new files are token-clean, not in
+`IGNORED_PATHS`), lint:css ✓ (same 5 pre-existing global.css warnings, 0 errors),
+vitest 24/24 ✓, `build:web` ✓. **Live on web** against hosted with the Session 2
+disposable account: `/tasks` loads the test workspace, the rail replaces the
+Context placeholder and auto-selects the first task showing every property +
+created/updated; then **Commit-to-today → Execute → Skip** surfaced
+**"Rescheduled 1×"** in the rail — the mirror, end-to-end. (Test task's
+`rescheduleCount` is now 1; left as demo data.)
+
+**Env note for future live-verify:** the Claude preview sandbox binds to whichever
+worktree owns the active dev server (another session held `:8081`), and worktrees
+don't share the repo's `node_modules`. Workaround used: `bun install` in the
+worktree (1.4s, hardlinked) + a local `web-s3` launch config on `:8091`
+(`.claude/launch.json`, gitignored), driven via the Chrome MCP. Display is
+high-DPI (innerWidth 2207); full-frame screenshots need the left rail collapsed.
+
+**Fable `/code-review` pass (same day, per the Opus-session policy):** 8
+findings, none merge-blocking; fixed in a follow-up commit: (1) selection
+validity moved to where the state lives — a scope-level backstop effect in
+tasks-plan-view (Board/Execute previously kept stale selections and never
+auto-selected; live-verified: empty-scope switch clears the rail, switching
+back auto-reselects, Board renders the selected card); (2) rail Scheduled/Due
+became draft-state commit-on-blur (was: uncontrolled + a Supabase upsert per
+date-segment keystroke); (3) `LEVEL_OPTIONS` + `formatTimestamp` hoisted to
+helpers (were triplicated/duplicated); (4) `Kbd` shared between the two empty
+states; (5) duration input `min={1}` to match the 0→null commit logic. Known
+minor, accepted: title/description drafts don't refresh if the selected task
+is renamed elsewhere mid-edit (key-on-id pattern; revisit if it bites).
+
+**Deferred:** title/description are the only inline-edit *text* fields; board
+within-column reorder + insertion indicators and ⌘K task actions stay in the
+polish backlog.
+
+---
+
 ## Improvement-plan Session 2 — Cloud consolidation (2026-06-12)
 
 Branch `t/maciej/cloud-consolidation` off `maciej`. Desktop and web now share

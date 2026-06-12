@@ -20,16 +20,10 @@ import {
   TooltipTrigger,
 } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
-import { formatDue, formatScheduled } from "../helpers";
+import { formatDue, formatScheduled, LEVEL_OPTIONS } from "../helpers";
 import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { CompleteToggle, LevelDots } from "./task-row";
-
-const LEVELS: Array<{ value: EnergyLevel | PriorityLevel; label: string }> = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
 
 type Props = {
   task: Task;
@@ -39,11 +33,24 @@ type Props = {
   /** Show the bucket tag (when columns are grouped by status, not bucket). */
   showBucket: boolean;
   canEdit: boolean;
+  /** Selection drives the detail rail; available to view-only users too. */
+  selected: boolean;
+  onSelect: () => void;
   api: TasksModuleApi;
 };
 
 /** A draggable kanban card. Cross-column drag changes status (or bucket). */
-export function TaskCard({ task, bucketName, buckets, inboxId, showBucket, canEdit, api }: Props) {
+export function TaskCard({
+  task,
+  bucketName,
+  buckets,
+  inboxId,
+  showBucket,
+  canEdit,
+  selected,
+  onSelect,
+  api,
+}: Props) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: task.id,
     data: { type: "card", taskId: task.id, bucketId: task.bucketId, status: task.status },
@@ -55,9 +62,13 @@ export function TaskCard({ task, bucketName, buckets, inboxId, showBucket, canEd
       ref={setNodeRef}
       {...attributes}
       {...(canEdit ? listeners : {})}
+      role="button"
+      aria-pressed={selected}
+      onClick={onSelect}
       className={cn(
-        "group flex items-start gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-sm",
+        "group flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm transition-colors",
         "select-none",
+        selected ? "border-ring bg-accent" : "border-border bg-background hover:border-foreground/30",
         canEdit && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-40",
       )}
@@ -122,7 +133,7 @@ export function TaskCard({ task, bucketName, buckets, inboxId, showBucket, canEd
               }
             >
               <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVELS.map((l) => (
+              {LEVEL_OPTIONS.map((l) => (
                 <ContextMenuRadioItem key={l.value} value={l.value}>
                   {l.label}
                 </ContextMenuRadioItem>
@@ -140,7 +151,7 @@ export function TaskCard({ task, bucketName, buckets, inboxId, showBucket, canEd
               }
             >
               <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVELS.map((l) => (
+              {LEVEL_OPTIONS.map((l) => (
                 <ContextMenuRadioItem key={l.value} value={l.value}>
                   {l.label}
                 </ContextMenuRadioItem>

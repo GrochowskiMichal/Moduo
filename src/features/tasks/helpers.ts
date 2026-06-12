@@ -122,6 +122,13 @@ export const PRIORITY_LABELS: Record<PriorityLevel, string> = {
 
 export const LEVEL_ORDER = ["high", "medium", "low"] as const;
 
+/** Ascending level options for pickers (context menus, detail panel selects). */
+export const LEVEL_OPTIONS: Array<{ value: EnergyLevel | PriorityLevel; label: string }> = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
 // ── Datetime formatting ──────────────────────────────────────────────────────
 
 function sameDay(a: Date, b: Date): boolean {
@@ -140,6 +147,20 @@ const DATE_TIME_FMT = new Intl.DateTimeFormat(undefined, {
   hour: "numeric",
   minute: "2-digit",
 });
+const TIMESTAMP_FMT = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+/** Absolute timestamp with year — created/updated metadata, activity trails. */
+export function formatTimestamp(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : TIMESTAMP_FMT.format(d);
+}
 
 /** Scheduled clock time — just the time if today, else short date + time. */
 export function formatScheduled(iso: string | null, now: Date = new Date()): string | null {

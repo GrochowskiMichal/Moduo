@@ -16,6 +16,7 @@ import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import type { PlanView } from "./plan-view-header";
 import { TaskBoardView, type BoardGroupBy } from "./task-board-view";
+import { TaskDetailPanel } from "./task-detail-panel";
 import { TaskListView } from "./task-list-view";
 
 type Props = {
@@ -67,6 +68,9 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   );
   const [captureOpen, setCaptureOpen] = useState(false);
   const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
+  // Task-level selection (distinct from `selection`, which is the bucket scope).
+  // Lifted here so the right-rail detail panel can bind to it across List/Board.
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Persist preferences.
   useEffect(() => writeLS(workspaceId, "mode", mode), [workspaceId, mode]);
@@ -193,6 +197,24 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     />
   );
 
+  // Resolve the selected task live from the bundle so the rail follows edits and
+  // empties when the task is deleted.
+  const selectedTask = useMemo(
+    () => (selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null),
+    [selectedTaskId, tasks],
+  );
+
+  // Scope-level selection validity (the state lives here, so its backstop does
+  // too): when the selected task leaves the scope (archived, moved, deleted,
+  // scope/workspace switch), fall back to the first task in scope. The List view
+  // refines this against its collapse-aware visible rows; Board has no own logic
+  // and relies on this entirely.
+  useEffect(() => {
+    if (api.loading) return;
+    if (selectedTaskId && scopeTasks.some((t) => t.id === selectedTaskId)) return;
+    setSelectedTaskId(scopeTasks[0]?.id ?? null);
+  }, [api.loading, selectedTaskId, scopeTasks]);
+
   const sharedViewProps = {
     tasks: scopeTasks,
     scopeTitle,
@@ -204,6 +226,8 @@ export function TasksPlanView({ api, workspaceId }: Props) {
     bucketNameById,
     canEdit,
     onRequestCapture: openCapture,
+    selectedTaskId,
+    onSelectTask: setSelectedTaskId,
     api,
   };
 
@@ -258,16 +282,14 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   );
 
   const right = (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      <h2 className="font-display text-sm text-foreground">Context</h2>
-      <p className="text-sm text-muted-foreground">
-        Placeholder panel. Task details, a mini-calendar, and related context will
-        live here in future sessions.
-      </p>
-      <p className="mt-auto text-xs text-muted-foreground/70">
-        Drag the divider to resize — this rail is here for layout testing.
-      </p>
-    </div>
+    <TaskDetailPanel
+      task={selectedTask}
+      buckets={buckets}
+      inbox={inbox}
+      canEdit={canEdit}
+      onRequestCapture={openCapture}
+      api={api}
+    />
   );
 
   return (
