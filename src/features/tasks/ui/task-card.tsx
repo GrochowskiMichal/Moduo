@@ -33,7 +33,8 @@ import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../m
 import { recurrenceLabel } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
-import { BlockedMarker, LevelDots } from "./task-row";
+import { LevelDots } from "./level-icons";
+import { BlockedMarker } from "./task-row";
 
 type Props = {
   task: Task;

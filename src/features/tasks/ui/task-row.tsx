@@ -40,14 +40,13 @@ import {
 } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import {
-  ENERGY_LABELS,
   formatDue,
   formatScheduled,
   LEVEL_OPTIONS,
-  PRIORITY_LABELS,
   toDateInputValue,
   toLocalInputValue,
 } from "../helpers";
+import { LevelDots } from "./level-icons";
 import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../model";
 import { recurrenceLabel } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
@@ -439,37 +438,7 @@ function TitleEditor({
   );
 }
 
-// ── energy / priority dots (ambient, never alarming) ──────────────────────────
-
-export function LevelDots({ task }: { task: Task }) {
-  if (!task.priority && !task.energyLevel) return null;
-  return (
-    <div className="flex items-center gap-1">
-      {task.priority ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              className="size-2 rounded-full bg-foreground/70"
-              aria-label={PRIORITY_LABELS[task.priority]}
-            />
-          </TooltipTrigger>
-          <TooltipContent>{PRIORITY_LABELS[task.priority]}</TooltipContent>
-        </Tooltip>
-      ) : null}
-      {task.energyLevel ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              className="size-2 rounded-full border border-foreground/60"
-              aria-label={ENERGY_LABELS[task.energyLevel]}
-            />
-          </TooltipTrigger>
-          <TooltipContent>{ENERGY_LABELS[task.energyLevel]}</TooltipContent>
-        </Tooltip>
-      ) : null}
-    </div>
-  );
-}
+// LevelDots (priority/energy glyphs) now lives in ./level-icons.
 
 // ── meta popovers ─────────────────────────────────────────────────────────────
 
