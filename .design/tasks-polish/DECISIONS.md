@@ -4,6 +4,29 @@ Running record of decisions made with Maciej before any code is rewritten.
 Source audits: [../tasks-polish-audit-raw.md](../tasks-polish-audit-raw.md) (per-surface),
 [../tasks-polish-system-audit-raw.md](../tasks-polish-system-audit-raw.md) (system-level).
 
+## RESET — design-system control (Maciej, 2026-06-13, after testing the merge)
+Maciej: components still feel sloppy / not one system, despite shadcn. Root cause:
+shadcn is primitives + tokens, NOT an enforced system; the module stacks ~3
+generations (bespoke → shadcn → Session 11), per-call overrides, and **no
+composition layer** (a shared control "rung"). Decision = stop polishing surfaces,
+**lock the system**, and give Maciej direct visual control. Four calls:
+- **Process = Figma source-of-truth + Code Connect.** Build the canonical component
+  set in Figma (Maciej edits visually) → implement code to match → Code Connect maps
+  each Figma component to its file so they can't drift. *(Needs a Figma file from Maciej.)*
+- **Fonts = ONE family (Geist) everywhere.** Drop the display/body split + the font
+  picker; hierarchy via weight/size only. Kills the "secondary font is bad" problem
+  + a whole drift axis. (Reverses earlier titles=body-vs-display nuance — moot now.)
+- **Sizing = keep density (comfortable/compact/dense), DROP text-size axis.** One type
+  scale; density still adjustable. (Revises the "density is an axis" + Round A text calls.)
+- **Mode toggle = Plan / Focus** (the rail list stays "Queue"; "Queue" as a *mode* read wrong).
+- Also: "New task" → **"New"/"Add"**; **icon-only** List/Board switch; bucket prefixes/IDs
+  = optional, **off by default**, separate small feature.
+
+**Enforcement plan:** one control-rung recipe every control routes through (nested-radius
+math, non-clipping focus ring); delete all bespoke generations; lint bans raw control
+heights/fonts; Storybook visual-regression gate. Apply the motion system for real
+(fade/blur on popovers/dialogs/mode-shift — Session 11 tokenized but barely wired it).
+
 ## Goal (Maciej, 2026-06-13)
 Full UI/UX quality pass on Tasks, run with maximum rigor. Interrogate every element for
 form / layout / color / reusability / **stackability** (same-size controls must share

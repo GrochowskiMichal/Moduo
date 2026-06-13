@@ -269,7 +269,7 @@ function ModeToggle({
       onValueChange={(value) => onModeChange(value as TasksMode)}
       items={[
         { value: "plan", label: "Plan" },
-        { value: "execute", label: "Queue" },
+        { value: "execute", label: "Focus" },
       ]}
     />
   );

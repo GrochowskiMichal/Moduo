@@ -496,8 +496,11 @@
   --font-body-serif:  "Source Serif Pro", Georgia, serif;
   --font-body-mono:   "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Resolved font family — overridden by [data-font-*] below */
-  --font-display: var(--font-display-pilat);
+  /* ONE family everywhere (2026-06-13 decision): display + body both resolve to
+     Geist — hierarchy comes from weight/size, not a second typeface. The
+     font picker is retired (the [data-font-*] variant selectors below are gone).
+     The --font-display-* / --font-body-* alternates are kept for reference only. */
+  --font-display: var(--font-body-geist);
   --font-body:    var(--font-body-geist);
   --font-mono:    var(--font-body-mono); /* always mono — for code, not user-customizable */
 
@@ -532,17 +535,9 @@
   --font-weight-bold:    700;
 }
 
-/* Display font variants */
-[data-font-display="pilat"]    { --font-display: var(--font-display-pilat); }
-[data-font-display="geist"]    { --font-display: var(--font-display-geist); }
-[data-font-display="cal"]      { --font-display: var(--font-display-cal); }
-[data-font-display="fraunces"] { --font-display: var(--font-display-fraunces); }
-
-/* Body font variants */
-[data-font-body="geist"] { --font-body: var(--font-body-geist); }
-[data-font-body="inter"] { --font-body: var(--font-body-inter); }
-[data-font-body="serif"] { --font-body: var(--font-body-serif); }
-[data-font-body="mono"]  { --font-body: var(--font-body-mono); }
+/* Font picker retired (2026-06-13): one family everywhere. The [data-font-*]
+   variant selectors are intentionally removed so any persisted pick falls back
+   to the single Geist default above. Re-introduce only if the picker returns. */
 
 /* Text-size variants — only the body-tier sizes shift. Display sizes stay
    fixed so page titles don't change with user-text-size prefs. */

@@ -50,7 +50,7 @@ export function ExecuteView({
     <div className="flex h-full min-h-0 flex-col">
       {/* heading matches the Plan-mode header (same place + style) */}
       <div className="mb-3 flex shrink-0 items-center">
-        <h1 className="font-display text-lg text-foreground">Queue</h1>
+        <h1 className="font-display text-lg text-foreground">Focus</h1>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">

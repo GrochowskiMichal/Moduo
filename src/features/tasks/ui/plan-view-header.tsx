@@ -48,7 +48,7 @@ export function PlanViewHeader({
         <Toolbar.Primary>
           <Button size="sm" onClick={onRequestCapture} disabled={!canEdit}>
             <Plus aria-hidden />
-            New task
+            New
           </Button>
         </Toolbar.Primary>
       </Toolbar>
