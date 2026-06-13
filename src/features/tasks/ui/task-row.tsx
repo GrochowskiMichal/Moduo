@@ -8,11 +8,12 @@ import {
   Clock,
   CornerDownRight,
   Inbox,
+  ListChecks,
   Repeat,
-  Sunrise,
 } from "lucide-react";
 
 import { Badge } from "../../../components/ui/badge";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { TagChipList } from "../../../components/tag-chip";
 import {
   ContextMenu,
@@ -132,7 +133,7 @@ export function TaskRow({
       className={cn(
         "group relative flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
         "border border-transparent cursor-default select-none",
-        selected ? "bg-accent" : "hover:bg-accent/60",
+        selected ? "bg-(--selected-bg)" : "hover:bg-accent/60",
         nested && "ml-6",
       )}
       // height rides the density setting; py is only a multiline guard
@@ -141,6 +142,10 @@ export function TaskRow({
       {/* selected marker — a quiet accent bar, distinct from the lighter hover fill */}
       {selected ? (
         <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
+      ) : null}
+      {/* nested subtask indent guide — a quiet vertical hairline in the indent gutter */}
+      {nested ? (
+        <span className="absolute inset-y-0 -left-3 w-px bg-border/60" aria-hidden />
       ) : null}
       {expandSlot ? (
         expandable ? (
@@ -188,8 +193,9 @@ export function TaskRow({
           <button
             type="button"
             className={cn(
-              // flex-1 so the title keeps priority; chips shrink/truncate first
-              "min-w-0 flex-1 truncate text-left font-display",
+              // flex-1 so the title keeps priority; chips shrink/truncate first.
+              // Body font (content, not chrome) at 15px — quiet, Linear/Todoist-ward.
+              "min-w-0 flex-1 truncate text-left font-sans text-md",
               done ? "text-muted-foreground line-through" : blocked ? "text-muted-foreground" : "text-foreground",
             )}
             onClick={(e) => {
@@ -222,15 +228,35 @@ export function TaskRow({
       {/* meta cluster — quiet, right-aligned */}
       <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
         {blocked ? <BlockedMarker taskId={task.id} api={api} /> : null}
-        {committed ? (
+
+        {/* Queue toggle — always visible + quiet (the marker IS the action).
+            Committed → accent; idle → faint, darkens on hover/focus. */}
+        {canEdit ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="flex items-center text-foreground" aria-label="Committed for today">
-                <Sunrise className="size-3.5" aria-hidden />
-              </span>
+              <button
+                type="button"
+                aria-label={committed ? "Remove from queue" : "Add to queue"}
+                aria-pressed={committed}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  api.toggleCommit(task.id);
+                }}
+                className={cn(
+                  "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                  committed ? "text-primary" : "text-muted-foreground/40 hover:text-foreground",
+                )}
+              >
+                <ListChecks className="size-3.5" aria-hidden />
+              </button>
             </TooltipTrigger>
-            <TooltipContent>Committed for today</TooltipContent>
+            <TooltipContent>{committed ? "Remove from queue" : "Add to queue"}</TooltipContent>
           </Tooltip>
+        ) : committed ? (
+          <span className="flex items-center text-primary" aria-label="Queued">
+            <ListChecks className="size-3.5" aria-hidden />
+          </span>
         ) : null}
 
         {task.recurrence ? (
@@ -292,7 +318,7 @@ export function TaskRow({
           {done ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => api.toggleCommit(task.id)}>
-          {committed ? "Remove from today" : "Commit to today"}
+          {committed ? "Remove from queue" : "Add to queue"}
         </ContextMenuItem>
         {task.recurrence && !done && task.status !== "archived" ? (
           <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
@@ -376,41 +402,6 @@ export function BlockedMarker({ taskId, api }: { taskId: string; api: TasksModul
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
-  );
-}
-
-// ── complete toggle (bespoke; checkbox is not an enumerated shadcn primitive) ──
-
-export function CompleteToggle({
-  done,
-  disabled,
-  onToggle,
-}: {
-  done: boolean;
-  disabled: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      aria-pressed={done}
-      aria-label={done ? "Mark as not done" : "Mark as done"}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      className={cn(
-        "flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-        done
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-muted-foreground/50 hover:border-foreground",
-        disabled && "opacity-50",
-      )}
-    >
-      {done ? <Check className="size-2.5" strokeWidth={3} aria-hidden /> : null}
-    </button>
   );
 }
 
@@ -533,8 +524,12 @@ function SchedulePopover({
           type="button"
           onClick={(e) => e.stopPropagation()}
           aria-label="Scheduled time"
-          // empty + idle collapses (no reserved space); reveals on hover or when opened
-          className={cn("items-center", label ? "flex" : open ? "flex" : "hidden group-hover:flex")}
+          // Reserve the slot always; fade in on hover/focus when empty (no
+          // layout shift — the old hidden→flex pushed the row's content).
+          className={cn(
+            "flex items-center transition-opacity duration-(--motion-fade) ease-(--ease-out)",
+            label || open ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
+          )}
         >
           <MetaChip active={!!label} drifted={drifted} icon={<Clock className="size-3.5" aria-hidden />}>
             {label}

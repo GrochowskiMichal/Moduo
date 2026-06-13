@@ -6,6 +6,77 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Improvement-plan Session 11 — Tasks UI/UX rebuild + shared primitives (2026-06-13)
+
+Branch `t/maciej/session11-tasks-ui` off `maciej` (Opus). A maximum-rigor
+UI/UX pass on Tasks, building a **reusable primitive + motion layer** (Notes is
+the canary, next session). Decisions captured in
+[.design/tasks-polish/DECISIONS.md](../.design/tasks-polish/DECISIONS.md); brief +
+audits in `.design/tasks-polish/`. **One PR; primitives shared from day one.**
+
+**The "huge on web" mystery — RESOLVED: browser per-site zoom**, not fonts/
+density. `screen.width=1728` ⇒ base dpr 2.0 but the tab reported dpr 2.5 (= 125%
+Chrome/Dia page zoom on the Moduo origin); ⌘0 fixed it. Measured sizes were
+already Linear-grade. (Two earlier theories — "Inter wider", "display-role font"
+— were wrong; Geist≈Inter within ~2%.)
+
+**Foundation (tokens/global).** Replaced the `* { font-family: "Pilat Extended" }`
+override with `var(--font-body)` (unclassed text → Geist; `font-display` still
+wins) — a real bypass fix, not the zoom cause. Density default KEPT `comfortable`.
+Added a density-scaling **icon-size ladder** (`--icon-xs/-sm/-/-lg` + `@theme`
+`--spacing-icon-*` → `size-icon-*`). Motion: `--motion-fade` (kept ~80ms under
+reduced-motion) + `--blur-veil` (fade+blur motif; →0 reduced); reduced-motion now
+zeroes transforms but keeps fades. `--selected-bg`/`--selected-border` selection
+recipe (accent-mix, recolors per data-accent).
+
+**Shared primitives (`src/components/ui/`, with stories).** **FieldShell** cva
+(`filled`/`ghost`/`bare`, modern offset-less ring) composed by Input(+`size`/
+`variant`)/Textarea/SelectTrigger, all bumped to 14px. **Button** retuned (14px
+across rungs, icon ladder, modern ring). **SegmentedControl** (radix ToggleGroup;
+replaces 3 bespoke toggles: view switch, rail Plan/Queue, execute timer).
+**IconButton** (required tooltip+label). **Toolbar** (aligned control row).
+**Calendar** + **DateField** (react-day-picker@10 + date-fns; token-routed;
+replaces 4 native date inputs; presets + withTime). **CompleteToggle** (promoted;
+spring check-pop). **EmptyState** (promoted). **TagChip v2** (colored `#`, no
+dot/pill).
+
+**Surfaces.** Toolbar aligned (controls 26px, was 26/26/**32**/26). Task row: no
+hover reflow (schedule/due reserve+fade), title **body/15**, faint accent-tint
+selection, always-visible quiet **queue toggle** (replaces right-click-only),
+subtask indent guide. Rail eyebrows display→body. Detail panel: DateField + ghost
+property selects + `bg-primary` "Commit to Queue". Board: **Linear-quiet** (cards
+`bg-card`+hairline on transparent columns — fixes inverted elevation; drag grip
+removed). Capture modal: chromeless, 20px display title / body description,
+DateField, dead attachment removed. **"Today" → "Queue"** rename app-wide (UI
+only; `committed_for`/internal `execute` model unchanged). Execute card: compact
+timer (body+tabular), x/y label back at the bottom, empty "Linked" placeholder
+removed.
+
+**Accent policy (modern under all 8 accents — contrast verified AA earlier).**
+Accent only on: one primary action per pane, current selection (bar+tint), focus
+ring, the quiet done-check. Segmented toggles + priority/energy stay neutral.
+
+**Verified:** typecheck ✓, vitest **91/91** ✓, lint:tw ✓, lint:css ✓, build:web ✓.
+Live (web, worktree rsbuild `:8099` + Chrome MCP Browser 1 + hosted test acct):
+rename, board grip removal, **DateField calendar (June 2026 + presets + time,
+real-click)**, selection tint, no console errors. (Note: synthetic `.click()`
+won't open Radix popovers — used a real extension click.)
+
+**Deferred / gated:**
+- **Time-tracking (Wave 4)** — Round D chose "persisted total + sessions", which
+  needs a **hosted Supabase migration** (`task_time_entries` + `tasks_op_track_time`
+  intent-op) + runtime + UI. That migration is an irreversible shared-DB change, so
+  it's **held for Maciej's explicit go-ahead** and split to a follow-up. The Execute
+  card is restyled; the Time-spent mode + estimate-chip + Pomodoro-settings land then.
+- **Detail-panel full PropertyRow** inline label→value grid (kept the `Field`
+  stacked layout, now quiet via ghost controls).
+- **Group control** = ghost Select (chose over a separate DropdownMenu-radio).
+- **Visual-test baselines** for the new primitives (need a Storybook+Playwright run).
+- `q` keyboard shortcut for queue; meta-icon density-scaling in rows.
+- **Notes canary (Session 12):** adopt these primitives, prove portability.
+
+---
+
 ## Improvement-plan Session 10 — Theme shades + tokenization deepening (2026-06-13)
 
 Branch `t/maciej/session10-theme-shades` off `maciej` (Fable). Sessions 8/9

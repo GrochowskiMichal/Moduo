@@ -1,9 +1,10 @@
-// Shared, quiet tag chip (cross-module). A faint hue-tinted pill with a colored
-// dot and the tag name. Color is routed entirely through the label tokens via
-// `data-label` (see tokens.css §13b + the .tag-chip/.tag-dot classes in
-// global.css) — no raw color in this component. Used inline on task rows/cards
-// (display), in the detail panel (removable), and as active filter chips
-// (`onClick` to clear). Mail / Notes adopt the same chip later.
+// Shared, quiet tag chip (cross-module). Borderless inline text: the "#" glyph
+// carries the tag's hue, the name stays neutral — no dot, no pill. Color is
+// routed entirely through the label tokens via `data-label` (see tokens.css
+// §13b + the .tag-hash / .tag-chip-active classes in global.css) — no raw color
+// in this component. Active filter chips go fully hued (# + name). Used inline
+// on task rows/cards (display), in the detail panel (removable), and as filter
+// chips (`onClick` to clear). Mail / Notes adopt the same chip later.
 
 import { cn } from "../lib/utils";
 import { normalizeLabelColor } from "./tag-colors";
@@ -23,13 +24,12 @@ type Props = {
 
 export function TagChip({ name, color, onClick, onRemove, active, className, title }: Props) {
   const label = (
-    <>
-      <span className="tag-dot size-1.5 shrink-0 rounded-full" aria-hidden />
-      <span className="min-w-0 truncate">
-        <span className="text-muted-foreground/70">#</span>
-        {name}
+    <span className={cn("min-w-0 truncate", active ? "tag-chip-active" : "text-foreground/90")}>
+      <span className={cn(!active && "tag-hash")} aria-hidden>
+        #
       </span>
-    </>
+      {name}
+    </span>
   );
 
   return (
@@ -37,8 +37,7 @@ export function TagChip({ name, color, onClick, onRemove, active, className, tit
       data-label={normalizeLabelColor(color)}
       title={title ?? `#${name}`}
       className={cn(
-        "tag-chip inline-flex max-w-full items-center gap-1 rounded border border-transparent px-1.5 py-0.5 text-2xs leading-none text-foreground/80",
-        active && "tag-chip-outline",
+        "inline-flex max-w-full items-center gap-0.5 text-2xs leading-none",
         className,
       )}
     >
@@ -49,12 +48,12 @@ export function TagChip({ name, color, onClick, onRemove, active, className, tit
             e.stopPropagation();
             onClick();
           }}
-          className="flex min-w-0 items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-w-0 items-center rounded-sm hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {label}
         </button>
       ) : (
-        <span className="flex min-w-0 items-center gap-1">{label}</span>
+        <span className="flex min-w-0 items-center">{label}</span>
       )}
       {onRemove ? (
         <button
@@ -64,7 +63,7 @@ export function TagChip({ name, color, onClick, onRemove, active, className, tit
             e.stopPropagation();
             onRemove();
           }}
-          className="-mr-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex size-3.5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           ×
         </button>

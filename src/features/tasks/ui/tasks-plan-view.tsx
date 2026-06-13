@@ -179,7 +179,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   }, [scopeTasksAll, liveFilterTagIds, api.tagsByTask]);
 
   const scopeTitle =
-    isAll ? "All" : selection === "today" ? "Today" : selection === "inbox" ? "Inbox" : bucketNameById(selection);
+    isAll ? "All" : selection === "today" ? "Queue" : selection === "inbox" ? "Inbox" : bucketNameById(selection);
 
   // The commit queue is inherently ordered, so Today List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : groupBy;

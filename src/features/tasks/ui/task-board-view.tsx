@@ -146,9 +146,9 @@ export function TaskBoardView({
   const groupControl =
     selection === "all" ? (
       <div className="flex items-center gap-1.5">
-        <span className="font-display text-xs text-muted-foreground">Columns</span>
+        <span className="font-sans text-xs text-muted-foreground">Columns</span>
         <Select value={boardGroupBy} onValueChange={(v) => onBoardGroupByChange(v as BoardGroupBy)}>
-          <SelectTrigger size="sm" className="w-28 font-display">
+          <SelectTrigger size="sm" variant="ghost" className="w-28">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -243,7 +243,7 @@ function BoardColumn({
   return (
     <section className="flex h-full w-72 shrink-0 flex-col">
       <header className="mb-2 flex items-center gap-1.5 px-1">
-        <span className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
           {column.label}
         </span>
         <span className="font-sans text-xs tabular-nums text-muted-foreground/70">
@@ -253,8 +253,10 @@ function BoardColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md p-1 transition-colors",
-          isOver ? "bg-accent/50 ring-1 ring-ring/40" : "bg-muted/30",
+          // Linear-quiet: columns are transparent on the canvas; cards carry the
+          // elevation (bg-card + hairline). Only a drag-over state lights up.
+          "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md p-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
+          isOver ? "bg-accent/40 ring-1 ring-ring/40" : "bg-transparent",
         )}
       >
         {column.tasks.length === 0 ? (

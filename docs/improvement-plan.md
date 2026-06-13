@@ -292,19 +292,25 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       Settings picker, same cascade mechanism as `data-accent`.
 - [x] Audit for token bypasses while in there.
 
-### ☐ 11 — Tasks UI/UX pass *(design · scope TBD with Maciej)*
+### ☑ 11 — Tasks UI/UX pass *(design + reusable primitives)*
 
-> Added 2026-06-12: Maciej isn't happy with how Tasks looks overall and wants
-> visual modifications — deferred while features land. No other session covers
-> this (1 was density, 10 is shades/tokens; the polish backlog is small
-> mechanics, not look-and-feel). Start with a design critique / brief session
-> with Maciej (what specifically reads wrong: hierarchy? chrome? spacing?
-> typography?), then restyle the Tasks surfaces against it. Natural pairing:
-> run alongside or right after 10, since both touch the token layer.
+> **Done 2026-06-13** (Opus, branch `t/maciej/session11-tasks-ui`). Scoped with
+> Maciej into a full UI/UX rebuild on a **reusable primitive + motion layer**
+> (Notes = canary, Session 12). 6 decision rounds → brief; built foundation +
+> 10 shared primitives + all 8 surfaces. **The "huge on web" complaint was
+> browser per-site zoom (125%), not fonts/density** — ⌘0 fixed it; the font/
+> density work stayed as genuine quality fixes. typecheck/vitest 91/91/lints/
+> build all green; live-verified on web. See build-log + `.design/tasks-polish/`.
+> **Deferred (gated):** time-tracking (Wave 4) needs a hosted migration —
+> held for explicit go-ahead, split to a follow-up. Next: Fable/`/code-review`
+> + Maciej's review, then the Notes canary.
 
-- [ ] Collect the critique → brief (`.design/` doc) with Maciej.
-- [ ] Restyle Tasks surfaces (rail, rows, cards, detail panel, Execute)
-      against the brief; fold in the polish backlog items that fit.
+- [x] Collect the critique → brief (`.design/tasks-polish/` — DECISIONS, BRIEF,
+      TASKS + two raw audits).
+- [x] Restyle Tasks surfaces (toolbar, rail, rows, cards, detail panel, board,
+      capture modal, Queue/Execute) + build the shared primitives Notes inherits.
+- [ ] **Follow-up:** time-tracking (migration + intent-op + tracker UI +
+      Pomodoro settings); full PropertyRow grid; visual-test baselines; `q` shortcut.
 
 ## Model assignment (decided with Maciej, 2026-06-12)
 

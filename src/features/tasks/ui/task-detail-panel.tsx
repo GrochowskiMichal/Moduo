@@ -12,11 +12,11 @@ import {
   CornerDownRight,
   Hourglass,
   Inbox,
+  ListChecks,
   Plus,
   Repeat,
   RotateCcw,
   SkipForward,
-  Sunrise,
   X,
 } from "lucide-react";
 
@@ -37,6 +37,7 @@ import {
 } from "../../../components/ui/popover";
 import { TagChip } from "../../../components/tag-chip";
 import { TagPicker } from "../../../components/tag-picker";
+import { DateField } from "../../../components/ui/date-field";
 import {
   Select,
   SelectContent,
@@ -56,8 +57,6 @@ import {
   formatTimestamp,
   LEVEL_OPTIONS,
   STATUS_LABELS,
-  toDateInputValue,
-  toLocalInputValue,
   wouldCreateCycle,
 } from "../helpers";
 import { activityActorName, activityLine } from "../activity";
@@ -77,7 +76,7 @@ import {
   type RecurrencePreset,
 } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { CompleteToggle } from "./task-row";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
 
 type Props = {
   task: Task | null;
@@ -137,14 +136,6 @@ function DetailBody({
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [duration, setDuration] = useState(task.durationMinutes != null ? String(task.durationMinutes) : "");
-  const [scheduled, setScheduled] = useState(toLocalInputValue(task.scheduledAt));
-  const [due, setDue] = useState(toDateInputValue(task.dueDate));
-
-  // The scheduled time also moves outside this input (skip-occurrence,
-  // recurrence catch-up) — keep the draft in step with the task.
-  useEffect(() => {
-    setScheduled(toLocalInputValue(task.scheduledAt));
-  }, [task.scheduledAt]);
 
   const drifted = isDrifted(task);
   const committed = !!task.committedFor && task.committedFor === api.today;
@@ -172,16 +163,6 @@ function DetailBody({
     const n = Number.parseInt(duration, 10);
     const next = Number.isFinite(n) && n > 0 ? n : null;
     if (next !== task.durationMinutes) api.patchTask(task.id, { durationMinutes: next });
-  };
-  // Date fields commit on blur (not per segment-change — each patch is a network
-  // upsert) and tolerate clearing: empty input → null.
-  const commitScheduled = () => {
-    const next = scheduled ? new Date(scheduled).toISOString() : null;
-    if (next !== task.scheduledAt) api.patchTask(task.id, { scheduledAt: next });
-  };
-  const commitDue = () => {
-    const next = due ? new Date(`${due}T00:00:00`).toISOString() : null;
-    if (next !== task.dueDate) api.patchTask(task.id, { dueDate: next });
   };
 
   // Recurrence (spec §5d): the current rule mapped back to a preset for the
@@ -226,7 +207,7 @@ function DetailBody({
               e.currentTarget.blur();
             }
           }}
-          className="border-transparent bg-transparent px-0 font-display text-base text-foreground"
+          className="border-transparent bg-transparent px-0 font-sans text-md text-foreground"
         />
 
         {/* sub-task of — quiet breadcrumb back to the parent (one level) */}
@@ -275,7 +256,7 @@ function DetailBody({
               disabled={!canEdit}
               onValueChange={(v) => api.patchTask(task.id, { status: v as TaskStatus })}
             >
-              <SelectTrigger size="sm" className="w-full font-display">
+              <SelectTrigger size="sm" variant="ghost" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -296,7 +277,7 @@ function DetailBody({
                 if (v !== task.bucketId) api.patchTask(task.id, { bucketId: v });
               }}
             >
-              <SelectTrigger size="sm" className="w-full font-display">
+              <SelectTrigger size="sm" variant="ghost" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -314,23 +295,30 @@ function DetailBody({
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Scheduled">
-              <Input
-                type="datetime-local"
+              <DateField
+                value={task.scheduledAt ? new Date(task.scheduledAt) : null}
+                onChange={(d) =>
+                  api.patchTask(task.id, { scheduledAt: d ? d.toISOString() : null })
+                }
+                withTime
+                variant="ghost"
+                placeholder="Set time"
+                aria-label="Scheduled time"
                 disabled={!canEdit}
-                value={scheduled}
-                className="h-8"
-                onChange={(e) => setScheduled(e.target.value)}
-                onBlur={commitScheduled}
+                className="w-full"
               />
             </Field>
             <Field label="Due">
-              <Input
-                type="date"
+              <DateField
+                value={task.dueDate ? new Date(task.dueDate) : null}
+                onChange={(d) =>
+                  api.patchTask(task.id, { dueDate: d ? d.toISOString() : null })
+                }
+                variant="ghost"
+                placeholder="Set date"
+                aria-label="Due date"
                 disabled={!canEdit}
-                value={due}
-                className="h-8"
-                onChange={(e) => setDue(e.target.value)}
-                onBlur={commitDue}
+                className="w-full"
               />
             </Field>
           </div>
@@ -378,7 +366,7 @@ function DetailBody({
                 disabled={!canEdit}
                 onValueChange={setRecurrencePreset}
               >
-                <SelectTrigger size="sm" className="w-full font-display">
+                <SelectTrigger size="sm" variant="ghost" className="w-full">
                   <span className="flex min-w-0 items-center gap-2">
                     <Repeat className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                     <SelectValue />
@@ -473,13 +461,13 @@ function DetailBody({
           {canEdit ? (
             <Button
               type="button"
-              variant={committed ? "secondary" : "outline"}
+              variant={committed ? "secondary" : "default"}
               size="sm"
               className="w-full justify-center"
               onClick={() => api.toggleCommit(task.id)}
             >
-              <Sunrise className="size-3.5" aria-hidden />
-              {committed ? "Remove from today" : "Commit to today"}
+              <ListChecks aria-hidden />
+              {committed ? "Remove from queue" : "Commit to Queue"}
             </Button>
           ) : null}
         </div>
@@ -555,7 +543,7 @@ function ActivitySection({ task, api }: { task: Task; api: TasksModuleApi }) {
 
   return (
     <div className="space-y-1">
-      <span className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         Activity
       </span>
       <div className="space-y-1 text-2xs text-muted-foreground/80">
@@ -606,7 +594,7 @@ function SubtasksField({
 
   return (
     <div className="space-y-1">
-      <span className="flex items-baseline gap-1.5 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="flex items-baseline gap-1.5 font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         Subtasks
         {progress && progress.total > 0 ? (
           // quiet n/m mirror — factual, never alarming (principles 4 & 5)
@@ -699,21 +687,21 @@ function SubtaskRow({
             <button
               type="button"
               disabled={!canEdit}
-              aria-label={committed ? "Remove from today" : "Commit to today"}
+              aria-label={committed ? "Remove from queue" : "Add to queue"}
               onClick={() => api.toggleCommit(subtask.id)}
               className={cn(
                 "flex size-5 shrink-0 items-center justify-center rounded transition-opacity",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:opacity-100",
                 committed
-                  ? "text-foreground"
+                  ? "text-primary"
                   : "text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
               )}
             >
-              <Sunrise className="size-3.5" aria-hidden />
+              <ListChecks className="size-3.5" aria-hidden />
             </button>
           </TooltipTrigger>
           <TooltipContent>
-            {committed ? "Committed for today — click to remove" : "Commit to today"}
+            {committed ? "Queued — click to remove" : "Add to queue"}
           </TooltipContent>
         </Tooltip>
       ) : null}
@@ -885,7 +873,7 @@ function DetailEmptyState({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <span className="block font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="block font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
       {children}
@@ -908,7 +896,7 @@ function LevelSelect({
       disabled={disabled}
       onValueChange={(v) => onChange(v === "none" ? null : (v as EnergyLevel | PriorityLevel))}
     >
-      <SelectTrigger size="sm" className="w-full font-display">
+      <SelectTrigger size="sm" variant="ghost" className="w-full">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
+import { EmptyState as EmptyStateBase } from "../../../components/ui/empty-state";
 import {
   Select,
   SelectContent,
@@ -283,9 +284,9 @@ export function TaskListView({
         activeFilters={activeTagFilters}
         groupControl={
           <div className="flex items-center gap-1.5">
-            <span className="font-display text-xs text-muted-foreground">Group</span>
+            <span className="font-sans text-xs text-muted-foreground">Group</span>
             <Select value={groupBy} onValueChange={(v) => onGroupByChange(v as GroupBy)}>
-              <SelectTrigger size="sm" className="w-28 font-display">
+              <SelectTrigger size="sm" variant="ghost" className="w-28">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -397,19 +398,17 @@ function EmptyState({
   onRequestCapture: () => void;
 }) {
   return (
-    <div className="grid h-full place-content-center gap-2 text-center text-muted-foreground">
-      <p className="text-sm">Nothing here yet.</p>
-      {canEdit ? (
-        <>
-          <Button variant="secondary" size="sm" onClick={onRequestCapture} className="mx-auto">
-            <Plus className="size-4" aria-hidden />
+    <EmptyStateBase
+      title="Nothing here yet."
+      action={
+        canEdit ? (
+          <Button variant="secondary" size="sm" onClick={onRequestCapture}>
+            <Plus aria-hidden />
             Add a task
           </Button>
-          <p className="text-2xs text-muted-foreground/70">
-            or press <Kbd>c</Kbd> to capture
-          </p>
-        </>
-      ) : null}
-    </div>
+        ) : undefined
+      }
+      hint={canEdit ? <>or press <Kbd>c</Kbd> to capture</> : undefined}
+    />
   );
 }

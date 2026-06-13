@@ -3,6 +3,7 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 
 import { cn } from "@/src/lib/utils";
+import { fieldShellVariants, type FieldShellVariant } from "./field-shell";
 
 function Select({
   ...props
@@ -25,11 +26,14 @@ function SelectValue({
 function SelectTrigger({
   className,
   size = "default",
+  variant = "filled",
   children,
   style,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default";
+  /** Surface treatment — see field-shell.ts. Default `filled`. */
+  variant?: FieldShellVariant;
 }) {
   const heightVar = size === "sm" ? "var(--ctrl-h-sm)" : "var(--ctrl-h)";
   return (
@@ -37,12 +41,10 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-fit items-center justify-between gap-2 rounded-md border border-border bg-input px-3 font-sans text-sm whitespace-nowrap text-foreground transition-colors outline-none",
-        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        "aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive",
+        fieldShellVariants({ variant }),
+        "flex w-fit items-center justify-between gap-2 px-3 whitespace-nowrap",
         "data-[placeholder]:text-muted-foreground",
-        "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
+        "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-icon-sm [&_svg:not([class*='text-'])]:text-muted-foreground",
         className,
       )}
       style={{ height: heightVar, ...style }}
@@ -50,7 +52,7 @@ function SelectTrigger({
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="size-4 opacity-70" />
+        <ChevronDownIcon className="size-icon-sm opacity-70" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );

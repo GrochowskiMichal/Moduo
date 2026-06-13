@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Check, Link2, Pause, Play, RotateCcw } from "lucide-react";
+import { Check, Pause, Play, RotateCcw } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
+import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { cn } from "../../../lib/utils";
 import {
   ENERGY_LABELS,
@@ -48,13 +49,8 @@ export function ExecuteView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* heading matches the Plan-mode header (same place + style) */}
-      <div className="mb-3 flex shrink-0 items-center justify-between">
-        <h1 className="font-display text-lg text-foreground">Focus</h1>
-        {total > 0 ? (
-          <span className="font-sans text-xs text-muted-foreground tabular-nums">
-            {doneCount} / {total} Done
-          </span>
-        ) : null}
+      <div className="mb-3 flex shrink-0 items-center">
+        <h1 className="font-display text-lg text-foreground">Queue</h1>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -72,11 +68,17 @@ export function ExecuteView({
               onDoLast={() => onDoLast(current.id)}
               canDoLast={upcoming.length > 0}
             />
-            <RelationsPlaceholder />
             <Queue tasks={upcoming} bucketNameById={bucketNameById} parentTitleFor={parentTitleFor} />
           </div>
         )}
       </div>
+
+      {/* progress mirror — quiet, back at the bottom (reads as a tally, not a heading) */}
+      {current && total > 0 ? (
+        <div className="mt-3 flex shrink-0 justify-center font-sans text-xs tabular-nums text-muted-foreground">
+          {doneCount} / {total} done
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -165,9 +167,10 @@ function NowCard({
         <p className="mx-auto mt-3 max-w-md font-sans text-sm text-muted-foreground">{task.description}</p>
       ) : null}
 
-      <div className="mt-8 flex flex-col items-center gap-2">
+      <div className="mt-6 flex flex-col items-center gap-2">
         <ModeToggle mode={mode} onModeChange={setMode} />
-        <span className="mt-2 font-display text-6xl tabular-nums text-foreground">
+        {/* compact timer — body + tabular; secondary to the task details above */}
+        <span className="mt-1 font-sans text-3xl tabular-nums text-foreground">
           {formatClock(timer.secondsLeft)}
         </span>
         <span className="font-sans text-2xs uppercase tracking-wide text-muted-foreground/70">
@@ -209,40 +212,20 @@ function NowCard({
 
 function ModeToggle({ mode, onModeChange }: { mode: TimerMode; onModeChange: (m: TimerMode) => void }) {
   return (
-    <div role="tablist" aria-label="Timer mode" className="flex items-center gap-1 rounded-md bg-muted p-1">
-      {(["pomodoro", "duration"] as const).map((m) => (
-        <button
-          key={m}
-          role="tab"
-          aria-selected={mode === m}
-          onClick={() => onModeChange(m)}
-          className={cn(
-            "rounded-sm px-2.5 py-1 font-display text-xs capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            mode === m ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {m}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      aria-label="Timer mode"
+      size="sm"
+      value={mode}
+      onValueChange={(value) => onModeChange(value as TimerMode)}
+      items={[
+        { value: "pomodoro", label: "Pomodoro" },
+        { value: "duration", label: "Timer" },
+      ]}
+    />
   );
 }
 
 // ── relations (placeholder for cross-module links) ────────────────────────────
-
-function RelationsPlaceholder() {
-  return (
-    <div className="rounded-lg border border-dashed border-border p-4">
-      <div className="mb-1 flex items-center gap-1.5 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
-        <Link2 className="size-3.5" aria-hidden />
-        Linked
-      </div>
-      <p className="font-sans text-sm text-muted-foreground">
-        Notes, emails, calendar events, and other linked items will surface here while you focus.
-      </p>
-    </div>
-  );
-}
 
 // ── queue ─────────────────────────────────────────────────────────────────────
 

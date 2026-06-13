@@ -127,8 +127,13 @@ body,
   font-display: swap;
 }
 
+/* Default font for all elements = the user's BODY font (Geist by default, set
+   via [data-font-body]). Elements opt into the display face with the
+   `font-display` utility (higher specificity wins over this `*` rule). This is
+   the token-routed replacement for the old hardcoded "Pilat Extended" override,
+   which forced the display face onto everything and bypassed --font-body. */
 * {
-  font-family: "Pilat Extended", "Inter", "Inter_400Regular", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-body, "Geist", "Inter", system-ui, -apple-system, sans-serif);
 }
 
 .auth-hero-title {
@@ -186,6 +191,45 @@ body,
 
 .tag-dot {
   background-color: var(--label);
+}
+
+/* TagChip v2: the "#" glyph carries the hue, the name stays neutral — a
+   smaller, borderless chip (no dot, no pill). `.tag-chip-active` hues the whole
+   label (the one fully-colored treatment, reserved for active filter chips). */
+.tag-hash {
+  color: var(--label);
+}
+
+.tag-chip-active {
+  color: var(--label);
+}
+
+/* ═══ Check-off "pop" — the one sanctioned delight moment (CompleteToggle).
+   The check springs in when a task is marked done. Reduced-motion: no pop,
+   the check just appears (color still transitions). ═══ */
+@keyframes check-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.check-pop {
+  animation: check-pop var(--motion-base) var(--ease-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check-pop {
+    animation: none;
+  }
 }
 
 /* ═══ Notes: Lexical theme — token-driven ═══ */

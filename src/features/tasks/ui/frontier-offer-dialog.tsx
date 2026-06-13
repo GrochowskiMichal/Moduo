@@ -1,4 +1,4 @@
-import { CircleDashed, Sunrise } from "lucide-react";
+import { CircleDashed, ListChecks } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import {
@@ -62,7 +62,7 @@ export function FrontierOfferDialog({
               key={t.id}
               className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent/60"
             >
-              <span className="min-w-0 flex-1 truncate font-display text-sm text-foreground">
+              <span className="min-w-0 flex-1 truncate font-sans text-sm text-foreground">
                 {t.title || "Untitled"}
               </span>
               <span className="shrink-0 font-sans text-xs text-muted-foreground">
@@ -77,7 +77,7 @@ export function FrontierOfferDialog({
                   onOpenChange(false);
                 }}
               >
-                <Sunrise className="size-3.5" aria-hidden />
+                <ListChecks aria-hidden />
                 Commit
               </Button>
             </div>
