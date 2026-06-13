@@ -69,11 +69,12 @@ export function ViewSwitcher({
     <SegmentedControl
       aria-label="View"
       size="sm"
+      iconOnly
       value={view}
       onValueChange={(value) => onViewChange(value as PlanView)}
       items={[
-        { value: "list", label: "List", icon: List },
-        { value: "board", label: "Board", icon: Columns3 },
+        { value: "list", icon: List, ariaLabel: "List view" },
+        { value: "board", icon: Columns3, ariaLabel: "Board view" },
       ]}
     />
   );
