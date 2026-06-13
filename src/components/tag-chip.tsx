@@ -18,11 +18,13 @@ type Props = {
   onRemove?: () => void;
   /** Stronger emphasis — a hue-colored hairline (e.g. an active filter chip). */
   active?: boolean;
+  /** `sm` (default, 11px) for dense rows; `md` (13px) where there's room (detail panel). */
+  size?: "sm" | "md";
   className?: string;
   title?: string;
 };
 
-export function TagChip({ name, color, onClick, onRemove, active, className, title }: Props) {
+export function TagChip({ name, color, onClick, onRemove, active, size = "sm", className, title }: Props) {
   const label = (
     <span className={cn("min-w-0 truncate", active ? "tag-chip-active" : "text-foreground/90")}>
       <span className={cn(!active && "tag-hash")} aria-hidden>
@@ -37,7 +39,8 @@ export function TagChip({ name, color, onClick, onRemove, active, className, tit
       data-label={normalizeLabelColor(color)}
       title={title ?? `#${name}`}
       className={cn(
-        "inline-flex max-w-full items-center gap-0.5 text-2xs leading-none",
+        "inline-flex max-w-full items-center gap-0.5 leading-none",
+        size === "md" ? "text-sm" : "text-2xs",
         className,
       )}
     >

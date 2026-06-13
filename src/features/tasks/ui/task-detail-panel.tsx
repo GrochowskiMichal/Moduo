@@ -190,7 +190,8 @@ function DetailBody({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+      {/* px/py inset so a focused field's ring isn't clipped by this scroll box */}
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1">
         {/* title + complete */}
         <Input
           value={title}
@@ -239,10 +240,11 @@ function DetailBody({
           <Textarea
             value={description}
             disabled={!canEdit}
+            variant="ghost"
             placeholder={canEdit ? "Add a description…" : undefined}
             onChange={(e) => setDescription(e.target.value)}
             onBlur={commitDescription}
-            className="min-h-16 text-sm"
+            className="min-h-16"
           />
         </Field>
 
@@ -410,6 +412,7 @@ function DetailBody({
                   key={t.id}
                   name={t.name}
                   color={t.color}
+                  size="md"
                   onRemove={canEdit ? () => api.toggleTaskTag(task.id, t.id) : undefined}
                 />
               ))}
@@ -546,13 +549,15 @@ function ActivitySection({ task, api }: { task: Task; api: TasksModuleApi }) {
       <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         Activity
       </span>
-      <div className="space-y-1 text-2xs text-muted-foreground/80">
+      <div className="space-y-1 text-2xs leading-relaxed text-muted-foreground/80">
         {(entries ?? []).map((entry) => (
-          <div key={entry.id} className="flex items-baseline justify-between gap-2">
-            <span className="min-w-0">
-              {activityActorName(entry, api.currentUserId)} {activityLine(entry)}
+          // One flowing line (action + a quiet inline timestamp) — wraps as a
+          // paragraph instead of a narrow 2-column action that breaks to 3 lines.
+          <div key={entry.id}>
+            {activityActorName(entry, api.currentUserId)} {activityLine(entry)}{" "}
+            <span className="whitespace-nowrap text-muted-foreground/50 tabular-nums">
+              · {formatTimestamp(entry.createdAt)}
             </span>
-            <span className="shrink-0 tabular-nums">{formatTimestamp(entry.createdAt)}</span>
           </div>
         ))}
         {entries && entries.length === 0 ? (

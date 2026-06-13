@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  CalendarDays,
   Check,
+  Clock,
   CornerDownLeft,
   Flag,
   Inbox,
@@ -12,7 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
-import { DateField } from "../../../components/ui/date-field";
+import { Calendar } from "../../../components/ui/calendar";
 import {
   Dialog,
   DialogClose,
@@ -244,24 +246,60 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
             ))}
           </ListPill>
 
-          {/* Scheduled — token Calendar + time (replaces the native picker) */}
-          <DateField
-            value={effScheduled ? new Date(effScheduled) : null}
-            onChange={(d) => setScheduled({ manual: true, value: d ? d.toISOString() : null })}
-            withTime
-            variant="outline"
-            placeholder="Schedule"
-            aria-label="Scheduled time"
-          />
+          {/* Scheduled — same pill as the others; token Calendar + time inside */}
+          <InputPill
+            active={!!effScheduled}
+            icon={<Clock className="size-3.5" />}
+            label={effScheduled ? scheduledLabel(effScheduled) : "Schedule"}
+            onClear={effScheduled ? () => setScheduled({ manual: true, value: null }) : undefined}
+          >
+            <Calendar
+              mode="single"
+              selected={effScheduled ? new Date(effScheduled) : undefined}
+              onSelect={(d) => {
+                if (!d) return setScheduled({ manual: true, value: null });
+                const base = effScheduled ? new Date(effScheduled) : null;
+                const next = new Date(d);
+                next.setHours(base ? base.getHours() : 9, base ? base.getMinutes() : 0, 0, 0);
+                setScheduled({ manual: true, value: next.toISOString() });
+              }}
+            />
+            <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
+              <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
+              <Input
+                type="time"
+                size="sm"
+                className="w-auto"
+                value={effScheduled ? new Date(effScheduled).toTimeString().slice(0, 5) : "09:00"}
+                onChange={(e) => {
+                  const [h, m] = e.target.value.split(":").map(Number);
+                  const base = effScheduled ? new Date(effScheduled) : new Date();
+                  base.setHours(h || 0, m || 0, 0, 0);
+                  setScheduled({ manual: true, value: base.toISOString() });
+                }}
+                aria-label="Scheduled time"
+              />
+            </div>
+          </InputPill>
 
           {/* Due */}
-          <DateField
-            value={effDue ? new Date(effDue) : null}
-            onChange={(d) => setDue({ manual: true, value: d ? d.toISOString() : null })}
-            variant="outline"
-            placeholder="Due"
-            aria-label="Due date"
-          />
+          <InputPill
+            active={!!effDue}
+            icon={<CalendarDays className="size-3.5" />}
+            label={effDue ? `Due ${dateLabel(effDue)}` : "Due"}
+            onClear={effDue ? () => setDue({ manual: true, value: null }) : undefined}
+          >
+            <Calendar
+              mode="single"
+              selected={effDue ? new Date(effDue) : undefined}
+              onSelect={(d) =>
+                setDue({
+                  manual: true,
+                  value: d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString() : null,
+                })
+              }
+            />
+          </InputPill>
 
           {/* Recurrence */}
           <ListPill

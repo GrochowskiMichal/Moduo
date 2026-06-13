@@ -288,38 +288,39 @@ function CountDrift({
   onTriage?: () => void;
 }) {
   const hasDrift = !!drift && drift > 0;
-  if (count === 0 && !hasDrift) return null;
-  // X (Y): X = open count, Y = drifted (parenthesised, click to triage). The
-  // word "drifted" lives in the tooltip — the rail itself stays numbers-only.
-  if (!hasDrift) {
-    return (
-      <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground/70">
-        {count}
-      </span>
-    );
+  // Fixed-width, right-aligned numeric column so counts align down the whole
+  // rail (the old variable-width "X (Y)" was the misalignment). Drift is
+  // ambient: the number emphasizes (muted → foreground) and the detail lives in
+  // the tooltip; clicking a drifted count opens triage. Never red.
+  if (count === 0 && !hasDrift) {
+    // keep the column even when empty so siblings stay aligned
+    return <span className="w-6 shrink-0" aria-hidden />;
   }
+  const tip = hasDrift ? `${count} open · ${drift} drifted — click to triage` : `${count} open`;
+  const cls = "w-6 shrink-0 text-right font-sans text-xs tabular-nums";
   return (
-    <span className="flex shrink-0 items-center font-sans text-xs tabular-nums text-muted-foreground/70">
-      {count}
-      <Tooltip>
-        <TooltipTrigger asChild>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {hasDrift ? (
           <button
             type="button"
-            aria-label={`Triage ${drift} drifted`}
+            aria-label={tip}
             onClick={(e) => {
               e.stopPropagation();
               onTriage?.();
             }}
-            className="ml-0.5 rounded px-0.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+            className={cn(cls, "rounded text-foreground")}
           >
-            ({drift})
+            {count}
           </button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {count} open · {drift} drifted — click to triage
-        </TooltipContent>
-      </Tooltip>
-    </span>
+        ) : (
+          <span className={cn(cls, "text-muted-foreground/70")} aria-label={tip}>
+            {count}
+          </span>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
   );
 }
 
