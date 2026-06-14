@@ -105,6 +105,7 @@ pub fn run() {
                 perform_one_time_auth_v3_reset(app.handle(), &config).map_err(|e| e.to_string())?;
             let state = AppState::new(db_path).map_err(|e| e.to_string())?;
             app.manage(state);
+            commands::email::bootstrap_idle_workers(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
