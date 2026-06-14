@@ -13,9 +13,11 @@ composition layer** (a shared control "rung"). Decision = stop polishing surface
 - **Process = Figma source-of-truth + Code Connect.** Build the canonical component
   set in Figma (Maciej edits visually) → implement code to match → Code Connect maps
   each Figma component to its file so they can't drift. *(Needs a Figma file from Maciej.)*
-- **Fonts = ONE family (Geist) everywhere.** Drop the display/body split + the font
-  picker; hierarchy via weight/size only. Kills the "secondary font is bad" problem
-  + a whole drift axis. (Reverses earlier titles=body-vs-display nuance — moot now.)
+- **Fonts = ONE family everywhere, but still customizable.** Drop the display/body
+  split; hierarchy via weight/size only. **REVISED 2026-06-14:** Session 11 over-shot
+  by retiring the picker entirely (hardcoded Geist) — Maciej still wants a font picker,
+  just a single axis (one face for the whole UI), not two. Restored as `data-font`
+  (geist default; inter/pilat/cal/fraunces/serif/mono) with a single Settings picker.
 - **Sizing = keep density (comfortable/compact/dense), DROP text-size axis.** One type
   scale; density still adjustable. (Revises the "density is an axis" + Round A text calls.)
 - **Mode toggle = Plan / Focus** (the rail list stays "Queue"; "Queue" as a *mode* read wrong).

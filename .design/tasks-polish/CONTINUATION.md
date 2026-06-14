@@ -13,7 +13,9 @@
   **Notes canary is the next planned session**.
 
 ## Locked decisions (do NOT relitigate)
-- **One font: Geist everywhere** (display/body split + font picker retired; hierarchy via weight/size).
+- **One font axis, still customizable** (no display/body split; hierarchy via weight/size).
+  Revised 2026-06-14: Session 11 wrongly retired the picker entirely — restored as a single
+  `data-font` picker (Geist default; inter/pilat/cal/fraunces/serif/mono).
 - **Density-only sizing**: `comfortable/compact/dense`; the **text-size axis was dropped** (one type scale).
 - **Mode toggle = Plan / Focus**; the rail list/scope stays **"Queue"** ("Today" was renamed, UI only —
   the internal `committed_for`/`execute`/`selection==="today"` model is unchanged).
