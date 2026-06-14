@@ -75,8 +75,7 @@ User preferences map to `data-*` attributes on `<html>`. The cascade does the wo
 | `data-accent` | `pink`, `violet`, `blue`, `green`, `amber`, `red`, `teal`, `mono` | `pink` |
 | `data-density` | `comfortable`, `compact`, `dense` | `comfortable` |
 | `data-radius` | `sharp`, `soft`, `round` | `soft` |
-| `data-font-display` | `pilat`, `geist`, `cal`, `fraunces` | `pilat` |
-| `data-font-body` | `geist`, `inter`, `serif`, `mono` | `geist` |
+| `data-font` | `geist`, `inter`, `pilat`, `cal`, `fraunces`, `serif`, `mono` | `geist` |
 | `data-text-size` | `small`, `normal`, `large` | `normal` |
 
 The Settings page is the UI for setting these. The values persist to Tauri-backed local storage and are applied on app launch before first paint.

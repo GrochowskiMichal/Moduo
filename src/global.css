@@ -127,11 +127,11 @@ body,
   font-display: swap;
 }
 
-/* Default font for all elements = the user's BODY font (Geist by default, set
-   via [data-font-body]). Elements opt into the display face with the
-   `font-display` utility (higher specificity wins over this `*` rule). This is
-   the token-routed replacement for the old hardcoded "Pilat Extended" override,
-   which forced the display face onto everything and bypassed --font-body. */
+/* Default font for all elements = the user's chosen typeface (Geist by default,
+   set via [data-font] → --font-ui → --font-body). The `font-display` utility
+   resolves to the same face now (one family everywhere; hierarchy is
+   weight/size). This is the token-routed replacement for the old hardcoded
+   "Pilat Extended" override, which forced one face onto everything. */
 * {
   font-family: var(--font-body, "Geist", "Inter", system-ui, -apple-system, sans-serif);
 }

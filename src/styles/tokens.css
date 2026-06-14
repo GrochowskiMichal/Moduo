@@ -11,8 +11,7 @@
  *   data-accent=pink|violet|blue|green|amber|red|teal|mono   (default: pink)
  *   data-density=comfortable|compact|dense   (default: comfortable)
  *   data-radius=sharp|soft|round      (default: soft)
- *   data-font-display=pilat|geist|cal|fraunces   (default: pilat)
- *   data-font-body=geist|inter|serif|mono        (default: geist)
+ *   data-font=geist|inter|pilat|cal|fraunces|serif|mono   (default: geist)
  *   data-text-size=small|normal|large            (default: normal)
  *
  * This file is intentionally not imported yet. Wiring it into global.css and
@@ -496,12 +495,14 @@
   --font-body-serif:  "Source Serif Pro", Georgia, serif;
   --font-body-mono:   "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* ONE family everywhere (2026-06-13 decision): display + body both resolve to
-     Geist — hierarchy comes from weight/size, not a second typeface. The
-     font picker is retired (the [data-font-*] variant selectors below are gone).
-     The --font-display-* / --font-body-* alternates are kept for reference only. */
-  --font-display: var(--font-body-geist);
-  --font-body:    var(--font-body-geist);
+  /* ONE customizable family everywhere: the user picks a single typeface
+     (data-font) that drives both the display and body roles — hierarchy comes
+     from weight/size, not a second typeface. --font-ui is the single axis the
+     [data-font=...] selectors below remap; display + body both follow it.
+     Default = Geist. */
+  --font-ui:      var(--font-body-geist);
+  --font-display: var(--font-ui);
+  --font-body:    var(--font-ui);
   --font-mono:    var(--font-body-mono); /* always mono — for code, not user-customizable */
 
   /* Type scale — base case (data-text-size="normal").
@@ -535,9 +536,17 @@
   --font-weight-bold:    700;
 }
 
-/* Font picker retired (2026-06-13): one family everywhere. The [data-font-*]
-   variant selectors are intentionally removed so any persisted pick falls back
-   to the single Geist default above. Re-introduce only if the picker returns. */
+/* Single font picker (data-font): one typeface drives the whole UI. Each option
+   remaps --font-ui; --font-display and --font-body both follow it (hierarchy is
+   weight/size, not a second face). Scoped per-element, so a [data-font] on a
+   preview swatch renders that subtree in the chosen face. */
+[data-font="geist"]    { --font-ui: var(--font-body-geist); }
+[data-font="inter"]    { --font-ui: var(--font-body-inter); }
+[data-font="pilat"]    { --font-ui: var(--font-display-pilat); }
+[data-font="cal"]      { --font-ui: var(--font-display-cal); }
+[data-font="fraunces"] { --font-ui: var(--font-display-fraunces); }
+[data-font="serif"]    { --font-ui: var(--font-body-serif); }
+[data-font="mono"]     { --font-ui: var(--font-body-mono); }
 
 /* Text-size picker retired (2026-06-13): one type scale (the values in :root
    above). Density is the size axis. The [data-text-size] variant selectors are
