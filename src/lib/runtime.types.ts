@@ -32,6 +32,19 @@ export type AuthListener = (event: AuthChangeEvent, session: RuntimeSession | nu
 
 export type RuntimeResult<T> = Promise<{ data: T; error: { message: string } | null }>;
 
+export type LocalAuthState = {
+  profileExists: boolean;
+  displayName: string | null;
+  userId: string | null;
+  hasPin: boolean;
+  hasKeychainMnemonic: boolean;
+};
+
+export type AuthMnemonic = {
+  words: string[];
+  phrase: string;
+};
+
 /** Per-platform capability flags. Components read this to hide desktop-only UI on web. */
 export type RuntimeCapabilities = {
   isDesktop: boolean;
@@ -39,6 +52,7 @@ export type RuntimeCapabilities = {
   hasEmail: boolean;
   hasTimeTracking: boolean;
   hasCalendarOAuth: boolean;
+  hasLocalMnemonic: boolean;
   hasOfflineMode: boolean;
 };
 
@@ -68,8 +82,24 @@ export type ModuoRuntime = {
   capabilities: RuntimeCapabilities;
 
   auth: {
+    getLocalAuthState(): RuntimeResult<LocalAuthState>;
+    generateMnemonic(): RuntimeResult<AuthMnemonic>;
+    registerLocalMnemonic(args: {
+      displayName: string;
+      mnemonicPhrase: string;
+      inviteToken?: string;
+    }): RuntimeResult<{ user: RuntimeSession["user"] | null; session: RuntimeSession | null }>;
+    unlockWithMnemonic(args: {
+      mnemonicPhrase: string;
+      inviteToken?: string;
+    }): RuntimeResult<{ user: RuntimeSession["user"] | null; session: RuntimeSession | null }>;
+    forgotResetLocal(): Promise<{ error: { message: string } | null }>;
     tryAutoUnlock(): RuntimeResult<{ session: RuntimeSession | null }>;
+    setPin(pin: string): Promise<{ error: { message: string } | null }>;
+    unlockWithPin(pin: string): RuntimeResult<{ session: RuntimeSession | null }>;
+    removePin(): Promise<{ error: { message: string } | null }>;
     updateDisplayName(displayName: string): RuntimeResult<{ displayName: string }>;
+    getStoredMnemonic(): RuntimeResult<{ phrase: string | null }>;
     getSession(): RuntimeResult<{ session: RuntimeSession | null }>;
     refreshSession(): RuntimeResult<{
       user: RuntimeSession["user"] | null;
@@ -77,7 +107,18 @@ export type ModuoRuntime = {
     }>;
     onAuthStateChange(cb: AuthListener): { data: { subscription: { unsubscribe(): void } } };
     signOut(): Promise<{ error: { message: string } | null }>;
-    /** Send a magic OTP code to the given email. */
+    /** Cloud (Supabase) signup — desktop: links local identity to Supabase; web: primary signup. */
+    signUpWithEmail(args: {
+      email: string;
+      password: string;
+      displayName?: string;
+    }): RuntimeResult<{ user: RuntimeSession["user"] | null; session: RuntimeSession | null }>;
+    /** Cloud sign-in with email + password. */
+    signInWithEmail(args: {
+      email: string;
+      password: string;
+    }): RuntimeResult<{ user: RuntimeSession["user"] | null; session: RuntimeSession | null }>;
+    /** Send a magic OTP code to the given email (web primary auth). */
     sendOtp(args: { email: string }): RuntimeResult<{}>;
     /** Verify the OTP code received by email and sign the user in. */
     verifyOtp(args: {

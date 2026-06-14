@@ -10,7 +10,9 @@
 export type {
   AuthChangeEvent,
   AuthListener,
+  AuthMnemonic,
   IntegrationStatusItem,
+  LocalAuthState,
   ModuoRuntime,
   RuntimeCapabilities,
   RuntimeResult,
