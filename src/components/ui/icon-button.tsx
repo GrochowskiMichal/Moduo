@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { cn } from "@/src/lib/utils";
+import { cn } from "@/lib/utils";
 import { Button, type ButtonProps } from "./button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 

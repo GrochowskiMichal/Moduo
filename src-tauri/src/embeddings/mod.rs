@@ -3,12 +3,14 @@ use std::sync::mpsc::{channel, Sender};
 use std::thread;
 
 pub struct EmbeddingEngine {
-    model_path: Option<PathBuf>,
+    _model_path: Option<PathBuf>,
 }
 
 impl EmbeddingEngine {
     pub fn new(model_path: Option<PathBuf>) -> anyhow::Result<Self> {
-        Ok(Self { model_path })
+        Ok(Self {
+            _model_path: model_path,
+        })
     }
 
     pub fn embed_text(&self, _text: &str) -> Vec<f32> {

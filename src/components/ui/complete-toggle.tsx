@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Check } from "lucide-react";
 
-import { cn } from "@/src/lib/utils";
+import { cn } from "@/lib/utils";
 
 type CompleteToggleProps = {
   done: boolean;

@@ -2,7 +2,7 @@ import * as React from "react";
 import { CalendarDays, Clock, X } from "lucide-react";
 import { addDays, format, startOfWeek } from "date-fns";
 
-import { cn } from "@/src/lib/utils";
+import { cn } from "@/lib/utils";
 import { Button } from "./button";
 import { Calendar } from "./calendar";
 import { Input } from "./input";

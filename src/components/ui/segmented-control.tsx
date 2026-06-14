@@ -1,7 +1,7 @@
 import * as React from "react";
 import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui";
 
-import { cn } from "@/src/lib/utils";
+import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 export type SegmentedItem = {

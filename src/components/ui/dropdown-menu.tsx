@@ -2,7 +2,7 @@ import * as React from "react";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 
-import { cn } from "@/src/lib/utils";
+import { cn } from "@/lib/utils";
 
 const contentBase = cn(
   "fx-overlay min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground",

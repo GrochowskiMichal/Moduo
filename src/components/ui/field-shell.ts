@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority";
 
-import { cn } from "@/src/lib/utils";
+import { cn } from "@/lib/utils";
 
 /**
  * Shared field chrome for text-entry controls (Input, Textarea, SelectTrigger).

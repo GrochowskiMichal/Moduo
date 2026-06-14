@@ -34,7 +34,7 @@ impl AppState {
             fs::create_dir_all(parent)?;
         }
         let store = store_redb::RedbStore::open(&db_path)?;
-        let acl = identity_acl::AclManager::new(config.keychain_service.clone());
+        let acl = identity_acl::AclManager::new();
         let _ = acl.get_or_create_identity(&store)?;
 
         let sidecar_path = std::env::var("HELIX_SIDECAR_PATH")
@@ -72,7 +72,7 @@ impl AppState {
 
 fn perform_one_time_auth_v3_reset(
     app: &tauri::AppHandle,
-    config: &config::AppConfig,
+    _config: &config::AppConfig,
 ) -> anyhow::Result<PathBuf> {
     let app_data_root = app
         .path()
@@ -86,11 +86,6 @@ fn perform_one_time_auth_v3_reset(
         let _ = fs::remove_file(&db_path);
         let _ = fs::remove_file(PathBuf::from("moduo_desktop.redb"));
         let _ = fs::remove_file(PathBuf::from("src-tauri/moduo_desktop.redb"));
-
-        let _ = keychain::delete_secret(&config.keychain_service, "session");
-        let _ = keychain::delete_secret(&config.keychain_service, "local_unlock_passkey");
-        let _ = keychain::delete_secret(&config.keychain_service, "device_private_key");
-        let _ = keychain::delete_secret(&config.keychain_service, "local_mnemonic_phrase");
 
         let marker_parent = marker
             .parent()
@@ -110,7 +105,6 @@ pub fn run() {
                 perform_one_time_auth_v3_reset(app.handle(), &config).map_err(|e| e.to_string())?;
             let state = AppState::new(db_path).map_err(|e| e.to_string())?;
             app.manage(state);
-            commands::email::bootstrap_idle_workers(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -131,6 +125,7 @@ pub fn run() {
             commands::auth::auth_remove_pin,
             commands::auth::auth_update_display_name,
             commands::auth::auth_get_stored_mnemonic,
+            commands::auth::auth_accept_supabase_session,
             commands::workspace::workspace_list_local,
             commands::workspace::workspace_create_local,
             commands::workspace::workspace_rename_local,
@@ -175,9 +170,9 @@ pub fn run() {
             commands::local_store::local_store_get,
             commands::local_store::local_store_set,
             commands::local_store::local_store_remove,
-            commands::email::email_accounts_list,
-            commands::email::email_account_connect_and_save,
-            commands::email::email_account_disconnect,
+            commands::email::account_commands::email_accounts_list,
+            commands::email::account_commands::email_account_connect_and_save,
+            commands::email::account_commands::email_account_disconnect,
             commands::email::email_list_envelopes,
             commands::email::email_get_message_body,
             commands::email::email_prefetch_bodies,
@@ -185,7 +180,7 @@ pub fn run() {
             commands::email::email_set_activity_state,
             commands::email::email_apply_flag,
             commands::email::email_get_mailbox_status,
-            commands::email::email_send_saved,
+            commands::email::send_commands::email_send_saved,
             commands::calendar::calendar_google_oauth_start,
             commands::calendar::calendar_outlook_oauth_start,
             commands::calendar::calendar_apple_oauth_start,
