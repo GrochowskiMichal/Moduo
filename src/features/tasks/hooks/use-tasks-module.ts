@@ -475,9 +475,18 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       if (!Number.isFinite(deltaSeconds) || deltaSeconds < 1) return;
       const t = bundle.tasks.find((x) => x.id === id);
       if (!t) return;
-      patchTask(id, { timeSpentSeconds: (t.timeSpentSeconds ?? 0) + Math.round(deltaSeconds) });
+      patchTask(id, { timeSpentSeconds: Math.max(0, (t.timeSpentSeconds ?? 0) + Math.round(deltaSeconds)) });
     },
     [bundle.tasks, patchTask],
+  );
+
+  /** Set the tracked total to an absolute value (manual "edit the value"). */
+  const setTimeSpent = useCallback(
+    (id: string, seconds: number) => {
+      if (!Number.isFinite(seconds)) return;
+      patchTask(id, { timeSpentSeconds: Math.max(0, Math.round(seconds)) });
+    },
+    [patchTask],
   );
 
   /**
@@ -1066,6 +1075,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     markDone,
     archiveTask,
     addTimeSpent,
+    setTimeSpent,
     rescheduleScheduledAt,
     unscheduleTask,
     toggleCommit,
