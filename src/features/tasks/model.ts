@@ -79,6 +79,8 @@ export type Task = {
   scheduledAt: string | null;
   /** Estimated/blocked duration in minutes (default-on-drop, resizable). */
   durationMinutes: number | null;
+  /** Accumulated tracked work time in seconds (lightweight time-tracking). */
+  timeSpentSeconds: number;
   recurrence: RecurrenceRule | null;
   /** How demanding the task is to do. */
   energyLevel: EnergyLevel | null;

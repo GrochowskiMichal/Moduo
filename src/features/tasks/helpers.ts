@@ -87,6 +87,7 @@ export function makeTask(fields: NewTaskFields): Task {
     dueDate: fields.dueDate ?? null,
     scheduledAt: fields.scheduledAt ?? null,
     durationMinutes: fields.durationMinutes ?? null,
+    timeSpentSeconds: 0,
     recurrence: fields.recurrence ?? null,
     energyLevel: fields.energyLevel ?? null,
     priority: fields.priority ?? null,

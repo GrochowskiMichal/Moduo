@@ -466,6 +466,21 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   );
 
   /**
+   * Lightweight time-tracking: fold an elapsed work delta (seconds) into the
+   * task's persisted total through the normal save path. Reads the current
+   * total from the source of truth so repeated flushes accumulate cleanly.
+   */
+  const addTimeSpent = useCallback(
+    (id: string, deltaSeconds: number) => {
+      if (!Number.isFinite(deltaSeconds) || deltaSeconds < 1) return;
+      const t = bundle.tasks.find((x) => x.id === id);
+      if (!t) return;
+      patchTask(id, { timeSpentSeconds: (t.timeSpentSeconds ?? 0) + Math.round(deltaSeconds) });
+    },
+    [bundle.tasks, patchTask],
+  );
+
+  /**
    * Push a scheduled task's time `days` into the future, preserving its clock
    * time. Clears the drift (drift = scheduled time in the past). No-op if the
    * task has no scheduled time.
@@ -1050,6 +1065,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     toggleDone,
     markDone,
     archiveTask,
+    addTimeSpent,
     rescheduleScheduledAt,
     unscheduleTask,
     toggleCommit,

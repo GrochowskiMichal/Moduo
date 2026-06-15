@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Pause, Play, RotateCcw } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
@@ -12,11 +12,12 @@ import {
 } from "../helpers";
 import type { Task } from "../model";
 
-type TimerMode = "pomodoro" | "duration";
+type TimerMode = "pomodoro" | "stopwatch";
 
 const POMODORO_WORK = 25 * 60;
 const POMODORO_BREAK = 5 * 60;
-const DURATION_FALLBACK_MIN = 25;
+// Persist accrued time periodically so a crash/reload loses at most this much.
+const FLUSH_INTERVAL_SECONDS = 60;
 
 type Props = {
   committedTasks: Task[];
@@ -28,6 +29,8 @@ type Props = {
   onMarkDone: (id: string) => void;
   onSkip: (id: string) => void;
   onDoLast: (id: string) => void;
+  /** Fold an elapsed work delta (seconds) into the task's tracked total. */
+  onAddTime: (taskId: string, deltaSeconds: number) => void;
   onExit: () => void;
 };
 
@@ -39,6 +42,7 @@ export function ExecuteView({
   onMarkDone,
   onSkip,
   onDoLast,
+  onAddTime,
   onExit,
 }: Props) {
   const current = committedTasks.find((t) => t.status !== "done") ?? null;
@@ -66,6 +70,7 @@ export function ExecuteView({
               onMarkDone={() => onMarkDone(current.id)}
               onSkip={() => onSkip(current.id)}
               onDoLast={() => onDoLast(current.id)}
+              onAddTime={onAddTime}
               canDoLast={upcoming.length > 0}
             />
             <Queue tasks={upcoming} bucketNameById={bucketNameById} parentTitleFor={parentTitleFor} />
@@ -120,6 +125,7 @@ function NowCard({
   onMarkDone,
   onSkip,
   onDoLast,
+  onAddTime,
   canDoLast,
 }: {
   task: Task;
@@ -129,10 +135,11 @@ function NowCard({
   onMarkDone: () => void;
   onSkip: () => void;
   onDoLast: () => void;
+  onAddTime: (taskId: string, deltaSeconds: number) => void;
   canDoLast: boolean;
 }) {
   const [mode, setMode] = useState<TimerMode>("pomodoro");
-  const timer = useExecuteTimer(task.id, mode, task.durationMinutes);
+  const timer = useExecuteTimer(task.id, mode, onAddTime);
 
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
@@ -146,8 +153,12 @@ function NowCard({
     task.energyLevel ? ENERGY_LABELS[task.energyLevel] : null,
     scheduled ? `Scheduled ${scheduled}` : null,
     due ? `Due ${due}` : null,
-    task.durationMinutes ? `~${task.durationMinutes} min` : null,
+    // estimate chip reuses durationMinutes
+    task.durationMinutes ? `Est. ${task.durationMinutes} min` : null,
   ].filter(Boolean) as string[];
+
+  // live tracked total = persisted seconds + the unflushed seconds this session
+  const trackedTotal = task.timeSpentSeconds + timer.sessionSeconds;
 
   // Calm, centered focus card: title → context → timer → primary action.
   return (
@@ -171,10 +182,10 @@ function NowCard({
         <ModeToggle mode={mode} onModeChange={setMode} />
         {/* compact timer — body + tabular; secondary to the task details above */}
         <span className="mt-1 font-sans text-3xl tabular-nums text-foreground">
-          {formatClock(timer.secondsLeft)}
+          {formatClock(mode === "pomodoro" ? timer.secondsLeft : timer.sessionSeconds)}
         </span>
         <span className="font-sans text-2xs uppercase tracking-wide text-muted-foreground/70">
-          {mode === "pomodoro" ? timer.phase : "remaining"}
+          {mode === "pomodoro" ? timer.phase : "elapsed"}
         </span>
         <div className="mt-1 flex items-center gap-2">
           <Button variant="secondary" size="sm" onClick={timer.toggle}>
@@ -185,6 +196,10 @@ function NowCard({
             <RotateCcw className="size-4" aria-hidden />
           </Button>
         </div>
+        {/* persisted tracked total — the time-tracking mirror */}
+        <span className="mt-1 font-sans text-xs tabular-nums text-muted-foreground">
+          Tracked {formatDuration(trackedTotal)}
+        </span>
       </div>
 
       <div className="mt-8 flex flex-col items-center gap-3">
@@ -219,7 +234,7 @@ function ModeToggle({ mode, onModeChange }: { mode: TimerMode; onModeChange: (m:
       onValueChange={(value) => onModeChange(value as TimerMode)}
       items={[
         { value: "pomodoro", label: "Pomodoro" },
-        { value: "duration", label: "Timer" },
+        { value: "stopwatch", label: "Time spent" },
       ]}
     />
   );
@@ -271,50 +286,98 @@ function Queue({
 
 // ── timer ─────────────────────────────────────────────────────────────────────
 
-function useExecuteTimer(taskKey: string, mode: TimerMode, durationMin: number | null) {
-  const durationSeconds = (durationMin && durationMin > 0 ? durationMin : DURATION_FALLBACK_MIN) * 60;
-
+/**
+ * Focus timer with two modes — Pomodoro (work/break countdown) and a count-up
+ * stopwatch. Both accrue *work* seconds, folded into the task's persisted total
+ * via onAddTime on pause / task change / unmount / every minute. Attribution is
+ * captured by ref so a flush always credits the task the time was spent on.
+ */
+function useExecuteTimer(
+  taskKey: string,
+  mode: TimerMode,
+  onAddTime: (taskId: string, deltaSeconds: number) => void,
+) {
   const [phase, setPhase] = useState<"work" | "break">("work");
-  const [secondsLeft, setSecondsLeft] = useState(mode === "pomodoro" ? POMODORO_WORK : durationSeconds);
+  const [secondsLeft, setSecondsLeft] = useState(POMODORO_WORK);
+  const [sessionSeconds, setSessionSeconds] = useState(0);
   const [running, setRunning] = useState(true);
 
-  // Fresh timer whenever the task or mode changes (auto-runs on entry).
-  useEffect(() => {
-    setPhase("work");
-    setSecondsLeft(mode === "pomodoro" ? POMODORO_WORK : durationSeconds);
-    setRunning(true);
-  }, [taskKey, mode, durationSeconds]);
+  const unflushedRef = useRef(0);
+  const taskRef = useRef(taskKey);
+  const addRef = useRef(onAddTime);
+  addRef.current = onAddTime;
 
-  // Tick.
+  const flush = useCallback(() => {
+    if (unflushedRef.current >= 1) {
+      addRef.current(taskRef.current, unflushedRef.current);
+      unflushedRef.current = 0;
+    }
+  }, []);
+
+  // On task/mode change: flush the prior task (cleanup, before taskRef moves),
+  // then reset for the new one. Also flushes on unmount.
+  useEffect(() => {
+    taskRef.current = taskKey;
+    setPhase("work");
+    setSecondsLeft(POMODORO_WORK);
+    setSessionSeconds(0);
+    setRunning(true);
+    unflushedRef.current = 0;
+    return () => flush();
+  }, [taskKey, mode, flush]);
+
+  // Tick: accrue work-seconds (stopwatch always; pomodoro only during work),
+  // advance the pomodoro countdown. A throttled/slept tab pauses the interval,
+  // so an idle laptop can't over-count.
   useEffect(() => {
     if (!running) return;
-    const id = window.setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
+    const id = window.setInterval(() => {
+      const isWork = mode === "stopwatch" || phase === "work";
+      if (isWork) {
+        unflushedRef.current += 1;
+        setSessionSeconds((s) => s + 1);
+      }
+      if (mode === "pomodoro") {
+        setSecondsLeft((s) => Math.max(0, s - 1));
+      }
+    }, 1000);
     return () => window.clearInterval(id);
-  }, [running]);
+  }, [running, mode, phase]);
 
-  // Handle reaching zero.
+  // Pomodoro phase rollover.
   useEffect(() => {
-    if (secondsLeft !== 0) return;
-    if (mode === "pomodoro") {
-      setPhase((p) => {
-        const next = p === "work" ? "break" : "work";
-        setSecondsLeft(next === "work" ? POMODORO_WORK : POMODORO_BREAK);
-        return next;
-      });
-    } else {
-      setRunning(false); // duration countdown finished
-    }
+    if (mode !== "pomodoro" || secondsLeft !== 0) return;
+    setPhase((p) => {
+      const next = p === "work" ? "break" : "work";
+      setSecondsLeft(next === "work" ? POMODORO_WORK : POMODORO_BREAK);
+      return next;
+    });
   }, [secondsLeft, mode]);
+
+  // Periodic flush so a crash loses at most FLUSH_INTERVAL_SECONDS.
+  useEffect(() => {
+    if (!running) return;
+    const id = window.setInterval(flush, FLUSH_INTERVAL_SECONDS * 1000);
+    return () => window.clearInterval(id);
+  }, [running, flush]);
 
   return {
     secondsLeft,
+    sessionSeconds,
     phase,
     running,
-    toggle: () => setRunning((r) => !r),
+    toggle: () =>
+      setRunning((r) => {
+        if (r) flush(); // pausing → persist what's accrued
+        return !r;
+      }),
     reset: () => {
+      flush();
       setPhase("work");
-      setSecondsLeft(mode === "pomodoro" ? POMODORO_WORK : durationSeconds);
+      setSecondsLeft(POMODORO_WORK);
+      setSessionSeconds(0);
       setRunning(true);
+      unflushedRef.current = 0;
     },
   };
 }
@@ -323,4 +386,13 @@ function formatClock(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
 }

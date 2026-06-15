@@ -372,6 +372,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         onMarkDone={api.markDone}
         onSkip={api.rescheduleFromToday}
         onDoLast={api.doLast}
+        onAddTime={api.addTimeSpent}
         onExit={exitExecute}
       />
     ) : view === "board" ? (
