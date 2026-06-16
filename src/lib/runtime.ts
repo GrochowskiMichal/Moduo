@@ -59,8 +59,12 @@ export function getRuntime(): import("./runtime.types").ModuoRuntime | null {
 }
 
 /**
- * Convenience reactive export used throughout the codebase.
- * For components that need the runtime at render time, prefer useRuntime() from auth-provider.
+ * Legacy placeholder — ALWAYS null. It is not wired to the initRuntime()
+ * singleton, so reading it never yields a runtime. Do not use it: prefer
+ * getRuntime() (synchronous, valid after startup) or useRuntime() from
+ * auth-provider (in components). A few call sites still import this and
+ * silently get null, which no-ops their code paths; those are flagged for
+ * migration to getRuntime().
  */
 export const runtime: import("./runtime.types").ModuoRuntime | null = null;
 
