@@ -14,6 +14,7 @@
     "build:desktop:signed:debug": "bash ./scripts/tauri-signed-build.sh debug",
     "build:desktop:signed:release": "bash ./scripts/tauri-signed-build.sh release",
     "verify:desktop:signature": "codesign -d -r- ./src-tauri/target/release/bundle/macos/moduo.app/Contents/MacOS/moduo && codesign -vv ./src-tauri/target/release/bundle/macos/moduo.app",
+    "icon:liquid": "bun scripts/icons/build-liquid-icon.ts",
     "storybook": "sb dev -p 6006",
     "build-storybook": "sb build",
     "storybook:gen": "bun ./scripts/generate-storybook-stories.ts",
