@@ -465,6 +465,9 @@ function useFocusTimer(
   // Latest prefs for the rollover effect / controls without re-subscribing the tick.
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
+  // Read `running` inside the resync effect without re-running it on pause/resume.
+  const runningRef = useRef(running);
+  runningRef.current = running;
 
   const flush = useCallback(() => {
     if (unflushedRef.current >= 1) {
@@ -528,6 +531,20 @@ function useFocusTimer(
     if (p.soundEnabled) playChime();
     if (!p.autoStartNext) setRunning(false);
   }, [pomoLeft, pomodoro, phase, completedWork, flush]);
+
+  // Keep the idle/paused countdown in step with the configured interval. While
+  // the timer isn't running, pomoLeft just previews the current phase's full
+  // interval — so editing Work/break (Settings → Focus or the ⋯ popover) updates
+  // the big clock live instead of only on the next start. Gated on a ref, not a
+  // dep, so a running countdown is never disturbed and pausing never resets it.
+  useEffect(() => {
+    if (runningRef.current) return;
+    setPomoLeft(
+      phase === "work"
+        ? prefs.workMinutes * 60
+        : (longBreak ? prefs.longBreakMinutes : prefs.breakMinutes) * 60,
+    );
+  }, [prefs.workMinutes, prefs.breakMinutes, prefs.longBreakMinutes, phase, longBreak]);
 
   // periodic flush so a crash loses at most FLUSH_INTERVAL_SECONDS
   useEffect(() => {
