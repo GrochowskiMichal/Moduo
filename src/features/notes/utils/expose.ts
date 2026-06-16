@@ -276,7 +276,8 @@ async function buildEmbedsPayload(
     if (!embedRefs.length) return [];
 
     try {
-        const { runtime } = await import("../../../lib/runtime");
+        const { getRuntime } = await import("../../../lib/runtime");
+        const runtime = getRuntime();
         if (!runtime) return [];
 
         const payload: ExposedEmbed[] = [];
