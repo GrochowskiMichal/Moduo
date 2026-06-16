@@ -30,6 +30,7 @@ import {
   NestableTask,
   SortableTask,
   asTaskDropTarget,
+  pointerFirstCollision,
   useTaskDndSensors,
 } from "./dnd/task-dnd";
 import { PlanViewHeader, type PlanView } from "./plan-view-header";
@@ -521,7 +522,7 @@ export function TaskListView({
         ) : canNest ? (
           <DndContext
             sensors={nestSensors}
-            collisionDetection={closestCenter}
+            collisionDetection={pointerFirstCollision}
             onDragStart={onNestDragStart}
             onDragEnd={onNestDragEnd}
             onDragCancel={endNestDrag}

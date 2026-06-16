@@ -16,10 +16,13 @@ import { forwardRef, useCallback, type CSSProperties, type ReactNode } from "rea
 import {
   KeyboardSensor,
   PointerSensor,
+  closestCenter,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -90,6 +93,29 @@ export function useTaskDndSensors(opts?: { sortable?: boolean }) {
     ),
   );
 }
+
+// ── collision detection ──────────────────────────────────────────────────────
+
+/**
+ * Pointer-first collision strategy for drag-*onto*-target surfaces (nesting),
+ * where a droppable's rect can be taller than its own row: an expanded parent's
+ * `onto-task` node encloses its visible children (see {@link NestableTask}), so
+ * its geometric centre sits down among them. Plain `closestCenter` then
+ * mis-resolves a hover over a lower child to the *next sibling* (whose centre is
+ * nearer the pointer), nesting under the wrong parent. `pointerWithin` asks the
+ * precise question instead — which droppable actually contains the pointer — and
+ * only falls back to `closestCenter` when there is no pointer (keyboard dragging)
+ * or it sits outside every droppable. This is the dnd-kit-recommended combo for
+ * high-precision drop-onto-target semantics.
+ *
+ * Reorder surfaces (Queue/board) stay on plain `closestCenter`: their droppables
+ * are one row tall, so centre distance is the right proxy and the sortable
+ * keyboard path expects it.
+ */
+export const pointerFirstCollision: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  return pointerHits.length > 0 ? pointerHits : closestCenter(args);
+};
 
 // ── drag handle ──────────────────────────────────────────────────────────────
 
