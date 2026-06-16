@@ -5,6 +5,7 @@ import {
   DndContext,
   DragOverlay,
   closestCenter,
+  type DraggableSyntheticListeners,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -355,9 +356,12 @@ export function TaskListView({
   );
 
   // A top-level row plus (when expanded) its nested subtasks — shared by the
-  // grouped render and the drag-to-nest render. `drag` injects the grip and the
-  // live drop-target highlight when this list is in nestable mode.
-  const renderParentRow = (task: Task, drag?: { handle: ReactNode; dropActive: boolean }) => {
+  // grouped render and the drag-to-nest render. `drag` wires the whole-row drag
+  // listeners and the live drop-target highlight when this list is in nestable mode.
+  const renderParentRow = (
+    task: Task,
+    drag?: { dragListeners: DraggableSyntheticListeners; dropActive: boolean },
+  ) => {
     const children = nest ? api.subtasksByParent.get(task.id) ?? [] : [];
     const expanded = expandedParents.has(task.id);
     return (
@@ -370,7 +374,7 @@ export function TaskListView({
           onToggleExpand={() => toggleExpandParent(task.id)}
           progress={api.subtaskProgressByTask.get(task.id) ?? null}
           parentTitle={parentTitleFor(task)}
-          dragHandle={drag?.handle}
+          dragListeners={drag?.dragListeners}
           dropActive={drag?.dropActive ?? false}
         />
         {expanded
@@ -508,11 +512,11 @@ export function TaskListView({
                   key={task.id}
                   id={task.id}
                   from="queue"
-                  render={({ handle }) => (
+                  render={({ dragListeners }) => (
                     <TaskRow
                       {...buildRowProps(task)}
                       parentTitle={parentTitleFor(task)}
-                      dragHandle={handle}
+                      dragListeners={dragListeners}
                     />
                   )}
                 />
@@ -534,8 +538,8 @@ export function TaskListView({
                 from="list"
                 canDrag={canDragRow(task)}
                 canDrop={isNestTarget(task)}
-                render={({ handle, isOver }) =>
-                  renderParentRow(task, { handle, dropActive: isOver })
+                render={({ dragListeners, isOver }) =>
+                  renderParentRow(task, { dragListeners, dropActive: isOver })
                 }
               />
             ))}

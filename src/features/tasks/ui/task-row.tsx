@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CalendarDays,
   Check,
@@ -11,6 +11,8 @@ import {
   ListChecks,
   Repeat,
 } from "lucide-react";
+
+import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 
 import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -87,9 +89,10 @@ type Props = {
   /** Parent title caption for subtasks rendered flat (Today queue, or a scope
    * that doesn't contain the parent). */
   parentTitle?: string | null;
-  /** Drag grip for a sortable (reorderable) row — rendered at the far left,
-   * quiet until row hover. Absent rows look and behave exactly as before. */
-  dragHandle?: ReactNode;
+  /** When set, the whole row is the drag activator (no separate grip): the
+   * dnd-kit listeners from the sortable/draggable wrapper, spread on the row
+   * root. Absent → the row isn't draggable (looks/behaves as before). */
+  dragListeners?: DraggableSyntheticListeners;
   /** Highlight as the live drop target during a drag-to-nest (quiet accent +
    * ring, mirrors the board column's drag-over treatment). */
   dropActive?: boolean;
@@ -119,7 +122,7 @@ export function TaskRow({
   progress = null,
   nested = false,
   parentTitle = null,
-  dragHandle = null,
+  dragListeners,
   dropActive = false,
   api,
 }: Props) {
@@ -137,9 +140,13 @@ export function TaskRow({
       role="row"
       aria-selected={selected}
       onClick={onSelect}
+      {...(editing ? {} : dragListeners)}
       className={cn(
         "group relative flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
-        "border border-transparent cursor-default select-none",
+        "border border-transparent select-none",
+        // Whole-row drag (queue reorder / drag-to-nest): a grab cursor signals
+        // it; a 6px activation distance keeps plain clicks selecting the row.
+        dragListeners ? "cursor-grab active:cursor-grabbing" : "cursor-default",
         // Drop-target highlight wins over selection/hover while a nest drag is
         // live (mirrors the board column's drag-over treatment — ring + accent).
         dropActive
@@ -147,7 +154,7 @@ export function TaskRow({
           : selected
             ? "bg-(--selected-bg)"
             : "hover:bg-accent/60",
-        nested && "ml-6",
+        nested && "ml-10",
       )}
       // height rides the density setting; py is only a multiline guard
       style={{ minHeight: "var(--row-h)" }}
@@ -158,9 +165,8 @@ export function TaskRow({
       ) : null}
       {/* nested subtask indent guide — a quiet vertical hairline in the indent gutter */}
       {nested ? (
-        <span className="absolute inset-y-0 -left-3 w-px bg-border/60" aria-hidden />
+        <span className="absolute inset-y-0 -left-4 w-px bg-border/60" aria-hidden />
       ) : null}
-      {dragHandle}
       {expandSlot ? (
         expandable ? (
           <Tooltip>
@@ -243,36 +249,6 @@ export function TaskRow({
       <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
         {blocked ? <BlockedMarker taskId={task.id} api={api} /> : null}
 
-        {/* Queue toggle — always visible + quiet (the marker IS the action).
-            Committed → accent; idle → faint, darkens on hover/focus. */}
-        {canEdit ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={committed ? "Remove from queue" : "Add to queue"}
-                aria-pressed={committed}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  api.toggleCommit(task.id);
-                }}
-                className={cn(
-                  "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                  committed ? "text-primary" : "text-muted-foreground/40 hover:text-foreground",
-                )}
-              >
-                <ListChecks className="size-3.5" aria-hidden />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{committed ? "Remove from queue" : "Add to queue"}</TooltipContent>
-          </Tooltip>
-        ) : committed ? (
-          <span className="flex items-center text-primary" aria-label="Queued">
-            <ListChecks className="size-3.5" aria-hidden />
-          </span>
-        ) : null}
-
         {task.recurrence ? (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -316,6 +292,37 @@ export function TaskRow({
             onOpenChange={(o) => !o && onClearCommand()}
             api={api}
           />
+        ) : null}
+
+        {/* Queue toggle — pinned to the far right so it has one predictable,
+            targetable home (the marker IS the action). Committed → accent; idle →
+            faint, darkens on hover/focus. */}
+        {canEdit ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={committed ? "Remove from queue" : "Add to queue"}
+                aria-pressed={committed}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  api.toggleCommit(task.id);
+                }}
+                className={cn(
+                  "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                  committed ? "text-primary" : "text-muted-foreground/40 hover:text-foreground",
+                )}
+              >
+                <ListChecks className="size-3.5" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{committed ? "Remove from queue" : "Add to queue"}</TooltipContent>
+          </Tooltip>
+        ) : committed ? (
+          <span className="flex items-center text-primary" aria-label="Queued">
+            <ListChecks className="size-3.5" aria-hidden />
+          </span>
         ) : null}
       </div>
     </div>
@@ -508,12 +515,10 @@ function SchedulePopover({
           type="button"
           onClick={(e) => e.stopPropagation()}
           aria-label="Scheduled time"
-          // Reserve the slot always; fade in on hover/focus when empty (no
-          // layout shift — the old hidden→flex pushed the row's content).
-          className={cn(
-            "flex items-center transition-opacity duration-(--motion-fade) ease-(--ease-out)",
-            label || open ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
-          )}
+          // Show only when a time is set (or the keyboard opened the popover).
+          // No empty hover-reveal — it flickered and shifted the row for no gain;
+          // set/clear instead via right-click, the `s` key, or the detail panel.
+          className={cn("items-center", label || open ? "flex" : "hidden")}
         >
           <MetaChip active={!!label} drifted={drifted} icon={<Clock className="size-3.5" aria-hidden />}>
             {label}
@@ -572,7 +577,9 @@ function DuePopover({
           type="button"
           onClick={(e) => e.stopPropagation()}
           aria-label="Due date"
-          className={cn("items-center", label ? "flex" : open ? "flex" : "hidden group-hover:flex")}
+          // Show only when a due date is set (or the keyboard opened the popover)
+          // — no empty hover-reveal. Set/clear via right-click, `d`, or the panel.
+          className={cn("items-center", label || open ? "flex" : "hidden")}
         >
           <MetaChip active={!!label} icon={<CalendarDays className="size-3.5" aria-hidden />}>
             {label}
