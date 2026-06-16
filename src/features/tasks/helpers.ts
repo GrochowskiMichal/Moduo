@@ -375,6 +375,29 @@ export function nestedSubtaskIds(scopeTasks: Task[], nest = true): Set<string> {
   return nested;
 }
 
+/**
+ * Whether `active` may be dropped onto `target` to become its subtask — the
+ * eligibility test the List uses to highlight valid drop targets during a
+ * drag-to-nest. Mirrors the one-level rule that `setTaskParent` (and the DB
+ * trigger) enforce on write; this is the read-side affordance, not the
+ * guarantee. A nest is allowed when:
+ *   • the active task is childless (a parent can't become a subtask — one level);
+ *   • the target is neither the active task nor its current parent (no-op);
+ *   • the target is top-level (a subtask can't gain children — one level).
+ */
+export function canNestUnder(
+  active: Pick<Task, "id" | "parentId">,
+  target: Pick<Task, "id" | "parentId">,
+  hasChildren: (id: string) => boolean,
+): boolean {
+  return (
+    !hasChildren(active.id) &&
+    target.id !== active.id &&
+    target.id !== (active.parentId ?? null) &&
+    !target.parentId
+  );
+}
+
 // ── Blocked-by dependencies (Session 6 — spec §5c) ───────────────────────────
 
 /** An open task can be worked on; done/archived can't block anything. */

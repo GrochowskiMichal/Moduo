@@ -391,6 +391,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         onGroupByChange={setGroupBy}
         reorderable={selection === "today"}
         onReorder={api.reorderQueue}
+        nestable={selection !== "today" && selection !== "all"}
       />
     );
 

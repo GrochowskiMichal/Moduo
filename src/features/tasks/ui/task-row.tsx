@@ -90,6 +90,9 @@ type Props = {
   /** Drag grip for a sortable (reorderable) row — rendered at the far left,
    * quiet until row hover. Absent rows look and behave exactly as before. */
   dragHandle?: ReactNode;
+  /** Highlight as the live drop target during a drag-to-nest (quiet accent +
+   * ring, mirrors the board column's drag-over treatment). */
+  dropActive?: boolean;
   api: TasksModuleApi;
 };
 
@@ -117,6 +120,7 @@ export function TaskRow({
   nested = false,
   parentTitle = null,
   dragHandle = null,
+  dropActive = false,
   api,
 }: Props) {
   const done = task.status === "done";
@@ -136,7 +140,13 @@ export function TaskRow({
       className={cn(
         "group relative flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
         "border border-transparent cursor-default select-none",
-        selected ? "bg-(--selected-bg)" : "hover:bg-accent/60",
+        // Drop-target highlight wins over selection/hover while a nest drag is
+        // live (mirrors the board column's drag-over treatment — ring + accent).
+        dropActive
+          ? "bg-accent/50 ring-1 ring-inset ring-ring/50"
+          : selected
+            ? "bg-(--selected-bg)"
+            : "hover:bg-accent/60",
         nested && "ml-6",
       )}
       // height rides the density setting; py is only a multiline guard
