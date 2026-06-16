@@ -46,19 +46,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (!active) return;
       setRt(client);
 
-      // Restore from cache / keychain first.
+      // Restore cached Supabase session first.
       const { data } = await client.auth.getSession();
       if (!active) return;
 
-      const resolvedSession = data.session ?? (() => null)();
-      let finalSession = resolvedSession;
-
-      if (!resolvedSession) {
-        // No cached session — attempt silent unlock (keychain on desktop, Supabase session on web).
-        const { data: autoData } = await client.auth.tryAutoUnlock();
-        if (!active) return;
-        finalSession = autoData.session ?? null;
-      }
+      const finalSession = data.session ?? null;
 
       setSession(finalSession);
       setLoading(false);

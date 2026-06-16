@@ -1,7 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 
 import { Button } from "../../../components/ui/button";
+import { EmptyState as EmptyStateBase } from "../../../components/ui/empty-state";
 import {
   Select,
   SelectContent,
@@ -9,9 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { groupTasks, nestedSubtaskIds, type GroupBy } from "../helpers";
+import { canNestUnder, groupTasks, nestedSubtaskIds, type GroupBy } from "../helpers";
 import type { Bucket, Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import {
+  NestableTask,
+  SortableTask,
+  asTaskDropTarget,
+  useTaskDndSensors,
+} from "./dnd/task-dnd";
 import { PlanViewHeader, type PlanView } from "./plan-view-header";
 import { Kbd } from "./task-detail-panel";
 import { TaskRow, type RowCommand } from "./task-row";
@@ -37,6 +57,14 @@ type Props = {
   activeTagFilters?: ReactNode;
   /** Click a row's tag chip to toggle it in the filter. */
   onTagFilter?: (tagId: string) => void;
+  /** Enable drag-to-reorder (the Queue): a flat, ungrouped, ordered list. */
+  reorderable?: boolean;
+  /** Persist a reorder — receives the task ids in their new order. */
+  onReorder?: (orderedIds: string[]) => void;
+  /** Enable drag-a-task-onto-another → make it a subtask. Applies only to the
+   * flat (`groupBy === "none"`) single-bucket list, never the cross-bucket "All"
+   * or the Queue (which owns drag-to-reorder instead). */
+  nestable?: boolean;
   api: TasksModuleApi;
 };
 
@@ -66,6 +94,9 @@ export function TaskListView({
   tagFilterControl,
   activeTagFilters,
   onTagFilter,
+  reorderable = false,
+  onReorder,
+  nestable = false,
   api,
 }: Props) {
   // Selection is owned by the parent (shared with the detail rail); these aliases
@@ -75,7 +106,13 @@ export function TaskListView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [command, setCommand] = useState<{ taskId: string; kind: RowCommand } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [reordering, setReordering] = useState(false);
+  // The task currently being dragged onto another to nest it (null = not nesting).
+  const [nestActiveId, setNestActiveId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dndSensors = useTaskDndSensors();
+  // Nesting is drag-onto-target (no SortableContext) → default keyboard sensor.
+  const nestSensors = useTaskDndSensors({ sortable: false });
 
   const crossBucket = selection === "all" || selection === "today";
   const showBucketTag =
@@ -194,8 +231,9 @@ export function TaskListView({
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       // While inline-editing a title, the Input stops propagation; popovers are
-      // portaled out — so reaching here means plain navigation is safe.
-      if (editingId) return;
+      // portaled out — so reaching here means plain navigation is safe. During a
+      // keyboard reorder the dnd sensor owns the arrows — don't also move the cursor.
+      if (editingId || reordering) return;
       const key = e.key.toLowerCase();
       if (key === "j" || e.key === "ArrowDown") {
         e.preventDefault();
@@ -223,7 +261,9 @@ export function TaskListView({
       } else if (key === "d" && selectedTask && canEdit) {
         e.preventDefault();
         setCommand({ taskId: selectedTask.id, kind: "due" });
-      } else if (key === "t" && selectedTask && canEdit) {
+      } else if (key === "q" && selectedTask && canEdit) {
+        // Queue/unqueue the selected task (Round D: `q` is the queue key — was
+        // `t` from when the queue was "Today"; the rename makes `q` canonical).
         e.preventDefault();
         api.toggleCommit(selectedTask.id);
       } else if (e.key === "ArrowRight" && selectedTask) {
@@ -249,6 +289,7 @@ export function TaskListView({
     },
     [
       editingId,
+      reordering,
       move,
       selectedTask,
       canEdit,
@@ -271,6 +312,147 @@ export function TaskListView({
     });
   };
 
+  // Row props, shared by the grouped and the reorderable (Queue) renders.
+  const buildRowProps = useCallback(
+    (t: Task) => ({
+      task: t,
+      bucketName: bucketNameById(t.bucketId),
+      buckets,
+      inboxId: inbox?.id ?? null,
+      showBucket: showBucketTag,
+      selected: t.id === selectedId,
+      editing: t.id === editingId,
+      command: command?.taskId === t.id ? command.kind : null,
+      canEdit,
+      onSelect: () => setSelectedId(t.id),
+      onStartEdit: () => setEditingId(t.id),
+      onEndEdit: () => {
+        setEditingId(null);
+        containerRef.current?.focus();
+      },
+      onClearCommand: () => {
+        setCommand(null);
+        containerRef.current?.focus();
+      },
+      onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),
+      onTagFilter,
+      api,
+    }),
+    [
+      bucketNameById,
+      buckets,
+      inbox,
+      showBucketTag,
+      selectedId,
+      editingId,
+      command,
+      canEdit,
+      setSelectedId,
+      onTagFilter,
+      api,
+    ],
+  );
+
+  // A top-level row plus (when expanded) its nested subtasks — shared by the
+  // grouped render and the drag-to-nest render. `drag` injects the grip and the
+  // live drop-target highlight when this list is in nestable mode.
+  const renderParentRow = (task: Task, drag?: { handle: ReactNode; dropActive: boolean }) => {
+    const children = nest ? api.subtasksByParent.get(task.id) ?? [] : [];
+    const expanded = expandedParents.has(task.id);
+    return (
+      <>
+        <TaskRow
+          {...buildRowProps(task)}
+          expandSlot={expandSlot}
+          expandable={children.length > 0}
+          expanded={expanded}
+          onToggleExpand={() => toggleExpandParent(task.id)}
+          progress={api.subtaskProgressByTask.get(task.id) ?? null}
+          parentTitle={parentTitleFor(task)}
+          dragHandle={drag?.handle}
+          dropActive={drag?.dropActive ?? false}
+        />
+        {expanded
+          ? children.map((child) => (
+              <TaskRow key={child.id} {...buildRowProps(child)} nested />
+            ))
+          : null}
+      </>
+    );
+  };
+
+  // The Queue is a single flat, ordered group — reorder is a vertical sort over
+  // it. Disabled (falls through to the grouped render) unless the parent asked
+  // for it and the user can edit.
+  const queueTasks = groups[0]?.tasks ?? [];
+  const queueIds = useMemo(() => queueTasks.map((t) => t.id), [queueTasks]);
+  const canReorder = reorderable && canEdit && groupBy === "none" && queueTasks.length > 1;
+
+  const onQueueDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      setReordering(false);
+      const { active, over } = e;
+      if (!over || active.id === over.id) return;
+      const from = queueIds.indexOf(String(active.id));
+      const to = queueIds.indexOf(String(over.id));
+      if (from < 0 || to < 0) return;
+      onReorder?.(arrayMove(queueIds, from, to));
+    },
+    [queueIds, onReorder],
+  );
+
+  // ── drag-a-task-onto-another → subtask (nestable mode) ──────────────────────
+  // The flat single-bucket list (groupBy "none", not the Queue, not cross-bucket
+  // "All"). Top-level rows are drag sources + drop targets; children render
+  // nested as usual. setTaskParent enforces the one-level rule (DB trigger backs it).
+  const nestTasks = groups[0]?.tasks ?? [];
+  const canNest =
+    nestable &&
+    canEdit &&
+    groupBy === "none" &&
+    selection !== "all" &&
+    selection !== "today" &&
+    nestTasks.length > 1;
+
+  const hasChildren = useCallback(
+    (id: string) => (api.subtasksByParent.get(id)?.length ?? 0) > 0,
+    [api.subtasksByParent],
+  );
+  // Only a childless task may be dragged — a parent can't itself become a subtask
+  // (one level). Independent of the live drag, so it gates the grip at rest.
+  const canDragRow = useCallback((task: Task) => !hasChildren(task.id), [hasChildren]);
+  // A row accepts the active drag per the one-level eligibility rule (childless
+  // active, top-level target, not a no-op) — shared with `setTaskParent`/the DB.
+  const nestActiveTask = nestActiveId ? taskById.get(nestActiveId) ?? null : null;
+  const isNestTarget = useCallback(
+    (task: Task) => (nestActiveTask ? canNestUnder(nestActiveTask, task, hasChildren) : false),
+    [nestActiveTask, hasChildren],
+  );
+
+  const onNestDragStart = useCallback((e: DragStartEvent) => {
+    setReordering(true); // the dnd sensor owns the arrows during a keyboard drag
+    setNestActiveId(String(e.active.id));
+  }, []);
+  const endNestDrag = useCallback(() => {
+    setReordering(false);
+    setNestActiveId(null);
+  }, []);
+  const onNestDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      endNestDrag();
+      const { active, over } = e;
+      if (!over) return;
+      const target = asTaskDropTarget(over.data.current);
+      if (target?.type !== "onto-task") return;
+      const childId = String(active.id);
+      if (target.taskId === childId) return;
+      api.setTaskParent(childId, target.taskId);
+      // Reveal the result — expand the new parent so the moved task shows nested.
+      if (nest) setExpandedParents((prev) => new Set(prev).add(target.taskId));
+    },
+    [endNestDrag, api, nest],
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PlanViewHeader
@@ -283,9 +465,9 @@ export function TaskListView({
         activeFilters={activeTagFilters}
         groupControl={
           <div className="flex items-center gap-1.5">
-            <span className="font-display text-xs text-muted-foreground">Group</span>
+            <span className="font-sans text-xs text-muted-foreground">Group</span>
             <Select value={groupBy} onValueChange={(v) => onGroupByChange(v as GroupBy)}>
-              <SelectTrigger size="sm" className="w-28 font-display">
+              <SelectTrigger size="sm" variant="ghost" className="w-28">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -311,6 +493,62 @@ export function TaskListView({
       >
         {tasks.length === 0 ? (
           <EmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />
+        ) : canReorder ? (
+          <DndContext
+            sensors={dndSensors}
+            collisionDetection={closestCenter}
+            onDragStart={() => setReordering(true)}
+            onDragEnd={onQueueDragEnd}
+            onDragCancel={() => setReordering(false)}
+          >
+            <SortableContext items={queueIds} strategy={verticalListSortingStrategy}>
+              {queueTasks.map((task) => (
+                <SortableTask
+                  key={task.id}
+                  id={task.id}
+                  from="queue"
+                  render={({ handle }) => (
+                    <TaskRow
+                      {...buildRowProps(task)}
+                      parentTitle={parentTitleFor(task)}
+                      dragHandle={handle}
+                    />
+                  )}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        ) : canNest ? (
+          <DndContext
+            sensors={nestSensors}
+            collisionDetection={closestCenter}
+            onDragStart={onNestDragStart}
+            onDragEnd={onNestDragEnd}
+            onDragCancel={endNestDrag}
+          >
+            {nestTasks.map((task) => (
+              <NestableTask
+                key={task.id}
+                id={task.id}
+                from="list"
+                canDrag={canDragRow(task)}
+                canDrop={isNestTarget(task)}
+                render={({ handle, isOver }) =>
+                  renderParentRow(task, { handle, dropActive: isOver })
+                }
+              />
+            ))}
+            {createPortal(
+              <DragOverlay>
+                {nestActiveTask ? (
+                  <div className="pointer-events-none rounded-md border border-border bg-popover px-2 py-1 font-sans text-md shadow-md">
+                    {nestActiveTask.title || "Untitled"}
+                  </div>
+                ) : null}
+              </DragOverlay>,
+              document.body,
+            )}
+          </DndContext>
         ) : (
           groups.map((group) => {
             const isCollapsed = collapsed.has(group.key);
@@ -333,52 +571,7 @@ export function TaskListView({
                 ) : null}
 
                 {!isCollapsed
-                  ? group.tasks.map((task) => {
-                      const children = nest ? api.subtasksByParent.get(task.id) ?? [] : [];
-                      const expanded = expandedParents.has(task.id);
-                      const rowProps = (t: Task) => ({
-                        task: t,
-                        bucketName: bucketNameById(t.bucketId),
-                        buckets,
-                        inboxId: inbox?.id ?? null,
-                        showBucket: showBucketTag,
-                        selected: t.id === selectedId,
-                        editing: t.id === editingId,
-                        command: command?.taskId === t.id ? command.kind : null,
-                        canEdit,
-                        onSelect: () => setSelectedId(t.id),
-                        onStartEdit: () => setEditingId(t.id),
-                        onEndEdit: () => {
-                          setEditingId(null);
-                          containerRef.current?.focus();
-                        },
-                        onClearCommand: () => {
-                          setCommand(null);
-                          containerRef.current?.focus();
-                        },
-                        onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),
-                        onTagFilter,
-                        api,
-                      });
-                      return (
-                        <div key={task.id}>
-                          <TaskRow
-                            {...rowProps(task)}
-                            expandSlot={expandSlot}
-                            expandable={children.length > 0}
-                            expanded={expanded}
-                            onToggleExpand={() => toggleExpandParent(task.id)}
-                            progress={api.subtaskProgressByTask.get(task.id) ?? null}
-                            parentTitle={parentTitleFor(task)}
-                          />
-                          {expanded
-                            ? children.map((child) => (
-                                <TaskRow key={child.id} {...rowProps(child)} nested />
-                              ))
-                            : null}
-                        </div>
-                      );
-                    })
+                  ? group.tasks.map((task) => <div key={task.id}>{renderParentRow(task)}</div>)
                   : null}
               </div>
             );
@@ -397,19 +590,17 @@ function EmptyState({
   onRequestCapture: () => void;
 }) {
   return (
-    <div className="grid h-full place-content-center gap-2 text-center text-muted-foreground">
-      <p className="text-sm">Nothing here yet.</p>
-      {canEdit ? (
-        <>
-          <Button variant="secondary" size="sm" onClick={onRequestCapture} className="mx-auto">
-            <Plus className="size-4" aria-hidden />
+    <EmptyStateBase
+      title="Nothing here yet."
+      action={
+        canEdit ? (
+          <Button variant="secondary" size="sm" onClick={onRequestCapture}>
+            <Plus aria-hidden />
             Add a task
           </Button>
-          <p className="text-2xs text-muted-foreground/70">
-            or press <Kbd>c</Kbd> to capture
-          </p>
-        </>
-      ) : null}
-    </div>
+        ) : undefined
+      }
+      hint={canEdit ? <>or press <Kbd>c</Kbd> to capture</> : undefined}
+    />
   );
 }

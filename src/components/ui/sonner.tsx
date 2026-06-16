@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
-import { useAppearance } from "@/src/lib/appearance";
+import { useAppearance } from "@/lib/appearance";
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { appearance } = useAppearance();

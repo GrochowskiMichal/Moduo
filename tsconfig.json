@@ -12,8 +12,7 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"],
-      "@/src/*": ["./src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src", "rsbuild.config.ts", "playwright.config.ts", "vitest.config.ts"],

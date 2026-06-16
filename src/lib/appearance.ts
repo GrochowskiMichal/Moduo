@@ -6,8 +6,7 @@ export type Shade = "black" | "warm" | "cool" | "slate" | "plum" | "forest";
 export type Accent = "pink" | "violet" | "blue" | "green" | "amber" | "red" | "teal" | "mono";
 export type Density = "comfortable" | "compact" | "dense";
 export type Radius = "sharp" | "soft" | "round";
-export type DisplayFont = "pilat" | "geist" | "cal" | "fraunces";
-export type BodyFont = "geist" | "inter" | "serif" | "mono";
+export type Font = "geist" | "inter" | "pilat" | "cal" | "fraunces" | "serif" | "mono";
 export type TextSize = "small" | "normal" | "large";
 export type Tabs = "auto" | "icons";
 
@@ -17,8 +16,7 @@ export interface Appearance {
   accent: Accent;
   density: Density;
   radius: Radius;
-  fontDisplay: DisplayFont;
-  fontBody: BodyFont;
+  font: Font;
   textSize: TextSize;
   tabs: Tabs;
 }
@@ -29,8 +27,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   accent: "pink",
   density: "comfortable",
   radius: "soft",
-  fontDisplay: "pilat",
-  fontBody: "geist",
+  font: "geist",
   textSize: "normal",
   tabs: "auto",
 };
@@ -45,8 +42,7 @@ const DATA_ATTR_MAP: Record<keyof Appearance, string> = {
   accent: "data-accent",
   density: "data-density",
   radius: "data-radius",
-  fontDisplay: "data-font-display",
-  fontBody: "data-font-body",
+  font: "data-font",
   textSize: "data-text-size",
   tabs: "data-tabs",
 };
@@ -57,8 +53,7 @@ const VALID_VALUES: Record<keyof Appearance, ReadonlyArray<string>> = {
   accent: ["pink", "violet", "blue", "green", "amber", "red", "teal", "mono"],
   density: ["comfortable", "compact", "dense"],
   radius: ["sharp", "soft", "round"],
-  fontDisplay: ["pilat", "geist", "cal", "fraunces"],
-  fontBody: ["geist", "inter", "serif", "mono"],
+  font: ["geist", "inter", "pilat", "cal", "fraunces", "serif", "mono"],
   textSize: ["small", "normal", "large"],
   tabs: ["auto", "icons"],
 };
@@ -72,6 +67,16 @@ function sanitize(raw: unknown): Appearance {
     if (typeof value === "string" && VALID_VALUES[key].includes(value)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (result as any)[key] = value;
+    }
+  }
+  // Migrate the retired two-font model (fontDisplay/fontBody) to the single
+  // font axis: prefer the old body font, then the old display font.
+  const hasValidFont =
+    typeof candidate.font === "string" && VALID_VALUES.font.includes(candidate.font);
+  if (!hasValidFont) {
+    const legacy = candidate.fontBody ?? candidate.fontDisplay;
+    if (typeof legacy === "string" && VALID_VALUES.font.includes(legacy)) {
+      result.font = legacy as Font;
     }
   }
   return result;
@@ -139,8 +144,7 @@ export interface UseAppearance {
   setAccent: (value: Accent) => void;
   setDensity: (value: Density) => void;
   setRadius: (value: Radius) => void;
-  setFontDisplay: (value: DisplayFont) => void;
-  setFontBody: (value: BodyFont) => void;
+  setFont: (value: Font) => void;
   setTextSize: (value: TextSize) => void;
   setTabs: (value: Tabs) => void;
   setAppearance: (patch: Partial<Appearance>) => void;
@@ -180,8 +184,7 @@ export function useAppearance(): UseAppearance {
     setAccent: (value) => update({ accent: value }),
     setDensity: (value) => update({ density: value }),
     setRadius: (value) => update({ radius: value }),
-    setFontDisplay: (value) => update({ fontDisplay: value }),
-    setFontBody: (value) => update({ fontBody: value }),
+    setFont: (value) => update({ font: value }),
     setTextSize: (value) => update({ textSize: value }),
     setTabs: (value) => update({ tabs: value }),
     setAppearance: update,

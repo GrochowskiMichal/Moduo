@@ -1,12 +1,12 @@
-import { useDraggable } from "@dnd-kit/core";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   CalendarDays,
   Clock,
   CornerDownRight,
-  GripVertical,
   Inbox,
+  ListChecks,
   Repeat,
-  Sunrise,
 } from "lucide-react";
 
 import { Badge } from "../../../components/ui/badge";
@@ -33,7 +33,10 @@ import { formatDue, formatScheduled, LEVEL_OPTIONS } from "../helpers";
 import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../model";
 import { recurrenceLabel } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { BlockedMarker, CompleteToggle, LevelDots } from "./task-row";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { taskDrag } from "./dnd/task-dnd";
+import { LevelDots } from "./level-icons";
+import { BlockedMarker } from "./task-row";
 
 type Props = {
   task: Task;
@@ -51,7 +54,8 @@ type Props = {
   api: TasksModuleApi;
 };
 
-/** A draggable kanban card. Cross-column drag changes status (or bucket). */
+/** A sortable kanban card. Drag reorders within a column; dropping on another
+ *  column changes status (or bucket). */
 export function TaskCard({
   task,
   bucketName,
@@ -64,34 +68,37 @@ export function TaskCard({
   onTagFilter,
   api,
 }: Props) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
-    data: { type: "card", taskId: task.id, bucketId: task.bucketId, status: task.status },
+    data: taskDrag(task.id, "board"),
     disabled: !canEdit,
   });
 
   const card = (
     <div
       ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       {...attributes}
       {...(canEdit ? listeners : {})}
       role="button"
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "group flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm transition-colors",
+        // Linear-quiet: card = bg-card + hairline on the (transparent) column,
+        // so it reads as a quiet lift off the canvas — not darker than its
+        // column (the old bg-background was the inverted-elevation bug).
+        "group flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm transition-colors duration-(--motion-fade) ease-(--ease-out)",
         "select-none",
-        selected ? "border-ring bg-accent" : "border-border bg-background hover:border-foreground/30",
+        selected
+          ? "border-(--selected-border) bg-(--selected-bg)"
+          : "border-border bg-card hover:border-foreground/30",
+        // whole card is the drag handle (grip removed)
         canEdit && "cursor-grab active:cursor-grabbing",
-        isDragging && "opacity-40",
+        // hide the source while the DragOverlay clone follows the cursor; the
+        // empty slot stays so neighbours animate apart (insertion indicator).
+        isDragging && "opacity-0",
       )}
     >
-      {canEdit ? (
-        <GripVertical
-          className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100"
-          aria-hidden
-        />
-      ) : null}
       <CardBody
         task={task}
         bucketName={bucketName}
@@ -114,7 +121,7 @@ export function TaskCard({
           {task.status === "done" ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => api.toggleCommit(task.id)}>
-          {task.committedFor === api.today ? "Remove from today" : "Commit to today"}
+          {task.committedFor === api.today ? "Remove from queue" : "Add to queue"}
         </ContextMenuItem>
         {task.recurrence && task.status !== "done" && task.status !== "archived" ? (
           <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
@@ -259,15 +266,33 @@ export function CardBody({
             </span>
           ) : null}
           {blocked ? <BlockedMarker taskId={task.id} api={api} /> : null}
-          {committed ? (
+          {/* Queue toggle — always visible + quiet (marker IS the action). */}
+          {canEdit ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="flex items-center text-foreground" aria-label="Committed for today">
-                  <Sunrise className="size-3.5" aria-hidden />
-                </span>
+                <button
+                  type="button"
+                  aria-label={committed ? "Remove from queue" : "Add to queue"}
+                  aria-pressed={committed}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    api.toggleCommit(task.id);
+                  }}
+                  className={cn(
+                    "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                    committed ? "text-primary" : "text-muted-foreground/40 hover:text-foreground",
+                  )}
+                >
+                  <ListChecks className="size-3.5" aria-hidden />
+                </button>
               </TooltipTrigger>
-              <TooltipContent>Committed for today</TooltipContent>
+              <TooltipContent>{committed ? "Remove from queue" : "Add to queue"}</TooltipContent>
             </Tooltip>
+          ) : committed ? (
+            <span className="flex items-center text-primary" aria-label="Queued">
+              <ListChecks className="size-3.5" aria-hidden />
+            </span>
           ) : null}
           {task.recurrence ? (
             <Tooltip>

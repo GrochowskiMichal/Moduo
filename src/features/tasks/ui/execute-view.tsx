@@ -1,21 +1,21 @@
-import { useEffect, useState } from "react";
-import { Check, Link2, Pause, Play, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, Clock, MoreHorizontal, Pause, Play, Square } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
+import { IconButton } from "../../../components/ui/icon-button";
+import { Input } from "../../../components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { TagChipList } from "../../../components/tag-chip";
 import { cn } from "../../../lib/utils";
-import {
-  ENERGY_LABELS,
-  formatDue,
-  formatScheduled,
-  PRIORITY_LABELS,
-} from "../helpers";
-import type { Task } from "../model";
+import { dispatchOpenSettings } from "../../settings/settings-events";
+import { useFocusPrefs, type FocusPrefs } from "../../../lib/focus-prefs";
+import { formatDue, formatScheduled } from "../helpers";
+import type { Task, Tag } from "../model";
 
-type TimerMode = "pomodoro" | "duration";
-
-const POMODORO_WORK = 25 * 60;
-const POMODORO_BREAK = 5 * 60;
-const DURATION_FALLBACK_MIN = 25;
+// Persist accrued time periodically so a crash/reload loses at most this much.
+const FLUSH_INTERVAL_SECONDS = 60;
 
 type Props = {
   committedTasks: Task[];
@@ -26,7 +26,13 @@ type Props = {
   blockedNoteFor: (task: Task) => string | null;
   onMarkDone: (id: string) => void;
   onSkip: (id: string) => void;
-  onDoLast: (id: string) => void;
+  /** Fold an elapsed work delta (seconds) into the task's tracked total. */
+  onAddTime: (taskId: string, deltaSeconds: number) => void;
+  /** Set the tracked total to an absolute value (manual edit). */
+  onSetTime: (taskId: string, seconds: number) => void;
+  tagsFor: (taskId: string) => Tag[];
+  subtasksFor: (taskId: string) => Task[];
+  onToggleSubtask: (subtask: Task) => void;
   onExit: () => void;
 };
 
@@ -37,24 +43,24 @@ export function ExecuteView({
   blockedNoteFor,
   onMarkDone,
   onSkip,
-  onDoLast,
+  onAddTime,
+  onSetTime,
+  tagsFor,
+  subtasksFor,
+  onToggleSubtask,
   onExit,
 }: Props) {
   const current = committedTasks.find((t) => t.status !== "done") ?? null;
   const upcoming = committedTasks.filter((t) => t.status !== "done").slice(1);
   const total = committedTasks.length;
   const doneCount = committedTasks.filter((t) => t.status === "done").length;
+  // Pomodoro prefs (persisted) — the timer reads these; the ⋯ popover edits them.
+  const { prefs: focusPrefs, setPrefs: setFocusPrefs } = useFocusPrefs();
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* heading matches the Plan-mode header (same place + style) */}
-      <div className="mb-3 flex shrink-0 items-center justify-between">
+      <div className="mb-3 flex shrink-0 items-center">
         <h1 className="font-display text-lg text-foreground">Focus</h1>
-        {total > 0 ? (
-          <span className="font-sans text-xs text-muted-foreground tabular-nums">
-            {doneCount} / {total} Done
-          </span>
-        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -69,27 +75,29 @@ export function ExecuteView({
               blockedNote={blockedNoteFor(current)}
               onMarkDone={() => onMarkDone(current.id)}
               onSkip={() => onSkip(current.id)}
-              onDoLast={() => onDoLast(current.id)}
-              canDoLast={upcoming.length > 0}
+              onAddTime={onAddTime}
+              onSetTime={onSetTime}
+              tags={tagsFor(current.id)}
+              subtasks={subtasksFor(current.id)}
+              onToggleSubtask={onToggleSubtask}
+              focusPrefs={focusPrefs}
+              onFocusPrefsChange={setFocusPrefs}
             />
-            <RelationsPlaceholder />
             <Queue tasks={upcoming} bucketNameById={bucketNameById} parentTitleFor={parentTitleFor} />
           </div>
         )}
       </div>
+
+      {current && total > 0 ? (
+        <div className="mt-3 flex shrink-0 justify-center font-sans text-xs tabular-nums text-muted-foreground">
+          {doneCount} / {total} done
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function EndSummary({
-  doneCount,
-  total,
-  onExit,
-}: {
-  doneCount: number;
-  total: number;
-  onExit: () => void;
-}) {
+function EndSummary({ doneCount, total, onExit }: { doneCount: number; total: number; onExit: () => void }) {
   return (
     <div className="grid h-full place-content-center gap-4 text-center">
       <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted text-foreground">
@@ -108,7 +116,7 @@ function EndSummary({
   );
 }
 
-// ── Now card ──────────────────────────────────────────────────────────────────
+// ── Now card — task-first; the timer is opt-in, tucked bottom-left ────────────
 
 function NowCard({
   task,
@@ -117,8 +125,13 @@ function NowCard({
   blockedNote,
   onMarkDone,
   onSkip,
-  onDoLast,
-  canDoLast,
+  onAddTime,
+  onSetTime,
+  tags,
+  subtasks,
+  onToggleSubtask,
+  focusPrefs,
+  onFocusPrefsChange,
 }: {
   task: Task;
   bucketName: string;
@@ -126,121 +139,253 @@ function NowCard({
   blockedNote: string | null;
   onMarkDone: () => void;
   onSkip: () => void;
-  onDoLast: () => void;
-  canDoLast: boolean;
+  onAddTime: (taskId: string, deltaSeconds: number) => void;
+  onSetTime: (taskId: string, seconds: number) => void;
+  tags: Tag[];
+  subtasks: Task[];
+  onToggleSubtask: (subtask: Task) => void;
+  focusPrefs: FocusPrefs;
+  onFocusPrefsChange: (patch: Partial<FocusPrefs>) => void;
 }) {
-  const [mode, setMode] = useState<TimerMode>("pomodoro");
-  const timer = useExecuteTimer(task.id, mode, task.durationMinutes);
+  const timer = useFocusTimer(task.id, onAddTime, focusPrefs);
 
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
-  const meta = [
-    // committed subtask: quiet context for which bigger thing this serves
-    parentTitle ? `Part of ${parentTitle}` : null,
-    // blocked-but-committed-anyway: a quiet mirror, never a wall (spec §5c)
-    blockedNote,
-    bucketName,
-    task.priority ? PRIORITY_LABELS[task.priority] : null,
-    task.energyLevel ? ENERGY_LABELS[task.energyLevel] : null,
-    scheduled ? `Scheduled ${scheduled}` : null,
-    due ? `Due ${due}` : null,
-    task.durationMinutes ? `~${task.durationMinutes} min` : null,
-  ].filter(Boolean) as string[];
+  const subLine =
+    blockedNote ??
+    [
+      parentTitle ? `Part of ${parentTitle}` : null,
+      scheduled ? `Scheduled ${scheduled}` : null,
+      task.durationMinutes ? `~${task.durationMinutes}m est` : null,
+    ]
+      .filter(Boolean)
+      .join("  ·  ");
 
-  // Calm, centered focus card: title → context → timer → primary action.
+  const trackedTotal = task.timeSpentSeconds + timer.accrued;
+  const estimateSeconds = task.durationMinutes ? task.durationMinutes * 60 : null;
+
   return (
-    <div className="rounded-lg border border-border px-6 py-8 text-center">
-      <h2 className="font-display text-2xl text-foreground">{task.title || "Untitled"}</h2>
-      {meta.length ? (
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 font-sans text-xs text-muted-foreground">
-          {meta.map((m, i) => (
-            <span key={m} className="flex items-center gap-2">
-              {i > 0 ? <span className="text-muted-foreground/40">·</span> : null}
-              {m}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      {task.description ? (
-        <p className="mx-auto mt-3 max-w-md font-sans text-sm text-muted-foreground">{task.description}</p>
-      ) : null}
-
-      <div className="mt-8 flex flex-col items-center gap-2">
-        <ModeToggle mode={mode} onModeChange={setMode} />
-        <span className="mt-2 font-display text-6xl tabular-nums text-foreground">
-          {formatClock(timer.secondsLeft)}
-        </span>
-        <span className="font-sans text-2xs uppercase tracking-wide text-muted-foreground/70">
-          {mode === "pomodoro" ? timer.phase : "remaining"}
-        </span>
-        <div className="mt-1 flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={timer.toggle}>
-            {timer.running ? <Pause className="size-4" aria-hidden /> : <Play className="size-4" aria-hidden />}
-            {timer.running ? "Pause" : "Resume"}
-          </Button>
-          <Button variant="secondary" size="sm" onClick={timer.reset} aria-label="Reset timer">
-            <RotateCcw className="size-4" aria-hidden />
-          </Button>
+    // elevated: --popover sits one step lighter than the --card panel (no shadow —
+    // surface contrast carries elevation on dark). Left-aligned, task-first.
+    <div className="rounded-lg border border-border bg-popover px-6 py-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="shrink-0 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
+          {bucketName}
+        </p>
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          {due ? <span className="shrink-0 font-sans text-2xs text-muted-foreground">Due {due}</span> : null}
+          {tags.length ? <TagChipList tags={tags} max={3} className="min-w-0" /> : null}
         </div>
       </div>
+      <h2 className="mt-0.5 font-display text-2xl text-foreground">{task.title || "Untitled"}</h2>
+      {subLine ? <p className="mt-1 font-sans text-xs text-muted-foreground">{subLine}</p> : null}
+      {task.description ? (
+        <p className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
+          {task.description}
+        </p>
+      ) : null}
 
-      <div className="mt-8 flex flex-col items-center gap-3">
-        <Button size="md" onClick={onMarkDone} className="min-w-44">
-          <Check className="size-4" aria-hidden />
-          Done, next
-        </Button>
-        <div className="flex items-center gap-3 font-sans text-sm text-muted-foreground">
-          <button type="button" onClick={onSkip} className="hover:text-foreground">
+      {subtasks.length > 0 ? <SubtaskChecklist subtasks={subtasks} onToggle={onToggleSubtask} /> : null}
+
+      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
+        {/* bottom-left — opt-in time tracking */}
+        <div className="min-w-0">
+          {timer.tracking ? (
+            <div className="flex items-center gap-1.5">
+              {timer.running ? <span className="track-pulse size-2 rounded-full bg-muted-foreground" aria-hidden /> : null}
+              <span className="mr-1 font-sans text-lg tabular-nums text-foreground">{formatClock(timer.bigClock)}</span>
+              <IconButton
+                icon={timer.running ? Pause : Play}
+                label={timer.running ? "Pause" : "Resume"}
+                onClick={timer.toggle}
+              />
+              <IconButton icon={Square} label="Stop" onClick={timer.stop} />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="ml-0.5 cursor-default font-sans text-xs tabular-nums text-muted-foreground">
+                    {timer.pomodoro ? <span className="uppercase tracking-wide text-muted-foreground/70">{timer.phaseLabel} · </span> : null}
+                    {formatDuration(trackedTotal)}
+                    {estimateSeconds ? <span className="text-muted-foreground/60"> / ~{formatDuration(estimateSeconds)}</span> : null}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Total time tracked on this task</TooltipContent>
+              </Tooltip>
+              <TimerMenu
+                task={task}
+                onAddTime={onAddTime}
+                onSetTime={onSetTime}
+                timer={timer}
+                prefs={focusPrefs}
+                onPrefsChange={onFocusPrefsChange}
+              />
+            </div>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={timer.start}>
+                  <Clock className="size-icon-sm" aria-hidden />
+                  {trackedTotal > 0 ? formatDuration(trackedTotal) : "Track time"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {trackedTotal > 0 ? "Total time tracked · click to keep tracking" : "Start tracking time"}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+
+        {/* bottom-right — Skip / Done (reorder lives in the Queue now) */}
+        <div className="flex shrink-0 items-center gap-3">
+          <button type="button" onClick={onSkip} className="font-sans text-sm text-muted-foreground hover:text-foreground">
             Skip
           </button>
-          {canDoLast ? (
-            <>
-              <span className="text-muted-foreground/40">·</span>
-              <button type="button" onClick={onDoLast} className="hover:text-foreground">
-                Do last
-              </button>
-            </>
-          ) : null}
+          <Button size="md" onClick={onMarkDone}>
+            <Check className="size-icon-sm" aria-hidden />
+            Done
+          </Button>
         </div>
       </div>
     </div>
   );
 }
 
-function ModeToggle({ mode, onModeChange }: { mode: TimerMode; onModeChange: (m: TimerMode) => void }) {
+// ── subtask checklist — tick the pieces off while focusing the parent ─────────
+
+function SubtaskChecklist({ subtasks, onToggle }: { subtasks: Task[]; onToggle: (subtask: Task) => void }) {
+  const done = subtasks.filter((s) => s.status === "done").length;
   return (
-    <div role="tablist" aria-label="Timer mode" className="flex items-center gap-1 rounded-md bg-muted p-1">
-      {(["pomodoro", "duration"] as const).map((m) => (
-        <button
-          key={m}
-          role="tab"
-          aria-selected={mode === m}
-          onClick={() => onModeChange(m)}
-          className={cn(
-            "rounded-sm px-2.5 py-1 font-display text-xs capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            mode === m ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {m}
-        </button>
-      ))}
+    <div className="mt-4">
+      <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
+        Subtasks {done}/{subtasks.length}
+      </p>
+      <div className="mt-1.5 flex flex-col">
+        {subtasks.map((st) => {
+          const isDone = st.status === "done";
+          return (
+            <div key={st.id} className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-accent">
+              <CompleteToggle done={isDone} onToggle={() => onToggle(st)} />
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate font-sans text-sm",
+                  isDone ? "text-muted-foreground line-through" : "text-foreground",
+                )}
+              >
+                {st.title || "Untitled"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// ── relations (placeholder for cross-module links) ────────────────────────────
+// ── ⋯ popover — manual add / set total / Pomodoro intervals ───────────────────
 
-function RelationsPlaceholder() {
+function TimerMenu({
+  task,
+  onAddTime,
+  onSetTime,
+  timer,
+  prefs,
+  onPrefsChange,
+}: {
+  task: Task;
+  onAddTime: (taskId: string, deltaSeconds: number) => void;
+  onSetTime: (taskId: string, seconds: number) => void;
+  timer: ReturnType<typeof useFocusTimer>;
+  prefs: FocusPrefs;
+  onPrefsChange: (patch: Partial<FocusPrefs>) => void;
+}) {
+  const [setMin, setSetMin] = useState("");
+
   return (
-    <div className="rounded-lg border border-dashed border-border p-4">
-      <div className="mb-1 flex items-center gap-1.5 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
-        <Link2 className="size-3.5" aria-hidden />
-        Linked
-      </div>
-      <p className="font-sans text-sm text-muted-foreground">
-        Notes, emails, calendar events, and other linked items will surface here while you focus.
-      </p>
-    </div>
+    <Popover>
+      <PopoverTrigger asChild>
+        <IconButton icon={MoreHorizontal} label="Timer options" tooltip={null} />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 text-left">
+        <div className="flex flex-col gap-3">
+          <div>
+            <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">Add time</p>
+            <div className="mt-1.5 flex gap-1.5">
+              {[5, 15, 30].map((m) => (
+                <Button key={m} variant="secondary" size="sm" onClick={() => onAddTime(task.id, m * 60)}>
+                  +{m}m
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+              Set total (min)
+            </p>
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <Input
+                size="sm"
+                type="number"
+                min={0}
+                value={setMin}
+                placeholder={String(Math.round(task.timeSpentSeconds / 60))}
+                onChange={(e) => setSetMin(e.target.value)}
+                className="w-20"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  const n = Number(setMin);
+                  if (Number.isFinite(n) && setMin !== "") onSetTime(task.id, Math.max(0, n) * 60);
+                  setSetMin("");
+                }}
+              >
+                Set
+              </Button>
+            </div>
+          </div>
+
+          {/* Pomodoro — work/break edit the persisted Focus prefs (Settings →
+              Focus holds long break / auto-start / sound). */}
+          <div className="border-t border-border pt-3">
+            <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">Pomodoro</p>
+            <div className="mt-1.5 flex items-center gap-2 font-sans text-sm text-muted-foreground">
+              <span>Work</span>
+              <Input
+                size="sm"
+                type="number"
+                min={1}
+                max={180}
+                value={String(prefs.workMinutes)}
+                onChange={(e) => onPrefsChange({ workMinutes: Math.max(1, Number(e.target.value) || 1) })}
+                className="w-14"
+              />
+              <span>Break</span>
+              <Input
+                size="sm"
+                type="number"
+                min={1}
+                max={180}
+                value={String(prefs.breakMinutes)}
+                onChange={(e) => onPrefsChange({ breakMinutes: Math.max(1, Number(e.target.value) || 1) })}
+                className="w-14"
+              />
+            </div>
+            <label className="mt-2 flex cursor-pointer items-center gap-2 font-sans text-sm text-muted-foreground">
+              <input type="checkbox" checked={timer.pomodoro} onChange={timer.togglePomodoro} />
+              Pomodoro rhythm
+            </label>
+            <button
+              type="button"
+              onClick={() => dispatchOpenSettings({ section: "focus" })}
+              className="mt-2 font-sans text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              More in Settings → Focus
+            </button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -288,56 +433,193 @@ function Queue({
 
 // ── timer ─────────────────────────────────────────────────────────────────────
 
-function useExecuteTimer(taskKey: string, mode: TimerMode, durationMin: number | null) {
-  const durationSeconds = (durationMin && durationMin > 0 ? durationMin : DURATION_FALLBACK_MIN) * 60;
-
+/**
+ * Opt-in stopwatch (never auto-starts) + optional Pomodoro overlay. `tracking`
+ * is whether the timer is open; `running` whether the clock ticks. Real *work*
+ * seconds accrue into the task's persisted total via onAddTime — flushed on
+ * pause / Stop / task change / unmount / every minute / each completed work
+ * block (attribution by ref). With Pomodoro on, the big clock shows the
+ * work/break countdown; intervals, the long-break rhythm, auto-start, and the
+ * end-of-interval chime all come from the persisted Focus prefs. Breaks don't
+ * accrue; without Pomodoro it just counts the sitting up.
+ */
+function useFocusTimer(
+  taskKey: string,
+  onAddTime: (taskId: string, deltaSeconds: number) => void,
+  prefs: FocusPrefs,
+) {
+  const [tracking, setTracking] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [pomodoro, setPomodoro] = useState(false);
   const [phase, setPhase] = useState<"work" | "break">("work");
-  const [secondsLeft, setSecondsLeft] = useState(mode === "pomodoro" ? POMODORO_WORK : durationSeconds);
-  const [running, setRunning] = useState(true);
+  const [longBreak, setLongBreak] = useState(false);
+  const [completedWork, setCompletedWork] = useState(0);
+  const [pomoLeft, setPomoLeft] = useState(prefs.workMinutes * 60);
+  const [sitElapsed, setSitElapsed] = useState(0);
+  const [accrued, setAccrued] = useState(0);
 
-  // Fresh timer whenever the task or mode changes (auto-runs on entry).
+  const unflushedRef = useRef(0);
+  const taskRef = useRef(taskKey);
+  const addRef = useRef(onAddTime);
+  addRef.current = onAddTime;
+  // Latest prefs for the rollover effect / controls without re-subscribing the tick.
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
+
+  const flush = useCallback(() => {
+    if (unflushedRef.current >= 1) {
+      addRef.current(taskRef.current, unflushedRef.current);
+      unflushedRef.current = 0;
+      setAccrued(0);
+    }
+  }, []);
+
+  // new task: flush the prior task on cleanup, then reset to the resting state
+  // (never auto-starts — tracking + running both false)
   useEffect(() => {
+    taskRef.current = taskKey;
+    setTracking(false);
+    setRunning(false);
     setPhase("work");
-    setSecondsLeft(mode === "pomodoro" ? POMODORO_WORK : durationSeconds);
-    setRunning(true);
-  }, [taskKey, mode, durationSeconds]);
+    setLongBreak(false);
+    setCompletedWork(0);
+    setPomoLeft(prefsRef.current.workMinutes * 60);
+    setSitElapsed(0);
+    setAccrued(0);
+    unflushedRef.current = 0;
+    return () => flush();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskKey, flush]);
 
-  // Tick.
+  // tick
   useEffect(() => {
     if (!running) return;
-    const id = window.setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
+    const id = window.setInterval(() => {
+      setSitElapsed((s) => s + 1);
+      const isWork = !pomodoro || phase === "work";
+      if (isWork) {
+        unflushedRef.current += 1;
+        setAccrued((a) => a + 1);
+      }
+      if (pomodoro) setPomoLeft((s) => Math.max(0, s - 1));
+    }, 1000);
     return () => window.clearInterval(id);
-  }, [running]);
+  }, [running, pomodoro, phase]);
 
-  // Handle reaching zero.
+  // Pomodoro rollover: work → (long?) break → work on the persisted intervals.
+  // A finished work block banks its seconds and bumps the long-break counter;
+  // chime + auto-start (or pause-to-resume-by-hand) follow the prefs.
   useEffect(() => {
-    if (secondsLeft !== 0) return;
-    if (mode === "pomodoro") {
-      setPhase((p) => {
-        const next = p === "work" ? "break" : "work";
-        setSecondsLeft(next === "work" ? POMODORO_WORK : POMODORO_BREAK);
-        return next;
-      });
+    if (!pomodoro || pomoLeft !== 0) return;
+    const p = prefsRef.current;
+    if (phase === "work") {
+      flush(); // bank the finished work block before the break
+      const nextCount = completedWork + 1;
+      const isLong = nextCount % p.sessionsBeforeLongBreak === 0;
+      setCompletedWork(nextCount);
+      setLongBreak(isLong);
+      setPhase("break");
+      setPomoLeft((isLong ? p.longBreakMinutes : p.breakMinutes) * 60);
     } else {
-      setRunning(false); // duration countdown finished
+      setLongBreak(false);
+      setPhase("work");
+      setPomoLeft(p.workMinutes * 60);
     }
-  }, [secondsLeft, mode]);
+    if (p.soundEnabled) playChime();
+    if (!p.autoStartNext) setRunning(false);
+  }, [pomoLeft, pomodoro, phase, completedWork, flush]);
+
+  // periodic flush so a crash loses at most FLUSH_INTERVAL_SECONDS
+  useEffect(() => {
+    if (!running) return;
+    const id = window.setInterval(flush, FLUSH_INTERVAL_SECONDS * 1000);
+    return () => window.clearInterval(id);
+  }, [running, flush]);
 
   return {
-    secondsLeft,
-    phase,
+    tracking,
     running,
-    toggle: () => setRunning((r) => !r),
-    reset: () => {
-      setPhase("work");
-      setSecondsLeft(mode === "pomodoro" ? POMODORO_WORK : durationSeconds);
+    pomodoro,
+    phase,
+    longBreak,
+    phaseLabel: phase === "work" ? "work" : longBreak ? "long break" : "break",
+    sitElapsed,
+    accrued,
+    bigClock: pomodoro ? pomoLeft : sitElapsed,
+    start: () => {
+      setTracking(true);
       setRunning(true);
+      setSitElapsed(0);
+      setPhase("work");
+      setLongBreak(false);
+      setCompletedWork(0);
+      setPomoLeft(prefsRef.current.workMinutes * 60);
     },
+    toggle: () =>
+      setRunning((r) => {
+        if (r) flush();
+        return !r;
+      }),
+    stop: () => {
+      flush();
+      setRunning(false);
+      setTracking(false);
+      setSitElapsed(0);
+      setPhase("work");
+      setLongBreak(false);
+      setCompletedWork(0);
+      setPomoLeft(prefsRef.current.workMinutes * 60);
+    },
+    togglePomodoro: () =>
+      setPomodoro((on) => {
+        setPhase("work");
+        setLongBreak(false);
+        setCompletedWork(0);
+        setPomoLeft(prefsRef.current.workMinutes * 60);
+        return !on;
+      }),
   };
+}
+
+/** A short end-of-interval chime via Web Audio — no asset, gated by the sound
+ *  pref. Silent where Web Audio is unavailable. */
+function playChime(): void {
+  if (typeof window === "undefined") return;
+  const Ctx =
+    window.AudioContext ??
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return;
+  try {
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    osc.start(t);
+    osc.stop(t + 0.42);
+    osc.onended = () => void ctx.close();
+  } catch {
+    /* audio unavailable — silent */
+  }
 }
 
 function formatClock(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
 }

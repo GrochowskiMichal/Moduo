@@ -12,11 +12,11 @@ import {
   CornerDownRight,
   Hourglass,
   Inbox,
+  ListChecks,
   Plus,
   Repeat,
   RotateCcw,
   SkipForward,
-  Sunrise,
   X,
 } from "lucide-react";
 
@@ -35,8 +35,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../components/ui/popover";
+import { PropertyRow } from "../../../components/ui/property-row";
 import { TagChip } from "../../../components/tag-chip";
 import { TagPicker } from "../../../components/tag-picker";
+import { DateField } from "../../../components/ui/date-field";
 import {
   Select,
   SelectContent,
@@ -56,8 +58,6 @@ import {
   formatTimestamp,
   LEVEL_OPTIONS,
   STATUS_LABELS,
-  toDateInputValue,
-  toLocalInputValue,
   wouldCreateCycle,
 } from "../helpers";
 import { activityActorName, activityLine } from "../activity";
@@ -77,7 +77,7 @@ import {
   type RecurrencePreset,
 } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { CompleteToggle } from "./task-row";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
 
 type Props = {
   task: Task | null;
@@ -137,14 +137,16 @@ function DetailBody({
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [duration, setDuration] = useState(task.durationMinutes != null ? String(task.durationMinutes) : "");
-  const [scheduled, setScheduled] = useState(toLocalInputValue(task.scheduledAt));
-  const [due, setDue] = useState(toDateInputValue(task.dueDate));
-
-  // The scheduled time also moves outside this input (skip-occurrence,
-  // recurrence catch-up) — keep the draft in step with the task.
-  useEffect(() => {
-    setScheduled(toLocalInputValue(task.scheduledAt));
-  }, [task.scheduledAt]);
+  // Manual time-spent (minutes) — adjust the persisted total directly. The live
+  // tracker lives only in Focus (locked decision 2026-06-16); here you just
+  // type/correct the value. Stored as seconds; shown/edited in whole minutes.
+  const timeSpentDisplay = task.timeSpentSeconds ? String(Math.round(task.timeSpentSeconds / 60)) : "";
+  // Draft only while the field is focused; otherwise the input mirrors the live
+  // total (which Focus may accrue into in the background). Seeding the draft once
+  // and leaving it would let a bare blur write a stale value over freshly-tracked
+  // seconds — see commitTimeSpent.
+  const [timeSpent, setTimeSpentDraft] = useState(timeSpentDisplay);
+  const [timeSpentEditing, setTimeSpentEditing] = useState(false);
 
   const drifted = isDrifted(task);
   const committed = !!task.committedFor && task.committedFor === api.today;
@@ -173,15 +175,14 @@ function DetailBody({
     const next = Number.isFinite(n) && n > 0 ? n : null;
     if (next !== task.durationMinutes) api.patchTask(task.id, { durationMinutes: next });
   };
-  // Date fields commit on blur (not per segment-change — each patch is a network
-  // upsert) and tolerate clearing: empty input → null.
-  const commitScheduled = () => {
-    const next = scheduled ? new Date(scheduled).toISOString() : null;
-    if (next !== task.scheduledAt) api.patchTask(task.id, { scheduledAt: next });
-  };
-  const commitDue = () => {
-    const next = due ? new Date(`${due}T00:00:00`).toISOString() : null;
-    if (next !== task.dueDate) api.patchTask(task.id, { dueDate: next });
+  const commitTimeSpent = () => {
+    // Only write when the field actually changed — a bare focus/blur must never
+    // truncate the seconds-precise total accrued in Focus to whole minutes. The
+    // draft is re-seeded from the live display on focus, so this equality holds
+    // for an untouched field even after the total changed in the background.
+    if (timeSpent === timeSpentDisplay) return;
+    const n = Number.parseInt(timeSpent, 10);
+    api.setTimeSpent(task.id, Number.isFinite(n) && n > 0 ? n * 60 : 0);
   };
 
   // Recurrence (spec §5d): the current rule mapped back to a preset for the
@@ -209,7 +210,8 @@ function DetailBody({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+      {/* px/py inset so a focused field's ring isn't clipped by this scroll box */}
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1">
         {/* title + complete */}
         <Input
           value={title}
@@ -226,7 +228,7 @@ function DetailBody({
               e.currentTarget.blur();
             }
           }}
-          className="border-transparent bg-transparent px-0 font-display text-base text-foreground"
+          className="border-transparent bg-transparent px-0 font-sans text-md text-foreground"
         />
 
         {/* sub-task of — quiet breadcrumb back to the parent (one level) */}
@@ -253,29 +255,29 @@ function DetailBody({
           </div>
         ) : null}
 
-        {/* description */}
-        <Field label="Description">
-          <Textarea
-            value={description}
-            disabled={!canEdit}
-            placeholder={canEdit ? "Add a description…" : undefined}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={commitDescription}
-            className="min-h-16 text-sm"
-          />
-        </Field>
+        {/* description — label-less under the title (Linear-style) */}
+        <Textarea
+          value={description}
+          disabled={!canEdit}
+          variant="ghost"
+          aria-label="Description"
+          placeholder={canEdit ? "Add a description…" : undefined}
+          onChange={(e) => setDescription(e.target.value)}
+          onBlur={commitDescription}
+          className="min-h-16"
+        />
 
         <Separator />
 
-        {/* properties */}
-        <div className="space-y-3">
-          <Field label="Status">
+        {/* properties — label-left / value-right grid (PropertyRow) */}
+        <div className="space-y-0.5">
+          <PropertyRow label="Status">
             <Select
               value={task.status}
               disabled={!canEdit}
               onValueChange={(v) => api.patchTask(task.id, { status: v as TaskStatus })}
             >
-              <SelectTrigger size="sm" className="w-full font-display">
+              <SelectTrigger size="sm" variant="ghost" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -286,9 +288,9 @@ function DetailBody({
                 ))}
               </SelectContent>
             </Select>
-          </Field>
+          </PropertyRow>
 
-          <Field label="Bucket">
+          <PropertyRow label="Bucket">
             <Select
               value={task.bucketId}
               disabled={!canEdit}
@@ -296,7 +298,7 @@ function DetailBody({
                 if (v !== task.bucketId) api.patchTask(task.id, { bucketId: v });
               }}
             >
-              <SelectTrigger size="sm" className="w-full font-display">
+              <SelectTrigger size="sm" variant="ghost" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -310,92 +312,125 @@ function DetailBody({
                 ))}
               </SelectContent>
             </Select>
-          </Field>
+          </PropertyRow>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Scheduled">
-              <Input
-                type="datetime-local"
-                disabled={!canEdit}
-                value={scheduled}
-                className="h-8"
-                onChange={(e) => setScheduled(e.target.value)}
-                onBlur={commitScheduled}
-              />
-            </Field>
-            <Field label="Due">
-              <Input
-                type="date"
-                disabled={!canEdit}
-                value={due}
-                className="h-8"
-                onChange={(e) => setDue(e.target.value)}
-                onBlur={commitDue}
-              />
-            </Field>
-          </div>
+          <PropertyRow label="Scheduled">
+            <DateField
+              value={task.scheduledAt ? new Date(task.scheduledAt) : null}
+              onChange={(d) => api.patchTask(task.id, { scheduledAt: d ? d.toISOString() : null })}
+              withTime
+              variant="ghost"
+              placeholder="Set time"
+              aria-label="Scheduled time"
+              disabled={!canEdit}
+              className="w-full"
+            />
+          </PropertyRow>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Priority">
-              <LevelSelect
-                value={task.priority}
-                disabled={!canEdit}
-                onChange={(v) => api.patchTask(task.id, { priority: v })}
-              />
-            </Field>
-            <Field label="Energy">
-              <LevelSelect
-                value={task.energyLevel}
-                disabled={!canEdit}
-                onChange={(v) => api.patchTask(task.id, { energyLevel: v })}
-              />
-            </Field>
-          </div>
+          <PropertyRow label="Due">
+            <DateField
+              value={task.dueDate ? new Date(task.dueDate) : null}
+              onChange={(d) => api.patchTask(task.id, { dueDate: d ? d.toISOString() : null })}
+              variant="ghost"
+              placeholder="Set date"
+              aria-label="Due date"
+              disabled={!canEdit}
+              className="w-full"
+            />
+          </PropertyRow>
 
-          <Field label="Duration">
+          <PropertyRow label="Priority">
+            <LevelSelect
+              value={task.priority}
+              disabled={!canEdit}
+              onChange={(v) => api.patchTask(task.id, { priority: v })}
+            />
+          </PropertyRow>
+
+          <PropertyRow label="Energy">
+            <LevelSelect
+              value={task.energyLevel}
+              disabled={!canEdit}
+              onChange={(v) => api.patchTask(task.id, { energyLevel: v })}
+            />
+          </PropertyRow>
+
+          <PropertyRow label="Duration">
             <div className="flex items-center gap-2">
               <Input
                 type="number"
                 min={1}
                 inputMode="numeric"
+                size="sm"
+                variant="ghost"
                 disabled={!canEdit}
                 value={duration}
                 placeholder="—"
                 onChange={(e) => setDuration(e.target.value)}
                 onBlur={commitDuration}
-                className="h-8 w-24"
+                className="w-20"
               />
-              <span className="text-xs text-muted-foreground">minutes</span>
+              <span className="text-xs text-muted-foreground">min est</span>
             </div>
-          </Field>
+          </PropertyRow>
+
+          {/* manual time-spent — adjust the total; the live tracker is Focus-only */}
+          <PropertyRow label="Time spent">
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                size="sm"
+                variant="ghost"
+                disabled={!canEdit}
+                value={timeSpentEditing ? timeSpent : timeSpentDisplay}
+                placeholder="0"
+                aria-label="Time spent in minutes"
+                onFocus={() => {
+                  setTimeSpentDraft(timeSpentDisplay);
+                  setTimeSpentEditing(true);
+                }}
+                onChange={(e) => setTimeSpentDraft(e.target.value)}
+                onBlur={() => {
+                  setTimeSpentEditing(false);
+                  commitTimeSpent();
+                }}
+                className="w-20"
+              />
+              <span className="text-xs text-muted-foreground">min</span>
+            </div>
+          </PropertyRow>
 
           {/* recurrence — the single-row engine (spec §5d): preset vocabulary
               only (no complex picker), plus the skip-occurrence affordance */}
-          <Field label="Repeat">
-            <div className="flex items-center gap-2">
-              <Select
-                value={recurrencePreset}
-                disabled={!canEdit}
-                onValueChange={setRecurrencePreset}
-              >
-                <SelectTrigger size="sm" className="w-full font-display">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Repeat className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                    <SelectValue />
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Doesn’t repeat</SelectItem>
-                  {RECURRENCE_PRESETS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                  {recurrencePreset === "custom" && task.recurrence ? (
-                    <SelectItem value="custom">{recurrenceLabel(task.recurrence)}</SelectItem>
-                  ) : null}
-                </SelectContent>
-              </Select>
+          <PropertyRow label="Repeat">
+            <div className="flex items-center gap-1.5">
+              <div className="min-w-0 flex-1">
+                <Select
+                  value={recurrencePreset}
+                  disabled={!canEdit}
+                  onValueChange={setRecurrencePreset}
+                >
+                  <SelectTrigger size="sm" variant="ghost" className="w-full">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Repeat className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                      <SelectValue />
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Doesn’t repeat</SelectItem>
+                    {RECURRENCE_PRESETS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                    {recurrencePreset === "custom" && task.recurrence ? (
+                      <SelectItem value="custom">{recurrenceLabel(task.recurrence)}</SelectItem>
+                    ) : null}
+                  </SelectContent>
+                </Select>
+              </div>
               {canEdit && task.recurrence && task.status !== "done" && task.status !== "archived" ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -413,8 +448,13 @@ function DetailBody({
                 </Tooltip>
               ) : null}
             </div>
-          </Field>
+          </PropertyRow>
+        </div>
 
+        <Separator />
+
+        {/* collections — full-width labeled sections (lists, not scalar values) */}
+        <div className="space-y-4">
           <Field label="Tags">
             <div className="flex flex-wrap items-center gap-1.5">
               {taskTags.map((t) => (
@@ -422,6 +462,7 @@ function DetailBody({
                   key={t.id}
                   name={t.name}
                   color={t.color}
+                  size="md"
                   onRemove={canEdit ? () => api.toggleTaskTag(task.id, t.id) : undefined}
                 />
               ))}
@@ -473,13 +514,13 @@ function DetailBody({
           {canEdit ? (
             <Button
               type="button"
-              variant={committed ? "secondary" : "outline"}
+              variant={committed ? "secondary" : "default"}
               size="sm"
               className="w-full justify-center"
               onClick={() => api.toggleCommit(task.id)}
             >
-              <Sunrise className="size-3.5" aria-hidden />
-              {committed ? "Remove from today" : "Commit to today"}
+              <ListChecks aria-hidden />
+              {committed ? "Remove from queue" : "Commit to Queue"}
             </Button>
           ) : null}
         </div>
@@ -555,16 +596,18 @@ function ActivitySection({ task, api }: { task: Task; api: TasksModuleApi }) {
 
   return (
     <div className="space-y-1">
-      <span className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         Activity
       </span>
-      <div className="space-y-1 text-2xs text-muted-foreground/80">
+      <div className="space-y-1 text-2xs leading-relaxed text-muted-foreground/80">
         {(entries ?? []).map((entry) => (
-          <div key={entry.id} className="flex items-baseline justify-between gap-2">
-            <span className="min-w-0">
-              {activityActorName(entry, api.currentUserId)} {activityLine(entry)}
+          // One flowing line (action + a quiet inline timestamp) — wraps as a
+          // paragraph instead of a narrow 2-column action that breaks to 3 lines.
+          <div key={entry.id}>
+            {activityActorName(entry, api.currentUserId)} {activityLine(entry)}{" "}
+            <span className="whitespace-nowrap text-muted-foreground/50 tabular-nums">
+              · {formatTimestamp(entry.createdAt)}
             </span>
-            <span className="shrink-0 tabular-nums">{formatTimestamp(entry.createdAt)}</span>
           </div>
         ))}
         {entries && entries.length === 0 ? (
@@ -606,7 +649,7 @@ function SubtasksField({
 
   return (
     <div className="space-y-1">
-      <span className="flex items-baseline gap-1.5 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="flex items-baseline gap-1.5 font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         Subtasks
         {progress && progress.total > 0 ? (
           // quiet n/m mirror — factual, never alarming (principles 4 & 5)
@@ -699,21 +742,21 @@ function SubtaskRow({
             <button
               type="button"
               disabled={!canEdit}
-              aria-label={committed ? "Remove from today" : "Commit to today"}
+              aria-label={committed ? "Remove from queue" : "Add to queue"}
               onClick={() => api.toggleCommit(subtask.id)}
               className={cn(
                 "flex size-5 shrink-0 items-center justify-center rounded transition-opacity",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:opacity-100",
                 committed
-                  ? "text-foreground"
+                  ? "text-primary"
                   : "text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
               )}
             >
-              <Sunrise className="size-3.5" aria-hidden />
+              <ListChecks className="size-3.5" aria-hidden />
             </button>
           </TooltipTrigger>
           <TooltipContent>
-            {committed ? "Committed for today — click to remove" : "Commit to today"}
+            {committed ? "Queued — click to remove" : "Add to queue"}
           </TooltipContent>
         </Tooltip>
       ) : null}
@@ -885,7 +928,7 @@ function DetailEmptyState({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <span className="block font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="block font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
       {children}
@@ -908,7 +951,7 @@ function LevelSelect({
       disabled={disabled}
       onValueChange={(v) => onChange(v === "none" ? null : (v as EnergyLevel | PriorityLevel))}
     >
-      <SelectTrigger size="sm" className="w-full font-display">
+      <SelectTrigger size="sm" variant="ghost" className="w-full">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

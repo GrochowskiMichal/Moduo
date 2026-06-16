@@ -1,14 +1,11 @@
 use std::sync::Mutex;
 
-use anyhow::Context;
 use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine as _};
 use ed25519_dalek::SigningKey;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::store_redb::RedbStore;
-
-const KEYCHAIN_ACCOUNT: &str = "device_private_key";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,14 +16,12 @@ pub struct LocalIdentity {
 }
 
 pub struct AclManager {
-    keychain_service: String,
     cache: Mutex<Option<LocalIdentity>>,
 }
 
 impl AclManager {
-    pub fn new(keychain_service: String) -> Self {
+    pub fn new() -> Self {
         Self {
-            keychain_service,
             cache: Mutex::new(None),
         }
     }
@@ -88,14 +83,7 @@ impl AclManager {
             }
         }
 
-        // New or changed identity — persist private key and public identity
-        crate::keychain::set_secret(
-            &self.keychain_service,
-            KEYCHAIN_ACCOUNT,
-            &STANDARD_NO_PAD.encode(signing_key.to_bytes()),
-        )
-        .context("persist derived private key")?;
-
+        // New or changed identity — persist public identity
         let identity = LocalIdentity {
             device_id: account_id,
             public_key: STANDARD_NO_PAD.encode(public_key_bytes),
@@ -121,13 +109,6 @@ impl AclManager {
             public_key: STANDARD_NO_PAD.encode(public_key),
             key_rotated_at: chrono::Utc::now().to_rfc3339(),
         };
-
-        crate::keychain::set_secret(
-            &self.keychain_service,
-            KEYCHAIN_ACCOUNT,
-            &STANDARD_NO_PAD.encode(private_key),
-        )
-        .context("persist private key")?;
 
         store.put_device_identity("current", &serde_json::to_value(&identity)?)?;
         *self

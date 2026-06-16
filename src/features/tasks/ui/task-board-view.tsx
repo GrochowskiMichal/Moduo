@@ -3,13 +3,16 @@ import { createPortal } from "react-dom";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  closestCorners,
   useDroppable,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 
 import {
   Select,
@@ -19,9 +22,11 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
-import { endPosition, nestedSubtaskIds, STATUS_LABELS } from "../helpers";
+import { nestedSubtaskIds, STATUS_LABELS } from "../helpers";
+import { positionForReorder } from "../reorder";
 import type { Bucket, Task, TaskStatus } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
 import { CardBody, TaskCard } from "./task-card";
@@ -114,31 +119,55 @@ export function TaskBoardView({
     }));
   }, [groupDim, boardTasks, buckets, inbox, bucketNameById]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-  );
+  const sensors = useTaskDndSensors();
 
   const onDragStart = (e: DragStartEvent) => {
     if (!canEdit) return;
     setActiveId(String(e.active.id));
   };
 
+  // Resolve a drop into a `position` (Lexorank slot) plus the column field that
+  // changed — reorder within a column, or move (status/bucket) across columns.
+  // Everything is computed on drop from the over target (a sibling card, or the
+  // column itself for an end-drop); within-column shifts animate via the
+  // SortableContext (no fragile mid-drag cross-container state).
   const onDragEnd = (e: DragEndEvent) => {
     setActiveId(null);
-    if (!canEdit || !e.over) return;
-    const overId = String(e.over.id);
-    if (!overId.startsWith("col:")) return;
-    const task = tasks.find((t) => t.id === String(e.active.id));
-    if (!task) return;
-    const value = overId.slice(overId.lastIndexOf(":") + 1);
+    const { active, over } = e;
+    if (!canEdit || !over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
 
-    if (groupDim === "status" && task.status !== value) {
-      const dest = tasks.filter((t) => t.status === value);
-      api.patchTask(task.id, { status: value as TaskStatus, position: endPosition(dest) });
-    } else if (groupDim === "bucket" && task.bucketId !== value) {
-      const dest = tasks.filter((t) => t.bucketId === value);
-      api.patchTask(task.id, { bucketId: value, position: endPosition(dest) });
+    const task = tasks.find((t) => t.id === activeId);
+    const sourceCol = columns.find((c) => c.tasks.some((t) => t.id === activeId));
+    const overIsColumn = overId.startsWith("col:");
+    const destCol = overIsColumn
+      ? columns.find((c) => c.id === overId)
+      : columns.find((c) => c.tasks.some((t) => t.id === overId));
+    if (!task || !sourceCol || !destCol) return;
+
+    if (sourceCol.id === destCol.id) {
+      // within-column reorder
+      if (overIsColumn) return; // dropped on own column gutter — no move
+      const ids = sourceCol.tasks.map((t) => t.id);
+      const from = ids.indexOf(activeId);
+      const to = ids.indexOf(overId);
+      if (from < 0 || to < 0 || from === to) return;
+      const reordered = arrayMove(sourceCol.tasks, from, to);
+      api.patchTask(activeId, { position: positionForReorder(reordered, to) });
+      return;
     }
+
+    // cross-column move — insert before the hovered card, or at the column end
+    const destTasks = destCol.tasks; // excludes the active card (other column)
+    const overIdx = overIsColumn ? destTasks.length : destTasks.findIndex((t) => t.id === overId);
+    const at = Math.max(0, Math.min(destTasks.length, overIdx < 0 ? destTasks.length : overIdx));
+    const ordered = [...destTasks.slice(0, at), task, ...destTasks.slice(at)];
+    const patch: Partial<Task> = { position: positionForReorder(ordered, at) };
+    if (destCol.dim === "status") patch.status = destCol.value as TaskStatus;
+    else patch.bucketId = destCol.value;
+    api.patchTask(activeId, patch);
   };
 
   const activeTask = activeId ? tasks.find((t) => t.id === activeId) ?? null : null;
@@ -146,9 +175,9 @@ export function TaskBoardView({
   const groupControl =
     selection === "all" ? (
       <div className="flex items-center gap-1.5">
-        <span className="font-display text-xs text-muted-foreground">Columns</span>
+        <span className="font-sans text-xs text-muted-foreground">Columns</span>
         <Select value={boardGroupBy} onValueChange={(v) => onBoardGroupByChange(v as BoardGroupBy)}>
-          <SelectTrigger size="sm" className="w-28 font-display">
+          <SelectTrigger size="sm" variant="ghost" className="w-28">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -172,7 +201,13 @@ export function TaskBoardView({
         onRequestCapture={onRequestCapture}
       />
 
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => setActiveId(null)}
+      >
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
           {columns.map((col) => (
             <BoardColumn
@@ -193,7 +228,7 @@ export function TaskBoardView({
 
         {typeof document !== "undefined"
           ? createPortal(
-              <DragOverlay dropAnimation={null}>
+              <DragOverlay>
                 {activeTask ? (
                   <div className="w-72 rounded-md border border-border bg-background px-2 py-1.5 shadow-lg">
                     <CardBody
@@ -243,7 +278,7 @@ function BoardColumn({
   return (
     <section className="flex h-full w-72 shrink-0 flex-col">
       <header className="mb-2 flex items-center gap-1.5 px-1">
-        <span className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
           {column.label}
         </span>
         <span className="font-sans text-xs tabular-nums text-muted-foreground/70">
@@ -253,31 +288,38 @@ function BoardColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md p-1 transition-colors",
-          isOver ? "bg-accent/50 ring-1 ring-ring/40" : "bg-muted/30",
+          // Linear-quiet: columns are transparent on the canvas; cards carry the
+          // elevation (bg-card + hairline). Only a drag-over state lights up.
+          "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md p-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
+          isOver ? "bg-accent/40 ring-1 ring-ring/40" : "bg-transparent",
         )}
       >
-        {column.tasks.length === 0 ? (
-          <p className="px-2 py-6 text-center text-xs text-muted-foreground/50">
-            {canEdit ? "Drop tasks here" : "Empty"}
-          </p>
-        ) : (
-          column.tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              bucketName={bucketNameById(task.bucketId)}
-              buckets={buckets}
-              inboxId={inbox?.id ?? null}
-              showBucket={showBucketTag}
-              canEdit={canEdit}
-              selected={task.id === selectedTaskId}
-              onSelect={() => onSelectTask(task.id)}
-              onTagFilter={onTagFilter}
-              api={api}
-            />
-          ))
-        )}
+        <SortableContext
+          items={column.tasks.map((t) => t.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {column.tasks.length === 0 ? (
+            <p className="px-2 py-6 text-center text-xs text-muted-foreground/50">
+              {canEdit ? "Drop tasks here" : "Empty"}
+            </p>
+          ) : (
+            column.tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                bucketName={bucketNameById(task.bucketId)}
+                buckets={buckets}
+                inboxId={inbox?.id ?? null}
+                showBucket={showBucketTag}
+                canEdit={canEdit}
+                selected={task.id === selectedTaskId}
+                onSelect={() => onSelectTask(task.id)}
+                onTagFilter={onTagFilter}
+                api={api}
+              />
+            ))
+          )}
+        </SortableContext>
       </div>
     </section>
   );

@@ -6,6 +6,172 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Tasks follow-ups c4 — drag-to-subtask, q shortcut, live-verify (2026-06-16)
+
+Branch `claude/awesome-mayer-57a503` (Opus), continuing CONTINUATION-3's open
+work. Two commits; all five gates green (typecheck · `test` now **110**, +6
+`canNestUnder` cases · `lint:tw` · `lint:css` · `build:web`). **Live-verified
+end-to-end** on the hosted test account — the first click-test of the DnD work.
+
+**Drag-a-task-onto-another → subtask** (the last unbuilt piece of CONTINUATION-2
+#1). New `NestableTask` in `ui/dnd/task-dnd.tsx` (draggable + droppable on one
+node, no reordering) + a `sortable:false` `useTaskDndSensors` variant (nesting
+has no SortableContext → default keyboard coordinate getter). The flat
+single-bucket List (`groupBy === "none"`, not the Queue, not "All") gains a
+`nestable` mode: childless top-level rows expose the grip + an `onto-task`
+droppable; dropping one onto another calls `api.setTaskParent` (one-level rule
+enforced there + the DB trigger). Eligibility is a shared, unit-tested pure
+helper `canNestUnder` (childless active, top-level target, not a no-op). Only
+valid targets highlight; a title-chip `DragOverlay` follows the cursor; the new
+parent auto-expands on drop. `DragHandle` reserves its gutter when disabled so a
+parent row (no grip) stays column-aligned. Board reorder unchanged.
+
+**`q` queue shortcut.** The List `q` key (un)queues the selected task (Round D's
+queue key), replacing the stale `t` binding from when the queue was "Today".
+
+**Visual suite.** Added `property-row` (the detail-panel grid primitive) to
+`tests/visual/primitives.spec.ts`. PNG baselines are *not* generated/committed
+here: they're platform-suffixed (`*-visual-darwin.png`), the static-checks CI
+workflow doesn't run the visual project, and the spec's own note leaves baseline
+capture to an intentional human `--update-snapshots` run.
+
+**Live verification** (web, worktree rsbuild `:8097` + local Dia browser + hosted
+test acct; session pre-existing, no credential entry): no console errors
+throughout. The nest branch mounts; grips render on exactly the 3 childless Inbox
+rows (none on the "Verify…" parent). A real dnd-kit drag — synthetic pointer
+events with per-frame delays (synchronous dispatch is dropped by dnd-kit's rAF
+collision loop, which is why earlier sessions called drag "unsimulable") — nested
+"Untagged filter-test task" under "Session 8 ops probe" (auto-expand + "0/1"
+mirror); detach (context menu) restored it; `q` toggled the queue both ways; and
+the detail panel renders as the PropertyRow grid + Time-spent row (c3,
+previously unverified). Demo data restored — a commit/uncommit pair was added to
+Session 8's activity trail as a side effect (see [[project-test-account-hosted]]).
+
+**Remaining:** visual-baseline PNG generation (human/canonical-env); future
+additive DnD targets (drag onto a sidebar calendar → schedule; task list as a
+drag *source*) once those surfaces exist. See CONTINUATION-4.
+
+---
+
+## Tasks follow-ups c3 — DnD layer, detail panel, Pomodoro prefs (2026-06-16)
+
+Branch `claude/suspicious-golick-3f4e80` off `cca9e11` (Opus). Continued the
+Session-11 follow-up backlog ([.design/tasks-polish/CONTINUATION-2.md](../.design/tasks-polish/CONTINUATION-2.md));
+full handoff in **CONTINUATION-3.md**. Four chunks, all five gates green
+(typecheck · `test` now **104**, +13 reorder-math · `lint:tw` · `lint:css` ·
+`build:web`).
+
+**Reusable DnD layer + Queue reorder.** New `src/features/tasks/ui/dnd/task-dnd.tsx`
+— typed `taskDrag` payload, extensible `TaskDropTarget` union (`onto-task` /
+`column` now; calendar-slot additive), shared pointer+keyboard sensors, a
+`SortableTask` wrapper + `DragHandle` grip. Pure ordering math + tests in
+`reorder.{ts,test.ts}`. The **Queue** is a vertical sortable; reorder persists
+`commit_order` via `api.reorderQueue` (raw save path, no intent op — a
+high-frequency personal ordering, same shape as the board's `position` drag).
+Focus dropped the interim **"Do last"** link (Skip + Done only); `doLast` removed.
+
+**Board within-column reorder.** Cards → multi-container sortable (per-column
+`SortableContext`). Within-column drag reorders (neighbours animate apart =
+insertion indicator); cross-column move now slots `position` at the drop point
+instead of always end. DragOverlay regained its drop animation. Move/reorder
+resolve on drop from the over target via `positionForReorder` — no fragile
+mid-drag cross-container state.
+
+**Detail panel = PropertyRow grid.** New `PropertyRow` primitive
+(`src/components/ui/`, label-left/value-right, `align="start"` for multi-line,
+with a story). `task-detail-panel.tsx` rebuilt off it: scalar props are an
+aligned grid, description label-less under the title, collections stay
+full-width. Added a **manual "Time spent" row** (minutes → `setTimeSpent`; the
+live tracker stays Focus-only per the 2026-06-16 lock; a bare blur never
+truncates the seconds-precise total).
+
+**Pomodoro prefs → Settings → Focus.** New `src/lib/focus-prefs.ts` (work /
+short break / long break / rhythm / auto-start / sound; `appearance.ts`
+persistence shape) + a Settings → Focus section. `useFocusTimer` reads them:
+long-break rhythm, auto-start-next (or pause-to-resume), Web-Audio chime. The
+card ⋯ popover edits the same persisted work/break values. Timer still
+strictly opt-in.
+
+**Deferred.** Drag-a-task-onto-another → subtask (foundation ready: `onto-task`
+variant + `DragHandle`; the per-bucket List's parent/child/group rendering makes
+a clean nesting surface the riskiest, least-verifiable piece — see CONTINUATION-3
+for the planned `nestable` approach). **Not live-verified this session** (auth-
+gated UI, no test password on hand, drag doesn't simulate reliably) — gates +
+unit tests + the PropertyRow story stand in; live-verify is step 1 next session.
+
+---
+
+## Improvement-plan Session 11 — Tasks UI/UX rebuild + shared primitives (2026-06-13)
+
+Branch `t/maciej/session11-tasks-ui` off `maciej` (Opus). A maximum-rigor
+UI/UX pass on Tasks, building a **reusable primitive + motion layer** (Notes is
+the canary, next session). Decisions captured in
+[.design/tasks-polish/DECISIONS.md](../.design/tasks-polish/DECISIONS.md); brief +
+audits in `.design/tasks-polish/`. **One PR; primitives shared from day one.**
+
+**The "huge on web" mystery — RESOLVED: browser per-site zoom**, not fonts/
+density. `screen.width=1728` ⇒ base dpr 2.0 but the tab reported dpr 2.5 (= 125%
+Chrome/Dia page zoom on the Moduo origin); ⌘0 fixed it. Measured sizes were
+already Linear-grade. (Two earlier theories — "Inter wider", "display-role font"
+— were wrong; Geist≈Inter within ~2%.)
+
+**Foundation (tokens/global).** Replaced the `* { font-family: "Pilat Extended" }`
+override with `var(--font-body)` (unclassed text → Geist; `font-display` still
+wins) — a real bypass fix, not the zoom cause. Density default KEPT `comfortable`.
+Added a density-scaling **icon-size ladder** (`--icon-xs/-sm/-/-lg` + `@theme`
+`--spacing-icon-*` → `size-icon-*`). Motion: `--motion-fade` (kept ~80ms under
+reduced-motion) + `--blur-veil` (fade+blur motif; →0 reduced); reduced-motion now
+zeroes transforms but keeps fades. `--selected-bg`/`--selected-border` selection
+recipe (accent-mix, recolors per data-accent).
+
+**Shared primitives (`src/components/ui/`, with stories).** **FieldShell** cva
+(`filled`/`ghost`/`bare`, modern offset-less ring) composed by Input(+`size`/
+`variant`)/Textarea/SelectTrigger, all bumped to 14px. **Button** retuned (14px
+across rungs, icon ladder, modern ring). **SegmentedControl** (radix ToggleGroup;
+replaces 3 bespoke toggles: view switch, rail Plan/Queue, execute timer).
+**IconButton** (required tooltip+label). **Toolbar** (aligned control row).
+**Calendar** + **DateField** (react-day-picker@10 + date-fns; token-routed;
+replaces 4 native date inputs; presets + withTime). **CompleteToggle** (promoted;
+spring check-pop). **EmptyState** (promoted). **TagChip v2** (colored `#`, no
+dot/pill).
+
+**Surfaces.** Toolbar aligned (controls 26px, was 26/26/**32**/26). Task row: no
+hover reflow (schedule/due reserve+fade), title **body/15**, faint accent-tint
+selection, always-visible quiet **queue toggle** (replaces right-click-only),
+subtask indent guide. Rail eyebrows display→body. Detail panel: DateField + ghost
+property selects + `bg-primary` "Commit to Queue". Board: **Linear-quiet** (cards
+`bg-card`+hairline on transparent columns — fixes inverted elevation; drag grip
+removed). Capture modal: chromeless, 20px display title / body description,
+DateField, dead attachment removed. **"Today" → "Queue"** rename app-wide (UI
+only; `committed_for`/internal `execute` model unchanged). Execute card: compact
+timer (body+tabular), x/y label back at the bottom, empty "Linked" placeholder
+removed.
+
+**Accent policy (modern under all 8 accents — contrast verified AA earlier).**
+Accent only on: one primary action per pane, current selection (bar+tint), focus
+ring, the quiet done-check. Segmented toggles + priority/energy stay neutral.
+
+**Verified:** typecheck ✓, vitest **91/91** ✓, lint:tw ✓, lint:css ✓, build:web ✓.
+Live (web, worktree rsbuild `:8099` + Chrome MCP Browser 1 + hosted test acct):
+rename, board grip removal, **DateField calendar (June 2026 + presets + time,
+real-click)**, selection tint, no console errors. (Note: synthetic `.click()`
+won't open Radix popovers — used a real extension click.)
+
+**Deferred / gated:**
+- **Time-tracking (Wave 4)** — Round D chose "persisted total + sessions", which
+  needs a **hosted Supabase migration** (`task_time_entries` + `tasks_op_track_time`
+  intent-op) + runtime + UI. That migration is an irreversible shared-DB change, so
+  it's **held for Maciej's explicit go-ahead** and split to a follow-up. The Execute
+  card is restyled; the Time-spent mode + estimate-chip + Pomodoro-settings land then.
+- **Detail-panel full PropertyRow** inline label→value grid (kept the `Field`
+  stacked layout, now quiet via ghost controls).
+- **Group control** = ghost Select (chose over a separate DropdownMenu-radio).
+- **Visual-test baselines** for the new primitives (need a Storybook+Playwright run).
+- `q` keyboard shortcut for queue; meta-icon density-scaling in rows.
+- **Notes canary (Session 12):** adopt these primitives, prove portability.
+
+---
+
 ## Improvement-plan Session 10 — Theme shades + tokenization deepening (2026-06-13)
 
 Branch `t/maciej/session10-theme-shades` off `maciej` (Fable). Sessions 8/9

@@ -179,7 +179,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   }, [scopeTasksAll, liveFilterTagIds, api.tagsByTask]);
 
   const scopeTitle =
-    isAll ? "All" : selection === "today" ? "Today" : selection === "inbox" ? "Inbox" : bucketNameById(selection);
+    isAll ? "All" : selection === "today" ? "Queue" : selection === "inbox" ? "Inbox" : bucketNameById(selection);
 
   // The commit queue is inherently ordered, so Today List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : groupBy;
@@ -371,7 +371,11 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         blockedNoteFor={blockedNoteFor}
         onMarkDone={api.markDone}
         onSkip={api.rescheduleFromToday}
-        onDoLast={api.doLast}
+        onAddTime={api.addTimeSpent}
+        onSetTime={api.setTimeSpent}
+        tagsFor={(id) => api.tagsByTask.get(id) ?? []}
+        subtasksFor={(id) => api.subtasksByParent.get(id) ?? []}
+        onToggleSubtask={api.toggleDone}
         onExit={exitExecute}
       />
     ) : view === "board" ? (
@@ -385,6 +389,9 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         {...sharedViewProps}
         groupBy={effectiveGroupBy}
         onGroupByChange={setGroupBy}
+        reorderable={selection === "today"}
+        onReorder={api.reorderQueue}
+        nestable={selection !== "today" && selection !== "all"}
       />
     );
 

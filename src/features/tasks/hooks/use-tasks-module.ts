@@ -27,6 +27,7 @@ import {
   recurrenceOnStatusChange,
   skipOccurrencePatch,
 } from "../recurrence-engine";
+import { commitOrderUpdates } from "../reorder";
 import {
   INBOX_BUCKET_NAME,
   isDrifted,
@@ -466,6 +467,30 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   );
 
   /**
+   * Lightweight time-tracking: fold an elapsed work delta (seconds) into the
+   * task's persisted total through the normal save path. Reads the current
+   * total from the source of truth so repeated flushes accumulate cleanly.
+   */
+  const addTimeSpent = useCallback(
+    (id: string, deltaSeconds: number) => {
+      if (!Number.isFinite(deltaSeconds) || deltaSeconds < 1) return;
+      const t = bundle.tasks.find((x) => x.id === id);
+      if (!t) return;
+      patchTask(id, { timeSpentSeconds: Math.max(0, (t.timeSpentSeconds ?? 0) + Math.round(deltaSeconds)) });
+    },
+    [bundle.tasks, patchTask],
+  );
+
+  /** Set the tracked total to an absolute value (manual "edit the value"). */
+  const setTimeSpent = useCallback(
+    (id: string, seconds: number) => {
+      if (!Number.isFinite(seconds)) return;
+      patchTask(id, { timeSpentSeconds: Math.max(0, Math.round(seconds)) });
+    },
+    [patchTask],
+  );
+
+  /**
    * Push a scheduled task's time `days` into the future, preserving its clock
    * time. Clears the drift (drift = scheduled time in the past). No-op if the
    * task has no scheduled time.
@@ -562,15 +587,21 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [bundle.tasks, applyOp, runtime, workspaceId],
   );
 
-  /** Do last: send it to the end of today's queue (the commit op reorders). */
-  const doLast = useCallback(
-    (id: string) => {
-      const maxOrder = committedTasks.reduce((m, t) => Math.max(m, t.commitOrder ?? 0), 0);
-      applyOp(id, { commitOrder: maxOrder + 1 }, () =>
-        runtime!.tasks.opCommit({ workspaceId: workspaceId!, taskId: id, forDate: today }),
-      );
+  /**
+   * Reorder the committed queue to `orderedIds` (drag-to-reorder). Renumbers the
+   * affected rows' commitOrder through the normal save path — only the rows whose
+   * rank changed are written. Queue order rides the lightweight `commit_order`
+   * column rather than an intent op: a high-frequency, low-stakes personal
+   * ordering, the same call shape as the board's `position` drag.
+   */
+  const reorderQueue = useCallback(
+    (orderedIds: string[]) => {
+      if (!canEdit) return;
+      for (const u of commitOrderUpdates(orderedIds, committedTasks)) {
+        patchTask(u.id, { commitOrder: u.commitOrder });
+      }
     },
-    [committedTasks, applyOp, runtime, workspaceId, today],
+    [canEdit, committedTasks, patchTask],
   );
 
   const deleteTask = useCallback(
@@ -1050,12 +1081,14 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     toggleDone,
     markDone,
     archiveTask,
+    addTimeSpent,
+    setTimeSpent,
     rescheduleScheduledAt,
     unscheduleTask,
     toggleCommit,
     rescheduleFromToday,
     skipOccurrence,
-    doLast,
+    reorderQueue,
     deleteTask,
     loadActivity,
     activityStamp,

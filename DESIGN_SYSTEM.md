@@ -75,8 +75,7 @@ User preferences map to `data-*` attributes on `<html>`. The cascade does the wo
 | `data-accent` | `pink`, `violet`, `blue`, `green`, `amber`, `red`, `teal`, `mono` | `pink` |
 | `data-density` | `comfortable`, `compact`, `dense` | `comfortable` |
 | `data-radius` | `sharp`, `soft`, `round` | `soft` |
-| `data-font-display` | `pilat`, `geist`, `cal`, `fraunces` | `pilat` |
-| `data-font-body` | `geist`, `inter`, `serif`, `mono` | `geist` |
+| `data-font` | `geist`, `inter`, `pilat`, `cal`, `fraunces`, `serif`, `mono` | `geist` |
 | `data-text-size` | `small`, `normal`, `large` | `normal` |
 
 The Settings page is the UI for setting these. The values persist to Tauri-backed local storage and are applied on app launch before first paint.
@@ -242,6 +241,45 @@ A Stylelint config will land alongside the redesign work. It enforces:
 - `font-family-no-missing-generic-family-keyword` — every font stack must end in a generic family.
 
 Until the config lands, the rules are honour-system. Claude reads them; humans review them.
+
+## Control / type / icon ladders + primitives (Session 11)
+
+Established during the Tasks rebuild; **reusable across modules** (Notes adopts next).
+
+- **Control rung = a fixed bundle** so any two controls on a row stack pixel-perfect:
+  height (`--ctrl-h-sm`/`--ctrl-h`/`--ctrl-h-lg`), font (`font-display text-base`
+  — 14px across rungs; size changes height/padding only, never the font size),
+  icon (`size-icon-sm`), radius `rounded-md`. Put a control row in **`Toolbar`**;
+  keep every child on one rung.
+- **Type roles:** chrome (headings, control labels, button text, **section
+  eyebrows**) = `font-display`; **content** (task/note titles, select *values*,
+  descriptions, metadata, numerics) = `font-sans` (body). Numerics add
+  `tabular-nums`. Eyebrows are body at `text-2xs` (the wide display face read too
+  large at 11px). Titles render as **content → body**, not display.
+- **Icon-size ladder** (density-scaling): `--icon-xs/-sm/-/-lg` → `size-icon-xs`
+  … `size-icon-lg`. Bind control svg defaults to the rung; don't hardcode `size-4`.
+- **Fields:** `FieldShell` cva drives Input/Textarea/SelectTrigger. Variants
+  `filled` (default well) · **`ghost`** (borderless-until-focus — detail-panel /
+  inline) · `bare` (plain text). Focus = offset-less `ring-2 ring-ring/50`.
+- **New primitives in `src/components/ui/`:** `SegmentedControl` (the one toggle —
+  no bespoke segmented controls), `IconButton` (required tooltip+label),
+  `Toolbar`, `Calendar` + `DateField` (no native `<input type=date>`),
+  `CompleteToggle`, `EmptyState`. `TagChip` v2 = colored `#` + neutral name (no
+  dot/pill); active filter chip = full-hue.
+
+### Motion (Session 11)
+Restrained + a **fade/micro-blur** signature. Tokens are load-bearing — no raw
+ms/cubic. `--motion-fade` for opacity/color (survives reduced-motion at ~80ms);
+`--motion-*`/`--ease-*` for movement (zeroed under reduced-motion). `--blur-veil`
+for overlay/popover/mode-shift fade+blur-in (→0 reduced). One sanctioned delight:
+the check-off `.check-pop`. Reveal-on-hover **reserves space + fades opacity**
+(never `hidden`→`flex`, which reflows). No spring-heavy / sparkle / glow motion.
+
+### Accent-usage policy (Session 11)
+Accent (`--primary`/`--ring`) appears ONLY on: (1) one primary action per surface
+(`bg-primary` — never two competing); (2) current selection (the `--selected-bg`
+tint + bar/border recipe); (3) the focus ring; (4) the quiet done-check. Segmented
+toggles, priority/energy, and chrome stay **neutral**. Verified AA on all 8 accents.
 
 ## Open questions / future work
 

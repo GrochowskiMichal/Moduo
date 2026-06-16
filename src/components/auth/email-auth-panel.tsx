@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, CircleHelp, CircleUserRound, Mail, UserPlus } from "lucide-react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/src/components/ui/avatar";
-import { Button } from "@/src/components/ui/button";
-import { Input } from "@/src/components/ui/input";
-import { ModuoMark } from "@/src/components/ui/moduo-mark";
-import { useAuth } from "@/src/providers/auth-provider";
-import type { AuthMnemonic } from "@/src/lib/runtime";
-import { notifyProfileUpdated, writeStoredAvatar } from "@/src/features/profile/profile-storage";
-import { cn } from "@/src/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ModuoMark } from "@/components/ui/moduo-mark";
+import { useAuth } from "@/providers/auth-provider";
+import type { AuthMnemonic } from "@/lib/runtime";
+import { notifyProfileUpdated, writeStoredAvatar } from "@/features/profile/profile-storage";
+import { cn } from "@/lib/utils";
 
 import defaultProfilePic from "../../../assets/icon.png";
 

@@ -127,8 +127,13 @@ body,
   font-display: swap;
 }
 
+/* Default font for all elements = the user's chosen typeface (Geist by default,
+   set via [data-font] → --font-ui → --font-body). The `font-display` utility
+   resolves to the same face now (one family everywhere; hierarchy is
+   weight/size). This is the token-routed replacement for the old hardcoded
+   "Pilat Extended" override, which forced one face onto everything. */
 * {
-  font-family: "Pilat Extended", "Inter", "Inter_400Regular", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-body, "Geist", "Inter", system-ui, -apple-system, sans-serif);
 }
 
 .auth-hero-title {
@@ -186,6 +191,103 @@ body,
 
 .tag-dot {
   background-color: var(--label);
+}
+
+/* TagChip v2: the "#" glyph carries the hue, the name stays neutral — a
+   smaller, borderless chip (no dot, no pill). `.tag-chip-active` hues the whole
+   label (the one fully-colored treatment, reserved for active filter chips). */
+.tag-hash {
+  color: var(--label);
+}
+
+.tag-chip-active {
+  color: var(--label);
+}
+
+/* ═══ Check-off "pop" — the one sanctioned delight moment (CompleteToggle).
+   The check springs in when a task is marked done. Reduced-motion: no pop,
+   the check just appears (color still transitions). ═══ */
+@keyframes check-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.check-pop {
+  animation: check-pop var(--motion-base) var(--ease-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check-pop {
+    animation: none;
+  }
+}
+
+/* Quiet "live" pulse for the running time-tracking dot. Gentle opacity only
+   (no transform/accent), so it reads as active without shouting. */
+@keyframes track-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.track-pulse {
+  animation: track-pulse 1.8s var(--ease-out) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track-pulse {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+/* ═══ Fade + micro-blur motif for floating surfaces (popovers, dialogs, menus,
+   selects). Enter/exit fade with a small blur-in. Uses --motion-fade so a soft
+   fade survives reduced-motion; --blur-veil is 0 under reduced-motion (no blur),
+   so the effect degrades to a plain fade. ═══ */
+@keyframes fx-overlay-in {
+  from {
+    opacity: 0;
+    filter: blur(var(--blur-veil));
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes fx-overlay-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(var(--blur-veil));
+  }
+}
+
+.fx-overlay[data-state="open"] {
+  animation: fx-overlay-in var(--motion-fade) var(--ease-out);
+}
+
+.fx-overlay[data-state="closed"] {
+  animation: fx-overlay-out var(--motion-fade) var(--ease-out);
 }
 
 /* ═══ Notes: Lexical theme — token-driven ═══ */

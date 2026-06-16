@@ -6,7 +6,6 @@ import {
   CornerDownLeft,
   Flag,
   Inbox,
-  Paperclip,
   Repeat,
   Timer,
   X,
@@ -15,6 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
+import { Calendar } from "../../../components/ui/calendar";
 import {
   Dialog,
   DialogClose,
@@ -42,8 +42,6 @@ import { cn } from "../../../lib/utils";
 import {
   ENERGY_LABELS,
   PRIORITY_LABELS,
-  toDateInputValue,
-  toLocalInputValue,
   type NewTaskFields,
 } from "../helpers";
 import {
@@ -170,18 +168,20 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
         showCloseButton={false}
         className="top-[12%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl"
       >
-        <DialogHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border px-4 py-2.5 text-left">
-          <DialogTitle className="font-display text-sm font-medium text-foreground">New task</DialogTitle>
-          <DialogDescription className="sr-only">
+        {/* Chromeless, Linear-style: no "New task" band — the title input is the
+            top. Header stays for a11y (sr-only); close floats top-right. */}
+        <DialogHeader className="sr-only">
+          <DialogTitle>New task</DialogTitle>
+          <DialogDescription>
             Type a task. Dates and recurrence parse automatically; set any property below.
           </DialogDescription>
-          <DialogClose className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <X className="size-4" aria-hidden />
-            <span className="sr-only">Close</span>
-          </DialogClose>
         </DialogHeader>
+        <DialogClose className="absolute top-3 right-3 z-10 flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <X className="size-4" aria-hidden />
+          <span className="sr-only">Close</span>
+        </DialogClose>
 
-        <div className="flex flex-col gap-2 px-4 pt-3 pb-1">
+        <div className="flex flex-col gap-2 px-4 pt-5 pb-1">
           <Input
             ref={inputRef}
             value={raw}
@@ -193,7 +193,7 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
                 submit();
               }
             }}
-            className="h-9 border-0 bg-transparent px-0 font-display text-lg shadow-none focus-visible:ring-0"
+            className="h-9 border-0 bg-transparent px-0 font-display text-xl shadow-none focus-visible:ring-0"
           />
 
           <Textarea
@@ -201,7 +201,7 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
             placeholder="Add description…"
             onChange={(e) => setDescription(e.target.value)}
             onKeyDown={onKeyDownSubmit}
-            className="min-h-9 resize-none border-0 bg-transparent px-0 font-display text-sm shadow-none focus-visible:ring-0"
+            className="min-h-9 resize-none border-0 bg-transparent px-0 font-sans text-base shadow-none focus-visible:ring-0"
             rows={2}
           />
 
@@ -246,23 +246,40 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
             ))}
           </ListPill>
 
-          {/* Scheduled */}
+          {/* Scheduled — same pill as the others; token Calendar + time inside */}
           <InputPill
             active={!!effScheduled}
             icon={<Clock className="size-3.5" />}
             label={effScheduled ? scheduledLabel(effScheduled) : "Schedule"}
             onClear={effScheduled ? () => setScheduled({ manual: true, value: null }) : undefined}
           >
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Scheduled time</label>
-            <Input
-              type="datetime-local"
-              autoFocus
-              defaultValue={toLocalInputValue(effScheduled)}
-              className="h-8"
-              onChange={(e) =>
-                setScheduled({ manual: true, value: e.target.value ? new Date(e.target.value).toISOString() : null })
-              }
+            <Calendar
+              mode="single"
+              selected={effScheduled ? new Date(effScheduled) : undefined}
+              onSelect={(d) => {
+                if (!d) return setScheduled({ manual: true, value: null });
+                const base = effScheduled ? new Date(effScheduled) : null;
+                const next = new Date(d);
+                next.setHours(base ? base.getHours() : 9, base ? base.getMinutes() : 0, 0, 0);
+                setScheduled({ manual: true, value: next.toISOString() });
+              }}
             />
+            <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
+              <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
+              <Input
+                type="time"
+                size="sm"
+                className="w-auto"
+                value={effScheduled ? new Date(effScheduled).toTimeString().slice(0, 5) : "09:00"}
+                onChange={(e) => {
+                  const [h, m] = e.target.value.split(":").map(Number);
+                  const base = effScheduled ? new Date(effScheduled) : new Date();
+                  base.setHours(h || 0, m || 0, 0, 0);
+                  setScheduled({ manual: true, value: base.toISOString() });
+                }}
+                aria-label="Scheduled time"
+              />
+            </div>
           </InputPill>
 
           {/* Due */}
@@ -272,14 +289,14 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
             label={effDue ? `Due ${dateLabel(effDue)}` : "Due"}
             onClear={effDue ? () => setDue({ manual: true, value: null }) : undefined}
           >
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Due date</label>
-            <Input
-              type="date"
-              autoFocus
-              defaultValue={toDateInputValue(effDue)}
-              className="h-8"
-              onChange={(e) =>
-                setDue({ manual: true, value: e.target.value ? new Date(`${e.target.value}T00:00:00`).toISOString() : null })
+            <Calendar
+              mode="single"
+              selected={effDue ? new Date(effDue) : undefined}
+              onSelect={(d) =>
+                setDue({
+                  manual: true,
+                  value: d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString() : null,
+                })
               }
             />
           </InputPill>
@@ -337,20 +354,10 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
 
         {/* footer — secondary font; attachment placeholder (cross-module links) */}
         <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-label="Link items (coming soon)"
-              title="Link notes, emails, and more — coming soon"
-              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <Paperclip className="size-4" aria-hidden />
-            </button>
-            <label className="flex items-center gap-2 font-sans text-xs text-muted-foreground">
-              <Switch checked={createMore} onCheckedChange={setCreateMore} />
-              Create more
-            </label>
-          </div>
+          <label className="flex items-center gap-2 font-sans text-xs text-muted-foreground">
+            <Switch checked={createMore} onCheckedChange={setCreateMore} />
+            Create more
+          </label>
           <Button size="sm" onClick={submit} disabled={!raw.trim()}>
             Create
             <kbd className="flex items-center opacity-80">

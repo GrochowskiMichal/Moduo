@@ -4,12 +4,13 @@ import {
   ChevronRight,
   Inbox,
   Layers,
+  ListChecks,
   MoreHorizontal,
   Plus,
-  Sunrise,
 } from "lucide-react";
 
 import { Input } from "../../../components/ui/input";
+import { SegmentedControl } from "../../../components/ui/segmented-control";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,9 +39,11 @@ import type { Bucket } from "../model";
 
 export type TasksMode = "plan" | "execute";
 
-// Primary (display) font for structure/labels; secondary (body) for meta/counts.
+// Section eyebrows use the BODY font (Geist): at 11px the wide display face
+// read too large/heavy; body is narrower + quieter while staying on the type
+// ladder (text-2xs is the smallest step — going smaller would be off-ladder).
 const SECTION_LABEL =
-  "px-2 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70";
+  "px-2 font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground/70";
 
 type Props = {
   mode: TasksMode;
@@ -115,8 +118,8 @@ export function BucketRail({
             onClick={() => onSelect("all")}
           />
           <SelectionRow
-            icon={<Sunrise className="size-4" aria-hidden />}
-            label="Today"
+            icon={<ListChecks className="size-4" aria-hidden />}
+            label="Queue"
             count={committedCount}
             active={selection === "today"}
             reserveAction={canEdit}
@@ -200,7 +203,7 @@ export function BucketRail({
                   ) : (
                     <ChevronDown className="size-3.5 shrink-0" aria-hidden />
                   )}
-                  <span className="min-w-0 flex-1 truncate font-display text-2xs font-medium uppercase tracking-wide">
+                  <span className="min-w-0 flex-1 truncate font-sans text-2xs font-medium uppercase tracking-wide">
                     {section.name}
                   </span>
                   <span className="flex shrink-0 items-center font-sans text-xs tabular-nums text-muted-foreground/60">
@@ -255,32 +258,20 @@ function ModeToggle({
   mode: TasksMode;
   onModeChange: (mode: TasksMode) => void;
 }) {
+  // Shared SegmentedControl primitive. The internal mode value stays "execute"
+  // (model-level); only the label reads "Queue" (UI rename — keeps the
+  // committed_for model intact).
   return (
-    <div
-      role="tablist"
+    <SegmentedControl
       aria-label="Tasks mode"
-      className="flex shrink-0 gap-1 rounded-md bg-muted p-1"
-    >
-      {(["plan", "execute"] as const).map((value) => (
-        <button
-          key={value}
-          role="tab"
-          aria-selected={mode === value}
-          onClick={() => onModeChange(value)}
-          // flex-1 fills width (uniform p-1 inset all around); inner radius =
-          // outer (rounded-md) minus p-1 → rounded-sm, so corners nest cleanly.
-          className={cn(
-            "flex-1 rounded-sm py-1 text-center font-display text-sm capitalize transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            mode === value
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {value}
-        </button>
-      ))}
-    </div>
+      fullWidth
+      value={mode}
+      onValueChange={(value) => onModeChange(value as TasksMode)}
+      items={[
+        { value: "plan", label: "Plan" },
+        { value: "execute", label: "Focus" },
+      ]}
+    />
   );
 }
 
@@ -297,38 +288,39 @@ function CountDrift({
   onTriage?: () => void;
 }) {
   const hasDrift = !!drift && drift > 0;
-  if (count === 0 && !hasDrift) return null;
-  // X (Y): X = open count, Y = drifted (parenthesised, click to triage). The
-  // word "drifted" lives in the tooltip — the rail itself stays numbers-only.
-  if (!hasDrift) {
-    return (
-      <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground/70">
-        {count}
-      </span>
-    );
+  // Fixed-width, right-aligned numeric column so counts align down the whole
+  // rail (the old variable-width "X (Y)" was the misalignment). Drift is
+  // ambient: the number emphasizes (muted → foreground) and the detail lives in
+  // the tooltip; clicking a drifted count opens triage. Never red.
+  if (count === 0 && !hasDrift) {
+    // keep the column even when empty so siblings stay aligned
+    return <span className="w-6 shrink-0" aria-hidden />;
   }
+  const tip = hasDrift ? `${count} open · ${drift} drifted — click to triage` : `${count} open`;
+  const cls = "w-6 shrink-0 text-right font-sans text-xs tabular-nums";
   return (
-    <span className="flex shrink-0 items-center font-sans text-xs tabular-nums text-muted-foreground/70">
-      {count}
-      <Tooltip>
-        <TooltipTrigger asChild>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {hasDrift ? (
           <button
             type="button"
-            aria-label={`Triage ${drift} drifted`}
+            aria-label={tip}
             onClick={(e) => {
               e.stopPropagation();
               onTriage?.();
             }}
-            className="ml-0.5 rounded px-0.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+            className={cn(cls, "rounded text-foreground")}
           >
-            ({drift})
+            {count}
           </button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {count} open · {drift} drifted — click to triage
-        </TooltipContent>
-      </Tooltip>
-    </span>
+        ) : (
+          <span className={cn(cls, "text-muted-foreground/70")} aria-label={tip}>
+            {count}
+          </span>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
   );
 }
 

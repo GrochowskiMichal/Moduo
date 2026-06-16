@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { makeTask, nestedSubtaskIds, subtaskProgress, subtasksByParent } from "./helpers";
+import {
+  canNestUnder,
+  makeTask,
+  nestedSubtaskIds,
+  subtaskProgress,
+  subtasksByParent,
+} from "./helpers";
 import type { Task, TaskStatus } from "./model";
 
 function task(
@@ -70,5 +76,35 @@ describe("nestedSubtaskIds", () => {
 
   it("nests nothing when nest=false (Today's queue stays flat)", () => {
     expect(nestedSubtaskIds([parent, child], false).size).toBe(0);
+  });
+});
+
+describe("canNestUnder", () => {
+  // Default fixture: nothing has children. Individual cases override.
+  const none = () => false;
+
+  it("allows a childless top-level task onto another top-level task", () => {
+    expect(canNestUnder(task("a"), task("b"), none)).toBe(true);
+  });
+
+  it("rejects dragging a task onto itself", () => {
+    expect(canNestUnder(task("a"), task("a"), none)).toBe(false);
+  });
+
+  it("rejects when the active task has children (one level — a parent can't nest)", () => {
+    const hasKids = (id: string) => id === "a";
+    expect(canNestUnder(task("a"), task("b"), hasKids)).toBe(false);
+  });
+
+  it("rejects when the target is already a subtask (one level — no grandchildren)", () => {
+    expect(canNestUnder(task("a"), task("b", { parentId: "p" }), none)).toBe(false);
+  });
+
+  it("rejects re-dropping onto the current parent (no-op)", () => {
+    expect(canNestUnder(task("a", { parentId: "p" }), task("p"), none)).toBe(false);
+  });
+
+  it("allows re-parenting a childless subtask onto a different top-level task", () => {
+    expect(canNestUnder(task("a", { parentId: "p" }), task("q"), none)).toBe(true);
   });
 });
