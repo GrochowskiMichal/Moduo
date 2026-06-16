@@ -8,11 +8,12 @@
 //   • `TaskDropTarget` — a discriminated union of where a task can land; new
 //     surfaces add a variant + a branch in their drop handler, nothing else.
 //   • `useTaskDndSensors` — shared pointer + keyboard sensors (a11y reorder).
-//   • `SortableTask` + `DragHandle` — the wrapper + grip for sortable rows/cards.
+//   • `SortableTask` / `NestableTask` — wrappers that hand the row its drag
+//     listeners so the whole row is the activator (no separate grip).
 //
 // dnd-kit does the geometry; this module is the shared contract on top of it.
 
-import { forwardRef, useCallback, type CSSProperties, type ReactNode } from "react";
+import { useCallback, type CSSProperties, type ReactNode } from "react";
 import {
   KeyboardSensor,
   PointerSensor,
@@ -23,10 +24,10 @@ import {
   useSensor,
   useSensors,
   type CollisionDetection,
+  type DraggableSyntheticListeners,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
 
 import { cn } from "../../../../lib/utils";
 
@@ -117,63 +118,19 @@ export const pointerFirstCollision: CollisionDetection = (args) => {
   return pointerHits.length > 0 ? pointerHits : closestCenter(args);
 };
 
-// ── drag handle ──────────────────────────────────────────────────────────────
-
-/** The activator bindings dnd-kit hands back from `useSortable`/`useDraggable`. */
-type SortableHandleBindings = Pick<ReturnType<typeof useSortable>, "listeners" | "attributes">;
-
-type DragHandleProps = SortableHandleBindings & {
-  disabled?: boolean;
-  className?: string;
-};
-
-/**
- * The grip a sortable row/card exposes as its drag affordance. Quiet by default
- * (reserves its gutter so nothing shifts), fades in on row hover/focus. A
- * dedicated handle — not the whole row — keeps click-to-select and inline edit
- * intact.
- */
-export const DragHandle = forwardRef<HTMLButtonElement, DragHandleProps>(function DragHandle(
-  { listeners, attributes, disabled, className },
-  ref,
-) {
-  // Keep the gutter even when this row can't be dragged (e.g. a parent in
-  // nestable mode), so draggable and non-draggable rows stay column-aligned.
-  if (disabled) return <span className={cn("h-5 w-4 shrink-0", className)} aria-hidden />;
-  return (
-    <button
-      ref={ref}
-      type="button"
-      aria-label="Drag to reorder"
-      // The handle is the activator; swallow the click so it never selects/edits
-      // the row. dnd-kit's listeners own pointer/keydown.
-      onClick={(e) => e.stopPropagation()}
-      className={cn(
-        "flex h-5 w-4 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground/40",
-        "opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out)",
-        "hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        "group-hover:opacity-100 active:cursor-grabbing",
-        className,
-      )}
-      {...attributes}
-      {...listeners}
-    >
-      <GripVertical className="size-3.5" aria-hidden />
-    </button>
-  );
-});
-
 // ── sortable wrapper ─────────────────────────────────────────────────────────
 
 type SortableTaskRender = (slot: {
-  /** The ready-to-render drag grip — place it where the row wants its handle. */
-  handle: ReactNode;
+  /** dnd-kit listeners — spread on the row root so the WHOLE row is the drag
+   * activator (no separate grip). A 6px activation distance (see
+   * {@link useTaskDndSensors}) keeps plain clicks selecting/opening the row. */
+  dragListeners: DraggableSyntheticListeners;
   isDragging: boolean;
 }) => ReactNode;
 
 /**
  * Wraps a sortable task row/card: owns the sortable node ref + transform and
- * hands back a pre-built {@link DragHandle} for the child to position. The
+ * hands the drag listeners back for the child to spread on the whole row. The
  * dragged item lifts (raised z + reduced opacity) while its neighbours animate
  * apart — the insertion affordance comes free from the sortable strategy.
  */
@@ -190,15 +147,11 @@ export function SortableTask({
   className?: string;
   render: SortableTaskRender;
 }) {
-  const {
-    setNodeRef,
-    setActivatorNodeRef,
-    listeners,
-    attributes,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id, data: taskDrag(id, from), disabled });
+  const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
+    id,
+    data: taskDrag(id, from),
+    disabled,
+  });
 
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -211,17 +164,7 @@ export function SortableTask({
       style={style}
       className={cn(isDragging && "relative z-10 opacity-60", className)}
     >
-      {render({
-        handle: (
-          <DragHandle
-            ref={setActivatorNodeRef}
-            listeners={listeners}
-            attributes={attributes}
-            disabled={disabled}
-          />
-        ),
-        isDragging,
-      })}
+      {render({ dragListeners: listeners, isDragging })}
     </div>
   );
 }
@@ -229,8 +172,9 @@ export function SortableTask({
 // ── nestable wrapper (drag-onto-task → subtask) ──────────────────────────────
 
 type NestableTaskRender = (slot: {
-  /** The drag grip — present only when this row may be dragged (childless). */
-  handle: ReactNode;
+  /** dnd-kit listeners — spread on the row root so the WHOLE childless row is
+   * the drag activator. Undefined when this row can't be dragged (has children). */
+  dragListeners: DraggableSyntheticListeners;
   /** A valid drop is currently hovering this row → caller paints the target. */
   isOver: boolean;
   isDragging: boolean;
@@ -264,9 +208,7 @@ export function NestableTask({
 }) {
   const {
     setNodeRef: setDragRef,
-    setActivatorNodeRef,
     listeners,
-    attributes,
     isDragging,
   } = useDraggable({ id, data: taskDrag(id, from), disabled: !canDrag });
   const { setNodeRef: setDropRef, isOver } = useDroppable({
@@ -285,18 +227,7 @@ export function NestableTask({
 
   return (
     <div ref={setNodeRef} className={cn(isDragging && "opacity-50", className)}>
-      {render({
-        handle: (
-          <DragHandle
-            ref={setActivatorNodeRef}
-            listeners={listeners}
-            attributes={attributes}
-            disabled={!canDrag}
-          />
-        ),
-        isOver,
-        isDragging,
-      })}
+      {render({ dragListeners: listeners, isOver, isDragging })}
     </div>
   );
 }

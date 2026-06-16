@@ -1,10 +1,9 @@
 // Priority + energy as ambient, NEVER-accent glyphs (spec principles 4-5; accent
-// policy keeps these neutral). Both read the level at a glance:
-//   Priority — dots climbing a pyramid (low 1 → high 3, peak fills last).
-//   Energy   — bars stacked bottom-up (low 1 → high 3).
-// Unfilled positions stay as faint ghosts so the footprint is constant and the
-// filled count = the level. Replaces the old single-dot LevelDots (which didn't
-// even distinguish low/med/high).
+// policy keeps these neutral). Both read the level at a glance by COUNT alone —
+// only the filled units render, no ghost placeholders (Morgen-style). The count
+// IS the level, so the footprint is variable but the read is instant:
+//   Priority — 1-3 dots, a centered row (low 1 → high 3).
+//   Energy   — 1-3 bars, stacked bottom-up (low 1 → high 3).
 
 import { cn } from "../../../lib/utils";
 import {
@@ -16,7 +15,6 @@ import { ENERGY_LABELS, PRIORITY_LABELS } from "../helpers";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
 
 const LEVEL_COUNT: Record<string, number> = { low: 1, med: 2, high: 3 };
-const GHOST = 0.28;
 
 export function PriorityIcon({
   level,
@@ -26,16 +24,14 @@ export function PriorityIcon({
   className?: string;
 }) {
   const n = LEVEL_COUNT[level] ?? 0;
-  // bottom-left, bottom-right, apex — filled in that order (base → peak)
-  const dots = [
-    { cx: 3, cy: 9, on: n >= 1 },
-    { cx: 9, cy: 9, on: n >= 2 },
-    { cx: 6, cy: 3.5, on: n >= 3 },
-  ];
+  if (n === 0) return null;
+  // Only the filled dots show — the count is the level. Centered horizontally so
+  // 1 / 2 / 3 each read as deliberate rather than a fragment of a fixed grid.
+  const cxs = n === 1 ? [8] : n === 2 ? [5.5, 10.5] : [3, 8, 13];
   return (
-    <svg viewBox="0 0 12 12" className={cn("size-icon-sm", className)} fill="currentColor" aria-hidden>
-      {dots.map((d, i) => (
-        <circle key={i} cx={d.cx} cy={d.cy} r="1.6" opacity={d.on ? 1 : GHOST} />
+    <svg viewBox="0 0 16 16" className={cn("size-icon", className)} fill="currentColor" aria-hidden>
+      {cxs.map((cx, i) => (
+        <circle key={i} cx={cx} cy={8} r="2.2" />
       ))}
     </svg>
   );
@@ -49,15 +45,13 @@ export function EnergyIcon({
   className?: string;
 }) {
   const n = LEVEL_COUNT[level] ?? 0;
-  const bars = [
-    { y: 8.4, on: n >= 1 },
-    { y: 5.1, on: n >= 2 },
-    { y: 1.8, on: n >= 3 },
-  ];
+  if (n === 0) return null;
+  // Only the filled bars show, stacked from the bottom up (mirrors PriorityIcon).
+  const ys = [11, 6.75, 2.5]; // bottom → top; render the first n
   return (
-    <svg viewBox="0 0 12 12" className={cn("size-icon-sm", className)} fill="currentColor" aria-hidden>
-      {bars.map((b, i) => (
-        <rect key={i} x="2" y={b.y} width="8" height="1.8" rx="0.9" opacity={b.on ? 1 : GHOST} />
+    <svg viewBox="0 0 16 16" className={cn("size-icon", className)} fill="currentColor" aria-hidden>
+      {ys.slice(0, n).map((y, i) => (
+        <rect key={i} x="3" y={y} width="10" height="2.5" rx="1.25" />
       ))}
     </svg>
   );
