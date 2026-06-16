@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Clock, MoreHorizontal, Pause, Play, Square } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
+import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { formatDue, formatScheduled } from "../helpers";
 import type { Task } from "../model";
@@ -132,10 +134,10 @@ function NowCard({
 
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
-  const contextLine =
+  const subLine =
     blockedNote ??
     [
-      parentTitle ? `Part of ${parentTitle}` : bucketName,
+      parentTitle ? `Part of ${parentTitle}` : null,
       due ? `Due ${due}` : scheduled ? `Scheduled ${scheduled}` : null,
       task.durationMinutes ? `~${task.durationMinutes}m est` : null,
     ]
@@ -149,8 +151,9 @@ function NowCard({
     // elevated: --popover sits one step lighter than the --card panel (no shadow —
     // surface contrast carries elevation on dark). Left-aligned, task-first.
     <div className="rounded-lg border border-border bg-popover px-6 py-5">
-      <h2 className="font-display text-2xl text-foreground">{task.title || "Untitled"}</h2>
-      {contextLine ? <p className="mt-1 font-sans text-xs text-muted-foreground">{contextLine}</p> : null}
+      <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">{bucketName}</p>
+      <h2 className="mt-0.5 font-display text-2xl text-foreground">{task.title || "Untitled"}</h2>
+      {subLine ? <p className="mt-1 font-sans text-xs text-muted-foreground">{subLine}</p> : null}
       {task.description ? (
         <p className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
           {task.description}
@@ -164,24 +167,36 @@ function NowCard({
             <div className="flex items-center gap-1.5">
               {timer.running ? <span className="size-2 rounded-full bg-muted-foreground" aria-hidden /> : null}
               <span className="mr-1 font-sans text-lg tabular-nums text-foreground">{formatClock(timer.bigClock)}</span>
-              <Button variant="ghost" size="sm" onClick={timer.toggle} aria-label={timer.running ? "Pause" : "Resume"}>
-                {timer.running ? <Pause className="size-icon-sm" aria-hidden /> : <Play className="size-icon-sm" aria-hidden />}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={timer.stop} aria-label="Stop">
-                <Square className="size-icon-sm" aria-hidden />
-              </Button>
-              <span className="ml-0.5 font-sans text-xs tabular-nums text-muted-foreground">
-                {timer.pomodoro ? <span className="uppercase tracking-wide text-muted-foreground/70">{timer.phase} · </span> : null}
-                {formatDuration(trackedTotal)}
-                {estimateSeconds ? <span className="text-muted-foreground/60"> / ~{formatDuration(estimateSeconds)}</span> : null}
-              </span>
+              <IconButton
+                icon={timer.running ? Pause : Play}
+                label={timer.running ? "Pause" : "Resume"}
+                onClick={timer.toggle}
+              />
+              <IconButton icon={Square} label="Stop" onClick={timer.stop} />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="ml-0.5 cursor-default font-sans text-xs tabular-nums text-muted-foreground">
+                    {timer.pomodoro ? <span className="uppercase tracking-wide text-muted-foreground/70">{timer.phase} · </span> : null}
+                    {formatDuration(trackedTotal)}
+                    {estimateSeconds ? <span className="text-muted-foreground/60"> / ~{formatDuration(estimateSeconds)}</span> : null}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Total time tracked on this task</TooltipContent>
+              </Tooltip>
               <TimerMenu task={task} onAddTime={onAddTime} onSetTime={onSetTime} timer={timer} />
             </div>
           ) : (
-            <Button variant="ghost" size="sm" onClick={timer.start}>
-              <Clock className="size-icon-sm" aria-hidden />
-              {trackedTotal > 0 ? formatDuration(trackedTotal) : "Track time"}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={timer.start}>
+                  <Clock className="size-icon-sm" aria-hidden />
+                  {trackedTotal > 0 ? formatDuration(trackedTotal) : "Track time"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {trackedTotal > 0 ? "Total time tracked · click to keep tracking" : "Start tracking time"}
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
 
@@ -223,9 +238,7 @@ function TimerMenu({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Timer options">
-          <MoreHorizontal className="size-icon-sm" aria-hidden />
-        </Button>
+        <IconButton icon={MoreHorizontal} label="Timer options" tooltip={null} />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 text-left">
         <div className="flex flex-col gap-3">
