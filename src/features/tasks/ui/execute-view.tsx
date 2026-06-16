@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, MoreHorizontal, Pause, Play, Square, Timer } from "lucide-react";
+import { Check, Clock, MoreHorizontal, Pause, Play, Square } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -103,7 +103,7 @@ function EndSummary({ doneCount, total, onExit }: { doneCount: number; total: nu
   );
 }
 
-// ── Now card — elevated focus surface, three zones: identity → timer → action ──
+// ── Now card — task-first; the timer is opt-in, tucked bottom-left ────────────
 
 function NowCard({
   task,
@@ -130,7 +130,6 @@ function NowCard({
 }) {
   const timer = useFocusTimer(task.id, onAddTime);
 
-  // one quiet context line: waiting-on note wins, else where/when
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
   const contextLine =
@@ -138,84 +137,68 @@ function NowCard({
     [
       parentTitle ? `Part of ${parentTitle}` : bucketName,
       due ? `Due ${due}` : scheduled ? `Scheduled ${scheduled}` : null,
+      task.durationMinutes ? `~${task.durationMinutes}m est` : null,
     ]
       .filter(Boolean)
       .join("  ·  ");
 
   const trackedTotal = task.timeSpentSeconds + timer.accrued;
   const estimateSeconds = task.durationMinutes ? task.durationMinutes * 60 : null;
-  const bigClock = timer.pomodoro ? timer.pomoLeft : timer.sitElapsed;
-  const showStop = timer.running || timer.sitElapsed > 0;
 
   return (
     // elevated: --popover sits one step lighter than the --card panel (no shadow —
-    // surface contrast carries elevation on dark)
-    <div className="rounded-lg border border-border bg-popover px-6 py-7 text-center">
-      {/* zone 1 — identity */}
+    // surface contrast carries elevation on dark). Left-aligned, task-first.
+    <div className="rounded-lg border border-border bg-popover px-6 py-5">
       <h2 className="font-display text-2xl text-foreground">{task.title || "Untitled"}</h2>
-      {contextLine ? (
-        <p className="mt-1.5 font-sans text-xs text-muted-foreground">{contextLine}</p>
+      {contextLine ? <p className="mt-1 font-sans text-xs text-muted-foreground">{contextLine}</p> : null}
+      {task.description ? (
+        <p className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
+          {task.description}
+        </p>
       ) : null}
 
-      {/* zone 2 — timer module */}
-      <div className="mt-6 border-t border-border pt-6">
-        <div className="flex items-center justify-center gap-2.5">
-          {timer.running ? (
-            <span className="size-2 rounded-full bg-muted-foreground" aria-hidden />
-          ) : null}
-          <span className="font-sans text-4xl tabular-nums text-foreground">{formatClock(bigClock)}</span>
-        </div>
-        <p className="mt-1.5 font-sans text-xs tabular-nums text-muted-foreground">
-          {timer.pomodoro ? (
-            <span className="uppercase tracking-wide text-muted-foreground/70">{timer.phase} · </span>
-          ) : null}
-          Tracked {formatDuration(trackedTotal)}
-          {estimateSeconds ? <span className="text-muted-foreground/60"> / ~{formatDuration(estimateSeconds)}</span> : null}
-        </p>
-
-        <div className="mt-4 flex items-center justify-center gap-2">
-          <Button variant="secondary" size="sm" onClick={timer.toggle}>
-            {timer.running ? <Pause className="size-icon-sm" aria-hidden /> : <Play className="size-icon-sm" aria-hidden />}
-            {timer.running ? "Pause" : timer.sitElapsed > 0 ? "Resume" : "Start"}
-          </Button>
-          {showStop ? (
-            <Button variant="secondary" size="sm" onClick={timer.stop}>
-              <Square className="size-icon-sm" aria-hidden />
-              Stop
+      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
+        {/* bottom-left — opt-in time tracking */}
+        <div className="min-w-0">
+          {timer.tracking ? (
+            <div className="flex items-center gap-1.5">
+              {timer.running ? <span className="size-2 rounded-full bg-muted-foreground" aria-hidden /> : null}
+              <span className="mr-1 font-sans text-lg tabular-nums text-foreground">{formatClock(timer.bigClock)}</span>
+              <Button variant="ghost" size="sm" onClick={timer.toggle} aria-label={timer.running ? "Pause" : "Resume"}>
+                {timer.running ? <Pause className="size-icon-sm" aria-hidden /> : <Play className="size-icon-sm" aria-hidden />}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={timer.stop} aria-label="Stop">
+                <Square className="size-icon-sm" aria-hidden />
+              </Button>
+              <span className="ml-0.5 font-sans text-xs tabular-nums text-muted-foreground">
+                {timer.pomodoro ? <span className="uppercase tracking-wide text-muted-foreground/70">{timer.phase} · </span> : null}
+                {formatDuration(trackedTotal)}
+                {estimateSeconds ? <span className="text-muted-foreground/60"> / ~{formatDuration(estimateSeconds)}</span> : null}
+              </span>
+              <TimerMenu task={task} onAddTime={onAddTime} onSetTime={onSetTime} timer={timer} />
+            </div>
+          ) : (
+            <Button variant="ghost" size="sm" onClick={timer.start}>
+              <Clock className="size-icon-sm" aria-hidden />
+              {trackedTotal > 0 ? formatDuration(trackedTotal) : "Track time"}
             </Button>
-          ) : null}
-          <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
-          <Button
-            variant={timer.pomodoro ? "secondary" : "ghost"}
-            size="sm"
-            onClick={timer.togglePomodoro}
-            aria-pressed={timer.pomodoro}
-          >
-            <Timer className="size-icon-sm" aria-hidden />
-            Pomodoro
-          </Button>
-          <TimerMenu task={task} onAddTime={onAddTime} onSetTime={onSetTime} timer={timer} />
+          )}
         </div>
-      </div>
 
-      {/* zone 3 — action */}
-      <div className="mt-7 flex flex-col items-center gap-3">
-        <Button size="md" onClick={onMarkDone} className="min-w-44">
-          <Check className="size-icon-sm" aria-hidden />
-          Done, next
-        </Button>
-        <div className="flex items-center gap-3 font-sans text-sm text-muted-foreground">
-          <button type="button" onClick={onSkip} className="hover:text-foreground">
+        {/* bottom-right — Skip / Do last / Done */}
+        <div className="flex shrink-0 items-center gap-3">
+          <button type="button" onClick={onSkip} className="font-sans text-sm text-muted-foreground hover:text-foreground">
             Skip
           </button>
           {canDoLast ? (
-            <>
-              <span className="text-muted-foreground/40">·</span>
-              <button type="button" onClick={onDoLast} className="hover:text-foreground">
-                Do last
-              </button>
-            </>
+            <button type="button" onClick={onDoLast} className="font-sans text-sm text-muted-foreground hover:text-foreground">
+              Do last
+            </button>
           ) : null}
+          <Button size="md" onClick={onMarkDone}>
+            <Check className="size-icon-sm" aria-hidden />
+            Done
+          </Button>
         </div>
       </div>
     </div>
@@ -244,7 +227,7 @@ function TimerMenu({
           <MoreHorizontal className="size-icon-sm" aria-hidden />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 text-left">
+      <PopoverContent align="start" className="w-64 text-left">
         <div className="flex flex-col gap-3">
           <div>
             <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">Add time</p>
@@ -307,6 +290,10 @@ function TimerMenu({
                 className="w-14"
               />
             </div>
+            <label className="mt-2 flex cursor-pointer items-center gap-2 font-sans text-sm text-muted-foreground">
+              <input type="checkbox" checked={timer.pomodoro} onChange={timer.togglePomodoro} />
+              Pomodoro rhythm
+            </label>
           </div>
         </div>
       </PopoverContent>
@@ -359,15 +346,16 @@ function Queue({
 // ── timer ─────────────────────────────────────────────────────────────────────
 
 /**
- * Stopwatch base + optional Pomodoro overlay. Real *work* seconds always accrue
- * into the task's persisted total via onAddTime — flushed on pause / Stop / task
- * change / unmount / every minute (attribution captured by ref). With Pomodoro
- * on, the big clock shows the work/break countdown and breaks don't accrue;
- * otherwise it counts the sitting up. `accrued` mirrors the unflushed buffer for
- * a live total; `sitElapsed` is the count-up display (survives pause).
+ * Opt-in stopwatch (never auto-starts) + optional Pomodoro overlay. `tracking`
+ * is whether the timer is open; `running` whether the clock ticks. Real *work*
+ * seconds accrue into the task's persisted total via onAddTime — flushed on
+ * pause / Stop / task change / unmount / every minute (attribution by ref). With
+ * Pomodoro on, the big clock shows the work/break countdown and breaks don't
+ * accrue; otherwise it counts the sitting up.
  */
 function useFocusTimer(taskKey: string, onAddTime: (taskId: string, deltaSeconds: number) => void) {
-  const [running, setRunning] = useState(true);
+  const [tracking, setTracking] = useState(false);
+  const [running, setRunning] = useState(false);
   const [pomodoro, setPomodoro] = useState(false);
   const [phase, setPhase] = useState<"work" | "break">("work");
   const [pomoLeft, setPomoLeft] = useState(DEFAULT_WORK_MIN * 60);
@@ -389,10 +377,12 @@ function useFocusTimer(taskKey: string, onAddTime: (taskId: string, deltaSeconds
     }
   }, []);
 
-  // reset for a new task; flush the prior task on cleanup (before taskRef moves)
+  // new task: flush the prior task on cleanup, then reset to the resting state
+  // (never auto-starts — tracking + running both false)
   useEffect(() => {
     taskRef.current = taskKey;
-    setRunning(true);
+    setTracking(false);
+    setRunning(false);
     setPhase("work");
     setPomoLeft(workMin * 60);
     setSitElapsed(0);
@@ -435,16 +425,24 @@ function useFocusTimer(taskKey: string, onAddTime: (taskId: string, deltaSeconds
   }, [running, flush]);
 
   return {
+    tracking,
     running,
     pomodoro,
     phase,
-    pomoLeft,
     sitElapsed,
     accrued,
     workMin,
     breakMin,
     setWorkMin,
     setBreakMin,
+    bigClock: pomodoro ? pomoLeft : sitElapsed,
+    start: () => {
+      setTracking(true);
+      setRunning(true);
+      setSitElapsed(0);
+      setPhase("work");
+      setPomoLeft(workMin * 60);
+    },
     toggle: () =>
       setRunning((r) => {
         if (r) flush();
@@ -452,10 +450,11 @@ function useFocusTimer(taskKey: string, onAddTime: (taskId: string, deltaSeconds
       }),
     stop: () => {
       flush();
+      setRunning(false);
+      setTracking(false);
       setSitElapsed(0);
       setPhase("work");
       setPomoLeft(workMin * 60);
-      setRunning(false);
     },
     togglePomodoro: () =>
       setPomodoro((on) => {
