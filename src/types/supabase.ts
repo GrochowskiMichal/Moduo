@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      buckets: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          group_label: string | null
+          id: string
+          is_system: boolean
+          name: string
+          owner_id: string | null
+          position: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          group_label?: string | null
+          id?: string
+          is_system?: boolean
+          name: string
+          owner_id?: string | null
+          position?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          group_label?: string | null
+          id?: string
+          is_system?: boolean
+          name?: string
+          owner_id?: string | null
+          position?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buckets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       calendar_events: {
         Row: {
           all_day: boolean
@@ -87,6 +134,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "calendar_events_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "calendar_events_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
@@ -130,6 +184,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_layouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "dashboard_layouts_workspace_id_fkey"
@@ -287,15 +348,131 @@ export type Database = {
         }
         Relationships: []
       }
+      module_activity: {
+        Row: {
+          actor_id: string | null
+          actor_label: string | null
+          actor_type: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          module: string
+          op: string
+          payload: Json
+          workspace_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_label?: string | null
+          actor_type: string
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          module: string
+          op: string
+          payload?: Json
+          workspace_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_label?: string | null
+          actor_type?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          module?: string
+          op?: string
+          payload?: Json
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_activity_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      note_shares: {
+        Row: {
+          created_at: string
+          id: string
+          note_id: string
+          permission: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note_id: string
+          permission?: string
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note_id?: string
+          permission?: string
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "note_shares_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "note_shares_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "note_shares_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "note_shares_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notes: {
         Row: {
           created_at: string
           created_by: string | null
           deleted_at: string | null
           doc_state: string | null
+          icon: string | null
           id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
           parent_id: string | null
-          position: number
+          position: string
+          share_permission: string
+          share_scope: string
+          tags: Json
           title: string
           updated_at: string
           workspace_id: string
@@ -305,9 +482,16 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           doc_state?: string | null
+          icon?: string | null
           id?: string
+          is_archived?: boolean
+          is_pinned?: boolean
+          kind?: string
           parent_id?: string | null
-          position?: number
+          position?: string
+          share_permission?: string
+          share_scope?: string
+          tags?: Json
           title?: string
           updated_at?: string
           workspace_id: string
@@ -317,9 +501,16 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           doc_state?: string | null
+          icon?: string | null
           id?: string
+          is_archived?: boolean
+          is_pinned?: boolean
+          kind?: string
           parent_id?: string | null
-          position?: number
+          position?: string
+          share_permission?: string
+          share_scope?: string
+          tags?: Json
           title?: string
           updated_at?: string
           workspace_id?: string
@@ -331,6 +522,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "notes_parent_id_fkey"
@@ -377,6 +575,13 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "panel_layouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -548,6 +753,279 @@ export type Database = {
         }
         Relationships: []
       }
+      tag_links: {
+        Row: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          tag_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          tag_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          tag_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tag_links_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tag_links_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tags: {
+        Row: {
+          color: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          name: string
+          owner_id: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name: string
+          owner_id?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          owner_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tags_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_relations: {
+        Row: {
+          blocked_task_id: string
+          blocker_task_id: string
+          created_at: string
+          id: string
+          workspace_id: string
+        }
+        Insert: {
+          blocked_task_id: string
+          blocker_task_id: string
+          created_at?: string
+          id?: string
+          workspace_id: string
+        }
+        Update: {
+          blocked_task_id?: string
+          blocker_task_id?: string
+          created_at?: string
+          id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_relations_blocked_task_id_fkey"
+            columns: ["blocked_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_relations_blocked_task_id_fkey"
+            columns: ["blocked_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_with_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_relations_blocker_task_id_fkey"
+            columns: ["blocker_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_relations_blocker_task_id_fkey"
+            columns: ["blocker_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_with_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_relations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_time_blocks: {
+        Row: {
+          blocks: Json
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          blocks?: Json
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          blocks?: Json
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_time_blocks_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          bucket_id: string
+          commit_order?: number | null
+          committed_for?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          description?: string
+          due_date?: string | null
+          duration_minutes?: number | null
+          energy_level?: string | null
+          id?: string
+          owner_id?: string | null
+          parent_id?: string | null
+          position?: string
+          priority?: string | null
+          recurrence?: Json | null
+          reschedule_count?: number
+          scheduled_at?: string | null
+          status?: string
+          time_spent_seconds?: number
+          title?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          bucket_id?: string
+          commit_order?: number | null
+          committed_for?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          description?: string
+          due_date?: string | null
+          duration_minutes?: number | null
+          energy_level?: string | null
+          id?: string
+          owner_id?: string | null
+          parent_id?: string | null
+          position?: string
+          priority?: string | null
+          recurrence?: Json | null
+          reschedule_count?: number
+          scheduled_at?: string | null
+          status?: string
+          time_spent_seconds?: number
+          title?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_bucket_id_fkey"
+            columns: ["bucket_id"]
+            isOneToOne: false
+            referencedRelation: "buckets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_with_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks_comments: {
         Row: {
           author_id: string | null
@@ -583,6 +1061,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "tasks_comments_task_id_fkey"
@@ -646,6 +1131,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_items_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "tasks_items_project_id_fkey"
@@ -811,6 +1303,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "user_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       waitlist: {
@@ -845,6 +1344,53 @@ export type Database = {
           user_agent?: string | null
         }
         Relationships: []
+      }
+      workspace_api_keys: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          key_hash: string
+          key_prefix: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          scopes: Json
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_hash: string
+          key_prefix: string
+          last_used_at?: string | null
+          name: string
+          revoked_at?: string | null
+          scopes?: Json
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          key_hash?: string
+          key_prefix?: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          scopes?: Json
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_api_keys_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       workspace_invites: {
         Row: {
@@ -895,6 +1441,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "workspace_invites_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "workspace_invites_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
@@ -938,6 +1491,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "workspace_members_workspace_id_fkey"
@@ -985,6 +1545,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "workspace_notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "workspace_notifications_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
@@ -1026,14 +1593,507 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "workspaces_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
     }
     Views: {
-      [_ in never]: never
+      tasks_with_drift: {
+        Row: {
+          bucket_id: string | null
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string | null
+          deleted_at: string | null
+          description: string | null
+          drifted: boolean | null
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string | null
+          owner_id: string | null
+          position: string | null
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number | null
+          scheduled_at: string | null
+          status: string | null
+          title: string | null
+          updated_at: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          bucket_id?: string | null
+          commit_order?: number | null
+          committed_for?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          drifted?: never
+          due_date?: string | null
+          duration_minutes?: number | null
+          energy_level?: string | null
+          id?: string | null
+          owner_id?: string | null
+          position?: string | null
+          priority?: string | null
+          recurrence?: Json | null
+          reschedule_count?: number | null
+          scheduled_at?: string | null
+          status?: string | null
+          title?: string | null
+          updated_at?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          bucket_id?: string | null
+          commit_order?: number | null
+          committed_for?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          drifted?: never
+          due_date?: string | null
+          duration_minutes?: number | null
+          energy_level?: string | null
+          id?: string | null
+          owner_id?: string | null
+          position?: string | null
+          priority?: string | null
+          recurrence?: Json | null
+          reschedule_count?: number | null
+          scheduled_at?: string | null
+          status?: string | null
+          title?: string | null
+          updated_at?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_bucket_id_fkey"
+            columns: ["bucket_id"]
+            isOneToOne: false
+            referencedRelation: "buckets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_entitlements: {
+        Row: {
+          current_period_end: string | null
+          plan_tier: string | null
+          stripe_subscription_id: string | null
+          subscription_status: string | null
+          trial_days_remaining: number | null
+          trial_ends_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          current_period_end?: string | null
+          plan_tier?: never
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
+          trial_days_remaining?: never
+          trial_ends_at?: never
+          user_id?: string | null
+        }
+        Update: {
+          current_period_end?: string | null
+          plan_tier?: never
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
+          trial_days_remaining?: never
+          trial_ends_at?: never
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      accept_workspace_invite: { Args: { p_invite_id: string }; Returns: Json }
+      module_activity_log: {
+        Args: {
+          p_entity_id: string
+          p_entity_type: string
+          p_module: string
+          p_op: string
+          p_payload: Json
+          p_workspace_id: string
+        }
+        Returns: undefined
+      }
+      module_api_key_id: { Args: never; Returns: string }
+      profile_plan_tier_text: { Args: { p_user_id: string }; Returns: string }
+      tasks_module_can_access_workspace: {
+        Args: { p_workspace_id: string }
+        Returns: boolean
+      }
+      tasks_module_permission: {
+        Args: { p_workspace_id: string }
+        Returns: string
+      }
+      tasks_op__guard: {
+        Args: { p_task_id: string; p_workspace_id: string }
+        Returns: {
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      tasks_op_catch_up: {
+        Args: { p_items: Json; p_workspace_id: string }
+        Returns: {
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      tasks_op_commit: {
+        Args: { p_for: string; p_task_id: string; p_workspace_id: string }
+        Returns: {
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      tasks_op_reschedule: {
+        Args: {
+          p_days?: number
+          p_scheduled_at: string
+          p_task_id: string
+          p_workspace_id: string
+        }
+        Returns: {
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      tasks_op_set_status: {
+        Args: {
+          p_position?: string
+          p_recurrence?: Json
+          p_status: string
+          p_task_id: string
+          p_workspace_id: string
+        }
+        Returns: {
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      tasks_op_skip_occurrence: {
+        Args: {
+          p_recurrence: Json
+          p_release_commit?: boolean
+          p_scheduled_at: string
+          p_task_id: string
+          p_workspace_id: string
+        }
+        Returns: {
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      tasks_op_skip_today: {
+        Args: { p_task_id: string; p_workspace_id: string }
+        Returns: {
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      tasks_op_uncommit: {
+        Args: { p_task_id: string; p_workspace_id: string }
+        Returns: {
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      tasks_op_unschedule: {
+        Args: { p_task_id: string; p_workspace_id: string }
+        Returns: {
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      user_can_manage_workspace_members: {
+        Args: { p_workspace_id: string }
+        Returns: boolean
+      }
+      user_is_workspace_member: {
+        Args: { p_workspace_id: string }
+        Returns: boolean
+      }
+      user_is_workspace_owner: {
+        Args: { p_workspace_id: string }
+        Returns: boolean
+      }
+      workspace_api_keys_can_manage: {
+        Args: { p_workspace_id: string }
+        Returns: boolean
+      }
+      workspace_api_keys_create: {
+        Args: { p_name: string; p_scopes?: Json; p_workspace_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          key_prefix: string
+          name: string
+          scopes: Json
+          secret: string
+        }[]
+      }
+      workspace_api_keys_revoke: {
+        Args: { p_key_id: string }
+        Returns: undefined
+      }
+      workspaces_owned_count_for_user: {
+        Args: { p_user_id: string }
+        Returns: number
+      }
     }
     Enums: {
       plan_tier: "free" | "pro" | "team" | "founder"

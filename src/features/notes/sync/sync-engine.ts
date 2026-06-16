@@ -2,7 +2,7 @@ import type { Provider } from "@lexical/yjs";
 import { Awareness } from "y-protocols/awareness";
 
 import * as Y from "yjs";
-import { runtime, type ModuoRuntime } from "../../../lib/runtime";
+import type { ModuoRuntime } from "../../../lib/runtime";
 import type { NotesSyncStatus } from "../types";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
 
@@ -493,7 +493,7 @@ export class NotesSyncEngine {
     _userId: string,
     private readonly workspaceId: string
   ) {
-    this.runtime = runtimeClient ?? runtime;
+    this.runtime = runtimeClient;
   }
 
   onStatus(listener: StatusListener): () => void {
