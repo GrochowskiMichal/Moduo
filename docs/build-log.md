@@ -6,6 +6,53 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Tasks follow-ups c4 — drag-to-subtask, q shortcut, live-verify (2026-06-16)
+
+Branch `claude/awesome-mayer-57a503` (Opus), continuing CONTINUATION-3's open
+work. Two commits; all five gates green (typecheck · `test` now **110**, +6
+`canNestUnder` cases · `lint:tw` · `lint:css` · `build:web`). **Live-verified
+end-to-end** on the hosted test account — the first click-test of the DnD work.
+
+**Drag-a-task-onto-another → subtask** (the last unbuilt piece of CONTINUATION-2
+#1). New `NestableTask` in `ui/dnd/task-dnd.tsx` (draggable + droppable on one
+node, no reordering) + a `sortable:false` `useTaskDndSensors` variant (nesting
+has no SortableContext → default keyboard coordinate getter). The flat
+single-bucket List (`groupBy === "none"`, not the Queue, not "All") gains a
+`nestable` mode: childless top-level rows expose the grip + an `onto-task`
+droppable; dropping one onto another calls `api.setTaskParent` (one-level rule
+enforced there + the DB trigger). Eligibility is a shared, unit-tested pure
+helper `canNestUnder` (childless active, top-level target, not a no-op). Only
+valid targets highlight; a title-chip `DragOverlay` follows the cursor; the new
+parent auto-expands on drop. `DragHandle` reserves its gutter when disabled so a
+parent row (no grip) stays column-aligned. Board reorder unchanged.
+
+**`q` queue shortcut.** The List `q` key (un)queues the selected task (Round D's
+queue key), replacing the stale `t` binding from when the queue was "Today".
+
+**Visual suite.** Added `property-row` (the detail-panel grid primitive) to
+`tests/visual/primitives.spec.ts`. PNG baselines are *not* generated/committed
+here: they're platform-suffixed (`*-visual-darwin.png`), the static-checks CI
+workflow doesn't run the visual project, and the spec's own note leaves baseline
+capture to an intentional human `--update-snapshots` run.
+
+**Live verification** (web, worktree rsbuild `:8097` + local Dia browser + hosted
+test acct; session pre-existing, no credential entry): no console errors
+throughout. The nest branch mounts; grips render on exactly the 3 childless Inbox
+rows (none on the "Verify…" parent). A real dnd-kit drag — synthetic pointer
+events with per-frame delays (synchronous dispatch is dropped by dnd-kit's rAF
+collision loop, which is why earlier sessions called drag "unsimulable") — nested
+"Untagged filter-test task" under "Session 8 ops probe" (auto-expand + "0/1"
+mirror); detach (context menu) restored it; `q` toggled the queue both ways; and
+the detail panel renders as the PropertyRow grid + Time-spent row (c3,
+previously unverified). Demo data restored — a commit/uncommit pair was added to
+Session 8's activity trail as a side effect (see [[project-test-account-hosted]]).
+
+**Remaining:** visual-baseline PNG generation (human/canonical-env); future
+additive DnD targets (drag onto a sidebar calendar → schedule; task list as a
+drag *source*) once those surfaces exist. See CONTINUATION-4.
+
+---
+
 ## Tasks follow-ups c3 — DnD layer, detail panel, Pomodoro prefs (2026-06-16)
 
 Branch `claude/suspicious-golick-3f4e80` off `cca9e11` (Opus). Continued the
