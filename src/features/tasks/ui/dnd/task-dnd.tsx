@@ -8,20 +8,26 @@
 //   • `TaskDropTarget` — a discriminated union of where a task can land; new
 //     surfaces add a variant + a branch in their drop handler, nothing else.
 //   • `useTaskDndSensors` — shared pointer + keyboard sensors (a11y reorder).
-//   • `SortableTask` + `DragHandle` — the wrapper + grip for sortable rows/cards.
+//   • `SortableTask` / `NestableTask` — wrappers that hand the row its drag
+//     listeners so the whole row is the activator (no separate grip).
 //
 // dnd-kit does the geometry; this module is the shared contract on top of it.
 
-import { forwardRef, type CSSProperties, type ReactNode } from "react";
+import { useCallback, type CSSProperties, type ReactNode } from "react";
 import {
   KeyboardSensor,
   PointerSensor,
+  closestCenter,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
+  type DraggableSyntheticListeners,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
 
 import { cn } from "../../../../lib/utils";
 
@@ -70,72 +76,61 @@ export function asTaskDropTarget(data: unknown): TaskDropTarget | null {
 
 /**
  * Shared sensors: a small pointer activation distance (so a click still selects
- * / opens the row without starting a drag) plus a keyboard sensor wired to the
- * sortable coordinate getter for accessible reordering (focus the grip, Space to
- * lift, arrows to move).
+ * / opens the row without starting a drag) plus a keyboard sensor for accessible
+ * dragging (focus the grip, Space to lift, arrows to move).
+ *
+ * `sortable` (default) wires the keyboard sensor to dnd-kit's sortable coordinate
+ * getter — correct for reorder lists inside a `SortableContext`. Drag-onto-target
+ * surfaces (e.g. nesting) have no sortable context, so they pass `sortable:false`
+ * to fall back to the default step-and-detect keyboard behaviour.
  */
-export function useTaskDndSensors() {
+export function useTaskDndSensors(opts?: { sortable?: boolean }) {
+  const sortable = opts?.sortable ?? true;
   return useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(
+      KeyboardSensor,
+      sortable ? { coordinateGetter: sortableKeyboardCoordinates } : undefined,
+    ),
   );
 }
 
-// ── drag handle ──────────────────────────────────────────────────────────────
-
-/** The activator bindings dnd-kit hands back from `useSortable`/`useDraggable`. */
-type SortableHandleBindings = Pick<ReturnType<typeof useSortable>, "listeners" | "attributes">;
-
-type DragHandleProps = SortableHandleBindings & {
-  disabled?: boolean;
-  className?: string;
-};
+// ── collision detection ──────────────────────────────────────────────────────
 
 /**
- * The grip a sortable row/card exposes as its drag affordance. Quiet by default
- * (reserves its gutter so nothing shifts), fades in on row hover/focus. A
- * dedicated handle — not the whole row — keeps click-to-select and inline edit
- * intact.
+ * Pointer-first collision strategy for drag-*onto*-target surfaces (nesting),
+ * where a droppable's rect can be taller than its own row: an expanded parent's
+ * `onto-task` node encloses its visible children (see {@link NestableTask}), so
+ * its geometric centre sits down among them. Plain `closestCenter` then
+ * mis-resolves a hover over a lower child to the *next sibling* (whose centre is
+ * nearer the pointer), nesting under the wrong parent. `pointerWithin` asks the
+ * precise question instead — which droppable actually contains the pointer — and
+ * only falls back to `closestCenter` when there is no pointer (keyboard dragging)
+ * or it sits outside every droppable. This is the dnd-kit-recommended combo for
+ * high-precision drop-onto-target semantics.
+ *
+ * Reorder surfaces (Queue/board) stay on plain `closestCenter`: their droppables
+ * are one row tall, so centre distance is the right proxy and the sortable
+ * keyboard path expects it.
  */
-export const DragHandle = forwardRef<HTMLButtonElement, DragHandleProps>(function DragHandle(
-  { listeners, attributes, disabled, className },
-  ref,
-) {
-  if (disabled) return null;
-  return (
-    <button
-      ref={ref}
-      type="button"
-      aria-label="Drag to reorder"
-      // The handle is the activator; swallow the click so it never selects/edits
-      // the row. dnd-kit's listeners own pointer/keydown.
-      onClick={(e) => e.stopPropagation()}
-      className={cn(
-        "flex h-5 w-4 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground/40",
-        "opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out)",
-        "hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        "group-hover:opacity-100 active:cursor-grabbing",
-        className,
-      )}
-      {...attributes}
-      {...listeners}
-    >
-      <GripVertical className="size-3.5" aria-hidden />
-    </button>
-  );
-});
+export const pointerFirstCollision: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  return pointerHits.length > 0 ? pointerHits : closestCenter(args);
+};
 
 // ── sortable wrapper ─────────────────────────────────────────────────────────
 
 type SortableTaskRender = (slot: {
-  /** The ready-to-render drag grip — place it where the row wants its handle. */
-  handle: ReactNode;
+  /** dnd-kit listeners — spread on the row root so the WHOLE row is the drag
+   * activator (no separate grip). A 6px activation distance (see
+   * {@link useTaskDndSensors}) keeps plain clicks selecting/opening the row. */
+  dragListeners: DraggableSyntheticListeners;
   isDragging: boolean;
 }) => ReactNode;
 
 /**
  * Wraps a sortable task row/card: owns the sortable node ref + transform and
- * hands back a pre-built {@link DragHandle} for the child to position. The
+ * hands the drag listeners back for the child to spread on the whole row. The
  * dragged item lifts (raised z + reduced opacity) while its neighbours animate
  * apart — the insertion affordance comes free from the sortable strategy.
  */
@@ -152,15 +147,11 @@ export function SortableTask({
   className?: string;
   render: SortableTaskRender;
 }) {
-  const {
-    setNodeRef,
-    setActivatorNodeRef,
-    listeners,
-    attributes,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id, data: taskDrag(id, from), disabled });
+  const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
+    id,
+    data: taskDrag(id, from),
+    disabled,
+  });
 
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -173,17 +164,70 @@ export function SortableTask({
       style={style}
       className={cn(isDragging && "relative z-10 opacity-60", className)}
     >
-      {render({
-        handle: (
-          <DragHandle
-            ref={setActivatorNodeRef}
-            listeners={listeners}
-            attributes={attributes}
-            disabled={disabled}
-          />
-        ),
-        isDragging,
-      })}
+      {render({ dragListeners: listeners, isDragging })}
+    </div>
+  );
+}
+
+// ── nestable wrapper (drag-onto-task → subtask) ──────────────────────────────
+
+type NestableTaskRender = (slot: {
+  /** dnd-kit listeners — spread on the row root so the WHOLE childless row is
+   * the drag activator. Undefined when this row can't be dragged (has children). */
+  dragListeners: DraggableSyntheticListeners;
+  /** A valid drop is currently hovering this row → caller paints the target. */
+  isOver: boolean;
+  isDragging: boolean;
+}) => ReactNode;
+
+/**
+ * Wraps a row that can be dragged *onto another row* to nest it (set parent),
+ * and/or receive such a drop. Unlike {@link SortableTask} there is no
+ * reordering: the row is a plain draggable plus an `onto-task` droppable on the
+ * same node. The two capabilities are gated independently —
+ *   • `canDrag` — only a childless task may become a subtask (one level), so the
+ *     handle (and lift) appear only when true;
+ *   • `canDrop` — only a valid parent target for the in-flight drag; the caller
+ *     recomputes this per render against the active task and toggles it, so
+ *     invalid rows never register as `over`.
+ */
+export function NestableTask({
+  id,
+  from,
+  canDrag = true,
+  canDrop = true,
+  className,
+  render,
+}: {
+  id: string;
+  from: TaskDragSource;
+  canDrag?: boolean;
+  canDrop?: boolean;
+  className?: string;
+  render: NestableTaskRender;
+}) {
+  const {
+    setNodeRef: setDragRef,
+    listeners,
+    isDragging,
+  } = useDraggable({ id, data: taskDrag(id, from), disabled: !canDrag });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `onto:${id}`,
+    data: { type: "onto-task", taskId: id } satisfies TaskDropTarget,
+    disabled: !canDrop,
+  });
+  // Same DOM node is both the drag source and the drop target.
+  const setNodeRef = useCallback(
+    (node: HTMLElement | null) => {
+      setDragRef(node);
+      setDropRef(node);
+    },
+    [setDragRef, setDropRef],
+  );
+
+  return (
+    <div ref={setNodeRef} className={cn(isDragging && "opacity-50", className)}>
+      {render({ dragListeners: listeners, isOver, isDragging })}
     </div>
   );
 }

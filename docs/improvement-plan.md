@@ -313,9 +313,13 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       (prior session); **reusable DnD layer** + Queue drag-reorder + board within-column
       reorder/insertion indicators; **detail panel rebuilt as the PropertyRow grid** +
       manual time-spent row; **Pomodoro settings** (Settings → Focus) wired into the
-      Focus timer. **Remaining:** drag-a-task-onto-another → subtask (DnD foundation
-      ready — `onto-task` variant + `DragHandle` in place); visual-test baselines;
-      `q` queue shortcut. See `.design/tasks-polish/CONTINUATION-3.md`.
+      Focus timer; **drag-a-task-onto-another → subtask** (`NestableTask` + `nestable`
+      List mode; one-level `canNestUnder`); **`q` queue shortcut** (replaces stale `t`).
+      All **live-verified** end-to-end on the hosted test account (c4). `property-row`
+      added to the visual suite. **Remaining:** visual-baseline PNG generation
+      (human/canonical-env; CI doesn't gate it); future additive DnD drop targets
+      (sidebar calendar → schedule; task list as a drag source) once those surfaces
+      exist. See `.design/tasks-polish/CONTINUATION-4.md`.
 
 ## Model assignment (decided with Maciej, 2026-06-12)
 

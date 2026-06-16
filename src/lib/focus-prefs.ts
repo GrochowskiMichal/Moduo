@@ -1,11 +1,20 @@
-// Focus/Pomodoro preferences. Same two-layer persistence as appearance.ts — a
-// localStorage mirror for instant reads + Supabase `user_preferences` for
-// cross-device sync (every focus field syncs) via prefs-sync.ts — but with no
-// DOM application; these only drive the Focus-card timer. The timer reads these
-// instead of hardcoded intervals; Settings → Focus and the card's ⋯ popover edit
-// them. The paused redb local store is not used.
+// Focus/Pomodoro preferences. No DOM surface to apply to (these only drive the
+// Focus-card timer — it reads them instead of hardcoded intervals; Settings →
+// Focus and the card's ⋯ popover edit them), so coherence is handled in two
+// layers:
+//
+//  1. In-app + cross-tab: the canonical value lives in a module-level store read
+//     via useSyncExternalStore, so every useFocusPrefs() instance shares it —
+//     editing in Settings reaches an already-mounted timer (the NowCard) without
+//     a remount — and a `storage` listener folds in writes from other tabs.
+//  2. Cross-device: the value (every focus field syncs) round-trips to Supabase
+//     `user_preferences` via prefs-sync.ts, with the localStorage mirror as the
+//     instant first-paint + offline cache. The paused redb local store is not used.
+//
+// A value won from the cloud (another device) flows back through the same store,
+// so it propagates to every instance exactly like a local edit.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { useDomainSync } from "./prefs-sync";
 
 export interface FocusPrefs {
@@ -80,6 +89,47 @@ function writeLocalMirror(prefs: FocusPrefs): void {
   }
 }
 
+// ── Shared module store ───────────────────────────────────────────────────────
+// The canonical in-memory value. Every useFocusPrefs() subscribes to this, so a
+// write from any instance (Settings → Focus, the card's ⋯ popover) or from the
+// cloud reconcile re-renders the others — no remount required.
+
+let store: FocusPrefs = readLocalFocusPrefs();
+const listeners = new Set<() => void>();
+
+function emit(): void {
+  for (const listener of listeners) listener();
+}
+
+function setStore(next: FocusPrefs): void {
+  store = next;
+  emit();
+}
+
+function getSnapshot(): FocusPrefs {
+  return store;
+}
+
+function handleStorage(event: StorageEvent): void {
+  // A cross-tab write to our key (or a localStorage.clear(), key === null).
+  if (event.key !== null && event.key !== LOCAL_STORAGE_KEY) return;
+  store = readLocalFocusPrefs();
+  emit();
+}
+
+function subscribe(listener: () => void): () => void {
+  if (listeners.size === 0 && typeof window !== "undefined") {
+    window.addEventListener("storage", handleStorage);
+  }
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0 && typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorage);
+    }
+  };
+}
+
 export interface UseFocusPrefs {
   prefs: FocusPrefs;
   setPrefs: (patch: Partial<FocusPrefs>) => void;
@@ -87,20 +137,21 @@ export interface UseFocusPrefs {
 }
 
 export function useFocusPrefs(): UseFocusPrefs {
-  const [prefs, setPrefsState] = useState<FocusPrefs>(readLocalFocusPrefs);
-  const prefsRef = useRef(prefs);
-  prefsRef.current = prefs;
+  const prefs = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  // Every focus field syncs, so the cloud blob IS the full prefs object.
+  // A value won from the cloud (another device) lands in the shared store, so
+  // every mounted instance re-renders; keep the localStorage mirror warm too.
   const applyFromCloud = useCallback((value: Record<string, unknown>) => {
     const next = value as unknown as FocusPrefs; // validated by sanitizeCloud / defaults
+    setStore(next);
     writeLocalMirror(next);
-    setPrefsState(next);
   }, []);
 
+  // Every focus field syncs, so the cloud blob IS the full prefs object, read
+  // from the shared store (the canonical value).
   const { pushLocalChange } = useDomainSync({
     domain: "focus",
-    getLocalSyncable: () => prefsRef.current as unknown as Record<string, unknown>,
+    getLocalSyncable: () => store as unknown as Record<string, unknown>,
     defaults: DEFAULT_FOCUS_PREFS as unknown as Record<string, unknown>,
     sanitizeCloud: (raw) => sanitize(raw) as unknown as Record<string, unknown>,
     apply: applyFromCloud,
@@ -108,12 +159,10 @@ export function useFocusPrefs(): UseFocusPrefs {
 
   const update = useCallback(
     (patch: Partial<FocusPrefs>) => {
-      setPrefsState((prev) => {
-        const next = sanitize({ ...prev, ...patch });
-        writeLocalMirror(next);
-        pushLocalChange(next as unknown as Record<string, unknown>);
-        return next;
-      });
+      const next = sanitize({ ...store, ...patch });
+      setStore(next);
+      writeLocalMirror(next);
+      pushLocalChange(next as unknown as Record<string, unknown>);
     },
     [pushLocalChange]
   );
