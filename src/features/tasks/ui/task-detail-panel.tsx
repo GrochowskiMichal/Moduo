@@ -141,7 +141,12 @@ function DetailBody({
   // tracker lives only in Focus (locked decision 2026-06-16); here you just
   // type/correct the value. Stored as seconds; shown/edited in whole minutes.
   const timeSpentDisplay = task.timeSpentSeconds ? String(Math.round(task.timeSpentSeconds / 60)) : "";
+  // Draft only while the field is focused; otherwise the input mirrors the live
+  // total (which Focus may accrue into in the background). Seeding the draft once
+  // and leaving it would let a bare blur write a stale value over freshly-tracked
+  // seconds — see commitTimeSpent.
   const [timeSpent, setTimeSpentDraft] = useState(timeSpentDisplay);
+  const [timeSpentEditing, setTimeSpentEditing] = useState(false);
 
   const drifted = isDrifted(task);
   const committed = !!task.committedFor && task.committedFor === api.today;
@@ -172,7 +177,9 @@ function DetailBody({
   };
   const commitTimeSpent = () => {
     // Only write when the field actually changed — a bare focus/blur must never
-    // truncate the seconds-precise total accrued in Focus to whole minutes.
+    // truncate the seconds-precise total accrued in Focus to whole minutes. The
+    // draft is re-seeded from the live display on focus, so this equality holds
+    // for an untouched field even after the total changed in the background.
     if (timeSpent === timeSpentDisplay) return;
     const n = Number.parseInt(timeSpent, 10);
     api.setTimeSpent(task.id, Number.isFinite(n) && n > 0 ? n * 60 : 0);
@@ -377,11 +384,18 @@ function DetailBody({
                 size="sm"
                 variant="ghost"
                 disabled={!canEdit}
-                value={timeSpent}
+                value={timeSpentEditing ? timeSpent : timeSpentDisplay}
                 placeholder="0"
                 aria-label="Time spent in minutes"
+                onFocus={() => {
+                  setTimeSpentDraft(timeSpentDisplay);
+                  setTimeSpentEditing(true);
+                }}
                 onChange={(e) => setTimeSpentDraft(e.target.value)}
-                onBlur={commitTimeSpent}
+                onBlur={() => {
+                  setTimeSpentEditing(false);
+                  commitTimeSpent();
+                }}
                 className="w-20"
               />
               <span className="text-xs text-muted-foreground">min</span>
