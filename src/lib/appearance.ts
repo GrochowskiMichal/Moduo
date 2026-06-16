@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
-import { runtime } from "./runtime";
+// Persisted appearance settings (theme, shade, accent, density, radius, font,
+// text size, tabs). localStorage-only for now: it survives restarts on web and
+// in the Tauri WebView, and main.tsx reads it synchronously at startup so the
+// first paint already has the right theme. There is no cross-device sync yet —
+// settings stay on the device that set them. Cross-device sync is future work
+// (a Supabase-backed prefs store with this localStorage copy as the offline
+// cache); we deliberately do not use the redb local store, which is paused.
+
+import { useCallback, useState } from "react";
 
 export type Theme = "dark" | "light";
 export type Shade = "black" | "warm" | "cool" | "slate" | "plum" | "forest";
@@ -33,8 +40,6 @@ export const DEFAULT_APPEARANCE: Appearance = {
 };
 
 const LOCAL_STORAGE_KEY = "moduo.appearance";
-const TAURI_NAMESPACE = "appearance";
-const TAURI_KEY = "settings";
 
 const DATA_ATTR_MAP: Record<keyof Appearance, string> = {
   theme: "data-theme",
@@ -101,39 +106,12 @@ export function applyAppearance(appearance: Appearance): void {
   }
 }
 
-function writeLocalMirror(appearance: Appearance): void {
+function writeLocal(appearance: Appearance): void {
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appearance));
   } catch {
     /* quota exceeded or storage disabled — non-fatal */
-  }
-}
-
-async function readPersisted(): Promise<Appearance | null> {
-  if (!runtime) return null;
-  try {
-    const raw = await runtime.localStore.get(TAURI_NAMESPACE, TAURI_KEY);
-    if (!raw) return null;
-    if (typeof raw === "string") {
-      try {
-        return sanitize(JSON.parse(raw));
-      } catch {
-        return null;
-      }
-    }
-    return sanitize(raw);
-  } catch {
-    return null;
-  }
-}
-
-async function writePersisted(appearance: Appearance): Promise<void> {
-  if (!runtime) return;
-  try {
-    await runtime.localStore.set(TAURI_NAMESPACE, TAURI_KEY, appearance);
-  } catch {
-    /* non-fatal — the localStorage mirror still holds the value */
   }
 }
 
@@ -154,25 +132,11 @@ export interface UseAppearance {
 export function useAppearance(): UseAppearance {
   const [appearance, setAppearanceState] = useState<Appearance>(readLocalAppearance);
 
-  useEffect(() => {
-    let cancelled = false;
-    void readPersisted().then((persisted) => {
-      if (cancelled || !persisted) return;
-      setAppearanceState(persisted);
-      applyAppearance(persisted);
-      writeLocalMirror(persisted);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const update = useCallback((patch: Partial<Appearance>) => {
     setAppearanceState((prev) => {
       const next: Appearance = { ...prev, ...patch };
       applyAppearance(next);
-      writeLocalMirror(next);
-      void writePersisted(next);
+      writeLocal(next);
       return next;
     });
   }, []);

@@ -1,11 +1,12 @@
-// Persisted Focus/Pomodoro preferences. Same persistence shape as
-// appearance.ts (localStorage mirror for an instant first paint + the Tauri
-// local store as the source of truth) but with no DOM application — these only
-// drive the Focus-card timer. The timer reads these instead of hardcoded
-// intervals; the Settings → Focus section and the card's ⋯ popover edit them.
+// Persisted Focus/Pomodoro preferences. Same persistence model as appearance.ts:
+// localStorage-only for now (survives restarts on web and in the Tauri WebView,
+// no cross-device sync yet), but with no DOM application — these only drive the
+// Focus-card timer. The timer reads these instead of hardcoded intervals; the
+// Settings → Focus section and the card's ⋯ popover edit them. Cross-device sync
+// is future work (a Supabase-backed prefs store with this localStorage copy as
+// the offline cache), not the paused redb local store.
 
-import { useCallback, useEffect, useState } from "react";
-import { runtime } from "./runtime";
+import { useCallback, useState } from "react";
 
 export interface FocusPrefs {
   /** Work interval, minutes. */
@@ -34,8 +35,6 @@ export const DEFAULT_FOCUS_PREFS: FocusPrefs = {
 };
 
 const LOCAL_STORAGE_KEY = "moduo.focus";
-const TAURI_NAMESPACE = "focus";
-const TAURI_KEY = "prefs";
 
 const MIN_MIN = 1;
 const MAX_MIN = 180;
@@ -72,39 +71,12 @@ export function readLocalFocusPrefs(): FocusPrefs {
   }
 }
 
-function writeLocalMirror(prefs: FocusPrefs): void {
+function writeLocal(prefs: FocusPrefs): void {
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(prefs));
   } catch {
     /* quota exceeded or storage disabled — non-fatal */
-  }
-}
-
-async function readPersisted(): Promise<FocusPrefs | null> {
-  if (!runtime) return null;
-  try {
-    const raw = await runtime.localStore.get(TAURI_NAMESPACE, TAURI_KEY);
-    if (!raw) return null;
-    if (typeof raw === "string") {
-      try {
-        return sanitize(JSON.parse(raw));
-      } catch {
-        return null;
-      }
-    }
-    return sanitize(raw);
-  } catch {
-    return null;
-  }
-}
-
-async function writePersisted(prefs: FocusPrefs): Promise<void> {
-  if (!runtime) return;
-  try {
-    await runtime.localStore.set(TAURI_NAMESPACE, TAURI_KEY, prefs);
-  } catch {
-    /* non-fatal — the localStorage mirror still holds the value */
   }
 }
 
@@ -117,23 +89,10 @@ export interface UseFocusPrefs {
 export function useFocusPrefs(): UseFocusPrefs {
   const [prefs, setPrefsState] = useState<FocusPrefs>(readLocalFocusPrefs);
 
-  useEffect(() => {
-    let cancelled = false;
-    void readPersisted().then((persisted) => {
-      if (cancelled || !persisted) return;
-      setPrefsState(persisted);
-      writeLocalMirror(persisted);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const update = useCallback((patch: Partial<FocusPrefs>) => {
     setPrefsState((prev) => {
       const next = sanitize({ ...prev, ...patch });
-      writeLocalMirror(next);
-      void writePersisted(next);
+      writeLocal(next);
       return next;
     });
   }, []);
