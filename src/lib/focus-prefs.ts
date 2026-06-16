@@ -1,10 +1,18 @@
-// Persisted Focus/Pomodoro preferences. Same persistence shape as
-// appearance.ts (localStorage mirror for an instant first paint + the Tauri
-// local store as the source of truth) but with no DOM application — these only
-// drive the Focus-card timer. The timer reads these instead of hardcoded
-// intervals; the Settings → Focus section and the card's ⋯ popover edit them.
+// Persisted Focus/Pomodoro preferences. Same persistence shape as appearance.ts
+// (localStorage mirror for an instant first paint + the Tauri local store as the
+// source of truth) but with no DOM application — these only drive the Focus-card
+// timer. The timer reads these instead of hardcoded intervals; the Settings →
+// Focus section and the card's ⋯ popover edit them.
+//
+// Unlike appearance.ts — which stays coherent across instances because every
+// write lands on :root and every reader pulls from the same DOM — these prefs
+// have no surface to apply to. So the canonical value lives in a module-level
+// store read via useSyncExternalStore: every useFocusPrefs() instance shares it,
+// which is what lets Settings → Focus reach an already-mounted timer (the
+// NowCard) without waiting for a remount. A `storage` listener folds in writes
+// from other tabs too.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { runtime } from "./runtime";
 
 export interface FocusPrefs {
@@ -108,6 +116,47 @@ async function writePersisted(prefs: FocusPrefs): Promise<void> {
   }
 }
 
+// ── Shared module store ───────────────────────────────────────────────────────
+// The canonical in-memory value. Every useFocusPrefs() subscribes to this, so a
+// write from any instance (Settings → Focus, the card's ⋯ popover) re-renders
+// the others — no remount required.
+
+let store: FocusPrefs = readLocalFocusPrefs();
+const listeners = new Set<() => void>();
+
+function emit(): void {
+  for (const listener of listeners) listener();
+}
+
+function setStore(next: FocusPrefs): void {
+  store = next;
+  emit();
+}
+
+function getSnapshot(): FocusPrefs {
+  return store;
+}
+
+function handleStorage(event: StorageEvent): void {
+  // A cross-tab write to our key (or a localStorage.clear(), key === null).
+  if (event.key !== null && event.key !== LOCAL_STORAGE_KEY) return;
+  store = readLocalFocusPrefs();
+  emit();
+}
+
+function subscribe(listener: () => void): () => void {
+  if (listeners.size === 0 && typeof window !== "undefined") {
+    window.addEventListener("storage", handleStorage);
+  }
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0 && typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorage);
+    }
+  };
+}
+
 export interface UseFocusPrefs {
   prefs: FocusPrefs;
   setPrefs: (patch: Partial<FocusPrefs>) => void;
@@ -115,13 +164,16 @@ export interface UseFocusPrefs {
 }
 
 export function useFocusPrefs(): UseFocusPrefs {
-  const [prefs, setPrefsState] = useState<FocusPrefs>(readLocalFocusPrefs);
+  const prefs = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
+  // Hydrate the shared store from the persisted source once (mirrors
+  // appearance.ts). `runtime` is null today so this is a no-op, but it keeps the
+  // Tauri path live for when it's wired up; idempotent across instances.
   useEffect(() => {
     let cancelled = false;
     void readPersisted().then((persisted) => {
       if (cancelled || !persisted) return;
-      setPrefsState(persisted);
+      setStore(persisted);
       writeLocalMirror(persisted);
     });
     return () => {
@@ -130,12 +182,10 @@ export function useFocusPrefs(): UseFocusPrefs {
   }, []);
 
   const update = useCallback((patch: Partial<FocusPrefs>) => {
-    setPrefsState((prev) => {
-      const next = sanitize({ ...prev, ...patch });
-      writeLocalMirror(next);
-      void writePersisted(next);
-      return next;
-    });
+    const next = sanitize({ ...store, ...patch });
+    setStore(next);
+    writeLocalMirror(next);
+    void writePersisted(next);
   }, []);
 
   return {
