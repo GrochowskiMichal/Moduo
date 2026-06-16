@@ -42,6 +42,7 @@ const STORIES = [
   { name: "calendar-default", id: "components-ui-calendar--default" },
   { name: "date-field-date-only", id: "components-ui-date-field--date-only" },
   { name: "tag-chip-all-hues", id: "components-tag-chip--all-hues" },
+  { name: "property-row-grid", id: "components-ui-property-row--grid" },
 ];
 
 test.describe("primitives — visual snapshots", () => {
