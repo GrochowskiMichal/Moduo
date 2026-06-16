@@ -1,4 +1,5 @@
-import { useDraggable } from "@dnd-kit/core";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   CalendarDays,
   Clock,
@@ -33,6 +34,7 @@ import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../m
 import { recurrenceLabel } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { taskDrag } from "./dnd/task-dnd";
 import { LevelDots } from "./level-icons";
 import { BlockedMarker } from "./task-row";
 
@@ -52,7 +54,8 @@ type Props = {
   api: TasksModuleApi;
 };
 
-/** A draggable kanban card. Cross-column drag changes status (or bucket). */
+/** A sortable kanban card. Drag reorders within a column; dropping on another
+ *  column changes status (or bucket). */
 export function TaskCard({
   task,
   bucketName,
@@ -65,15 +68,16 @@ export function TaskCard({
   onTagFilter,
   api,
 }: Props) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
-    data: { type: "card", taskId: task.id, bucketId: task.bucketId, status: task.status },
+    data: taskDrag(task.id, "board"),
     disabled: !canEdit,
   });
 
   const card = (
     <div
       ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       {...attributes}
       {...(canEdit ? listeners : {})}
       role="button"
@@ -90,7 +94,9 @@ export function TaskCard({
           : "border-border bg-card hover:border-foreground/30",
         // whole card is the drag handle (grip removed)
         canEdit && "cursor-grab active:cursor-grabbing",
-        isDragging && "opacity-40",
+        // hide the source while the DragOverlay clone follows the cursor; the
+        // empty slot stays so neighbours animate apart (insertion indicator).
+        isDragging && "opacity-0",
       )}
     >
       <CardBody
