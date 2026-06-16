@@ -12,12 +12,23 @@ import type {
 } from "./model";
 
 // ── Position (fractional indexing) ───────────────────────────────────────────
-// Fixed-width base-36 keys so lexicographic order == numeric order. STEP leaves
-// room to insert between neighbours without re-indexing. Enough for v1; a full
-// Lexorank can replace this later without touching call sites.
+// Order keys are base-36 digit strings compared lexicographically (see
+// `byPosition` in the data hook and the DB's text sort), so each key reads as
+// the fraction 0.<digits>. Fresh keys are fixed-width and STEP-spaced to leave
+// integer room between neighbours; when that room runs out (adjacent neighbours)
+// we subdivide by extending precision — appending base-36 digits — so the gap
+// can always be split again. The scheme never exhausts and needs no re-indexing.
+//
+// Lexicographic order matches fraction order for every key minted here: a
+// midpoint is strictly between its bounds, so two keys never share a value, and
+// distinct fraction values always agree with string comparison. (Equal values —
+// the only case lexicographic order could disagree, via trailing zeros — never
+// arise.) `midpointFraction` therefore never emits a trailing zero.
 
 const POS_WIDTH = 10;
 const POS_STEP = 1 << 20;
+const POS_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"; // base 36 (Number#toString(36))
+const POS_MID_DIGIT = POS_ALPHABET[POS_ALPHABET.length >> 1]!; // "i" — a non-zero middle digit
 
 function encodePos(n: number): string {
   return Math.max(0, Math.floor(n)).toString(36).padStart(POS_WIDTH, "0");
@@ -25,6 +36,39 @@ function encodePos(n: number): string {
 function decodePos(s: string): number {
   const n = parseInt(s, 36);
   return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * A digit string strictly between the base-36 fractions `lo` and `hi`, extending
+ * precision when no existing digit fits. `lo` is "" (= 0) at the bottom; `hi` is
+ * `null` (= 1) for an open top. Caller guarantees `lo < hi`. Never returns a
+ * trailing zero, so lexicographic order matches fraction order for the result.
+ * This is the unbounded path that backs {@link betweenPositions} once the
+ * integer gap between two fixed-width neighbours is gone.
+ */
+function midpointFraction(lo: string, hi: string | null): string {
+  // Carry any shared leading digits onto the result and recurse on the rest —
+  // the split happens at the first place the bounds diverge. Bounded by `hi`'s
+  // length so a degenerate equal/zero bound can't spin forever. (Skipped for an
+  // open top, which shares no prefix with a real lower bound.)
+  if (hi !== null) {
+    let n = 0;
+    while (n < hi.length && (lo[n] ?? "0") === hi[n]) n += 1;
+    if (n > 0) {
+      const tail = hi.slice(n);
+      return hi.slice(0, n) + midpointFraction(lo.slice(n), tail.length > 0 ? tail : null);
+    }
+  }
+  const digitLo = lo.length > 0 ? POS_ALPHABET.indexOf(lo[0]!) : 0;
+  const digitHi = hi !== null && hi.length > 0 ? POS_ALPHABET.indexOf(hi[0]!) : POS_ALPHABET.length;
+  if (digitHi - digitLo > 1) {
+    // Room for a whole digit between the bounds — take the middle one.
+    return POS_ALPHABET[Math.round((digitLo + digitHi) / 2)]!;
+  }
+  // Bounds are consecutive digits: borrow `hi`'s leading digit if it has more
+  // precision to spare, else descend into `lo` against an open top.
+  if (hi !== null && hi.length > 1) return hi.slice(0, 1);
+  return POS_ALPHABET[digitLo]! + midpointFraction(lo.slice(1), null);
 }
 
 /** A position string that sorts after every existing position. */
@@ -37,12 +81,43 @@ export function endPosition(existing: Array<{ position: string }>): string {
   return encodePos(max + POS_STEP);
 }
 
-/** A position string strictly between `a` and `b` (either bound may be null). */
+/**
+ * A position string strictly between `a` and `b` (either bound may be null).
+ * Uses a fixed-width integer midpoint while neighbours still have room between
+ * them (lexicographic order == integer order only at equal width, so this is
+ * gated on two clean POS_WIDTH keys). Once they're adjacent — or a neighbour is
+ * already a subdivided, variable-width key — it falls through to
+ * {@link midpointFraction}, which extends precision instead of colliding, so
+ * repeated inserts into one shrinking gap never exhaust it (the board-reorder
+ * bug). Open ends step by STEP so the column's min/max stay clean keys.
+ */
 export function betweenPositions(a: string | null, b: string | null): string {
-  const lo = a ? decodePos(a) : 0;
-  const hi = b ? decodePos(b) : lo + 2 * POS_STEP;
-  if (hi - lo <= 1) return encodePos(lo + 1); // overflow-safe-ish fallback
-  return encodePos(Math.floor((lo + hi) / 2));
+  if (a === null) {
+    if (b === null) return encodePos(POS_STEP); // lone item
+    // Insert below `b`: halve the integer room when `b` is a clean key that has
+    // some, otherwise subdivide beneath it.
+    if (b.length === POS_WIDTH) {
+      const hi = decodePos(b);
+      if (hi > 1) return encodePos(Math.floor(hi / 2));
+    }
+    return midpointFraction("", b);
+  }
+  if (b === null) {
+    // Open top — step past `a`. The column's max is always a clean key
+    // (subdivision only happens between two present neighbours), so the integer
+    // step stays consistent with `endPosition`.
+    return encodePos(decodePos(a) + POS_STEP);
+  }
+  // Degenerate bounds from a legacy collision (equal, or out of order) can't be
+  // split — nudge deterministically past `a` rather than loop or tie.
+  if (a >= b) return a + POS_MID_DIGIT;
+  // Interior with room: integer midpoint between two clean, equal-width keys.
+  if (a.length === POS_WIDTH && b.length === POS_WIDTH) {
+    const lo = decodePos(a);
+    const hi = decodePos(b);
+    if (hi - lo > 1) return encodePos(Math.floor((lo + hi) / 2));
+  }
+  return midpointFraction(a, b);
 }
 
 /** Local calendar date as YYYY-MM-DD (the value stored in `committedFor`). */
