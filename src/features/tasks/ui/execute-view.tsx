@@ -165,7 +165,7 @@ function NowCard({
         <div className="min-w-0">
           {timer.tracking ? (
             <div className="flex items-center gap-1.5">
-              {timer.running ? <span className="size-2 rounded-full bg-muted-foreground" aria-hidden /> : null}
+              {timer.running ? <span className="track-pulse size-2 rounded-full bg-muted-foreground" aria-hidden /> : null}
               <span className="mr-1 font-sans text-lg tabular-nums text-foreground">{formatClock(timer.bigClock)}</span>
               <IconButton
                 icon={timer.running ? Pause : Play}

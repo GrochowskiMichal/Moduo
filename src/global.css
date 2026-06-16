@@ -232,6 +232,30 @@ body,
   }
 }
 
+/* Quiet "live" pulse for the running time-tracking dot. Gentle opacity only
+   (no transform/accent), so it reads as active without shouting. */
+@keyframes track-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.track-pulse {
+  animation: track-pulse 1.8s var(--ease-out) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track-pulse {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
 /* ═══ Fade + micro-blur motif for floating surfaces (popovers, dialogs, menus,
    selects). Enter/exit fade with a small blur-in. Uses --motion-fade so a soft
    fade survives reduced-motion; --blur-veil is 0 under reduced-motion (no blur),
