@@ -1,11 +1,12 @@
-// Persisted Focus/Pomodoro preferences. Same persistence shape as
-// appearance.ts (localStorage mirror for an instant first paint + the Tauri
-// local store as the source of truth) but with no DOM application — these only
-// drive the Focus-card timer. The timer reads these instead of hardcoded
-// intervals; the Settings → Focus section and the card's ⋯ popover edit them.
+// Focus/Pomodoro preferences. Same two-layer persistence as appearance.ts — a
+// localStorage mirror for instant reads + Supabase `user_preferences` for
+// cross-device sync (every focus field syncs) via prefs-sync.ts — but with no
+// DOM application; these only drive the Focus-card timer. The timer reads these
+// instead of hardcoded intervals; Settings → Focus and the card's ⋯ popover edit
+// them. The paused redb local store is not used.
 
-import { useCallback, useEffect, useState } from "react";
-import { runtime } from "./runtime";
+import { useCallback, useRef, useState } from "react";
+import { useDomainSync } from "./prefs-sync";
 
 export interface FocusPrefs {
   /** Work interval, minutes. */
@@ -34,8 +35,6 @@ export const DEFAULT_FOCUS_PREFS: FocusPrefs = {
 };
 
 const LOCAL_STORAGE_KEY = "moduo.focus";
-const TAURI_NAMESPACE = "focus";
-const TAURI_KEY = "prefs";
 
 const MIN_MIN = 1;
 const MAX_MIN = 180;
@@ -81,33 +80,6 @@ function writeLocalMirror(prefs: FocusPrefs): void {
   }
 }
 
-async function readPersisted(): Promise<FocusPrefs | null> {
-  if (!runtime) return null;
-  try {
-    const raw = await runtime.localStore.get(TAURI_NAMESPACE, TAURI_KEY);
-    if (!raw) return null;
-    if (typeof raw === "string") {
-      try {
-        return sanitize(JSON.parse(raw));
-      } catch {
-        return null;
-      }
-    }
-    return sanitize(raw);
-  } catch {
-    return null;
-  }
-}
-
-async function writePersisted(prefs: FocusPrefs): Promise<void> {
-  if (!runtime) return;
-  try {
-    await runtime.localStore.set(TAURI_NAMESPACE, TAURI_KEY, prefs);
-  } catch {
-    /* non-fatal — the localStorage mirror still holds the value */
-  }
-}
-
 export interface UseFocusPrefs {
   prefs: FocusPrefs;
   setPrefs: (patch: Partial<FocusPrefs>) => void;
@@ -116,27 +88,35 @@ export interface UseFocusPrefs {
 
 export function useFocusPrefs(): UseFocusPrefs {
   const [prefs, setPrefsState] = useState<FocusPrefs>(readLocalFocusPrefs);
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
 
-  useEffect(() => {
-    let cancelled = false;
-    void readPersisted().then((persisted) => {
-      if (cancelled || !persisted) return;
-      setPrefsState(persisted);
-      writeLocalMirror(persisted);
-    });
-    return () => {
-      cancelled = true;
-    };
+  // Every focus field syncs, so the cloud blob IS the full prefs object.
+  const applyFromCloud = useCallback((value: Record<string, unknown>) => {
+    const next = value as unknown as FocusPrefs; // validated by sanitizeCloud / defaults
+    writeLocalMirror(next);
+    setPrefsState(next);
   }, []);
 
-  const update = useCallback((patch: Partial<FocusPrefs>) => {
-    setPrefsState((prev) => {
-      const next = sanitize({ ...prev, ...patch });
-      writeLocalMirror(next);
-      void writePersisted(next);
-      return next;
-    });
-  }, []);
+  const { pushLocalChange } = useDomainSync({
+    domain: "focus",
+    getLocalSyncable: () => prefsRef.current as unknown as Record<string, unknown>,
+    defaults: DEFAULT_FOCUS_PREFS as unknown as Record<string, unknown>,
+    sanitizeCloud: (raw) => sanitize(raw) as unknown as Record<string, unknown>,
+    apply: applyFromCloud,
+  });
+
+  const update = useCallback(
+    (patch: Partial<FocusPrefs>) => {
+      setPrefsState((prev) => {
+        const next = sanitize({ ...prev, ...patch });
+        writeLocalMirror(next);
+        pushLocalChange(next as unknown as Record<string, unknown>);
+        return next;
+      });
+    },
+    [pushLocalChange]
+  );
 
   return {
     prefs,

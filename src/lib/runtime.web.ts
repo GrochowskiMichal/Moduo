@@ -18,6 +18,7 @@ import type {
   ModuoRuntime,
   RuntimeCapabilities,
   RuntimeSession,
+  UserPreferences,
 } from "./runtime.types";
 
 // ── Supabase client ────────────────────────────────────────────────────────────
@@ -60,6 +61,20 @@ function sessionFromSupabase(supaSession: any): RuntimeSession | null {
       id: supaSession.user.id,
       email: supaSession.user.email ?? null,
     },
+  };
+}
+
+function prefsRowToModel(row: {
+  appearance: unknown;
+  appearance_updated_at: string | null;
+  focus: unknown;
+  focus_updated_at: string | null;
+}): UserPreferences {
+  return {
+    appearance: (row.appearance as Record<string, unknown> | null) ?? null,
+    appearanceUpdatedAt: row.appearance_updated_at ?? null,
+    focus: (row.focus as Record<string, unknown> | null) ?? null,
+    focusUpdatedAt: row.focus_updated_at ?? null,
   };
 }
 
@@ -598,6 +613,39 @@ export const webRuntime: ModuoRuntime = {
     async remove(namespace, key) {
       if (typeof window === "undefined") return;
       window.localStorage.removeItem(`${LS_PREFIX}${namespace}:${key}`);
+    },
+  },
+
+  preferences: {
+    async get() {
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (!user) return null;
+      const { data, error } = await supabaseClient
+        .from("user_preferences")
+        .select("appearance, appearance_updated_at, focus, focus_updated_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return null;
+      return prefsRowToModel(data);
+    },
+    async set(patch) {
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (!user) return null;
+      // Upsert only the domains present in the patch; columns omitted here keep
+      // their existing value on conflict (and their table default on insert).
+      const row: Record<string, unknown> = { user_id: user.id };
+      if (patch.appearance !== undefined) row.appearance = patch.appearance ?? {};
+      if (patch.appearanceUpdatedAt !== undefined) row.appearance_updated_at = patch.appearanceUpdatedAt;
+      if (patch.focus !== undefined) row.focus = patch.focus ?? {};
+      if (patch.focusUpdatedAt !== undefined) row.focus_updated_at = patch.focusUpdatedAt;
+      const { data, error } = await supabaseClient
+        .from("user_preferences")
+        .upsert(row, { onConflict: "user_id" })
+        .select("appearance, appearance_updated_at, focus, focus_updated_at")
+        .single();
+      if (error) throw new Error(error.message);
+      return prefsRowToModel(data);
     },
   },
 

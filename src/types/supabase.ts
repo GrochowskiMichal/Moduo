@@ -778,6 +778,41 @@ export type Database = {
         }
         Relationships: []
       }
+      user_preferences: {
+        Row: {
+          appearance: Json
+          appearance_updated_at: string
+          created_at: string
+          focus: Json
+          focus_updated_at: string
+          user_id: string
+        }
+        Insert: {
+          appearance?: Json
+          appearance_updated_at?: string
+          created_at?: string
+          focus?: Json
+          focus_updated_at?: string
+          user_id: string
+        }
+        Update: {
+          appearance?: Json
+          appearance_updated_at?: string
+          created_at?: string
+          focus?: Json
+          focus_updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       waitlist: {
         Row: {
           created_at: string

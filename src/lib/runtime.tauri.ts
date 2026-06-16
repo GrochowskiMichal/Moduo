@@ -208,4 +208,8 @@ export const tauriRuntime: ModuoRuntime = {
   // Cloud-first: Supabase-direct, same code path as web. The redb-backed
   // tasks_module_* commands stay registered for the lite version.
   tasks: webRuntime.tasks,
+
+  // Cloud-first per-user settings. Delegates to the web runtime today; the
+  // future offline-lite build can wrap this with a local queue + replay.
+  preferences: webRuntime.preferences,
 };

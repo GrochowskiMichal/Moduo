@@ -78,6 +78,21 @@ export type WorkspaceApiKey = {
   lastUsedAt: string | null;
 };
 
+/**
+ * Per-user UI / workflow settings that follow the user across devices
+ * (cloud-first via Supabase; backed by the `user_preferences` table). Two
+ * opaque JSONB domains, each with its own client-set `updatedAt` so they
+ * reconcile independently (per-domain last-write-wins). The client owns the
+ * field shapes and decides which fields are syncable — the runtime is dumb
+ * transport. See src/lib/prefs-sync.ts and the appearance / focus-prefs hooks.
+ */
+export type UserPreferences = {
+  appearance: Record<string, unknown> | null;
+  appearanceUpdatedAt: string | null;
+  focus: Record<string, unknown> | null;
+  focusUpdatedAt: string | null;
+};
+
 export type ModuoRuntime = {
   capabilities: RuntimeCapabilities;
 
@@ -207,6 +222,16 @@ export type ModuoRuntime = {
     get(namespace: string, key: string): Promise<any>;
     set(namespace: string, key: string, value: unknown): Promise<void>;
     remove(namespace: string, key: string): Promise<void>;
+  };
+
+  /**
+   * Cross-device user settings (appearance + focus). Cloud-first: web hits
+   * Supabase directly; desktop delegates to the web runtime. Both return null
+   * when signed out. `set` upserts only the domains present in the patch.
+   */
+  preferences: {
+    get(): Promise<UserPreferences | null>;
+    set(patch: Partial<UserPreferences>): Promise<UserPreferences | null>;
   };
 
   window: {
