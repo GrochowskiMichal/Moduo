@@ -35,6 +35,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../components/ui/popover";
+import { PropertyRow } from "../../../components/ui/property-row";
 import { TagChip } from "../../../components/tag-chip";
 import { TagPicker } from "../../../components/tag-picker";
 import { DateField } from "../../../components/ui/date-field";
@@ -136,6 +137,11 @@ function DetailBody({
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [duration, setDuration] = useState(task.durationMinutes != null ? String(task.durationMinutes) : "");
+  // Manual time-spent (minutes) — adjust the persisted total directly. The live
+  // tracker lives only in Focus (locked decision 2026-06-16); here you just
+  // type/correct the value. Stored as seconds; shown/edited in whole minutes.
+  const timeSpentDisplay = task.timeSpentSeconds ? String(Math.round(task.timeSpentSeconds / 60)) : "";
+  const [timeSpent, setTimeSpentDraft] = useState(timeSpentDisplay);
 
   const drifted = isDrifted(task);
   const committed = !!task.committedFor && task.committedFor === api.today;
@@ -163,6 +169,13 @@ function DetailBody({
     const n = Number.parseInt(duration, 10);
     const next = Number.isFinite(n) && n > 0 ? n : null;
     if (next !== task.durationMinutes) api.patchTask(task.id, { durationMinutes: next });
+  };
+  const commitTimeSpent = () => {
+    // Only write when the field actually changed — a bare focus/blur must never
+    // truncate the seconds-precise total accrued in Focus to whole minutes.
+    if (timeSpent === timeSpentDisplay) return;
+    const n = Number.parseInt(timeSpent, 10);
+    api.setTimeSpent(task.id, Number.isFinite(n) && n > 0 ? n * 60 : 0);
   };
 
   // Recurrence (spec §5d): the current rule mapped back to a preset for the
@@ -235,24 +248,23 @@ function DetailBody({
           </div>
         ) : null}
 
-        {/* description */}
-        <Field label="Description">
-          <Textarea
-            value={description}
-            disabled={!canEdit}
-            variant="ghost"
-            placeholder={canEdit ? "Add a description…" : undefined}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={commitDescription}
-            className="min-h-16"
-          />
-        </Field>
+        {/* description — label-less under the title (Linear-style) */}
+        <Textarea
+          value={description}
+          disabled={!canEdit}
+          variant="ghost"
+          aria-label="Description"
+          placeholder={canEdit ? "Add a description…" : undefined}
+          onChange={(e) => setDescription(e.target.value)}
+          onBlur={commitDescription}
+          className="min-h-16"
+        />
 
         <Separator />
 
-        {/* properties */}
-        <div className="space-y-3">
-          <Field label="Status">
+        {/* properties — label-left / value-right grid (PropertyRow) */}
+        <div className="space-y-0.5">
+          <PropertyRow label="Status">
             <Select
               value={task.status}
               disabled={!canEdit}
@@ -269,9 +281,9 @@ function DetailBody({
                 ))}
               </SelectContent>
             </Select>
-          </Field>
+          </PropertyRow>
 
-          <Field label="Bucket">
+          <PropertyRow label="Bucket">
             <Select
               value={task.bucketId}
               disabled={!canEdit}
@@ -293,99 +305,118 @@ function DetailBody({
                 ))}
               </SelectContent>
             </Select>
-          </Field>
+          </PropertyRow>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Scheduled">
-              <DateField
-                value={task.scheduledAt ? new Date(task.scheduledAt) : null}
-                onChange={(d) =>
-                  api.patchTask(task.id, { scheduledAt: d ? d.toISOString() : null })
-                }
-                withTime
-                variant="ghost"
-                placeholder="Set time"
-                aria-label="Scheduled time"
-                disabled={!canEdit}
-                className="w-full"
-              />
-            </Field>
-            <Field label="Due">
-              <DateField
-                value={task.dueDate ? new Date(task.dueDate) : null}
-                onChange={(d) =>
-                  api.patchTask(task.id, { dueDate: d ? d.toISOString() : null })
-                }
-                variant="ghost"
-                placeholder="Set date"
-                aria-label="Due date"
-                disabled={!canEdit}
-                className="w-full"
-              />
-            </Field>
-          </div>
+          <PropertyRow label="Scheduled">
+            <DateField
+              value={task.scheduledAt ? new Date(task.scheduledAt) : null}
+              onChange={(d) => api.patchTask(task.id, { scheduledAt: d ? d.toISOString() : null })}
+              withTime
+              variant="ghost"
+              placeholder="Set time"
+              aria-label="Scheduled time"
+              disabled={!canEdit}
+              className="w-full"
+            />
+          </PropertyRow>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Priority">
-              <LevelSelect
-                value={task.priority}
-                disabled={!canEdit}
-                onChange={(v) => api.patchTask(task.id, { priority: v })}
-              />
-            </Field>
-            <Field label="Energy">
-              <LevelSelect
-                value={task.energyLevel}
-                disabled={!canEdit}
-                onChange={(v) => api.patchTask(task.id, { energyLevel: v })}
-              />
-            </Field>
-          </div>
+          <PropertyRow label="Due">
+            <DateField
+              value={task.dueDate ? new Date(task.dueDate) : null}
+              onChange={(d) => api.patchTask(task.id, { dueDate: d ? d.toISOString() : null })}
+              variant="ghost"
+              placeholder="Set date"
+              aria-label="Due date"
+              disabled={!canEdit}
+              className="w-full"
+            />
+          </PropertyRow>
 
-          <Field label="Duration">
+          <PropertyRow label="Priority">
+            <LevelSelect
+              value={task.priority}
+              disabled={!canEdit}
+              onChange={(v) => api.patchTask(task.id, { priority: v })}
+            />
+          </PropertyRow>
+
+          <PropertyRow label="Energy">
+            <LevelSelect
+              value={task.energyLevel}
+              disabled={!canEdit}
+              onChange={(v) => api.patchTask(task.id, { energyLevel: v })}
+            />
+          </PropertyRow>
+
+          <PropertyRow label="Duration">
             <div className="flex items-center gap-2">
               <Input
                 type="number"
                 min={1}
                 inputMode="numeric"
+                size="sm"
+                variant="ghost"
                 disabled={!canEdit}
                 value={duration}
                 placeholder="—"
                 onChange={(e) => setDuration(e.target.value)}
                 onBlur={commitDuration}
-                className="h-8 w-24"
+                className="w-20"
               />
-              <span className="text-xs text-muted-foreground">minutes</span>
+              <span className="text-xs text-muted-foreground">min est</span>
             </div>
-          </Field>
+          </PropertyRow>
+
+          {/* manual time-spent — adjust the total; the live tracker is Focus-only */}
+          <PropertyRow label="Time spent">
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                size="sm"
+                variant="ghost"
+                disabled={!canEdit}
+                value={timeSpent}
+                placeholder="0"
+                aria-label="Time spent in minutes"
+                onChange={(e) => setTimeSpentDraft(e.target.value)}
+                onBlur={commitTimeSpent}
+                className="w-20"
+              />
+              <span className="text-xs text-muted-foreground">min</span>
+            </div>
+          </PropertyRow>
 
           {/* recurrence — the single-row engine (spec §5d): preset vocabulary
               only (no complex picker), plus the skip-occurrence affordance */}
-          <Field label="Repeat">
-            <div className="flex items-center gap-2">
-              <Select
-                value={recurrencePreset}
-                disabled={!canEdit}
-                onValueChange={setRecurrencePreset}
-              >
-                <SelectTrigger size="sm" variant="ghost" className="w-full">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Repeat className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                    <SelectValue />
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Doesn’t repeat</SelectItem>
-                  {RECURRENCE_PRESETS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                  {recurrencePreset === "custom" && task.recurrence ? (
-                    <SelectItem value="custom">{recurrenceLabel(task.recurrence)}</SelectItem>
-                  ) : null}
-                </SelectContent>
-              </Select>
+          <PropertyRow label="Repeat">
+            <div className="flex items-center gap-1.5">
+              <div className="min-w-0 flex-1">
+                <Select
+                  value={recurrencePreset}
+                  disabled={!canEdit}
+                  onValueChange={setRecurrencePreset}
+                >
+                  <SelectTrigger size="sm" variant="ghost" className="w-full">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Repeat className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                      <SelectValue />
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Doesn’t repeat</SelectItem>
+                    {RECURRENCE_PRESETS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                    {recurrencePreset === "custom" && task.recurrence ? (
+                      <SelectItem value="custom">{recurrenceLabel(task.recurrence)}</SelectItem>
+                    ) : null}
+                  </SelectContent>
+                </Select>
+              </div>
               {canEdit && task.recurrence && task.status !== "done" && task.status !== "archived" ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -403,8 +434,13 @@ function DetailBody({
                 </Tooltip>
               ) : null}
             </div>
-          </Field>
+          </PropertyRow>
+        </div>
 
+        <Separator />
+
+        {/* collections — full-width labeled sections (lists, not scalar values) */}
+        <div className="space-y-4">
           <Field label="Tags">
             <div className="flex flex-wrap items-center gap-1.5">
               {taskTags.map((t) => (
