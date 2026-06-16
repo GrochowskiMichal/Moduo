@@ -27,6 +27,7 @@ import {
   recurrenceOnStatusChange,
   skipOccurrencePatch,
 } from "../recurrence-engine";
+import { commitOrderUpdates } from "../reorder";
 import {
   INBOX_BUCKET_NAME,
   isDrifted,
@@ -586,15 +587,21 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [bundle.tasks, applyOp, runtime, workspaceId],
   );
 
-  /** Do last: send it to the end of today's queue (the commit op reorders). */
-  const doLast = useCallback(
-    (id: string) => {
-      const maxOrder = committedTasks.reduce((m, t) => Math.max(m, t.commitOrder ?? 0), 0);
-      applyOp(id, { commitOrder: maxOrder + 1 }, () =>
-        runtime!.tasks.opCommit({ workspaceId: workspaceId!, taskId: id, forDate: today }),
-      );
+  /**
+   * Reorder the committed queue to `orderedIds` (drag-to-reorder). Renumbers the
+   * affected rows' commitOrder through the normal save path — only the rows whose
+   * rank changed are written. Queue order rides the lightweight `commit_order`
+   * column rather than an intent op: a high-frequency, low-stakes personal
+   * ordering, the same call shape as the board's `position` drag.
+   */
+  const reorderQueue = useCallback(
+    (orderedIds: string[]) => {
+      if (!canEdit) return;
+      for (const u of commitOrderUpdates(orderedIds, committedTasks)) {
+        patchTask(u.id, { commitOrder: u.commitOrder });
+      }
     },
-    [committedTasks, applyOp, runtime, workspaceId, today],
+    [canEdit, committedTasks, patchTask],
   );
 
   const deleteTask = useCallback(
@@ -1081,7 +1088,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     toggleCommit,
     rescheduleFromToday,
     skipOccurrence,
-    doLast,
+    reorderQueue,
     deleteTask,
     loadActivity,
     activityStamp,

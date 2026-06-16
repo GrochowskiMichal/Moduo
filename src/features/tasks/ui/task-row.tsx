@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CalendarDays,
   Check,
@@ -87,6 +87,9 @@ type Props = {
   /** Parent title caption for subtasks rendered flat (Today queue, or a scope
    * that doesn't contain the parent). */
   parentTitle?: string | null;
+  /** Drag grip for a sortable (reorderable) row — rendered at the far left,
+   * quiet until row hover. Absent rows look and behave exactly as before. */
+  dragHandle?: ReactNode;
   api: TasksModuleApi;
 };
 
@@ -113,6 +116,7 @@ export function TaskRow({
   progress = null,
   nested = false,
   parentTitle = null,
+  dragHandle = null,
   api,
 }: Props) {
   const done = task.status === "done";
@@ -146,6 +150,7 @@ export function TaskRow({
       {nested ? (
         <span className="absolute inset-y-0 -left-3 w-px bg-border/60" aria-hidden />
       ) : null}
+      {dragHandle}
       {expandSlot ? (
         expandable ? (
           <Tooltip>

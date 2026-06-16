@@ -26,7 +26,6 @@ type Props = {
   blockedNoteFor: (task: Task) => string | null;
   onMarkDone: (id: string) => void;
   onSkip: (id: string) => void;
-  onDoLast: (id: string) => void;
   /** Fold an elapsed work delta (seconds) into the task's tracked total. */
   onAddTime: (taskId: string, deltaSeconds: number) => void;
   /** Set the tracked total to an absolute value (manual edit). */
@@ -44,7 +43,6 @@ export function ExecuteView({
   blockedNoteFor,
   onMarkDone,
   onSkip,
-  onDoLast,
   onAddTime,
   onSetTime,
   tagsFor,
@@ -75,13 +73,11 @@ export function ExecuteView({
               blockedNote={blockedNoteFor(current)}
               onMarkDone={() => onMarkDone(current.id)}
               onSkip={() => onSkip(current.id)}
-              onDoLast={() => onDoLast(current.id)}
               onAddTime={onAddTime}
               onSetTime={onSetTime}
               tags={tagsFor(current.id)}
               subtasks={subtasksFor(current.id)}
               onToggleSubtask={onToggleSubtask}
-              canDoLast={upcoming.length > 0}
             />
             <Queue tasks={upcoming} bucketNameById={bucketNameById} parentTitleFor={parentTitleFor} />
           </div>
@@ -125,13 +121,11 @@ function NowCard({
   blockedNote,
   onMarkDone,
   onSkip,
-  onDoLast,
   onAddTime,
   onSetTime,
   tags,
   subtasks,
   onToggleSubtask,
-  canDoLast,
 }: {
   task: Task;
   bucketName: string;
@@ -139,13 +133,11 @@ function NowCard({
   blockedNote: string | null;
   onMarkDone: () => void;
   onSkip: () => void;
-  onDoLast: () => void;
   onAddTime: (taskId: string, deltaSeconds: number) => void;
   onSetTime: (taskId: string, seconds: number) => void;
   tags: Tag[];
   subtasks: Task[];
   onToggleSubtask: (subtask: Task) => void;
-  canDoLast: boolean;
 }) {
   const timer = useFocusTimer(task.id, onAddTime);
 
@@ -227,16 +219,11 @@ function NowCard({
           )}
         </div>
 
-        {/* bottom-right — Skip / Do last / Done */}
+        {/* bottom-right — Skip / Done (reorder lives in the Queue now) */}
         <div className="flex shrink-0 items-center gap-3">
           <button type="button" onClick={onSkip} className="font-sans text-sm text-muted-foreground hover:text-foreground">
             Skip
           </button>
-          {canDoLast ? (
-            <button type="button" onClick={onDoLast} className="font-sans text-sm text-muted-foreground hover:text-foreground">
-              Do last
-            </button>
-          ) : null}
           <Button size="md" onClick={onMarkDone}>
             <Check className="size-icon-sm" aria-hidden />
             Done

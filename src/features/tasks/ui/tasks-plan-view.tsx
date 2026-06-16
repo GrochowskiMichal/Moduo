@@ -371,7 +371,6 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         blockedNoteFor={blockedNoteFor}
         onMarkDone={api.markDone}
         onSkip={api.rescheduleFromToday}
-        onDoLast={api.doLast}
         onAddTime={api.addTimeSpent}
         onSetTime={api.setTimeSpent}
         tagsFor={(id) => api.tagsByTask.get(id) ?? []}
@@ -390,6 +389,8 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         {...sharedViewProps}
         groupBy={effectiveGroupBy}
         onGroupByChange={setGroupBy}
+        reorderable={selection === "today"}
+        onReorder={api.reorderQueue}
       />
     );
 

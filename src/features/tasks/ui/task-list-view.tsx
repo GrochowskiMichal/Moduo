@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 
 import { Button } from "../../../components/ui/button";
 import { EmptyState as EmptyStateBase } from "../../../components/ui/empty-state";
@@ -13,6 +19,7 @@ import {
 import { groupTasks, nestedSubtaskIds, type GroupBy } from "../helpers";
 import type { Bucket, Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { SortableTask, useTaskDndSensors } from "./dnd/task-dnd";
 import { PlanViewHeader, type PlanView } from "./plan-view-header";
 import { Kbd } from "./task-detail-panel";
 import { TaskRow, type RowCommand } from "./task-row";
@@ -38,6 +45,10 @@ type Props = {
   activeTagFilters?: ReactNode;
   /** Click a row's tag chip to toggle it in the filter. */
   onTagFilter?: (tagId: string) => void;
+  /** Enable drag-to-reorder (the Queue): a flat, ungrouped, ordered list. */
+  reorderable?: boolean;
+  /** Persist a reorder — receives the task ids in their new order. */
+  onReorder?: (orderedIds: string[]) => void;
   api: TasksModuleApi;
 };
 
@@ -67,6 +78,8 @@ export function TaskListView({
   tagFilterControl,
   activeTagFilters,
   onTagFilter,
+  reorderable = false,
+  onReorder,
   api,
 }: Props) {
   // Selection is owned by the parent (shared with the detail rail); these aliases
@@ -76,7 +89,9 @@ export function TaskListView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [command, setCommand] = useState<{ taskId: string; kind: RowCommand } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [reordering, setReordering] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dndSensors = useTaskDndSensors();
 
   const crossBucket = selection === "all" || selection === "today";
   const showBucketTag =
@@ -195,8 +210,9 @@ export function TaskListView({
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       // While inline-editing a title, the Input stops propagation; popovers are
-      // portaled out — so reaching here means plain navigation is safe.
-      if (editingId) return;
+      // portaled out — so reaching here means plain navigation is safe. During a
+      // keyboard reorder the dnd sensor owns the arrows — don't also move the cursor.
+      if (editingId || reordering) return;
       const key = e.key.toLowerCase();
       if (key === "j" || e.key === "ArrowDown") {
         e.preventDefault();
@@ -250,6 +266,7 @@ export function TaskListView({
     },
     [
       editingId,
+      reordering,
       move,
       selectedTask,
       canEdit,
@@ -271,6 +288,67 @@ export function TaskListView({
       return next;
     });
   };
+
+  // Row props, shared by the grouped and the reorderable (Queue) renders.
+  const buildRowProps = useCallback(
+    (t: Task) => ({
+      task: t,
+      bucketName: bucketNameById(t.bucketId),
+      buckets,
+      inboxId: inbox?.id ?? null,
+      showBucket: showBucketTag,
+      selected: t.id === selectedId,
+      editing: t.id === editingId,
+      command: command?.taskId === t.id ? command.kind : null,
+      canEdit,
+      onSelect: () => setSelectedId(t.id),
+      onStartEdit: () => setEditingId(t.id),
+      onEndEdit: () => {
+        setEditingId(null);
+        containerRef.current?.focus();
+      },
+      onClearCommand: () => {
+        setCommand(null);
+        containerRef.current?.focus();
+      },
+      onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),
+      onTagFilter,
+      api,
+    }),
+    [
+      bucketNameById,
+      buckets,
+      inbox,
+      showBucketTag,
+      selectedId,
+      editingId,
+      command,
+      canEdit,
+      setSelectedId,
+      onTagFilter,
+      api,
+    ],
+  );
+
+  // The Queue is a single flat, ordered group — reorder is a vertical sort over
+  // it. Disabled (falls through to the grouped render) unless the parent asked
+  // for it and the user can edit.
+  const queueTasks = groups[0]?.tasks ?? [];
+  const queueIds = useMemo(() => queueTasks.map((t) => t.id), [queueTasks]);
+  const canReorder = reorderable && canEdit && groupBy === "none" && queueTasks.length > 1;
+
+  const onQueueDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      setReordering(false);
+      const { active, over } = e;
+      if (!over || active.id === over.id) return;
+      const from = queueIds.indexOf(String(active.id));
+      const to = queueIds.indexOf(String(over.id));
+      if (from < 0 || to < 0) return;
+      onReorder?.(arrayMove(queueIds, from, to));
+    },
+    [queueIds, onReorder],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -312,6 +390,31 @@ export function TaskListView({
       >
         {tasks.length === 0 ? (
           <EmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />
+        ) : canReorder ? (
+          <DndContext
+            sensors={dndSensors}
+            collisionDetection={closestCenter}
+            onDragStart={() => setReordering(true)}
+            onDragEnd={onQueueDragEnd}
+            onDragCancel={() => setReordering(false)}
+          >
+            <SortableContext items={queueIds} strategy={verticalListSortingStrategy}>
+              {queueTasks.map((task) => (
+                <SortableTask
+                  key={task.id}
+                  id={task.id}
+                  from="queue"
+                  render={({ handle }) => (
+                    <TaskRow
+                      {...buildRowProps(task)}
+                      parentTitle={parentTitleFor(task)}
+                      dragHandle={handle}
+                    />
+                  )}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
         ) : (
           groups.map((group) => {
             const isCollapsed = collapsed.has(group.key);
@@ -337,34 +440,10 @@ export function TaskListView({
                   ? group.tasks.map((task) => {
                       const children = nest ? api.subtasksByParent.get(task.id) ?? [] : [];
                       const expanded = expandedParents.has(task.id);
-                      const rowProps = (t: Task) => ({
-                        task: t,
-                        bucketName: bucketNameById(t.bucketId),
-                        buckets,
-                        inboxId: inbox?.id ?? null,
-                        showBucket: showBucketTag,
-                        selected: t.id === selectedId,
-                        editing: t.id === editingId,
-                        command: command?.taskId === t.id ? command.kind : null,
-                        canEdit,
-                        onSelect: () => setSelectedId(t.id),
-                        onStartEdit: () => setEditingId(t.id),
-                        onEndEdit: () => {
-                          setEditingId(null);
-                          containerRef.current?.focus();
-                        },
-                        onClearCommand: () => {
-                          setCommand(null);
-                          containerRef.current?.focus();
-                        },
-                        onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),
-                        onTagFilter,
-                        api,
-                      });
                       return (
                         <div key={task.id}>
                           <TaskRow
-                            {...rowProps(task)}
+                            {...buildRowProps(task)}
                             expandSlot={expandSlot}
                             expandable={children.length > 0}
                             expanded={expanded}
@@ -374,7 +453,7 @@ export function TaskListView({
                           />
                           {expanded
                             ? children.map((child) => (
-                                <TaskRow key={child.id} {...rowProps(child)} nested />
+                                <TaskRow key={child.id} {...buildRowProps(child)} nested />
                               ))
                             : null}
                         </div>
