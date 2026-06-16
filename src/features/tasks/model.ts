@@ -40,6 +40,13 @@ export type Bucket = {
   ownerId: string;
   name: string;
   isSystem: boolean;
+  /**
+   * Optional, presentational section label. Buckets that share a `group` render
+   * under a collapsible rail section (two levels max). Unset by default — the
+   * rail stays flat until a bucket is assigned one. Stored as `group_label` on
+   * the cloud side (reserved-word avoidance).
+   */
+  group: string | null;
   /** Lexorank-style ordering string. */
   position: string;
   createdAt: string;
@@ -57,6 +64,13 @@ export type Task = {
   ownerId: string;
   /** Required: the bucket this task belongs to (Inbox as fallback). */
   bucketId: string;
+  /**
+   * Optional parent task — subtasks are exactly one level deep (a task with a
+   * parent is never itself a parent; recursion forbidden). A `parentId` that no
+   * longer resolves to a live task is treated as unset (the task renders
+   * top-level), so children of a deleted parent are never lost.
+   */
+  parentId: string | null;
   title: string;
   description: string;
   /** When the task is due. */
@@ -65,6 +79,8 @@ export type Task = {
   scheduledAt: string | null;
   /** Estimated/blocked duration in minutes (default-on-drop, resizable). */
   durationMinutes: number | null;
+  /** Accumulated tracked work time in seconds (lightweight time-tracking). */
+  timeSpentSeconds: number;
   recurrence: RecurrenceRule | null;
   /** How demanding the task is to do. */
   energyLevel: EnergyLevel | null;
@@ -109,13 +125,90 @@ export type TagLink = {
   createdAt: string;
 };
 
+/**
+ * A directed dependency edge: `blockerTaskId` blocks `blockedTaskId` (spec §5c).
+ * *Blocked* is computed at read time from these edges — see `blockedTaskIds`
+ * in helpers — never stored on the task. The edge graph is a DAG (cycles are
+ * forbidden client-side and by a DB trigger).
+ */
+export type TaskRelation = {
+  id: string;
+  workspaceId: string;
+  blockerTaskId: string;
+  blockedTaskId: string;
+  createdAt: string;
+};
+
+/** Who performed an intent op (module contract Pillar 2). `agent` / `api_key`
+ * arrive with the MCP connector's scoped keys (Session 9). */
+export type ActivityActorType = "user" | "agent" | "api_key";
+
+/**
+ * One attributed intent-op record from the shared, append-only cross-module
+ * `module_activity` table (docs/moduo-module-contract.md). Written only by
+ * `<module>_op_*` RPCs — never from clients. Rendered as a quiet trail in the
+ * entity's detail surface (a mirror, never a wall).
+ */
+export type ActivityEntry = {
+  id: string;
+  workspaceId: string;
+  module: string;
+  entityType: string;
+  entityId: string;
+  /** Intent-op name, e.g. "tasks.commit". */
+  op: string;
+  actorType: ActivityActorType;
+  actorId: string | null;
+  /** Display snapshot at write time (profiles.display_name for users). */
+  actorLabel: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
+/**
+ * One engine result for the batched `tasks.catch_up` op (spec §5d): the
+ * client computes the occurrence math; the op enforces structure + attribution.
+ */
+export type TasksCatchUpItem = {
+  taskId: string;
+  kind: "reopen" | "collapse" | "adopt";
+  /** Only ever "todo" — catch-up reopens, it never completes/archives. */
+  status?: "todo";
+  scheduledAt?: string;
+  recurrence: RecurrenceRule;
+  clearCommit?: boolean;
+};
+
 /** Read bundle for the Tasks module, scoped to a workspace. */
 export type TasksModuleBundle = {
   buckets: Bucket[];
   tasks: Task[];
   tags: Tag[];
   tagLinks: TagLink[];
+  taskRelations: TaskRelation[];
 };
+
+/** Coarse time-of-day slots that a bucket can be mapped to (spec §9). */
+export type TimeBlockSlot = "morning" | "afternoon" | "evening";
+
+export const TIME_BLOCK_SLOTS: TimeBlockSlot[] = ["morning", "afternoon", "evening"];
+
+/**
+ * Per-workspace slot → bucketId assignment. A bucket holds at most one slot.
+ * Persisted in the `task_time_blocks` table (one row per workspace).
+ */
+export type TimeBlockMap = Partial<Record<TimeBlockSlot, string>>;
+
+/** Keep only well-formed slot entries — used on every read from storage. */
+export function sanitizeTimeBlocks(raw: unknown): TimeBlockMap {
+  if (!raw || typeof raw !== "object") return {};
+  const out: TimeBlockMap = {};
+  for (const slot of TIME_BLOCK_SLOTS) {
+    const v = (raw as Record<string, unknown>)[slot];
+    if (typeof v === "string" && v) out[slot] = v;
+  }
+  return out;
+}
 
 /** Name of the reserved system Inbox bucket. */
 export const INBOX_BUCKET_NAME = "Inbox";

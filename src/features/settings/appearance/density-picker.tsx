@@ -5,7 +5,8 @@ import { AppearancePickerRow } from "./picker-row";
 
 const OPTIONS: ReadonlyArray<{ value: Density; label: string; hint: string }> = [
   { value: "comfortable", label: "Comfortable", hint: "Roomier rows and controls." },
-  { value: "compact", label: "Compact", hint: "More content per screen." },
+  { value: "compact", label: "Compact", hint: "Tighter rows and controls." },
+  { value: "dense", label: "Dense", hint: "Maximum content per screen." },
 ];
 
 type Props = {
@@ -22,7 +23,7 @@ export function DensityPicker({ value, onChange }: Props) {
       <RadioGroup
         value={value}
         onValueChange={(next) => onChange(next as Density)}
-        className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+        className="grid grid-cols-1 gap-2 sm:grid-cols-3"
         aria-label="Density"
       >
         {OPTIONS.map(({ value: optionValue, label, hint }) => {

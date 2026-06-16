@@ -1,48 +1,47 @@
 /**
  * Tauri desktop implementation of ModuoRuntime.
- * All data operations go through Tauri `invoke()` to the Rust core.
+ *
+ * Cloud-first composition (improvement-plan Session 2): auth, workspaces and
+ * tasks reuse the Supabase-backed web runtime — the exact same code path as
+ * the web app. Everything else (notes, email, time-tracking, calendar OAuth,
+ * integrations, graph) stays on Tauri `invoke()` to the Rust core; those
+ * modules have no Supabase path yet.
+ *
+ * The future free/offline "lite" version re-introduces a local-first runtime
+ * behind this same ModuoRuntime interface — that seam is why nothing outside
+ * runtime.* may import supabase or invoke() directly for these modules.
  */
 
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  AuthChangeEvent,
-  AuthListener,
   IntegrationStatusItem,
-  LocalAuthState,
   ModuoRuntime,
   RuntimeCapabilities,
   RuntimeSession,
 } from "./runtime.types";
+import { webRuntime } from "./runtime.web";
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Cloud session → Rust core ─────────────────────────────────────────────────
+// Invoke-backed modules attribute writes via the Rust-side session. Mirror the
+// Supabase session into AppState on every auth change (INITIAL_SESSION fires
+// on subscribe, covering boot restore).
 
-function toError(error: unknown): { message: string } {
-  if (error instanceof Error) return { message: error.message };
-  return { message: String(error) };
+function pushSessionToRust(session: RuntimeSession | null): void {
+  void invoke("auth_set_cloud_session", {
+    session: session
+      ? {
+          accessToken: session.access_token,
+          refreshToken: session.refresh_token ?? null,
+          expiresAt: session.expires_at ?? null,
+          user: { id: session.user.id, email: session.user.email ?? null },
+        }
+      : null,
+  }).catch((error) => {
+    console.warn("[runtime.tauri] auth_set_cloud_session failed:", error);
+  });
 }
 
-function normalizeSession(raw: any): RuntimeSession | null {
-  if (!raw) return null;
-  const accessToken = raw.accessToken ?? raw.access_token;
-  const userRaw = raw.user ?? {};
-  const userId = userRaw.id;
-  if (!accessToken || !userId) return null;
-  return {
-    access_token: accessToken,
-    refresh_token: raw.refreshToken ?? raw.refresh_token ?? null,
-    expires_at: raw.expiresAt ?? raw.expires_at ?? undefined,
-    user: {
-      id: userId,
-      email: userRaw.email ?? null,
-    },
-  };
-}
-
-const authListeners = new Set<AuthListener>();
-
-function emitAuth(event: AuthChangeEvent, session: RuntimeSession | null) {
-  for (const listener of authListeners) listener(event, session);
-}
+webRuntime.auth.onAuthStateChange((_event, session) => pushSessionToRust(session));
 
 // ── Capabilities ──────────────────────────────────────────────────────────────
 
@@ -52,8 +51,10 @@ export const tauriCapabilities: RuntimeCapabilities = {
   hasEmail: true,
   hasTimeTracking: true,
   hasCalendarOAuth: true,
-  hasLocalMnemonic: true,
-  hasOfflineMode: true,
+  // Cloud-first: the local mnemonic vault and offline mode are paused until
+  // the lite version lands (Rust commands kept).
+  hasLocalMnemonic: false,
+  hasOfflineMode: false,
 };
 
 // ── Runtime implementation ────────────────────────────────────────────────────
@@ -61,245 +62,11 @@ export const tauriCapabilities: RuntimeCapabilities = {
 export const tauriRuntime: ModuoRuntime = {
   capabilities: tauriCapabilities,
 
-  auth: {
-    async getLocalAuthState() {
-      try {
-        const raw = await invoke<any>("auth_get_local_auth_state");
-        const data: LocalAuthState = {
-          profileExists: !!(raw?.profileExists ?? raw?.profile_exists),
-          displayName: raw?.displayName ?? raw?.display_name ?? null,
-          userId: raw?.userId ?? raw?.user_id ?? null,
-          hasPin: !!(raw?.hasPin ?? raw?.has_pin),
-          hasKeychainMnemonic: !!(raw?.hasKeychainMnemonic ?? raw?.has_keychain_mnemonic),
-        };
-        return { data, error: null };
-      } catch (error) {
-        return {
-          data: { profileExists: false, displayName: null, userId: null, hasPin: false, hasKeychainMnemonic: false },
-          error: toError(error),
-        };
-      }
-    },
-
-    async generateMnemonic() {
-      try {
-        const raw = await invoke<any>("auth_generate_mnemonic");
-        return { data: { words: Array.isArray(raw?.words) ? raw.words : [], phrase: raw?.phrase ?? "" }, error: null };
-      } catch (error) {
-        return { data: { words: [], phrase: "" }, error: toError(error) };
-      }
-    },
-
-    async registerLocalMnemonic({ displayName, mnemonicPhrase, inviteToken }) {
-      try {
-        const raw = await invoke<any>("auth_register_local_mnemonic", {
-          input: { displayName, mnemonicPhrase, inviteToken: inviteToken ?? null },
-        });
-        const session = normalizeSession(raw?.session);
-        emitAuth("SIGNED_IN", session);
-        return { data: { user: session?.user ?? null, session }, error: null };
-      } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
-      }
-    },
-
-    async unlockWithMnemonic({ mnemonicPhrase, inviteToken }) {
-      try {
-        await invoke("auth_unlock_with_mnemonic", {
-          input: { mnemonicPhrase, inviteToken: inviteToken ?? null },
-        });
-        const next = await tauriRuntime.auth.getSession();
-        emitAuth("SIGNED_IN", next.data.session ?? null);
-        return {
-          data: { user: next.data.session?.user ?? null, session: next.data.session ?? null },
-          error: null,
-        };
-      } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
-      }
-    },
-
-    async forgotResetLocal() {
-      try {
-        await invoke("auth_forgot_reset_local");
-        emitAuth("SIGNED_OUT", null);
-        return { error: null };
-      } catch (error) {
-        return { error: toError(error) };
-      }
-    },
-
-    async tryAutoUnlock() {
-      try {
-        const raw = await invoke<any>("auth_try_auto_unlock");
-        const session = normalizeSession(raw);
-        if (session) emitAuth("SIGNED_IN", session);
-        return { data: { session }, error: null };
-      } catch (error) {
-        return { data: { session: null }, error: toError(error) };
-      }
-    },
-
-    async setPin(pin: string) {
-      try {
-        await invoke("auth_set_pin", { pin });
-        return { error: null };
-      } catch (error) {
-        return { error: toError(error) };
-      }
-    },
-
-    async unlockWithPin(pin: string) {
-      try {
-        const raw = await invoke<any>("auth_unlock_with_pin", { pin });
-        const session = normalizeSession(raw);
-        if (session) emitAuth("SIGNED_IN", session);
-        return { data: { session }, error: null };
-      } catch (error) {
-        return { data: { session: null }, error: toError(error) };
-      }
-    },
-
-    async removePin() {
-      try {
-        await invoke("auth_remove_pin");
-        return { error: null };
-      } catch (error) {
-        return { error: toError(error) };
-      }
-    },
-
-    async updateDisplayName(displayName: string) {
-      try {
-        const raw = await invoke<any>("auth_update_display_name", { input: { displayName } });
-        return { data: { displayName: raw?.displayName ?? raw?.display_name ?? displayName }, error: null };
-      } catch (error) {
-        return { data: { displayName }, error: toError(error) };
-      }
-    },
-
-    async getStoredMnemonic() {
-      try {
-        const phrase = await invoke<string | null>("auth_get_stored_mnemonic");
-        return { data: { phrase: typeof phrase === "string" ? phrase : null }, error: null };
-      } catch (error) {
-        return { data: { phrase: null }, error: toError(error) };
-      }
-    },
-
-    async getSession() {
-      try {
-        const raw = await invoke<any>("auth_get_session");
-        return { data: { session: normalizeSession(raw) }, error: null };
-      } catch (error) {
-        return { data: { session: null }, error: toError(error) };
-      }
-    },
-
-    async refreshSession() {
-      try {
-        const raw = await invoke<any>("auth_refresh_session");
-        const session = normalizeSession(raw);
-        emitAuth("TOKEN_REFRESHED", session);
-        return { data: { user: session?.user ?? null, session }, error: null };
-      } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
-      }
-    },
-
-    onAuthStateChange(callback) {
-      authListeners.add(callback);
-      void tauriRuntime.auth.getSession().then((result: any) => {
-        callback("INITIAL_SESSION", result?.data?.session ?? null);
-      });
-      return {
-        data: {
-          subscription: {
-            unsubscribe() {
-              authListeners.delete(callback);
-            },
-          },
-        },
-      };
-    },
-
-    async signOut() {
-      try {
-        await invoke("auth_sign_out");
-        emitAuth("SIGNED_OUT", null);
-        return { error: null };
-      } catch (error) {
-        return { error: toError(error) };
-      }
-    },
-
-    async signUpWithEmail({ email, password, displayName }) {
-      // Desktop: proxies to the Rust auth_link_to_cloud command
-      try {
-        const raw = await invoke<any>("auth_link_to_cloud", {
-          input: { email, password, displayName: displayName ?? null },
-        });
-        const session = normalizeSession(raw?.session);
-        if (session) emitAuth("SIGNED_IN", session);
-        return { data: { user: session?.user ?? null, session }, error: null };
-      } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
-      }
-    },
-
-    async signInWithEmail({ email, password }) {
-      try {
-        const raw = await invoke<any>("auth_sign_in_cloud", { input: { email, password } });
-        const session = normalizeSession(raw?.session);
-        if (session) emitAuth("SIGNED_IN", session);
-        return { data: { user: session?.user ?? null, session }, error: null };
-      } catch (error) {
-        return { data: { user: null, session: null }, error: toError(error) };
-      }
-    },
-
-    async sendOtp() {
-      return { data: {}, error: { message: "OTP auth is only available on web." } };
-    },
-
-    async verifyOtp() {
-      return { data: { user: null, session: null, isNewUser: false }, error: { message: "OTP auth is only available on web." } };
-    },
-  },
-
-  workspace: {
-    async getProfile(userId: string) {
-      try {
-        const data = await invoke<{ plan_tier?: string; display_name?: string; avatar_url?: string } | null>(
-          "profile_get", { userId }
-        );
-        return { data: data ?? null, error: null };
-      } catch (e: any) {
-        return { data: null, error: e };
-      }
-    },
-    list() { return invoke<any[]>("workspace_list_local"); },
-    create(name) { return invoke<any>("workspace_create_local", { name }); },
-    rename(workspaceId, name) { return invoke<any>("workspace_rename_local", { workspaceId, name }); },
-    leave(workspaceId) { return invoke<void>("workspace_leave_local", { workspaceId }); },
-    softDelete(workspaceId) { return invoke<void>("workspace_soft_delete_local", { workspaceId }); },
-    issueInvite(workspaceId, email, role, modulePermissions) {
-      return invoke<any>("workspace_issue_invite", { workspaceId, email, role, modulePermissions });
-    },
-    joinInvite(token) { return invoke<any>("workspace_join_invite", { token }); },
-    listMembers(workspaceId) { return invoke<any[]>("workspace_list_members", { workspaceId }); },
-    listInvites(workspaceId) { return invoke<any[]>("workspace_list_invites", { workspaceId }); },
-    updateInvite(inviteId, role, modulePermissions) {
-      return invoke<void>("workspace_update_invite", { input: { inviteId, role, modulePermissions } });
-    },
-    revokeInvite(inviteId) { return invoke<void>("workspace_revoke_invite", { inviteId }); },
-    updateMemberPermissions(memberId, role, modulePermissions) {
-      return invoke<void>("workspace_update_member_permissions", { input: { memberId, role, modulePermissions } });
-    },
-    listNotifications() { return invoke<any[]>("workspace_list_notifications"); },
-    markNotificationRead(notificationId) { return invoke<void>("workspace_mark_notification_read", { notificationId }); },
-    markAllNotificationsRead() { return invoke<void>("workspace_mark_all_notifications_read"); },
-  },
+  // Cloud-first: same Supabase session and queries as the web app. The local
+  // vault flows (mnemonic / PIN) return "desktop only" errors from the web
+  // implementation — their Rust commands stay registered for the lite version.
+  auth: webRuntime.auth,
+  workspace: webRuntime.workspace,
 
   notes: {
     list(workspaceId) { return invoke<any[]>("notes_list", { workspaceId }); },
@@ -438,36 +205,11 @@ export const tauriRuntime: ModuoRuntime = {
     },
   },
 
-  tasks: {
-    list(workspaceId) {
-      return invoke("tasks_module_list", { workspaceId });
-    },
-    seedInbox(workspaceId) {
-      return invoke("tasks_module_seed_inbox", { workspaceId });
-    },
-    upsertBucket(bucket) {
-      return invoke("tasks_module_upsert_bucket", { bucket });
-    },
-    deleteBucket(input) {
-      return invoke("tasks_module_delete_bucket", { input });
-    },
-    upsertTask(task) {
-      return invoke("tasks_module_upsert_task", { task });
-    },
-    deleteTask(input) {
-      return invoke("tasks_module_delete_task", { input });
-    },
-    upsertTag(tag) {
-      return invoke("tasks_module_upsert_tag", { tag });
-    },
-    deleteTag(input) {
-      return invoke("tasks_module_delete_tag", { input });
-    },
-    attachTag(input) {
-      return invoke("tasks_module_attach_tag", { input });
-    },
-    detachTag(input) {
-      return invoke("tasks_module_detach_tag", { input });
-    },
-  },
+  // Cloud-first: Supabase-direct, same code path as web. The redb-backed
+  // tasks_module_* commands stay registered for the lite version.
+  tasks: webRuntime.tasks,
+
+  // Cloud-first per-user settings. Delegates to the web runtime today; the
+  // future offline-lite build can wrap this with a local queue + replay.
+  preferences: webRuntime.preferences,
 };

@@ -32,6 +32,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "icons/Assets.car": "Assets.car"
+    },
     "macOS": {
       "signingIdentity": null,
       "hardenedRuntime": true

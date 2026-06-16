@@ -45,3 +45,25 @@ export const Types: Story = {
     </div>
   ),
 };
+
+/** FieldShell surface variants — filled (default), ghost (quiet inline-edit),
+ *  bare (plain-text until focus). Hover/focus a ghost field to see the
+ *  hairline + fill appear. */
+export const Variants: Story = {
+  render: () => (
+    <div className="grid w-72 gap-3">
+      <Input variant="filled" placeholder="Filled (default)" />
+      <Input variant="ghost" placeholder="Ghost — hover/focus me" />
+      <Input variant="bare" placeholder="Bare — plain until focus" />
+    </div>
+  ),
+};
+
+export const Sizes: Story = {
+  render: () => (
+    <div className="grid w-72 gap-3">
+      <Input size="md" placeholder="md — --ctrl-h" />
+      <Input size="sm" placeholder="sm — --ctrl-h-sm" />
+    </div>
+  ),
+};

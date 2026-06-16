@@ -9,7 +9,7 @@ import {
   type SeparatorProps,
 } from "react-resizable-panels";
 
-import { cn } from "@/src/lib/utils";
+import { cn } from "@/lib/utils";
 
 type Direction = "horizontal" | "vertical";
 

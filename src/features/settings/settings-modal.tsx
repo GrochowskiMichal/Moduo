@@ -9,6 +9,7 @@ import {
   Plug,
   Sliders,
   TerminalSquare,
+  Timer,
   User,
   X,
   type LucideIcon,
@@ -23,6 +24,7 @@ import { AboutSection } from "./sections/about-section";
 import { AccountSection } from "./sections/account-section";
 import { AdvancedSection } from "./sections/advanced-section";
 import { AppearanceSection } from "./sections/appearance-section";
+import { FocusSection } from "./sections/focus-section";
 import { IntegrationsSection } from "./sections/integrations-section";
 import { PreferencesSection } from "./sections/preferences-section";
 import { WorkspaceSection } from "./sections/workspace-section";
@@ -51,6 +53,7 @@ const SECTIONS: SectionEntry[] = [
     icon: Sliders,
     Component: PreferencesSection,
   },
+  { id: "focus", label: "Focus", icon: Timer, Component: FocusSection },
   {
     id: "advanced",
     label: "Advanced",
@@ -186,7 +189,7 @@ export function SettingsModal() {
                   value={id}
                   className="data-[state=inactive]:hidden"
                 >
-                  <Component />
+                  {id === section ? <Component /> : null}
                 </TabsContent>
               ))}
             </div>

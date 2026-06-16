@@ -7,11 +7,8 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::{
-    auth, commands::workspace::join_invite_for_user, domain::ModulePermissions, keychain, AppState,
+    auth, commands::workspace::join_invite_for_user, domain::ModulePermissions, AppState,
 };
-
-// ── Keychain keys ─────────────────────────────────────────────────────────────
-const KEYCHAIN_MNEMONIC_ACCOUNT: &str = "local_mnemonic_phrase";
 
 // ── DB keys ───────────────────────────────────────────────────────────────────
 const LOCAL_AUTH_PROFILE_KEY: &str = "local-auth-profile";
@@ -304,35 +301,8 @@ fn maybe_join_invite(
 /// fresh session.  Returns `None` when no mnemonic is in the keychain so
 /// the caller can fall back to manual entry.
 fn try_unlock_from_keychain(state: &AppState) -> Result<Option<auth::AuthSession>, String> {
-    let Some(raw) = keychain::get_secret(&state.config.keychain_service, KEYCHAIN_MNEMONIC_ACCOUNT)
-        .map_err(|e| e.to_string())?
-    else {
-        return Ok(None);
-    };
-
-    let Some(profile) = load_local_profile(state)? else {
-        return Ok(None);
-    };
-
-    let (mnemonic, canonical) = parse_mnemonic(&raw)?;
-
-    // Validate the stored mnemonic still matches the profile hash.
-    if !verify_secret(&canonical, &profile.mnemonic_hash)? {
-        // Stale / wrong mnemonic in keychain — clear it.
-        let _ = keychain::delete_secret(&state.config.keychain_service, KEYCHAIN_MNEMONIC_ACCOUNT);
-        return Ok(None);
-    }
-
-    // Re-derive (or confirm) the cryptographic identity from the BIP-39 seed.
-    let seed = mnemonic.to_seed("");
-    state
-        .acl
-        .get_or_create_identity_from_seed(&seed, &state.store)
-        .map_err(|e| e.to_string())?;
-
-    let session = create_auth_session(&profile.user_id);
-    persist_active_session(state, &session, Some(&profile.display_name))?;
-    Ok(Some(session))
+    let _ = state;
+    Ok(None)
 }
 
 fn require_session(state: &AppState) -> Result<(), String> {
@@ -361,17 +331,12 @@ pub async fn auth_get_local_auth_state(
         });
     };
 
-    let has_keychain_mnemonic =
-        keychain::get_secret(&state.config.keychain_service, KEYCHAIN_MNEMONIC_ACCOUNT)
-            .unwrap_or(None)
-            .is_some();
-
     Ok(LocalAuthStateResponse {
         profile_exists: true,
         display_name: Some(profile.display_name),
         user_id: Some(profile.user_id),
         has_pin: profile.pin_hash.is_some(),
-        has_keychain_mnemonic,
+        has_keychain_mnemonic: false,
     })
 }
 
@@ -392,7 +357,7 @@ pub async fn auth_generate_mnemonic() -> Result<AuthMnemonicResponse, String> {
 /// - Validates the phrase against the BIP-39 English word list.
 /// - Derives a deterministic ed25519 identity from the BIP-39 seed (same
 ///   phrase → same `user_id` across installs / after a db wipe).
-/// - Stores the mnemonic in the OS keychain for future auto-unlock.
+/// - Keeps recovery local to the current profile only (no OS keychain writes).
 #[tauri::command]
 pub async fn auth_register_local_mnemonic(
     state: State<'_, AppState>,
@@ -428,14 +393,6 @@ pub async fn auth_register_local_mnemonic(
     };
     save_local_profile(&state, &profile)?;
 
-    // Cache the mnemonic in the OS keychain for silent auto-unlock on next launch.
-    keychain::set_secret(
-        &state.config.keychain_service,
-        KEYCHAIN_MNEMONIC_ACCOUNT,
-        &canonical,
-    )
-    .map_err(|e| e.to_string())?;
-
     ensure_local_workspace_for_user(&state, &user_id, &display_name)?;
     maybe_join_invite(&state, &user_id, input.invite_token)?;
 
@@ -446,8 +403,7 @@ pub async fn auth_register_local_mnemonic(
 
 /// Unlocks an existing account with the 12-word BIP-39 mnemonic phrase.
 ///
-/// Re-caches the mnemonic in the OS keychain and re-derives the identity,
-/// which also handles post-wipe account recovery.
+/// Re-derives the identity, which also handles post-wipe account recovery.
 #[tauri::command]
 pub async fn auth_unlock_with_mnemonic(
     state: State<'_, AppState>,
@@ -470,14 +426,6 @@ pub async fn auth_unlock_with_mnemonic(
         .get_or_create_identity_from_seed(&seed, &state.store)
         .map_err(|e| e.to_string())?;
 
-    // Refresh keychain cache so the next launch can auto-unlock.
-    keychain::set_secret(
-        &state.config.keychain_service,
-        KEYCHAIN_MNEMONIC_ACCOUNT,
-        &canonical,
-    )
-    .map_err(|e| e.to_string())?;
-
     maybe_join_invite(&state, &profile.user_id, input.invite_token)?;
 
     profile.updated_at = now_iso();
@@ -488,13 +436,11 @@ pub async fn auth_unlock_with_mnemonic(
     Ok(session)
 }
 
-/// Attempts a silent auto-unlock using the mnemonic stored in the OS keychain.
+/// Attempts a silent auto-unlock.
 ///
 /// - If a valid in-memory session already exists, returns it immediately.
-/// - Otherwise reads the keychain mnemonic, verifies it, re-derives the
-///   identity, and returns a fresh session.
-/// - Returns `null` if no mnemonic is in the keychain; the frontend should
-///   then show the manual unlock screen.
+/// - Otherwise returns `null`; desktop auth now follows the same explicit
+///   sign-in path as web.
 #[tauri::command]
 pub async fn auth_try_auto_unlock(
     state: State<'_, AppState>,
@@ -533,29 +479,13 @@ pub async fn auth_set_pin(state: State<'_, AppState>, pin: String) -> Result<(),
     save_local_profile(&state, &profile)
 }
 
-/// Unlocks using a PIN.  The PIN is verified against the Argon2 hash stored
-/// in the profile; internally uses the keychain mnemonic to create the session.
+/// Unlocks using a PIN.
 #[tauri::command]
 pub async fn auth_unlock_with_pin(
-    state: State<'_, AppState>,
-    pin: String,
+    _state: State<'_, AppState>,
+    _pin: String,
 ) -> Result<auth::AuthSession, String> {
-    let Some(profile) = load_local_profile(&state)? else {
-        return Err("no_profile".to_string());
-    };
-
-    let Some(ref pin_hash) = profile.pin_hash else {
-        return Err("no_pin_configured".to_string());
-    };
-
-    if !verify_secret(pin.trim(), pin_hash)? {
-        return Err("invalid_pin".to_string());
-    }
-
-    // PIN correct — derive session via the keychain mnemonic.
-    try_unlock_from_keychain(&state)?.ok_or_else(|| {
-        "mnemonic_not_in_keychain: please unlock with your mnemonic phrase first".to_string()
-    })
+    Err("pin_unlock_disabled".to_string())
 }
 
 /// Removes the PIN.  Requires an active session.
@@ -608,26 +538,34 @@ pub async fn auth_update_display_name(
 
 #[tauri::command]
 pub async fn auth_get_stored_mnemonic(
-    state: State<'_, AppState>,
+    _state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
-    require_session(&state)?;
-    keychain::get_secret(&state.config.keychain_service, KEYCHAIN_MNEMONIC_ACCOUNT)
-        .map_err(|e| e.to_string())
+    Ok(None)
 }
 
-/// Wipes the local DB and all keychain secrets.  After this the user must
+/// Wipes the local DB.  After this the user must
 /// register again.
 #[tauri::command]
 pub async fn auth_forgot_reset_local(state: State<'_, AppState>) -> Result<(), String> {
     state.store.wipe_all().map_err(|e| e.to_string())?;
 
-    let svc = &state.config.keychain_service;
-    let _ = keychain::delete_secret(svc, "session");
-    let _ = keychain::delete_secret(svc, "local_unlock_passkey");
-    let _ = keychain::delete_secret(svc, "device_private_key");
-    let _ = keychain::delete_secret(svc, KEYCHAIN_MNEMONIC_ACCOUNT);
-
     *state.session.lock().map_err(|e| e.to_string())? = None;
+    Ok(())
+}
+
+/// Mirrors the webview's Supabase session into AppState so invoke-backed
+/// modules (notes, email, calendar, time-tracking, graph) attribute work to
+/// the cloud user. The webview owns the session lifecycle (supabase-js);
+/// Rust only holds it in memory — `None` clears it on sign-out.
+#[tauri::command]
+pub async fn auth_set_cloud_session(
+    state: State<'_, AppState>,
+    session: Option<auth::AuthSession>,
+) -> Result<(), String> {
+    if session.is_none() {
+        crate::commands::email::stop_all_idle_workers();
+    }
+    *state.session.lock().map_err(|e| e.to_string())? = session;
     Ok(())
 }
 
@@ -653,8 +591,7 @@ pub async fn auth_get_session(
 }
 
 /// Clears the active session (lock-screen behaviour).
-/// The mnemonic is kept in the keychain so the next `auth_try_auto_unlock`
-/// call will silently restore the session.
+/// A new sign-in is required to restore the session.
 /// Use `auth_forgot_reset_local` to wipe everything.
 #[tauri::command]
 pub async fn auth_sign_out(state: State<'_, AppState>) -> Result<(), String> {
@@ -701,4 +638,38 @@ pub async fn auth_rotate_device_keys(
         public_key: identity.public_key,
         key_rotated_at: identity.key_rotated_at,
     })
+}
+
+/// Accepts a verified Supabase session from the JS layer (OTP, magic-link, etc.)
+/// and persists it into the Rust AppState so workspace/data commands can resolve
+/// the current user identity.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcceptSupabaseSessionInput {
+    pub access_token: String,
+    pub refresh_token: Option<String>,
+    pub user_id: String,
+    pub email: Option<String>,
+    pub expires_at: Option<i64>,
+    pub display_name: Option<String>,
+}
+
+#[tauri::command]
+pub async fn auth_accept_supabase_session(
+    state: State<'_, AppState>,
+    input: AcceptSupabaseSessionInput,
+) -> Result<(), String> {
+    let session = auth::AuthSession {
+        access_token: input.access_token,
+        refresh_token: input.refresh_token,
+        user: auth::AuthUser {
+            id: input.user_id.clone(),
+            email: input.email,
+        },
+        expires_at: input.expires_at,
+    };
+    let display_name = input.display_name.as_deref().unwrap_or("User");
+    persist_active_session(&state, &session, Some(display_name))?;
+    ensure_local_workspace_for_user(&state, &input.user_id, display_name)?;
+    Ok(())
 }

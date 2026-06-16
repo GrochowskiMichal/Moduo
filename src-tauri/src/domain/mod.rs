@@ -180,6 +180,11 @@ pub struct Bucket {
     pub name: String,
     #[serde(default)]
     pub is_system: bool,
+    /// Optional, presentational section label. Buckets sharing a `group` render
+    /// under a collapsible rail section (improvement-plan Session 4). Stored in
+    /// the `group_label` column on the cloud side (reserved-word avoidance).
+    #[serde(default)]
+    pub group: Option<String>,
     /// Lexorank-style ordering string.
     pub position: String,
     pub created_at: String,
@@ -197,6 +202,11 @@ pub struct Task {
     pub owner_id: String,
     /// Required: the bucket this task belongs to (Inbox as fallback).
     pub bucket_id: String,
+    /// Optional parent task — subtasks are exactly one level deep (a task with
+    /// a parent is never itself a parent). `serde(default)` keeps existing redb
+    /// rows (written before this field) deserializable.
+    #[serde(default)]
+    pub parent_id: Option<String>,
     pub title: String,
     #[serde(default)]
     pub description: String,
@@ -273,6 +283,20 @@ pub struct TagLink {
     pub created_at: String,
 }
 
+/// A directed dependency edge: `blocker_task_id` blocks `blocked_task_id`
+/// (spec §5c). *Blocked* is computed at read time, never stored; the edge
+/// graph is a DAG. Parity-only for now — desktop tasks ride the web runtime,
+/// and redb has no relations table yet (lite version concern).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskRelation {
+    pub id: String,
+    pub workspace_id: String,
+    pub blocker_task_id: String,
+    pub blocked_task_id: String,
+    pub created_at: String,
+}
+
 /// Read bundle for the Tasks module, scoped to a workspace.
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -281,6 +305,9 @@ pub struct TasksModuleBundle {
     pub tasks: Vec<Task>,
     pub tags: Vec<Tag>,
     pub tag_links: Vec<TagLink>,
+    /// Blocked-by edges. `serde(default)` keeps pre-Session-6 payloads valid.
+    #[serde(default)]
+    pub task_relations: Vec<TaskRelation>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -429,6 +456,7 @@ mod tests {
             workspace_id: "w1".into(),
             owner_id: "u1".into(),
             bucket_id: "b1".into(),
+            parent_id: None,
             title: "x".into(),
             description: String::new(),
             due_date: None,

@@ -47,6 +47,16 @@ const IGNORED_PATHS: string[] = [
   "src/features/dashboard/ui/widgets/weather-widget.tsx",
   "src/features/dashboard/ui/widgets/widget-shell.tsx",
   "src/features/email/ui/email-workspace.tsx",
+  // Children the structural refactor extracted out of the (already-exempt)
+  // email-workspace + mindmap-workspace above. Same pre-foundation legacy
+  // values, just relocated; queued to migrate with their feature briefs.
+  "src/features/email/ui/email-account-sidebar.tsx",
+  "src/features/email/ui/email-compose-panel.tsx",
+  "src/features/email/ui/email-connection-setup.tsx",
+  "src/features/email/ui/email-message-detail.tsx",
+  "src/features/email/ui/email-message-list.tsx",
+  "src/features/mindmap/ui/edge-style-menu.tsx",
+  "src/features/mindmap/ui/mindmap-empty-state.tsx",
   "src/features/mindmap/ui/components/mindmap-relations.tsx",
   "src/features/mindmap/ui/components/mindmap-toolbar.tsx",
   "src/features/mindmap/ui/custom-node.tsx",

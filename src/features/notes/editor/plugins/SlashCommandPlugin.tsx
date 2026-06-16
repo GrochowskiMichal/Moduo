@@ -446,7 +446,8 @@ export function SlashCommandPlugin({
     setEmbedItems([]);
 
     try {
-      const { runtime } = await import("../../../../lib/runtime");
+      const { getRuntime } = await import("../../../../lib/runtime");
+      const runtime = getRuntime();
       if (!runtime) {
         setEmbedItems([]);
         setEmbedLoading(false);

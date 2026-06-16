@@ -1,7 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, Check, Clock, Inbox, Repeat, Sunrise } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleDashed,
+  Clock,
+  CornerDownRight,
+  Inbox,
+  ListChecks,
+  Repeat,
+} from "lucide-react";
+
+import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 
 import { Badge } from "../../../components/ui/badge";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { TagChipList } from "../../../components/tag-chip";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -27,14 +42,15 @@ import {
 } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import {
-  ENERGY_LABELS,
   formatDue,
   formatScheduled,
-  PRIORITY_LABELS,
+  LEVEL_OPTIONS,
   toDateInputValue,
   toLocalInputValue,
 } from "../helpers";
+import { LevelDots } from "./level-icons";
 import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../model";
+import { recurrenceLabel } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 
 /** Which inline popover the keyboard asked to open on this row. */
@@ -55,14 +71,33 @@ type Props = {
   onEndEdit: () => void;
   onClearCommand: () => void;
   onRequestCommand: (command: RowCommand) => void;
+  /** Click a tag chip to toggle it in the view filter. */
+  onTagFilter?: (tagId: string) => void;
+  /**
+   * Reserve the expand gutter so checkboxes stay aligned. The list turns this
+   * on only when the scope actually nests subtasks (quiet until used).
+   */
+  expandSlot?: boolean;
+  /** Subtask nesting (Session 5): this row has children → chevron + n/m mirror. */
+  expandable?: boolean;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+  /** Quiet n/m subtask progress (parents only; mirror, never a wall). */
+  progress?: { done: number; total: number } | null;
+  /** Render indented one level (the row is a nested subtask). */
+  nested?: boolean;
+  /** Parent title caption for subtasks rendered flat (Today queue, or a scope
+   * that doesn't contain the parent). */
+  parentTitle?: string | null;
+  /** When set, the whole row is the drag activator (no separate grip): the
+   * dnd-kit listeners from the sortable/draggable wrapper, spread on the row
+   * root. Absent → the row isn't draggable (looks/behaves as before). */
+  dragListeners?: DraggableSyntheticListeners;
+  /** Highlight as the live drop target during a drag-to-nest (quiet accent +
+   * ring, mirrors the board column's drag-over treatment). */
+  dropActive?: boolean;
   api: TasksModuleApi;
 };
-
-const LEVELS: Array<{ value: EnergyLevel | PriorityLevel; label: string }> = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
 
 export function TaskRow({
   task,
@@ -79,6 +114,16 @@ export function TaskRow({
   onEndEdit,
   onClearCommand,
   onRequestCommand,
+  onTagFilter,
+  expandSlot = false,
+  expandable = false,
+  expanded = false,
+  onToggleExpand,
+  progress = null,
+  nested = false,
+  parentTitle = null,
+  dragListeners,
+  dropActive = false,
   api,
 }: Props) {
   const done = task.status === "done";
@@ -86,22 +131,73 @@ export function TaskRow({
   const committed = !!task.committedFor && task.committedFor === api.today;
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
+  const tags = api.tagsByTask.get(task.id) ?? [];
+  // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
+  const blocked = api.blockedTaskIds.has(task.id);
 
   const row = (
     <div
       role="row"
       aria-selected={selected}
       onClick={onSelect}
+      {...(editing ? {} : dragListeners)}
       className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-        "border border-transparent cursor-default select-none",
-        selected ? "bg-accent" : "hover:bg-accent/60",
+        "group relative flex items-center gap-2 rounded-md px-2 py-0.5 text-sm",
+        "border border-transparent select-none",
+        // Whole-row drag (queue reorder / drag-to-nest): a grab cursor signals
+        // it; a 6px activation distance keeps plain clicks selecting the row.
+        dragListeners ? "cursor-grab active:cursor-grabbing" : "cursor-default",
+        // Drop-target highlight wins over selection/hover while a nest drag is
+        // live (mirrors the board column's drag-over treatment — ring + accent).
+        dropActive
+          ? "bg-accent/50 ring-1 ring-inset ring-ring/50"
+          : selected
+            ? "bg-(--selected-bg)"
+            : "hover:bg-accent/60",
+        nested && "ml-10",
       )}
+      // height rides the density setting; py is only a multiline guard
+      style={{ minHeight: "var(--row-h)" }}
     >
+      {/* selected marker — a quiet accent bar, distinct from the lighter hover fill */}
+      {selected ? (
+        <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
+      ) : null}
+      {/* nested subtask indent guide — a quiet vertical hairline in the indent gutter */}
+      {nested ? (
+        <span className="absolute inset-y-0 -left-4 w-px bg-border/60" aria-hidden />
+      ) : null}
+      {expandSlot ? (
+        expandable ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
+                className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleExpand?.();
+                }}
+              >
+                {expanded ? (
+                  <ChevronDown className="size-3.5" aria-hidden />
+                ) : (
+                  <ChevronRight className="size-3.5" aria-hidden />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{expanded ? "Collapse subtasks" : "Expand subtasks"}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="size-4 shrink-0" aria-hidden />
+        )
+      ) : null}
       <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(task)} />
 
-      <div className="min-w-0 flex-1">
-        {editing ? (
+      {editing ? (
+        <div className="min-w-0 flex-1">
           <TitleEditor
             initial={task.title}
             onCommit={(value) => {
@@ -111,12 +207,16 @@ export function TaskRow({
             }}
             onCancel={onEndEdit}
           />
-        ) : (
+        </div>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <button
             type="button"
             className={cn(
-              "block max-w-full truncate text-left font-display",
-              done ? "text-muted-foreground line-through" : "text-foreground",
+              // flex-1 so the title keeps priority; chips shrink/truncate first.
+              // Body font (content, not chrome) at 15px — quiet, Linear/Todoist-ward.
+              "min-w-0 flex-1 truncate text-left font-sans text-md",
+              done ? "text-muted-foreground line-through" : blocked ? "text-muted-foreground" : "text-foreground",
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -129,21 +229,25 @@ export function TaskRow({
           >
             {task.title || "Untitled"}
           </button>
-        )}
-      </div>
+          {progress && progress.total > 0 ? (
+            // quiet subtask progress — a mirror, never a wall (principles 4 & 5)
+            <span className="shrink-0 font-sans text-xs text-muted-foreground tabular-nums">
+              {progress.done}/{progress.total}
+            </span>
+          ) : null}
+          {parentTitle ? (
+            <span className="flex min-w-0 shrink items-center gap-1 truncate font-sans text-xs text-muted-foreground">
+              <CornerDownRight className="size-3 shrink-0 opacity-70" aria-hidden />
+              <span className="truncate">{parentTitle}</span>
+            </span>
+          ) : null}
+          <TagChipList tags={tags} max={3} onTagClick={onTagFilter} className="min-w-0 shrink" />
+        </div>
+      )}
 
       {/* meta cluster — quiet, right-aligned */}
       <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-        {committed ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex items-center text-foreground" aria-label="Committed for today">
-                <Sunrise className="size-3.5" aria-hidden />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Committed for today</TooltipContent>
-          </Tooltip>
-        ) : null}
+        {blocked ? <BlockedMarker taskId={task.id} api={api} /> : null}
 
         {task.recurrence ? (
           <Tooltip>
@@ -152,7 +256,7 @@ export function TaskRow({
                 <Repeat className="size-3.5" aria-hidden />
               </span>
             </TooltipTrigger>
-            <TooltipContent>{task.recurrence.rrule}</TooltipContent>
+            <TooltipContent>{recurrenceLabel(task.recurrence)}</TooltipContent>
           </Tooltip>
         ) : null}
 
@@ -189,6 +293,37 @@ export function TaskRow({
             api={api}
           />
         ) : null}
+
+        {/* Queue toggle — pinned to the far right so it has one predictable,
+            targetable home (the marker IS the action). Committed → accent; idle →
+            faint, darkens on hover/focus. */}
+        {canEdit ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={committed ? "Remove from queue" : "Add to queue"}
+                aria-pressed={committed}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  api.toggleCommit(task.id);
+                }}
+                className={cn(
+                  "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                  committed ? "text-primary" : "text-muted-foreground/40 hover:text-foreground",
+                )}
+              >
+                <ListChecks className="size-3.5" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{committed ? "Remove from queue" : "Add to queue"}</TooltipContent>
+          </Tooltip>
+        ) : committed ? (
+          <span className="flex items-center text-primary" aria-label="Queued">
+            <ListChecks className="size-3.5" aria-hidden />
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -204,12 +339,22 @@ export function TaskRow({
           {done ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => api.toggleCommit(task.id)}>
-          {committed ? "Remove from today" : "Commit to today"}
+          {committed ? "Remove from queue" : "Add to queue"}
         </ContextMenuItem>
+        {task.recurrence && !done && task.status !== "archived" ? (
+          <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
+            Skip occurrence
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => onRequestCommand("schedule")}>Schedule…</ContextMenuItem>
         <ContextMenuItem onSelect={() => onRequestCommand("due")}>Set due date…</ContextMenuItem>
         <ContextMenuItem onSelect={() => onRequestCommand("bucket")}>Move to bucket…</ContextMenuItem>
+        {task.parentId ? (
+          <ContextMenuItem onSelect={() => api.setTaskParent(task.id, null)}>
+            Detach from parent
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuSeparator />
         <ContextMenuSub>
           <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
@@ -221,7 +366,7 @@ export function TaskRow({
               }
             >
               <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVELS.map((l) => (
+              {LEVEL_OPTIONS.map((l) => (
                 <ContextMenuRadioItem key={l.value} value={l.value}>
                   {l.label}
                 </ContextMenuRadioItem>
@@ -239,7 +384,7 @@ export function TaskRow({
               }
             >
               <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVELS.map((l) => (
+              {LEVEL_OPTIONS.map((l) => (
                 <ContextMenuRadioItem key={l.value} value={l.value}>
                   {l.label}
                 </ContextMenuRadioItem>
@@ -259,38 +404,25 @@ export function TaskRow({
   );
 }
 
-// ── complete toggle (bespoke; checkbox is not an enumerated shadcn primitive) ──
+// ── blocked marker (computed, ambient — dim/quiet, never red; spec §5c) ───────
 
-function CompleteToggle({
-  done,
-  disabled,
-  onToggle,
-}: {
-  done: boolean;
-  disabled: boolean;
-  onToggle: () => void;
-}) {
+export function BlockedMarker({ taskId, api }: { taskId: string; api: TasksModuleApi }) {
+  const openBlockers = (api.blockersByTask.get(taskId) ?? []).filter(
+    (b) => b.status !== "done" && b.status !== "archived",
+  );
+  const label =
+    openBlockers.length === 1
+      ? `Blocked by “${openBlockers[0].title || "Untitled"}”`
+      : `Blocked by ${openBlockers.length} tasks`;
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      aria-pressed={done}
-      aria-label={done ? "Mark as not done" : "Mark as done"}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      className={cn(
-        "flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-        done
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-muted-foreground/50 hover:border-foreground",
-        disabled && "opacity-50",
-      )}
-    >
-      {done ? <Check className="size-2.5" strokeWidth={3} aria-hidden /> : null}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="flex items-center" aria-label={label}>
+          <CircleDashed className="size-3.5" aria-hidden />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -328,37 +460,7 @@ function TitleEditor({
   );
 }
 
-// ── energy / priority dots (ambient, never alarming) ──────────────────────────
-
-function LevelDots({ task }: { task: Task }) {
-  if (!task.priority && !task.energyLevel) return null;
-  return (
-    <div className="flex items-center gap-1">
-      {task.priority ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              className="size-2 rounded-full bg-foreground/70"
-              aria-label={PRIORITY_LABELS[task.priority]}
-            />
-          </TooltipTrigger>
-          <TooltipContent>{PRIORITY_LABELS[task.priority]}</TooltipContent>
-        </Tooltip>
-      ) : null}
-      {task.energyLevel ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              className="size-2 rounded-full border border-foreground/60"
-              aria-label={ENERGY_LABELS[task.energyLevel]}
-            />
-          </TooltipTrigger>
-          <TooltipContent>{ENERGY_LABELS[task.energyLevel]}</TooltipContent>
-        </Tooltip>
-      ) : null}
-    </div>
-  );
-}
+// LevelDots (priority/energy glyphs) now lives in ./level-icons.
 
 // ── meta popovers ─────────────────────────────────────────────────────────────
 
@@ -413,8 +515,10 @@ function SchedulePopover({
           type="button"
           onClick={(e) => e.stopPropagation()}
           aria-label="Scheduled time"
-          // empty + idle collapses (no reserved space); reveals on hover or when opened
-          className={cn("items-center", label ? "flex" : open ? "flex" : "hidden group-hover:flex")}
+          // Show only when a time is set (or the keyboard opened the popover).
+          // No empty hover-reveal — it flickered and shifted the row for no gain;
+          // set/clear instead via right-click, the `s` key, or the detail panel.
+          className={cn("items-center", label || open ? "flex" : "hidden")}
         >
           <MetaChip active={!!label} drifted={drifted} icon={<Clock className="size-3.5" aria-hidden />}>
             {label}
@@ -473,7 +577,9 @@ function DuePopover({
           type="button"
           onClick={(e) => e.stopPropagation()}
           aria-label="Due date"
-          className={cn("items-center", label ? "flex" : open ? "flex" : "hidden group-hover:flex")}
+          // Show only when a due date is set (or the keyboard opened the popover)
+          // — no empty hover-reveal. Set/clear via right-click, `d`, or the panel.
+          className={cn("items-center", label || open ? "flex" : "hidden")}
         >
           <MetaChip active={!!label} icon={<CalendarDays className="size-3.5" aria-hidden />}>
             {label}

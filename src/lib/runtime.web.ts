@@ -9,7 +9,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
-import type { Bucket, Tag, TagLink, Task } from "../features/tasks/model";
+import { sanitizeTimeBlocks, type ActivityEntry, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -18,6 +18,7 @@ import type {
   ModuoRuntime,
   RuntimeCapabilities,
   RuntimeSession,
+  UserPreferences,
 } from "./runtime.types";
 
 // ── Supabase client ────────────────────────────────────────────────────────────
@@ -63,6 +64,20 @@ function sessionFromSupabase(supaSession: any): RuntimeSession | null {
   };
 }
 
+function prefsRowToModel(row: {
+  appearance: unknown;
+  appearance_updated_at: string | null;
+  focus: unknown;
+  focus_updated_at: string | null;
+}): UserPreferences {
+  return {
+    appearance: (row.appearance as Record<string, unknown> | null) ?? null,
+    appearanceUpdatedAt: row.appearance_updated_at ?? null,
+    focus: (row.focus as Record<string, unknown> | null) ?? null,
+    focusUpdatedAt: row.focus_updated_at ?? null,
+  };
+}
+
 // LocalStore backed by localStorage for web
 const LS_PREFIX = "moduo:ls:";
 
@@ -85,14 +100,32 @@ export const webRuntime: ModuoRuntime = {
 
   auth: {
     async getLocalAuthState() {
-      const data: LocalAuthState = {
+      // Cloud-auth equivalent of the desktop vault state: derived from the
+      // Supabase session so display-name consumers work on every platform.
+      const empty: LocalAuthState = {
         profileExists: false,
         displayName: null,
         userId: null,
         hasPin: false,
         hasKeychainMnemonic: false,
       };
-      return { data, error: null };
+      try {
+        const { data } = await supabaseClient.auth.getSession();
+        const user = data.session?.user;
+        if (!user) return { data: empty, error: null };
+        return {
+          data: {
+            profileExists: true,
+            displayName: (user.user_metadata?.display_name as string | undefined) ?? null,
+            userId: user.id,
+            hasPin: false,
+            hasKeychainMnemonic: false,
+          },
+          error: null,
+        };
+      } catch {
+        return { data: empty, error: null };
+      }
     },
 
     async generateMnemonic() {
@@ -366,6 +399,54 @@ export const webRuntime: ModuoRuntime = {
       if (!user) return;
       await supabaseClient.from("workspace_notifications").update({ read_at: new Date().toISOString() }).eq("user_id", user.id).is("read_at", null);
     },
+
+    // MCP connector keys (docs/moduo-mcp-connector.md). Explicit column list —
+    // key_hash is never client-readable (column-level grant excludes it).
+    async listApiKeys(workspaceId) {
+      const { data, error } = await supabaseClient
+        .from("workspace_api_keys")
+        .select("id, workspace_id, name, key_prefix, scopes, created_at, last_used_at")
+        .eq("workspace_id", workspaceId)
+        .is("revoked_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        workspaceId: row.workspace_id,
+        name: row.name,
+        keyPrefix: row.key_prefix,
+        scopes: (row.scopes ?? {}) as Record<string, string>,
+        createdAt: row.created_at,
+        lastUsedAt: row.last_used_at ?? null,
+      }));
+    },
+    async createApiKey({ workspaceId, name, scopes }) {
+      const { data, error } = await supabaseClient.rpc("workspace_api_keys_create", {
+        p_workspace_id: workspaceId,
+        p_name: name,
+        p_scopes: scopes,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("Key creation returned nothing.");
+      return {
+        id: row.id,
+        workspaceId,
+        name: row.name,
+        keyPrefix: row.key_prefix,
+        scopes: (row.scopes ?? {}) as Record<string, string>,
+        createdAt: row.created_at,
+        lastUsedAt: null,
+        secret: row.secret,
+      };
+    },
+    async revokeApiKey(keyId) {
+      const { error } = await supabaseClient.rpc("workspace_api_keys_revoke", { p_key_id: keyId });
+      if (error) throw new Error(error.message);
+    },
+    getMcpEndpoint() {
+      return `${SUPABASE_URL}/functions/v1/moduo-mcp`;
+    },
   },
 
   notes: {
@@ -535,6 +616,39 @@ export const webRuntime: ModuoRuntime = {
     },
   },
 
+  preferences: {
+    async get() {
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (!user) return null;
+      const { data, error } = await supabaseClient
+        .from("user_preferences")
+        .select("appearance, appearance_updated_at, focus, focus_updated_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return null;
+      return prefsRowToModel(data);
+    },
+    async set(patch) {
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (!user) return null;
+      // Upsert only the domains present in the patch; columns omitted here keep
+      // their existing value on conflict (and their table default on insert).
+      const row: Record<string, unknown> = { user_id: user.id };
+      if (patch.appearance !== undefined) row.appearance = patch.appearance ?? {};
+      if (patch.appearanceUpdatedAt !== undefined) row.appearance_updated_at = patch.appearanceUpdatedAt;
+      if (patch.focus !== undefined) row.focus = patch.focus ?? {};
+      if (patch.focusUpdatedAt !== undefined) row.focus_updated_at = patch.focusUpdatedAt;
+      const { data, error } = await supabaseClient
+        .from("user_preferences")
+        .upsert(row, { onConflict: "user_id" })
+        .select("appearance, appearance_updated_at, focus, focus_updated_at")
+        .single();
+      if (error) throw new Error(error.message);
+      return prefsRowToModel(data);
+    },
+  },
+
   window: {
     async toggleFullscreen() {
       if (document.fullscreenElement) {
@@ -619,19 +733,22 @@ export const webRuntime: ModuoRuntime = {
   tasks: {
     async list(workspaceId) {
       await ensureWebInbox(workspaceId);
-      const [bucketsRes, tasksRes, tagsRes, linksRes] = await Promise.all([
+      const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes] = await Promise.all([
         supabaseClient.from("buckets").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position"),
         supabaseClient.from("tasks").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position"),
         supabaseClient.from("tags").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
         supabaseClient.from("tag_links").select("*").eq("workspace_id", workspaceId),
+        supabaseClient.from("task_relations").select("*").eq("workspace_id", workspaceId),
       ]);
-      const firstError = bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error;
+      const firstError =
+        bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
         buckets: (bucketsRes.data ?? []).map(bucketRowToModel),
         tasks: (tasksRes.data ?? []).map(taskRowToModel),
         tags: (tagsRes.data ?? []).map(tagRowToModel),
         tagLinks: (linksRes.data ?? []).map(tagLinkRowToModel),
+        taskRelations: (relationsRes.data ?? []).map(taskRelationRowToModel),
       };
     },
 
@@ -651,6 +768,7 @@ export const webRuntime: ModuoRuntime = {
         owner_id: bucket.ownerId || user?.id || null,
         name: bucket.name,
         is_system: prev ? prev.is_system : false,
+        group_label: bucket.group ?? null,
         position: bucket.position ?? "",
         created_at: prev ? prev.created_at : (bucket.createdAt || now),
         updated_at: now,
@@ -704,6 +822,8 @@ export const webRuntime: ModuoRuntime = {
       const now = new Date().toISOString();
       const { data, error } = await supabaseClient.from("tasks").update({ deleted_at: now, updated_at: now }).eq("id", taskId).select().single();
       if (error) throw new Error(error.message);
+      // Deleting a parent promotes its subtasks to top-level (never lose work).
+      await supabaseClient.from("tasks").update({ parent_id: null, updated_at: now }).eq("parent_id", taskId).is("deleted_at", null);
       return taskRowToModel(data);
     },
 
@@ -755,10 +875,156 @@ export const webRuntime: ModuoRuntime = {
         .eq("entity_type", entityType).eq("entity_id", entityId);
       if (error) throw new Error(error.message);
     },
+
+    async createTaskRelation({ workspaceId, blockerTaskId, blockedTaskId }) {
+      // Idempotent like attachTag — re-adding an existing edge returns it.
+      const { data: existing } = await supabaseClient
+        .from("task_relations").select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("blocker_task_id", blockerTaskId)
+        .eq("blocked_task_id", blockedTaskId)
+        .maybeSingle();
+      if (existing) return taskRelationRowToModel(existing);
+      const { data, error } = await supabaseClient.from("task_relations")
+        .insert({ workspace_id: workspaceId, blocker_task_id: blockerTaskId, blocked_task_id: blockedTaskId })
+        .select().single();
+      if (error) throw new Error(error.message);
+      return taskRelationRowToModel(data);
+    },
+
+    async deleteTaskRelation({ workspaceId, relationId }) {
+      const { error } = await supabaseClient.from("task_relations").delete()
+        .eq("workspace_id", workspaceId).eq("id", relationId);
+      if (error) throw new Error(error.message);
+    },
+
+    async getTimeBlocks(workspaceId) {
+      const { data, error } = await supabaseClient
+        .from("task_time_blocks").select("blocks")
+        .eq("workspace_id", workspaceId).maybeSingle();
+      if (error) throw new Error(error.message);
+      return sanitizeTimeBlocks(data?.blocks);
+    },
+
+    async setTimeBlocks({ workspaceId, blocks }) {
+      const clean = sanitizeTimeBlocks(blocks);
+      const { data, error } = await supabaseClient
+        .from("task_time_blocks")
+        .upsert(
+          { workspace_id: workspaceId, blocks: clean, updated_at: new Date().toISOString() },
+          { onConflict: "workspace_id" },
+        )
+        .select("blocks").single();
+      if (error) throw new Error(error.message);
+      return sanitizeTimeBlocks(data?.blocks);
+    },
+
+    // ── intent ops (docs/moduo-module-contract.md) ─────────────────────────
+    // Each RPC checks permission, enforces invariants, writes, and logs an
+    // attributed module_activity row in one transaction.
+    async opCommit({ workspaceId, taskId, forDate }) {
+      return taskOpRpc("tasks_op_commit", {
+        p_workspace_id: workspaceId, p_task_id: taskId, p_for: forDate,
+      });
+    },
+
+    async opUncommit({ workspaceId, taskId }) {
+      return taskOpRpc("tasks_op_uncommit", {
+        p_workspace_id: workspaceId, p_task_id: taskId,
+      });
+    },
+
+    async opSkipToday({ workspaceId, taskId }) {
+      return taskOpRpc("tasks_op_skip_today", {
+        p_workspace_id: workspaceId, p_task_id: taskId,
+      });
+    },
+
+    async opSetStatus({ workspaceId, taskId, status, recurrence, position }) {
+      return taskOpRpc("tasks_op_set_status", {
+        p_workspace_id: workspaceId, p_task_id: taskId, p_status: status,
+        p_recurrence: recurrence ?? null, p_position: position ?? null,
+      });
+    },
+
+    async opReschedule({ workspaceId, taskId, scheduledAt, days }) {
+      return taskOpRpc("tasks_op_reschedule", {
+        p_workspace_id: workspaceId, p_task_id: taskId,
+        p_scheduled_at: scheduledAt, p_days: days ?? null,
+      });
+    },
+
+    async opUnschedule({ workspaceId, taskId }) {
+      return taskOpRpc("tasks_op_unschedule", {
+        p_workspace_id: workspaceId, p_task_id: taskId,
+      });
+    },
+
+    async opSkipOccurrence({ workspaceId, taskId, scheduledAt, recurrence, releaseCommit }) {
+      return taskOpRpc("tasks_op_skip_occurrence", {
+        p_workspace_id: workspaceId, p_task_id: taskId,
+        p_scheduled_at: scheduledAt, p_recurrence: recurrence,
+        p_release_commit: releaseCommit,
+      });
+    },
+
+    async opCatchUp({ workspaceId, items }) {
+      const { data, error } = await supabaseClient.rpc("tasks_op_catch_up", {
+        p_workspace_id: workspaceId,
+        p_items: items.map((i) => ({
+          task_id: i.taskId,
+          kind: i.kind,
+          status: i.status ?? null,
+          scheduled_at: i.scheduledAt ?? null,
+          recurrence: i.recurrence,
+          clear_commit: i.clearCommit ?? false,
+        })),
+      });
+      if (error) throw new Error(error.message);
+      return (Array.isArray(data) ? data : []).map(taskRowToModel);
+    },
+
+    async listActivity({ workspaceId, entityType, entityId, limit }) {
+      const { data, error } = await supabaseClient
+        .from("module_activity").select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("module", "tasks")
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId)
+        .order("created_at", { ascending: false })
+        .limit(limit ?? 50);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map(activityRowToModel);
+    },
   },
 };
 
 // ── Tasks module: Inbox seeding + row<->model mappers ─────────────────────────
+
+/** Call a single-task intent-op RPC and map the returned row. */
+async function taskOpRpc(fn: string, args: Record<string, unknown>): Promise<Task> {
+  const { data, error } = await supabaseClient.rpc(fn, args);
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("The operation returned nothing.");
+  return taskRowToModel(row);
+}
+
+function activityRowToModel(r: any): ActivityEntry {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    module: r.module,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    op: r.op,
+    actorType: r.actor_type ?? "user",
+    actorId: r.actor_id ?? null,
+    actorLabel: r.actor_label ?? null,
+    payload: (r.payload ?? {}) as Record<string, unknown>,
+    createdAt: r.created_at,
+  };
+}
 
 /** Ensure the workspace has its reserved Inbox bucket (idempotent). */
 async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
@@ -795,6 +1061,7 @@ function bucketRowToModel(r: any): Bucket {
     ownerId: r.owner_id ?? "",
     name: r.name,
     isSystem: !!r.is_system,
+    group: r.group_label ?? null,
     position: r.position ?? "",
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -808,11 +1075,13 @@ function taskRowToModel(r: any): Task {
     workspaceId: r.workspace_id,
     ownerId: r.owner_id ?? "",
     bucketId: r.bucket_id,
+    parentId: r.parent_id ?? null,
     title: r.title ?? "",
     description: r.description ?? "",
     dueDate: r.due_date ?? null,
     scheduledAt: r.scheduled_at ?? null,
     durationMinutes: r.duration_minutes ?? null,
+    timeSpentSeconds: r.time_spent_seconds ?? 0,
     recurrence: r.recurrence ?? null,
     energyLevel: r.energy_level ?? null,
     priority: r.priority ?? null,
@@ -833,11 +1102,13 @@ function taskModelToRow(t: Task): Record<string, unknown> {
     workspace_id: t.workspaceId,
     owner_id: t.ownerId || null,
     bucket_id: t.bucketId,
+    parent_id: t.parentId ?? null,
     title: t.title,
     description: t.description ?? "",
     due_date: t.dueDate ?? null,
     scheduled_at: t.scheduledAt ?? null,
     duration_minutes: t.durationMinutes ?? null,
+    time_spent_seconds: t.timeSpentSeconds ?? 0,
     recurrence: t.recurrence ?? null,
     energy_level: t.energyLevel ?? null,
     priority: t.priority ?? null,
@@ -872,6 +1143,16 @@ function tagLinkRowToModel(r: any): TagLink {
     tagId: r.tag_id,
     entityType: r.entity_type,
     entityId: r.entity_id,
+    createdAt: r.created_at,
+  };
+}
+
+function taskRelationRowToModel(r: any): TaskRelation {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    blockerTaskId: r.blocker_task_id,
+    blockedTaskId: r.blocked_task_id,
     createdAt: r.created_at,
   };
 }

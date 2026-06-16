@@ -39,21 +39,21 @@ export class RootErrorBoundary extends Component<
     }
 
     return (
-      <main className="flex min-h-screen items-center justify-center bg-zinc-950 p-6 text-zinc-100">
-        <section className="w-full max-w-lg rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
+      <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+        <section className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-xl">
           <h1 className="text-xl font-semibold">App recovered from a runtime error</h1>
-          <p className="mt-2 text-sm text-zinc-300">
+          <p className="mt-2 text-sm text-muted-foreground">
             The interface hit an unexpected error (often during rapid layout transitions like
             fullscreen). Reload to continue.
           </p>
           {this.state.errorMessage ? (
-            <pre className="mt-4 overflow-auto rounded-md bg-zinc-950 p-3 text-xs text-zinc-300">
+            <pre className="mt-4 overflow-auto rounded-md bg-muted p-3 text-xs text-muted-foreground">
               {this.state.errorMessage}
             </pre>
           ) : null}
           <button
             type="button"
-            className="mt-5 rounded-md bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200"
+            className="mt-5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             onClick={this.handleReload}
           >
             Reload app

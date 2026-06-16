@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, CircleHelp, CircleUserRound, Mail, UserPlus } from "lucide-react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/src/components/ui/avatar";
-import { Button } from "@/src/components/ui/button";
-import { Input } from "@/src/components/ui/input";
-import { ModuoMark } from "@/src/components/ui/moduo-mark";
-import { useAuth } from "@/src/providers/auth-provider";
-import type { AuthMnemonic } from "@/src/lib/runtime";
-import { notifyProfileUpdated, writeStoredAvatar } from "@/src/features/profile/profile-storage";
-import { cn } from "@/src/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ModuoMark } from "@/components/ui/moduo-mark";
+import { useAuth } from "@/providers/auth-provider";
+import type { AuthMnemonic } from "@/lib/runtime";
+import { notifyProfileUpdated, writeStoredAvatar } from "@/features/profile/profile-storage";
+import { cn } from "@/lib/utils";
 
 import defaultProfilePic from "../../../assets/icon.png";
 
@@ -39,7 +39,10 @@ function normalizePhrase(value: string) {
 
 export function EmailAuthPanel({ priceId = null }: Props) {
   const { runtime, configError } = useAuth();
-  const isWeb = !!runtime?.capabilities.isWeb;
+  // Cloud auth (email OTP) is the default on web AND desktop (cloud-first).
+  // The vault flows below only activate on runtimes that expose a local
+  // mnemonic — i.e. the future offline/lite runtime.
+  const cloudAuth = !runtime?.capabilities.hasLocalMnemonic;
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -73,7 +76,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
 
     const run = async () => {
       setLoading(true);
-      if (isWeb) {
+      if (cloudAuth) {
         setLoading(false);
         setFlow("email");
         return;
@@ -96,7 +99,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
     return () => {
       active = false;
     };
-  }, [runtime, isWeb]);
+  }, [runtime, cloudAuth]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -318,22 +321,22 @@ export function EmailAuthPanel({ priceId = null }: Props) {
   };
 
   const panelTitle =
-    isWeb && flow === "otp_sent"
+    cloudAuth && flow === "otp_sent"
       ? "Check your email"
-      : isWeb && flow === "email"
+      : cloudAuth && flow === "email"
         ? "Log in or create account"
-        : isWeb
+        : cloudAuth
           ? "Continue"
           : profileExists
             ? "Unlock your vault"
             : "Create your vault";
 
   const panelSubtitle =
-    isWeb && flow === "otp_sent"
+    cloudAuth && flow === "otp_sent"
       ? "Enter the six-digit code we sent. It expires shortly."
-      : isWeb && flow === "email"
+      : cloudAuth && flow === "email"
         ? "We’ll email you a secure code to continue."
-        : isWeb
+        : cloudAuth
           ? ""
           : profileExists
             ? "Use your PIN or recovery phrase to continue."
@@ -401,11 +404,11 @@ export function EmailAuthPanel({ priceId = null }: Props) {
         <ModuoMark
           className={cn(
             "size-8 opacity-95",
-            isWeb && flow === "otp_sent" ? "mb-10" : "mb-6",
+            cloudAuth && flow === "otp_sent" ? "mb-10" : "mb-6",
           )}
           aria-hidden="true"
         />
-        {isWeb && flow === "otp_sent" ? (
+        {cloudAuth && flow === "otp_sent" ? (
           <div className="relative w-full px-10">
             <button
               type="button"
@@ -437,7 +440,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
       </div>
 
       <div className="w-full">
-        {isWeb && flow === "email" ? (
+        {cloudAuth && flow === "email" ? (
           <div className="w-full">
             <div className="relative w-full">
               <Mail
@@ -473,7 +476,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
           </div>
         ) : null}
 
-        {isWeb && flow === "otp_sent" ? (
+        {cloudAuth && flow === "otp_sent" ? (
           <div className="w-full">
             <div className="flex flex-col gap-4">
               <Input
@@ -515,7 +518,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
           </div>
         ) : null}
 
-        {!isWeb && flow === "entry" ? (
+        {!cloudAuth && flow === "entry" ? (
           <div className="flex flex-col gap-3">
             {!profileExists ? (
               <Button
@@ -563,7 +566,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
           </div>
         ) : null}
 
-        {!isWeb && flow === "create_profile" ? (
+        {!cloudAuth && flow === "create_profile" ? (
           <div className="flex flex-col gap-3">
             {smallAvatar}
             <div className="relative">
@@ -598,7 +601,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
           </div>
         ) : null}
 
-        {!isWeb && flow === "create_phrase" ? (
+        {!cloudAuth && flow === "create_phrase" ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between px-1">
               <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
@@ -646,7 +649,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
           </div>
         ) : null}
 
-        {!isWeb && flow === "create_email" ? (
+        {!cloudAuth && flow === "create_email" ? (
           <div className="flex flex-col gap-3">
             <Input
               type="email"
@@ -675,7 +678,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
           </div>
         ) : null}
 
-        {!isWeb && flow === "pin" ? (
+        {!cloudAuth && flow === "pin" ? (
           <div className="flex flex-col gap-3">
             <p className="text-center text-sm text-muted-foreground">
               {profileName ? `Welcome back, ${profileName}` : "Enter your PIN"}
@@ -729,7 +732,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
           </div>
         ) : null}
 
-        {!isWeb && flow === "unlock" ? (
+        {!cloudAuth && flow === "unlock" ? (
           <div className="flex flex-col gap-3">
             <div className="relative">
               <CircleUserRound
@@ -780,7 +783,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
           </div>
         ) : null}
 
-        {!isWeb && flow === "reset_confirm" ? (
+        {!cloudAuth && flow === "reset_confirm" ? (
           <div className="flex flex-col gap-3">
             <p className="text-center font-display text-base font-semibold text-foreground">
               Reset vault?
@@ -824,7 +827,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
               <p className="text-sm leading-5 text-destructive">{error}</p>
             </div>
           ) : null}
-          {info && !(isWeb && flow === "otp_sent") ? (
+          {info && !(cloudAuth && flow === "otp_sent") ? (
             <div role="status" className="rounded-md border border-border bg-muted px-4 py-3">
               <p className="text-sm leading-5 text-muted-foreground">{info}</p>
             </div>

@@ -1,0 +1,21 @@
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.039216,0.039216,0.039216,1.000000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "moduo-mark.svg",
+          "name" : "Moduo Mark"
+        }
+      ]
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
   Copy,
   Crown,
+  KeyRound,
   Mail,
   MoreHorizontal,
+  Plus,
   Send,
   Shield,
   User,
@@ -12,8 +14,11 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 
+import { useAuth } from "../providers/auth-provider";
 import { useWorkspace } from "../providers/workspace-provider";
+import type { WorkspaceApiKey } from "../lib/runtime";
 import { useEntitlement } from "../hooks/use-entitlement";
 import { UpgradeModal } from "./upgrade-modal";
 import type { ModulePermission, WorkspaceRole } from "../features/workspaces/types";
@@ -107,6 +112,240 @@ function RolePicker({
         );
       })}
     </div>
+  );
+}
+
+type KeyScope = "view" | "edit";
+
+function keyScope(key: WorkspaceApiKey): KeyScope {
+  return key.scopes?.tasks === "edit" ? "edit" : "view";
+}
+
+/**
+ * Workspace API keys for the Moduo MCP connector (docs/moduo-mcp-connector.md).
+ * Keys are workspace-scoped, read-only by default; the secret is shown exactly
+ * once at creation. Owner/admin only (the modal already gates on
+ * canManageWorkspace; RLS enforces it server-side regardless).
+ */
+function ApiKeysSection({ workspaceId }: { workspaceId: string }) {
+  const { runtime } = useAuth();
+  const [keys, setKeys] = useState<WorkspaceApiKey[]>([]);
+  const [name, setName] = useState("");
+  const [scope, setScope] = useState<KeyScope>("view");
+  const [creating, setCreating] = useState(false);
+  const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
+  const [copied, setCopied] = useState<"secret" | "endpoint" | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!runtime) return;
+    try {
+      setKeys(await runtime.workspace.listApiKeys(workspaceId));
+    } catch {
+      // Non-managers can't read keys; the section is already gated, so stay quiet.
+    }
+  }, [runtime, workspaceId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const copy = async (text: string, what: "secret" | "endpoint") => {
+    await navigator.clipboard.writeText(text).catch(() => {});
+    setCopied(what);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const handleCreate = async () => {
+    if (!runtime || creating) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setCreating(true);
+    try {
+      const created = await runtime.workspace.createApiKey({
+        workspaceId,
+        name: trimmed,
+        scopes: { tasks: scope },
+      });
+      setRevealedSecret(created.secret);
+      setName("");
+      setScope("view");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create the key.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleRevoke = async (key: WorkspaceApiKey) => {
+    if (!runtime) return;
+    try {
+      await runtime.workspace.revokeApiKey(key.id);
+      setKeys((prev) => prev.filter((k) => k.id !== key.id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't revoke the key.");
+    }
+  };
+
+  const endpoint = runtime?.workspace.getMcpEndpoint() ?? "";
+
+  return (
+    <section className="flex flex-col gap-3">
+      <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <KeyRound className="size-3" aria-hidden />
+        <span>API keys · MCP</span>
+      </header>
+
+      <p className="text-xs text-muted-foreground">
+        Agents connect to this workspace over MCP. Keys are read-only by default,
+        and everything a key does is attributed in each task's activity trail.
+      </p>
+
+      <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+        <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+          {endpoint}
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Copy MCP endpoint"
+          title="Copy MCP endpoint"
+          className="h-6 w-6"
+          onClick={() => void copy(endpoint, "endpoint")}
+        >
+          {copied === "endpoint" ? (
+            <Check className="size-3 text-success" aria-hidden />
+          ) : (
+            <Copy className="size-3" aria-hidden />
+          )}
+        </Button>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <Label htmlFor="api-key-name" className="sr-only">
+            Key name
+          </Label>
+          <Input
+            id="api-key-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Key name — e.g. Claude"
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void handleCreate();
+            }}
+          />
+        </div>
+        <div
+          role="radiogroup"
+          aria-label="Key scope"
+          className="inline-flex items-center gap-1"
+        >
+          {(["view", "edit"] as const).map((level) => (
+            <Button
+              key={level}
+              type="button"
+              variant={scope === level ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setScope(level)}
+              aria-pressed={scope === level}
+              className={scope === level ? "text-foreground" : "text-muted-foreground"}
+            >
+              {level === "view" ? "View" : "Edit"}
+            </Button>
+          ))}
+        </div>
+        <Button
+          type="button"
+          onClick={() => void handleCreate()}
+          disabled={creating || !name.trim()}
+        >
+          <Plus className="size-3.5" aria-hidden />
+          {creating ? "Creating…" : "Create"}
+        </Button>
+      </div>
+
+      {revealedSecret ? (
+        <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2">
+          <Check className="size-3.5 shrink-0 text-success" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-success">
+              Key created — copy it now, it won't be shown again:
+            </p>
+            <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+              {revealedSecret}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Copy API key"
+            title="Copy API key"
+            className="h-6 w-6"
+            onClick={() => void copy(revealedSecret, "secret")}
+          >
+            {copied === "secret" ? (
+              <Check className="size-3 text-success" aria-hidden />
+            ) : (
+              <Copy className="size-3" aria-hidden />
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Dismiss"
+            className="h-6 w-6"
+            onClick={() => setRevealedSecret(null)}
+          >
+            <X className="size-3.5" aria-hidden />
+          </Button>
+        </div>
+      ) : null}
+
+      {keys.length > 0 ? (
+        <ul className="flex flex-col gap-1.5">
+          {keys.map((key) => (
+            <li
+              key={key.id}
+              className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm text-foreground">{key.name}</p>
+                <p className="truncate font-mono text-xs text-muted-foreground">
+                  {key.keyPrefix}…
+                  <span className="ml-2 font-sans">
+                    {key.lastUsedAt
+                      ? `Last used ${new Date(key.lastUsedAt).toLocaleDateString()}`
+                      : "Never used"}
+                  </span>
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Badge variant={keyScope(key) === "edit" ? "info" : "secondary"}>
+                  Tasks · {keyScope(key) === "edit" ? "Edit" : "View"}
+                </Badge>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Revoke ${key.name}`}
+                  title="Revoke key"
+                  onClick={() => void handleRevoke(key)}
+                  className="h-6 w-6 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <X className="size-3.5" aria-hidden />
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">No keys yet.</p>
+      )}
+    </section>
   );
 }
 
@@ -460,6 +699,9 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                     </ul>
                   </section>
                 ) : null}
+
+                {/* MCP connector keys */}
+                <ApiKeysSection workspaceId={selectedWorkspace.id} />
               </div>
             )}
           </div>

@@ -41,14 +41,17 @@ Toggled at the **top of the left panel**. The split is the heart of the module: 
 **Left panel:**
 - Mode toggle (Plan / Execute) at the very top.
 - Bucket list: name + task count. One bucket open by default; all expandable.
-- Per-bucket **drift indicator** — ambient, soft, **numbers-only** (a small dot + drift count, with the open count; the word "drifted" lives in the hover tooltip). Never red, never "overdue". Click → batch-triage for that bucket (reschedule / archive / ignore).
+- Per-bucket **drift indicator** — ambient, soft, **numbers-only** (a small dot + drift count, with the open count; the word "drifted" lives in the hover tooltip). Never red, never "overdue". Click the count → **batch-triage** for that bucket, with both batch ("apply to all") and per-task escape hatches:
+  - **Reschedule** — push the scheduled time into the future (Tomorrow / Next week), keeping the original clock time. Clears the drift by moving it forward.
+  - **Archive** — terminal status; removes it from open lists.
+  - **Ignore** — clears the stale scheduled time but **keeps the task**. (Drift is computed from `scheduled_at < now`, not stored, so "ignore" = drop the past time rather than acknowledge-and-keep-it. If a true "dismiss without unscheduling" is ever wanted, it needs a stored `drift_acknowledged_at` — deferred until dogfooding asks for it.)
 - Add-bucket — instant, no cooldown; a hover **"+"** on the "Buckets" header (Notion-style), not a standalone button.
 - A cross-bucket "All" selection, a **"Today"** selection (today's commit queue, ordered), and the reserved "Inbox" bucket.
 
 **Center panel:**
 - View switcher: **List | Board** (Gantt deferred).
 - **List view** — modeled on Linear: keyboard-first, dense-but-scannable rows, grouping (status/priority/bucket), inline quick-edit (no modals), command-palette speed. Row shows: complete-checkbox, title, scheduled time (if any), due-date marker (if any), bucket tag.
-- **Board view** — kanban columns; groupable by status (or bucket in the "All" selection).
+- **Board view** — kanban columns; groupable by status (or bucket in the "All" selection). Status columns are **Todo → In progress → Done** (left→right flow; Archived is never a column). Drag a card to another column to change its status (or bucket, in the bucket-grouped "All" board) — dragging to **Done** completes it. Cross-column drag is the v1 action; manual **within-column reordering is deferred** (a moved card appends to the destination column). Today renders status columns of the committed set (uniform with other scopes; no special-casing).
 - **Commit action** on a task → adds it to **today's commit queue** (ordered). Deliberate, visually distinct. Means "doing this today", not "scheduled at a specific time".
 
 ### Execute Mode
@@ -72,7 +75,115 @@ Typography/casing/density follow `DESIGN_SYSTEM.md` (primary = display font for 
 
 Exclusive (one task = one bucket). No cooldown. Inbox is reserved/undeletable. Tags are a separate, workspace-level cross-cutting concept.
 
+**Sections (presentational).** A bucket may carry an optional `group` label; buckets sharing a label collapse under a section header in the rail (two levels max: section → bucket, never nested). Sections are purely presentational — capture and task→bucket assignment never depend on them, and the rail stays flat until a bucket is assigned one (quiet until used). Assigned/created via the bucket's "…" → "Section" menu.
+
 Example buckets: Junction, Fitness, Diet, Money, Moduo, Plugin Client, EP, Hangout Realm, Godot Game, Inbox.
+
+## 5b. Subtasks (one level)
+
+Subtasks are **full tasks** with a `parent_id` — not checklist items. Exactly one
+level: a task with a parent is never itself a parent (recursion forbidden;
+enforced app-side and by a DB trigger until Session 8's intent ops).
+
+- **Hidden from top-level lists by default.** In List view they nest under the
+  parent behind a chevron expand affordance (collapsed by default — quiet until
+  asked); the parent row carries a quiet **n/m** progress count (mirror, never a
+  wall; archived subtasks count toward neither side). Board columns hide
+  subtasks whose parent is on the board — the parent card carries the n/m and
+  the detail panel lists them.
+- **Individually committable to Today** — start a scary task via its smallest
+  step. Today (list, board, Execute queue) stays a **flat** ordered queue:
+  committed subtasks render as first-class items with a quiet "↳ parent"
+  caption (Execute's Now card says "Part of <parent>").
+- **Never invisible.** A subtask whose parent isn't in the rendered scope
+  (other bucket, filtered out, deleted) renders as a normal top-level row.
+  Deleting a parent **promotes** its subtasks to top-level.
+- **Created in the detail panel** ("Add subtask" — lands in the parent's
+  bucket); capture stays subtask-free (friction behind the dump). Detach
+  ("promote to task") from the detail panel or the row context menu.
+- **No automagic:** completing all subtasks never auto-completes the parent —
+  the n/m mirror surfaces it; the user decides.
+
+---
+
+## 5c. Blocked-by dependencies
+
+Dependencies are **edges, not statuses**: a `task_relations` row (blocker →
+blocked) between two same-workspace tasks. *Blocked* is **computed at read
+time** (the drift pattern, §11) — never a stored field, never a workflow state:
+
+> blocked = at least one live, open (not done / archived) blocker exists.
+
+Completing a blocker unblocks its dependents with **zero writes** to them;
+un-completing re-blocks them the same way. An edge whose blocker no longer
+resolves (deleted) is inert — work is never invisibly stuck behind a ghost.
+
+- **Cycles forbidden, any length.** Client checks before adding an edge; a DB
+  trigger walks the edge graph (recursive CTE) as the backstop until Session
+  8's intent ops. The graph is always a DAG — the frontier walk relies on it.
+- **Blocked renders dim/quiet, never red.** Rows/cards dim the title and carry
+  a quiet icon + "Blocked by <n>" tooltip; the detail panel lists blockers
+  (click-through) and a read-only "Blocks" reverse list. Mirrors, not walls —
+  a blocked task stays fully editable, completable, and committable.
+- **The frontier walk:** from any blocked task, "what's actually next" = its
+  **unblocked frontier** — walk up the blocker chain and collect the open
+  blockers that aren't themselves blocked. Always non-empty on a DAG.
+- **Committing a blocked task offers the frontier** in a quiet dialog ("Blocked
+  by <x> — start with what unblocks it?"): commit a frontier task with one
+  click, or **Commit anyway** (never a wall — principle 5). Removing from
+  Today is never intercepted.
+- **Edges are managed in the detail panel only** (v1): a "Blocked by" field
+  with a searchable task picker; ✕ removes the edge (not the task).
+- **No automagic:** completing the last blocker never auto-commits or
+  auto-surfaces the unblocked task; the dimming just lifts.
+
+---
+
+## 5d. Recurrence (single-row engine)
+
+A recurring task is **one task row that cycles** — never a template spawning
+occurrence rows. The rule lives in `recurrence` (rrule + dtstart + a stored
+`nextOccurrence` pointer); `scheduledAt` always carries the **current
+occurrence's** datetime, so rows, drift, commit, and the future Calendar all
+work unchanged. Missed occurrences **don't exist**: there is no backfill and
+no "7 overdue" — at any moment the task has exactly one live occurrence
+(principle 4: identical behavior whether productive or crashed).
+
+- **Advance-on-done.** Completing a recurring task keeps it visibly `done` for
+  the rest of the day (Execute's n/m and the Done column keep their meaning)
+  and advances the stored pointer: `nextOccurrence` = first occurrence after
+  `max(now, scheduledAt)` (completing early advances past the pending
+  occurrence; completing late never backfills). A quiet toast mirrors the
+  parse ("Done — next Jun 13, 8:00 AM"). Un-completing recomputes the pointer
+  the same way. A rule that is exhausted (COUNT/UNTIL) advances to `null` —
+  the task simply stays done.
+- **Catch-up on app open** (and every bundle reload) is the other half of the
+  engine, one idempotent pass, client-side writes via the normal optimistic
+  patch path (edit permission required; view-only users just see quiet drift):
+  - a **done** recurring task whose pointer has arrived (`nextOccurrence ≤
+    now`) **reopens**: status `todo`, `scheduledAt` = the *latest* occurrence
+    ≤ now, pointer = first occurrence > now, stale commit cleared. Reopening
+    never auto-commits (no automagic).
+  - an **open** recurring task that missed ≥1 full occurrence collapses
+    forward: `scheduledAt` = latest occurrence ≤ now (one quiet drift, not a
+    pile); a recurring task with no `scheduledAt` adopts its live occurrence.
+  - drift *within* the current occurrence (vitamins at 10:00, occurrence was
+    8:00, next is tomorrow) is **not** caught up — it stays a normal, quiet
+    drifted task: still actionable today.
+- **Skip-occurrence affordance.** "Skip" jumps an open recurring task to the
+  occurrence after `max(now, scheduledAt)` without done-credit: `scheduledAt`
+  moves, the pointer follows, and a commit for today is released when the new
+  occurrence isn't today. Skipping does **not** increment `rescheduleCount`
+  (a skipped occurrence is a decision, not a slip) and is never offered on a
+  done task. Lives in the detail panel and the row/card context menus.
+  Distinct from Execute's *Skip* (= leave today's queue; the occurrence stays
+  live and may still be done later today).
+- **Editing.** The detail panel's "Repeat" field sets/clears recurrence from
+  the same preset vocabulary as capture (no complex picker, spec §7). Setting
+  a rule on a task without `scheduledAt` adopts the first occurrence; clearing
+  the rule keeps the task and its current `scheduledAt` (it becomes one-off).
+- **Capture parity:** a captured recurring task materializes `scheduledAt`
+  from the rule's first occurrence, so it is never invisible to drift/lists.
 
 ---
 
@@ -84,7 +195,7 @@ New-task modal — **Linear-style**: a natural-language title line on top, a des
 
 Bucket defaults to selected/last-used. **Title is the only thing needed** — Enter on the title alone files immediately to the default bucket. `⌘↵` submits from anywhere (e.g. the description). A "Create more" toggle keeps the modal open for rapid entry. **Land directly, fix lazily** — a confirmation toast shows the parse ("Take vitamins — recurs daily at 8:00 AM").
 
-This is *not* a required-field form: the pills are optional, never block submit, and default to sensible values. Tags are deferred (own surface).
+This is *not* a required-field form: the pills are optional, never block submit, and default to sensible values. Tags are applied **after** capture, in the task detail panel via the shared workspace-level TagPicker — the capture modal stays tag-free so the dump stays frictionless (friction behind the dump, not in front of it).
 
 Anti-patterns: required-field forms before submit, triage queues, multi-step wizards, forced bucket dropdowns.
 
@@ -118,6 +229,19 @@ Anti-patterns: required-field forms before submit, triage queues, multi-step wiz
 3. Open in last-used view (List/Board).
 4. Never the full cross-bucket list first.
 
+**Time-blocks (how they're defined).** A bucket is mapped to a coarse time-of-day
+slot — **Morning** (05:00–11:59), **Afternoon** (12:00–17:59), **Evening**
+(18:00–04:59, wraps midnight) — via that bucket's **"…" → "Open at"** menu in the
+rail. At most one bucket per slot (assigning a slot evicts the prior holder). The
+mapping is **workspace data** — one `task_time_blocks` row per workspace (slot →
+bucketId jsonb), shared across devices *(moved from localStorage in Session 2 of
+the 2026-06 improvement plan; mode / selection / grouping remain per-device
+localStorage view preferences)*. Coverage is total, so a slot always resolves; if its
+mapped bucket was deleted, resolution falls through to the last-opened bucket, then
+Inbox. There's no separate time-blocks editor surface — the per-bucket menu is the
+whole control (quiet until used). The resolution itself is one-shot per workspace
+on open and never overrides later in-session navigation.
+
 ---
 
 ## 10. Design Principles (load-bearing)
@@ -132,15 +256,44 @@ Anti-patterns: required-field forms before submit, triage queues, multi-step wiz
 
 ## 11. Data Model (suggested — adjust to codebase)
 
-**Task:** `id`, `workspace_id`, `bucket_id` (req), `title`, `description`, `due_date?`, `scheduled_at?`, `duration_minutes?` (default-on-drop, resizable), `recurrence?` (rrule), `energy_level?` (low/med/high), `priority?` (low/med/high), `status` (todo/in_progress/done/archived), `committed_for?` (date), `commit_order?` (int), `reschedule_count` (int, ambient), `created_at`, `updated_at`, `drifted` (computed: `scheduled_at < now() AND status NOT IN (done, archived)`).
+**Task:** `id`, `workspace_id`, `bucket_id` (req), `parent_id?` (subtasks §5b —
+one level, never recursive; an unresolvable `parent_id` reads as unset), `title`, `description`, `due_date?`, `scheduled_at?`, `duration_minutes?` (default-on-drop, resizable), `recurrence?` (rrule), `energy_level?` (low/med/high), `priority?` (low/med/high), `status` (todo/in_progress/done/archived), `committed_for?` (date), `commit_order?` (int), `reschedule_count` (int, ambient), `created_at`, `updated_at`, `drifted` (computed: `scheduled_at < now() AND status NOT IN (done, archived)`).
 
 **Energy vs. priority (two distinct optional axes).** `energy_level` = *how demanding* a task is (the cost to do it); `priority` = *how important* it is to get done (its weight in time). Both are optional, unset by default, and rendered **ambiently** — never red, never alarming (principles 4 & 5). Both are offered as opt-in group-by dimensions in List view alongside None / Status / Bucket. `priority` uses low/med/high to mirror `energy_level`; an `urgent` tier is a non-breaking future enum extension if dogfooding wants it.
 
-**Bucket:** `id`, `workspace_id`, `name`, `is_system` (Inbox), `created_at`. No cooldown field.
+**Bucket:** `id`, `workspace_id`, `name`, `is_system` (Inbox), `group?` (optional, presentational section label; `group_label` column), `position`, `created_at`. No cooldown field.
 
-**Tag:** `id`, `workspace_id`, `name`, polymorphic association.
+**Tag:** `id`, `workspace_id`, `name`, `color` (a label-palette hue name — token-routed, not a hex), polymorphic association via `tag_links` (`entity_type` "task" | "note" | "email" | …). Workspace-level; shared `TagPicker` (`src/components/`) is the cross-module surface.
+
+**TaskRelation (§5c):** `id`, `workspace_id`, `blocker_task_id`, `blocked_task_id`, `created_at` — a directed blocker → blocked edge; unique per (workspace, blocker, blocked). `blocked` is computed at read time like `drifted`, never stored; a DB trigger forbids cycles of any length (the graph is a DAG).
 
 **Event** (Calendar module — here for completeness): fixed-time, no completion, native or read-only feed.
+
+---
+
+## 11b. Intent ops + activity (platform contract)
+
+Tasks is the reference implementation of the per-module AI-readiness contract
+(`docs/moduo-module-contract.md` — read it before touching mutation paths).
+The invariant-bearing mutations — commit/uncommit, skip-out-of-today (the
+`reschedule_count` mirror), drift-triage reschedule/ignore, status changes with
+their recurrence pointer ride-along, skip-occurrence, and the catch-up pass —
+go through `tasks_op_*` Postgres RPCs (intent ops), which enforce edit
+permission and the op's invariants server-side and append an attributed
+`module_activity` row in the same transaction. Plain single-field edits (title,
+description, priority, …) remain raw upserts for now. Occurrence math stays in
+the client engine (`recurrence-engine.ts`); ops enforce the structural
+invariants (forward-only moves, recurring-only, commit release, atomic
+counters).
+
+The **activity trail** renders in the task detail panel: quiet, factual,
+newest-first ("You committed this for today · 2:14 PM"); creation needs no
+activity row (the panel's Created metadata anchors it) — an ambient mirror
+(principles 1, 4, 5), never a wall. Actors
+are recorded server-side: `user` for signed-in calls, `api_key` for MCP
+connector calls (`docs/moduo-mcp-connector.md` — workspace-scoped keys on the
+none/view/edit ladder, read-only by default; writes go through the same
+intent ops). `agent` stays reserved for in-app agents.
 
 ---
 

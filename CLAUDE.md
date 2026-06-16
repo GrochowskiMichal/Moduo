@@ -4,7 +4,11 @@ Project context for Claude Code. Always loaded.
 
 ## Stack
 
-Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind CSS v4. Redb for local-first persistence. Lexical for rich text. Yjs for collaboration. XYFlow for the mindmap. Storybook 8 for component dev. Vitest + Playwright for tests. Bun for the package manager.
+Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind CSS v4. Supabase is the source of truth (cloud-first): auth, workspaces and tasks go through the Supabase-backed runtime on **both** web and desktop. Redb persists the desktop-only modules that haven't migrated yet (notes, email, time-tracking, calendar) and is otherwise paused — kept for the future offline/lite version; never make it load-bearing for new features. Lexical for rich text. Yjs for collaboration. XYFlow for the mindmap. Storybook 8 for component dev. Vitest + Playwright for tests. Bun for the package manager.
+
+## Active plan
+
+A multi-session improvement plan lives at [docs/improvement-plan.md](./docs/improvement-plan.md). At session start, read it (plus the docs it links) and continue the **next unchecked session** unless the user directs otherwise. Check off completed items and keep it current — when a decision there changes, edit the plan first, then code. Remove this section when the plan is done.
 
 ## Build / dev
 
@@ -101,6 +105,7 @@ Format follows the existing project style (concise present-tense imperative). Si
 
 Branching model and PR direction live in [CONTRIBUTING.md](./CONTRIBUTING.md). Short version for LLM agents:
 
+- **Cut the task branch before editing any files.** The moment a task is more than a one-off question, create `t/<owner>/<short-kebab-case>` off the personal branch *first* — do not start editing on `maciej`/`mike` and move the work later.
 - Default base for new task branches is the user's personal branch (`maciej` or `mike`). Never branch from `main`. Never branch from `develop` unless explicitly told.
 - Never push directly to `main` or `develop`. Never merge or close PRs without explicit authorization.
 - Force-push only on your own task branches, only with `--force-with-lease`.
