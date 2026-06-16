@@ -309,8 +309,13 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       TASKS + two raw audits).
 - [x] Restyle Tasks surfaces (toolbar, rail, rows, cards, detail panel, board,
       capture modal, Queue/Execute) + build the shared primitives Notes inherits.
-- [ ] **Follow-up:** time-tracking (migration + intent-op + tracker UI +
-      Pomodoro settings); full PropertyRow grid; visual-test baselines; `q` shortcut.
+- [x] **Follow-up (2026-06-16):** lightweight time-tracking + Focus-card tracker
+      (prior session); **reusable DnD layer** + Queue drag-reorder + board within-column
+      reorder/insertion indicators; **detail panel rebuilt as the PropertyRow grid** +
+      manual time-spent row; **Pomodoro settings** (Settings → Focus) wired into the
+      Focus timer. **Remaining:** drag-a-task-onto-another → subtask (DnD foundation
+      ready — `onto-task` variant + `DragHandle` in place); visual-test baselines;
+      `q` queue shortcut. See `.design/tasks-polish/CONTINUATION-3.md`.
 
 ## Model assignment (decided with Maciej, 2026-06-12)
 

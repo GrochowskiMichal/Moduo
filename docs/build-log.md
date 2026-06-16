@@ -6,6 +6,54 @@ built, key decisions, and anything deferred or broken. Pairs with
 
 ---
 
+## Tasks follow-ups c3 — DnD layer, detail panel, Pomodoro prefs (2026-06-16)
+
+Branch `claude/suspicious-golick-3f4e80` off `cca9e11` (Opus). Continued the
+Session-11 follow-up backlog ([.design/tasks-polish/CONTINUATION-2.md](../.design/tasks-polish/CONTINUATION-2.md));
+full handoff in **CONTINUATION-3.md**. Four chunks, all five gates green
+(typecheck · `test` now **104**, +13 reorder-math · `lint:tw` · `lint:css` ·
+`build:web`).
+
+**Reusable DnD layer + Queue reorder.** New `src/features/tasks/ui/dnd/task-dnd.tsx`
+— typed `taskDrag` payload, extensible `TaskDropTarget` union (`onto-task` /
+`column` now; calendar-slot additive), shared pointer+keyboard sensors, a
+`SortableTask` wrapper + `DragHandle` grip. Pure ordering math + tests in
+`reorder.{ts,test.ts}`. The **Queue** is a vertical sortable; reorder persists
+`commit_order` via `api.reorderQueue` (raw save path, no intent op — a
+high-frequency personal ordering, same shape as the board's `position` drag).
+Focus dropped the interim **"Do last"** link (Skip + Done only); `doLast` removed.
+
+**Board within-column reorder.** Cards → multi-container sortable (per-column
+`SortableContext`). Within-column drag reorders (neighbours animate apart =
+insertion indicator); cross-column move now slots `position` at the drop point
+instead of always end. DragOverlay regained its drop animation. Move/reorder
+resolve on drop from the over target via `positionForReorder` — no fragile
+mid-drag cross-container state.
+
+**Detail panel = PropertyRow grid.** New `PropertyRow` primitive
+(`src/components/ui/`, label-left/value-right, `align="start"` for multi-line,
+with a story). `task-detail-panel.tsx` rebuilt off it: scalar props are an
+aligned grid, description label-less under the title, collections stay
+full-width. Added a **manual "Time spent" row** (minutes → `setTimeSpent`; the
+live tracker stays Focus-only per the 2026-06-16 lock; a bare blur never
+truncates the seconds-precise total).
+
+**Pomodoro prefs → Settings → Focus.** New `src/lib/focus-prefs.ts` (work /
+short break / long break / rhythm / auto-start / sound; `appearance.ts`
+persistence shape) + a Settings → Focus section. `useFocusTimer` reads them:
+long-break rhythm, auto-start-next (or pause-to-resume), Web-Audio chime. The
+card ⋯ popover edits the same persisted work/break values. Timer still
+strictly opt-in.
+
+**Deferred.** Drag-a-task-onto-another → subtask (foundation ready: `onto-task`
+variant + `DragHandle`; the per-bucket List's parent/child/group rendering makes
+a clean nesting surface the riskiest, least-verifiable piece — see CONTINUATION-3
+for the planned `nestable` approach). **Not live-verified this session** (auth-
+gated UI, no test password on hand, drag doesn't simulate reliably) — gates +
+unit tests + the PropertyRow story stand in; live-verify is step 1 next session.
+
+---
+
 ## Improvement-plan Session 11 — Tasks UI/UX rebuild + shared primitives (2026-06-13)
 
 Branch `t/maciej/session11-tasks-ui` off `maciej` (Opus). A maximum-rigor
