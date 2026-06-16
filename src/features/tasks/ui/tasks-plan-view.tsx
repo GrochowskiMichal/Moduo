@@ -374,6 +374,9 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         onDoLast={api.doLast}
         onAddTime={api.addTimeSpent}
         onSetTime={api.setTimeSpent}
+        tagsFor={(id) => api.tagsByTask.get(id) ?? []}
+        subtasksFor={(id) => api.subtasksByParent.get(id) ?? []}
+        onToggleSubtask={api.toggleDone}
         onExit={exitExecute}
       />
     ) : view === "board" ? (

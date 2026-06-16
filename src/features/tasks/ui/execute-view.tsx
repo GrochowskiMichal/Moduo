@@ -6,9 +6,11 @@ import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { TagChipList } from "../../../components/tag-chip";
 import { cn } from "../../../lib/utils";
 import { formatDue, formatScheduled } from "../helpers";
-import type { Task } from "../model";
+import type { Task, Tag } from "../model";
 
 const DEFAULT_WORK_MIN = 25;
 const DEFAULT_BREAK_MIN = 5;
@@ -29,6 +31,9 @@ type Props = {
   onAddTime: (taskId: string, deltaSeconds: number) => void;
   /** Set the tracked total to an absolute value (manual edit). */
   onSetTime: (taskId: string, seconds: number) => void;
+  tagsFor: (taskId: string) => Tag[];
+  subtasksFor: (taskId: string) => Task[];
+  onToggleSubtask: (subtask: Task) => void;
   onExit: () => void;
 };
 
@@ -42,6 +47,9 @@ export function ExecuteView({
   onDoLast,
   onAddTime,
   onSetTime,
+  tagsFor,
+  subtasksFor,
+  onToggleSubtask,
   onExit,
 }: Props) {
   const current = committedTasks.find((t) => t.status !== "done") ?? null;
@@ -70,6 +78,9 @@ export function ExecuteView({
               onDoLast={() => onDoLast(current.id)}
               onAddTime={onAddTime}
               onSetTime={onSetTime}
+              tags={tagsFor(current.id)}
+              subtasks={subtasksFor(current.id)}
+              onToggleSubtask={onToggleSubtask}
               canDoLast={upcoming.length > 0}
             />
             <Queue tasks={upcoming} bucketNameById={bucketNameById} parentTitleFor={parentTitleFor} />
@@ -117,6 +128,9 @@ function NowCard({
   onDoLast,
   onAddTime,
   onSetTime,
+  tags,
+  subtasks,
+  onToggleSubtask,
   canDoLast,
 }: {
   task: Task;
@@ -128,6 +142,9 @@ function NowCard({
   onDoLast: () => void;
   onAddTime: (taskId: string, deltaSeconds: number) => void;
   onSetTime: (taskId: string, seconds: number) => void;
+  tags: Tag[];
+  subtasks: Task[];
+  onToggleSubtask: (subtask: Task) => void;
   canDoLast: boolean;
 }) {
   const timer = useFocusTimer(task.id, onAddTime);
@@ -138,7 +155,7 @@ function NowCard({
     blockedNote ??
     [
       parentTitle ? `Part of ${parentTitle}` : null,
-      due ? `Due ${due}` : scheduled ? `Scheduled ${scheduled}` : null,
+      scheduled ? `Scheduled ${scheduled}` : null,
       task.durationMinutes ? `~${task.durationMinutes}m est` : null,
     ]
       .filter(Boolean)
@@ -151,7 +168,15 @@ function NowCard({
     // elevated: --popover sits one step lighter than the --card panel (no shadow —
     // surface contrast carries elevation on dark). Left-aligned, task-first.
     <div className="rounded-lg border border-border bg-popover px-6 py-5">
-      <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">{bucketName}</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="shrink-0 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
+          {bucketName}
+        </p>
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          {due ? <span className="shrink-0 font-sans text-2xs text-muted-foreground">Due {due}</span> : null}
+          {tags.length ? <TagChipList tags={tags} max={3} className="min-w-0" /> : null}
+        </div>
+      </div>
       <h2 className="mt-0.5 font-display text-2xl text-foreground">{task.title || "Untitled"}</h2>
       {subLine ? <p className="mt-1 font-sans text-xs text-muted-foreground">{subLine}</p> : null}
       {task.description ? (
@@ -159,6 +184,8 @@ function NowCard({
           {task.description}
         </p>
       ) : null}
+
+      {subtasks.length > 0 ? <SubtaskChecklist subtasks={subtasks} onToggle={onToggleSubtask} /> : null}
 
       <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
         {/* bottom-left — opt-in time tracking */}
@@ -215,6 +242,37 @@ function NowCard({
             Done
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── subtask checklist — tick the pieces off while focusing the parent ─────────
+
+function SubtaskChecklist({ subtasks, onToggle }: { subtasks: Task[]; onToggle: (subtask: Task) => void }) {
+  const done = subtasks.filter((s) => s.status === "done").length;
+  return (
+    <div className="mt-4">
+      <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
+        Subtasks {done}/{subtasks.length}
+      </p>
+      <div className="mt-1.5 flex flex-col">
+        {subtasks.map((st) => {
+          const isDone = st.status === "done";
+          return (
+            <div key={st.id} className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-accent">
+              <CompleteToggle done={isDone} onToggle={() => onToggle(st)} />
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate font-sans text-sm",
+                  isDone ? "text-muted-foreground line-through" : "text-foreground",
+                )}
+              >
+                {st.title || "Untitled"}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

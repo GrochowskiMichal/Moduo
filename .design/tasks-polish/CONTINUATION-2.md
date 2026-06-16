@@ -28,6 +28,8 @@
   starts on click and collapses to the tracked total at rest), elevated `bg-popover` card (no shadow),
   bucket eyebrow, total has a tooltip, square `IconButton`s, gentle running-dot pulse (`.track-pulse`).
   Stopwatch base + optional Pomodoro overlay; `⋯` popover = add-time / set-total / Pomodoro intervals.
+  Top row carries the bucket (left) + due date and tags (right); a **subtask checklist** renders in the
+  card when the focused task has subtasks (tick them off while focusing the parent, via `CompleteToggle`).
 
 ## Locked decisions for the open work (from Maciej, 2026-06-16)
 - **Detail panel = manual time-spent input ONLY, no live tracker.** The running timer lives only in
@@ -56,13 +58,9 @@
    `appearance.ts` prefs pattern.
 4. **Board polish**: drop animation, within-column reorder, insertion indicators (folds naturally into #1).
 
-## Unresolved question to ask Maciej first
-**"You lost the details row somewhere, can't see it on the panel."** `task-detail-panel.tsx` is
-**unchanged** since Session 11 (`9328550`) — not touched by the merge or any of this session's commits.
-Candidates: (a) the Focus card's **description** only renders when the task has one (`task.description ?`
-guard in execute-view) — the test task may have none; (b) in Focus mode the right rail binds to the
-**selected** task, not the current Focus task, so it can show the empty "Pick a task" state; (c) a
-property row in the detail panel he expected. **Clarify which before acting.**
+## Resolved this session
+- The "details row" complaint was about the **Focus card** (the mock had more than the code showed) —
+  fixed by adding due + tags to the top row's right side and the subtask checklist (above).
 
 ## Git/PR
 Concise present-tense commits, `Co-Authored-By: Claude <noreply@anthropic.com>`. FF `maciej` per chunk;
