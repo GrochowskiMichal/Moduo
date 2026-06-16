@@ -11,8 +11,8 @@ import { applyAppearance, readLocalAppearance } from "./lib/appearance";
 import "./global.css";
 
 // Pre-paint: synchronously apply the cached appearance to <html> before React
-// mounts. Prevents a flash of default theme on launch. The Tauri-backed value
-// is reconciled later inside useAppearance().
+// mounts. Prevents a flash of default theme on launch. This localStorage mirror
+// is the source of truth (appearance is localStorage-only; redb is paused).
 applyAppearance(readLocalAppearance());
 
 window.addEventListener("error", (event) => {

@@ -58,12 +58,6 @@ export function getRuntime(): import("./runtime.types").ModuoRuntime | null {
   return _runtime;
 }
 
-/**
- * Convenience reactive export used throughout the codebase.
- * For components that need the runtime at render time, prefer useRuntime() from auth-provider.
- */
-export const runtime: import("./runtime.types").ModuoRuntime | null = null;
-
 // Legacy compat: runtimeConfigError was checked by the old auth panel.
 export const runtimeConfigError: string | null =
   buildTarget === "web" || isTauriRuntime()
