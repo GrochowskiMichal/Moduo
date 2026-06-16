@@ -9,11 +9,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { TagChipList } from "../../../components/tag-chip";
 import { cn } from "../../../lib/utils";
+import { dispatchOpenSettings } from "../../settings/settings-events";
+import { useFocusPrefs, type FocusPrefs } from "../../../lib/focus-prefs";
 import { formatDue, formatScheduled } from "../helpers";
 import type { Task, Tag } from "../model";
 
-const DEFAULT_WORK_MIN = 25;
-const DEFAULT_BREAK_MIN = 5;
 // Persist accrued time periodically so a crash/reload loses at most this much.
 const FLUSH_INTERVAL_SECONDS = 60;
 
@@ -54,6 +54,8 @@ export function ExecuteView({
   const upcoming = committedTasks.filter((t) => t.status !== "done").slice(1);
   const total = committedTasks.length;
   const doneCount = committedTasks.filter((t) => t.status === "done").length;
+  // Pomodoro prefs (persisted) — the timer reads these; the ⋯ popover edits them.
+  const { prefs: focusPrefs, setPrefs: setFocusPrefs } = useFocusPrefs();
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -78,6 +80,8 @@ export function ExecuteView({
               tags={tagsFor(current.id)}
               subtasks={subtasksFor(current.id)}
               onToggleSubtask={onToggleSubtask}
+              focusPrefs={focusPrefs}
+              onFocusPrefsChange={setFocusPrefs}
             />
             <Queue tasks={upcoming} bucketNameById={bucketNameById} parentTitleFor={parentTitleFor} />
           </div>
@@ -126,6 +130,8 @@ function NowCard({
   tags,
   subtasks,
   onToggleSubtask,
+  focusPrefs,
+  onFocusPrefsChange,
 }: {
   task: Task;
   bucketName: string;
@@ -138,8 +144,10 @@ function NowCard({
   tags: Tag[];
   subtasks: Task[];
   onToggleSubtask: (subtask: Task) => void;
+  focusPrefs: FocusPrefs;
+  onFocusPrefsChange: (patch: Partial<FocusPrefs>) => void;
 }) {
-  const timer = useFocusTimer(task.id, onAddTime);
+  const timer = useFocusTimer(task.id, onAddTime, focusPrefs);
 
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
@@ -195,14 +203,21 @@ function NowCard({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="ml-0.5 cursor-default font-sans text-xs tabular-nums text-muted-foreground">
-                    {timer.pomodoro ? <span className="uppercase tracking-wide text-muted-foreground/70">{timer.phase} · </span> : null}
+                    {timer.pomodoro ? <span className="uppercase tracking-wide text-muted-foreground/70">{timer.phaseLabel} · </span> : null}
                     {formatDuration(trackedTotal)}
                     {estimateSeconds ? <span className="text-muted-foreground/60"> / ~{formatDuration(estimateSeconds)}</span> : null}
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>Total time tracked on this task</TooltipContent>
               </Tooltip>
-              <TimerMenu task={task} onAddTime={onAddTime} onSetTime={onSetTime} timer={timer} />
+              <TimerMenu
+                task={task}
+                onAddTime={onAddTime}
+                onSetTime={onSetTime}
+                timer={timer}
+                prefs={focusPrefs}
+                onPrefsChange={onFocusPrefsChange}
+              />
             </div>
           ) : (
             <Tooltip>
@@ -272,11 +287,15 @@ function TimerMenu({
   onAddTime,
   onSetTime,
   timer,
+  prefs,
+  onPrefsChange,
 }: {
   task: Task;
   onAddTime: (taskId: string, deltaSeconds: number) => void;
   onSetTime: (taskId: string, seconds: number) => void;
   timer: ReturnType<typeof useFocusTimer>;
+  prefs: FocusPrefs;
+  onPrefsChange: (patch: Partial<FocusPrefs>) => void;
 }) {
   const [setMin, setSetMin] = useState("");
 
@@ -326,6 +345,8 @@ function TimerMenu({
             </div>
           </div>
 
+          {/* Pomodoro — work/break edit the persisted Focus prefs (Settings →
+              Focus holds long break / auto-start / sound). */}
           <div className="border-t border-border pt-3">
             <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">Pomodoro</p>
             <div className="mt-1.5 flex items-center gap-2 font-sans text-sm text-muted-foreground">
@@ -334,8 +355,9 @@ function TimerMenu({
                 size="sm"
                 type="number"
                 min={1}
-                value={timer.workMin}
-                onChange={(e) => timer.setWorkMin(Math.max(1, Number(e.target.value) || 1))}
+                max={180}
+                value={String(prefs.workMinutes)}
+                onChange={(e) => onPrefsChange({ workMinutes: Math.max(1, Number(e.target.value) || 1) })}
                 className="w-14"
               />
               <span>Break</span>
@@ -343,8 +365,9 @@ function TimerMenu({
                 size="sm"
                 type="number"
                 min={1}
-                value={timer.breakMin}
-                onChange={(e) => timer.setBreakMin(Math.max(1, Number(e.target.value) || 1))}
+                max={180}
+                value={String(prefs.breakMinutes)}
+                onChange={(e) => onPrefsChange({ breakMinutes: Math.max(1, Number(e.target.value) || 1) })}
                 className="w-14"
               />
             </div>
@@ -352,6 +375,13 @@ function TimerMenu({
               <input type="checkbox" checked={timer.pomodoro} onChange={timer.togglePomodoro} />
               Pomodoro rhythm
             </label>
+            <button
+              type="button"
+              onClick={() => dispatchOpenSettings({ section: "focus" })}
+              className="mt-2 font-sans text-2xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              More in Settings → Focus
+            </button>
           </div>
         </div>
       </PopoverContent>
@@ -407,25 +437,34 @@ function Queue({
  * Opt-in stopwatch (never auto-starts) + optional Pomodoro overlay. `tracking`
  * is whether the timer is open; `running` whether the clock ticks. Real *work*
  * seconds accrue into the task's persisted total via onAddTime — flushed on
- * pause / Stop / task change / unmount / every minute (attribution by ref). With
- * Pomodoro on, the big clock shows the work/break countdown and breaks don't
- * accrue; otherwise it counts the sitting up.
+ * pause / Stop / task change / unmount / every minute / each completed work
+ * block (attribution by ref). With Pomodoro on, the big clock shows the
+ * work/break countdown; intervals, the long-break rhythm, auto-start, and the
+ * end-of-interval chime all come from the persisted Focus prefs. Breaks don't
+ * accrue; without Pomodoro it just counts the sitting up.
  */
-function useFocusTimer(taskKey: string, onAddTime: (taskId: string, deltaSeconds: number) => void) {
+function useFocusTimer(
+  taskKey: string,
+  onAddTime: (taskId: string, deltaSeconds: number) => void,
+  prefs: FocusPrefs,
+) {
   const [tracking, setTracking] = useState(false);
   const [running, setRunning] = useState(false);
   const [pomodoro, setPomodoro] = useState(false);
   const [phase, setPhase] = useState<"work" | "break">("work");
-  const [pomoLeft, setPomoLeft] = useState(DEFAULT_WORK_MIN * 60);
+  const [longBreak, setLongBreak] = useState(false);
+  const [completedWork, setCompletedWork] = useState(0);
+  const [pomoLeft, setPomoLeft] = useState(prefs.workMinutes * 60);
   const [sitElapsed, setSitElapsed] = useState(0);
   const [accrued, setAccrued] = useState(0);
-  const [workMin, setWorkMin] = useState(DEFAULT_WORK_MIN);
-  const [breakMin, setBreakMin] = useState(DEFAULT_BREAK_MIN);
 
   const unflushedRef = useRef(0);
   const taskRef = useRef(taskKey);
   const addRef = useRef(onAddTime);
   addRef.current = onAddTime;
+  // Latest prefs for the rollover effect / controls without re-subscribing the tick.
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
 
   const flush = useCallback(() => {
     if (unflushedRef.current >= 1) {
@@ -442,7 +481,9 @@ function useFocusTimer(taskKey: string, onAddTime: (taskId: string, deltaSeconds
     setTracking(false);
     setRunning(false);
     setPhase("work");
-    setPomoLeft(workMin * 60);
+    setLongBreak(false);
+    setCompletedWork(0);
+    setPomoLeft(prefsRef.current.workMinutes * 60);
     setSitElapsed(0);
     setAccrued(0);
     unflushedRef.current = 0;
@@ -465,15 +506,28 @@ function useFocusTimer(taskKey: string, onAddTime: (taskId: string, deltaSeconds
     return () => window.clearInterval(id);
   }, [running, pomodoro, phase]);
 
-  // Pomodoro phase rollover
+  // Pomodoro rollover: work → (long?) break → work on the persisted intervals.
+  // A finished work block banks its seconds and bumps the long-break counter;
+  // chime + auto-start (or pause-to-resume-by-hand) follow the prefs.
   useEffect(() => {
     if (!pomodoro || pomoLeft !== 0) return;
-    setPhase((p) => {
-      const next = p === "work" ? "break" : "work";
-      setPomoLeft((next === "work" ? workMin : breakMin) * 60);
-      return next;
-    });
-  }, [pomoLeft, pomodoro, workMin, breakMin]);
+    const p = prefsRef.current;
+    if (phase === "work") {
+      flush(); // bank the finished work block before the break
+      const nextCount = completedWork + 1;
+      const isLong = nextCount % p.sessionsBeforeLongBreak === 0;
+      setCompletedWork(nextCount);
+      setLongBreak(isLong);
+      setPhase("break");
+      setPomoLeft((isLong ? p.longBreakMinutes : p.breakMinutes) * 60);
+    } else {
+      setLongBreak(false);
+      setPhase("work");
+      setPomoLeft(p.workMinutes * 60);
+    }
+    if (p.soundEnabled) playChime();
+    if (!p.autoStartNext) setRunning(false);
+  }, [pomoLeft, pomodoro, phase, completedWork, flush]);
 
   // periodic flush so a crash loses at most FLUSH_INTERVAL_SECONDS
   useEffect(() => {
@@ -487,19 +541,19 @@ function useFocusTimer(taskKey: string, onAddTime: (taskId: string, deltaSeconds
     running,
     pomodoro,
     phase,
+    longBreak,
+    phaseLabel: phase === "work" ? "work" : longBreak ? "long break" : "break",
     sitElapsed,
     accrued,
-    workMin,
-    breakMin,
-    setWorkMin,
-    setBreakMin,
     bigClock: pomodoro ? pomoLeft : sitElapsed,
     start: () => {
       setTracking(true);
       setRunning(true);
       setSitElapsed(0);
       setPhase("work");
-      setPomoLeft(workMin * 60);
+      setLongBreak(false);
+      setCompletedWork(0);
+      setPomoLeft(prefsRef.current.workMinutes * 60);
     },
     toggle: () =>
       setRunning((r) => {
@@ -512,15 +566,47 @@ function useFocusTimer(taskKey: string, onAddTime: (taskId: string, deltaSeconds
       setTracking(false);
       setSitElapsed(0);
       setPhase("work");
-      setPomoLeft(workMin * 60);
+      setLongBreak(false);
+      setCompletedWork(0);
+      setPomoLeft(prefsRef.current.workMinutes * 60);
     },
     togglePomodoro: () =>
       setPomodoro((on) => {
         setPhase("work");
-        setPomoLeft(workMin * 60);
+        setLongBreak(false);
+        setCompletedWork(0);
+        setPomoLeft(prefsRef.current.workMinutes * 60);
         return !on;
       }),
   };
+}
+
+/** A short end-of-interval chime via Web Audio — no asset, gated by the sound
+ *  pref. Silent where Web Audio is unavailable. */
+function playChime(): void {
+  if (typeof window === "undefined") return;
+  const Ctx =
+    window.AudioContext ??
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return;
+  try {
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    osc.start(t);
+    osc.stop(t + 0.42);
+    osc.onended = () => void ctx.close();
+  } catch {
+    /* audio unavailable — silent */
+  }
 }
 
 function formatClock(totalSeconds: number): string {
