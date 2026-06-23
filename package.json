@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "types": ".design-sync/ds-types/index.d.ts",
   "scripts": {
     "start": "bun run dev:web",
     "dev:web": "MODUO_TARGET=web ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8081",
