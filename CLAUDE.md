@@ -10,6 +10,27 @@ Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind CSS v4. Supabas
 
 A multi-session improvement plan lives at [docs/improvement-plan.md](./docs/improvement-plan.md). At session start, read it (plus the docs it links) and continue the **next unchecked session** unless the user directs otherwise. Check off completed items and keep it current — when a decision there changes, edit the plan first, then code. Remove this section when the plan is done.
 
+## Product north star (READ BEFORE DESIGNING ANY MODULE)
+
+The product direction is captured in three always-relevant docs — read them before planning or building a module, and edit them *before* code when direction changes:
+
+- [docs/PRODUCT_BRIEF.md](./docs/PRODUCT_BRIEF.md) — what Moduo is, who it's for, the **connective-tissue "spine" that is the moat**, module depth ceilings, design principles, and the non-goals/anti-patterns (no Notion-style databases, no abstract graph UI, links are one-gesture, AI is MCP-only, graceful slippage, quiet notifications).
+- [docs/ROADMAP.md](./docs/ROADMAP.md) — the build sequence (waves), the scored idea backlog, and the **numbered open questions + risks** that gate parts of the plan (items marked ⚠).
+- [docs/data-layers.md](./docs/data-layers.md) — the data-layer architecture (two runtimes, Supabase-first, the spine's target shape, email's desktop-first hybrid).
+
+Per-module briefs live in `.design/<module>/BRIEF.md` (product) and `.design/<module>/DESIGN_BRIEF.md` (design/interaction/data — the build spec). **A module is not "done" until it wires into the spine (links/attach/drag/@mention/notifications/activity/tags), ships its MCP tools, and ships its dashboard widget** — not just CRUD.
+
+## Session wrap-up: manual test checklist (REQUIRED at the end of every build session)
+
+Before reporting a session/sprint done, write or update `docs/testing/<branch-or-sprint>.md` — a **manual test checklist** the user runs to verify the session's work in one pass (see [docs/testing/TEMPLATE.md](./docs/testing/TEMPLATE.md)):
+
+- **Group by feature/surface**; one checkbox per check.
+- Each check = a concrete **step → expected result → surface** (web / desktop / both).
+- Cover everything the session changed: new flows, edge cases, migrations, and likely-regressed areas you touched.
+- **Live-verify first** where the change is observable (preview tooling + the hosted test account) so the user's pass is *confirmation*, not first-discovery; list anything you could not verify under "Known gaps."
+
+Keep it copy-pasteable and self-contained — the user should never have to re-derive what the session touched.
+
 ## Build / dev
 
 - `bun run dev:web` — web dev server, http://127.0.0.1:8081
