@@ -181,6 +181,15 @@ Personal value (P) = dogfood pull for a solo founder. Business value (B) = acqui
 
 The user asked for a numbered list of questions to make this plan **bulletproof**, with recommendations where I'm confident. Items marked **⚠ NEED YOU** genuinely require a decision; items marked **✅ REC (confident)** I'll proceed on unless overridden.
 
+### Resolved (2026-06-24, after user review)
+- **Build sequence (Q1): CONFIRMED** — spine → Contacts → Calendar → Notes → Finance → Email.
+- **Pricing (Q3): DEFERRED — blocked on a cost model.** Can't price without knowing run-cost; this does **not** block the build. TODO before setting tiers: a cost / unit-economics model (Supabase + the desktop email engine + infra, per active workspace and per free-tier student).
+- **Polymorphic integrity (Q5): RESOLVED** — trigger-based validation + partial indexes (no central `entities` registry table).
+- **Assistive scheduling (Q12): RESOLVED (refined)** — allow a *constrained, transparent, reversible* auto-arrange limited to **focus blocks within buckets**; delegate richer / "smart" scheduling to an **external AI via the MCP connector**. NOT a Motion-style opaque auto-reshuffle of the whole calendar.
+- **Perpetual-fallback license (Q13): DEFERRED** — lossless export is committed at launch; the license model is decided later.
+
+Still genuinely open: a concrete **pricing/tier table** (needs the cost model first).
+
 ### A. Strategy & scope
 1. **Build-sequence sign-off** — spine → Contacts → Calendar → Notes → Finance → Email. **✅ REC (confident):** proceed. The only live alternative is *Calendar before Contacts* (calendar is the bigger dogfood pull). I still put Contacts first because it's the cheapest spine proof and de-risks the whole architecture before the heavier calendar build. **⚠ NEED YOU:** override only if you'd rather feel the calendar win sooner than de-risk the spine.
 2. **Internal-dogfood milestone vs public alpha** — full-suite alpha is the *public* bar, but should we cut an explicit "private dogfood build" you + Mike run from end of Wave 2? **✅ REC (confident):** yes — start living in it after Calendar; it shortens the feedback loop without changing the public bar.

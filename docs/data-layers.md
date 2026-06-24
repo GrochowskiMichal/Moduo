@@ -169,7 +169,7 @@ A full multi-account Spark replacement on a cloud-first web app would mean build
 These are tracked in the alpha **Open Questions & Risks** doc; the load-bearing ones for this doc:
 
 - **`entity_links` shape** — one universal table with a `relation_kind` enum, vs. separate `links`/`attachments` tables. (Rec: one table, typed.)
-- **Polymorphic integrity** — how to keep `(entity_type, entity_id)` referentially sane without per-type FKs (trigger validation vs. partial indexes vs. a central `entities` registry table).
+- **Polymorphic integrity** — how to keep `(entity_type, entity_id)` referentially sane without per-type FKs (trigger validation vs. partial indexes vs. a central `entities` registry table). **(Resolved 2026-06-24: trigger validation + partial indexes — no central registry.)**
 - **Notes CRDT ↔ Postgres** — how Yjs state reconciles with Supabase for cloud-sync (store the Yjs doc as a blob + derived searchable fields, vs. shred to rows).
 - **Drag-payload contract** — the TypeScript shape for "any entity → any drop target" and where it lives (`src/lib/`).
 
