@@ -6,9 +6,26 @@ Project context for Claude Code. Always loaded.
 
 Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind CSS v4. Supabase is the source of truth (cloud-first): auth, workspaces and tasks go through the Supabase-backed runtime on **both** web and desktop. Redb persists the desktop-only modules that haven't migrated yet (notes, email, time-tracking, calendar) and is otherwise paused — kept for the future offline/lite version; never make it load-bearing for new features. Lexical for rich text. Yjs for collaboration. XYFlow for the mindmap. Storybook 8 for component dev. Vitest + Playwright for tests. Bun for the package manager.
 
+## Working posture (planning & execution)
+
+The user is a **product designer, not an engineer** — authoritative on product, UX, edge cases, scope, and priorities; not on infrastructure, data models, or testing. Build around that asymmetry: extract product knowledge relentlessly, and research/decide the technical layer yourself.
+
+**Planning (`/plan`, read-only — write no code):**
+
+- Grill exhaustively on product behavior, user goals, UX, states, edge cases, acceptance criteria, scope, and priorities until nothing is ambiguous — err toward 50–100 questions up front, not 10 mid-build.
+- **Never ask the user implementation, infra, data-model, or library questions.** Research them yourself (Explore subagent + web), decide, and record the decision + its assumption in the spec. Surface a technical choice only when it genuinely changes the product (a cost/speed/UX tradeoff a user would feel) — framed in product terms, with a recommendation.
+- Resolve every technical unknown during planning so execution never has to stop and ask. End with the Definition-of-Ready gate in `specs/_template.md`.
+
+**Execution (`/execute`, auto mode):**
+
+- **Stay silent between tool calls.** When a block completes, output ONE summary — **Changed** · **Test this** · **Next** — plus, only when applicable: **⚠ Broke** (what failed + your options), **🔎 Found** (context that changes the plan/spec), **❓ Your call** (a decision you can't make alone). Never suppress breakage, a blocker, or a needed decision for brevity. The only acceptable mid-run interruption is a hard blocker you can't resolve by research.
+- A block is done when **`bun run verify` passes** (typecheck + lint + tests) and the validator (`/review`) finds nothing blocking.
+
+**Model:** use **Opus everywhere** — planning, execution, subagents, validator. Quality over cost; never downgrade subagents or the validator to save tokens.
+
 ## Active plan
 
-A multi-session improvement plan lives at [docs/improvement-plan.md](./docs/improvement-plan.md). At session start, read it (plus the docs it links) and continue the **next unchecked session** unless the user directs otherwise. Check off completed items and keep it current — when a decision there changes, edit the plan first, then code. Remove this section when the plan is done.
+The plan of record is [docs/ROADMAP.md](./docs/ROADMAP.md) (waves 0–5, the scored backlog, and the numbered open questions/risks that gate parts of the plan). At session start, read it plus the north-star docs it links, and build in wave order unless the user directs otherwise — don't start a module before its wave, and check `§Open Questions & Risks` before building anything marked ⚠. [docs/improvement-plan.md](./docs/improvement-plan.md) is the **completed** Tasks-era execution log — history, not the live plan.
 
 ## Product north star (READ BEFORE DESIGNING ANY MODULE)
 
@@ -19,6 +36,16 @@ The product direction is captured in three always-relevant docs — read them be
 - [docs/data-layers.md](./docs/data-layers.md) — the data-layer architecture (two runtimes, Supabase-first, the spine's target shape, email's desktop-first hybrid).
 
 Per-module briefs live in `.design/<module>/BRIEF.md` (product) and `.design/<module>/DESIGN_BRIEF.md` (design/interaction/data — the build spec). **A module is not "done" until it wires into the spine (links/attach/drag/@mention/notifications/activity/tags), ships its MCP tools, and ships its dashboard widget** — not just CRUD.
+
+## Knowledge map (read these instead of re-deriving)
+
+The architecture, data model, and conventions are already documented — find them here rather than re-deriving from code. Append to the two logs at the end of each block; read both at session start so knowledge compounds.
+
+- **Architecture:** [docs/architecture.md](./docs/architecture.md) (code layout) · [docs/data-layers.md](./docs/data-layers.md) (runtimes, spine, data flow) · [docs/moduo-module-contract.md](./docs/moduo-module-contract.md) (the 4-pillar module pattern + "done" checklist).
+- **Data model:** [docs/data-layers.md](./docs/data-layers.md) §2–3 · per-module `.design/<module>/BRIEF.md` data sketches · `supabase/migrations/`.
+- **Conventions & glossary:** [docs/moduo-architecture-vocabulary.md](./docs/moduo-architecture-vocabulary.md) (terms, principles, decision rules, anti-patterns) · [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) (UI).
+- **Decisions log:** [docs/decisions.md](./docs/decisions.md) — newest-first index of locked decisions; **append new ones here** so they stop scattering.
+- **Gotchas / footguns:** [docs/gotchas.md](./docs/gotchas.md) — read before debugging; **append when something bites.**
 
 ## Session wrap-up: manual test checklist (REQUIRED at the end of every build session)
 
