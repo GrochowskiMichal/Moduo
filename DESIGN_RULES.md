@@ -1,6 +1,6 @@
 # Design rules
 
-> **Status: DRAFT — pending ratification.** These are product/design decisions; only the designer can ratify them. Drafted from the live `src/styles/tokens.css` + `DESIGN_SYSTEM.md`. Once confirmed, the `[DRAFT]` markers come off and the `moduo-design-quality` skill enforces this file.
+> **Status: Ratified 2026-06-25.** These are product/design decisions, confirmed by the designer and distilled from the live `src/styles/tokens.css` + `DESIGN_SYSTEM.md`. The `moduo-design-quality` skill enforces this file; change a rule here before changing component behaviour.
 
 `tokens.css` holds the **values**; this file holds the **relationships between them** — the "these scale together / this is reserved for that / this never pairs with that" rules a flat token list can't express. Each rule is tagged **[lint]** (a script can catch violations), **[review]** (only a human/skill reading the diff can), or **[lint+review]**.
 
@@ -56,5 +56,5 @@ Knowing which scale is a first-class utility tells you when an arbitrary value i
 - **Tailwind utilities (via `@theme` in tokens.css):** color (`bg-/text-/border-/ring-` semantic), radius (`rounded-*`), font-family (`font-display/-sans/-mono`), icon size (`size-icon-*`), type scale (`text-2xs`…`text-5xl`), shadow (`shadow-*`). → Use the utility. An arbitrary value here is almost always drift.
 - **`var()`-only (no utility):** spacing (use Tailwind's built-in `p-`/`gap-`/`m-`), z-index (`--z-*`), motion/ease (`--motion-*`/`--ease-*`), layout widths (`--width-*`, `--bar-h`), density dims (`--row-h`/`--ctrl-h`/`--pad-*`), leading/tracking/weight, `--blur-veil`, selection (`--selected-*`), label hues (`--label*`). → Reach for `var(--…)` (in CSS or, sparingly, `[var(--…)]`), never a magic number.
 
-## `--space-*` tokens are currently inert
-`--space-0`…`--space-24` exist in tokens.css but are **not** in `@theme` and have **0 references** in `src/`. `p-4` resolves to Tailwind's built-in 4px scale, **not** these vars. They're a reserved hook for a possible future density-driven spacing axis. Until that ships, treat **Tailwind's built-in spacing** as the spacing source of truth. *(Open: keep as a reserved hook, or delete? — designer's call.)*
+## Spacing source
+Spacing uses **Tailwind v4's built-in 4px scale** (`p-4`, `gap-2`, `mx-3`). The former `--space-*` mirror tokens were **removed 2026-06-25** (0 refs, never in `@theme`). If a density-driven spacing axis is ever needed, re-introduce a scale in tokens.css and wire it into `@theme`.

@@ -60,7 +60,7 @@ Never `bg-[#xxxxxx]`, never `text-zinc-400`, never `bg-neutral-900`. The Styleli
 
 ## Spacing — 4px base
 
-Spacing uses **Tailwind v4's built-in 4px scale** — `p-4`, `gap-2`, `mx-3`. The `--space-*` variables mirror that scale but are **not** wired into `@theme` and currently have **0 references** in `src/`; they're a reserved hook for a possible future density-driven spacing axis. Until that ships, `p-4` etc. resolve to Tailwind's built-ins, **not** these vars. (Candidate for removal if the future axis is abandoned.)
+Spacing uses **Tailwind v4's built-in 4px scale** — `p-4`, `gap-2`, `mx-3`. The `--space-*` mirror tokens were **removed 2026-06-25** (unused — 0 refs, never wired into `@theme`). If a density-driven spacing axis is ever needed, re-introduce a scale and wire it into `@theme`.
 
 ## Density — row/control sizing
 
