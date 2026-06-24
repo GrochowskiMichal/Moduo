@@ -184,7 +184,7 @@ The user asked for a numbered list of questions to make this plan **bulletproof*
 ### Resolved (2026-06-24, after user review)
 - **Build sequence (Q1): CONFIRMED** — spine → Contacts → Calendar → Notes → Finance → Email.
 - **Pricing (Q3): DEFERRED — blocked on a cost model.** Can't price without knowing run-cost; this does **not** block the build. TODO before setting tiers: a cost / unit-economics model (Supabase + the desktop email engine + infra, per active workspace and per free-tier student).
-- **Polymorphic integrity (Q5): RESOLVED** — trigger-based validation + partial indexes (no central `entities` registry table).
+- **Polymorphic integrity (Q5): RESOLVED → revised to a central `entities` registry.** A lean index (`workspace_id, entity_type, entity_id, label, icon, deleted_at`) upserted by each module's intent op in the same transaction; `entity_links`/`comments`/`tag_links` FK into it. Chosen over trigger+partial-indexes because it makes cross-module search / @mention / roll-up **one indexed query instead of N per-module fan-outs** and gives clean cascade-tombstone on delete, for the cost of one tiny extra upsert per mutation. Authoritative spec: [.design/connective-tissue/DESIGN_BRIEF.md](../.design/connective-tissue/DESIGN_BRIEF.md).
 - **Assistive scheduling (Q12): RESOLVED (refined)** — allow a *constrained, transparent, reversible* auto-arrange limited to **focus blocks within buckets**; delegate richer / "smart" scheduling to an **external AI via the MCP connector**. NOT a Motion-style opaque auto-reshuffle of the whole calendar.
 - **Perpetual-fallback license (Q13): DEFERRED** — lossless export is committed at launch; the license model is decided later.
 
