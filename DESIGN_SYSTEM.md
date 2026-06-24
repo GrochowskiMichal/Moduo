@@ -5,6 +5,8 @@ The full reference. [CLAUDE.md](./CLAUDE.md) holds the short rules; this documen
 > If you're reading this as a human: skim the rules section, then the recipes. If you're Claude: the rules section is the contract.
 >
 > Source artefacts: [.design/foundation/](./.design/foundation/) — grill summary, brief, IA, tokens reference.
+>
+> The terse, checkable **relational** rules (control rungs, radius-by-role, type roles, accent policy, motion) live in [DESIGN_RULES.md](./DESIGN_RULES.md) — that file is what the design-quality skill enforces.
 
 ## Contract
 
@@ -54,9 +56,7 @@ Playwright runs visual snapshot tests for every primitive's Storybook story. New
 
 ### 6. No new fonts outside the picker
 
-The font roles are:
-- **Display**: Pilat Extended (default), Geist Sans, Cal Sans, Fraunces.
-- **Body**: Geist Sans (default), Inter, Source Serif Pro, Geist Mono.
+There is **one font picker** (`data-font`, default Geist). The chosen family drives the whole UI — both the display and body roles resolve to it; hierarchy comes from weight/size, not a second typeface. Options: Geist, Inter, Pilat Extended, Cal Sans, Fraunces, Source Serif Pro, Geist Mono. `font-mono` stays mono for code.
 
 If a feature wants a new font, it's a design-system change, not a feature change. Discuss before adding.
 
@@ -76,7 +76,8 @@ User preferences map to `data-*` attributes on `<html>`. The cascade does the wo
 | `data-density` | `comfortable`, `compact`, `dense` | `comfortable` |
 | `data-radius` | `sharp`, `soft`, `round` | `soft` |
 | `data-font` | `geist`, `inter`, `pilat`, `cal`, `fraunces`, `serif`, `mono` | `geist` |
-| `data-text-size` | `small`, `normal`, `large` | `normal` |
+
+(`data-text-size` was retired 2026-06-13 — density is the size axis.)
 
 The Settings page is the UI for setting these. The values persist to Tauri-backed local storage and are applied on app launch before first paint.
 
@@ -199,9 +200,11 @@ regressions during the visual sweep.
 
 ## Typography roles (primary vs. secondary)
 
-Two user-selectable families live in Settings → Appearance: a **display** font
-and a **body** font. Components map to a *role*, never to a hardcoded family, so
-the user's choice always flows through:
+Components map to a *role*, never to a hardcoded family, so the user's font
+choice always flows through. Today a single picker (`data-font`, default Geist)
+drives **both** roles to one family — so display vs. body differ by weight,
+size, and `tabular-nums`, not by typeface. The role split is kept so a distinct
+display face can return later without touching component code:
 
 - **Primary = `font-display`** — structure & app chrome: headings, section /
   eyebrow labels, control labels, **buttons**, menu / select triggers, and

@@ -15,9 +15,7 @@ Every customization axis is a single `data-*` attribute on `<html>`. They compos
 | Accent | `data-accent` | `pink`, `violet`, `blue`, `green`, `amber`, `red`, `teal`, `mono` | `pink` | `--primary`, `--primary-hover`, `--primary-active`, `--ring` |
 | Density | `data-density` | `comfortable`, `compact`, `dense` | `comfortable` | `--row-h`, `--ctrl-h`, `--pad-x`, `--pad-y` (and size variants) |
 | Radius | `data-radius` | `sharp`, `soft`, `round` | `soft` | `--radius`, `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl` |
-| Display font | `data-font-display` | `pilat`, `geist`, `cal`, `fraunces` | `pilat` | `--font-display` |
-| Body font | `data-font-body` | `geist`, `inter`, `serif`, `mono` | `geist` | `--font-body` (Tailwind's `font-sans` resolves here) |
-| Body text size | `data-text-size` | `small`, `normal`, `large` | `normal` | `--text-xs`, `--text-sm`, `--text-base`, `--text-md` (display sizes stay fixed) |
+| Font | `data-font` | `geist`, `inter`, `pilat`, `cal`, `fraunces`, `serif`, `mono` | `geist` | `--font-ui` → drives **both** `--font-display` and `--font-body` (one family for the whole UI; hierarchy is weight/size, not a second typeface). `font-mono` stays mono. |
 
 Single source of truth: the variant attribute. The cascade does the rest — no React re-render required to change appearance.
 
@@ -58,13 +56,11 @@ Component code may only use semantic tokens via Tailwind utilities:
 - `border-border`, `border-input`
 - `ring-ring`
 
-Never `bg-[#xxxxxx]`, never `text-zinc-400`, never `bg-neutral-900`. The Stylelint config will enforce this.
+Never `bg-[#xxxxxx]`, never `text-zinc-400`, never `bg-neutral-900`. The Stylelint config + the `lint:tw` gate enforce this.
 
 ## Spacing — 4px base
 
-Standard Tailwind v4 spacing scale. `--space-1` = 4px. Defined as variables so density variants can override if needed (currently density only changes row/control sizes, not spacing scale, but the door is open).
-
-Use Tailwind utilities (`p-4`, `gap-2`, etc.) — they map to these tokens via the `@theme` block.
+Spacing uses **Tailwind v4's built-in 4px scale** — `p-4`, `gap-2`, `mx-3`. The `--space-*` variables mirror that scale but are **not** wired into `@theme` and currently have **0 references** in `src/`; they're a reserved hook for a possible future density-driven spacing axis. Until that ships, `p-4` etc. resolve to Tailwind's built-ins, **not** these vars. (Candidate for removal if the future axis is abandoned.)
 
 ## Density — row/control sizing
 
@@ -109,11 +105,11 @@ Default usage:
 
 ## Typography
 
-### Two roles
-- **Display** — page titles, logo, hero numbers. Default Pilat Extended. User-customizable to Geist Sans, Cal Sans, or Fraunces.
-- **Body** — paragraphs, labels, every UI surface. Default Geist Sans. User-customizable to Inter, Source Serif Pro, or Geist Mono.
+### Two roles, one family
+- **Display** (`font-display`) — chrome: page/section titles, control labels, buttons.
+- **Body** (`font-sans`) — content: paragraphs, values, metadata, every reading surface.
 
-Tailwind's `font-display` utility resolves to `--font-display`. Tailwind's `font-sans` resolves to `--font-body`. `font-mono` is always mono.
+There is **one font picker** (`data-font`, default Geist). The chosen family feeds `--font-ui`, and **both** `--font-display` and `--font-body` resolve to it — so the two roles differ by weight/size (and `tabular-nums` on numerics), not by typeface. `font-mono` is always mono (code only). The role split is kept so a distinct display face can return later without touching component code.
 
 ### Type scale (14px base)
 | Token | Default size | Use for |
@@ -129,18 +125,8 @@ Tailwind's `font-display` utility resolves to `--font-display`. Tailwind's `font
 | `--text-4xl` | 36 | Hero |
 | `--text-5xl` | 48 | Auth hero |
 
-### Text-size variants
-User-selectable. Only the **body tier** (xs/sm/base/md) shifts — display sizes (lg+) stay fixed so page titles don't change with this preference.
-
-The base ladder is 13 / 14 / 16 — small ≈ Linear UI text, normal ≈ Notion
-chrome, large stays generous.
-
-| | Small | Normal | Large |
-| --- | --- | --- | --- |
-| `--text-xs` | 11 | 12 | 13 |
-| `--text-sm` | 12 | 13 | 14 |
-| `--text-base` | 13 | 14 | 16 |
-| `--text-md` | 14 | 15 | 17 |
+### Text-size variant — retired (2026-06-13)
+The `data-text-size` (small/normal/large) picker was removed; the type scale above is fixed, and **density is the size axis** (the dense end ≈ Linear UI text). Any persisted pick is inert.
 
 ### Line height & tracking
 - `--leading-tight` 1.2 — display
@@ -186,7 +172,7 @@ Dark mode shadows are subtle drop shadows with high opacity (since pure-black al
 
 ## Z-index
 
-Ten-step scale in increments of 10 — leaves room between layers without inflation.
+Scale in increments of ~10 — leaves room between layers without inflation.
 
 | Token | Value | Layer |
 | --- | --- | --- |
@@ -194,9 +180,9 @@ Ten-step scale in increments of 10 — leaves room between layers without inflat
 | `--z-sticky` | 10 | Sticky headers within content |
 | `--z-rail` | 20 | Sidebars and right rails |
 | `--z-header` | 30 | App top bar |
-| `--z-dropdown` | 40 | Dropdowns from the top bar |
 | `--z-overlay` | 50 | Modal backdrops |
 | `--z-dialog` | 60 | Dialogs |
+| `--z-dropdown` | 70 | Dropdowns / per-row menus (raised to popover level so menus clear dialogs) |
 | `--z-popover` | 70 | Floating popovers |
 | `--z-tooltip` | 80 | Tooltips |
 | `--z-toast` | 90 | Toasts (always on top of normal flow) |
@@ -207,11 +193,12 @@ Ten-step scale in increments of 10 — leaves room between layers without inflat
 | Token | Value | Use for |
 | --- | --- | --- |
 | `--width-sidebar` | 256 | Default left rail |
-| `--width-sidebar-icon` | 56 | Collapsed left rail |
 | `--width-rail` | 320 | Default right rail |
-| `--width-rail-icon` | 48 | Collapsed right rail |
+| `--bar-h` | 48 | Shared height for top + bottom bars |
 | `--width-content-max` | 1040 | Center column cap on wide screens |
 | `--width-prose-max` | 672 | Reading width for Notes body |
+
+(Collapsed icon-rail widths were retired — the rails no longer have an icon-only mode.)
 
 ## Tailwind v4 mapping
 
@@ -222,8 +209,8 @@ The `@theme inline` block at the bottom of [tokens.css](../../src/styles/tokens.
 - `border-border`, `border-input` → work
 - `ring-ring` → focus ring color
 - `rounded-sm`, `rounded`, `rounded-md`, `rounded-lg`, `rounded-xl`, `rounded-full` → respect the radius variant
-- `font-display`, `font-sans`, `font-mono` → respect font variants
-- `text-xs`…`text-5xl` → respect text-size variant for body sizes
+- `font-display`, `font-sans` → both resolve to the single `data-font` family; `font-mono` is always mono
+- `text-2xs`…`text-5xl` → the fixed type scale (the `data-text-size` variant was retired; density is the size axis)
 
 ## Open questions / deferred decisions
 

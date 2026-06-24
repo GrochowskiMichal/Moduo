@@ -12,10 +12,10 @@
  *   data-density=comfortable|compact|dense   (default: comfortable)
  *   data-radius=sharp|soft|round      (default: soft)
  *   data-font=geist|inter|pilat|cal|fraunces|serif|mono   (default: geist)
- *   data-text-size=small|normal|large            (default: normal)
+ *   (data-text-size retired 2026-06-13 — density is the size axis.)
  *
- * This file is intentionally not imported yet. Wiring it into global.css and
- * removing the hardcoded styles is a /frontend-design task.
+ * Imported via src/global.css. The @theme block at the bottom maps these tokens
+ * to Tailwind utilities. See DESIGN_RULES.md for the relational rules.
  * ==========================================================================*/
 
 /* ─── 1. Font face loading TODO ─────────────────────────────────────────────
@@ -385,8 +385,8 @@
 /* ============================================================================
  * 7. Density variants — drive row heights, control heights, paddings.
  *    Three steps, an even 4px row ladder (36 / 32 / 28). The dense end
- *    matches Linear/Notion chrome; pair with data-text-size="small" for the
- *    full Linear feel. The loose end stays the comfortable default.
+ *    matches Linear/Notion chrome (density is the size axis). The loose end
+ *    stays the comfortable default.
  * ==========================================================================*/
 
 :root,

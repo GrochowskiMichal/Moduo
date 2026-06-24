@@ -69,7 +69,7 @@ Keep it copy-pasteable and self-contained — the user should never have to re-d
 
 ## Design system (READ BEFORE TOUCHING UI)
 
-The full reference is [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md). The token file is [src/styles/tokens.css](./src/styles/tokens.css). Rationale in [.design/foundation/](./.design/foundation/).
+The full reference is [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md); the terse, checkable **relational** rules (control rungs, radius-by-role, type roles, accent policy, motion) are in [DESIGN_RULES.md](./DESIGN_RULES.md). The token file is [src/styles/tokens.css](./src/styles/tokens.css). Rationale in [.design/foundation/](./.design/foundation/).
 
 **Hard rules. Stylelint enforces these on PRs:**
 
@@ -83,7 +83,7 @@ The full reference is [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md). The token file is 
 
 5. **Storybook story required** for any new primitive in `src/components/ui/`. Pattern: `<name>.stories.tsx` next to the component.
 
-6. **No new fonts** without adding them to the token system. The font roles are display (default Pilat Extended, alternates Geist / Cal Sans / Fraunces) and body (default Geist, alternates Inter / Source Serif Pro / Geist Mono). The picker in Settings is the only way to expose alternates.
+6. **No new fonts** without adding them to the token system. There is **one font picker** (`data-font`, default Geist) — the chosen family drives the whole UI; display vs body are roles (`font-display` / `font-sans`) that differ by weight/size, not by a second typeface. Options: Geist, Inter, Pilat Extended, Cal Sans, Fraunces, Source Serif Pro, Geist Mono. The picker in Settings is the only way to expose alternates.
 
 7. **No new top-level routes** without confirming with the user. The app is converging from 23 exploratory routes to 5–7 — don't add more without intent.
 
