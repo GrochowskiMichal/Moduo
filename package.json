@@ -44,6 +44,7 @@
     "@lexical/rich-text": "^0.40.0",
     "@lexical/selection": "^0.40.0",
     "@lexical/yjs": "^0.40.0",
+    "@subframe/core": "^1.155.0",
     "@supabase/supabase-js": "^2.105.4",
     "@tailwindcss/postcss": "^4.3.0",
     "@tanstack/react-router": "^1.169.2",

@@ -5,7 +5,8 @@
     "node_modules/**",
     "dist/**",
     "src-tauri/**",
-    "src/styles/tokens.css"
+    "src/styles/tokens.css",
+    "src/ui/**"
   ],
   "defaultSeverity": "warning",
   "rules": {

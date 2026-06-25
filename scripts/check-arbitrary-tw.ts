@@ -23,6 +23,11 @@ const IGNORED_PATHS: string[] = [
   // React Native compatibility shim — intentionally untouched per CLAUDE.md.
   "src/tw",
 
+  // Subframe-generated code (synced from the Subframe project via the CLI).
+  // Not hand-authored; it carries Subframe's own theme idioms, so it's exempt
+  // from the design-system gate. The Subframe theme mirrors tokens.css.
+  "src/ui",
+
   // Legacy baseline: files that still hold pre-foundation arbitrary
   // Tailwind values. Each is queued for its own per-feature brief; the
   // CI gate enforces "no new violations in clean files" without blocking
