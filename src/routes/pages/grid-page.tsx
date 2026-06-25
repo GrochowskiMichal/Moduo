@@ -25,7 +25,7 @@ export function GridPage() {
       <FeaturePanelsShell
         feature="grid"
         center={
-          <div className="grid h-full place-content-center gap-2 text-center text-[#d4d8e1]">
+          <div className="grid h-full place-content-center gap-2 text-center text-muted-foreground">
             <h2>Grid unavailable</h2>
             <p>{configError ?? "Authentication, workspace, or desktop runtime is missing."}</p>
           </div>
