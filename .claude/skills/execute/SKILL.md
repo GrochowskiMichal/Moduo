@@ -1,6 +1,6 @@
 ---
 name: execute
-description: Build one approved execution block from a Moduo spec autonomously under auto mode — quietly, using subagents internally for noisy work, ending with the verify gate (bun run verify) and a skeptical-senior validator pass, then reporting in the Changed/Test this/Next format. Use after /plan when the designer approves a block and presses play. Not for planning (that is /plan) or session wrap-up/commit (that is /wrap).
+description: Build one approved execution block from a Moduo spec autonomously under auto mode (auto-selecting the next ready block from specs/BUILD_ORDER.md when none is named) — quietly, using subagents internally for noisy work, ending with the verify gate (bun run verify) and a skeptical-senior validator pass, then reporting in the Changed/Test this/Next format. Use after /plan when the designer approves a block and presses play. Not for planning (that is /plan) or session wrap-up/commit (that is /wrap).
 ---
 
 # /execute — build one block, prove it, report once
@@ -15,11 +15,11 @@ You are building **one approved execution block** from `specs/<feature>.md` unde
 - **Don't stop to ask the designer a new question.** Everything technical was resolved in `/plan`. The only acceptable interruption is a hard blocker you cannot resolve by research — surface it under **❓ Your call** / **⚠ Broke**.
 
 ## Steps
-1. **Re-read** the block's spec section + its acceptance criteria + tests, plus `docs/decisions.md` and `docs/gotchas.md`. Confirm the block is recoverable from the spec alone.
+1. **Select + re-read.** If the designer named a block, use it. Otherwise (e.g. `/execute next`, or no target) open `specs/BUILD_ORDER.md` and take the **first unchecked block whose dependencies are all ticked** — state which block you picked and why before building, and ask if none is eligible or the choice is ambiguous. Then re-read that block's spec section + its acceptance criteria + tests, plus `docs/decisions.md` and `docs/gotchas.md`, and confirm the block is recoverable from the spec alone.
 2. **Build** the block. Reuse existing patterns found in `/plan`. Write the tests authored in the spec alongside the code.
 3. **Verify** — run `bun run verify` (typecheck + lint:tw + lint:css + tests). A non-zero exit means **not done** — fix and re-run. If the change is observable in the browser, live-verify with the preview tooling + the hosted test account (see `docs/gotchas.md`); a visual-snapshot diff means *stop and ask*, never auto-accept.
 4. **Validator pass** — before reporting, run a critical review of the diff as a skeptical senior/staff engineer: invoke the `code-review` skill (or spawn a review subagent with that framing). Look for logic errors, broken acceptance criteria, regressions, hardcoded values that should be tokens, and anything that wouldn't pass a real review. Fix what you can; fold the rest into the summary.
-5. **Record** — append any decision/assumption made during the block to `docs/decisions.md`, and any new footgun to `docs/gotchas.md`.
+5. **Record** — tick the block's box in `specs/BUILD_ORDER.md` (with date + branch); append any decision/assumption made during the block to `docs/decisions.md`, and any new footgun to `docs/gotchas.md`.
 
 ## Report (exactly once, this shape)
 - **Changed** — what landed (files/behavior), tight.

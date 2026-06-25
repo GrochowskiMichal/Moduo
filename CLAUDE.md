@@ -25,7 +25,7 @@ The user is a **product designer, not an engineer** — authoritative on product
 
 ## Active plan
 
-The plan of record is [docs/ROADMAP.md](./docs/ROADMAP.md) (waves 0–5, the scored backlog, and the numbered open questions/risks that gate parts of the plan). At session start, read it plus the north-star docs it links, and build in wave order unless the user directs otherwise — don't start a module before its wave, and check `§Open Questions & Risks` before building anything marked ⚠. [docs/improvement-plan.md](./docs/improvement-plan.md) is the **completed** Tasks-era execution log — history, not the live plan.
+The plan of record is [docs/ROADMAP.md](./docs/ROADMAP.md) (waves 0–5, the scored backlog, and the numbered open questions/risks that gate parts of the plan). At session start, read it plus the north-star docs it links, and build in wave order unless the user directs otherwise — don't start a module before its wave, and check `§Open Questions & Risks` before building anything marked ⚠. The **live, block-level execution ledger** is [specs/BUILD_ORDER.md](./specs/BUILD_ORDER.md) — the ordered list of ready execution blocks with status, dependencies, and parallel-session lanes; `/execute next` builds the next ready block from it. [docs/improvement-plan.md](./docs/improvement-plan.md) is the **completed** Tasks-era execution log — history, not the live plan.
 
 ## Product north star (READ BEFORE DESIGNING ANY MODULE)
 
