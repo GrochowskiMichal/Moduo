@@ -23,6 +23,7 @@
     "lint:tw": "bun ./scripts/check-arbitrary-tw.ts",
     "test": "vitest run --maxWorkers=1",
     "test:watch": "vitest --maxWorkers=1",
+    "verify": "bun run typecheck && bun run lint:tw && bun run lint:css && bun run test",
     "e2e": "playwright test"
   },
   "dependencies": {

@@ -8,7 +8,7 @@ Things that have bitten us, so they don't bite again. **Read before debugging; a
 
 - **Never import a bare `{ runtime }`.** Always resolve via `getRuntime()`. The bare export was an always-null const footgun; grep `./runtime` when auditing lib exports. → [data-layers.md](./data-layers.md)
 - **redb is paused — never make it load-bearing** for a new feature. New models are Supabase-first; redb is kept only for the future offline/"lite" version and not-yet-migrated legacy modules. → [data-layers.md](./data-layers.md)
-- **The local done-check is `bun run verify`** (typecheck + lint:tw + lint:css + tests). Mirror it before declaring a block done — CI historically ran only typecheck + lint, so green CI did not mean tests passed.
+- **The local done-check is `bun run verify`** (typecheck + lint:tw + lint:css + unit tests) — it mirrors CI's gate. CI does **not** run the e2e / visual-snapshot / billing suites (those stay local/manual), so a green PR doesn't cover them.
 - **Visual-snapshot PNG baselines are NOT generated in CI** and are platform-suffixed (`*-visual-darwin.png`). Capture is a deliberate human `bun run e2e --update-snapshots` run on the canonical env. A visual diff means **stop and ask**, never auto-accept/regenerate.
 - **macOS Liquid Glass app icon has been lost in merges twice.** It lives in-repo at `scripts/icons/source/Moduo.icon`; regenerate with `bun run icon:liquid` (needs full Xcode for `actool`). Don't let a merge drop it.
 
