@@ -14,7 +14,7 @@ Things that have bitten us, so they don't bite again. **Read before debugging; a
 
 ## Git / branching
 
-- **`maciej` is a hot branch — merge-commit into it, never fast-forward.** Before editing in a worktree, **check the worktree's base vs `maciej`** (`git rev-list --left-right --count HEAD...maciej`) — sessions have started on a weeks-stale `main` base and edited stale copies of `CLAUDE.md` / `DESIGN_SYSTEM.md` / `tokens.css`. Cut `t/<owner>/<kebab>` off `maciej`, not `main`. → [CONTRIBUTING.md](../CONTRIBUTING.md)
+- **`maciej` is a hot branch — merge-commit into it, never fast-forward.** Before editing in a worktree, **check the worktree's base vs `maciej`** (`git rev-list --left-right --count HEAD...maciej`) — sessions have started on a weeks-stale `main` base and edited stale copies of `CLAUDE.md` / `DESIGN_SYSTEM.md` / `tokens.css`. Cut `t/<owner>/<kebab>` off `maciej`, not `main`. A `SessionStart` hook (`.claude/hooks/session-start.sh`) now runs this check automatically and warns on a stale base at session start — but only takes effect once it's merged into `maciej`. → [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 ## Claude Code / skills
 

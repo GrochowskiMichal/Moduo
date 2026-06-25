@@ -117,7 +117,19 @@ Each: what it is · the insight behind it · how it wires into the spine.
 ## 7. Data model sketch (Supabase-first)
 
 ```sql
--- THE keystone. One table, typed, polymorphic both ends.
+-- CENTRAL polymorphic registry — the referential anchor (resolved 2026-06-24).
+entities (
+  workspace_id    uuid not null,
+  entity_type     text not null,           -- 'task'|'note'|'contact'|'company'|'payment'|'invoice'|'email'|'event'|...
+  entity_id       uuid not null,
+  label           text not null,           -- denormalized title for search + @mention + roll-up resolution
+  icon            text,                     -- type glyph hint
+  deleted_at      timestamptz,             -- tombstone → search exclusion + roll-up dimming
+  primary key (workspace_id, entity_type, entity_id)
+)
+-- UPSERTED by every module's intent op in the same transaction as its own mutation.
+
+-- THE keystone. One table, typed, polymorphic both ends. FKs into entities.
 entity_links (
   id              uuid pk,
   workspace_id    uuid not null,           -- RLS scope
@@ -125,13 +137,16 @@ entity_links (
   source_id       uuid not null,
   target_type     text not null,
   target_id       uuid not null,
-  relation_kind   text not null,           -- 'spawned-from'|'paid-by'|'references'|'blocks'|'attachment'|'mentions'
+  relation_kind   text not null,           -- CLOSED set @ alpha:
+                                           --   references|spawned-from|blocks|attachment|mentions|works-at|follow-up|paid-by
   origin          text not null,           -- 'drag'|'mention'|'ref'|'suggest'|'manual'  (for trust + dedupe)
   created_by      uuid not null,           -- actor (Pillar 2)
   created_at      timestamptz default now(),
-  deleted_at      timestamptz
+  deleted_at      timestamptz,
+  foreign key (workspace_id, source_type, source_id) references entities,
+  foreign key (workspace_id, target_type, target_id) references entities
 )
--- direction-agnostic uniqueness on (workspace, source pair, target pair, kind);
+-- direction-agnostic uniqueness on (workspace, unordered (source,target) pair, kind);
 -- index both (source_type, source_id) and (target_type, target_id) for hub roll-ups.
 
 comments (
@@ -155,9 +170,14 @@ notification_state (                         -- read-state overlay on activity
 
 email_refs ( id, workspace_id, message_id, thread_id, account, from_addr, subject, date, snippet )
                                              -- desktop syncs metadata so email participates in entity_links everywhere
+
+link_suggestion_declines (                   -- "remember my no" so auto-suggest never nags
+  workspace_id, user_id, source_type, source_id, target_type, target_id,
+  primary key (workspace_id, source_type, source_id, target_type, target_id)
+)
 ```
 
-**Polymorphic integrity.** No per-type FK is possible across `(entity_type, entity_id)`. **Recommendation:** a lightweight central `entities` registry (workspace-scoped `(entity_type, entity_id, label, deleted_at)`, written by each module's intent ops) that `entity_links`/`comments`/`tag_links` FK into. It gives one referential anchor, one place to drive the @/`/`-mention + search projector, and cascade-on-delete — without leaking a "generic entity" to the UI. Cheaper than per-type validation triggers across N modules, and it sidesteps orphaned links when an entity is deleted. (Alternative if the registry write-amplification proves costly: validation trigger + partial indexes per type — revisit at module #4.)
+**Polymorphic integrity — RESOLVED (2026-06-24): a central `entities` registry.** No per-type FK is possible across `(entity_type, entity_id)`, so a lightweight workspace-scoped `entities(entity_type, entity_id, label, icon, deleted_at)` registry — **upserted by each module's intent op in the same transaction** — is the referential anchor `entity_links`/`comments`/`tag_links` FK into. It gives one indexed anchor, one place to drive the @/`/`-mention + search projector + roll-up label resolution, and clean cascade-tombstone on delete — without leaking a "generic entity" to the UI. Per-type validation triggers + partial indexes were the **rejected** alternative (N per-module fan-out reads, bespoke orphan handling), not a pending fallback. Authoritative spec: [DESIGN_BRIEF.md](./DESIGN_BRIEF.md) §Data Model; logged in [docs/decisions.md](../../docs/decisions.md). `data-layers.md` §"Open architectural questions" and ROADMAP Q5 already reflect this.
 
 ---
 
@@ -166,7 +186,7 @@ email_refs ( id, workspace_id, message_id, thread_id, account, from_addr, subjec
 | # | Question | Recommendation |
 | --- | --- | --- |
 | 1 | `entity_links` one typed table vs. split `links`/`attachments` | **One table, typed** (`relation_kind=attachment`). Confirmed direction in data-layers §; splitting duplicates RLS, indexes, and hub-read logic. |
-| 2 | Polymorphic integrity strategy | **Central `entities` registry table** (see §7). Trigger+partial-index is the fallback; decide for real before module #4 so the choice isn't retrofitted into 4 modules. |
+| 2 | Polymorphic integrity strategy | **RESOLVED (2026-06-24) → central `entities` registry** (see §7; authoritative in [DESIGN_BRIEF.md](./DESIGN_BRIEF.md) §Data Model, logged in [docs/decisions.md](../../docs/decisions.md)). `entity_links`/`comments`/`tag_links` FK into it, upserted per intent op. Trigger+partial-index was the rejected alternative — not a pending fallback. |
 | 3 | Drag-payload contract — shape & location | **Typed contract in `src/lib/`** (e.g. `src/lib/drag-payload.ts`): `{ entityType, entityId, label, snippet, capabilities[] }`; drop targets declare `accepts: entityType[]` and a resolver that returns the `relation_kind`. One contract replaces per-feature DnD. |
 | 4 | Auto-suggest: where does it run, and how aggressive? | **Server-derived, client-confirmed.** Compute candidates from cheap deterministic signals (shared tag, address match, ±time window) in an RPC/edge step; surface as a quiet one-tap affordance, **never auto-apply**, and remember declines. Keep it load-bearing — if it can't beat coin-flip on real data, cut it rather than ship theater. |
 | 5 | Is `comments` the @mention substrate, or is mention separate from comment? | **Separate concerns.** Mentions can occur in *any* text (note body, task description, comment); the mention resolver writes `entity_link(kind=mentions)` + (for people) an activity/notification row regardless of host surface. Comments are just one host. |
