@@ -16,6 +16,13 @@ import type {
   TaskStatus,
   TimeBlockMap,
 } from "../features/tasks/model";
+import type {
+  EntityLink,
+  EntityRecord,
+  EntityRef,
+  LinkOrigin,
+  RelationKind,
+} from "./entity-links";
 
 export type RuntimeSession = {
   access_token: string;
@@ -389,5 +396,76 @@ export type ModuoRuntime = {
       entityId: string;
       limit?: number;
     }): Promise<ActivityEntry[]>;
+  };
+
+  /**
+   * Connective-tissue spine — the link substrate (specs/connective-tissue.md
+   * block CT-1). Any entity links/attaches/relates to any other through one
+   * typed `entity_links` table FK'd into the central `entities` registry.
+   * Cloud-first: web hits Supabase directly; desktop delegates to the web
+   * runtime (same code path). All mutations go through `links_op_*` /
+   * `entities_op_*` RPCs (permission guard + write + attributed activity row in
+   * one transaction); reads are direct SELECTs over the indexed tables.
+   */
+  spine: {
+    /**
+     * Every live link touching an entity (matched on either end). Block CT-2
+     * builds the grouped hub roll-up on top of this single indexed read.
+     */
+    listLinks(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<EntityLink[]>;
+    /**
+     * Create a typed link. Idempotent + direction-agnostic (a duplicate pair+kind
+     * no-ops and returns the existing row); rejects self-links and unknown kinds.
+     * Registers both endpoints in the registry in the same transaction. Optional
+     * labels/icons seed the registry projection for the @mention/search picker.
+     */
+    createLink(input: {
+      workspaceId: string;
+      source: EntityRef;
+      target: EntityRef;
+      relationKind?: RelationKind;
+      origin?: LinkOrigin;
+      sourceLabel?: string;
+      sourceIcon?: string | null;
+      targetLabel?: string;
+      targetIcon?: string | null;
+    }): Promise<EntityLink>;
+    /** Re-type an existing link (optimistic re-group in the hub). No-op if unchanged. */
+    setLinkKind(input: {
+      workspaceId: string;
+      linkId: string;
+      relationKind: RelationKind;
+    }): Promise<EntityLink>;
+    /** Soft-delete a link (Undo-friendly; idempotent). Returns the tombstoned row. */
+    deleteLink(input: { workspaceId: string; linkId: string }): Promise<EntityLink | null>;
+    /**
+     * Search the central registry for the @mention / `/ref` / link picker.
+     * Excludes tombstones; optionally scoped to a set of entity types.
+     */
+    searchEntities(input: {
+      workspaceId: string;
+      query?: string;
+      types?: string[];
+      limit?: number;
+    }): Promise<EntityRecord[]>;
+    /**
+     * Batch-read registry records for a set of refs — the hub snippet/label
+     * projection for one roll-up. Includes tombstones (so the hub can dim
+     * deleted targets), unlike `searchEntities`.
+     */
+    getEntities(input: { workspaceId: string; refs: EntityRef[] }): Promise<EntityRecord[]>;
+    /**
+     * Tombstone a registry entry (the delete half of the registry contract) — a
+     * module's own delete op calls this; exposed for testing + pre-adoption use.
+     */
+    tombstoneEntity(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<void>;
   };
 };

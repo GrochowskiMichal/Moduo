@@ -10,9 +10,9 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in t
 
 ## Wave 0 — Connective Tissue (the spine) · [`specs/connective-tissue.md`](./connective-tissue.md)
 
-- [ ] **CT-1 — Registry + link substrate (DB + runtime)** · spine block 1 · deps: — 
-- [ ] **CT-2 — EntityHub roll-up + components** · spine block 2 · deps: CT-1
-- [ ] **CT-3 — Universal drag-payload contract** · spine block 3 · deps: CT-1, CT-2
+- [x] **CT-1 — Registry + link substrate (DB + runtime)** · spine block 1 · deps: — · _done 2026-06-25 · `t/maciej/ct-1-link-substrate` (migration validated on real Postgres 17 via a rolled-back txn — all 15 AC1–AC5 checks green; prod left byte-clean. Deploy-ready; branching unavailable on Free plan so not applied to prod here — your deploy step.)_
+- [x] **CT-2 — EntityHub roll-up + components** · spine block 2 · deps: CT-1 · _done 2026-06-25 · `t/maciej/ct-1-link-substrate` (built on CT-1; visual baselines + live render pending — Storybook preview.tsx load is broken in this worktree)_
+- [x] **CT-3 — Universal drag-payload contract** · spine block 3 · deps: CT-1, CT-2 · _done 2026-06-25 · `t/maciej/ct-1-link-substrate` (contract + hooks + drop-to-link toast; AC7 keyboard "Link to…" half + the drag e2e + a live drag-source/target consumer deferred — keyboard needs CT-4's MentionPicker, wiring+e2e land with CT-4/CT-7 when live-verifiable)_
 - [ ] **CT-4 — @mention / /ref resolver + EntityRefChip** · spine block 4 · deps: CT-1, CT-2
 - [ ] **CT-5 — Comments + notification/activity generalization** · spine block 5 · deps: CT-1
 - [ ] **CT-6 — Deterministic auto-suggest + strip** · spine block 6 · deps: CT-1, CT-2
