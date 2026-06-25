@@ -234,16 +234,15 @@ copy:
 - Counts read like "2 / 2 Done".
 - Acronyms and proper nouns as-is (CRM, Inbox).
 
-## Stylelint enforcement (to be added)
+## Enforcement
 
-A Stylelint config will land alongside the redesign work. It enforces:
+Three layers enforce the contract:
 
-- `declaration-property-value-disallowed-list` — no `color: #xxx`, `background: #xxx`, `border-color: #xxx` etc. outside `tokens.css`.
-- `selector-class-pattern` — bans `bg-\[#`, `p-\[\d+px\]`, `text-\[\d+px\]`, `rounded-\[\d+px\]`, `font-\[` in className strings (via a custom rule or a regex check in CI).
-- `unit-disallowed-list` — `px` for spacing/radius/typography (rem is allowed). `px` is OK for hairlines (1px borders).
-- `font-family-no-missing-generic-family-keyword` — every font stack must end in a generic family.
+1. **`bun run lint:css`** (Stylelint, `.stylelintrc.json`) — `color-no-hex` + `declaration-strict-value`: any `*color` / `fill` / `stroke` / `background-color` in CSS must be a `var(--…)` token (or transparent/currentColor/none/inherit). `tokens.css` is exempt; `global.css` is warn-level.
+2. **`bun run lint:tw`** (`scripts/check-arbitrary-tw.ts`) — scans `.ts/.tsx` for arbitrary Tailwind + inline-style hardcodes: raw hex / color-functions across every color utility, arbitrary font-size / radius / spacing / shadow, the motion-token bypass (`duration-200` / `duration-[180ms]`), and static `style={{ color: "#…" }}`. The sanctioned `[var(--token)]` escape hatch and one-off *geometry* (`top-` / `h-` / `w-` / `translate-[…]`) are allowed. A curated ignore list quarantines the pre-foundation legacy backlog; remove an entry when its feature brief lands.
+3. **The `moduo-design-quality` skill** — the review layer for what a regex can't see: the relational rules in `DESIGN_RULES.md` (R1–R10), contrast, interaction states, overflow/clipping. It runs in `/execute`'s validator pass and before shipping.
 
-Until the config lands, the rules are honour-system. Claude reads them; humans review them.
+Both lint gates run in CI (`.github/workflows/checks.yml`). The concentric-radius rule (R3) and the other relational rules are skill/review-enforced, not lint-enforced.
 
 ## Control / type / icon ladders + primitives (Session 11)
 

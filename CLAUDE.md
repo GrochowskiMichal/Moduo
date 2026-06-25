@@ -71,7 +71,7 @@ Keep it copy-pasteable and self-contained — the user should never have to re-d
 
 The full reference is [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md); the terse, checkable **relational** rules (control rungs, radius-by-role, type roles, accent policy, motion) are in [DESIGN_RULES.md](./DESIGN_RULES.md). The token file is [src/styles/tokens.css](./src/styles/tokens.css). Rationale in [.design/foundation/](./.design/foundation/).
 
-**Hard rules. Stylelint enforces these on PRs:**
+**Hard rules. The `lint:css` + `lint:tw` gates enforce these on PRs; the `moduo-design-quality` skill reviews the relational rules a regex can't (see [DESIGN_RULES.md](./DESIGN_RULES.md)):**
 
 1. **No raw hex codes** in component code. Use the semantic tokens via Tailwind utilities (`bg-background`, `text-foreground`, `bg-primary`, `border-border`, etc.) or via CSS variables (`var(--card)`, `var(--primary)`). The only places hex is allowed: `src/styles/tokens.css` itself (the palette definition) and SVG/illustration assets.
 
