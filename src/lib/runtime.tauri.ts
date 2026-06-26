@@ -209,6 +209,10 @@ export const tauriRuntime: ModuoRuntime = {
   // tasks_module_* commands stay registered for the lite version.
   tasks: webRuntime.tasks,
 
+  // Cloud-first: the connective-tissue spine is Supabase-direct on both
+  // surfaces (entity_links FK'd into the entities registry). Same code path.
+  spine: webRuntime.spine,
+
   // Cloud-first per-user settings. Delegates to the web runtime today; the
   // future offline-lite build can wrap this with a local queue + replay.
   preferences: webRuntime.preferences,
