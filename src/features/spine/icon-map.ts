@@ -29,6 +29,7 @@ const ENTITY_TYPE_ICONS: Record<string, LucideIcon> = {
   email: Mail,
   comment: MessageSquare,
   contact: User,
+  user: User, // a workspace member (a person @mention), distinct from a CRM contact
   company: Building2,
   payment: CreditCard,
   invoice: Receipt,
