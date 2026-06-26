@@ -8,7 +8,7 @@ import { NotesPage } from "../../routes/pages/notes-page";
 import { TasksPage } from "../../routes/pages/tasks-page";
 import { MindmapPage } from "../../routes/pages/mindmap-page";
 import { EmailPage } from "../../routes/pages/email-page";
-import { CrmPage } from "../../routes/pages/crm-page";
+import { ContactsPage } from "../../routes/pages/contacts-page";
 import { SettingsPage } from "../../routes/pages/settings-page";
 import { PaywallPage } from "../../routes/pages/paywall-page";
 
@@ -85,10 +85,19 @@ const emailRoute = createRoute({
   component: EmailPage,
 });
 
-const crmRoute = createRoute({
+const contactsRoute = createRoute({
+  getParentRoute: () => appGateRoute,
+  path: "/contacts",
+  component: ContactsPage,
+});
+
+// /crm is the throwaway exploratory route; /contacts is its planned destination
+// (specs/contacts.md AC10). Redirect stale deep-links so they don't 404.
+const legacyCrmRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/crm",
-  component: CrmPage,
+  beforeLoad: () => { throw redirect({ to: "/contacts", replace: true }); },
+  component: () => null,
 });
 
 const settingsRoute = createRoute({
@@ -108,7 +117,8 @@ export const routeTree = rootRoute.addChildren([
     tasksRoute,
     mindmapRoute,
     emailRoute,
-    crmRoute,
+    contactsRoute,
+    legacyCrmRoute,
     settingsRoute,
   ]),
 ]);
