@@ -37,6 +37,24 @@ test.describe("contacts contact-hub — visual snapshots", () => {
   }
 });
 
+// CO-4 / AC8: the company hub (People group + unioned work roll-up).
+const COMPANY_STORIES = [
+  { name: "company-hub-populated", id: "contacts-companyhub--populated" },
+  { name: "company-hub-empty", id: "contacts-companyhub--empty" },
+];
+
+test.describe("contacts company-hub — visual snapshots", () => {
+  for (const story of COMPANY_STORIES) {
+    test(story.name, async ({ page }) => {
+      await page.goto(`/iframe.html?id=${story.id}&viewMode=story`);
+      const root = page.locator("#storybook-root, #root").first();
+      await root.waitFor({ state: "visible", timeout: 15_000 });
+      await page.waitForTimeout(150);
+      await expect(page).toHaveScreenshot(`${story.name}.png`, { animations: "disabled" });
+    });
+  }
+});
+
 test.describe("contacts import-dialog — visual snapshots", () => {
   for (const story of IMPORT_STORIES) {
     test(story.name, async ({ page }) => {
