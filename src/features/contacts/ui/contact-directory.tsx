@@ -4,7 +4,7 @@
 // via tokens (--row-h-ish via the control rung); tokens only (R7/R10).
 
 import { useMemo, useState } from "react";
-import { Building2, Plus, Search, User } from "lucide-react";
+import { Building2, Plus, Search, Upload, User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -73,6 +73,7 @@ type Props = {
   selected: DirectorySelection | null;
   onSelect: (sel: DirectorySelection) => void;
   onNew?: () => void;
+  onImport?: () => void;
   onRetry?: () => void;
 };
 
@@ -82,7 +83,7 @@ const FILTER_ITEMS = [
   { value: "companies", label: "Companies" },
 ];
 
-export function ContactDirectory({ contacts, companies, status, selected, onSelect, onNew, onRetry }: Props) {
+export function ContactDirectory({ contacts, companies, status, selected, onSelect, onNew, onImport, onRetry }: Props) {
   const [filter, setFilter] = useState<DirectoryFilter>("all");
   const [query, setQuery] = useState("");
 
@@ -112,6 +113,9 @@ export function ContactDirectory({ contacts, companies, status, selected, onSele
           className="flex-1"
           fullWidth
         />
+        {onImport ? (
+          <IconButton icon={Upload} label="Import contacts" size="sm" variant="ghost" onClick={onImport} />
+        ) : null}
         <IconButton icon={Plus} label="New contact" size="sm" variant="ghost" onClick={onNew} />
       </div>
 

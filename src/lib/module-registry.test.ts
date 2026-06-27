@@ -14,8 +14,8 @@ function manifest(module: string): ModuleManifest {
 }
 
 describe("module registry", () => {
-  it("registers both the tasks and the links manifests (no regression)", () => {
-    expect(moduleManifests.map((m) => m.module)).toEqual(expect.arrayContaining(["tasks", "links"]));
+  it("registers the tasks, links, and contacts manifests (no regression)", () => {
+    expect(moduleManifests.map((m) => m.module)).toEqual(expect.arrayContaining(["tasks", "links", "contacts"]));
   });
 
   it("every manifest conforms to the ModuleManifest shape", () => {
@@ -70,5 +70,33 @@ describe("links manifest", () => {
     const create = links.ops.find((o) => o.rpc === "links_op_create");
     expect(create?.args.p_relation_kind).toMatch(/references/);
     expect(create?.args.p_relation_kind).toMatch(/works-at/);
+  });
+});
+
+describe("contacts manifest", () => {
+  const contacts = manifest("contacts");
+
+  it("rides the Tasks permission lane at alpha", () => {
+    expect(contacts.permissionKey).toBe("tasks");
+  });
+
+  it("exposes the write surface — the 6 contacts ops by RPC name", () => {
+    const rpcs = contacts.ops.map((o) => o.rpc);
+    expect(rpcs).toEqual(
+      expect.arrayContaining([
+        "contacts_op_create",
+        "contacts_op_update",
+        "contacts_op_set_status",
+        "contacts_op_link",
+        "contacts_op_unlink",
+        "contacts_op_import",
+      ]),
+    );
+  });
+
+  it("exposes the read surface — list, get, search", () => {
+    expect(contacts.resources.map((r) => r.name)).toEqual(
+      expect.arrayContaining(["contacts.list", "contacts.get", "contacts.search"]),
+    );
   });
 });

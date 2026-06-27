@@ -17,6 +17,8 @@ import type {
   TimeBlockMap,
 } from "../features/tasks/model";
 import type { Company, Contact, ContactsModuleBundle } from "../features/contacts/model";
+import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
+import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type { RecentLinkItem } from "../features/spine/recent";
@@ -615,5 +617,21 @@ export type ModuoRuntime = {
     }): Promise<EntityLink>;
     /** Soft-delete a link the contact owns (Undo-friendly; idempotent). */
     unlink(input: { workspaceId: string; linkId: string }): Promise<EntityLink | null>;
+    /**
+     * Bulk CSV import (AC6) — one attributed, activity-logged op. The client
+     * parses + previews dedupe; this writes the confirmed plan (create / merge
+     * rows) in a single transaction and returns the counts + affected ids.
+     */
+    importContacts(input: {
+      workspaceId: string;
+      rows: ContactImportRow[];
+    }): Promise<ContactImportResult>;
+    /**
+     * Contacts that need attention (AC11) — overdue follow-ups, no-touch active
+     * contacts (>14d), stale leads (>30d). The "Needs attention" dashboard widget
+     * read; an indexed contacts + follow-up-links + tasks read, shaped by the pure
+     * selector. Degrades to fewer signals before the contacts migration deploys.
+     */
+    needsAttention(input: { workspaceId: string }): Promise<NeedsAttentionItem[]>;
   };
 };

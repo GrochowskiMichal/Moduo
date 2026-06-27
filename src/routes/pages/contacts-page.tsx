@@ -1,7 +1,8 @@
-// Contacts (light CRM) — the directory + ContactHub page (specs/contacts.md
-// block CO-2). The rename destination of `/crm`, composing the 3-pane shell:
-// the people+companies directory (left) and the auto-rollup hub (center). The
-// right context strip (suggestions / tags / quick actions) arrives in CO-4.
+// Contacts (light CRM) — the directory + ContactHub/CompanyHub page
+// (specs/contacts.md blocks CO-2 + CO-4). The rename destination of `/crm`,
+// composing the 3-pane shell: the people+companies directory (left), the
+// auto-rollup hub (center), and the context strip (right: suggestions + quick
+// actions, CO-4).
 //
 // Contacts rides the Tasks permission lane at alpha (CO-1 decision a), so render
 // + edit gate on `modulePermissions.tasks` until a dedicated lane lands.
@@ -12,20 +13,23 @@ import { toast } from "sonner";
 
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { EmptyState } from "../../components/ui/empty-state";
-import { Separator } from "../../components/ui/separator";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import type { EntityLink, EntityRef, RelationKind } from "../../lib/entity-links";
-import { EntityHub } from "../../features/spine/ui/entity-hub";
+import type { MentionCandidate } from "../../features/spine/mention";
 import "../../features/contacts/projectors";
 import { useContactsDirectory } from "../../features/contacts/hooks/use-contacts-directory";
 import { useContactHub } from "../../features/contacts/hooks/use-contact-hub";
-import { lastTouchLine } from "../../features/contacts/rollup";
+import { useCompanyHub } from "../../features/contacts/hooks/use-company-hub";
+import { buildFollowupTask, followupLinkArgs } from "../../features/contacts/followup";
 import {
   ContactDirectory,
   type DirectorySelection,
 } from "../../features/contacts/ui/contact-directory";
 import { ContactHub } from "../../features/contacts/ui/contact-hub";
+import { CompanyHub } from "../../features/contacts/ui/company-hub";
+import { ContactContextStrip } from "../../features/contacts/ui/contact-context-strip";
+import { ContactImportDialog } from "../../features/contacts/ui/contact-import-dialog";
 
 function openEntity(ref: EntityRef) {
   if (typeof window === "undefined") return;
@@ -36,22 +40,34 @@ export function ContactsPage() {
   const { runtime, userId, configError } = useAuth();
   const { selectedWorkspaceId, modulePermissions } = useWorkspace();
   const permission = modulePermissions.tasks;
-  const canEdit = permission === "edit";
+  const canEdit = permission === "edit" || permission === "admin";
 
   const workspaceId = selectedWorkspaceId ?? null;
   const directory = useContactsDirectory(runtime, workspaceId);
   const [selected, setSelected] = useState<DirectorySelection | null>(null);
-
-  const focus = useMemo<EntityRef | null>(
-    () => (selected ? { type: selected.type, id: selected.id } : null),
-    [selected],
-  );
-  const hub = useContactHub(runtime, workspaceId, focus);
+  const [importOpen, setImportOpen] = useState(false);
 
   const selectedContact =
     selected?.type === "contact" ? directory.bundle.contacts.find((c) => c.id === selected.id) ?? null : null;
   const selectedCompany =
     selected?.type === "company" ? directory.bundle.companies.find((c) => c.id === selected.id) ?? null : null;
+
+  const contactFocus = useMemo<EntityRef | null>(
+    () => (selectedContact ? { type: "contact", id: selectedContact.id } : null),
+    [selectedContact],
+  );
+  const companyFocus = useMemo<EntityRef | null>(
+    () => (selectedCompany ? { type: "company", id: selectedCompany.id } : null),
+    [selectedCompany],
+  );
+  // A company's denormalized members (works-at-only people are unioned in the hook).
+  const companyMembers = useMemo(
+    () => (selectedCompany ? directory.bundle.contacts.filter((c) => c.companyId === selectedCompany.id) : []),
+    [selectedCompany, directory.bundle.contacts],
+  );
+
+  const hub = useContactHub(runtime, workspaceId, contactFocus);
+  const companyHub = useCompanyHub(runtime, workspaceId, companyFocus, companyMembers);
 
   const canRender = !!runtime && !!userId && !!workspaceId && !configError && permission !== "none";
 
@@ -114,6 +130,82 @@ export function ContactsPage() {
     }
   }
 
+  // ── CO-4 actions (a contact is selected) ────────────────────────────────────
+  async function addFollowup(contactId: string, contactName: string) {
+    try {
+      const inbox = await runtime!.tasks.seedInbox(ws);
+      const task = await runtime!.tasks.upsertTask(
+        buildFollowupTask({ workspaceId: ws, bucketId: inbox.id, contactName }),
+      );
+      const args = followupLinkArgs({ type: "contact", id: contactId }, task.id);
+      await runtime!.contacts.link({
+        workspaceId: ws,
+        contact: args.contact,
+        target: args.target,
+        relationKind: args.relationKind,
+        origin: args.origin,
+        targetLabel: task.title,
+      });
+      hub.reload();
+      directory.reload();
+      toast.success("Follow-up added", { description: task.title });
+    } catch (err) {
+      toast.error("Couldn’t add follow-up", { description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function linkExisting(contactId: string, candidate: MentionCandidate) {
+    if (candidate.kind !== "entity") return; // create-and-link is the @mention path's job
+    try {
+      await runtime!.contacts.link({
+        workspaceId: ws,
+        contact: { type: "contact", id: contactId },
+        target: candidate.ref,
+        relationKind: "references",
+        origin: "manual",
+        targetLabel: candidate.label,
+        targetIcon: candidate.icon,
+      });
+      hub.reload();
+      directory.reload();
+    } catch (err) {
+      toast.error("Couldn’t add the link", { description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function setCompany(contactId: string, candidate: MentionCandidate) {
+    try {
+      let companyRef: EntityRef;
+      let label: string;
+      if (candidate.kind === "entity") {
+        companyRef = candidate.ref;
+        label = candidate.label;
+      } else if (candidate.kind === "create") {
+        const company = await runtime!.contacts.createCompany({ workspaceId: ws, name: candidate.label });
+        companyRef = { type: "company", id: company.id };
+        label = company.name;
+      } else {
+        return; // person candidates aren't companies
+      }
+      // The works-at link is canonical; company_id is the denormalized convenience.
+      await runtime!.contacts.link({
+        workspaceId: ws,
+        contact: { type: "contact", id: contactId },
+        target: companyRef,
+        relationKind: "works-at",
+        origin: "manual",
+        targetLabel: label,
+        targetIcon: "building-2",
+      });
+      await runtime!.contacts.updateContact({ workspaceId: ws, contactId, setCompany: { companyId: companyRef.id } });
+      hub.reload();
+      directory.reload();
+      toast.success("Company set", { description: label });
+    } catch (err) {
+      toast.error("Couldn’t set company", { description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
   const left = (
     <ContactDirectory
       contacts={directory.bundle.contacts}
@@ -121,11 +213,13 @@ export function ContactsPage() {
       status={directory.status}
       selected={selected}
       onSelect={setSelected}
+      onImport={canEdit ? () => setImportOpen(true) : undefined}
       onRetry={directory.reload}
     />
   );
 
   let center: ReactNode;
+  let right: ReactNode;
   if (selectedContact) {
     center = (
       <ContactHub
@@ -143,24 +237,32 @@ export function ContactsPage() {
         onRetry={hub.reload}
       />
     );
+    right = (
+      <ContactContextStrip
+        runtime={runtime}
+        workspaceId={ws}
+        contact={selectedContact}
+        canEdit={canEdit}
+        onLinked={() => {
+          hub.reload();
+          directory.reload();
+        }}
+        onAddFollowup={() => void addFollowup(selectedContact.id, selectedContact.name)}
+        onLink={(candidate) => void linkExisting(selectedContact.id, candidate)}
+        onSetCompany={(candidate) => void setCompany(selectedContact.id, candidate)}
+      />
+    );
   } else if (selectedCompany) {
-    // A company hub: roll-up + activity now; the People-union group lands in CO-4.
     center = (
-      <div className="mx-auto flex h-full min-h-0 max-w-2xl flex-col gap-5 overflow-y-auto p-6">
-        <h2 className="font-display text-2xl text-foreground">{selectedCompany.name || "Unnamed company"}</h2>
-        <p className="text-sm text-muted-foreground">{lastTouchLine(hub.rollup, new Date())}</p>
-        <Separator />
-        <EntityHub
-          variant="page"
-          status={hub.hubStatus}
-          sections={hub.rollup.sections}
-          canEdit={canEdit}
-          onOpen={openEntity}
-          onChangeKind={(link, kind) => void changeKind(link, kind)}
-          onUnlink={(link) => void unlink(link)}
-          onRetry={hub.reload}
-        />
-      </div>
+      <CompanyHub
+        company={selectedCompany}
+        rollup={companyHub.rollup}
+        status={companyHub.status}
+        activity={companyHub.activity}
+        currentUserId={userId ?? null}
+        onOpenEntity={openEntity}
+        onRetry={companyHub.reload}
+      />
     );
   } else {
     center = (
@@ -172,5 +274,28 @@ export function ContactsPage() {
     );
   }
 
-  return <FeaturePanelsShell feature="contacts" hideRight left={left} center={center} />;
+  return (
+    <>
+      <FeaturePanelsShell feature="contacts" left={left} center={center} right={right} hideRight={!right} />
+      {canEdit ? (
+        <ContactImportDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          existingContacts={directory.bundle.contacts}
+          existingCompanies={directory.bundle.companies}
+          onImport={(rows) => runtime!.contacts.importContacts({ workspaceId: ws, rows })}
+          onDone={(result) => {
+            directory.reload();
+            const parts = [
+              result.created ? `${result.created} added` : null,
+              result.merged ? `${result.merged} merged` : null,
+            ].filter(Boolean);
+            toast.success("Contacts imported", {
+              description: parts.length ? parts.join(" · ") : "Nothing to import.",
+            });
+          }}
+        />
+      ) : null}
+    </>
+  );
 }
