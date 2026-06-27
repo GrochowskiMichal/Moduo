@@ -17,6 +17,10 @@ const STORIES = [
   { name: "entity-hub-tombstone", id: "spine-entityhub--tombstone" },
   { name: "entity-hub-show-all", id: "spine-entityhub--show-all" },
   { name: "entity-hub-page-variant", id: "spine-entityhub--page-variant" },
+  // CT-7 — the "Recently linked" dashboard widget (AC12).
+  { name: "recently-linked-populated", id: "spine-recentlylinkedwidget--populated" },
+  { name: "recently-linked-tombstone", id: "spine-recentlylinkedwidget--with-tombstone" },
+  { name: "recently-linked-empty", id: "spine-recentlylinkedwidget--empty" },
 ];
 
 test.describe("spine entity-hub — visual snapshots", () => {
