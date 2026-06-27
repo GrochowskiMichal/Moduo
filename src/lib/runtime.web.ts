@@ -12,7 +12,8 @@ import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/util
 import type { Company, Contact } from "../features/contacts/model";
 import { sanitizeTimeBlocks, type ActivityEntry, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
 import type { NotificationItem } from "../features/spine/notifications";
-import type { EntityLink, EntityRecord } from "./entity-links";
+import type { SuggestionCandidate } from "../features/spine/suggest";
+import { coerceRelationKind, type EntityLink, type EntityRecord } from "./entity-links";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -1155,6 +1156,29 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
     },
+
+    // ── Deterministic auto-suggested links (block CT-6) ───────────────────────
+    async suggestLinks({ workspaceId, entityType, entityId, limit }) {
+      const { data, error } = await supabaseClient.rpc("links_suggest", {
+        p_workspace_id: workspaceId,
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+        p_limit: limit ?? 20,
+      });
+      if (error) throw new Error(error.message);
+      return (Array.isArray(data) ? data : []).map(suggestionRowToModel);
+    },
+
+    async declineSuggestion({ workspaceId, source, target }) {
+      const { error } = await supabaseClient.rpc("links_op_decline_suggestion", {
+        p_workspace_id: workspaceId,
+        p_source_type: source.type,
+        p_source_id: source.id,
+        p_target_type: target.type,
+        p_target_id: target.id,
+      });
+      if (error) throw new Error(error.message);
+    },
   },
 
   // ── Contacts module (specs/contacts.md block CO-1) ──────────────────────────
@@ -1483,6 +1507,19 @@ function commentRowToModel(r: any): SpineComment {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
+  };
+}
+
+/** A `links_suggest` row → a raw {@link SuggestionCandidate} the scorer ranks (block CT-6). */
+function suggestionRowToModel(r: any): SuggestionCandidate {
+  return {
+    target: { type: r.target_type, id: r.target_id },
+    label: r.label ?? "",
+    icon: r.icon ?? null,
+    suggestedKind: coerceRelationKind(r.suggested_kind),
+    sharedTagCount: Number(r.shared_tag_count ?? 0),
+    addressMatch: Boolean(r.address_match),
+    nearInTime: Boolean(r.near_in_time),
   };
 }
 

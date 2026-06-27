@@ -18,6 +18,7 @@ import type {
 } from "../features/tasks/model";
 import type { Company, Contact, ContactsModuleBundle } from "../features/contacts/model";
 import type { NotificationItem } from "../features/spine/notifications";
+import type { SuggestionCandidate } from "../features/spine/suggest";
 import type {
   EntityLink,
   EntityRecord,
@@ -509,6 +510,29 @@ export type ModuoRuntime = {
     markNotificationRead(input: { workspaceId: string; activityId: string }): Promise<void>;
     /** Mark every targeting-me notification in the workspace read. */
     markAllNotificationsRead(input: { workspaceId: string }): Promise<void>;
+
+    // ── Deterministic auto-suggested links (block CT-6) ───────────────────────
+    /**
+     * Deterministic, non-ML link candidates for a focus entity — shared tags +
+     * contact↔company email-domain matches, time-window as a booster (AC11). The
+     * scoring/ranking/max-one-at-rest pick live in `features/spine/suggest.ts`.
+     * Excludes self, already-linked pairs, and declined pairs server-side.
+     */
+    suggestLinks(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+      limit?: number;
+    }): Promise<SuggestionCandidate[]>;
+    /**
+     * Record a "no" for a suggested pair so it is never re-offered (AC11).
+     * Direction-agnostic + idempotent; writes no activity (a personal preference).
+     */
+    declineSuggestion(input: {
+      workspaceId: string;
+      source: EntityRef;
+      target: EntityRef;
+    }): Promise<void>;
   };
 
   /**
