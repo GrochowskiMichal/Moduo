@@ -14,6 +14,7 @@ import { sanitizeTimeBlocks, type ActivityEntry, type Bucket, type Tag, type Tag
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import { shapeRecentLinks, type RecentLinkItem } from "../features/spine/recent";
+import { selectNeedsAttention, type OverdueFollowup } from "../features/contacts/needs-attention";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import type {
   AuthChangeEvent,
@@ -1347,8 +1348,72 @@ export const webRuntime: ModuoRuntime = {
         mergedIds: r.merged_ids ?? [],
       };
     },
+
+    async needsAttention({ workspaceId }) {
+      const { data, error } = await supabaseClient
+        .from("contacts").select("*")
+        .eq("workspace_id", workspaceId).is("deleted_at", null);
+      if (error) throw new Error(error.message);
+      const contacts = (data ?? []).map(contactRowToModel);
+      const overdue = await loadOverdueFollowups(workspaceId);
+      return selectNeedsAttention({ contacts, overdue, now: new Date() });
+    },
   },
 };
+
+/** A Date as a local YYYY-MM-DD calendar date. */
+function localDateOf(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Today's local calendar date as YYYY-MM-DD. */
+function localToday(): string {
+  return localDateOf(new Date());
+}
+
+/**
+ * Contacts with a follow-up task past its due date (AC11). One indexed read of
+ * the workspace's follow-up links, then one batched read of their task endpoints
+ * — no per-contact fan-out. Open tasks only (done/archived excluded).
+ */
+async function loadOverdueFollowups(workspaceId: string): Promise<OverdueFollowup[]> {
+  const { data: links, error } = await supabaseClient
+    .from("entity_links").select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("relation_kind", "follow-up")
+    .is("deleted_at", null);
+  if (error) throw new Error(error.message);
+
+  const taskToContact = new Map<string, string>();
+  for (const l of links ?? []) {
+    const contactId = l.source_type === "contact" ? l.source_id : l.target_type === "contact" ? l.target_id : null;
+    const taskId = l.source_type === "task" ? l.source_id : l.target_type === "task" ? l.target_id : null;
+    if (contactId && taskId) taskToContact.set(taskId, contactId);
+  }
+  const taskIds = [...taskToContact.keys()];
+  if (taskIds.length === 0) return [];
+
+  const { data: tasks, error: tErr } = await supabaseClient
+    .from("tasks").select("id, due_date, status")
+    .eq("workspace_id", workspaceId).in("id", taskIds).is("deleted_at", null);
+  if (tErr) throw new Error(tErr.message);
+
+  // tasks.due_date is a timestamptz (stored from local midnight → UTC), so
+  // normalize it back to a local calendar date before comparing / surfacing —
+  // a raw lexical compare against "today" is off by a day for users east of UTC.
+  const today = localToday();
+  const overdue: OverdueFollowup[] = [];
+  for (const t of tasks ?? []) {
+    if (!t.due_date || t.status === "done" || t.status === "archived") continue;
+    const dueLocal = localDateOf(new Date(t.due_date));
+    if (dueLocal < today) {
+      const contactId = taskToContact.get(t.id);
+      if (contactId) overdue.push({ contactId, dueDate: dueLocal });
+    }
+  }
+  return overdue;
+}
 
 /** First row of a single-object RPC result, with a clear error if empty. */
 function firstRow(data: unknown, fn: string): any {
