@@ -23,9 +23,24 @@ import {
   type LexicalEditor,
   type NodeKey,
 } from "lexical";
+import { toast } from "sonner";
 import type { SlashCommand } from "../../types";
+import type { EntityRef } from "@/lib/entity-links";
+import { resolveMention } from "@/features/spine/mention";
+import { executeMention, type MentionContext } from "@/features/spine/mention-actions";
+import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+/** A registry entity offered by a `/ref` (`/task` `/note` `/contact`) command. */
+type RefItem = { type: string; id: string; label: string; icon: string | null };
+
+/** Maps each `/ref` command id to the entity type it links. */
+const REF_COMMAND_TYPES: Record<string, string> = {
+  "ref-task": "task",
+  "ref-note": "note",
+  "ref-contact": "contact",
+};
 
 type SlashMenuState = {
   query: string;
@@ -52,6 +67,9 @@ const COMMANDS: SlashCommand[] = [
   { id: "toggle", title: "Toggle", keywords: ["collapsible", "disclosure"], group: "Blocks" },
   { id: "table", title: "Table", keywords: ["grid", "spreadsheet"], group: "Media" },
   { id: "embed-mindmap", title: "Embed Mindmap", keywords: ["mindmap", "link", "embed", "map"], group: "Embeds" },
+  { id: "ref-task", title: "Link a task", keywords: ["task", "ref", "reference", "link"], group: "Refs" },
+  { id: "ref-note", title: "Link a note", keywords: ["note", "ref", "reference", "link"], group: "Refs" },
+  { id: "ref-contact", title: "Link a contact", keywords: ["contact", "person", "ref", "reference", "link"], group: "Refs" },
 ];
 
 // Icon map (SVG paths) keyed by command id
@@ -82,6 +100,12 @@ const COMMAND_ICONS: Record<string, string> = {
     "M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18",
   "embed-mindmap":
     "M12 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM20 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 5v3M6.5 15.5l3.5-4M17.5 15.5l-3.5-4",
+  "ref-task":
+    "M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1",
+  "ref-note":
+    "M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1",
+  "ref-contact":
+    "M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1",
 };
 
 function CommandIcon({ id }: { id: string }) {
@@ -361,8 +385,14 @@ function EmbedPicker({
 
 export function SlashCommandPlugin({
   workspaceId,
+  source,
+  sourceLabel,
 }: {
   workspaceId?: string;
+  /** The note's own entity (the `/ref` link's source end). */
+  source?: EntityRef;
+  /** The note's title — seeds the registry on link so the hub reads cleanly. */
+  sourceLabel?: string;
 }) {
   const [editor] = useLexicalComposerContext();
   const [menu, setMenu] = useState<SlashMenuState | null>(null);
@@ -373,6 +403,10 @@ export function SlashCommandPlugin({
   const [embedPickerKind, setEmbedPickerKind] = useState<"mindmap" | "task" | null>(null);
   const [embedItems, setEmbedItems] = useState<EmbedItem[]>([]);
   const [embedLoading, setEmbedLoading] = useState(false);
+  // Ref pickers (/task /note /contact → link an entity)
+  const [refPickerType, setRefPickerType] = useState<string | null>(null);
+  const [refItems, setRefItems] = useState<RefItem[]>([]);
+  const [refLoading, setRefLoading] = useState(false);
 
   const menuRef = useRef<SlashMenuState | null>(null);
   const commandsRef = useRef<SlashCommand[]>([]);
@@ -395,6 +429,8 @@ export function SlashCommandPlugin({
       setTablePickerOpen(false);
       setEmbedPickerKind(null);
       setEmbedItems([]);
+      setRefPickerType(null);
+      setRefItems([]);
       return;
     }
     setSelectedIndex((current) => Math.min(current, Math.max(0, commands.length - 1)));
@@ -412,6 +448,8 @@ export function SlashCommandPlugin({
         setTablePickerOpen(false);
         setEmbedPickerKind(null);
         setEmbedItems([]);
+        setRefPickerType(null);
+        setRefItems([]);
       }
       menuSigRef.current = nextSig;
       setMenu(next);
@@ -473,6 +511,81 @@ export function SlashCommandPlugin({
     }
     // Keep a ref to the active menu for the picker callback
     menuRef.current = activeMenu;
+  };
+
+  // ── Load ref items (entities of a type from the registry) ──────────────────
+  const openRefPicker = async (entityType: string) => {
+    setRefPickerType(entityType);
+    setRefLoading(true);
+    setRefItems([]);
+    try {
+      const { getRuntime } = await import("../../../../lib/runtime");
+      const runtime = getRuntime();
+      if (!runtime || !workspaceId) {
+        setRefItems([]);
+        return;
+      }
+      const records = await runtime.spine.searchEntities({
+        workspaceId,
+        types: [entityType],
+        limit: 8,
+      });
+      setRefItems(
+        records.map((r) => ({ type: r.type, id: r.id, label: r.label, icon: r.icon })),
+      );
+    } catch {
+      setRefItems([]);
+    } finally {
+      setRefLoading(false);
+    }
+  };
+
+  // ── Insert a ref chip + write the `references` link ─────────────────────────
+  const insertRef = (item: RefItem, activeMenu: SlashMenuState) => {
+    if (!source || !workspaceId) return;
+    editor.focus();
+    editor.update(() => {
+      removeSlashToken(activeMenu);
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) return;
+      selection.insertNodes([
+        $createEntityRefNode({
+          entityType: item.type,
+          entityId: item.id,
+          label: item.label,
+          icon: item.icon,
+        }),
+        $createTextNode(" "),
+      ]);
+    });
+    void writeRefLink(item);
+  };
+
+  const writeRefLink = async (item: RefItem) => {
+    if (!source || !workspaceId) return;
+    try {
+      const { getRuntime } = await import("../../../../lib/runtime");
+      const runtime = getRuntime();
+      if (!runtime) return;
+      const resolution = resolveMention({
+        trigger: "ref",
+        candidate: {
+          kind: "entity",
+          ref: { type: item.type, id: item.id },
+          label: item.label,
+          icon: item.icon,
+        },
+      });
+      const ctx: MentionContext = {
+        workspaceId,
+        source,
+        sourceLabel,
+        sourceIcon: source.type,
+      };
+      await executeMention(runtime, ctx, resolution);
+    } catch {
+      toast.error("Couldn't link that reference.");
+    }
   };
 
   // ── Handle table pick ──────────────────────────────────────────────────────
@@ -537,6 +650,12 @@ export function SlashCommandPlugin({
           setEmbedItems([]);
           return true;
         }
+        if (refPickerType) {
+          event?.preventDefault();
+          setRefPickerType(null);
+          setRefItems([]);
+          return true;
+        }
         if (!menuRef.current) return false;
         event?.preventDefault();
         setMenu(null);
@@ -544,7 +663,7 @@ export function SlashCommandPlugin({
       },
       COMMAND_PRIORITY_HIGH
     );
-  }, [editor, tablePickerOpen, embedPickerKind]);
+  }, [editor, tablePickerOpen, embedPickerKind, refPickerType]);
 
   // ── Enter ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -566,6 +685,11 @@ export function SlashCommandPlugin({
         if (command.id === "embed-mindmap" || command.id === "embed-task") {
           const kind = command.id === "embed-mindmap" ? "mindmap" : "task";
           void openEmbedPicker(kind, activeMenu);
+          return true;
+        }
+
+        if (command.id in REF_COMMAND_TYPES) {
+          void openRefPicker(REF_COMMAND_TYPES[command.id]!);
           return true;
         }
 
@@ -655,6 +779,11 @@ export function SlashCommandPlugin({
                       return;
                     }
 
+                    if (command.id in REF_COMMAND_TYPES) {
+                      void openRefPicker(REF_COMMAND_TYPES[command.id]!);
+                      return;
+                    }
+
                     applyCommand(command, activeMenu);
                     setMenu(null);
                   }}
@@ -710,6 +839,26 @@ export function SlashCommandPlugin({
                         setMenu(null);
                         setEmbedPickerKind(null);
                         setEmbedItems([]);
+                      }}
+                    />
+                  )}
+
+                {/* Ref picker (inline, under the /task /note /contact button) */}
+                {command.id in REF_COMMAND_TYPES &&
+                  refPickerType === REF_COMMAND_TYPES[command.id] &&
+                  isSelected && (
+                    <EmbedPicker
+                      items={refItems.map((r) => ({ id: r.id, label: r.label, sublabel: r.type }))}
+                      loading={refLoading}
+                      emptyLabel={`No ${REF_COMMAND_TYPES[command.id]}s found`}
+                      onPick={(picked) => {
+                        const activeMenu = menuRef.current;
+                        if (!activeMenu) return;
+                        const item = refItems.find((r) => r.id === picked.id);
+                        if (item) insertRef(item, activeMenu);
+                        setMenu(null);
+                        setRefPickerType(null);
+                        setRefItems([]);
                       }}
                     />
                   )}

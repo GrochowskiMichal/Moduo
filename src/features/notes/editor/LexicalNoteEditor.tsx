@@ -31,6 +31,9 @@ import { $isListItemNode } from "@lexical/list";
 import type { NotesSyncEngine } from "../sync/sync-engine";
 import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
 import { EmbedNode } from "./nodes/EmbedNode";
+import { EntityRefNode } from "@/features/spine/editor/entity-ref-node";
+import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
+import { useAuth } from "@/providers/auth-provider";
 
 type Props = {
   noteId: string;
@@ -116,6 +119,7 @@ function NotesListTabIndentationPlugin() {
 }
 
 export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChange, syncEngine, workspaceId }: Props) {
+  const { userId, runtime } = useAuth();
   const [draftTitle, setDraftTitle] = useState(title);
   const collabSession = useMemo(() => syncEngine.getOrCreateSession(noteId), [noteId, syncEngine]);
   const [collabReady, setCollabReady] = useState(() => collabSession.persistence.synced);
@@ -178,7 +182,7 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
     onError: (error: Error) => {
       console.error("Lexical editor error:", error);
     },
-    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode, LinkNode, HorizontalRuleNode, TableNode, TableCellNode, TableRowNode, EmbedNode],
+    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode, LinkNode, HorizontalRuleNode, TableNode, TableCellNode, TableRowNode, EmbedNode, EntityRefNode],
     theme: {
       paragraph: "notes-p",
       heading: {
@@ -239,7 +243,19 @@ export function LexicalNoteEditor({ noteId, title, editable = true, onTitleChang
               <NotesCodeHighlightPlugin />
               <LinkPlugin />
               <TablePlugin />
-              <SlashCommandPlugin workspaceId={workspaceId} />
+              <SlashCommandPlugin
+                workspaceId={workspaceId}
+                source={{ type: "note", id: noteId }}
+                sourceLabel={draftTitle || "Untitled"}
+              />
+              <MentionMenuPlugin
+                workspaceId={workspaceId ?? null}
+                runtime={runtime}
+                source={{ type: "note", id: noteId }}
+                sourceLabel={draftTitle || "Untitled"}
+                sourceIcon="note"
+                currentUserId={userId}
+              />
               {collabMode === "v2" && collabSession ? (
                 <>
                   <CollaborationPluginV2__EXPERIMENTAL
