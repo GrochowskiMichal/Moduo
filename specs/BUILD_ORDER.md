@@ -14,13 +14,13 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in t
 - [x] **CT-2 — EntityHub roll-up + components** · spine block 2 · deps: CT-1 · _done 2026-06-25 · `t/maciej/ct-1-link-substrate` (built on CT-1; visual baselines + live render pending — Storybook preview.tsx load is broken in this worktree)_
 - [x] **CT-3 — Universal drag-payload contract** · spine block 3 · deps: CT-1, CT-2 · _done 2026-06-25 · `t/maciej/ct-1-link-substrate` (contract + hooks + drop-to-link toast; AC7 keyboard "Link to…" half + the drag e2e + a live drag-source/target consumer deferred — keyboard needs CT-4's MentionPicker, wiring+e2e land with CT-4/CT-7 when live-verifiable)_
 - [ ] **CT-4 — @mention / /ref resolver + EntityRefChip** · spine block 4 · deps: CT-1, CT-2
-- [ ] **CT-5 — Comments + notification/activity generalization** · spine block 5 · deps: CT-1
+- [x] **CT-5 — Comments + notification/activity generalization** · spine block 5 · deps: CT-1 · _done 2026-06-26 · `claude/blissful-sinoussi-0a13fb` (migration `20260626130000_spine_comments_notifications.sql`: `comments`+`comments_op_add`, `notification_state`+`notifications_op_mark_read`/`_mark_all_read`, derived-feed RPC `notifications_list` + `spine_activity_targets_me` mention predicate. Pure-TS `spine/activity.ts`+`spine/notifications.ts` reducers (grouping/sentences) unit-tested. Runtime `spine.addComment`/`listNotifications`/`mark*` + NotificationCenter rewritten to grouped, human-readable, deep-linking cards — wired into `workspace-provider` MERGED with the legacy feed (graceful-degrade until the migration deploys). Migration deploy-ready but unapplied here (Supabase MCP wrong org); AC9/AC10 server round-trip = manual-test post-deploy.)_
 - [ ] **CT-6 — Deterministic auto-suggest + strip** · spine block 6 · deps: CT-1, CT-2
 - [ ] **CT-7 — Tasks adoption + MCP manifest + dashboard widget (DoD)** · spine block 7 · deps: CT-1, CT-2, CT-3, CT-5
 
 ## Wave 1 — Contacts (light CRM) · [`specs/contacts.md`](./contacts.md)
 
-- [ ] **CO-1 — Contacts schema + ops + route** · contacts block 1 · deps: CT-1
+- [x] **CO-1 — Contacts schema + ops + route** · contacts block 1 · deps: CT-1 · _done 2026-06-26 · `claude/blissful-sinoussi-0a13fb` (migration `20260626120000_contacts_module.sql`: `contacts`+`companies` (RLS mirror Tasks), ops `contacts_op_create`/`_update`/`_set_status`/`_link`/`_unlink` + `companies_op_create`/`_update` (guard + write + `entities` upsert + activity, one txn; reuse Tasks permission lane at alpha). Runtime `contacts` namespace (web + tauri). Route `/crm`→`/contacts` + `"crm"`→`"contacts"` layout key + `/crm` redirect + `ContactsPage` scaffold + new `contact` Icon. Pure-TS `contacts/status.ts` (renamable, no stage machine) unit-tested. Migration deploy-ready but unapplied here; AC1/AC3 server round-trip = manual-test post-deploy.)_
 - [ ] **CO-2 — Directory + ContactHub (the great moment)** · contacts block 2 · deps: CO-1, CT-2
 - [ ] **CO-3 — CSV import (the adoption gate)** · contacts block 3 · deps: CO-1
 - [ ] **CO-4 — Linking + suggestions + company union + follow-up** · contacts block 4 · deps: CO-2, CT-3, CT-4, CT-6

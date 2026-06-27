@@ -16,6 +16,8 @@ import type {
   TaskStatus,
   TimeBlockMap,
 } from "../features/tasks/model";
+import type { Company, Contact, ContactsModuleBundle } from "../features/contacts/model";
+import type { NotificationItem } from "../features/spine/notifications";
 import type {
   EntityLink,
   EntityRecord,
@@ -23,6 +25,19 @@ import type {
   LinkOrigin,
   RelationKind,
 } from "./entity-links";
+
+/** A comment on any registered entity (spine block CT-5). */
+export type SpineComment = {
+  id: string;
+  workspaceId: string;
+  entityType: string;
+  entityId: string;
+  body: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
 
 export type RuntimeSession = {
   access_token: string;
@@ -467,5 +482,99 @@ export type ModuoRuntime = {
       entityType: string;
       entityId: string;
     }): Promise<void>;
+
+    // ── Comments + notifications (block CT-5) ────────────────────────────────
+    /**
+     * Add a comment to any entity. `mentionedUserIds` (workspace members
+     * @-mentioned in the body) become notifications for those members (AC9).
+     * Goes through `comments_op_add` (guard + registry ensure + attributed
+     * activity in one transaction).
+     */
+    addComment(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+      body: string;
+      mentionedUserIds?: string[];
+      entityLabel?: string;
+      entityIcon?: string | null;
+    }): Promise<SpineComment>;
+    /**
+     * The derived notification feed: `module_activity` rows targeting me,
+     * overlaid with my read state, newest first (AC10). The NotificationCenter
+     * groups these by target then verb.
+     */
+    listNotifications(input: { workspaceId: string; limit?: number }): Promise<NotificationItem[]>;
+    /** Mark one notification (activity row) read. Idempotent. */
+    markNotificationRead(input: { workspaceId: string; activityId: string }): Promise<void>;
+    /** Mark every targeting-me notification in the workspace read. */
+    markAllNotificationsRead(input: { workspaceId: string }): Promise<void>;
+  };
+
+  /**
+   * Contacts module (light CRM) — block CO-1. People + companies are hub
+   * entities whose pages roll up from the spine. Cloud-first: web hits Supabase
+   * directly; desktop delegates to the web runtime (same code path). All
+   * invariant-bearing writes go through `contacts_op_*` / `companies_op_*` RPCs
+   * (permission guard + write + `entities` registry upsert + attributed activity
+   * in one transaction); reads are direct SELECTs over the indexed tables.
+   */
+  contacts: {
+    /** People + companies for the directory (CO-2 builds the UI on this). */
+    list(workspaceId: string): Promise<ContactsModuleBundle>;
+    createContact(input: {
+      workspaceId: string;
+      name: string;
+      email?: string | null;
+      phone?: string | null;
+      title?: string | null;
+      companyId?: string | null;
+      status?: string;
+      notesInline?: string;
+    }): Promise<Contact>;
+    updateContact(input: {
+      workspaceId: string;
+      contactId: string;
+      name?: string;
+      email?: string | null;
+      phone?: string | null;
+      title?: string | null;
+      notesInline?: string;
+      /** Pass to set/clear the denormalized company FK (canonical edge is the link). */
+      setCompany?: { companyId: string | null };
+    }): Promise<Contact>;
+    /** Optimistic, flat status change (AC3). Accepts any renamed/custom label. */
+    setStatus(input: { workspaceId: string; contactId: string; status: string }): Promise<Contact>;
+    createCompany(input: {
+      workspaceId: string;
+      name: string;
+      domains?: string[];
+      website?: string | null;
+      notesInline?: string;
+    }): Promise<Company>;
+    updateCompany(input: {
+      workspaceId: string;
+      companyId: string;
+      name?: string;
+      domains?: string[];
+      website?: string | null;
+      notesInline?: string;
+    }): Promise<Company>;
+    /**
+     * Link a contact/company to any other entity via the spine, attributed to
+     * Contacts (`contacts_op_link`). Idempotent + direction-agnostic.
+     */
+    link(input: {
+      workspaceId: string;
+      contact: EntityRef;
+      target: EntityRef;
+      relationKind?: RelationKind;
+      origin?: LinkOrigin;
+      contactLabel?: string;
+      targetLabel?: string;
+      targetIcon?: string | null;
+    }): Promise<EntityLink>;
+    /** Soft-delete a link the contact owns (Undo-friendly; idempotent). */
+    unlink(input: { workspaceId: string; linkId: string }): Promise<EntityLink | null>;
   };
 };

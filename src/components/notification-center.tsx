@@ -1,6 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+
+import { useAuth } from "../providers/auth-provider";
 import { useWorkspace } from "../providers/workspace-provider";
 import { useShortcut } from "../lib/shortcuts";
+import {
+  groupNotifications,
+  notificationDeepLink,
+  notificationSummary,
+  type NotificationGroup,
+} from "../features/spine/notifications";
 import { Card } from "./ui/card";
 import { Icon } from "./ui/icon";
 import {
@@ -13,7 +22,23 @@ import {
 } from "./ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
+/** "3 days ago" style relative time, falling back to a locale string. */
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffMs = Date.now() - then;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 export function NotificationCenter() {
+  const { userId } = useAuth();
   const {
     notifications,
     notificationsScope,
@@ -25,12 +50,16 @@ export function NotificationCenter() {
     markNotificationRead,
     markAllNotificationsRead,
   } = useWorkspace();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   const activeUnread = useMemo(
     () => (notificationsScope === "workspace" ? unreadCountWorkspace : unreadCountGlobal),
     [notificationsScope, unreadCountGlobal, unreadCountWorkspace],
   );
+
+  // Collapse the feed into target→verb cards (digest-default, AC10).
+  const groups = useMemo(() => groupNotifications(notifications), [notifications]);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -45,6 +74,21 @@ export function NotificationCenter() {
   useShortcut(
     "notifications",
     useCallback(() => handleOpenChange(!open), [handleOpenChange, open]),
+  );
+
+  const activateGroup = useCallback(
+    async (group: NotificationGroup) => {
+      // Mark every unread row in the card read on open (AC10: mark-on-open).
+      const unread = group.items.filter((item) => !item.readAt);
+      await Promise.all(unread.map((item) => markNotificationRead(item)));
+      // Best-effort deep-link to the target's module surface.
+      const link = notificationDeepLink(group);
+      if (link) {
+        setOpen(false);
+        void navigate({ to: link.route });
+      }
+    },
+    [markNotificationRead, navigate],
   );
 
   return (
@@ -109,41 +153,53 @@ export function NotificationCenter() {
         <div className="flex-1 overflow-y-auto px-4 pb-4">
           {notificationsLoading ? (
             <p className="text-sm text-muted-foreground">Loading notifications...</p>
-          ) : notifications.length === 0 ? (
+          ) : groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No notifications yet.</p>
           ) : (
             <div className="flex flex-col gap-2">
-              {notifications.map((notification) => (
-                <Card
-                  key={notification.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={async () => {
-                    if (!notification.readAt) {
-                      await markNotificationRead(notification.id);
-                    }
-                  }}
-                  onKeyDown={async (event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      if (!notification.readAt) {
-                        await markNotificationRead(notification.id);
+              {groups.map((group) => {
+                const unread = group.unreadCount > 0;
+                const link = notificationDeepLink(group);
+                return (
+                  <Card
+                    key={group.key}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => void activateGroup(group)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        void activateGroup(group);
                       }
-                    }
-                  }}
-                  className={`cursor-pointer gap-1 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    notification.readAt ? "bg-muted" : "bg-secondary"
-                  }`}
-                >
-                  <p className="text-sm text-foreground">{notification.eventType}</p>
-                  <p className="line-clamp-2 text-xs text-muted-foreground">
-                    {JSON.stringify(notification.payload)}
-                  </p>
-                  <p className="text-xs text-muted-foreground/70">
-                    {new Date(notification.createdAt).toLocaleString()}
-                  </p>
-                </Card>
-              ))}
+                    }}
+                    className={`cursor-pointer gap-1 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      unread ? "bg-secondary" : "bg-muted"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      {/* Unread is signalled by fill + a dot + weight — never color alone. */}
+                      {unread ? (
+                        <span
+                          className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground"
+                          aria-hidden
+                        />
+                      ) : (
+                        <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0" aria-hidden />
+                      )}
+                      <p className={`flex-1 text-sm ${unread ? "font-medium text-foreground" : "text-foreground"}`}>
+                        {notificationSummary(group, userId)}
+                        {group.count > 1 ? (
+                          <span className="ml-1 text-xs text-muted-foreground">×{group.count}</span>
+                        ) : null}
+                      </p>
+                    </div>
+                    <p className="flex items-center gap-1 pl-3.5 text-xs text-muted-foreground/70">
+                      {relativeTime(group.latestAt)}
+                      {link ? <span aria-hidden>· opens {link.entityType}</span> : null}
+                    </p>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </div>
