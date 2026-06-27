@@ -326,6 +326,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         entityType: "task",
         entityId: taskId,
         limit: 50,
+        module: "tasks",
       });
     },
     [runtime, workspaceId, canRead],

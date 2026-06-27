@@ -11,6 +11,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
 import { tasksConnectorModule } from "./modules/tasks.ts";
+import { linksConnectorModule } from "./modules/links.ts";
 
 /** A verified, live API key — the connector's caller identity. */
 export type KeyContext = {
@@ -43,7 +44,7 @@ export type ConnectorModule = {
   tools: ToolDef[];
 };
 
-export const connectorModules: ConnectorModule[] = [tasksConnectorModule];
+export const connectorModules: ConnectorModule[] = [tasksConnectorModule, linksConnectorModule];
 
 /** Normalize a key's scope for a module (absent/unknown → none). */
 export function moduleScope(key: KeyContext, module: string): "none" | "view" | "edit" {

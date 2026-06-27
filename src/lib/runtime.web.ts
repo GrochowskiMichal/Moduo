@@ -12,6 +12,8 @@ import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/util
 import type { Company, Contact } from "../features/contacts/model";
 import { sanitizeTimeBlocks, type ActivityEntry, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
 import type { NotificationItem } from "../features/spine/notifications";
+import type { RawLinkSuggestion } from "../features/spine/suggest";
+import { shapeRecentLinks, type RecentLinkItem } from "../features/spine/recent";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import type {
   AuthChangeEvent,
@@ -988,13 +990,18 @@ export const webRuntime: ModuoRuntime = {
       return (Array.isArray(data) ? data : []).map(taskRowToModel);
     },
 
-    async listActivity({ workspaceId, entityType, entityId, limit }) {
-      const { data, error } = await supabaseClient
+    async listActivity({ workspaceId, entityType, entityId, limit, module }) {
+      // `module` scopes the trail to one module (e.g. Tasks). Omit it to read the
+      // entity's activity across ALL modules — what a spine entity (a contact /
+      // company) wants, since its touches are logged under module='contacts' (and
+      // links/comments on it under other modules), never 'tasks'.
+      let q = supabaseClient
         .from("module_activity").select("*")
         .eq("workspace_id", workspaceId)
-        .eq("module", "tasks")
         .eq("entity_type", entityType)
-        .eq("entity_id", entityId)
+        .eq("entity_id", entityId);
+      if (module) q = q.eq("module", module);
+      const { data, error } = await q
         .order("created_at", { ascending: false })
         .limit(limit ?? 50);
       if (error) throw new Error(error.message);
@@ -1154,6 +1161,53 @@ export const webRuntime: ModuoRuntime = {
         p_workspace_id: workspaceId,
       });
       if (error) throw new Error(error.message);
+    },
+
+    // ── Deterministic auto-suggested links (block CT-6) ──────────────────────
+    async suggestLinks({ workspaceId, entityType, entityId, limit }) {
+      const { data, error } = await supabaseClient.rpc("links_suggest", {
+        p_workspace_id: workspaceId,
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+        p_limit: limit ?? 25,
+      });
+      if (error) throw new Error(error.message);
+      return (Array.isArray(data) ? data : []).map(linkSuggestionRowToModel);
+    },
+
+    async declineSuggestion({ workspaceId, source, target }) {
+      const { error } = await supabaseClient.rpc("links_op_decline_suggestion", {
+        p_workspace_id: workspaceId,
+        p_source_type: source.type,
+        p_source_id: source.id,
+        p_target_type: target.type,
+        p_target_id: target.id,
+      });
+      if (error) throw new Error(error.message);
+    },
+
+    async recentLinks({ workspaceId, limit }) {
+      const { data, error } = await supabaseClient
+        .from("entity_links").select("*")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(limit ?? 20);
+      if (error) throw new Error(error.message);
+      const links = (data ?? []).map(entityLinkRowToModel);
+      // One batched registry lookup for every endpoint (no N fan-out).
+      const ids = Array.from(new Set(links.flatMap((l) => [l.sourceId, l.targetId])));
+      let records: EntityRecord[] = [];
+      if (ids.length) {
+        const res = await supabaseClient
+          .from("entities").select("*")
+          .eq("workspace_id", workspaceId)
+          .in("entity_id", ids);
+        if (res.error) throw new Error(res.error.message);
+        records = (res.data ?? []).map(entityRecordRowToModel);
+      }
+      const byKey = new Map(records.map((r) => [`${r.type}:${r.id}`, r]));
+      return shapeRecentLinks(links, byKey);
     },
   },
 
@@ -1467,6 +1521,19 @@ function entityRecordRowToModel(r: any): EntityRecord {
     label: r.label ?? "",
     icon: r.icon ?? null,
     deletedAt: r.deleted_at ?? null,
+  };
+}
+
+/** A `links_suggest` row → a raw per-signal suggestion (scoreSuggestions ranks). */
+function linkSuggestionRowToModel(r: any): RawLinkSuggestion {
+  return {
+    otherType: r.other_type,
+    otherId: r.other_id,
+    otherLabel: r.other_label ?? "",
+    otherIcon: r.other_icon ?? null,
+    signal: r.signal,
+    suggestedKind: r.suggested_kind ?? "references",
+    strength: typeof r.strength === "number" ? r.strength : Number(r.strength) || 1,
   };
 }
 

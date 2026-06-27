@@ -18,6 +18,8 @@ import type {
 } from "../features/tasks/model";
 import type { Company, Contact, ContactsModuleBundle } from "../features/contacts/model";
 import type { NotificationItem } from "../features/spine/notifications";
+import type { RawLinkSuggestion } from "../features/spine/suggest";
+import type { RecentLinkItem } from "../features/spine/recent";
 import type {
   EntityLink,
   EntityRecord,
@@ -410,6 +412,10 @@ export type ModuoRuntime = {
       entityType: string;
       entityId: string;
       limit?: number;
+      /** Scope to one module (e.g. "tasks"). Omit to read across all modules —
+       * what a spine entity (contact/company) needs, since its activity is logged
+       * under module='contacts', not 'tasks'. */
+      module?: string;
     }): Promise<ActivityEntry[]>;
   };
 
@@ -509,6 +515,39 @@ export type ModuoRuntime = {
     markNotificationRead(input: { workspaceId: string; activityId: string }): Promise<void>;
     /** Mark every targeting-me notification in the workspace read. */
     markAllNotificationsRead(input: { workspaceId: string }): Promise<void>;
+
+    // ── Deterministic auto-suggested links (block CT-6) ──────────────────────
+    /**
+     * Deterministic auto-suggested links for a focus entity (AC11). Computed
+     * server-side from non-ML signals only (shared tags, matching email
+     * domains, ±time-window co-activity), already excluding self /
+     * already-linked / previously-declined pairs. Returns RAW per-signal rows;
+     * `scoreSuggestions` ranks them. Requires edit access (the strip is a link
+     * gesture); callers degrade gracefully on permission/RPC error.
+     */
+    suggestLinks(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+      limit?: number;
+    }): Promise<RawLinkSuggestion[]>;
+    /**
+     * Record a "no" for a suggested pair so it is never re-offered (AC11).
+     * Writes `link_suggestion_declines` (direction-agnostic, idempotent).
+     * Accepting a suggestion is just `createLink({ origin: "suggest" })`.
+     */
+    declineSuggestion(input: {
+      workspaceId: string;
+      source: EntityRef;
+      target: EntityRef;
+    }): Promise<void>;
+
+    /**
+     * The workspace's most recent links, both endpoints resolved from the
+     * registry — the "Recently linked" dashboard widget read (AC12). One indexed
+     * `entity_links` read + one batched registry lookup, shaped newest-first.
+     */
+    recentLinks(input: { workspaceId: string; limit?: number }): Promise<RecentLinkItem[]>;
   };
 
   /**
