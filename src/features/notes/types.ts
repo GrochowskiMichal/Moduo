@@ -56,10 +56,13 @@ export type SlashCommand = {
   | "toggle"
   | "table"
   | "embed-mindmap"
-  | "embed-task";
+  | "embed-task"
+  | "ref-task"
+  | "ref-note"
+  | "ref-contact";
   title: string;
   keywords: string[];
-  group: "Basic" | "Lists" | "Blocks" | "Media" | "Embeds";
+  group: "Basic" | "Lists" | "Blocks" | "Media" | "Embeds" | "Refs";
 };
 
 export type LocalOutboxEntry = {
