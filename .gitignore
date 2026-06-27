@@ -56,3 +56,13 @@ src-tauri/*.redb.lock
 !.claude/commands/
 !.claude/hooks/
 !.claude/settings.json
+
+# design-sync (claude.ai/design) — transient build/verification state
+.ds-sync/
+ds-bundle/
+.design-sync/sb-reference/
+.design-sync/learnings/
+.design-sync/.cache/
+.design-sync/node_modules
+.design-sync/ds-types/
+.design-sync/*.log
