@@ -18,6 +18,13 @@ const STORIES = [
   { name: "contact-hub-tombstone", id: "contacts-contacthub--tombstone" },
 ];
 
+// CO-3 / AC6: the CSV import dialog at its two decision steps. The dialog is
+// portalled, so target the portal root, not #storybook-root.
+const IMPORT_STORIES = [
+  { name: "import-dialog-map", id: "contacts-contactimportdialog--mapping" },
+  { name: "import-dialog-dedupe-preview", id: "contacts-contactimportdialog--dedupe-preview" },
+];
+
 test.describe("contacts contact-hub — visual snapshots", () => {
   for (const story of STORIES) {
     test(story.name, async ({ page }) => {
@@ -26,6 +33,18 @@ test.describe("contacts contact-hub — visual snapshots", () => {
       await root.waitFor({ state: "visible", timeout: 15_000 });
       await page.waitForTimeout(150);
       await expect(page).toHaveScreenshot(`${story.name}.png`, { animations: "disabled" });
+    });
+  }
+});
+
+test.describe("contacts import-dialog — visual snapshots", () => {
+  for (const story of IMPORT_STORIES) {
+    test(story.name, async ({ page }) => {
+      await page.goto(`/iframe.html?id=${story.id}&viewMode=story`);
+      const dialog = page.getByRole("dialog");
+      await dialog.waitFor({ state: "visible", timeout: 15_000 });
+      await page.waitForTimeout(150);
+      await expect(dialog).toHaveScreenshot(`${story.name}.png`, { animations: "disabled" });
     });
   }
 });

@@ -17,6 +17,7 @@ import type {
   TimeBlockMap,
 } from "../features/tasks/model";
 import type { Company, Contact, ContactsModuleBundle } from "../features/contacts/model";
+import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type { RecentLinkItem } from "../features/spine/recent";
@@ -615,5 +616,14 @@ export type ModuoRuntime = {
     }): Promise<EntityLink>;
     /** Soft-delete a link the contact owns (Undo-friendly; idempotent). */
     unlink(input: { workspaceId: string; linkId: string }): Promise<EntityLink | null>;
+    /**
+     * Bulk CSV import (AC6) — one attributed, activity-logged op. The client
+     * parses + previews dedupe; this writes the confirmed plan (create / merge
+     * rows) in a single transaction and returns the counts + affected ids.
+     */
+    importContacts(input: {
+      workspaceId: string;
+      rows: ContactImportRow[];
+    }): Promise<ContactImportResult>;
   };
 };

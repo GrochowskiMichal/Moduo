@@ -1327,6 +1327,26 @@ export const webRuntime: ModuoRuntime = {
       const row = Array.isArray(data) ? data[0] : data;
       return row?.id ? entityLinkRowToModel(row) : null;
     },
+
+    async importContacts({ workspaceId, rows }) {
+      const { data, error } = await supabaseClient.rpc("contacts_op_import", {
+        p_workspace_id: workspaceId,
+        p_rows: rows,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as {
+        created?: number;
+        merged?: number;
+        created_ids?: string[];
+        merged_ids?: string[];
+      };
+      return {
+        created: r.created ?? 0,
+        merged: r.merged ?? 0,
+        createdIds: r.created_ids ?? [],
+        mergedIds: r.merged_ids ?? [],
+      };
+    },
   },
 };
 

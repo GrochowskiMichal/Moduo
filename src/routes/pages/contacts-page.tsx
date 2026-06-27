@@ -26,6 +26,7 @@ import {
   type DirectorySelection,
 } from "../../features/contacts/ui/contact-directory";
 import { ContactHub } from "../../features/contacts/ui/contact-hub";
+import { ContactImportDialog } from "../../features/contacts/ui/contact-import-dialog";
 
 function openEntity(ref: EntityRef) {
   if (typeof window === "undefined") return;
@@ -36,11 +37,12 @@ export function ContactsPage() {
   const { runtime, userId, configError } = useAuth();
   const { selectedWorkspaceId, modulePermissions } = useWorkspace();
   const permission = modulePermissions.tasks;
-  const canEdit = permission === "edit";
+  const canEdit = permission === "edit" || permission === "admin";
 
   const workspaceId = selectedWorkspaceId ?? null;
   const directory = useContactsDirectory(runtime, workspaceId);
   const [selected, setSelected] = useState<DirectorySelection | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const focus = useMemo<EntityRef | null>(
     () => (selected ? { type: selected.type, id: selected.id } : null),
@@ -121,6 +123,7 @@ export function ContactsPage() {
       status={directory.status}
       selected={selected}
       onSelect={setSelected}
+      onImport={canEdit ? () => setImportOpen(true) : undefined}
       onRetry={directory.reload}
     />
   );
@@ -172,5 +175,28 @@ export function ContactsPage() {
     );
   }
 
-  return <FeaturePanelsShell feature="contacts" hideRight left={left} center={center} />;
+  return (
+    <>
+      <FeaturePanelsShell feature="contacts" hideRight left={left} center={center} />
+      {canEdit ? (
+        <ContactImportDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          existingContacts={directory.bundle.contacts}
+          existingCompanies={directory.bundle.companies}
+          onImport={(rows) => runtime!.contacts.importContacts({ workspaceId: ws, rows })}
+          onDone={(result) => {
+            directory.reload();
+            const parts = [
+              result.created ? `${result.created} added` : null,
+              result.merged ? `${result.merged} merged` : null,
+            ].filter(Boolean);
+            toast.success("Contacts imported", {
+              description: parts.length ? parts.join(" · ") : "Nothing to import.",
+            });
+          }}
+        />
+      ) : null}
+    </>
+  );
 }
