@@ -1,0 +1,328 @@
+// Connective-tissue spine — the inline `@mention` Lexical plugin (block CT-4).
+//
+// Typing `@` in prose opens a registry-backed menu (entities + people); picking
+// an entity inserts a neutral `EntityRefNode` and writes an `entity_link`
+// (`kind=mentions`), picking a person writes a person-targeted activity row
+// (the op lands with CT-5; here it routes through the `onMentionPerson` seam and
+// inserts the person's name). Selection is funnelled through the pure
+// `resolveMention` + `executeMention`. The caret detection / positioning /
+// keyboard handling mirror the proven notes `SlashCommandPlugin`; only the
+// trigger (`@`) and the menu content/actions differ. Tokens-only (DESIGN_RULES).
+
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import {
+  $getNodeByKey,
+  $getSelection,
+  $isRangeSelection,
+  $isTextNode,
+  $createTextNode,
+  COMMAND_PRIORITY_HIGH,
+  KEY_ARROW_DOWN_COMMAND,
+  KEY_ARROW_UP_COMMAND,
+  KEY_ENTER_COMMAND,
+  KEY_ESCAPE_COMMAND,
+  type LexicalEditor,
+  type NodeKey,
+} from "lexical";
+import { toast } from "sonner";
+import { User } from "lucide-react";
+import type { EntityRef } from "@/lib/entity-links";
+import type { ModuoRuntime } from "@/lib/runtime.types";
+import { resolveEntityIcon } from "../icon-map";
+import { resolveMention, type MentionCandidate } from "../mention";
+import { executeMention, type MentionContext } from "../mention-actions";
+import { useMentionSearch } from "../hooks/use-mention-search";
+import { $createEntityRefNode } from "./entity-ref-node";
+
+type MentionMenuState = {
+  query: string;
+  nodeKey: NodeKey;
+  startOffset: number;
+  endOffset: number;
+  top: number;
+  left: number;
+};
+
+export type MentionMenuPluginProps = {
+  workspaceId: string | null;
+  runtime: ModuoRuntime | null;
+  /** The text surface's own entity (the link's source end). */
+  source: EntityRef;
+  /** The source's registry label/icon (seeds the registry on link). */
+  sourceLabel?: string;
+  sourceIcon?: string | null;
+  currentUserId?: string | null;
+  /** Host seam for the person-mention activity row (CT-5 wires the real op). */
+  onMentionPerson?: (memberId: string, label: string) => Promise<void> | void;
+};
+
+const MENU_MIN_WIDTH = 240;
+const MENU_MAX_HEIGHT = 320;
+
+function resolveMentionMenuState(editor: LexicalEditor): MentionMenuState | null {
+  return editor.getEditorState().read(() => {
+    const selection = $getSelection();
+    if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+
+    const anchor = selection.anchor;
+    if (anchor.type !== "text") return null;
+
+    const node = anchor.getNode();
+    if (!$isTextNode(node) || !node.isSimpleText()) return null;
+
+    const textBefore = node.getTextContent().slice(0, anchor.offset);
+    const match = textBefore.match(/(?:^|\s)@([^\s@]*)$/);
+    if (!match) return null;
+
+    const query = match[1] ?? "";
+    const token = `@${query}`;
+    const startOffset = textBefore.lastIndexOf(token);
+    if (startOffset < 0) return null;
+
+    const domSelection = window.getSelection();
+    if (!domSelection || domSelection.rangeCount === 0) return null;
+
+    const range = domSelection.getRangeAt(0).cloneRange();
+    range.collapse(true);
+    const rect = range.getBoundingClientRect();
+    const margin = 12;
+
+    let top = rect.bottom + 8;
+    if (top + MENU_MAX_HEIGHT > window.innerHeight - margin) {
+      top = Math.max(margin, rect.top - 8 - MENU_MAX_HEIGHT);
+    }
+    top = Math.min(top, Math.max(margin, window.innerHeight - margin - MENU_MAX_HEIGHT));
+    const maxLeft = Math.max(margin, window.innerWidth - MENU_MIN_WIDTH - margin);
+    const left = Math.max(margin, Math.min(rect.left, maxLeft));
+
+    return { query, nodeKey: node.getKey(), startOffset, endOffset: anchor.offset, top, left };
+  });
+}
+
+function removeMentionToken(menu: MentionMenuState): void {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return;
+  const node = $getNodeByKey(menu.nodeKey);
+  if (!$isTextNode(node)) return;
+  const text = node.getTextContent();
+  if (menu.startOffset < 0 || menu.endOffset > text.length || menu.startOffset >= menu.endOffset) {
+    return;
+  }
+  node.spliceText(menu.startOffset, menu.endOffset - menu.startOffset, "", false);
+  selection.setTextNodeRange(node, menu.startOffset, node, menu.startOffset);
+}
+
+export function MentionMenuPlugin({
+  workspaceId,
+  runtime,
+  source,
+  sourceLabel,
+  sourceIcon,
+  currentUserId,
+  onMentionPerson,
+}: MentionMenuPluginProps) {
+  const [editor] = useLexicalComposerContext();
+  const [menu, setMenu] = useState<MentionMenuState | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const { query, setQuery, candidates, loading } = useMentionSearch({
+    runtime,
+    workspaceId,
+    trigger: "mention",
+    currentUserId,
+    // Until the person-notification op is wired (CT-5), don't surface people as
+    // silently-failing `@` candidates — entity mentions still work.
+    includePeople: Boolean(onMentionPerson),
+    enabled: menu !== null,
+  });
+
+  const menuRef = useRef<MentionMenuState | null>(null);
+  const candidatesRef = useRef<MentionCandidate[]>([]);
+  const selectedIndexRef = useRef(0);
+  menuRef.current = menu;
+  candidatesRef.current = candidates;
+  selectedIndexRef.current = selectedIndex;
+
+  // Drive the search off the caret query.
+  useEffect(() => {
+    setQuery(menu?.query ?? "");
+  }, [menu?.query, setQuery]);
+
+  // Keep the selection in range as the candidate list changes.
+  useEffect(() => {
+    setSelectedIndex((current) => Math.min(current, Math.max(0, candidates.length - 1)));
+  }, [candidates.length]);
+
+  const ctx: MentionContext = {
+    workspaceId: workspaceId ?? "",
+    source,
+    sourceLabel,
+    sourceIcon: sourceIcon ?? null,
+    onMentionPerson,
+  };
+
+  const commit = (candidate: MentionCandidate) => {
+    const activeMenu = menuRef.current;
+    if (!activeMenu || !runtime || !workspaceId) return;
+    const resolution = resolveMention({ trigger: "mention", candidate });
+
+    // For an existing entity, insert the chip optimistically (we hold its
+    // label/icon already); for a person, insert their name. Then reconcile.
+    editor.focus();
+    editor.update(() => {
+      removeMentionToken(activeMenu);
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) return;
+      if (resolution.action === "link") {
+        selection.insertNodes([
+          $createEntityRefNode({
+            entityType: resolution.target.type,
+            entityId: resolution.target.id,
+            label: resolution.label,
+            icon: resolution.icon,
+          }),
+          $createTextNode(" "),
+        ]);
+      } else if (resolution.action === "notify-person") {
+        selection.insertNodes([$createTextNode(`@${resolution.label} `)]);
+      }
+    });
+    setMenu(null);
+
+    // The `@` trigger only yields `link` (chip inserted optimistically above) or
+    // `notify-person` (text inserted above) — never `create-and-link` (that's a
+    // `/ref`-only candidate). So the write just reconciles; on failure the chip
+    // stays and Retry recovers the link (never silently lost).
+    void executeMention(runtime, ctx, resolution).catch(() => {
+      toast.error("Couldn't link that.", {
+        action: { label: "Retry", onClick: () => void executeMention(runtime, ctx, resolution) },
+      });
+    });
+  };
+
+  // The keyboard handler is registered once; route through a ref so Enter always
+  // calls the latest `commit` (fresh runtime / workspace / context), not a stale
+  // first-render closure.
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+
+  // ── caret detection ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    return editor.registerUpdateListener(() => {
+      if (typeof window === "undefined") return;
+      setMenu(resolveMentionMenuState(editor));
+    });
+  }, [editor]);
+
+  // ── keyboard ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    return editor.registerCommand(
+      KEY_ARROW_DOWN_COMMAND,
+      (event) => {
+        if (!menuRef.current || candidatesRef.current.length === 0) return false;
+        event?.preventDefault();
+        const next = (selectedIndexRef.current + 1) % candidatesRef.current.length;
+        setSelectedIndex(next);
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+  }, [editor]);
+
+  useEffect(() => {
+    return editor.registerCommand(
+      KEY_ARROW_UP_COMMAND,
+      (event) => {
+        if (!menuRef.current || candidatesRef.current.length === 0) return false;
+        event?.preventDefault();
+        const len = candidatesRef.current.length;
+        setSelectedIndex((selectedIndexRef.current - 1 + len) % len);
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+  }, [editor]);
+
+  useEffect(() => {
+    return editor.registerCommand(
+      KEY_ESCAPE_COMMAND,
+      (event) => {
+        if (!menuRef.current) return false;
+        event?.preventDefault();
+        setMenu(null);
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+  }, [editor]);
+
+  useEffect(() => {
+    return editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event) => {
+        const active = candidatesRef.current;
+        if (!menuRef.current || active.length === 0) return false;
+        event?.preventDefault();
+        const candidate = active[selectedIndexRef.current] ?? active[0];
+        if (candidate) commitRef.current(candidate);
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
+
+  if (!menu) return null;
+
+  return createPortal(
+    <div
+      className="fixed z-50 max-h-80 min-w-60 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+      style={{ top: menu.top, left: menu.left }}
+      role="listbox"
+      aria-label="Mention"
+    >
+      {loading && candidates.length === 0 ? (
+        <p className="px-2 py-3 text-sm text-muted-foreground">Searching…</p>
+      ) : candidates.length === 0 ? (
+        <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
+      ) : (
+        candidates.map((candidate, index) => {
+          const isSelected = index === selectedIndex;
+          // The `@` trigger only ever yields entity / person candidates
+          // (`buildMentionCandidates` reserves "create" for `/ref`).
+          const Icon =
+            candidate.kind === "entity"
+              ? resolveEntityIcon(candidate.ref.type, candidate.icon)
+              : User;
+          return (
+            <button
+              key={`${candidate.kind}:${index}`}
+              type="button"
+              role="option"
+              aria-selected={isSelected}
+              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors duration-(--motion-fade) ease-(--ease-out) ${
+                isSelected ? "bg-accent text-foreground" : "text-foreground hover:bg-accent"
+              }`}
+              onMouseEnter={() => setSelectedIndex(index)}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                commit(candidate);
+              }}
+            >
+              <Icon className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{candidate.label}</span>
+              {candidate.kind === "person" ? (
+                <span className="shrink-0 text-2xs uppercase tracking-wide text-muted-foreground/70">
+                  person
+                </span>
+              ) : null}
+            </button>
+          );
+        })
+      )}
+    </div>,
+    document.body,
+  );
+}

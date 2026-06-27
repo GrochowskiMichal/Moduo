@@ -5,7 +5,7 @@ export type FeatureLayoutKey =
   | "mindmap"
   | "email"
   | "calendar"
-  | "crm"
+  | "contacts"
   | "settings";
 
 export type FeaturePanelState = {
@@ -29,7 +29,7 @@ function cloneDefaultMap(): FeaturePanelsMap {
     mindmap: { ...defaultState },
     email: { ...defaultState },
     calendar: { ...defaultState },
-    crm: { ...defaultState },
+    contacts: { ...defaultState },
     settings: { left: true, right: false },
   };
 }
@@ -39,7 +39,7 @@ export function routeToFeatureLayout(pathname: string): FeatureLayoutKey {
   if (pathname === "/tasks") return "tasks";
   if (pathname === "/mindmap") return "mindmap";
   if (pathname === "/email") return "email";
-  if (pathname === "/crm") return "crm";
+  if (pathname === "/contacts") return "contacts";
   if (pathname === "/settings") return "settings";
   return "notes";
 }

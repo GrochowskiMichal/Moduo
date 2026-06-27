@@ -11,7 +11,7 @@ export function FeatureEmptyPage({ feature, title }: Props) {
     <FeaturePanelsShell
       feature={feature}
       center={
-        <div className="grid h-full place-content-center gap-2 text-center text-[#d4d8e1]">
+        <div className="grid h-full place-content-center gap-2 text-center text-muted-foreground">
           <h2>{title}</h2>
           <p>Coming soon.</p>
         </div>

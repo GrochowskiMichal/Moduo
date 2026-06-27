@@ -1,9 +1,9 @@
 import { createContext, useContext } from "react";
+import type { NotificationItem } from "../spine/notifications";
 import type {
   ModulePermission,
   WorkspaceInvite,
   WorkspaceMember,
-  WorkspaceNotification,
   WorkspaceRole,
   WorkspaceSummary,
 } from "./types";
@@ -52,7 +52,7 @@ export type WorkspaceContextValue = {
   invites: WorkspaceInvite[];
   notificationsScope: NotificationScope;
   notificationsLoading: boolean;
-  notifications: WorkspaceNotification[];
+  notifications: NotificationItem[];
   unreadCountWorkspace: number;
   unreadCountGlobal: number;
   setNotificationsScope: (scope: NotificationScope) => void;
@@ -69,7 +69,7 @@ export type WorkspaceContextValue = {
   updateInvite: (args: UpdateWorkspaceInviteArgs) => Promise<void>;
   revokeInvite: (inviteId: string) => Promise<void>;
   refreshNotifications: () => Promise<void>;
-  markNotificationRead: (notificationId: string) => Promise<void>;
+  markNotificationRead: (item: NotificationItem) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
 };
 

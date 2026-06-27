@@ -50,8 +50,12 @@ src-tauri/*.sqlite3
 src-tauri/*.redb
 src-tauri/*.redb.lock
 
-# Claude Code runtime files
-.claude/
+# Claude Code runtime files — ignore all, but version the shared workflow tooling
+.claude/*
+!.claude/skills/
+!.claude/commands/
+!.claude/hooks/
+!.claude/settings.json
 
 # design-sync (claude.ai/design) — transient build/verification state
 .ds-sync/

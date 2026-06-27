@@ -16,6 +16,28 @@ import type {
   TaskStatus,
   TimeBlockMap,
 } from "../features/tasks/model";
+import type { Company, Contact, ContactsModuleBundle } from "../features/contacts/model";
+import type { NotificationItem } from "../features/spine/notifications";
+import type {
+  EntityLink,
+  EntityRecord,
+  EntityRef,
+  LinkOrigin,
+  RelationKind,
+} from "./entity-links";
+
+/** A comment on any registered entity (spine block CT-5). */
+export type SpineComment = {
+  id: string;
+  workspaceId: string;
+  entityType: string;
+  entityId: string;
+  body: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
 
 export type RuntimeSession = {
   access_token: string;
@@ -389,5 +411,170 @@ export type ModuoRuntime = {
       entityId: string;
       limit?: number;
     }): Promise<ActivityEntry[]>;
+  };
+
+  /**
+   * Connective-tissue spine — the link substrate (specs/connective-tissue.md
+   * block CT-1). Any entity links/attaches/relates to any other through one
+   * typed `entity_links` table FK'd into the central `entities` registry.
+   * Cloud-first: web hits Supabase directly; desktop delegates to the web
+   * runtime (same code path). All mutations go through `links_op_*` /
+   * `entities_op_*` RPCs (permission guard + write + attributed activity row in
+   * one transaction); reads are direct SELECTs over the indexed tables.
+   */
+  spine: {
+    /**
+     * Every live link touching an entity (matched on either end). Block CT-2
+     * builds the grouped hub roll-up on top of this single indexed read.
+     */
+    listLinks(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<EntityLink[]>;
+    /**
+     * Create a typed link. Idempotent + direction-agnostic (a duplicate pair+kind
+     * no-ops and returns the existing row); rejects self-links and unknown kinds.
+     * Registers both endpoints in the registry in the same transaction. Optional
+     * labels/icons seed the registry projection for the @mention/search picker.
+     */
+    createLink(input: {
+      workspaceId: string;
+      source: EntityRef;
+      target: EntityRef;
+      relationKind?: RelationKind;
+      origin?: LinkOrigin;
+      sourceLabel?: string;
+      sourceIcon?: string | null;
+      targetLabel?: string;
+      targetIcon?: string | null;
+    }): Promise<EntityLink>;
+    /** Re-type an existing link (optimistic re-group in the hub). No-op if unchanged. */
+    setLinkKind(input: {
+      workspaceId: string;
+      linkId: string;
+      relationKind: RelationKind;
+    }): Promise<EntityLink>;
+    /** Soft-delete a link (Undo-friendly; idempotent). Returns the tombstoned row. */
+    deleteLink(input: { workspaceId: string; linkId: string }): Promise<EntityLink | null>;
+    /**
+     * Search the central registry for the @mention / `/ref` / link picker.
+     * Excludes tombstones; optionally scoped to a set of entity types.
+     */
+    searchEntities(input: {
+      workspaceId: string;
+      query?: string;
+      types?: string[];
+      limit?: number;
+    }): Promise<EntityRecord[]>;
+    /**
+     * Batch-read registry records for a set of refs — the hub snippet/label
+     * projection for one roll-up. Includes tombstones (so the hub can dim
+     * deleted targets), unlike `searchEntities`.
+     */
+    getEntities(input: { workspaceId: string; refs: EntityRef[] }): Promise<EntityRecord[]>;
+    /**
+     * Tombstone a registry entry (the delete half of the registry contract) — a
+     * module's own delete op calls this; exposed for testing + pre-adoption use.
+     */
+    tombstoneEntity(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<void>;
+
+    // ── Comments + notifications (block CT-5) ────────────────────────────────
+    /**
+     * Add a comment to any entity. `mentionedUserIds` (workspace members
+     * @-mentioned in the body) become notifications for those members (AC9).
+     * Goes through `comments_op_add` (guard + registry ensure + attributed
+     * activity in one transaction).
+     */
+    addComment(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+      body: string;
+      mentionedUserIds?: string[];
+      entityLabel?: string;
+      entityIcon?: string | null;
+    }): Promise<SpineComment>;
+    /**
+     * The derived notification feed: `module_activity` rows targeting me,
+     * overlaid with my read state, newest first (AC10). The NotificationCenter
+     * groups these by target then verb.
+     */
+    listNotifications(input: { workspaceId: string; limit?: number }): Promise<NotificationItem[]>;
+    /** Mark one notification (activity row) read. Idempotent. */
+    markNotificationRead(input: { workspaceId: string; activityId: string }): Promise<void>;
+    /** Mark every targeting-me notification in the workspace read. */
+    markAllNotificationsRead(input: { workspaceId: string }): Promise<void>;
+  };
+
+  /**
+   * Contacts module (light CRM) — block CO-1. People + companies are hub
+   * entities whose pages roll up from the spine. Cloud-first: web hits Supabase
+   * directly; desktop delegates to the web runtime (same code path). All
+   * invariant-bearing writes go through `contacts_op_*` / `companies_op_*` RPCs
+   * (permission guard + write + `entities` registry upsert + attributed activity
+   * in one transaction); reads are direct SELECTs over the indexed tables.
+   */
+  contacts: {
+    /** People + companies for the directory (CO-2 builds the UI on this). */
+    list(workspaceId: string): Promise<ContactsModuleBundle>;
+    createContact(input: {
+      workspaceId: string;
+      name: string;
+      email?: string | null;
+      phone?: string | null;
+      title?: string | null;
+      companyId?: string | null;
+      status?: string;
+      notesInline?: string;
+    }): Promise<Contact>;
+    updateContact(input: {
+      workspaceId: string;
+      contactId: string;
+      name?: string;
+      email?: string | null;
+      phone?: string | null;
+      title?: string | null;
+      notesInline?: string;
+      /** Pass to set/clear the denormalized company FK (canonical edge is the link). */
+      setCompany?: { companyId: string | null };
+    }): Promise<Contact>;
+    /** Optimistic, flat status change (AC3). Accepts any renamed/custom label. */
+    setStatus(input: { workspaceId: string; contactId: string; status: string }): Promise<Contact>;
+    createCompany(input: {
+      workspaceId: string;
+      name: string;
+      domains?: string[];
+      website?: string | null;
+      notesInline?: string;
+    }): Promise<Company>;
+    updateCompany(input: {
+      workspaceId: string;
+      companyId: string;
+      name?: string;
+      domains?: string[];
+      website?: string | null;
+      notesInline?: string;
+    }): Promise<Company>;
+    /**
+     * Link a contact/company to any other entity via the spine, attributed to
+     * Contacts (`contacts_op_link`). Idempotent + direction-agnostic.
+     */
+    link(input: {
+      workspaceId: string;
+      contact: EntityRef;
+      target: EntityRef;
+      relationKind?: RelationKind;
+      origin?: LinkOrigin;
+      contactLabel?: string;
+      targetLabel?: string;
+      targetIcon?: string | null;
+    }): Promise<EntityLink>;
+    /** Soft-delete a link the contact owns (Undo-friendly; idempotent). */
+    unlink(input: { workspaceId: string; linkId: string }): Promise<EntityLink | null>;
   };
 };

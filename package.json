@@ -24,6 +24,7 @@
     "lint:tw": "bun ./scripts/check-arbitrary-tw.ts",
     "test": "vitest run --maxWorkers=1",
     "test:watch": "vitest --maxWorkers=1",
+    "verify": "bun run typecheck && bun run lint:tw && bun run lint:css && bun run test",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -45,6 +46,7 @@
     "@lexical/rich-text": "^0.40.0",
     "@lexical/selection": "^0.40.0",
     "@lexical/yjs": "^0.40.0",
+    "@subframe/core": "^1.155.0",
     "@supabase/supabase-js": "^2.105.4",
     "@tailwindcss/postcss": "^4.3.0",
     "@tanstack/react-router": "^1.169.2",

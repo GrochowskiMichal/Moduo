@@ -9,7 +9,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
+import type { Company, Contact } from "../features/contacts/model";
 import { sanitizeTimeBlocks, type ActivityEntry, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
+import type { NotificationItem } from "../features/spine/notifications";
+import type { EntityLink, EntityRecord } from "./entity-links";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -18,6 +21,7 @@ import type {
   ModuoRuntime,
   RuntimeCapabilities,
   RuntimeSession,
+  SpineComment,
   UserPreferences,
 } from "./runtime.types";
 
@@ -997,7 +1001,287 @@ export const webRuntime: ModuoRuntime = {
       return (data ?? []).map(activityRowToModel);
     },
   },
+
+  // ── Connective-tissue spine (specs/connective-tissue.md block CT-1) ─────────
+  // Mutations go through links_op_* / entities_op_* RPCs (permission guard +
+  // write + attributed activity row in one transaction); reads are direct,
+  // indexed SELECTs over entity_links / entities.
+  spine: {
+    async listLinks({ workspaceId, entityType, entityId }) {
+      // entityType/entityId are app-owned tokens (type slugs + uuids), not user
+      // input — safe to interpolate into the PostgREST `.or()` filter below.
+      const { data, error } = await supabaseClient
+        .from("entity_links").select("*")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .or(
+          `and(source_type.eq.${entityType},source_id.eq.${entityId}),` +
+            `and(target_type.eq.${entityType},target_id.eq.${entityId})`,
+        )
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data ?? []).map(entityLinkRowToModel);
+    },
+
+    async createLink({
+      workspaceId,
+      source,
+      target,
+      relationKind,
+      origin,
+      sourceLabel,
+      sourceIcon,
+      targetLabel,
+      targetIcon,
+    }) {
+      const { data, error } = await supabaseClient.rpc("links_op_create", {
+        p_workspace_id: workspaceId,
+        p_source_type: source.type,
+        p_source_id: source.id,
+        p_target_type: target.type,
+        p_target_id: target.id,
+        p_relation_kind: relationKind ?? "references",
+        p_origin: origin ?? "manual",
+        p_source_label: sourceLabel ?? null,
+        p_source_icon: sourceIcon ?? null,
+        p_target_label: targetLabel ?? null,
+        p_target_icon: targetIcon ?? null,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The link operation returned nothing.");
+      return entityLinkRowToModel(row);
+    },
+
+    async setLinkKind({ workspaceId, linkId, relationKind }) {
+      const { data, error } = await supabaseClient.rpc("links_op_set_kind", {
+        p_workspace_id: workspaceId,
+        p_link_id: linkId,
+        p_relation_kind: relationKind,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The link operation returned nothing.");
+      return entityLinkRowToModel(row);
+    },
+
+    async deleteLink({ workspaceId, linkId }) {
+      const { data, error } = await supabaseClient.rpc("links_op_delete", {
+        p_workspace_id: workspaceId,
+        p_link_id: linkId,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      // The op returns SQL NULL when the link never existed; guard the id too
+      // in case an all-NULL composite ever slips through serialization.
+      return row?.id ? entityLinkRowToModel(row) : null;
+    },
+
+    async searchEntities({ workspaceId, query, types, limit }) {
+      let q = supabaseClient
+        .from("entities").select("*")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null);
+      const trimmed = query?.trim();
+      if (trimmed) q = q.ilike("label", `%${trimmed}%`);
+      if (types && types.length) q = q.in("entity_type", types);
+      const { data, error } = await q.order("label").limit(limit ?? 20);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map(entityRecordRowToModel);
+    },
+
+    async getEntities({ workspaceId, refs }) {
+      if (!refs.length) return [];
+      // entity_id is a uuid (effectively unique across types) — query by id then
+      // filter to the exact (type,id) pairs requested. Includes tombstones.
+      const ids = Array.from(new Set(refs.map((r) => r.id)));
+      const { data, error } = await supabaseClient
+        .from("entities").select("*")
+        .eq("workspace_id", workspaceId)
+        .in("entity_id", ids);
+      if (error) throw new Error(error.message);
+      const wanted = new Set(refs.map((r) => `${r.type}:${r.id}`));
+      return (data ?? [])
+        .map(entityRecordRowToModel)
+        .filter((rec) => wanted.has(`${rec.type}:${rec.id}`));
+    },
+
+    async tombstoneEntity({ workspaceId, entityType, entityId }) {
+      const { error } = await supabaseClient.rpc("entities_op_tombstone", {
+        p_workspace_id: workspaceId,
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+      });
+      if (error) throw new Error(error.message);
+    },
+
+    // ── Comments + notifications (block CT-5) ────────────────────────────────
+    async addComment({ workspaceId, entityType, entityId, body, mentionedUserIds, entityLabel, entityIcon }) {
+      const { data, error } = await supabaseClient.rpc("comments_op_add", {
+        p_workspace_id: workspaceId,
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+        p_body: body,
+        p_mentioned_user_ids: mentionedUserIds ?? [],
+        p_entity_label: entityLabel ?? null,
+        p_entity_icon: entityIcon ?? null,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The comment operation returned nothing.");
+      return commentRowToModel(row);
+    },
+
+    async listNotifications({ workspaceId, limit }) {
+      const { data, error } = await supabaseClient.rpc("notifications_list", {
+        p_workspace_id: workspaceId,
+        p_limit: limit ?? 50,
+      });
+      if (error) throw new Error(error.message);
+      return (Array.isArray(data) ? data : []).map(notificationRowToModel);
+    },
+
+    async markNotificationRead({ workspaceId, activityId }) {
+      const { error } = await supabaseClient.rpc("notifications_op_mark_read", {
+        p_workspace_id: workspaceId,
+        p_activity_id: activityId,
+      });
+      if (error) throw new Error(error.message);
+    },
+
+    async markAllNotificationsRead({ workspaceId }) {
+      const { error } = await supabaseClient.rpc("notifications_op_mark_all_read", {
+        p_workspace_id: workspaceId,
+      });
+      if (error) throw new Error(error.message);
+    },
+  },
+
+  // ── Contacts module (specs/contacts.md block CO-1) ──────────────────────────
+  // Writes go through contacts_op_* / companies_op_* RPCs (permission guard +
+  // write + entities-registry upsert + attributed activity in one transaction);
+  // reads are direct, indexed SELECTs over contacts / companies.
+  contacts: {
+    async list(workspaceId) {
+      const [contactsRes, companiesRes] = await Promise.all([
+        supabaseClient
+          .from("contacts").select("*")
+          .eq("workspace_id", workspaceId).is("deleted_at", null)
+          .order("name"),
+        supabaseClient
+          .from("companies").select("*")
+          .eq("workspace_id", workspaceId).is("deleted_at", null)
+          .order("name"),
+      ]);
+      if (contactsRes.error) throw new Error(contactsRes.error.message);
+      if (companiesRes.error) throw new Error(companiesRes.error.message);
+      return {
+        contacts: (contactsRes.data ?? []).map(contactRowToModel),
+        companies: (companiesRes.data ?? []).map(companyRowToModel),
+      };
+    },
+
+    async createContact({ workspaceId, name, email, phone, title, companyId, status, notesInline }) {
+      const { data, error } = await supabaseClient.rpc("contacts_op_create", {
+        p_workspace_id: workspaceId,
+        p_name: name,
+        p_email: email ?? null,
+        p_phone: phone ?? null,
+        p_title: title ?? null,
+        p_company_id: companyId ?? null,
+        p_status: status ?? "lead",
+        p_notes_inline: notesInline ?? "",
+      });
+      if (error) throw new Error(error.message);
+      return contactRowToModel(firstRow(data, "contacts_op_create"));
+    },
+
+    async updateContact({ workspaceId, contactId, name, email, phone, title, notesInline, setCompany }) {
+      const { data, error } = await supabaseClient.rpc("contacts_op_update", {
+        p_workspace_id: workspaceId,
+        p_contact_id: contactId,
+        p_name: name ?? null,
+        p_email: email ?? null,
+        p_phone: phone ?? null,
+        p_title: title ?? null,
+        p_notes_inline: notesInline ?? null,
+        p_set_company: setCompany !== undefined,
+        p_company_id: setCompany?.companyId ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return contactRowToModel(firstRow(data, "contacts_op_update"));
+    },
+
+    async setStatus({ workspaceId, contactId, status }) {
+      const { data, error } = await supabaseClient.rpc("contacts_op_set_status", {
+        p_workspace_id: workspaceId,
+        p_contact_id: contactId,
+        p_status: status,
+      });
+      if (error) throw new Error(error.message);
+      return contactRowToModel(firstRow(data, "contacts_op_set_status"));
+    },
+
+    async createCompany({ workspaceId, name, domains, website, notesInline }) {
+      const { data, error } = await supabaseClient.rpc("companies_op_create", {
+        p_workspace_id: workspaceId,
+        p_name: name,
+        p_domains: domains ?? [],
+        p_website: website ?? null,
+        p_notes_inline: notesInline ?? "",
+      });
+      if (error) throw new Error(error.message);
+      return companyRowToModel(firstRow(data, "companies_op_create"));
+    },
+
+    async updateCompany({ workspaceId, companyId, name, domains, website, notesInline }) {
+      const { data, error } = await supabaseClient.rpc("companies_op_update", {
+        p_workspace_id: workspaceId,
+        p_company_id: companyId,
+        p_name: name ?? null,
+        p_domains: domains ?? null,
+        p_website: website ?? null,
+        p_notes_inline: notesInline ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return companyRowToModel(firstRow(data, "companies_op_update"));
+    },
+
+    async link({ workspaceId, contact, target, relationKind, origin, contactLabel, targetLabel, targetIcon }) {
+      const { data, error } = await supabaseClient.rpc("contacts_op_link", {
+        p_workspace_id: workspaceId,
+        p_contact_type: contact.type,
+        p_contact_id: contact.id,
+        p_target_type: target.type,
+        p_target_id: target.id,
+        p_relation_kind: relationKind ?? "references",
+        p_origin: origin ?? "manual",
+        p_contact_label: contactLabel ?? null,
+        p_target_label: targetLabel ?? null,
+        p_target_icon: targetIcon ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return entityLinkRowToModel(firstRow(data, "contacts_op_link"));
+    },
+
+    async unlink({ workspaceId, linkId }) {
+      const { data, error } = await supabaseClient.rpc("contacts_op_unlink", {
+        p_workspace_id: workspaceId,
+        p_link_id: linkId,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      return row?.id ? entityLinkRowToModel(row) : null;
+    },
+  },
 };
+
+/** First row of a single-object RPC result, with a clear error if empty. */
+function firstRow(data: unknown, fn: string): any {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error(`The ${fn} operation returned nothing.`);
+  return row;
+}
 
 // ── Tasks module: Inbox seeding + row<->model mappers ─────────────────────────
 
@@ -1154,5 +1438,106 @@ function taskRelationRowToModel(r: any): TaskRelation {
     blockerTaskId: r.blocker_task_id,
     blockedTaskId: r.blocked_task_id,
     createdAt: r.created_at,
+  };
+}
+
+// ── Spine: entity_links / entities row<->model mappers ────────────────────────
+
+function entityLinkRowToModel(r: any): EntityLink {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    sourceType: r.source_type,
+    sourceId: r.source_id,
+    targetType: r.target_type,
+    targetId: r.target_id,
+    relationKind: r.relation_kind,
+    origin: r.origin,
+    createdBy: r.created_by ?? null,
+    createdAt: r.created_at,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+function entityRecordRowToModel(r: any): EntityRecord {
+  return {
+    workspaceId: r.workspace_id,
+    type: r.entity_type,
+    id: r.entity_id,
+    label: r.label ?? "",
+    icon: r.icon ?? null,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+// ── Spine: comments / notifications row<->model mappers (block CT-5) ───────────
+
+function commentRowToModel(r: any): SpineComment {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    body: r.body ?? "",
+    createdBy: r.created_by ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+/** A `notifications_list` row → the normalized NotificationItem the reducer groups. */
+function notificationRowToModel(r: any): NotificationItem {
+  return {
+    id: r.id,
+    source: "spine",
+    workspaceId: r.workspace_id ?? null,
+    targetType: r.entity_type ?? null,
+    targetId: r.entity_id ?? null,
+    op: r.op,
+    payload: (r.payload ?? {}) as Record<string, unknown>,
+    actorType: r.actor_type ?? "user",
+    actorId: r.actor_id ?? null,
+    actorLabel: r.actor_label ?? null,
+    createdAt: r.created_at,
+    readAt: r.read_at ?? null,
+  };
+}
+
+// ── Contacts module row<->model mappers (block CO-1) ──────────────────────────
+
+function contactRowToModel(r: any): Contact {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    ownerId: r.owner_id ?? "",
+    name: r.name ?? "",
+    email: r.email ?? null,
+    emails: Array.isArray(r.emails) ? r.emails : [],
+    phone: r.phone ?? null,
+    title: r.title ?? null,
+    companyId: r.company_id ?? null,
+    status: r.status ?? "lead",
+    notesInline: r.notes_inline ?? "",
+    avatarUrl: r.avatar_url ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+function companyRowToModel(r: any): Company {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    ownerId: r.owner_id ?? "",
+    name: r.name ?? "",
+    domains: Array.isArray(r.domains) ? r.domains : [],
+    website: r.website ?? null,
+    notesInline: r.notes_inline ?? "",
+    avatarUrl: r.avatar_url ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
   };
 }

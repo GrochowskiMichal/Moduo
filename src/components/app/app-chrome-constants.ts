@@ -15,7 +15,7 @@ export const baseModulesNavItems: ModuleNavItem[] = [
   { label: "Tasks", iconName: "check-square", href: "/tasks", module: "tasks" },
   { label: "Mindmap", iconName: "git-branch", href: "/mindmap", module: "mindmap" },
   { label: "Email", iconName: "mail", href: "/email", module: "email" },
-  { label: "CRM", iconName: "folder", href: "/crm" },
+  { label: "Contacts", iconName: "contact", href: "/contacts" },
 ];
 
 export const rowStyle = { display: "flex", flexDirection: "row" as const, alignItems: "center" };
