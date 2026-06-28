@@ -28,6 +28,7 @@ import type {
 } from "../features/contacts/model";
 import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
+import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type { RecentLinkItem } from "../features/spine/recent";
@@ -644,6 +645,8 @@ export type ModuoRuntime = {
      * selector. Degrades to fewer signals before the contacts migration deploys.
      */
     needsAttention(input: { workspaceId: string }): Promise<NeedsAttentionItem[]>;
+    /** Contacts you've gone quiet on (oldest last-touch first) — the Reconnect widget. */
+    reconnect(input: { workspaceId: string }): Promise<ReconnectItem[]>;
     /**
      * Apply a partial detail patch to a contact (the inline-edit card's save) —
      * any of name/title/notesInline/status/isFavorite/companyId + the labelled

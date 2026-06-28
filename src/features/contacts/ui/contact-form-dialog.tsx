@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";
+import { parseContactText } from "../parse-contact";
 import { ContactStatusDot } from "./contact-status-badge";
 
 export type ContactFormValues = {
@@ -42,27 +43,34 @@ type Props = {
   onSubmit: (values: ContactFormValues) => Promise<void>;
 };
 
-const EMPTY: ContactFormValues = { name: "", email: "", phone: "", title: "", status: "lead" };
+const EMPTY: ContactFormValues = { name: "", email: "", phone: "", title: "", status: "" };
+// Radix Select forbids an empty-string item value, so "No status" rides a sentinel.
+const NO_STATUS = "__none__";
 
 export function ContactFormDialog({ open, onOpenChange, mode, initial, onSubmit }: Props) {
   const [values, setValues] = useState<ContactFormValues>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setError(null);
     setSaving(false);
-    setValues({ ...EMPTY, ...initial, status: initial?.status || "lead" });
+    setPasteOpen(false);
+    setValues({ ...EMPTY, ...initial, status: initial?.status ?? "" });
   }, [open, initial]);
 
   const set = (patch: Partial<ContactFormValues>) => setValues((v) => ({ ...v, ...patch }));
   const canSave = values.name.trim().length > 0 && !saving;
 
-  // Keep a renamed/custom status selectable.
+  // Status is optional ("No status" first); a renamed/custom status stays selectable.
   const statusMeta = contactStatusMeta(values.status);
-  const known = DEFAULT_CONTACT_STATUSES.some((s) => s.id === statusMeta.id);
-  const statusOptions = known ? DEFAULT_CONTACT_STATUSES : [...DEFAULT_CONTACT_STATUSES, statusMeta];
+  const statusOptions: { id: string; label: string }[] = [
+    { id: "", label: "No status" },
+    ...DEFAULT_CONTACT_STATUSES,
+  ];
+  if (statusMeta.id && !statusOptions.some((s) => s.id === statusMeta.id)) statusOptions.push(statusMeta);
 
   async function handleSubmit() {
     if (!canSave) return;
@@ -107,6 +115,33 @@ export function ContactFormDialog({ open, onOpenChange, mode, initial, onSubmit 
             void handleSubmit();
           }}
         >
+          {mode === "create" ? (
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={() => setPasteOpen((v) => !v)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                {pasteOpen ? "Hide paste" : "Paste a signature to autofill"}
+              </button>
+              {pasteOpen ? (
+                <textarea
+                  rows={3}
+                  placeholder="Paste an email signature or contact block…"
+                  onChange={(e) => {
+                    const p = parseContactText(e.target.value);
+                    set({
+                      name: p.name ?? values.name,
+                      email: p.emails[0] ?? values.email,
+                      phone: p.phones[0] ?? values.phone,
+                      title: p.title ?? values.title,
+                    });
+                  }}
+                  className="w-full rounded-md border border-border bg-muted px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              ) : null}
+            </div>
+          ) : null}
           <div className="space-y-1.5">
             <Label htmlFor="contact-name">Name</Label>
             <Input
@@ -150,16 +185,18 @@ export function ContactFormDialog({ open, onOpenChange, mode, initial, onSubmit 
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="contact-status">Status</Label>
-              <Select value={statusMeta.id} onValueChange={(v) => set({ status: v })}>
+              <Select
+                value={statusMeta.id || NO_STATUS}
+                onValueChange={(v) => set({ status: v === NO_STATUS ? "" : v })}
+              >
                 <SelectTrigger id="contact-status" aria-label="Status">
-                  {/* SelectValue mirrors the chosen item (dot + label) — no extra dot here. */}
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {statusOptions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
+                    <SelectItem key={s.id || "none"} value={s.id || NO_STATUS}>
                       <span className="flex items-center gap-1.5">
-                        <ContactStatusDot status={s.id} />
+                        {s.id ? <ContactStatusDot status={s.id} /> : null}
                         {s.label}
                       </span>
                     </SelectItem>

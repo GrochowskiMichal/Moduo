@@ -25,7 +25,7 @@ import { LinkSuggestionStrip } from "../../spine/ui/link-suggestion-strip";
 import { spineActivityLine, spineActorName } from "../../spine/activity";
 import type { MentionCandidate } from "../../spine/mention";
 import type { ActivityEntry } from "../../tasks/model";
-import type { Contact, ContactChannel, ContactDateEntry, ContactFieldDef } from "../model";
+import type { Contact, ContactChannel, ContactDateEntry, ContactFieldDef, ContactFieldType } from "../model";
 import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";
 import { lastTouchLine, timeAgo, type ContactRollup } from "../rollup";
 import { useContactSuggestions } from "../hooks/use-contact-suggestions";
@@ -34,6 +34,8 @@ import { ContactStatusDot } from "./contact-status-badge";
 import { EntityLinkPicker } from "./entity-link-picker";
 
 const SECTION = "font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground";
+// Radix Select forbids an empty-string item value, so "No status" rides a sentinel.
+const NO_STATUS = "__none__";
 
 /** The card's editable draft (everything the inline-edit form owns). */
 type Draft = {
@@ -85,6 +87,8 @@ export type ContactHubProps = {
   onAddFollowup: () => void;
   onLink: (candidate: MentionCandidate) => void;
   onSetCompany: (candidate: MentionCandidate) => void;
+  onAddField?: (label: string, type: ContactFieldType) => void;
+  onDeleteField?: (fieldId: string) => void;
   onOpenEntity?: (ref: EntityRef) => void;
   onChangeKind?: (link: EntityLink, kind: RelationKind) => void;
   onUnlink?: (link: EntityLink) => void;
@@ -220,6 +224,8 @@ export function ContactHub(props: ContactHubProps) {
     onAddFollowup,
     onLink,
     onSetCompany,
+    onAddField,
+    onDeleteField,
     onOpenEntity,
     onChangeKind,
     onUnlink,
@@ -382,11 +388,14 @@ export function ContactHub(props: ContactHubProps) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="c-status">Status</Label>
-              <Select value={contactStatusMeta(draft.status).id} onValueChange={(v) => setDraft({ ...draft, status: v })}>
+              <Select
+                value={contactStatusMeta(draft.status).id || NO_STATUS}
+                onValueChange={(v) => setDraft({ ...draft, status: v === NO_STATUS ? "" : v })}
+              >
                 <SelectTrigger id="c-status"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {statusOptions.map((s) => (
-                    <SelectItem key={s.id || "none"} value={s.id}>
+                    <SelectItem key={s.id || "none"} value={s.id || NO_STATUS}>
                       <span className="flex items-center gap-1.5">
                         {s.id ? <ContactStatusDot status={s.id} /> : null}
                         {s.label}
@@ -402,23 +411,25 @@ export function ContactHub(props: ContactHubProps) {
           <ChannelEditor label="URL" placeholder="https://…" rows={draft.urls} onChange={(r) => setDraft({ ...draft, urls: r })} />
           <ChannelEditor label="Address" placeholder="123 Main St, City" rows={draft.addresses} onChange={(r) => setDraft({ ...draft, addresses: r })} />
           <DatesEditor rows={draft.dates} onChange={(r) => setDraft({ ...draft, dates: r })} />
-          {fieldDefs.length > 0 ? (
-            <div className="space-y-1.5">
-              <Label>Custom fields</Label>
-              {fieldDefs.map((f) => (
-                <div key={f.id} className="flex items-center gap-1.5">
-                  <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">{f.label}</span>
-                  <Input
-                    type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
-                    value={draft.custom[f.key] ?? ""}
-                    onChange={(e) => setDraft({ ...draft, custom: { ...draft.custom, [f.key]: e.target.value } })}
-                    className="min-w-0 flex-1"
-                    aria-label={f.label}
-                  />
-                </div>
-              ))}
-            </div>
-          ) : null}
+          <div className="space-y-1.5">
+            <Label>Custom fields</Label>
+            {fieldDefs.map((f) => (
+              <div key={f.id} className="flex items-center gap-1.5">
+                <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">{f.label}</span>
+                <Input
+                  type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
+                  value={draft.custom[f.key] ?? ""}
+                  onChange={(e) => setDraft({ ...draft, custom: { ...draft.custom, [f.key]: e.target.value } })}
+                  className="min-w-0 flex-1"
+                  aria-label={f.label}
+                />
+                {onDeleteField ? (
+                  <IconButton icon={X} label={`Remove ${f.label} field`} size="sm" variant="ghost" onClick={() => onDeleteField(f.id)} />
+                ) : null}
+              </div>
+            ))}
+            {onAddField ? <AddFieldInline onAdd={onAddField} /> : null}
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="c-notes">Note</Label>
             <Input id="c-notes" value={draft.notesInline} onChange={(e) => setDraft({ ...draft, notesInline: e.target.value })} placeholder="One-line note" />
@@ -556,6 +567,49 @@ function DatesEditor({ rows, onChange }: { rows: ContactDateEntry[]; onChange: (
         <Plus className="size-icon-sm" aria-hidden />
         Add date
       </Button>
+    </div>
+  );
+}
+
+const FIELD_TYPES: ContactFieldType[] = ["text", "number", "date", "url"];
+
+/** Inline "add a custom field" control (defines a workspace field def). */
+function AddFieldInline({ onAdd }: { onAdd: (label: string, type: ContactFieldType) => void }) {
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState("");
+  const [type, setType] = useState<ContactFieldType>("text");
+  if (!open) {
+    return (
+      <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => setOpen(true)}>
+        <Plus className="size-icon-sm" aria-hidden />
+        Add field
+      </Button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Field name" className="min-w-0 flex-1" aria-label="New field name" autoFocus />
+      <Select value={type} onValueChange={(v) => setType(v as ContactFieldType)}>
+        <SelectTrigger className="w-24" aria-label="Field type"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {FIELD_TYPES.map((t) => (
+            <SelectItem key={t} value={t}>{t}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        size="sm"
+        disabled={!label.trim()}
+        onClick={() => {
+          onAdd(label.trim(), type);
+          setLabel("");
+          setType("text");
+          setOpen(false);
+        }}
+      >
+        Add
+      </Button>
+      <IconButton icon={X} label="Cancel" size="sm" variant="ghost" onClick={() => { setOpen(false); setLabel(""); }} />
     </div>
   );
 }

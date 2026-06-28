@@ -19,7 +19,7 @@ import type { EntityLink, EntityRef, RelationKind } from "../../lib/entity-links
 import type { ContactDetailsPatch } from "../../lib/runtime.types";
 import type { MentionCandidate } from "../../features/spine/mention";
 import "../../features/contacts/projectors";
-import type { Contact } from "../../features/contacts/model";
+import type { Contact, ContactFieldType } from "../../features/contacts/model";
 import { useContactsDirectory } from "../../features/contacts/hooks/use-contacts-directory";
 import { useContactHub } from "../../features/contacts/hooks/use-contact-hub";
 import { useCompanyHub } from "../../features/contacts/hooks/use-company-hub";
@@ -237,6 +237,25 @@ export function ContactsPage() {
     }
   }
 
+  async function addFieldDef(label: string, type: ContactFieldType) {
+    const key = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "field";
+    try {
+      await runtime!.contacts.addFieldDef({ workspaceId: ws, key, label, type });
+      directory.reload();
+    } catch (err) {
+      toast.error("Couldn’t add field", { description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function deleteFieldDef(fieldId: string) {
+    try {
+      await runtime!.contacts.deleteFieldDef({ workspaceId: ws, fieldId });
+      directory.reload();
+    } catch (err) {
+      toast.error("Couldn’t remove field", { description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
   async function deleteContact(contactId: string) {
     try {
       await runtime!.contacts.deleteContact({ workspaceId: ws, contactId });
@@ -283,6 +302,8 @@ export function ContactsPage() {
         onAddFollowup={() => void addFollowup(selectedContact.id, selectedContact.name)}
         onLink={(candidate) => void linkExisting(selectedContact.id, candidate)}
         onSetCompany={(candidate) => void setCompany(selectedContact.id, candidate)}
+        onAddField={(label, type) => void addFieldDef(label, type)}
+        onDeleteField={(fieldId) => void deleteFieldDef(fieldId)}
         onOpenEntity={openEntity}
         onChangeKind={(link, kind) => void changeKind(link, kind)}
         onUnlink={(link) => void unlink(link)}

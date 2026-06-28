@@ -4,7 +4,7 @@
 // to a narrow rail; tokens only (R7/R10).
 
 import { useMemo, useState } from "react";
-import { Building2, Plus, Search, Star, Upload, User } from "lucide-react";
+import { Building2, Copy, Plus, Search, Star, Upload, User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { IconButton } from "@/components/ui/icon-button";
 import type { Company, Contact } from "../model";
 import { groupByLetter } from "../letter-index";
+import { findDuplicateGroups } from "../dedupe";
 import { ContactStatusDot } from "./contact-status-badge";
 
 export type DirectoryFilter = "people" | "companies";
@@ -136,6 +137,7 @@ export function ContactDirectory({
     [people],
   );
   const orgGroups = useMemo(() => groupByLetter(orgs, (c) => c.name || "Unnamed company"), [orgs]);
+  const dupGroups = useMemo(() => findDuplicateGroups(contacts), [contacts]);
 
   const showingPeople = filter === "people";
   const isEmpty = (showingPeople ? people.length : orgs.length) === 0;
@@ -166,6 +168,20 @@ export function ContactDirectory({
           className="pl-7 pr-2"
         />
       </div>
+
+      {status === "ready" && showingPeople && dupGroups.length > 0 ? (
+        <button
+          type="button"
+          onClick={() => {
+            const id = dupGroups[0].contactIds[0];
+            if (id) onSelect({ type: "contact", id });
+          }}
+          className="flex items-center gap-2 rounded-md bg-muted px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent"
+        >
+          <Copy className="size-icon-sm shrink-0" aria-hidden />
+          {dupGroups.length} possible duplicate{dupGroups.length === 1 ? "" : "s"} — review
+        </button>
+      ) : null}
 
       {status === "error" ? (
         <div className="flex flex-col items-start gap-2 rounded-md border border-border bg-card p-3 text-sm text-muted-foreground">

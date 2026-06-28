@@ -12,6 +12,7 @@ import { NotesWidget } from "./widgets/notes-widget";
 import { PomodoroWidget } from "./widgets/pomodoro-widget";
 import { RecentlyLinkedWidget } from "./widgets/recently-linked-widget";
 import { ContactsNeedsAttentionWidget } from "./widgets/contacts-needs-attention-widget";
+import { ContactsReconnectWidget } from "./widgets/contacts-reconnect-widget";
 import { StockWidget } from "./widgets/stock-widget";
 import { TodoListWidget } from "./widgets/todo-list-widget";
 import { WeatherWidget } from "./widgets/weather-widget";
@@ -107,6 +108,15 @@ export function DashboardGrid({
           ) : null}
           {widget.type === "contacts-needs-attention" ? (
             <ContactsNeedsAttentionWidget
+              runtime={runtime}
+              workspaceId={workspaceId}
+              config={widget.config}
+              isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
+            />
+          ) : null}
+          {widget.type === "contacts-reconnect" ? (
+            <ContactsReconnectWidget
               runtime={runtime}
               workspaceId={workspaceId}
               config={widget.config}

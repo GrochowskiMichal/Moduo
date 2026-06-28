@@ -22,6 +22,7 @@ import type { NotificationItem } from "../features/spine/notifications";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import { shapeRecentLinks, type RecentLinkItem } from "../features/spine/recent";
 import { selectNeedsAttention, type OverdueFollowup } from "../features/contacts/needs-attention";
+import { selectReconnect } from "../features/contacts/reconnect";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import type {
   AuthChangeEvent,
@@ -1431,6 +1432,18 @@ export const webRuntime: ModuoRuntime = {
       const contacts = (data ?? []).map(contactRowToModel);
       const overdue = await loadOverdueFollowups(workspaceId);
       return selectNeedsAttention({ contacts, overdue, now: new Date() });
+    },
+
+    async reconnect({ workspaceId }) {
+      const { data, error } = await supabaseClient
+        .from("contacts").select("*")
+        .eq("workspace_id", workspaceId).is("deleted_at", null);
+      if (error) throw new Error(error.message);
+      const contacts = (data ?? []).map(contactRowToModel);
+      // Last-touch proxy = the contact's updated_at (the cheap signal; CO-2 deferral).
+      const lastTouch: Record<string, string | null> = {};
+      for (const c of contacts) lastTouch[c.id] = c.updatedAt;
+      return selectReconnect({ contacts, lastTouchByContactId: lastTouch, now: new Date(), limit: 6, minDays: 30 });
     },
   },
 };
