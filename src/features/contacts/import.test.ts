@@ -22,9 +22,15 @@ function contact(over: Partial<Contact>): Contact {
     email: null,
     emails: [],
     phone: null,
+    phones: [],
+    addresses: [],
+    urls: [],
+    dates: [],
     title: null,
     companyId: null,
-    status: "lead",
+    status: "",
+    custom: {},
+    isFavorite: false,
     notesInline: "",
     avatarUrl: null,
     createdAt: "2026-01-01T00:00:00Z",
@@ -41,6 +47,7 @@ function company(over: Partial<Company>): Company {
     name: "",
     domains: [],
     website: null,
+    custom: {},
     notesInline: "",
     avatarUrl: null,
     createdAt: "2026-01-01T00:00:00Z",
@@ -120,7 +127,7 @@ describe("buildImportRows", () => {
 
 describe("planImport — dedupe email first, then name+company", () => {
   it("merges on an existing email match (reason email)", () => {
-    const existing = [contact({ id: "c1", name: "Old Name", email: "dana@acme.com", emails: ["dana@acme.com"] })];
+    const existing = [contact({ id: "c1", name: "Old Name", email: "dana@acme.com", emails: [{ label: "other", value: "dana@acme.com", primary: true }] })];
     const rows = buildImportRows(["name", "email"], [["Dana Lee", "DANA@acme.com"]], ["name", "email"]);
     const plan = planImport(rows, existing, []);
     expect(plan.entries[0]).toMatchObject({ action: "merge", matchedContactId: "c1", reason: "email" });
@@ -135,7 +142,7 @@ describe("planImport — dedupe email first, then name+company", () => {
   });
 
   it("flags a second row matching the same existing contact as a duplicate, not a second merge", () => {
-    const existing = [contact({ id: "c1", name: "Dana", email: "dana@acme.com", emails: ["dana@acme.com"] })];
+    const existing = [contact({ id: "c1", name: "Dana", email: "dana@acme.com", emails: [{ label: "other", value: "dana@acme.com", primary: true }] })];
     const rows = buildImportRows(
       ["name", "email"],
       [
@@ -189,7 +196,7 @@ describe("planImport — dedupe email first, then name+company", () => {
 
 describe("toImportPayload", () => {
   it("emits create + merge rows only, dropping duplicates and errors, normalizing status", () => {
-    const existing = [contact({ id: "c1", email: "dana@acme.com", emails: ["dana@acme.com"] })];
+    const existing = [contact({ id: "c1", email: "dana@acme.com", emails: [{ label: "other", value: "dana@acme.com", primary: true }] })];
     const rows = buildImportRows(
       ["name", "email", "status"],
       [

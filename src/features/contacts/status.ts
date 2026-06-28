@@ -19,8 +19,8 @@ export type ContactStatusMeta = {
   tone: ContactStatusTone;
 };
 
-/** The fallback status for a new/empty contact. */
-export const DEFAULT_CONTACT_STATUS: ContactStatus = "lead";
+/** The fallback status for a new/empty contact — none (status is optional; v2). */
+export const DEFAULT_CONTACT_STATUS: ContactStatus = "";
 
 /**
  * The default, renamable status set. A flat list — the order is presentational,
@@ -62,5 +62,6 @@ export function normalizeContactStatus(value: unknown): ContactStatus {
  */
 export function contactStatusMeta(value: unknown): ContactStatusMeta {
   const id = normalizeContactStatus(value);
+  if (id === "") return { id: "", label: "No status", tone: "muted" };
   return DEFAULTS_BY_ID[id] ?? { id, label: humanize(id), tone: "muted" };
 }
