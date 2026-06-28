@@ -109,10 +109,8 @@ function ContactHeader({
       {canEdit ? (
         <Select value={statusMeta.id} onValueChange={(v) => onStatusChange?.(v)}>
           <SelectTrigger size="sm" aria-label="Status" className="w-36">
-            <span className="flex items-center gap-1.5">
-              <ContactStatusDot status={statusMeta.id} />
-              <SelectValue />
-            </span>
+            {/* SelectValue mirrors the chosen item (dot + label) — no extra dot here. */}
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {options.map((s) => (

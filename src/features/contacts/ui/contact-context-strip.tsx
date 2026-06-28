@@ -97,7 +97,7 @@ export function ContactContextStrip({
           <h3 className={SECTION_HEADING}>Quick actions</h3>
           <Button variant="ghost" size="sm" className={ACTION_BUTTON} onClick={onAddFollowup}>
             <CalendarPlus className="size-icon-sm" aria-hidden />
-            Add follow-up
+            Add a follow-up task
           </Button>
           <EntityLinkPicker
             runtime={runtime}

@@ -152,10 +152,8 @@ export function ContactFormDialog({ open, onOpenChange, mode, initial, onSubmit 
               <Label htmlFor="contact-status">Status</Label>
               <Select value={statusMeta.id} onValueChange={(v) => set({ status: v })}>
                 <SelectTrigger id="contact-status" aria-label="Status">
-                  <span className="flex items-center gap-1.5">
-                    <ContactStatusDot status={statusMeta.id} />
-                    <SelectValue />
-                  </span>
+                  {/* SelectValue mirrors the chosen item (dot + label) — no extra dot here. */}
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {statusOptions.map((s) => (
