@@ -82,6 +82,12 @@ export const contactsModuleManifest: ModuleManifest = {
       args: { p_workspace_id: "workspace uuid", p_link_id: "link uuid" },
     },
     {
+      op: "contacts.delete",
+      rpc: "contacts_op_delete",
+      summary: "Soft-delete a contact: drops its links and tombstones its registry entry (so it leaves search / @mention / roll-ups).",
+      args: { p_workspace_id: "workspace uuid", p_contact_id: "contact uuid" },
+    },
+    {
       op: "contacts.import",
       rpc: "contacts_op_import",
       summary:

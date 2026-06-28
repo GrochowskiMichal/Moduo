@@ -90,6 +90,7 @@ describe("contacts manifest", () => {
         "contacts_op_link",
         "contacts_op_unlink",
         "contacts_op_import",
+        "contacts_op_delete",
       ]),
     );
   });

@@ -50,7 +50,7 @@ Things that have bitten us, so they don't bite again. **Read before debugging; a
 ## Contacts
 
 - **CSV import must sniff the delimiter — Excel/European exports are `;`-delimited, not `,`.** The first cut of `parseCsv` hardcoded a comma split, so a semicolon file collapsed each line into ONE field: the whole line became the contact `name` (e.g. a contact literally named `;noname@x.io;;;;;`, and even the header row imported as a contact). `parseCsv` now auto-detects `, ; \t |` from the header line (outside quotes) via `detectDelimiter`. When adding any delimited-text parsing, detect — don't assume comma. → [src/features/contacts/import.ts](../src/features/contacts/import.ts)
-- **There is no `contacts_op_delete` yet.** Contacts can be created/updated/imported but not deleted (CO-1 shipped no delete op + the UI has no delete affordance). A bad import therefore can't be cleaned from the app — it needs a direct DB soft-delete (`update contacts set deleted_at=now()` + tombstone the `entities` row) until a delete op + UI land. Worth adding next.
+- **Contact delete is soft + has no Undo yet.** `contacts_op_delete` (migration `20260628120000`) soft-deletes the contact (`deleted_at`), drops its live `entity_links`, and tombstones the registry entry; the UI is a confirm dialog in the context strip. There is **no un-delete/Undo op** yet (the toast can't offer one), and **companies have no delete op** at all — both are the next gaps.
 
 ## Tasks data
 

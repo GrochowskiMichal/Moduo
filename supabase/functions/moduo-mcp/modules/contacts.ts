@@ -325,6 +325,20 @@ export const contactsConnectorModule: ConnectorModule = {
       },
     },
     {
+      name: "contacts_delete",
+      description: "Soft-delete a contact: drops its links and removes it from search / @mention / roll-ups.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: { contact_id: { type: "string", description: "Contact uuid." } },
+        required: ["contact_id"],
+      },
+      handler: async (args, ctx) => {
+        const c = await callOp(ctx, "contacts_op_delete", { p_contact_id: str(args, "contact_id") });
+        return c ? shapeContact(c) : { ok: true };
+      },
+    },
+    {
       name: "contacts_import",
       description:
         "Bulk-create people from a deduped plan: each row { op:'create'|'merge', contactId?, name, email, phone, title, company, status }.",

@@ -255,6 +255,17 @@ export function ContactsPage() {
     }
   }
 
+  async function deleteContact(contactId: string) {
+    try {
+      await runtime!.contacts.deleteContact({ workspaceId: ws, contactId });
+      setSelected(null);
+      directory.reload();
+      toast.success("Contact deleted");
+    } catch (err) {
+      toast.error("Couldn’t delete the contact", { description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
   const left = (
     <ContactDirectory
       contacts={directory.bundle.contacts}
@@ -311,6 +322,7 @@ export function ContactsPage() {
         onAddFollowup={() => void addFollowup(selectedContact.id, selectedContact.name)}
         onLink={(candidate) => void linkExisting(selectedContact.id, candidate)}
         onSetCompany={(candidate) => void setCompany(selectedContact.id, candidate)}
+        onDelete={() => void deleteContact(selectedContact.id)}
       />
     );
   } else if (selectedCompany) {
