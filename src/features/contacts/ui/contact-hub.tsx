@@ -6,9 +6,11 @@
 // useContactHub); tokens only, status as color+label (AC12).
 
 import { useEffect, useState } from "react";
+import { Pencil } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -41,6 +43,8 @@ export type ContactHubProps = {
   now?: Date;
   onRename?: (name: string) => void;
   onStatusChange?: (status: string) => void;
+  /** Open the full edit dialog (name / email / phone / title / status). */
+  onEdit?: () => void;
   onOpenEntity?: (ref: EntityRef) => void;
   onChangeKind?: (link: EntityLink, kind: RelationKind) => void;
   onUnlink?: (link: EntityLink) => void;
@@ -58,7 +62,8 @@ function ContactHeader({
   canEdit,
   onRename,
   onStatusChange,
-}: Pick<ContactHubProps, "contact" | "canEdit" | "onRename" | "onStatusChange">) {
+  onEdit,
+}: Pick<ContactHubProps, "contact" | "canEdit" | "onRename" | "onStatusChange" | "onEdit">) {
   const [name, setName] = useState(contact.name);
   useEffect(() => setName(contact.name), [contact.id, contact.name]);
 
@@ -97,6 +102,10 @@ function ContactHeader({
           {contact.email ? <span className="truncate">{contact.email}</span> : null}
         </div>
       </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+      {canEdit && onEdit ? (
+        <IconButton icon={Pencil} label="Edit contact" size="sm" variant="ghost" onClick={onEdit} />
+      ) : null}
       {canEdit ? (
         <Select value={statusMeta.id} onValueChange={(v) => onStatusChange?.(v)}>
           <SelectTrigger size="sm" aria-label="Status" className="w-36">
@@ -122,6 +131,7 @@ function ContactHeader({
           {statusMeta.label}
         </span>
       )}
+      </div>
     </div>
   );
 }
@@ -164,6 +174,7 @@ export function ContactHub({
   now = new Date(),
   onRename,
   onStatusChange,
+  onEdit,
   onOpenEntity,
   onChangeKind,
   onUnlink,
@@ -171,7 +182,13 @@ export function ContactHub({
 }: ContactHubProps) {
   return (
     <div className={cn("mx-auto flex h-full min-h-0 max-w-2xl flex-col gap-5 overflow-y-auto p-6")}>
-      <ContactHeader contact={contact} canEdit={canEdit} onRename={onRename} onStatusChange={onStatusChange} />
+      <ContactHeader
+        contact={contact}
+        canEdit={canEdit}
+        onRename={onRename}
+        onStatusChange={onStatusChange}
+        onEdit={onEdit}
+      />
       <LastTouchLine rollup={rollup} now={now} />
       <Separator />
       <EntityHub

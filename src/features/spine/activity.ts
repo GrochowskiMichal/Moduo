@@ -60,6 +60,21 @@ export function spineActivityLine(entry: { op: string; payload?: Record<string, 
       const excerpt = str(p.excerpt);
       return excerpt ? `commented: “${excerpt}”` : "left a comment";
     }
+    // ── Contacts module ops (logged under module='contacts') ──────────────────
+    case "contacts.create":
+      return "added this contact";
+    case "contacts.update":
+      return "updated this contact";
+    case "contacts.set_status": {
+      const to = str(p.to);
+      return to ? `set status to ${to}` : "changed the status";
+    }
+    case "contacts.import":
+      return p.merged === true ? "updated this contact from an import" : "imported this contact";
+    case "companies.create":
+      return "added this company";
+    case "companies.update":
+      return "updated this company";
     default:
       return entry.op;
   }
