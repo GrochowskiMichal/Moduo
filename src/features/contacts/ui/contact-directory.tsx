@@ -99,20 +99,21 @@ export function ContactDirectory({ contacts, companies, status, selected, onSele
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
       <div className="flex w-full items-center gap-1">
+        {/* Content-width (not stretched) so the segments fill the box — no dead,
+            non-clickable space — and it reads the same as the Tasks switch. */}
         <SegmentedControl
           aria-label="Filter directory"
           value={filter}
           onValueChange={(v) => setFilter(v as DirectoryFilter)}
           items={FILTER_ITEMS}
           size="sm"
-          className="min-w-0 flex-1"
         />
-        {onImport ? (
-          <IconButton icon={Upload} label="Import contacts" size="sm" variant="ghost" className="shrink-0" onClick={onImport} />
-        ) : null}
-        {onNew ? (
-          <IconButton icon={Plus} label="New contact" size="sm" variant="ghost" className="shrink-0" onClick={onNew} />
-        ) : null}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {onImport ? (
+            <IconButton icon={Upload} label="Import contacts" size="sm" variant="ghost" onClick={onImport} />
+          ) : null}
+          {onNew ? <IconButton icon={Plus} label="New contact" size="sm" variant="ghost" onClick={onNew} /> : null}
+        </div>
       </div>
 
       <div className="relative">
@@ -122,7 +123,7 @@ export function ContactDirectory({ contacts, companies, status, selected, onSele
           onChange={(e) => setQuery(e.target.value)}
           placeholder={showingPeople ? "Search people" : "Search companies"}
           aria-label="Search contacts"
-          className="pl-7"
+          className="pl-7 pr-2"
         />
       </div>
 
@@ -145,15 +146,26 @@ export function ContactDirectory({ contacts, companies, status, selected, onSele
           ))}
         </div>
       ) : isEmpty ? (
-        <EmptyState
-          icon={showingPeople ? User : Building2}
-          title={showingPeople ? "No people yet" : "No companies yet"}
-          description={
-            showingPeople
-              ? "Import your contacts or add one to begin."
-              : "Companies appear as you add them or set a contact’s company."
-          }
-        />
+        q ? (
+          // No-results state (filtering) — distinct from the nothing-yet state.
+          // App-wide rule: a non-empty filter that matches nothing reads
+          // "No results", never the empty-collection copy.
+          <EmptyState
+            icon={Search}
+            title="No results"
+            description={`No ${showingPeople ? "people" : "companies"} match “${query.trim()}”.`}
+          />
+        ) : (
+          <EmptyState
+            icon={showingPeople ? User : Building2}
+            title={showingPeople ? "No people yet" : "No companies yet"}
+            description={
+              showingPeople
+                ? "Import your contacts or add one to begin."
+                : "Companies appear as you add them or set a contact’s company."
+            }
+          />
+        )
       ) : (
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-0.5 pr-1">

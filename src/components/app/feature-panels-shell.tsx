@@ -261,7 +261,7 @@ export function FeaturePanelsShell({
         <ResizablePanel
           id={`${feature}-left`}
           defaultSize="20%"
-          minSize={resizable ? "12%" : "20%"}
+          minSize={resizable ? "240px" : "20%"}
           maxSize={resizable ? "40%" : "20%"}
         >
           <aside className={RAIL_WRAPPER} data-rail-mode="full" style={RAIL_PAD}>
@@ -282,7 +282,7 @@ export function FeaturePanelsShell({
         <ResizablePanel
           id={`${feature}-right`}
           defaultSize="20%"
-          minSize={resizable ? "12%" : "20%"}
+          minSize={resizable ? "240px" : "20%"}
           maxSize={resizable ? "40%" : "20%"}
         >
           <aside className={RAIL_WRAPPER} data-rail-mode="full" style={RAIL_PAD}>
