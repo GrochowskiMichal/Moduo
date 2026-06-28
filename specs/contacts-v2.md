@@ -37,9 +37,16 @@ Add to `contacts` (and `companies` where noted): `is_favorite boolean` (contacts
 ## Execution batches
 
 - **Batch 1 — quick fixes** · **DONE 2026-06-28** · `t/maciej/wave1-contacts-finish`: status double-dot fix (drop the trigger's extra dot; `SelectValue` already mirrors the item) · search bar right-edge aligned to rows (`pr-2`) · "Add follow-up" → "Add a follow-up task" · no-results empty state (the cross-app rule) · left/right rail **min-width 240px** floor (shell) · People/Companies switch made **content-width** (fixes the dead-click resize bug; matches the Tasks switch).
-- **Batch 2 — data model + page restructure**: the V1 migration (multi-value JSONB + `custom`/`contact_field_defs` + `is_favorite` + ops) · move the right-panel content onto the page · inline-edit card (view/edit) · status optional (default none) · companies create/edit · expand the quick-add modal (company picker + a few fields).
-- **Batch 3 — iOS adds**: favorites (star + section) · A–Z letter separators + jump index · vCard share/export · attach-note (spine→Notes) · email-this-contact (mailto placeholder) · relationships (contact↔contact links) · custom fields UI ("add field").
-- **Batch 4 — delighters (backlog)**: "haven't talked in N" derived nudge · **Reconnect** dashboard widget (3–5 gone quiet) · passive dedupe/merge banner · paste-to-add (parse an email signature, Cardhop-style).
+- **Batch 2 — data model + page restructure** · **DONE 2026-06-29** · migration `20260628140000_contacts_v2` (applied to prod): multi-value JSONB (`emails`/`phones`/`addresses`/`urls`/`dates`) + `custom` blob + `contact_field_defs` + `is_favorite` + status default `''`; ops `set_details`/`set_favorite`/`companies_op_set_details`/`add`+`delete_field_def`; create/update/import rewritten for jsonb; `links_suggest` reads jsonb. Inline-edit card (view/edit) replaced the right panel; CompanyHub editable; quick-add form kept light.
+- **Batch 3 — iOS adds** · **DONE 2026-06-29**: favorites (directory star + pinned section + card star) · A–Z letter separators (`letter-index.ts`) · vCard share/export (`vcard.ts` + download) · attach-note (link a Notes entity) · email-this (mailto) · relationships (contact↔contact via the link picker) · custom-fields view/edit + add/delete defs on the card.
+- **Batch 4 — delighters** · **DONE 2026-06-29**: **Reconnect** dashboard widget (`reconnect.ts` + `runtime.contacts.reconnect`, updated_at proxy) · dedupe **detection** banner in the directory (`dedupe.ts`) · paste-to-add (`parse-contact.ts`) in the quick-add form.
+
+### Deferred (recorded)
+- **Dedupe MERGE** — the banner detects + jumps to a duplicate, but combining two contacts needs a `contacts_op_merge` (re-point links/blobs) — a focused follow-up.
+- **`multi_select`/`select` custom fields** via the card flatten to a comma string (the card only creates text/number/date/url); rich pickers later.
+- **Address is single-line** `{label,value}` (not structured street/city/…); **vCard lines aren't 75-octet folded** (every real parser accepts unfolded).
+- **Per-segment custom fields** (Folk-style) — V1 defs are workspace-global.
+- Last-touch (and Reconnect) use the `updated_at` proxy, not cross-entity activity (CO-2 deferral).
 
 ## Out of scope (unchanged)
 

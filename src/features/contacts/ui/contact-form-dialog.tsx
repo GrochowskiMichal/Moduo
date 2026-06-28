@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -125,7 +126,7 @@ export function ContactFormDialog({ open, onOpenChange, mode, initial, onSubmit 
                 {pasteOpen ? "Hide paste" : "Paste a signature to autofill"}
               </button>
               {pasteOpen ? (
-                <textarea
+                <Textarea
                   rows={3}
                   placeholder="Paste an email signature or contact block…"
                   onChange={(e) => {
@@ -137,7 +138,6 @@ export function ContactFormDialog({ open, onOpenChange, mode, initial, onSubmit 
                       title: p.title ?? values.title,
                     });
                   }}
-                  className="w-full rounded-md border border-border bg-muted px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               ) : null}
             </div>

@@ -267,7 +267,14 @@ export function ContactHub(props: ContactHubProps) {
     setEditing(false);
   }
 
-  const statusOptions = [{ id: "", label: "No status", tone: "muted" as const }, ...DEFAULT_CONTACT_STATUSES];
+  const draftStatusMeta = contactStatusMeta(draft.status);
+  const statusOptions: { id: string; label: string }[] = [
+    { id: "", label: "No status" },
+    ...DEFAULT_CONTACT_STATUSES,
+  ];
+  if (draftStatusMeta.id && !statusOptions.some((s) => s.id === draftStatusMeta.id)) {
+    statusOptions.push({ id: draftStatusMeta.id, label: draftStatusMeta.label });
+  }
 
   return (
     <div className="mx-auto flex h-full min-h-0 max-w-2xl flex-col gap-5 overflow-y-auto p-6">
