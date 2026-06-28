@@ -72,6 +72,18 @@ describe("parseCsv", () => {
     expect(headers).toEqual(["name", "email"]);
     expect(rows).toEqual([["Dana", "dana@acme.com"]]);
   });
+
+  it("auto-detects a semicolon delimiter (Excel / European export)", () => {
+    const { headers, rows } = parseCsv("Name;Email;Company\nDana Lee;dana@acme.com;Acme\n");
+    expect(headers).toEqual(["Name", "Email", "Company"]);
+    expect(rows).toEqual([["Dana Lee", "dana@acme.com", "Acme"]]);
+  });
+
+  it("auto-detects a tab delimiter", () => {
+    const { headers, rows } = parseCsv("Name\tEmail\nDana\tdana@acme.com\n");
+    expect(headers).toEqual(["Name", "Email"]);
+    expect(rows).toEqual([["Dana", "dana@acme.com"]]);
+  });
 });
 
 describe("guessColumnMapping", () => {

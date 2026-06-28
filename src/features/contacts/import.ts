@@ -48,15 +48,55 @@ export const IMPORT_FIELDS: { value: ImportField; label: string }[] = [
 
 // ── CSV parsing ───────────────────────────────────────────────────────────────
 
+/** Candidate field delimiters, in preference order on a tie. */
+const DELIMITERS = [",", ";", "\t", "|"] as const;
+
 /**
- * Parse CSV text into a header row + data rows. Handles quoted fields with
- * embedded commas / newlines and escaped `""` quotes, `\r\n` or `\n` line endings,
+ * Sniff the field delimiter from the header line — Excel and many European
+ * locales export semicolon- (or tab-) delimited CSV, not comma. Counts each
+ * candidate outside quotes on the first line and picks the most frequent;
+ * defaults to comma when there's no delimiter (a single-column file).
+ */
+export function detectDelimiter(text: string): string {
+  let firstLine = text;
+  let q = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === '"') q = !q;
+    else if (c === "\n" && !q) {
+      firstLine = text.slice(0, i);
+      break;
+    }
+  }
+  let best = ",";
+  let bestCount = 0;
+  for (const d of DELIMITERS) {
+    let count = 0;
+    let inQ = false;
+    for (let i = 0; i < firstLine.length; i += 1) {
+      const c = firstLine[i];
+      if (c === '"') inQ = !inQ;
+      else if (c === d && !inQ) count += 1;
+    }
+    if (count > bestCount) {
+      bestCount = count;
+      best = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * Parse CSV text into a header row + data rows. Auto-detects the field delimiter
+ * (comma / semicolon / tab / pipe), and handles quoted fields with embedded
+ * delimiters / newlines and escaped `""` quotes, `\r\n` or `\n` line endings,
  * and a leading BOM. Fully-blank lines are dropped. No external dependency — a
  * CSV import shouldn't pull a parser lib into the bundle.
  */
-export function parseCsv(input: string): { headers: string[]; rows: string[][] } {
+export function parseCsv(input: string, delimiter?: string): { headers: string[]; rows: string[][] } {
   let text = input;
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); // strip BOM
+  const delim = delimiter ?? detectDelimiter(text);
 
   const records: string[][] = [];
   let record: string[] = [];
@@ -96,7 +136,7 @@ export function parseCsv(input: string): { headers: string[]; rows: string[][] }
       i += 1;
       continue;
     }
-    if (ch === ",") {
+    if (ch === delim) {
       endField();
       i += 1;
       continue;

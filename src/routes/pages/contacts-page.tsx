@@ -30,6 +30,10 @@ import { ContactHub } from "../../features/contacts/ui/contact-hub";
 import { CompanyHub } from "../../features/contacts/ui/company-hub";
 import { ContactContextStrip } from "../../features/contacts/ui/contact-context-strip";
 import { ContactImportDialog } from "../../features/contacts/ui/contact-import-dialog";
+import {
+  ContactFormDialog,
+  type ContactFormValues,
+} from "../../features/contacts/ui/contact-form-dialog";
 
 function openEntity(ref: EntityRef) {
   if (typeof window === "undefined") return;
@@ -46,6 +50,8 @@ export function ContactsPage() {
   const directory = useContactsDirectory(runtime, workspaceId);
   const [selected, setSelected] = useState<DirectorySelection | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
 
   const selectedContact =
     selected?.type === "contact" ? directory.bundle.contacts.find((c) => c.id === selected.id) ?? null : null;
@@ -130,6 +136,49 @@ export function ContactsPage() {
     }
   }
 
+  // Create or edit a contact via the form dialog. Throws on failure so the
+  // dialog surfaces the error inline (and stays open).
+  async function submitContactForm(values: ContactFormValues) {
+    if (formMode === "create") {
+      const created = await runtime!.contacts.createContact({
+        workspaceId: ws,
+        name: values.name,
+        email: values.email || null,
+        phone: values.phone || null,
+        title: values.title || null,
+        status: values.status,
+      });
+      directory.reload();
+      setSelected({ type: "contact", id: created.id });
+    } else if (selectedContact) {
+      const id = selectedContact.id;
+      await runtime!.contacts.updateContact({
+        workspaceId: ws,
+        contactId: id,
+        name: values.name,
+        email: values.email || null,
+        phone: values.phone || null,
+        title: values.title || null,
+      });
+      if (values.status !== selectedContact.status) {
+        await runtime!.contacts.setStatus({ workspaceId: ws, contactId: id, status: values.status });
+      }
+      directory.reload();
+      hub.reload();
+    }
+  }
+
+  const formInitial: Partial<ContactFormValues> | undefined =
+    formMode === "edit" && selectedContact
+      ? {
+          name: selectedContact.name,
+          email: selectedContact.email ?? "",
+          phone: selectedContact.phone ?? "",
+          title: selectedContact.title ?? "",
+          status: selectedContact.status,
+        }
+      : undefined;
+
   // ── CO-4 actions (a contact is selected) ────────────────────────────────────
   async function addFollowup(contactId: string, contactName: string) {
     try {
@@ -213,6 +262,14 @@ export function ContactsPage() {
       status={directory.status}
       selected={selected}
       onSelect={setSelected}
+      onNew={
+        canEdit
+          ? () => {
+              setFormMode("create");
+              setFormOpen(true);
+            }
+          : undefined
+      }
       onImport={canEdit ? () => setImportOpen(true) : undefined}
       onRetry={directory.reload}
     />
@@ -231,6 +288,10 @@ export function ContactsPage() {
         currentUserId={userId ?? null}
         onRename={(name) => void rename(selectedContact.id, name)}
         onStatusChange={(status) => void changeStatus(selectedContact.id, status)}
+        onEdit={() => {
+          setFormMode("edit");
+          setFormOpen(true);
+        }}
         onOpenEntity={openEntity}
         onChangeKind={(link, kind) => void changeKind(link, kind)}
         onUnlink={(link) => void unlink(link)}
@@ -294,6 +355,15 @@ export function ContactsPage() {
               description: parts.length ? parts.join(" · ") : "Nothing to import.",
             });
           }}
+        />
+      ) : null}
+      {canEdit ? (
+        <ContactFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          mode={formMode}
+          initial={formInitial}
+          onSubmit={submitContactForm}
         />
       ) : null}
     </>
