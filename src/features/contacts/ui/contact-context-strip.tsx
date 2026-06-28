@@ -4,9 +4,18 @@
 // company AC8) + read-only contact details. Edit affordances are hidden for a
 // viewer (server-guarded regardless). Tokens + shadcn only; one accent at most.
 
-import { Building2, CalendarPlus, Link2 } from "lucide-react";
+import { useState } from "react";
+import { Building2, CalendarPlus, Link2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import type { MentionCandidate } from "../../spine/mention";
@@ -59,6 +68,7 @@ export type ContactContextStripProps = {
   onAddFollowup: () => void;
   onLink: (candidate: MentionCandidate) => void;
   onSetCompany: (candidate: MentionCandidate) => void;
+  onDelete?: () => void;
 };
 
 export function ContactContextStrip({
@@ -70,9 +80,11 @@ export function ContactContextStrip({
   onAddFollowup,
   onLink,
   onSetCompany,
+  onDelete,
 }: ContactContextStripProps) {
   const focus: EntityRef = { type: "contact", id: contact.id };
   const hasDetails = Boolean(contact.title || contact.email || contact.phone);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-3">
@@ -132,6 +144,44 @@ export function ContactContextStrip({
           <p className="text-sm text-muted-foreground">No details yet.</p>
         )}
       </section>
+
+      {canEdit && onDelete ? (
+        <div className="mt-auto pt-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2 className="size-icon-sm" aria-hidden />
+            Delete contact
+          </Button>
+          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Delete contact?</DialogTitle>
+                <DialogDescription>
+                  {contact.name || "This contact"} and its links will be removed from your contacts. This can’t be undone yet.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setConfirmOpen(false);
+                    onDelete();
+                  }}
+                >
+                  Delete
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      ) : null}
     </div>
   );
 }

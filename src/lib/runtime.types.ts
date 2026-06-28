@@ -617,6 +617,8 @@ export type ModuoRuntime = {
     }): Promise<EntityLink>;
     /** Soft-delete a link the contact owns (Undo-friendly; idempotent). */
     unlink(input: { workspaceId: string; linkId: string }): Promise<EntityLink | null>;
+    /** Soft-delete a contact: drops its links + tombstones the registry entry. */
+    deleteContact(input: { workspaceId: string; contactId: string }): Promise<Contact>;
     /**
      * Bulk CSV import (AC6) — one attributed, activity-logged op. The client
      * parses + previews dedupe; this writes the confirmed plan (create / merge
