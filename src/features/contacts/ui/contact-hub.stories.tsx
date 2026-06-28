@@ -111,7 +111,22 @@ const meta: Meta<typeof ContactHub> = {
       </div>
     ),
   ],
-  args: { now: NOW, currentUserId: "u2" },
+  args: {
+    now: NOW,
+    currentUserId: "u2",
+    companyName: "Acme Corp",
+    fieldDefs: [],
+    runtime: null,
+    workspaceId: "w",
+    onSaveDetails: () => {},
+    onToggleFavorite: () => {},
+    onDelete: () => {},
+    onShare: () => {},
+    onAddFollowup: () => {},
+    onLink: () => {},
+    onSetCompany: () => {},
+    onLinked: () => {},
+  },
 };
 
 export default meta;

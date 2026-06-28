@@ -1,10 +1,10 @@
-// The Contacts directory rail (block CO-2): a dense, Linear-style list of people
-// OR companies (one at a time via a People/Companies switch), with search and
-// add/import. Rows are presentational; selection + data come from the page.
-// Density via tokens (R7/R10); responsive down to a narrow rail.
+// The Contacts directory rail (CO-2 + v2): people OR companies, with a pinned
+// Favorites group and iOS-style A–Z letter separators, search, and add/import.
+// Rows are presentational; selection + data come from the page. Responsive down
+// to a narrow rail; tokens only (R7/R10).
 
 import { useMemo, useState } from "react";
-import { Building2, Plus, Search, Upload, User } from "lucide-react";
+import { Building2, Plus, Search, Star, Upload, User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -14,9 +14,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { IconButton } from "@/components/ui/icon-button";
 import type { Company, Contact } from "../model";
+import { groupByLetter } from "../letter-index";
 import { ContactStatusDot } from "./contact-status-badge";
 
-/** People OR companies — never both at once (looking at both together isn't useful). */
 export type DirectoryFilter = "people" | "companies";
 
 /** A selected directory entity — a person or a company. */
@@ -35,31 +35,58 @@ type RowProps = {
   secondary: string | null;
   status?: string;
   selected: boolean;
+  favorite?: boolean;
   onSelect: () => void;
+  onToggleFavorite?: () => void;
 };
 
-function DirectoryRow({ avatarUrl, name, secondary, status, selected, onSelect }: RowProps) {
+function DirectoryRow({ avatarUrl, name, secondary, status, selected, favorite, onSelect, onToggleFavorite }: RowProps) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-current={selected}
+    <div
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5",
         selected ? "bg-accent" : "hover:bg-accent/60",
       )}
     >
-      <Avatar size="sm" className="shrink-0">
-        {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
-        <AvatarFallback>{initials(name)}</AvatarFallback>
-      </Avatar>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm text-foreground">{name}</span>
-        {secondary ? <span className="block truncate text-xs text-muted-foreground">{secondary}</span> : null}
-      </span>
-      {status ? <ContactStatusDot status={status} className="ml-1 shrink-0" /> : null}
-    </button>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={selected}
+        className="flex min-w-0 flex-1 items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
+      >
+        <Avatar size="sm" className="shrink-0">
+          {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
+          <AvatarFallback>{initials(name)}</AvatarFallback>
+        </Avatar>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-foreground">{name}</span>
+          {secondary ? <span className="block truncate text-xs text-muted-foreground">{secondary}</span> : null}
+        </span>
+        {status ? <ContactStatusDot status={status} className="ml-1 shrink-0" /> : null}
+      </button>
+      {onToggleFavorite ? (
+        <button
+          type="button"
+          onClick={onToggleFavorite}
+          aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+          aria-pressed={favorite}
+          className={cn(
+            "shrink-0 rounded-sm p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            favorite ? "text-warning" : "text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-foreground",
+          )}
+        >
+          <Star className={cn("size-icon-sm", favorite && "fill-current")} aria-hidden />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function LetterHeader({ letter }: { letter: string }) {
+  return (
+    <div className="sticky top-0 z-10 bg-card/95 px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground backdrop-blur">
+      {letter}
+    </div>
   );
 }
 
@@ -71,6 +98,7 @@ type Props = {
   onSelect: (sel: DirectorySelection) => void;
   onNew?: () => void;
   onImport?: () => void;
+  onToggleFavorite?: (contactId: string) => void;
   onRetry?: () => void;
 };
 
@@ -79,7 +107,17 @@ const FILTER_ITEMS = [
   { value: "companies", label: "Companies" },
 ];
 
-export function ContactDirectory({ contacts, companies, status, selected, onSelect, onNew, onImport, onRetry }: Props) {
+export function ContactDirectory({
+  contacts,
+  companies,
+  status,
+  selected,
+  onSelect,
+  onNew,
+  onImport,
+  onToggleFavorite,
+  onRetry,
+}: Props) {
   const [filter, setFilter] = useState<DirectoryFilter>("people");
   const [query, setQuery] = useState("");
 
@@ -88,10 +126,16 @@ export function ContactDirectory({ contacts, companies, status, selected, onSele
     () => contacts.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q)),
     [contacts, q],
   );
-  const orgs = useMemo(
-    () => companies.filter((c) => !q || c.name.toLowerCase().includes(q)),
-    [companies, q],
+  const orgs = useMemo(() => companies.filter((c) => !q || c.name.toLowerCase().includes(q)), [companies, q]);
+
+  const favorites = useMemo(() => people.filter((c) => c.isFavorite), [people]);
+  // Favorites are pinned above; exclude them from the alphabetical groups to
+  // avoid a confusing double-listing in one scroll.
+  const peopleGroups = useMemo(
+    () => groupByLetter(people.filter((c) => !c.isFavorite), (c) => c.name || "Unnamed"),
+    [people],
   );
+  const orgGroups = useMemo(() => groupByLetter(orgs, (c) => c.name || "Unnamed company"), [orgs]);
 
   const showingPeople = filter === "people";
   const isEmpty = (showingPeople ? people.length : orgs.length) === 0;
@@ -99,8 +143,6 @@ export function ContactDirectory({ contacts, companies, status, selected, onSele
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
       <div className="flex w-full items-center gap-1">
-        {/* Content-width (not stretched) so the segments fill the box — no dead,
-            non-clickable space — and it reads the same as the Tasks switch. */}
         <SegmentedControl
           aria-label="Filter directory"
           value={filter}
@@ -109,9 +151,7 @@ export function ContactDirectory({ contacts, companies, status, selected, onSele
           size="sm"
         />
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {onImport ? (
-            <IconButton icon={Upload} label="Import contacts" size="sm" variant="ghost" onClick={onImport} />
-          ) : null}
+          {onImport ? <IconButton icon={Upload} label="Import contacts" size="sm" variant="ghost" onClick={onImport} /> : null}
           {onNew ? <IconButton icon={Plus} label="New contact" size="sm" variant="ghost" onClick={onNew} /> : null}
         </div>
       </div>
@@ -147,9 +187,6 @@ export function ContactDirectory({ contacts, companies, status, selected, onSele
         </div>
       ) : isEmpty ? (
         q ? (
-          // No-results state (filtering) — distinct from the nothing-yet state.
-          // App-wide rule: a non-empty filter that matches nothing reads
-          // "No results", never the empty-collection copy.
           <EmptyState
             icon={Search}
             title="No results"
@@ -169,28 +206,62 @@ export function ContactDirectory({ contacts, companies, status, selected, onSele
       ) : (
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-0.5 pr-1">
-            {showingPeople
-              ? people.map((c) => (
-                  <DirectoryRow
-                    key={c.id}
-                    avatarUrl={c.avatarUrl}
-                    name={c.name || "Unnamed"}
-                    secondary={c.title || c.email}
-                    status={c.status}
-                    selected={selected?.type === "contact" && selected.id === c.id}
-                    onSelect={() => onSelect({ type: "contact", id: c.id })}
-                  />
-                ))
-              : orgs.map((c) => (
-                  <DirectoryRow
-                    key={c.id}
-                    avatarUrl={c.avatarUrl}
-                    name={c.name || "Unnamed company"}
-                    secondary={c.domains[0] ?? c.website}
-                    selected={selected?.type === "company" && selected.id === c.id}
-                    onSelect={() => onSelect({ type: "company", id: c.id })}
-                  />
+            {showingPeople ? (
+              <>
+                {favorites.length > 0 ? (
+                  <>
+                    <LetterHeader letter="★ Favorites" />
+                    {favorites.map((c) => (
+                      <DirectoryRow
+                        key={c.id}
+                        avatarUrl={c.avatarUrl}
+                        name={c.name || "Unnamed"}
+                        secondary={c.title || c.email}
+                        status={c.status}
+                        favorite
+                        selected={selected?.type === "contact" && selected.id === c.id}
+                        onSelect={() => onSelect({ type: "contact", id: c.id })}
+                        onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(c.id) : undefined}
+                      />
+                    ))}
+                  </>
+                ) : null}
+                {peopleGroups.map((group) => (
+                  <div key={group.letter}>
+                    <LetterHeader letter={group.letter} />
+                    {group.items.map((c) => (
+                      <DirectoryRow
+                        key={c.id}
+                        avatarUrl={c.avatarUrl}
+                        name={c.name || "Unnamed"}
+                        secondary={c.title || c.email}
+                        status={c.status}
+                        favorite={c.isFavorite}
+                        selected={selected?.type === "contact" && selected.id === c.id}
+                        onSelect={() => onSelect({ type: "contact", id: c.id })}
+                        onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(c.id) : undefined}
+                      />
+                    ))}
+                  </div>
                 ))}
+              </>
+            ) : (
+              orgGroups.map((group) => (
+                <div key={group.letter}>
+                  <LetterHeader letter={group.letter} />
+                  {group.items.map((c) => (
+                    <DirectoryRow
+                      key={c.id}
+                      avatarUrl={c.avatarUrl}
+                      name={c.name || "Unnamed company"}
+                      secondary={c.domains[0] ?? c.website}
+                      selected={selected?.type === "company" && selected.id === c.id}
+                      onSelect={() => onSelect({ type: "company", id: c.id })}
+                    />
+                  ))}
+                </div>
+              ))
+            )}
           </div>
         </ScrollArea>
       )}
