@@ -21,22 +21,64 @@
  */
 export type ContactStatus = string;
 
+/**
+ * A labelled, repeatable contact channel — email / phone / address / url
+ * (specs/contacts-v2.md). `label` is a small preset (work/home/mobile/…) or a
+ * custom string; `primary` marks the value the scalar fast-path mirrors.
+ */
+export type ContactChannel = {
+  label: string;
+  value: string;
+  primary?: boolean;
+};
+
+/** A labelled date entry — birthday / anniversary / custom (value = YYYY-MM-DD). */
+export type ContactDateEntry = {
+  label: string;
+  value: string;
+};
+
+/** Custom-field value: scalar, or an array for multi-select. */
+export type ContactCustomValue = string | string[];
+
+export type ContactFieldType = "text" | "number" | "date" | "select" | "multi_select" | "url" | "checkbox";
+
+/** A user-defined custom-field definition (workspace-scoped; values live on the row). */
+export type ContactFieldDef = {
+  id: string;
+  workspaceId: string;
+  key: string;
+  label: string;
+  type: ContactFieldType;
+  options: string[];
+  position: number;
+};
+
 /** A person. The center hub of the light CRM (specs/contacts.md §Product). */
 export type Contact = {
   id: string;
   workspaceId: string;
   ownerId: string;
   name: string;
-  /** Primary email; additional addresses live in {@link emails}. */
+  /** Primary email (the dedupe/suggest fast-path; mirrors the primary of {@link emails}). */
   email: string | null;
-  /** All known addresses (dedupe/suggest match on these; AC7). */
-  emails: string[];
+  /** Labelled emails (v2). The flat dedupe key is the `email` scalar. */
+  emails: ContactChannel[];
+  /** Primary phone (mirrors the primary of {@link phones}). */
   phone: string | null;
+  phones: ContactChannel[];
+  addresses: ContactChannel[];
+  urls: ContactChannel[];
+  /** Birthday + other dates (label 'birthday' is special — drives reminders). */
+  dates: ContactDateEntry[];
   title: string | null;
-  /** Denormalized company FK convenience (the canonical edge is the `works-at`
-   * link; specs/contacts.md decision 3). */
+  /** Denormalized company FK convenience (canonical edge is the `works-at` link). */
   companyId: string | null;
+  /** Optional, renamable label — '' means no status (never forced; v2 decision 3). */
   status: ContactStatus;
+  /** User-defined custom-field values, keyed by field-def key. */
+  custom: Record<string, ContactCustomValue>;
+  isFavorite: boolean;
   /** One-line scratch only — rich notes live in the Notes module (decision 9). */
   notesInline: string;
   avatarUrl: string | null;
@@ -54,6 +96,7 @@ export type Company = {
   /** Email domains — the deterministic email-domain→company suggestion key (AC7). */
   domains: string[];
   website: string | null;
+  custom: Record<string, ContactCustomValue>;
   notesInline: string;
   avatarUrl: string | null;
   createdAt: string;
@@ -65,4 +108,6 @@ export type Company = {
 export type ContactsModuleBundle = {
   contacts: Contact[];
   companies: Company[];
+  /** Workspace custom-field definitions (the "add field" picker source). */
+  fieldDefs: ContactFieldDef[];
 };

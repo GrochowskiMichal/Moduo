@@ -9,12 +9,20 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
-import type { Company, Contact } from "../features/contacts/model";
+import type {
+  Company,
+  Contact,
+  ContactChannel,
+  ContactCustomValue,
+  ContactDateEntry,
+  ContactFieldDef,
+} from "../features/contacts/model";
 import { sanitizeTimeBlocks, type ActivityEntry, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import { shapeRecentLinks, type RecentLinkItem } from "../features/spine/recent";
 import { selectNeedsAttention, type OverdueFollowup } from "../features/contacts/needs-attention";
+import { selectReconnect } from "../features/contacts/reconnect";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import type {
   AuthChangeEvent,
@@ -1218,7 +1226,7 @@ export const webRuntime: ModuoRuntime = {
   // reads are direct, indexed SELECTs over contacts / companies.
   contacts: {
     async list(workspaceId) {
-      const [contactsRes, companiesRes] = await Promise.all([
+      const [contactsRes, companiesRes, defsRes] = await Promise.all([
         supabaseClient
           .from("contacts").select("*")
           .eq("workspace_id", workspaceId).is("deleted_at", null)
@@ -1227,12 +1235,19 @@ export const webRuntime: ModuoRuntime = {
           .from("companies").select("*")
           .eq("workspace_id", workspaceId).is("deleted_at", null)
           .order("name"),
+        supabaseClient
+          .from("contact_field_defs").select("*")
+          .eq("workspace_id", workspaceId)
+          .order("position"),
       ]);
       if (contactsRes.error) throw new Error(contactsRes.error.message);
       if (companiesRes.error) throw new Error(companiesRes.error.message);
+      // Field defs are additive — degrade to none if the v2 migration isn't deployed yet.
+      const fieldDefs = defsRes.error ? [] : (defsRes.data ?? []).map(contactFieldDefRowToModel);
       return {
         contacts: (contactsRes.data ?? []).map(contactRowToModel),
         companies: (companiesRes.data ?? []).map(companyRowToModel),
+        fieldDefs,
       };
     },
 
@@ -1244,11 +1259,62 @@ export const webRuntime: ModuoRuntime = {
         p_phone: phone ?? null,
         p_title: title ?? null,
         p_company_id: companyId ?? null,
-        p_status: status ?? "lead",
+        p_status: status ?? "",
         p_notes_inline: notesInline ?? "",
       });
       if (error) throw new Error(error.message);
       return contactRowToModel(firstRow(data, "contacts_op_create"));
+    },
+
+    async setContactDetails({ workspaceId, contactId, patch }) {
+      const { data, error } = await supabaseClient.rpc("contacts_op_set_details", {
+        p_workspace_id: workspaceId,
+        p_contact_id: contactId,
+        p_patch: patch,
+      });
+      if (error) throw new Error(error.message);
+      return contactRowToModel(firstRow(data, "contacts_op_set_details"));
+    },
+
+    async setFavorite({ workspaceId, contactId, value }) {
+      const { data, error } = await supabaseClient.rpc("contacts_op_set_favorite", {
+        p_workspace_id: workspaceId,
+        p_contact_id: contactId,
+        p_value: value,
+      });
+      if (error) throw new Error(error.message);
+      return contactRowToModel(firstRow(data, "contacts_op_set_favorite"));
+    },
+
+    async setCompanyDetails({ workspaceId, companyId, patch }) {
+      const { data, error } = await supabaseClient.rpc("companies_op_set_details", {
+        p_workspace_id: workspaceId,
+        p_company_id: companyId,
+        p_patch: patch,
+      });
+      if (error) throw new Error(error.message);
+      return companyRowToModel(firstRow(data, "companies_op_set_details"));
+    },
+
+    async addFieldDef({ workspaceId, key, label, type, options, position }) {
+      const { data, error } = await supabaseClient.rpc("contacts_op_add_field_def", {
+        p_workspace_id: workspaceId,
+        p_key: key,
+        p_label: label ?? key,
+        p_type: type ?? "text",
+        p_options: options ?? [],
+        p_position: position ?? 0,
+      });
+      if (error) throw new Error(error.message);
+      return contactFieldDefRowToModel(firstRow(data, "contacts_op_add_field_def"));
+    },
+
+    async deleteFieldDef({ workspaceId, fieldId }) {
+      const { error } = await supabaseClient.rpc("contacts_op_delete_field_def", {
+        p_workspace_id: workspaceId,
+        p_field_id: fieldId,
+      });
+      if (error) throw new Error(error.message);
     },
 
     async updateContact({ workspaceId, contactId, name, email, phone, title, notesInline, setCompany }) {
@@ -1366,6 +1432,18 @@ export const webRuntime: ModuoRuntime = {
       const contacts = (data ?? []).map(contactRowToModel);
       const overdue = await loadOverdueFollowups(workspaceId);
       return selectNeedsAttention({ contacts, overdue, now: new Date() });
+    },
+
+    async reconnect({ workspaceId }) {
+      const { data, error } = await supabaseClient
+        .from("contacts").select("*")
+        .eq("workspace_id", workspaceId).is("deleted_at", null);
+      if (error) throw new Error(error.message);
+      const contacts = (data ?? []).map(contactRowToModel);
+      // Last-touch proxy = the contact's updated_at (the cheap signal; CO-2 deferral).
+      const lastTouch: Record<string, string | null> = {};
+      for (const c of contacts) lastTouch[c.id] = c.updatedAt;
+      return selectReconnect({ contacts, lastTouchByContactId: lastTouch, now: new Date(), limit: 6, minDays: 30 });
     },
   },
 };
@@ -1667,6 +1745,29 @@ function notificationRowToModel(r: any): NotificationItem {
 
 // ── Contacts module row<->model mappers (block CO-1) ──────────────────────────
 
+/** Parse a jsonb labelled-channel list defensively. */
+function channelList(v: unknown): ContactChannel[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x: any) => ({ label: String(x?.label ?? ""), value: String(x?.value ?? ""), primary: Boolean(x?.primary) }))
+    .filter((c) => c.value !== "");
+}
+function dateList(v: unknown): ContactDateEntry[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x: any) => ({ label: String(x?.label ?? ""), value: String(x?.value ?? "") }))
+    .filter((d) => d.value !== "");
+}
+function customMap(v: unknown): Record<string, ContactCustomValue> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const out: Record<string, ContactCustomValue> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (Array.isArray(val)) out[k] = val.map(String);
+    else if (val != null) out[k] = String(val);
+  }
+  return out;
+}
+
 function contactRowToModel(r: any): Contact {
   return {
     id: r.id,
@@ -1674,11 +1775,17 @@ function contactRowToModel(r: any): Contact {
     ownerId: r.owner_id ?? "",
     name: r.name ?? "",
     email: r.email ?? null,
-    emails: Array.isArray(r.emails) ? r.emails : [],
+    emails: channelList(r.emails),
     phone: r.phone ?? null,
+    phones: channelList(r.phones),
+    addresses: channelList(r.addresses),
+    urls: channelList(r.urls),
+    dates: dateList(r.dates),
     title: r.title ?? null,
     companyId: r.company_id ?? null,
-    status: r.status ?? "lead",
+    status: r.status ?? "",
+    custom: customMap(r.custom),
+    isFavorite: r.is_favorite === true,
     notesInline: r.notes_inline ?? "",
     avatarUrl: r.avatar_url ?? null,
     createdAt: r.created_at,
@@ -1695,10 +1802,23 @@ function companyRowToModel(r: any): Company {
     name: r.name ?? "",
     domains: Array.isArray(r.domains) ? r.domains : [],
     website: r.website ?? null,
+    custom: customMap(r.custom),
     notesInline: r.notes_inline ?? "",
     avatarUrl: r.avatar_url ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
+  };
+}
+
+function contactFieldDefRowToModel(r: any): ContactFieldDef {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    key: r.key,
+    label: r.label ?? r.key,
+    type: r.type ?? "text",
+    options: Array.isArray(r.options) ? r.options.map(String) : [],
+    position: typeof r.position === "number" ? r.position : Number(r.position) || 0,
   };
 }

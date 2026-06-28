@@ -16,9 +16,19 @@ import type {
   TaskStatus,
   TimeBlockMap,
 } from "../features/tasks/model";
-import type { Company, Contact, ContactsModuleBundle } from "../features/contacts/model";
+import type {
+  Company,
+  Contact,
+  ContactChannel,
+  ContactCustomValue,
+  ContactDateEntry,
+  ContactFieldDef,
+  ContactFieldType,
+  ContactsModuleBundle,
+} from "../features/contacts/model";
 import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
+import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type { RecentLinkItem } from "../features/spine/recent";
@@ -635,5 +645,54 @@ export type ModuoRuntime = {
      * selector. Degrades to fewer signals before the contacts migration deploys.
      */
     needsAttention(input: { workspaceId: string }): Promise<NeedsAttentionItem[]>;
+    /** Contacts you've gone quiet on (oldest last-touch first) — the Reconnect widget. */
+    reconnect(input: { workspaceId: string }): Promise<ReconnectItem[]>;
+    /**
+     * Apply a partial detail patch to a contact (the inline-edit card's save) —
+     * any of name/title/notesInline/status/isFavorite/companyId + the labelled
+     * lists (emails/phones/addresses/urls/dates) + custom. Derives the scalar
+     * email/phone from each list's primary. (v2.)
+     */
+    setContactDetails(input: { workspaceId: string; contactId: string; patch: ContactDetailsPatch }): Promise<Contact>;
+    /** Toggle the per-workspace favorite flag. */
+    setFavorite(input: { workspaceId: string; contactId: string; value: boolean }): Promise<Contact>;
+    /** Apply a partial detail patch to a company (name/website/domains/notes/custom). */
+    setCompanyDetails(input: { workspaceId: string; companyId: string; patch: CompanyDetailsPatch }): Promise<Company>;
+    /** Create/upsert a workspace custom-field definition (the "add field" picker). */
+    addFieldDef(input: {
+      workspaceId: string;
+      key: string;
+      label?: string;
+      type?: ContactFieldType;
+      options?: string[];
+      position?: number;
+    }): Promise<ContactFieldDef>;
+    /** Remove a custom-field definition (values remain in the blobs, just unsurfaced). */
+    deleteFieldDef(input: { workspaceId: string; fieldId: string }): Promise<void>;
   };
 };
+
+/** Partial patch for `setContactDetails` — camelCase keys mirror the SQL op. */
+export type ContactDetailsPatch = Partial<{
+  name: string;
+  title: string | null;
+  notesInline: string;
+  status: string;
+  isFavorite: boolean;
+  companyId: string | null;
+  emails: ContactChannel[];
+  phones: ContactChannel[];
+  addresses: ContactChannel[];
+  urls: ContactChannel[];
+  dates: ContactDateEntry[];
+  custom: Record<string, ContactCustomValue>;
+}>;
+
+/** Partial patch for `setCompanyDetails`. */
+export type CompanyDetailsPatch = Partial<{
+  name: string;
+  website: string | null;
+  domains: string[];
+  notesInline: string;
+  custom: Record<string, ContactCustomValue>;
+}>;

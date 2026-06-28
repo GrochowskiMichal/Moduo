@@ -321,7 +321,7 @@ export function planImport(
   const byEmail = new Map<string, string>();
   const byNameCompany = new Map<string, string>();
   for (const c of existingContacts) {
-    for (const e of [c.email, ...c.emails]) {
+    for (const e of [c.email, ...c.emails.map((x) => x.value)]) {
       const ne = normEmail(e);
       if (ne && !byEmail.has(ne)) byEmail.set(ne, c.id);
     }
