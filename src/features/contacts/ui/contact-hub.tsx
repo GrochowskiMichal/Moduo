@@ -6,8 +6,25 @@
 // activity trail. Edit toggles inline editing; Save sends one patch. Tokens +
 // shadcn only; status is color+label and optional.
 
-import { useEffect, useState } from "react";
-import { Building2, CalendarPlus, Link2, Mail, Pencil, Plus, Share2, Star, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Building2,
+  Cake,
+  CalendarDays,
+  CalendarPlus,
+  Globe,
+  Hash,
+  Link2,
+  Mail,
+  MapPin,
+  MoreHorizontal,
+  Pencil,
+  PenLine,
+  Phone,
+  Plus,
+  Star,
+  X,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,25 +32,30 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ModuoRuntime, ContactDetailsPatch } from "@/lib/runtime.types";
 import { EntityHub } from "../../spine/ui/entity-hub";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import { LinkSuggestionStrip } from "../../spine/ui/link-suggestion-strip";
-import { spineActivityLine, spineActorName } from "../../spine/activity";
 import type { MentionCandidate } from "../../spine/mention";
 import type { ActivityEntry } from "../../tasks/model";
 import type { Contact, ContactChannel, ContactDateEntry, ContactFieldDef, ContactFieldType } from "../model";
 import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";
-import { lastTouchLine, timeAgo, type ContactRollup } from "../rollup";
+import { lastTouchLine, type ContactRollup } from "../rollup";
 import { useContactSuggestions } from "../hooks/use-contact-suggestions";
 import { initials } from "./contact-directory";
-import { ContactStatusDot } from "./contact-status-badge";
+import { ActivityTrail } from "./activity-trail";
+import { ContactStatusBadge, ContactStatusDot } from "./contact-status-badge";
 import { EntityLinkPicker } from "./entity-link-picker";
 
-const SECTION = "font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground";
 // Radix Select forbids an empty-string item value, so "No status" rides a sentinel.
 const NO_STATUS = "__none__";
 
@@ -152,34 +174,60 @@ function ChannelEditor({
   );
 }
 
-/** A read-only labelled list with click-to-act (mailto/tel/url). */
-function ChannelView({ rows, kind }: { rows: ContactChannel[]; kind: "email" | "phone" | "url" | "address" }) {
-  if (rows.length === 0) return null;
+// ── the read-mode details card (iOS-style grouped rows, click-to-act) ─────────
+
+type DetailRow = { label: string; value: ReactNode; wrap?: boolean };
+type DetailGroup = { key: string; icon: typeof Mail; rows: DetailRow[] };
+
+/** Multi-value channel → labelled rows; email/phone/url values act on click. */
+function channelRows(rows: ContactChannel[], kind: "email" | "phone" | "url" | "address"): DetailRow[] {
   const href = (v: string) =>
     kind === "email" ? `mailto:${v}` : kind === "phone" ? `tel:${v}` : kind === "url" ? v : undefined;
+  return rows.map((r) => {
+    const h = href(r.value);
+    // Display URLs without the protocol noise; the href keeps it.
+    const display = kind === "url" ? r.value.replace(/^https?:\/\//, "").replace(/\/$/, "") : r.value;
+    return {
+      label: r.label || kind,
+      value: h ? (
+        <a
+          href={h}
+          target={kind === "url" ? "_blank" : undefined}
+          rel={kind === "url" ? "noreferrer" : undefined}
+          className="rounded-sm text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {display}
+        </a>
+      ) : (
+        display
+      ),
+    };
+  });
+}
+
+/** "1988-04-17" → "April 17, 1988" (falls back to the raw value). */
+function formatDateValue(value: string): string {
+  const d = new Date(`${value}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? value
+    : d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+}
+
+/** One field group inside the card: a type icon on the first row, then rows. */
+function DetailsGroup({ icon: Icon, rows }: { icon: typeof Mail; rows: DetailRow[] }) {
   return (
-    <ul className="space-y-0.5">
-      {rows.map((r, i) => {
-        const h = href(r.value);
-        return (
-          <li key={i} className="flex items-baseline gap-2 text-sm">
-            <span className="w-16 shrink-0 truncate text-xs text-muted-foreground">{r.label || kind}</span>
-            {h ? (
-              <a
-                href={h}
-                target={kind === "url" ? "_blank" : undefined}
-                rel={kind === "url" ? "noreferrer" : undefined}
-                className="min-w-0 truncate text-foreground hover:underline"
-              >
-                {r.value}
-              </a>
-            ) : (
-              <span className="min-w-0 truncate text-foreground">{r.value}</span>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+    <div className="px-3 py-2">
+      {rows.map((r, i) => (
+        <div key={i} className={cn("flex gap-3 py-1 text-sm", r.wrap ? "items-start" : "items-center")}>
+          <Icon
+            className={cn("size-icon-sm shrink-0 text-muted-foreground/70", r.wrap && "mt-0.5", i > 0 && "invisible")}
+            aria-hidden
+          />
+          <span className="w-16 shrink-0 truncate text-xs text-muted-foreground">{r.label}</span>
+          <span className={cn("min-w-0 flex-1 text-foreground", r.wrap ? "break-words" : "truncate")}>{r.value}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -242,9 +290,62 @@ export function ContactHub(props: ContactHubProps) {
     setDraft(draftFrom(contact));
   }, [contact.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const statusMeta = contactStatusMeta(contact.status);
   const primaryEmail = contact.email ?? contact.emails.find((e) => e.primary)?.value ?? contact.emails[0]?.value ?? null;
-  const birthday = contact.dates.find((d) => d.label.toLowerCase() === "birthday")?.value ?? null;
+
+  // The read-mode field groups (only non-empty ones render; the card hides
+  // entirely when the record has no details yet — progressive disclosure).
+  const detailGroups = useMemo<DetailGroup[]>(() => {
+    const hasBirthday = contact.dates.some((d) => d.label.toLowerCase() === "birthday");
+    const customRows: DetailRow[] = fieldDefs.flatMap((f) => {
+      const v = contact.custom[f.key];
+      const text = Array.isArray(v) ? v.join(", ") : String(v ?? "");
+      if (!text) return [];
+      const value: ReactNode =
+        f.type === "url" ? (
+          <a
+            href={text}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-sm text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {text}
+          </a>
+        ) : (
+          text
+        );
+      return [{ label: f.label, value }];
+    });
+    return [
+      { key: "emails", icon: Mail, rows: channelRows(contact.emails, "email") },
+      { key: "phones", icon: Phone, rows: channelRows(contact.phones, "phone") },
+      { key: "urls", icon: Globe, rows: channelRows(contact.urls, "url") },
+      { key: "addresses", icon: MapPin, rows: channelRows(contact.addresses, "address") },
+      {
+        key: "dates",
+        icon: hasBirthday ? Cake : CalendarDays,
+        rows: contact.dates.map((d) => ({ label: d.label || "date", value: formatDateValue(d.value) })),
+      },
+      { key: "custom", icon: Hash, rows: customRows },
+      {
+        key: "note",
+        icon: PenLine,
+        rows: contact.notesInline ? [{ label: "note", value: contact.notesInline, wrap: true }] : [],
+      },
+    ].filter((g) => g.rows.length > 0);
+  }, [contact, fieldDefs]);
+
+  // The header already names the company — drop its works-at row from the
+  // roll-up so the same fact never renders twice on one page.
+  const sections = useMemo(() => {
+    if (!contact.companyId) return rollup.sections;
+    return rollup.sections
+      .map((s) => ({
+        ...s,
+        rows: s.rows.filter((r) => !(r.other.type === "company" && r.other.id === contact.companyId)),
+      }))
+      .map((s) => ({ ...s, count: s.rows.length }))
+      .filter((s) => s.rows.length > 0);
+  }, [rollup.sections, contact.companyId]);
 
   function clean(rows: ContactChannel[]): ContactChannel[] {
     return rows.filter((r) => r.value.trim() !== "").map((r) => ({ label: r.label.trim() || "other", value: r.value.trim(), primary: r.primary }));
@@ -277,7 +378,8 @@ export function ContactHub(props: ContactHubProps) {
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 max-w-2xl flex-col gap-5 overflow-y-auto p-6">
+    <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
+    <div className="mx-auto flex max-w-2xl flex-col gap-5 p-6">
       {/* Header */}
       <div className="flex items-start gap-3">
         <Avatar size="lg" className="shrink-0">
@@ -309,19 +411,11 @@ export function ContactHub(props: ContactHubProps) {
                 {companyName}
               </button>
             ) : null}
+            {contact.status ? <ContactStatusBadge status={contact.status} /> : null}
           </div>
         </div>
         {canEdit ? (
           <div className="flex shrink-0 items-center gap-0.5">
-            <IconButton
-              icon={Star}
-              label={contact.isFavorite ? "Remove from favorites" : "Add to favorites"}
-              size="sm"
-              variant="ghost"
-              className={cn(contact.isFavorite && "text-warning")}
-              onClick={onToggleFavorite}
-            />
-            <IconButton icon={Share2} label="Share contact" size="sm" variant="ghost" onClick={onShare} />
             {editing ? (
               <>
                 <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setDraft(draftFrom(contact)); }}>
@@ -330,7 +424,29 @@ export function ContactHub(props: ContactHubProps) {
                 <Button size="sm" onClick={save}>Done</Button>
               </>
             ) : (
-              <IconButton icon={Pencil} label="Edit contact" size="sm" variant="ghost" onClick={() => setEditing(true)} />
+              <>
+                <IconButton
+                  icon={Star}
+                  label={contact.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                  size="sm"
+                  variant="ghost"
+                  className={cn(contact.isFavorite && "text-warning")}
+                  onClick={onToggleFavorite}
+                />
+                <IconButton icon={Pencil} label="Edit contact" size="sm" variant="ghost" onClick={() => setEditing(true)} />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <IconButton icon={MoreHorizontal} label="More actions" size="sm" variant="ghost" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={onShare}>Share as vCard…</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                      Delete contact
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
             )}
           </div>
         ) : null}
@@ -383,8 +499,6 @@ export function ContactHub(props: ContactHubProps) {
       {/* Last touch */}
       <p className="text-sm text-muted-foreground">{lastTouchLine(rollup, now)}</p>
 
-      <Separator />
-
       {/* Details */}
       {editing ? (
         <div className="space-y-4">
@@ -411,6 +525,27 @@ export function ContactHub(props: ContactHubProps) {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Company</Label>
+            <div>
+              <EntityLinkPicker
+                runtime={runtime}
+                workspaceId={workspaceId}
+                types={["company"]}
+                canCreate
+                createType="company"
+                placeholder="Find or create a company…"
+                emptyLabel="No companies."
+                trigger={
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <Building2 className="size-icon-sm" aria-hidden />
+                    {companyName ?? "Set company"}
+                  </Button>
+                }
+                onPick={onSetCompany}
+              />
             </div>
           </div>
           <ChannelEditor label="Email" placeholder="name@example.com" rows={draft.emails} onChange={(r) => setDraft({ ...draft, emails: r })} />
@@ -442,66 +577,13 @@ export function ContactHub(props: ContactHubProps) {
             <Input id="c-notes" value={draft.notesInline} onChange={(e) => setDraft({ ...draft, notesInline: e.target.value })} placeholder="One-line note" />
           </div>
         </div>
-      ) : (
-        <div className="space-y-3">
-          <ChannelView rows={contact.emails} kind="email" />
-          <ChannelView rows={contact.phones} kind="phone" />
-          <ChannelView rows={contact.urls} kind="url" />
-          <ChannelView rows={contact.addresses} kind="address" />
-          {birthday || contact.dates.length > 0 ? (
-            <ul className="space-y-0.5 text-sm">
-              {contact.dates.map((d, i) => (
-                <li key={i} className="flex items-baseline gap-2">
-                  <span className="w-16 shrink-0 truncate text-xs text-muted-foreground">{d.label || "date"}</span>
-                  <span className="text-foreground">{d.value}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {contact.status ? (
-            <div className="flex items-center gap-1.5 text-sm">
-              <ContactStatusDot status={statusMeta.id} />
-              <span className="text-muted-foreground">{statusMeta.label}</span>
-            </div>
-          ) : null}
-          {fieldDefs.length > 0 ? (
-            <ul className="space-y-0.5 text-sm">
-              {fieldDefs.map((f) => {
-                const v = contact.custom[f.key];
-                const text = Array.isArray(v) ? v.join(", ") : (v ?? "");
-                if (!text) return null;
-                return (
-                  <li key={f.id} className="flex items-baseline gap-2">
-                    <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">{f.label}</span>
-                    <span className="min-w-0 truncate text-foreground">{text}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-          {contact.notesInline ? <p className="text-sm text-muted-foreground">{contact.notesInline}</p> : null}
-          {canEdit ? (
-            <div className="pt-1">
-              <EntityLinkPicker
-                runtime={runtime}
-                workspaceId={workspaceId}
-                types={["company"]}
-                canCreate
-                createType="company"
-                placeholder="Find or create a company…"
-                emptyLabel="No companies."
-                trigger={
-                  <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
-                    <Building2 className="size-icon-sm" aria-hidden />
-                    {contact.companyId ? "Change company" : "Set company"}
-                  </Button>
-                }
-                onPick={onSetCompany}
-              />
-            </div>
-          ) : null}
+      ) : detailGroups.length > 0 ? (
+        <div className="divide-y divide-border rounded-lg border border-border bg-card">
+          {detailGroups.map((g) => (
+            <DetailsGroup key={g.key} icon={g.icon} rows={g.rows} />
+          ))}
         </div>
-      )}
+      ) : null}
 
       {/* Suggested links (moved onto the page from the old right panel) */}
       {canEdit && !editing ? (
@@ -513,7 +595,7 @@ export function ContactHub(props: ContactHubProps) {
         <EntityHub
           variant="page"
           status={hubStatus}
-          sections={rollup.sections}
+          sections={sections}
           canEdit={canEdit}
           onOpen={onOpenEntity}
           onChangeKind={onChangeKind}
@@ -522,37 +604,11 @@ export function ContactHub(props: ContactHubProps) {
         />
       ) : null}
 
-      {/* Activity */}
-      {!editing && activity.length > 0 ? (
-        <section className="space-y-1">
-          <h3 className={SECTION}>Activity</h3>
-          <ul className="space-y-1">
-            {activity.map((entry) => (
-              <li key={entry.id} className="flex items-baseline gap-2 text-sm">
-                <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                  <span className="text-foreground">{spineActorName(entry, currentUserId)}</span> {spineActivityLine(entry)}
-                </span>
-                <span className="shrink-0 text-2xs text-muted-foreground/70">{timeAgo(entry.createdAt, now)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {/* Activity (delete moved to the header ⋯ menu — no destructive control on the page body) */}
+      {!editing ? (
+        <ActivityTrail activity={activity} currentUserId={currentUserId} now={now} entityId={contact.id} />
       ) : null}
-
-      {/* Delete (destructive, edit-gated) */}
-      {canEdit && !editing ? (
-        <div className="pt-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={onDelete}
-          >
-            <Trash2 className="size-icon-sm" aria-hidden />
-            Delete contact
-          </Button>
-        </div>
-      ) : null}
+    </div>
     </div>
   );
 }

@@ -1,26 +1,26 @@
-// The CompanyHub — a company's center pane (CO-4 AC8 + v2 editable). Header
-// (inline-editable) + a People group (members via the denormalized company_id ∪
-// works-at links) + the union of the company's + its people's work (read-only
-// EntityHub) + the activity trail. Tokens only.
+// The CompanyHub — a company's center pane (CO-4 AC8 + v2 editable). Same calm
+// card anatomy as ContactHub: header (inline-editable) + a grouped details card
+// (website / email domains / note, read mode) + a People group (members via the
+// denormalized company_id ∪ works-at links) + the union of the company's + its
+// people's work (read-only EntityHub) + the activity trail. Tokens only.
 
 import { useEffect, useState } from "react";
-import { Pencil } from "lucide-react";
+import { AtSign, Globe, Pencil, PenLine } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import type { EntityRef } from "@/lib/entity-links";
 import type { CompanyDetailsPatch } from "@/lib/runtime.types";
 import { EntityHub } from "../../spine/ui/entity-hub";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
-import { spineActivityLine, spineActorName } from "../../spine/activity";
 import type { ActivityEntry } from "../../tasks/model";
 import type { CompanyRollup } from "../company";
 import type { Company } from "../model";
-import { timeAgo } from "../rollup";
+import { ActivityTrail } from "./activity-trail";
 import { initials } from "./contact-directory";
 import { ContactStatusDot } from "./contact-status-badge";
 
@@ -39,6 +39,29 @@ export type CompanyHubProps = {
   onOpenEntity?: (ref: EntityRef) => void;
   onRetry?: () => void;
 };
+
+/** One field group inside the read-mode details card (mirrors ContactHub). */
+function DetailsGroup({
+  icon: Icon,
+  label,
+  value,
+  wrap = false,
+}: {
+  icon: typeof Globe;
+  label: string;
+  value: React.ReactNode;
+  wrap?: boolean;
+}) {
+  return (
+    <div className="px-3 py-2">
+      <div className={cn("flex gap-3 py-1 text-sm", wrap ? "items-start" : "items-center")}>
+        <Icon className={cn("size-icon-sm shrink-0 text-muted-foreground/70", wrap && "mt-0.5")} aria-hidden />
+        <span className="w-16 shrink-0 truncate text-xs text-muted-foreground">{label}</span>
+        <span className={cn("min-w-0 flex-1 text-foreground", wrap ? "break-words" : "truncate")}>{value}</span>
+      </div>
+    </div>
+  );
+}
 
 export function CompanyHub({
   company,
@@ -76,8 +99,12 @@ export function CompanyHub({
     setEditing(false);
   }
 
+  const hasDetails = !!(company.website || company.domains.length > 0 || company.notesInline);
+
   return (
-    <div className="mx-auto flex h-full min-h-0 max-w-2xl flex-col gap-5 overflow-y-auto p-6">
+    <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
+    <div className="mx-auto flex max-w-2xl flex-col gap-5 p-6">
+      {/* Header */}
       <div className="flex items-start gap-3">
         <Avatar size="lg" className="shrink-0">
           {company.avatarUrl ? <AvatarImage src={company.avatarUrl} alt="" /> : null}
@@ -116,6 +143,7 @@ export function CompanyHub({
         ) : null}
       </div>
 
+      {/* Details — edit form or the grouped read card */}
       {editing ? (
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -131,9 +159,30 @@ export function CompanyHub({
             <Input id="co-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="One-line note" />
           </div>
         </div>
+      ) : hasDetails ? (
+        <div className="divide-y divide-border rounded-lg border border-border bg-card">
+          {company.website ? (
+            <DetailsGroup
+              icon={Globe}
+              label="website"
+              value={
+                <a
+                  href={company.website}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-sm text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {company.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                </a>
+              }
+            />
+          ) : null}
+          {company.domains.length > 0 ? (
+            <DetailsGroup icon={AtSign} label="domains" value={company.domains.join(", ")} />
+          ) : null}
+          {company.notesInline ? <DetailsGroup icon={PenLine} label="note" value={company.notesInline} wrap /> : null}
+        </div>
       ) : null}
-
-      <Separator />
 
       <section className="space-y-1">
         <h3 className={SECTION_HEADING}>People ({rollup.people.length})</h3>
@@ -163,22 +212,8 @@ export function CompanyHub({
 
       <EntityHub variant="page" status={status} sections={rollup.unionSections} canEdit={false} onOpen={onOpenEntity} onRetry={onRetry} />
 
-      {activity.length > 0 ? (
-        <section className="space-y-1">
-          <h3 className={SECTION_HEADING}>Activity</h3>
-          <ul className="space-y-1">
-            {activity.map((entry) => (
-              <li key={entry.id} className="flex items-baseline gap-2 text-sm">
-                <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                  <span className="text-foreground">{spineActorName(entry, currentUserId)}</span>{" "}
-                  {spineActivityLine(entry)}
-                </span>
-                <span className="shrink-0 text-2xs text-muted-foreground/70">{timeAgo(entry.createdAt, now)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <ActivityTrail activity={activity} currentUserId={currentUserId} now={now} entityId={company.id} />
+    </div>
     </div>
   );
 }
