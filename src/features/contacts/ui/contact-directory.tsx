@@ -3,7 +3,7 @@
 // Rows are presentational; selection + data come from the page. Responsive down
 // to a narrow rail; tokens only (R7/R10).
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Building2, Copy, Plus, Search, Star, Upload, User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -121,8 +121,21 @@ export function ContactDirectory({
   onToggleFavorite,
   onRetry,
 }: Props) {
-  const [filter, setFilter] = useState<DirectoryFilter>("people");
+  // Seed from the selection so a company deep link doesn't flash the People
+  // tab on first paint.
+  const [filter, setFilter] = useState<DirectoryFilter>(() =>
+    selected?.type === "company" ? "companies" : "people",
+  );
   const [query, setQuery] = useState("");
+
+  // Follow the selection's type (a URL deep link can select a company while
+  // the People tab is up) — but only when the selection itself changes, so
+  // manually browsing the other tab isn't fought.
+  useEffect(() => {
+    if (!selected) return;
+    setFilter(selected.type === "company" ? "companies" : "people");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.type, selected?.id]);
 
   const q = query.trim().toLowerCase();
   const people = useMemo(

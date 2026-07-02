@@ -7,10 +7,13 @@
 // Contacts rides the Tasks permission lane at alpha, so render + edit gate on
 // `modulePermissions.tasks` until a dedicated lane lands.
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Contact as ContactIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
+import type { ContactsSearch } from "../../features/contacts/search";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { EmptyState } from "../../components/ui/empty-state";
 import { useAuth } from "../../providers/auth-provider";
@@ -33,7 +36,7 @@ import { ContactFormDialog, type ContactFormValues } from "../../features/contac
 
 function openEntity(ref: EntityRef) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent("moduo:entity:open", { detail: { type: ref.type, id: ref.id } }));
+  window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } }));
 }
 
 /** Trigger a client-side file download (vCard export). */
@@ -58,9 +61,28 @@ export function ContactsPage() {
 
   const workspaceId = selectedWorkspaceId ?? null;
   const directory = useContactsDirectory(runtime, workspaceId);
-  const [selected, setSelected] = useState<DirectorySelection | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+
+  // Selection lives in the URL (FX-1 AC1): refresh keeps your place, back/
+  // forward walk selection history, and deep links are shareable. strict:false
+  // because the route id sits under the pathless app-gate parent.
+  const search = useSearch({ strict: false }) as ContactsSearch;
+  const navigate = useNavigate();
+  const selected = useMemo<DirectorySelection | null>(
+    () => (search.type && search.id ? { type: search.type, id: search.id } : null),
+    [search.type, search.id],
+  );
+  const setSelected = useCallback(
+    (sel: DirectorySelection | null, opts?: { replace?: boolean }) => {
+      void navigate({
+        to: "/contacts",
+        search: sel ? { type: sel.type, id: sel.id } : {},
+        replace: opts?.replace ?? false,
+      });
+    },
+    [navigate],
+  );
 
   const selectedContact =
     selected?.type === "contact" ? directory.bundle.contacts.find((c) => c.id === selected.id) ?? null : null;
@@ -82,6 +104,42 @@ export function ContactsPage() {
 
   const hub = useContactHub(runtime, workspaceId, contactFocus);
   const companyHub = useCompanyHub(runtime, workspaceId, companyFocus, companyMembers);
+
+  // Palette entries land here carrying ?action=new|import (FX-1 AC2): open the
+  // dialog once, then clear the param (replace — no extra history entry).
+  useEffect(() => {
+    if (!search.action) return;
+    if (canEdit) {
+      if (search.action === "new") setFormOpen(true);
+      else setImportOpen(true);
+    } else {
+      // Don't swallow the palette command silently for view-only members.
+      toast("You don't have edit access to contacts in this workspace");
+    }
+    void navigate({
+      to: "/contacts",
+      search: selected ? { type: selected.type, id: selected.id } : {},
+      replace: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.action]);
+
+  // A URL id that never resolves (deleted contact, stale share link) clears
+  // after a short grace window — delayed so a just-created contact's directory
+  // reload can land first instead of being misread as missing.
+  useEffect(() => {
+    if (directory.status !== "ready" || !selected) return;
+    const exists =
+      selected.type === "contact"
+        ? directory.bundle.contacts.some((c) => c.id === selected.id)
+        : directory.bundle.companies.some((c) => c.id === selected.id);
+    if (exists) return;
+    const timer = window.setTimeout(() => {
+      toast(`That ${selected.type === "contact" ? "contact" : "company"} no longer exists`);
+      void navigate({ to: "/contacts", search: {}, replace: true });
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [directory.status, directory.bundle, selected, navigate]);
 
   const canRender = !!runtime && !!userId && !!workspaceId && !configError && permission !== "none";
 
@@ -259,7 +317,8 @@ export function ContactsPage() {
   async function deleteContact(contactId: string) {
     try {
       await runtime!.contacts.deleteContact({ workspaceId: ws, contactId });
-      setSelected(null);
+      // replace — otherwise Back lands on the deleted contact's dead URL.
+      setSelected(null, { replace: true });
       directory.reload();
       toast.success("Contact deleted");
     } catch (err) {

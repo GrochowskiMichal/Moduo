@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { toast } from "sonner";
+
+import { ENTITY_OPEN_EVENT, entityOpenTarget } from "../../lib/entity-open";
 
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
@@ -129,6 +132,31 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [runtime]);
+
+  // The host listener for the spine's deep-link event (FX-1 AC1). Every linked
+  // row, entity-ref chip, and dashboard widget dispatches `moduo:entity:open`;
+  // this is the one place that routes it. Unknown types get a quiet toast.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onEntityOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ type?: string; id?: string }>).detail;
+      if (!detail?.type || !detail.id) return;
+      const target = entityOpenTarget(detail.type, detail.id);
+      if (!target) {
+        toast("Nothing to open yet", {
+          description: `There's no page for "${detail.type}" yet.`,
+        });
+        return;
+      }
+      if (target.to === "/contacts") {
+        void navigate({ to: "/contacts", search: target.search ?? {} });
+      } else {
+        void navigate({ to: target.to });
+      }
+    };
+    window.addEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
+    return () => window.removeEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
+  }, [navigate]);
 
   const modulesNavItems = useMemo(
     () =>

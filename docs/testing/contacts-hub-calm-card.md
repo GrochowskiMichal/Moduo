@@ -40,6 +40,15 @@
 - [ ] **Do:** edit → Custom fields → Add field → open the type select → **Expect:** text / number / url only — **no "date"** (dates belong to the Dates section) _(both)_
 - [ ] **Do:** look at the directory list → **Expect:** status dots form an aligned column at the row's outer edge; the favorite star sits **inside** the dot, hover-revealed (filled + always visible on favorites) _(both)_
 
+## FX-1 — deep links + URL selection + palette (2026-07-02)
+- [ ] **Do:** open a contact → **Expect:** URL becomes `/contacts?type=contact&id=…`; reload keeps the same contact; browser back returns to the previous selection _(web)_
+- [ ] **Do:** on a contact, click the header company chip → **Expect:** the company page opens, URL says `type=company`, and the directory switches to the Companies tab with the row highlighted _(both)_
+- [ ] **Do:** click a linked task row (e.g. "Water plants" on Acme) → **Expect:** navigates to /tasks (page-level; in-page task selection is a Tasks follow-up) _(both)_
+- [ ] **Do:** on the dashboard, click a "Recently linked" / "Needs attention" row → **Expect:** it now actually navigates (these were dispatching into the void before) _(both)_
+- [ ] **Do:** ⌘K from any page → **Expect:** "Open Contacts", "New contact", "Import contacts" entries; "New contact" from /tasks lands on /contacts with the dialog open and a clean URL _(both)_
+- [ ] **Do:** open `/contacts?type=contact&id=00000000-0000-0000-0000-000000000000` → **Expect:** after ~2s, a quiet "That contact no longer exists" toast and the URL clears to /contacts _(web)_
+- [ ] **Do:** create a new contact via the modal → **Expect:** it opens selected (URL carries its id) with no false "no longer exists" toast _(both)_
+
 ## Regression sweep
 - [ ] **Do:** Tasks → open a task detail → **Expect:** the right-rail links section (when a task has links) is unchanged — compact uppercase relation tags still there (only the contacts *page* variant got the quiet captions) _(both)_
 - [ ] **Do:** app-wide sanity in dark mode → **Expect:** native scrollbars everywhere now render dark (the `color-scheme` token change is global — spot-check Notes/Email if anything looks off) _(both)_
