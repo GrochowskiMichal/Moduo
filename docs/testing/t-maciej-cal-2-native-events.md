@@ -1,14 +1,14 @@
 # Manual test checklist — CAL-2: Native events end-to-end
 
-> Generated 2026-07-02 · branch `t/maciej/cal-2-native-events` · **Live-verified:** partial — every grid interaction verified on the web preview with stubbed RPCs; **the migration is deploy-ready but UNAPPLIED** (Supabase MCP is on the wrong org), so everything marked **[post-deploy]** needs the migration applied first.
+> Generated 2026-07-02 · branch `t/maciej/cal-2-native-events` · **Live-verified:** partial — every grid interaction verified on the web preview with stubbed RPCs; **the migration IS APPLIED to prod** (2026-07-02, Supabase MCP) and the authed op round-trip is verified — create (recurring) / patch update / validation / registry / activity / RLS read / delete cascade. **[post-deploy]** items are now runnable.
 > Run top-to-bottom; check off as you go.
 
 ## ⚠ Deploy steps (do these first, in order)
 
-- [ ] **Pre-check:** run `SELECT count(*) FROM calendar_events WHERE workspace_id IS NULL;` on prod. These legacy exploratory rows become **invisible** after the migration (throwaway by our read; if the count looks like real data someone cares about, stop and decide before applying).
-- [ ] **Apply** `supabase/migrations/20260702130000_calendar_module.sql` to the Moduo project.
-- [ ] **Regenerate** `src/types/supabase.ts` afterwards.
-- [ ] Smoke: `SELECT calendar_module_permission('<workspace-uuid>');` as an authed member → `edit`/`admin`.
+- [x] **Pre-check:** done — the legacy table had **0 rows** (nothing lost).
+- [x] **Apply** — done via Supabase MCP, 2026-07-02.
+- [x] **Regenerate** `src/types/supabase.ts` — done.
+- [x] Smoke + full round-trip — done (create/update/validate/registry/activity/delete, all green as the test account).
 
 ## Draw-to-create (AC3) — verified live pre-deploy; re-run post-deploy for persistence
 
@@ -47,7 +47,6 @@
 
 ## Known gaps / not-yet-testable
 
-- **All server round-trips are deploy-gated** (migration unapplied from this environment) — the ops are syntax-checked (pgsql-parser) and pattern-mirrored from contacts, but RLS/guards/registry/activity are unproven until a live round-trip. That's the standard CT-5/CO-1 posture.
 - External (mirrored) chips + attribution untestable until CAL-6 connects an account.
 - Provider all-day events arriving as UTC midnights will spill one extra day east of UTC — CAL-6's mirror mapper must normalize provider all-day values to local dates (recorded in events.ts).
 - The event popover's anchor doesn't follow a scroll while open (closes on outside click anyway) — cosmetic.
