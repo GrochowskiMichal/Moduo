@@ -19,7 +19,6 @@ import {
   MapPin,
   MoreHorizontal,
   Pencil,
-  PenLine,
   Phone,
   Plus,
   Star,
@@ -42,7 +41,6 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ModuoRuntime, ContactDetailsPatch } from "@/lib/runtime.types";
-import { EntityHub } from "../../spine/ui/entity-hub";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import { LinkSuggestionStrip } from "../../spine/ui/link-suggestion-strip";
 import type { MentionCandidate } from "../../spine/mention";
@@ -54,6 +52,7 @@ import { useContactSuggestions } from "../hooks/use-contact-suggestions";
 import { initials } from "./contact-directory";
 import { ActivityTrail } from "./activity-trail";
 import { ContactStatusBadge, ContactStatusDot } from "./contact-status-badge";
+import { LinkedSections } from "./linked-sections";
 import { EntityLinkPicker } from "./entity-link-picker";
 
 // Radix Select forbids an empty-string item value, so "No status" rides a sentinel.
@@ -64,7 +63,6 @@ type Draft = {
   name: string;
   title: string;
   status: string;
-  notesInline: string;
   emails: ContactChannel[];
   phones: ContactChannel[];
   urls: ContactChannel[];
@@ -78,7 +76,6 @@ function draftFrom(c: Contact): Draft {
     name: c.name,
     title: c.title ?? "",
     status: c.status,
-    notesInline: c.notesInline,
     emails: c.emails.map((e) => ({ ...e })),
     phones: c.phones.map((e) => ({ ...e })),
     urls: c.urls.map((e) => ({ ...e })),
@@ -326,11 +323,6 @@ export function ContactHub(props: ContactHubProps) {
         rows: contact.dates.map((d) => ({ label: d.label || "date", value: formatDateValue(d.value) })),
       },
       { key: "custom", icon: Hash, rows: customRows },
-      {
-        key: "note",
-        icon: PenLine,
-        rows: contact.notesInline ? [{ label: "note", value: contact.notesInline, wrap: true }] : [],
-      },
     ].filter((g) => g.rows.length > 0);
   }, [contact, fieldDefs]);
 
@@ -356,7 +348,6 @@ export function ContactHub(props: ContactHubProps) {
       name: draft.name.trim() || contact.name,
       title: draft.title.trim() || null,
       status: draft.status,
-      notesInline: draft.notesInline,
       emails: clean(draft.emails),
       phones: clean(draft.phones),
       urls: clean(draft.urls),
@@ -572,10 +563,6 @@ export function ContactHub(props: ContactHubProps) {
             ))}
             {onAddField ? <AddFieldInline onAdd={onAddField} /> : null}
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="c-notes">Note</Label>
-            <Input id="c-notes" value={draft.notesInline} onChange={(e) => setDraft({ ...draft, notesInline: e.target.value })} placeholder="One-line note" />
-          </div>
         </div>
       ) : detailGroups.length > 0 ? (
         <div className="divide-y divide-border rounded-lg border border-border bg-card">
@@ -590,10 +577,9 @@ export function ContactHub(props: ContactHubProps) {
         <ContactSuggestions runtime={runtime} workspaceId={workspaceId} contactId={contact.id} onLinked={onLinked} />
       ) : null}
 
-      {/* Linked work */}
+      {/* Linked work — one fixed section per module relation, always present */}
       {!editing ? (
-        <EntityHub
-          variant="page"
+        <LinkedSections
           status={hubStatus}
           sections={sections}
           canEdit={canEdit}
@@ -634,7 +620,9 @@ function DatesEditor({ rows, onChange }: { rows: ContactDateEntry[]; onChange: (
   );
 }
 
-const FIELD_TYPES: ContactFieldType[] = ["text", "number", "date", "url"];
+// "date" is deliberately absent — labelled dates already live in the Dates
+// section; offering a date custom field would create a second dates concept.
+const FIELD_TYPES: ContactFieldType[] = ["text", "number", "url"];
 
 /** Inline "add a custom field" control (defines a workspace field def). */
 function AddFieldInline({ onAdd }: { onAdd: (label: string, type: ContactFieldType) => void }) {

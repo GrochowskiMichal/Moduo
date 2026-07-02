@@ -5,7 +5,7 @@
 // people's work (read-only EntityHub) + the activity trail. Tokens only.
 
 import { useEffect, useState } from "react";
-import { AtSign, Globe, Pencil, PenLine } from "lucide-react";
+import { AtSign, Globe, Pencil } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { EntityRef } from "@/lib/entity-links";
 import type { CompanyDetailsPatch } from "@/lib/runtime.types";
-import { EntityHub } from "../../spine/ui/entity-hub";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { ActivityEntry } from "../../tasks/model";
 import type { CompanyRollup } from "../company";
@@ -23,6 +22,7 @@ import type { Company } from "../model";
 import { ActivityTrail } from "./activity-trail";
 import { initials } from "./contact-directory";
 import { ContactStatusDot } from "./contact-status-badge";
+import { LinkedSections } from "./linked-sections";
 
 const SECTION_HEADING = "font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground";
 
@@ -79,14 +79,12 @@ export function CompanyHub({
   const [name, setName] = useState(company.name);
   const [website, setWebsite] = useState(company.website ?? "");
   const [domains, setDomains] = useState(company.domains.join(", "));
-  const [notes, setNotes] = useState(company.notesInline);
 
   useEffect(() => {
     setEditing(false);
     setName(company.name);
     setWebsite(company.website ?? "");
     setDomains(company.domains.join(", "));
-    setNotes(company.notesInline);
   }, [company.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function save() {
@@ -94,12 +92,11 @@ export function CompanyHub({
       name: name.trim() || company.name,
       website: website.trim() || null,
       domains: domains.split(",").map((d) => d.trim()).filter(Boolean),
-      notesInline: notes,
     });
     setEditing(false);
   }
 
-  const hasDetails = !!(company.website || company.domains.length > 0 || company.notesInline);
+  const hasDetails = !!(company.website || company.domains.length > 0);
 
   return (
     <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
@@ -154,10 +151,6 @@ export function CompanyHub({
             <Label htmlFor="co-domains">Email domains</Label>
             <Input id="co-domains" value={domains} onChange={(e) => setDomains(e.target.value)} placeholder="acme.com, acme.io" />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="co-notes">Note</Label>
-            <Input id="co-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="One-line note" />
-          </div>
         </div>
       ) : hasDetails ? (
         <div className="divide-y divide-border rounded-lg border border-border bg-card">
@@ -180,7 +173,6 @@ export function CompanyHub({
           {company.domains.length > 0 ? (
             <DetailsGroup icon={AtSign} label="domains" value={company.domains.join(", ")} />
           ) : null}
-          {company.notesInline ? <DetailsGroup icon={PenLine} label="note" value={company.notesInline} wrap /> : null}
         </div>
       ) : null}
 
@@ -210,7 +202,7 @@ export function CompanyHub({
         )}
       </section>
 
-      <EntityHub variant="page" status={status} sections={rollup.unionSections} canEdit={false} onOpen={onOpenEntity} onRetry={onRetry} />
+      <LinkedSections status={status} sections={rollup.unionSections} canEdit={false} onOpen={onOpenEntity} onRetry={onRetry} />
 
       <ActivityTrail activity={activity} currentUserId={currentUserId} now={now} entityId={company.id} />
     </div>

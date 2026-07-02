@@ -63,8 +63,9 @@ function DirectoryRow({ avatarUrl, name, secondary, status, selected, favorite, 
           <span className="block truncate text-sm text-foreground">{name}</span>
           {secondary ? <span className="block truncate text-xs text-muted-foreground">{secondary}</span> : null}
         </span>
-        {status ? <ContactStatusDot status={status} className="ml-1 shrink-0" /> : null}
       </button>
+      {/* Star sits INSIDE the dot column (dots are on ~every row, stars are rare —
+          the frequent signal owns the outer edge so the column reads aligned). */}
       {onToggleFavorite ? (
         <button
           type="button"
@@ -79,6 +80,7 @@ function DirectoryRow({ avatarUrl, name, secondary, status, selected, favorite, 
           <Star className={cn("size-icon-sm", favorite && "fill-current")} aria-hidden />
         </button>
       ) : null}
+      {status ? <ContactStatusDot status={status} className="shrink-0" /> : null}
     </div>
   );
 }
