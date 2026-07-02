@@ -698,6 +698,12 @@ export type ModuoRuntime = {
     /** Soft-delete a contact: drops its links + tombstones the registry entry. */
     deleteContact(input: { workspaceId: string; contactId: string }): Promise<Contact>;
     /**
+     * Soft-delete a company (FX-7): clears members' denormalized company_id,
+     * drops every link touching it (works-at included), tombstones the registry
+     * entry. Member contacts survive — only their company chip clears.
+     */
+    deleteCompany(input: { workspaceId: string; companyId: string }): Promise<Company>;
+    /**
      * Bulk CSV import (AC6) — one attributed, activity-logged op. The client
      * parses + previews dedupe; this writes the confirmed plan (create / merge
      * rows) in a single transaction and returns the counts + affected ids.

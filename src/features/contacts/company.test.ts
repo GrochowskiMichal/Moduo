@@ -102,6 +102,31 @@ describe("buildCompanyRollup", () => {
     expect(rows).not.toContain(entityRefKey(COMPANY));
   });
 
+  it("stamps inherited union rows with the member they came from (FX-7 via caption)", () => {
+    const { unionSections } = buildCompanyRollup(input());
+    const rows = unionSections.flatMap((s) => s.rows);
+    const taskRow = rows.find((r) => entityRefKey(r.other) === entityRefKey(taskA));
+    const noteRow = rows.find((r) => entityRefKey(r.other) === entityRefKey(noteA));
+    // Dana's task + Lee's note are inherited — they carry their member's name…
+    expect(taskRow?.via).toBe("Dana Lee");
+    expect(noteRow?.via).toBe("Lee Park");
+  });
+
+  it("leaves the company's own rows without a via caption", () => {
+    // A task linked directly to the company (not via any member) carries no via.
+    const directTask: EntityRef = { type: "task", id: "t-direct" };
+    const { unionSections } = buildCompanyRollup(
+      input({
+        companyLinks: [link(COMPANY, directTask, "references")],
+        members: [],
+        memberLinks: {},
+        records: new Map([[entityRefKey(directTask), rec(directTask, "Company kickoff")]]),
+      }),
+    );
+    const row = unionSections.flatMap((s) => s.rows).find((r) => entityRefKey(r.other) === entityRefKey(directTask));
+    expect(row?.via ?? null).toBeNull();
+  });
+
   it("dedupes a counterpart shared by two members", () => {
     const shared = input({
       memberLinks: {

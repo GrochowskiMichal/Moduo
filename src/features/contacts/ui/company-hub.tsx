@@ -5,23 +5,31 @@
 // people's work (read-only EntityHub) + the activity trail. Tokens only.
 
 import { useEffect, useState } from "react";
-import { AtSign, Globe, Pencil } from "lucide-react";
+import { AtSign, CalendarPlus, Globe, Link2, MoreHorizontal, Pencil, UserPlus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { EntityRef } from "@/lib/entity-links";
 import type { CompanyDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
+import type { MentionCandidate } from "../../spine/mention";
 import type { ActivityEntry } from "../../tasks/model";
 import type { CompanyRollup } from "../company";
 import type { Company } from "../model";
 import { ActivityTrail } from "./activity-trail";
 import { initials } from "./contact-directory";
 import { ContactStatusDot } from "./contact-status-badge";
+import { EntityLinkPicker } from "./entity-link-picker";
 import { EntityTagRow } from "./entity-tag-row";
 import { LinkedSections } from "./linked-sections";
 
@@ -41,6 +49,11 @@ export type CompanyHubProps = {
   now?: Date;
   onSaveDetails?: (patch: CompanyDetailsPatch) => void;
   onOpenEntity?: (ref: EntityRef) => void;
+  /** Action row + ⋯ menu + People "+ Add person" (FX-7). */
+  onAddTask?: () => void;
+  onLink?: (candidate: MentionCandidate) => void;
+  onAddPerson?: () => void;
+  onDelete?: () => void;
   onRetry?: () => void;
 };
 
@@ -79,6 +92,10 @@ export function CompanyHub({
   now = new Date(),
   onSaveDetails,
   onOpenEntity,
+  onAddTask,
+  onLink,
+  onAddPerson,
+  onDelete,
   onRetry,
 }: CompanyHubProps) {
   const [editing, setEditing] = useState(false);
@@ -140,7 +157,7 @@ export function CompanyHub({
             />
           ) : null}
         </div>
-        {canEdit && onSaveDetails ? (
+        {canEdit ? (
           editing ? (
             <div className="flex shrink-0 items-center gap-0.5">
               <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
@@ -151,10 +168,54 @@ export function CompanyHub({
               </Button>
             </div>
           ) : (
-            <IconButton icon={Pencil} label="Edit company" size="sm" variant="ghost" className="shrink-0" onClick={() => setEditing(true)} />
+            <div className="flex shrink-0 items-center gap-0.5">
+              {onSaveDetails ? (
+                <IconButton icon={Pencil} label="Edit company" size="sm" variant="ghost" onClick={() => setEditing(true)} />
+              ) : null}
+              {onDelete ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <IconButton icon={MoreHorizontal} label="More actions" size="sm" variant="ghost" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                      Delete company
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
+            </div>
           )
         ) : null}
       </div>
+
+      {/* Action row — Add task · Link (mirrors the contact card; FX-7) */}
+      {!editing && canEdit && (onAddTask || onLink) ? (
+        <div className="flex flex-wrap gap-1.5">
+          {onAddTask ? (
+            <Button variant="secondary" size="sm" className="gap-1.5" onClick={onAddTask}>
+              <CalendarPlus className="size-icon-sm" aria-hidden />
+              Add task
+            </Button>
+          ) : null}
+          {onLink ? (
+            <EntityLinkPicker
+              runtime={runtime}
+              workspaceId={workspaceId}
+              types={["task", "note", "event", "contact", "company"]}
+              placeholder="Link a task, note, contact…"
+              emptyLabel="Nothing to link."
+              trigger={
+                <Button variant="secondary" size="sm" className="gap-1.5">
+                  <Link2 className="size-icon-sm" aria-hidden />
+                  Link
+                </Button>
+              }
+              onPick={onLink}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Details — edit form or the grouped read card */}
       {editing ? (
@@ -216,6 +277,12 @@ export function CompanyHub({
             ))}
           </ul>
         )}
+        {canEdit && onAddPerson ? (
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={onAddPerson}>
+            <UserPlus className="size-icon-sm" aria-hidden />
+            Add person
+          </Button>
+        ) : null}
       </section>
 
       <LinkedSections status={status} sections={rollup.unionSections} canEdit={false} onOpen={onOpenEntity} onRetry={onRetry} />

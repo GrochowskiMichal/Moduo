@@ -11,12 +11,12 @@ import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import {
   RELATION_KIND_LABELS,
-  RELATION_KINDS,
   type EntityLink,
   type EntityRef,
   type RelationKind,
 } from "@/lib/entity-links";
 import { cn } from "@/lib/utils";
+import { allowedKinds } from "../kind-constraints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -211,6 +211,10 @@ export function EntityHubRow({ row, variant = "rail", canEdit, onOpen, onChangeK
         {row.snippet ? (
           <span className="min-w-0 truncate text-xs text-muted-foreground">· {row.snippet}</span>
         ) : null}
+        {/* Provenance caption on a company's union rows (FX-7): "· via Jane Cooper". */}
+        {row.via ? (
+          <span className="shrink-0 truncate text-xs text-muted-foreground/70">· via {row.via}</span>
+        ) : null}
         {variant === "page" ? (
           // The page card is calmer: sentence-case caption, and the default
           // "references" kind (no information) renders nothing at all.
@@ -244,7 +248,9 @@ export function EntityHubRow({ row, variant = "rail", canEdit, onOpen, onChangeK
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Change relation</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                  {RELATION_KINDS.map((kind) => (
+                  {/* Only kinds sensible for THIS endpoint pair (FX-5) — no
+                      `attachment`/`paid-by`/`works-at` between two people. */}
+                  {allowedKinds(row.link.sourceType, row.link.targetType).map((kind) => (
                     <DropdownMenuItem
                       key={kind}
                       disabled={kind === row.relationKind}

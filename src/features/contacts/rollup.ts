@@ -63,6 +63,21 @@ function shortVerb(op: string): string {
   }
 }
 
+/**
+ * Ops that are a *record edit* (someone changed the card), not a real
+ * *interaction* (a link/email/task/meeting/comment). Last-touch prefers
+ * interactions and only surfaces a record edit when nothing else exists (FX-4 AC7).
+ */
+const RECORD_EDIT_OPS = new Set([
+  "contacts.create",
+  "companies.create",
+  "contacts.update",
+  "companies.update",
+  "contacts.set_status",
+  "contacts.set_details",
+  "contacts.set_favorite",
+]);
+
 const DAY_MS = 86_400_000;
 
 /** A quiet relative-time phrase ("just now" · "3 days ago" · an ISO date for old). */
@@ -107,7 +122,11 @@ export function buildContactRollup(input: ContactRollupInput): ContactRollup {
   // Lexical compare is correct here: every timestamp is the same Postgres
   // timestamptz serialization (uniform ISO/UTC), so string order == time order.
   stamps.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
-  const latest = stamps[0] ?? null;
+  // Prefer the most-recent real interaction (a link, or any non-record-edit op)
+  // over a bare record edit — "updated" only surfaces when nothing else has
+  // happened (AC7). A bare link stamp (activity=null) is always an interaction.
+  const interaction = stamps.find((s) => s.activity === null || !RECORD_EDIT_OPS.has(s.activity.op)) ?? null;
+  const latest = interaction ?? stamps[0] ?? null;
 
   let openTaskCount = 0;
   let unpaidPaymentCount = 0;

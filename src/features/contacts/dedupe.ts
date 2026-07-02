@@ -25,6 +25,9 @@ export type DuplicateGroup = {
   contactIds: string[];
 };
 
+/** What the new-contact modal probes against the loaded directory (FX-6 AC9). */
+export type ContactProbe = { email?: string | null; name?: string | null };
+
 /** Lowercase + trim a single value; blanks normalize to "". */
 function normalizeEmail(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
@@ -135,4 +138,26 @@ export function findDuplicateGroups(contacts: Contact[]): DuplicateGroup[] {
   // Deterministic output: sort by key (then reason as a tiebreak for stability).
   groups.sort((a, b) => (a.key === b.key ? a.reason.localeCompare(b.reason) : a.key < b.key ? -1 : 1));
   return groups;
+}
+
+/**
+ * Probe a new-contact draft against the loaded directory and return the existing
+ * contact it likely duplicates (the modal's "Looks like Jane Cooper — Open
+ * instead?" warning, FX-6 AC9). An exact email match wins (case-insensitive,
+ * scalar OR channel); else an exact normalized-name match. Returns null when the
+ * draft has no signal or matches nobody — the warning is informational and never
+ * blocks creation. Blank inputs never match.
+ */
+export function probeDuplicate(input: ContactProbe, contacts: Contact[]): Contact | null {
+  const email = normalizeEmail(input.email);
+  if (email) {
+    const hit = contacts.find((c) => contactEmails(c).includes(email));
+    if (hit) return hit;
+  }
+  const name = normalizeName(input.name);
+  if (name) {
+    const hit = contacts.find((c) => normalizeName(c.name) === name);
+    if (hit) return hit;
+  }
+  return null;
 }

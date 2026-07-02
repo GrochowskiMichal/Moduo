@@ -30,6 +30,10 @@ describe("resolveKind matrix (AC7)", () => {
     expect(resolveKind("whatever", "thing")).toBe("references");
   });
 
+  it("resolves a person-on-person drag to references, never attachment (FX-5)", () => {
+    expect(resolveKind("contact", "contact")).toBe("references");
+  });
+
   it("only ever returns kinds from the closed set", () => {
     // resolveKind never invents a kind; spot-check the matrix outputs are valid.
     const outputs = [

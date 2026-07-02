@@ -12,6 +12,9 @@ import {
   Cake,
   CalendarDays,
   CalendarPlus,
+  Check,
+  ChevronDown,
+  Copy,
   Globe,
   Hash,
   Link2,
@@ -24,6 +27,7 @@ import {
   Star,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -48,6 +52,8 @@ import type { ActivityEntry } from "../../tasks/model";
 import type { Contact, ContactChannel, ContactDateEntry, ContactFieldDef, ContactFieldType } from "../model";
 import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";
 import { lastTouchLine, type ContactRollup } from "../rollup";
+import { birthdayCountdown } from "../dates";
+import { parseFieldOptions, selectOptionsFor } from "../field-defs";
 import { useContactSuggestions } from "../hooks/use-contact-suggestions";
 import { initials } from "./contact-directory";
 import { ActivityTrail } from "./activity-trail";
@@ -58,6 +64,32 @@ import { EntityLinkPicker } from "./entity-link-picker";
 
 // Radix Select forbids an empty-string item value, so "No status" rides a sentinel.
 const NO_STATUS = "__none__";
+
+const SECTION_HEADING = "font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground";
+
+/** Copy to clipboard with the notes-module fallback for non-secure contexts. */
+function copyText(text: string): void {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => toast.success("Copied", { description: text }),
+      () => toast.error("Couldn’t copy"),
+    );
+    return;
+  }
+  try {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.position = "fixed";
+    el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    el.remove();
+    toast.success("Copied", { description: text });
+  } catch {
+    toast.error("Couldn’t copy");
+  }
+}
 
 /** The card's editable draft (everything the inline-edit form owns). */
 type Draft = {
@@ -91,6 +123,8 @@ function draftFrom(c: Contact): Draft {
 export type ContactHubProps = {
   contact: Contact;
   companyName?: string | null;
+  /** Directory contacts by id — enriches linked-people rows with status/avatar (FX-5). */
+  contactsById?: Map<string, Contact>;
   fieldDefs: ContactFieldDef[];
   rollup: ContactRollup;
   hubStatus: HubStatus;
@@ -101,13 +135,15 @@ export type ContactHubProps = {
   runtime: ModuoRuntime | null;
   workspaceId: string | null;
   onSaveDetails: (patch: ContactDetailsPatch) => void;
+  /** Quick status change from the header pill in view mode (optimistic; FX-4 AC5). */
+  onSetStatus?: (status: string) => Promise<void>;
   onToggleFavorite: () => void;
   onDelete: () => void;
   onShare: () => void;
   onAddFollowup: () => void;
   onLink: (candidate: MentionCandidate) => void;
   onSetCompany: (candidate: MentionCandidate) => void;
-  onAddField?: (label: string, type: ContactFieldType) => void;
+  onAddField?: (label: string, type: ContactFieldType, options?: string[]) => void;
   onDeleteField?: (fieldId: string) => void;
   onOpenEntity?: (ref: EntityRef) => void;
   onChangeKind?: (link: EntityLink, kind: RelationKind) => void;
@@ -174,7 +210,7 @@ function ChannelEditor({
 
 // ── the read-mode details card (iOS-style grouped rows, click-to-act) ─────────
 
-type DetailRow = { label: string; value: ReactNode; wrap?: boolean };
+type DetailRow = { label: string; value: ReactNode; wrap?: boolean; copy?: string };
 type DetailGroup = { key: string; icon: typeof Mail; rows: DetailRow[] };
 
 /** Multi-value channel → labelled rows; email/phone/url values act on click. */
@@ -187,6 +223,8 @@ function channelRows(rows: ContactChannel[], kind: "email" | "phone" | "url" | "
     const display = kind === "url" ? r.value.replace(/^https?:\/\//, "").replace(/\/$/, "") : r.value;
     return {
       label: r.label || kind,
+      // Copy the raw value (email/phone/url); addresses have no one-tap channel.
+      copy: kind === "address" ? undefined : r.value,
       value: h ? (
         <a
           href={h}
@@ -211,18 +249,30 @@ function formatDateValue(value: string): string {
     : d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 }
 
-/** One field group inside the card: a type icon on the first row, then rows. */
+/** One field group inside the card: a type icon on the first row, then rows.
+ * Copyable rows (email/phone/url) reveal a copy button on hover/focus (R6). */
 function DetailsGroup({ icon: Icon, rows }: { icon: typeof Mail; rows: DetailRow[] }) {
   return (
     <div className="px-3 py-2">
       {rows.map((r, i) => (
-        <div key={i} className={cn("flex gap-3 py-1 text-sm", r.wrap ? "items-start" : "items-center")}>
+        <div key={i} className={cn("group/row flex gap-3 py-1 text-sm", r.wrap ? "items-start" : "items-center")}>
           <Icon
             className={cn("size-icon-sm shrink-0 text-muted-foreground/70", r.wrap && "mt-0.5", i > 0 && "invisible")}
             aria-hidden
           />
           <span className="w-16 shrink-0 truncate text-xs text-muted-foreground">{r.label}</span>
           <span className={cn("min-w-0 flex-1 text-foreground", r.wrap ? "break-words" : "truncate")}>{r.value}</span>
+          {r.copy ? (
+            // opacity-0 (not hidden) reserves the column so the value never shifts.
+            <IconButton
+              icon={Copy}
+              label={`Copy ${r.label}`}
+              size="sm"
+              variant="ghost"
+              className="-my-1 shrink-0 opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100"
+              onClick={() => copyText(r.copy!)}
+            />
+          ) : null}
         </div>
       ))}
     </div>
@@ -254,6 +304,7 @@ export function ContactHub(props: ContactHubProps) {
   const {
     contact,
     companyName,
+    contactsById,
     fieldDefs,
     rollup,
     hubStatus,
@@ -264,6 +315,7 @@ export function ContactHub(props: ContactHubProps) {
     runtime,
     workspaceId,
     onSaveDetails,
+    onSetStatus,
     onToggleFavorite,
     onDelete,
     onShare,
@@ -321,20 +373,49 @@ export function ContactHub(props: ContactHubProps) {
       {
         key: "dates",
         icon: hasBirthday ? Cake : CalendarDays,
-        rows: contact.dates.map((d) => ({ label: d.label || "date", value: formatDateValue(d.value) })),
+        rows: contact.dates.map((d) => {
+          // A quiet "in 3 weeks" caption when the date recurs within 60 days (FX-4 AC7).
+          const countdown = birthdayCountdown(d.value, now);
+          return {
+            label: d.label || "date",
+            value: (
+              <span className="inline-flex items-baseline gap-2">
+                {formatDateValue(d.value)}
+                {countdown ? <span className="text-xs text-muted-foreground">{countdown}</span> : null}
+              </span>
+            ),
+          };
+        }),
       },
       { key: "custom", icon: Hash, rows: customRows },
     ].filter((g) => g.rows.length > 0);
-  }, [contact, fieldDefs]);
+  }, [contact, fieldDefs, now]);
+
+  // Linked people get a dedicated People section (FX-5) instead of falling into
+  // "Other" — pull them out of the roll-up and enrich with status/avatar. Dedupe
+  // by id: a pair can hold two edges of different kinds (references + mentions),
+  // which would otherwise render the same person twice with a duplicate key.
+  const linkedPeople = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string; status: string; avatarUrl: string | null }>();
+    for (const r of rollup.sections.flatMap((s) => s.rows)) {
+      if (r.other.type !== "contact" || r.tombstoned || byId.has(r.other.id)) continue;
+      const c = contactsById?.get(r.other.id);
+      byId.set(r.other.id, { id: r.other.id, name: c?.name || r.title, status: c?.status ?? "", avatarUrl: c?.avatarUrl ?? null });
+    }
+    return [...byId.values()];
+  }, [rollup.sections, contactsById]);
 
   // The header already names the company — drop its works-at row from the
-  // roll-up so the same fact never renders twice on one page.
+  // roll-up so the same fact never renders twice; and person rows move to the
+  // People section above, so exclude them from the linked-work buckets.
   const sections = useMemo(() => {
-    if (!contact.companyId) return rollup.sections;
     return rollup.sections
       .map((s) => ({
         ...s,
-        rows: s.rows.filter((r) => !(r.other.type === "company" && r.other.id === contact.companyId)),
+        rows: s.rows.filter(
+          (r) =>
+            !(r.other.type === "company" && r.other.id === contact.companyId) && r.other.type !== "contact",
+        ),
       }))
       .map((s) => ({ ...s, count: s.rows.length }))
       .filter((s) => s.rows.length > 0);
@@ -403,7 +484,11 @@ export function ContactHub(props: ContactHubProps) {
                 {companyName}
               </button>
             ) : null}
-            {contact.status ? <ContactStatusBadge status={contact.status} /> : null}
+            {!editing ? (
+              <HeaderStatus contact={contact} canEdit={canEdit} onSetStatus={onSetStatus} />
+            ) : contact.status ? (
+              <ContactStatusBadge status={contact.status} />
+            ) : null}
           </div>
           {!editing ? (
             // key: remount per entity so tag state can never leak across a
@@ -561,13 +646,36 @@ export function ContactHub(props: ContactHubProps) {
             {fieldDefs.map((f) => (
               <div key={f.id} className="flex items-center gap-1.5">
                 <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">{f.label}</span>
-                <Input
-                  type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
-                  value={draft.custom[f.key] ?? ""}
-                  onChange={(e) => setDraft({ ...draft, custom: { ...draft.custom, [f.key]: e.target.value } })}
-                  className="min-w-0 flex-1"
-                  aria-label={f.label}
-                />
+                {f.type === "select" ? (
+                  <Select
+                    value={(draft.custom[f.key] ?? "") || NO_STATUS}
+                    onValueChange={(v) =>
+                      setDraft({ ...draft, custom: { ...draft.custom, [f.key]: v === NO_STATUS ? "" : v } })
+                    }
+                  >
+                    <SelectTrigger className="min-w-0 flex-1" aria-label={f.label}>
+                      <SelectValue placeholder="—" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_STATUS}>
+                        <span className="text-muted-foreground">None</span>
+                      </SelectItem>
+                      {selectOptionsFor(f, draft.custom[f.key] ?? "").map((opt) => (
+                        <SelectItem key={opt} value={opt}>
+                          {opt}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
+                    value={draft.custom[f.key] ?? ""}
+                    onChange={(e) => setDraft({ ...draft, custom: { ...draft.custom, [f.key]: e.target.value } })}
+                    className="min-w-0 flex-1"
+                    aria-label={f.label}
+                  />
+                )}
                 {onDeleteField ? (
                   <IconButton icon={X} label={`Remove ${f.label} field`} size="sm" variant="ghost" onClick={() => onDeleteField(f.id)} />
                 ) : null}
@@ -589,6 +697,31 @@ export function ContactHub(props: ContactHubProps) {
         <ContactSuggestions runtime={runtime} workspaceId={workspaceId} contactId={contact.id} onLinked={onLinked} />
       ) : null}
 
+      {/* Linked people — person↔person links get their own quiet section (FX-5) */}
+      {!editing && linkedPeople.length > 0 ? (
+        <section className="space-y-1">
+          <h3 className={SECTION_HEADING}>People</h3>
+          <ul className="space-y-0.5">
+            {linkedPeople.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpenEntity?.({ type: "contact", id: p.id })}
+                  className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Avatar size="sm">
+                    {p.avatarUrl ? <AvatarImage src={p.avatarUrl} alt="" /> : null}
+                    <AvatarFallback>{initials(p.name)}</AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{p.name}</span>
+                  {p.status ? <ContactStatusDot status={p.status} /> : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {/* Linked work — one fixed section per module relation, always present */}
       {!editing ? (
         <LinkedSections
@@ -608,6 +741,82 @@ export function ContactHub(props: ContactHubProps) {
       ) : null}
     </div>
     </div>
+  );
+}
+
+/**
+ * The header status pill — a click-to-open dropdown in view mode (FX-4 AC5).
+ * Optimistic: the pill flips immediately and rolls back on failure (the page
+ * toasts). Read-only members (or no handler) see a plain badge.
+ */
+function HeaderStatus({
+  contact,
+  canEdit,
+  onSetStatus,
+}: {
+  contact: Contact;
+  canEdit: boolean;
+  onSetStatus?: (status: string) => Promise<void>;
+}) {
+  const [optimistic, setOptimistic] = useState<string | null>(null);
+  // Drop the optimistic override once the real status catches up (or on switch).
+  useEffect(() => setOptimistic(null), [contact.id, contact.status]);
+  const status = optimistic ?? contact.status;
+
+  const options = useMemo(() => {
+    const opts: { id: string; label: string }[] = [
+      { id: "", label: "No status" },
+      ...DEFAULT_CONTACT_STATUSES.map((s) => ({ id: s.id, label: s.label })),
+    ];
+    const meta = contactStatusMeta(status);
+    if (meta.id && !opts.some((o) => o.id === meta.id)) opts.push({ id: meta.id, label: meta.label });
+    return opts;
+  }, [status]);
+
+  if (!canEdit || !onSetStatus) {
+    return status ? <ContactStatusBadge status={status} /> : null;
+  }
+
+  const change = (next: string) => {
+    if (next === status) return;
+    setOptimistic(next);
+    void onSetStatus(next).catch(() => setOptimistic(null));
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Change status"
+        >
+          {status ? (
+            <ContactStatusBadge status={status} />
+          ) : (
+            <span className="text-muted-foreground/70">Set status</span>
+          )}
+          <ChevronDown className="size-icon-sm shrink-0 opacity-60" aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {options.map((o) => (
+          <DropdownMenuItem key={o.id || "none"} onSelect={() => change(o.id)}>
+            <span className="flex flex-1 items-center gap-1.5">
+              {o.id ? (
+                <ContactStatusDot status={o.id} />
+              ) : (
+                <span className="inline-block size-2 shrink-0 rounded-full border border-border" aria-hidden />
+              )}
+              {o.label}
+              {contactStatusMeta(status).id === o.id ? (
+                <Check className="ml-auto size-icon-sm text-muted-foreground" aria-hidden />
+              ) : null}
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -634,13 +843,27 @@ function DatesEditor({ rows, onChange }: { rows: ContactDateEntry[]; onChange: (
 
 // "date" is deliberately absent — labelled dates already live in the Dates
 // section; offering a date custom field would create a second dates concept.
-const FIELD_TYPES: ContactFieldType[] = ["text", "number", "url"];
+// "select" is single-select only (multi_select stays deferred; FX-8).
+const FIELD_TYPES: ContactFieldType[] = ["text", "number", "url", "select"];
 
-/** Inline "add a custom field" control (defines a workspace field def). */
-function AddFieldInline({ onAdd }: { onAdd: (label: string, type: ContactFieldType) => void }) {
+/** Inline "add a custom field" control (defines a workspace field def). A
+ * `select` field asks for its options inline (comma-separated) before it can be
+ * added (FX-8). */
+function AddFieldInline({ onAdd }: { onAdd: (label: string, type: ContactFieldType, options?: string[]) => void }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [type, setType] = useState<ContactFieldType>("text");
+  const [optionsInput, setOptionsInput] = useState("");
+
+  const parsedOptions = parseFieldOptions(optionsInput);
+  const canAdd = label.trim().length > 0 && (type !== "select" || parsedOptions.length > 0);
+  const reset = () => {
+    setLabel("");
+    setType("text");
+    setOptionsInput("");
+    setOpen(false);
+  };
+
   if (!open) {
     return (
       <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => setOpen(true)}>
@@ -650,29 +873,31 @@ function AddFieldInline({ onAdd }: { onAdd: (label: string, type: ContactFieldTy
     );
   }
   return (
-    <div className="flex items-center gap-1.5">
-      <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Field name" className="min-w-0 flex-1" aria-label="New field name" autoFocus />
-      <Select value={type} onValueChange={(v) => setType(v as ContactFieldType)}>
-        <SelectTrigger className="w-24" aria-label="Field type"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {FIELD_TYPES.map((t) => (
-            <SelectItem key={t} value={t}>{t}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        size="sm"
-        disabled={!label.trim()}
-        onClick={() => {
-          onAdd(label.trim(), type);
-          setLabel("");
-          setType("text");
-          setOpen(false);
-        }}
-      >
-        Add
-      </Button>
-      <IconButton icon={X} label="Cancel" size="sm" variant="ghost" onClick={() => { setOpen(false); setLabel(""); }} />
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Field name" className="min-w-0 flex-1" aria-label="New field name" autoFocus />
+        <Select value={type} onValueChange={(v) => setType(v as ContactFieldType)}>
+          <SelectTrigger className="w-24" aria-label="Field type"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {FIELD_TYPES.map((t) => (
+              <SelectItem key={t} value={t}>{t}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" disabled={!canAdd} onClick={() => { onAdd(label.trim(), type, type === "select" ? parsedOptions : undefined); reset(); }}>
+          Add
+        </Button>
+        <IconButton icon={X} label="Cancel" size="sm" variant="ghost" onClick={reset} />
+      </div>
+      {type === "select" ? (
+        <Input
+          value={optionsInput}
+          onChange={(e) => setOptionsInput(e.target.value)}
+          placeholder="Options, comma-separated"
+          aria-label="Select options"
+          className="w-full"
+        />
+      ) : null}
     </div>
   );
 }

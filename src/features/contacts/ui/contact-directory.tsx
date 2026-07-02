@@ -8,6 +8,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownAZ, Building2, Copy, History, Plus, Search, Star, Upload, User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { entityDrag } from "@/lib/drag-payload";
+import { useDragPayload } from "../../spine/hooks/use-drag-payload";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,6 +63,10 @@ type RowProps = {
   favorite?: boolean;
   onSelect: () => void;
   onToggleFavorite?: () => void;
+  /** Drag-to-link wiring (FX-9), supplied only by DraggableRow. */
+  dragRef?: (node: HTMLElement | null) => void;
+  dragHandleProps?: Record<string, unknown>;
+  dragging?: boolean;
 };
 
 function DirectoryRow({
@@ -74,15 +80,22 @@ function DirectoryRow({
   favorite,
   onSelect,
   onToggleFavorite,
+  dragRef,
+  dragHandleProps,
+  dragging,
 }: RowProps) {
   return (
     <div
       id={rowId}
+      ref={dragRef}
+      {...dragHandleProps}
       className={cn(
         // scroll-mt keeps a keyboard-highlighted row clear of the sticky
         // letter header when scrolled into view.
         "group flex w-full scroll-mt-6 items-center gap-2.5 rounded-md px-2 py-1.5",
         selected ? "bg-accent" : highlighted ? "bg-accent/50" : "hover:bg-accent/60",
+        dragHandleProps && "cursor-grab active:cursor-grabbing",
+        dragging && "opacity-50",
       )}
     >
       <button
@@ -121,6 +134,17 @@ function DirectoryRow({
   );
 }
 
+/** A directory row wired as a spine entity drag source (FX-9). Only rendered
+ * when the page enables drag (so useDraggable always sits under a DndContext).
+ * Pointer-drag only — we spread `listeners`, not `attributes`, to keep the row's
+ * click-to-select semantics (no extra tab stop / role on the row). */
+function DraggableRow({ entity, label, rowProps }: { entity: DirectorySelection; label: string; rowProps: RowProps }) {
+  const { setNodeRef, listeners, isDragging } = useDragPayload(
+    entityDrag({ type: entity.type, id: entity.id }, { label, from: "contacts-directory" }),
+  );
+  return <DirectoryRow {...rowProps} dragRef={setNodeRef} dragHandleProps={listeners as Record<string, unknown>} dragging={isDragging} />;
+}
+
 function LetterHeader({ letter }: { letter: string }) {
   return (
     <div className="sticky top-0 z-10 bg-card/95 px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground backdrop-blur">
@@ -138,7 +162,11 @@ type Props = {
   workspaceTags?: Tag[];
   tagLinks?: TagLink[];
   onSelect: (sel: DirectorySelection) => void;
+  /** When true, rows are entity drag sources (FX-9) — the page must supply a DndContext. */
+  draggable?: boolean;
   onNew?: () => void;
+  /** Companies-tab "+" — opens the New-company dialog (FX-6). */
+  onNewCompany?: () => void;
   onImport?: () => void;
   onToggleFavorite?: (contactId: string) => void;
   onRetry?: () => void;
@@ -156,7 +184,9 @@ export function ContactDirectory({
   workspaceTags = [],
   tagLinks = [],
   onSelect,
+  draggable = false,
   onNew,
+  onNewCompany,
   onImport,
   onToggleFavorite,
   onRetry,
@@ -313,7 +343,7 @@ export function ContactDirectory({
         : contactStatusMeta(statusFilter).label;
   const activeTag = tagFilter ? workspaceTags.find((t) => t.id === tagFilter) : undefined;
 
-  const rowProps = (c: Contact) => ({
+  const rowProps = (c: Contact): RowProps => ({
     rowId: `dir-row-${c.id}`,
     avatarUrl: c.avatarUrl,
     name: c.name || "Unnamed",
@@ -325,6 +355,34 @@ export function ContactDirectory({
     onSelect: () => onSelect({ type: "contact", id: c.id }),
     onToggleFavorite: onToggleFavorite ? () => onToggleFavorite(c.id) : undefined,
   });
+
+  const companyRowProps = (c: Company): RowProps => ({
+    rowId: `dir-row-${c.id}`,
+    avatarUrl: c.avatarUrl,
+    name: c.name || "Unnamed company",
+    secondary: c.domains[0] ?? c.website,
+    selected: selected?.type === "company" && selected.id === c.id,
+    highlighted: c.id === highlightId,
+    onSelect: () => onSelect({ type: "company", id: c.id }),
+  });
+
+  // Render a row plain, or wrapped as a drag source when the page enables drag.
+  const personRow = (c: Contact) => {
+    const p = rowProps(c);
+    return draggable ? (
+      <DraggableRow key={p.rowId} entity={{ type: "contact", id: c.id }} label={c.name || "Unnamed"} rowProps={p} />
+    ) : (
+      <DirectoryRow key={p.rowId} {...p} />
+    );
+  };
+  const companyRow = (c: Company) => {
+    const p = companyRowProps(c);
+    return draggable ? (
+      <DraggableRow key={p.rowId} entity={{ type: "company", id: c.id }} label={c.name || "Unnamed company"} rowProps={p} />
+    ) : (
+      <DirectoryRow key={p.rowId} {...p} />
+    );
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2" onKeyDown={onKeyDown}>
@@ -340,8 +398,15 @@ export function ContactDirectory({
           size="sm"
         />
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {onImport ? <IconButton icon={Upload} label="Import contacts" size="sm" variant="ghost" onClick={onImport} /> : null}
-          {onNew ? <IconButton icon={Plus} label="New contact" size="sm" variant="ghost" onClick={onNew} /> : null}
+          {/* CSV import is people-only; "+" adds a contact or a company by tab. */}
+          {showingPeople && onImport ? (
+            <IconButton icon={Upload} label="Import contacts" size="sm" variant="ghost" onClick={onImport} />
+          ) : null}
+          {showingPeople
+            ? onNew && <IconButton icon={Plus} label="New contact" size="sm" variant="ghost" onClick={onNew} />
+            : onNewCompany && (
+                <IconButton icon={Plus} label="New company" size="sm" variant="ghost" onClick={onNewCompany} />
+              )}
         </div>
       </div>
 
@@ -486,55 +551,29 @@ export function ContactDirectory({
                 {favorites.length > 0 ? (
                   <>
                     <LetterHeader letter="★ Favorites" />
-                    {favorites.map((c) => (
-                      <DirectoryRow key={c.id} {...rowProps(c)} />
-                    ))}
+                    {favorites.map(personRow)}
                   </>
                 ) : null}
                 {sort === "alpha" ? (
                   peopleGroups.map((group) => (
                     <div key={group.letter}>
                       <LetterHeader letter={group.letter} />
-                      {group.items.map((c) => (
-                        <DirectoryRow key={c.id} {...rowProps(c)} />
-                      ))}
+                      {group.items.map(personRow)}
                     </div>
                   ))
                 ) : (
-                  peopleRecent.map((c) => <DirectoryRow key={c.id} {...rowProps(c)} />)
+                  peopleRecent.map(personRow)
                 )}
               </>
             ) : sort === "alpha" ? (
               orgGroups.map((group) => (
                 <div key={group.letter}>
                   <LetterHeader letter={group.letter} />
-                  {group.items.map((c) => (
-                    <DirectoryRow
-                      key={c.id}
-                      rowId={`dir-row-${c.id}`}
-                      avatarUrl={c.avatarUrl}
-                      name={c.name || "Unnamed company"}
-                      secondary={c.domains[0] ?? c.website}
-                      selected={selected?.type === "company" && selected.id === c.id}
-                      highlighted={c.id === highlightId}
-                      onSelect={() => onSelect({ type: "company", id: c.id })}
-                    />
-                  ))}
+                  {group.items.map(companyRow)}
                 </div>
               ))
             ) : (
-              orgsRecent.map((c) => (
-                <DirectoryRow
-                  key={c.id}
-                  rowId={`dir-row-${c.id}`}
-                  avatarUrl={c.avatarUrl}
-                  name={c.name || "Unnamed company"}
-                  secondary={c.domains[0] ?? c.website}
-                  selected={selected?.type === "company" && selected.id === c.id}
-                  highlighted={c.id === highlightId}
-                  onSelect={() => onSelect({ type: "company", id: c.id })}
-                />
-              ))
+              orgsRecent.map(companyRow)
             )}
           </div>
         </ScrollArea>

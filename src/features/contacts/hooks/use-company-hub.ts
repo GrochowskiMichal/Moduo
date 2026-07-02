@@ -21,6 +21,8 @@ export type UseCompanyHubResult = {
   rollup: CompanyRollup;
   activity: ActivityEntry[];
   status: HubStatus;
+  /** `entityRefKey`s of the company's OWN direct links — the drag duplicate guard (FX-9). */
+  directLinkKeys: Set<string>;
   reload: () => void;
 };
 
@@ -33,6 +35,7 @@ export function useCompanyHub(
   const [rollup, setRollup] = useState<CompanyRollup>(EMPTY);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [status, setStatus] = useState<HubStatus>("loading");
+  const [directLinkKeys, setDirectLinkKeys] = useState<Set<string>>(() => new Set());
   const [tick, setTick] = useState(0);
 
   // Read members through a ref so the effect re-runs on the member *set* (the
@@ -91,6 +94,14 @@ export function useCompanyHub(
 
         if (!active) return;
         setActivity(activityRows);
+        setDirectLinkKeys(
+          new Set(
+            companyLinks
+              .map((l) => otherEndpoint(companyRef, l))
+              .filter((r): r is EntityRef => r !== null)
+              .map((r) => entityRefKey(r)),
+          ),
+        );
         setRollup(
           buildCompanyRollup({ company: companyRef, companyLinks, members: denormalized, memberLinks, records: byKey }),
         );
@@ -104,5 +115,5 @@ export function useCompanyHub(
     };
   }, [runtime, workspaceId, companyId, memberKey, tick]);
 
-  return { rollup, activity, status, reload };
+  return { rollup, activity, status, directLinkKeys, reload };
 }
