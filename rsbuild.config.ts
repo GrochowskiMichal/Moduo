@@ -79,7 +79,9 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
-    port: 8081,
+    // Honor an externally assigned port (e.g. the Claude preview harness sets
+    // PORT with autoPort); default stays 8081 for the normal dev scripts.
+    port: process.env.PORT ? Number(process.env.PORT) : 8081,
     strictPort: true,
   },
   output: {

@@ -147,6 +147,15 @@ Three-pane desktop shell. Min window 1024×700. See [.design/foundation/INFORMAT
 - `.design/<feature-slug>/` — design briefs per feature. Foundation lives at `.design/foundation/`.
 - `.storybook/` — Storybook config.
 
+## Session naming (parallel-session identification)
+
+The designer runs several sessions at once and identifies them by title. **The moment a session's purpose is clear, write it to the worktree-local `.claude/SESSION_TITLE` file** (plain text, one line, gitignored; a SessionStart hook picks it up and sets the session title on the next start/resume). Overwrite freely as focus sharpens.
+
+- Planning / general work: `[<Module>] <short title>` — e.g. `[Tasks] Gantt view roadmap`.
+- Executing a block: `[<Module> <BLOCK-ID>] <block name>` — e.g. `[Tasks TL-1] Static timeline`.
+
+The file is the source of truth; a manual rename in the session picker is overwritten on the next resume unless the file is updated too.
+
 ## Git / commits / branching
 
 Format follows the existing project style (concise present-tense imperative). Single-line subject preferred. Co-Authored-By trailer if Claude wrote the change.

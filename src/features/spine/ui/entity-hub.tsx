@@ -157,6 +157,7 @@ export function EntityHubSection({
           <EntityHubRow
             key={row.link.id}
             row={row}
+            variant={variant}
             canEdit={canEdit}
             onOpen={onOpen}
             onChangeKind={onChangeKind}
@@ -168,7 +169,7 @@ export function EntityHubSection({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="font-sans text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          className="rounded-sm font-sans text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           Show all ({section.count})
         </button>
@@ -179,13 +180,15 @@ export function EntityHubSection({
 
 type RowProps = {
   row: HubRow;
+  /** rail keeps the compact uppercase relation tag; page renders it quieter. */
+  variant?: "rail" | "page";
   canEdit: boolean;
   onOpen?: (ref: EntityRef) => void;
   onChangeKind?: (link: EntityLink, kind: RelationKind) => void;
   onUnlink?: (link: EntityLink) => void;
 };
 
-export function EntityHubRow({ row, canEdit, onOpen, onChangeKind, onUnlink }: RowProps) {
+export function EntityHubRow({ row, variant = "rail", canEdit, onOpen, onChangeKind, onUnlink }: RowProps) {
   // Neutral, monochrome — the type icon (not color) distinguishes a task from a
   // contact (R5: accent reserved; color is never the only signal).
   const Icon = resolveEntityIcon(row.other.type, row.icon);
@@ -208,9 +211,19 @@ export function EntityHubRow({ row, canEdit, onOpen, onChangeKind, onUnlink }: R
         {row.snippet ? (
           <span className="min-w-0 truncate text-xs text-muted-foreground">· {row.snippet}</span>
         ) : null}
-        <span className="ml-auto shrink-0 pl-2 text-2xs uppercase tracking-wide text-muted-foreground/70">
-          {RELATION_KIND_LABELS[row.relationKind]}
-        </span>
+        {variant === "page" ? (
+          // The page card is calmer: sentence-case caption, and the default
+          // "references" kind (no information) renders nothing at all.
+          row.relationKind !== "references" ? (
+            <span className="ml-auto shrink-0 pl-2 text-xs text-muted-foreground/70">
+              {RELATION_KIND_LABELS[row.relationKind]}
+            </span>
+          ) : null
+        ) : (
+          <span className="ml-auto shrink-0 pl-2 text-2xs uppercase tracking-wide text-muted-foreground/70">
+            {RELATION_KIND_LABELS[row.relationKind]}
+          </span>
+        )}
       </button>
 
       {canEdit ? (

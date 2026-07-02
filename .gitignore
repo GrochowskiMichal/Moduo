@@ -66,3 +66,4 @@ ds-bundle/
 .design-sync/node_modules
 .design-sync/ds-types/
 .design-sync/*.log
+.claude/SESSION_TITLE
