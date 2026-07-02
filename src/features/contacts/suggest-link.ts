@@ -6,6 +6,7 @@
 // AC7 proof; the hook (use-contact-suggestions) performs the writes.
 
 import type { EntityRef } from "../../lib/entity-links";
+import { coerceKindForPair } from "../spine/kind-constraints";
 import type { LinkSuggestion } from "../spine/suggest";
 
 /** The `runtime.contacts.link` args that accept a suggestion (AC7). */
@@ -18,12 +19,15 @@ export type ContactSuggestLinkArgs = {
   targetIcon?: string | null;
 };
 
-/** Map a scored spine suggestion → the contacts.link call that accepts it. */
+/** Map a scored spine suggestion → the contacts.link call that accepts it. The
+ * suggested kind is coerced to one sensible for the endpoint pair (FX-5) so an
+ * errant suggestion can never persist a nonsense edge (e.g. attachment between
+ * two people). */
 export function contactSuggestLinkArgs(contact: EntityRef, s: LinkSuggestion): ContactSuggestLinkArgs {
   return {
     contact,
     target: s.other,
-    relationKind: s.suggestedKind,
+    relationKind: coerceKindForPair(s.suggestedKind, contact.type, s.other.type),
     origin: "suggest",
     targetLabel: s.label,
     targetIcon: s.icon,

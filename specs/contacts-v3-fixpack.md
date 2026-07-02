@@ -1,6 +1,6 @@
 # Spec: Contacts v3 fix pack
 
-> Status: **In progress — FX-1/2/3 done 2026-07-02, FX-4…FX-9 remain** · Owner: maciej · Related briefs: `.design/contacts/BRIEF.md`, `.design/contacts/DESIGN_BRIEF.md`, `.design/contacts/REDESIGN.md`, `specs/contacts-v2.md`
+> Status: **DONE — FX-1…FX-9 all landed 2026-07-02** · Owner: maciej · Related briefs: `.design/contacts/BRIEF.md`, `.design/contacts/DESIGN_BRIEF.md`, `.design/contacts/REDESIGN.md`, `specs/contacts-v2.md`
 > Source: the 2026-07-02 whole-module critique (session `claude/upbeat-morse-d9e772`), every item ratified by the designer 2026-07-02. Designer decisions this spec locks: **everything ships, priority-ordered** · person↔person = a simple **People section** (typed relations later) · custom fields gain **single-select** (multi-select stays deferred) · the entry modal is **kept and upgraded** (not replaced) · tags live in the **card header** · directory default sort stays **A–Z with a Recent toggle** · modal duplicates **warn but allow** ("Open instead" jump).
 
 ## Scope

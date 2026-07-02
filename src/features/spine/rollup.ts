@@ -67,6 +67,9 @@ export type HubRow = {
   /** Type-glyph hint (resolved to a lucide icon by the component). */
   icon: string | null;
   tombstoned: boolean;
+  /** Provenance for an inherited row (e.g. a company's union row from a member):
+   * the member's name, or null/undefined for the entity's own rows (FX-7). */
+  via?: string | null;
 };
 
 /** One fixed section: heading + the rows that fell into it + the total count. */

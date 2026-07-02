@@ -4,7 +4,7 @@
 // the result onto a {@link Contact}; everything here is optional and forgiving —
 // a bad guess is a pre-fill the user edits, never a hard failure.
 
-import type { Contact } from "./model";
+import type { Contact, ContactChannel } from "./model";
 
 /**
  * The shallow parse result. Lists are deduped and order-preserving; scalars are
@@ -158,6 +158,39 @@ export function parseContactText(text: string): ParsedContactInput {
   }
 
   return { name, emails, phones, title, company };
+}
+
+/**
+ * Turn a flat list of values into labelled {@link ContactChannel}s, marking the
+ * first as primary (blank/duplicate values dropped). The v2 model stores multi-
+ * value channels; the paste flow needs every parsed email/phone, not just the
+ * first (FX-6 AC9).
+ */
+export function channelsFromValues(values: string[], label = "work"): ContactChannel[] {
+  const seen = new Set<string>();
+  const out: ContactChannel[] = [];
+  for (const raw of values) {
+    const value = raw.trim();
+    if (!value || seen.has(value.toLowerCase())) continue;
+    seen.add(value.toLowerCase());
+    out.push({ label, value, primary: out.length === 0 });
+  }
+  return out;
+}
+
+/**
+ * The channel lists a pasted signature yields — ALL parsed emails/phones as
+ * labelled channels, so the modal can patch them onto the created contact
+ * (create with the primary, then set the full lists — FX-6 AC9).
+ */
+export function parsedContactChannels(parsed: ParsedContactInput): {
+  emails: ContactChannel[];
+  phones: ContactChannel[];
+} {
+  return {
+    emails: channelsFromValues(parsed.emails),
+    phones: channelsFromValues(parsed.phones),
+  };
 }
 
 // Re-export the model type used at the call site, so consumers can import the

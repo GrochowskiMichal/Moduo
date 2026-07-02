@@ -1546,6 +1546,15 @@ export const webRuntime: ModuoRuntime = {
       return contactRowToModel(firstRow(data, "contacts_op_delete"));
     },
 
+    async deleteCompany({ workspaceId, companyId }) {
+      const { data, error } = await supabaseClient.rpc("companies_op_delete", {
+        p_workspace_id: workspaceId,
+        p_company_id: companyId,
+      });
+      if (error) throw new Error(error.message);
+      return companyRowToModel(firstRow(data, "companies_op_delete"));
+    },
+
     async importContacts({ workspaceId, rows }) {
       const { data, error } = await supabaseClient.rpc("contacts_op_import", {
         p_workspace_id: workspaceId,

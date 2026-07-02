@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { Contact, ContactChannel } from "./model";
-import { findDuplicateGroups } from "./dedupe";
+import { findDuplicateGroups, probeDuplicate } from "./dedupe";
 
 /** Minimal Contact factory — only the dedupe-relevant fields matter. */
 function contact(overrides: Partial<Contact> & Pick<Contact, "id">): Contact {
@@ -155,5 +155,31 @@ describe("findDuplicateGroups", () => {
       contact({ id: "c", name: "Cy", email: "cy@e.com" }),
     ]);
     expect(groups).toEqual([]);
+  });
+});
+
+describe("probeDuplicate — modal dup probe (FX-6 AC9)", () => {
+  const existing = [
+    contact({ id: "jane", name: "Jane Cooper", email: "jane@acme.com" }),
+    contact({ id: "bob", name: "Bob Ross", emails: [channel("bob@paint.com")] }),
+  ];
+
+  it("flags the contact whose email matches exactly (case-insensitive)", () => {
+    expect(probeDuplicate({ email: "JANE@acme.com" }, existing)?.id).toBe("jane");
+    // Channel-array emails are matched too, not just the scalar.
+    expect(probeDuplicate({ email: "bob@paint.com" }, existing)?.id).toBe("bob");
+  });
+
+  it("flags a near-identical name when there is no email hit", () => {
+    expect(probeDuplicate({ name: "  jane   cooper " }, existing)?.id).toBe("jane");
+  });
+
+  it("prefers an email match over a name match", () => {
+    expect(probeDuplicate({ email: "jane@acme.com", name: "Bob Ross" }, existing)?.id).toBe("jane");
+  });
+
+  it("returns null for a distinct person and for blank input", () => {
+    expect(probeDuplicate({ email: "new@x.com", name: "New Person" }, existing)).toBeNull();
+    expect(probeDuplicate({ email: "", name: "" }, existing)).toBeNull();
   });
 });

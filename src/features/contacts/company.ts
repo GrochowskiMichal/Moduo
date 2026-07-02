@@ -71,7 +71,10 @@ export function buildCompanyRollup(input: CompanyRollupInput): CompanyRollup {
   const merged = new Map<string, HubSection>();
   const seen = new Set<string>();
 
-  const fold = (focus: EntityRef, links: EntityLink[]) => {
+  // `via` is the member whose links carried an inherited row (FX-7 "· via Jane
+  // Cooper"); null for the company's own rows. First writer wins via `seen`, so a
+  // row reachable from both the company and a member keeps the company's null.
+  const fold = (focus: EntityRef, links: EntityLink[], via: string | null) => {
     for (const section of rollupSections(focus, links, records)) {
       for (const row of section.rows) {
         if (row.other.type === "company" && row.other.id === company.id) continue;
@@ -80,15 +83,15 @@ export function buildCompanyRollup(input: CompanyRollupInput): CompanyRollup {
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
         const acc = merged.get(section.key) ?? { key: section.key, label: section.label, rows: [], count: 0 };
-        acc.rows.push(row);
+        acc.rows.push({ ...row, via });
         merged.set(section.key, acc);
       }
     }
   };
 
-  fold(company, companyLinks);
+  fold(company, companyLinks, null);
   // Fold every person's work — denormalized members AND works-at-only people.
-  for (const p of people) fold({ type: "contact", id: p.id }, memberLinks[p.id] ?? []);
+  for (const p of people) fold({ type: "contact", id: p.id }, memberLinks[p.id] ?? [], p.name);
 
   const unionSections = [...merged.values()]
     .map((s) => ({ ...s, count: s.rows.length }))
