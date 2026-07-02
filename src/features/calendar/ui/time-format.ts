@@ -25,3 +25,14 @@ export function formatHourLabel(hour: number): string {
 export function formatTimeOfDay(ms: number): string {
   return TIME_FMT.format(ms);
 }
+
+const DAY_FMT = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
+
+/** "Thu, Jul 2" — the chip popovers' day line. */
+export function formatDayLabel(ms: number): string {
+  return DAY_FMT.format(ms);
+}

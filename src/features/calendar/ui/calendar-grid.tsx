@@ -25,6 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useDroppable } from "@dnd-kit/core";
 
 import { Button } from "../../../components/ui/button";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,12 @@ const CLICK_SLOP_PX = 4;
 const RESIZE_EDGE_PX = 6;
 
 export type MoveEventDeltas = { startDeltaMs: number; endDeltaMs: number };
+export type MoveTaskResult = { startMs: number; durationMinutes: number };
+
+/** A grid chip under a gesture — either kind shares the engine. */
+type GestureTarget =
+  | { type: "event"; chip: EventChip }
+  | { type: "task"; block: TaskBlock };
 
 type Props = {
   view: CalendarView;
@@ -72,7 +79,10 @@ type Props = {
   onCreateEvent: (draft: QuickCreateDraft) => void;
   /** Occurrence-level drag/resize result — the page maps it onto the series. */
   onMoveEvent: (eventId: string, deltas: MoveEventDeltas) => void;
+  /** Task-block drag/resize writes the task's schedule/duration (AC6). */
+  onMoveTask: (taskId: string, result: MoveTaskResult) => void;
   onEventClick: (chip: EventChip, rect: DOMRect) => void;
+  onTaskClick: (block: TaskBlock, rect: DOMRect) => void;
   selectedOccurrenceKey: string | null;
   onSelectOccurrence: (key: string | null) => void;
 };
@@ -120,7 +130,7 @@ type Gesture =
     }
   | {
       kind: "move" | "resize-start" | "resize-end";
-      chip: EventChip;
+      target: GestureTarget;
       dayIdx: number;
       startMin: number;
       endMin: number;
@@ -148,7 +158,9 @@ export function CalendarGrid({
   onToggleDone,
   onCreateEvent,
   onMoveEvent,
+  onMoveTask,
   onEventClick,
+  onTaskClick,
   selectedOccurrenceKey,
   onSelectOccurrence,
 }: Props) {
@@ -190,8 +202,24 @@ export function CalendarGrid({
   const columnRectsRef = useRef<ColumnRect[]>([]);
   const geomsRef = useRef(geoms);
   geomsRef.current = geoms;
-  const propsRef = useRef({ canEdit, onCreateEvent, onMoveEvent, onEventClick, onSelectOccurrence });
-  propsRef.current = { canEdit, onCreateEvent, onMoveEvent, onEventClick, onSelectOccurrence };
+  const propsRef = useRef({
+    canEdit,
+    onCreateEvent,
+    onMoveEvent,
+    onMoveTask,
+    onEventClick,
+    onTaskClick,
+    onSelectOccurrence,
+  });
+  propsRef.current = {
+    canEdit,
+    onCreateEvent,
+    onMoveEvent,
+    onMoveTask,
+    onEventClick,
+    onTaskClick,
+    onSelectOccurrence,
+  };
 
   const measureColumns = useCallback(() => {
     const root = gridRef.current;
@@ -265,6 +293,7 @@ export function CalendarGrid({
       g.moved ||
       Math.hypot(e.clientX - g.downX, e.clientY - g.downY) > CLICK_SLOP_PX;
     const duration = g.endMin - g.startMin;
+    const title = g.target.type === "event" ? g.target.chip.title : g.target.block.title;
     if (g.kind === "move") {
       const dayIdx = pointToColumn(e.clientX);
       const raw = pointToMinutes(e.clientY, dayIdx) - g.grabOffsetMin;
@@ -272,14 +301,14 @@ export function CalendarGrid({
         Math.min(Math.max(raw, 0), geomsRef.current[dayIdx].totalMinutes - duration),
         fine,
       );
-      setDragVisual({ dayIdx, startMin: start, endMin: start + duration, title: g.chip.title });
+      setDragVisual({ dayIdx, startMin: start, endMin: start + duration, title });
     } else if (g.kind === "resize-end") {
       const cur = snapMin(pointToMinutes(e.clientY, g.dayIdx), fine);
       setDragVisual({
         dayIdx: g.dayIdx,
         startMin: g.startMin,
         endMin: Math.max(cur, g.startMin + 15),
-        title: g.chip.title,
+        title,
       });
     } else {
       const cur = snapMin(pointToMinutes(e.clientY, g.dayIdx), fine);
@@ -287,7 +316,7 @@ export function CalendarGrid({
         dayIdx: g.dayIdx,
         startMin: Math.min(cur, g.endMin - 15),
         endMin: g.endMin,
-        title: g.chip.title,
+        title,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -322,19 +351,35 @@ export function CalendarGrid({
       if (v) {
         const geomFrom = geomsRef.current[g.dayIdx];
         const geomTo = geomsRef.current[v.dayIdx];
-        const origStart = geomFrom.dayStartMs + g.startMin * 60_000;
-        const origEnd = geomFrom.dayStartMs + g.endMin * 60_000;
-        const nextStart = geomTo.dayStartMs + v.startMin * 60_000;
-        const nextEnd = geomTo.dayStartMs + v.endMin * 60_000;
-        p.onMoveEvent(g.chip.eventId, {
-          startDeltaMs: nextStart - origStart,
-          endDeltaMs: nextEnd - origEnd,
-        });
+        if (g.target.type === "event") {
+          const origStart = geomFrom.dayStartMs + g.startMin * 60_000;
+          const origEnd = geomFrom.dayStartMs + g.endMin * 60_000;
+          const nextStart = geomTo.dayStartMs + v.startMin * 60_000;
+          const nextEnd = geomTo.dayStartMs + v.endMin * 60_000;
+          p.onMoveEvent(g.target.chip.eventId, {
+            startDeltaMs: nextStart - origStart,
+            endDeltaMs: nextEnd - origEnd,
+          });
+        } else {
+          // A MOVE keeps the task's stored duration — the rendered span is
+          // day-clipped (a 23:00+2h block draws as 1h), so deriving duration
+          // from the visual would silently truncate it. Only a RESIZE takes
+          // the visual span (that's what the user is stating).
+          p.onMoveTask(g.target.block.taskId, {
+            startMs: geomTo.dayStartMs + v.startMin * 60_000,
+            durationMinutes:
+              g.kind === "move"
+                ? g.target.block.durationMinutes
+                : Math.max(Math.round(v.endMin - v.startMin), 15),
+          });
+        }
       }
-    } else {
+    } else if (g.target.type === "event") {
       // No travel → a click: select + open the chip popover.
-      p.onSelectOccurrence(g.chip.occurrenceKey);
-      p.onEventClick(g.chip, g.rect);
+      p.onSelectOccurrence(g.target.chip.occurrenceKey);
+      p.onEventClick(g.target.chip, g.rect);
+    } else {
+      p.onTaskClick(g.target.block, g.rect);
     }
     endGesture();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -372,21 +417,16 @@ export function CalendarGrid({
     [beginGesture, measureColumns, pointToMinutes],
   );
 
-  /** Move/resize (native events) or click-select (all events). */
-  const onEventChipPointerDown = useCallback(
-    (e: React.PointerEvent, chip: EventChip, dayIdx: number, span: { topMinutes: number; heightMinutes: number }) => {
-      if (e.button !== 0) return;
-      e.stopPropagation();
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const p = propsRef.current;
-      if (!p.canEdit || chip.external) {
-        // External chips resist edits (read-only tooltip on the chip); a
-        // click still opens the popover/detail.
-        p.onSelectOccurrence(chip.occurrenceKey);
-        p.onEventClick(chip, rect);
-        return;
-      }
+  /** Shared chip gesture start (events + task blocks). */
+  const startChipGesture = useCallback(
+    (
+      e: React.PointerEvent,
+      target: GestureTarget,
+      dayIdx: number,
+      span: { topMinutes: number; heightMinutes: number },
+    ) => {
       e.preventDefault();
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       columnRectsRef.current = measureColumns();
       const offsetY = e.clientY - rect.top;
       const kind =
@@ -399,7 +439,7 @@ export function CalendarGrid({
       const grabOffsetMin = (offsetY / rect.height) * span.heightMinutes;
       beginGesture({
         kind,
-        chip,
+        target,
         dayIdx,
         startMin: span.topMinutes,
         endMin: Math.min(span.topMinutes + span.heightMinutes, geom.totalMinutes),
@@ -411,6 +451,43 @@ export function CalendarGrid({
       });
     },
     [beginGesture, measureColumns],
+  );
+
+  /** Move/resize (native events) or click-select (all events). */
+  const onEventChipPointerDown = useCallback(
+    (e: React.PointerEvent, chip: EventChip, dayIdx: number, span: { topMinutes: number; heightMinutes: number }) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      const p = propsRef.current;
+      if (!p.canEdit || chip.external) {
+        // External chips resist edits (read-only tooltip on the chip); a
+        // click still opens the popover/detail.
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        p.onSelectOccurrence(chip.occurrenceKey);
+        p.onEventClick(chip, rect);
+        return;
+      }
+      startChipGesture(e, { type: "event", chip }, dayIdx, span);
+    },
+    [startChipGesture],
+  );
+
+  /** Task blocks: drag writes schedule/duration; a checkbox press never drags. */
+  const onTaskChipPointerDown = useCallback(
+    (e: React.PointerEvent, block: TaskBlock, dayIdx: number, span: { topMinutes: number; heightMinutes: number }) => {
+      if (e.button !== 0) return;
+      if ((e.target as HTMLElement).closest("button")) return; // the checkbox
+      e.stopPropagation();
+      const p = propsRef.current;
+      if (!p.canEdit || block.done) {
+        // Done blocks sit serenely; a click still opens the popover.
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        p.onTaskClick(block, rect);
+        return;
+      }
+      startChipGesture(e, { type: "task", block }, dayIdx, span);
+    },
+    [startChipGesture],
   );
 
   const commitCreate = useCallback(
@@ -570,6 +647,7 @@ export function CalendarGrid({
               <DayColumn
                 key={key}
                 dayIdx={i}
+                dayKey={key}
                 geom={geoms[i]}
                 blocks={blocksByDay.get(key) ?? EMPTY_BLOCKS}
                 events={events}
@@ -581,6 +659,7 @@ export function CalendarGrid({
                 onToggleDone={onToggleDone}
                 onBackgroundPointerDown={onBackgroundPointerDown}
                 onEventChipPointerDown={onEventChipPointerDown}
+                onTaskChipPointerDown={onTaskChipPointerDown}
                 selectedKey={
                   colSelected && events.some((c) => c.occurrenceKey === colSelected)
                     ? colSelected
@@ -608,6 +687,7 @@ export function CalendarGrid({
 
 const DayColumn = memo(function DayColumn({
   dayIdx,
+  dayKey,
   geom,
   blocks,
   events,
@@ -617,6 +697,7 @@ const DayColumn = memo(function DayColumn({
   onToggleDone,
   onBackgroundPointerDown,
   onEventChipPointerDown,
+  onTaskChipPointerDown,
   selectedKey,
   pending,
   onCommitCreate,
@@ -627,6 +708,7 @@ const DayColumn = memo(function DayColumn({
   emptyHint,
 }: {
   dayIdx: number;
+  dayKey: string;
   geom: DayGeometry;
   blocks: TaskBlock[];
   events: EventChip[];
@@ -642,6 +724,12 @@ const DayColumn = memo(function DayColumn({
     dayIdx: number,
     span: { topMinutes: number; heightMinutes: number },
   ) => void;
+  onTaskChipPointerDown: (
+    e: React.PointerEvent,
+    block: TaskBlock,
+    dayIdx: number,
+    span: { topMinutes: number; heightMinutes: number },
+  ) => void;
   selectedKey: string | null;
   pending: PendingCreate | null;
   onCommitCreate: (draft: QuickCreateDraft) => void;
@@ -651,6 +739,14 @@ const DayColumn = memo(function DayColumn({
   showLoadingChips: boolean;
   emptyHint: string | null;
 }) {
+  // Drop target for the panel's task rows (the universal drag contract):
+  // the page's DndContext resolves which column the pointer is over; the
+  // drop handler converts the pointer's y into the slot.
+  const { setNodeRef: setDropRef, isOver: isDropOver } = useDroppable({
+    id: `cal-day:${dayKey}`,
+    data: { dayKey, dayIdx },
+    disabled: !canEdit,
+  });
   // Task blocks and events overlap freely and share the cluster layout.
   const layout = useMemo(
     () =>
@@ -675,8 +771,13 @@ const DayColumn = memo(function DayColumn({
 
   return (
     <div
+      ref={setDropRef}
       data-day-col
-      className="relative border-l border-border"
+      data-day-key={dayKey}
+      className={cn(
+        "relative border-l border-border",
+        isDropOver && "bg-accent/20",
+      )}
       style={{ height: y(geom.totalMinutes) }}
       onPointerDown={(e) => onBackgroundPointerDown(e, dayIdx)}
     >
@@ -714,13 +815,17 @@ const DayColumn = memo(function DayColumn({
             <div
               key={p.id}
               data-chip="task"
-              className="absolute z-[1] pl-px pr-0.5"
+              className={cn(
+                "absolute z-[1] pl-px pr-0.5",
+                canEdit && !block.done && "cursor-grab",
+              )}
               style={{
                 top: y(span.topMinutes),
                 height: `max(${y(span.heightMinutes)}, 1.375rem)`,
                 left: `${(p.col / p.cols) * 100}%`,
                 width: `${100 / p.cols}%`,
               }}
+              onPointerDown={(e) => onTaskChipPointerDown(e, block, dayIdx, span)}
             >
               <TaskBlockChip
                 title={block.title}

@@ -87,6 +87,30 @@ export function writeViewState(
   writeStored(viewKey(userId, workspaceId), state);
 }
 
+// ── right-panel variant (localStorage, per user+workspace — §10) ────────────
+
+export type PanelVariantId = "tasks" | "detail";
+
+function panelVariantKey(userId: string, workspaceId: string): string {
+  return `moduo:calendar:panel-variant:${userId}:${workspaceId}`;
+}
+
+export function readPanelVariant(userId: string, workspaceId: string): PanelVariantId {
+  return readStored(
+    panelVariantKey(userId, workspaceId),
+    (raw) => (raw === "detail" ? "detail" : "tasks"),
+    () => "tasks" as PanelVariantId,
+  );
+}
+
+export function writePanelVariant(
+  userId: string,
+  workspaceId: string,
+  variant: PanelVariantId,
+): void {
+  writeStored(panelVariantKey(userId, workspaceId), variant);
+}
+
 // ── the calendar prefs domain (cloud shape; local fallback until CAL-4/6) ───
 
 export type CalendarPrefs = {
