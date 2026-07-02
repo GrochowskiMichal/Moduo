@@ -386,6 +386,15 @@ export type ModuoRuntime = {
       entityType: string;
       entityId: string;
     }): Promise<{ tags: Tag[]; links: TagLink[] }>;
+    /**
+     * All live workspace tags + every tag link for the given entity types —
+     * the directory's tag-filter read (fix pack FX-3). One indexed query pair;
+     * omit `entityTypes` for all links.
+     */
+    listTagLinks(input: {
+      workspaceId: string;
+      entityTypes?: string[];
+    }): Promise<{ tags: Tag[]; links: TagLink[] }>;
     /** Blocked-by dependency edge (blocker → blocked, spec §5c). Idempotent. */
     createTaskRelation(input: {
       workspaceId: string;

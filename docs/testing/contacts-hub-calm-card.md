@@ -57,6 +57,15 @@
 - [ ] **Do:** switch quickly between two contacts → **Expect:** no flash of the previous contact's tags _(both)_
 - [ ] Cleanup note: test data left a `#client` tag on Jane Cooper + Acme Corp — remove if unwanted.
 
+## FX-3 — directory power (2026-07-02)
+- [ ] **Do:** look at the segmented control → **Expect:** "People 11 · Companies 3"-style counts _(both)_
+- [ ] **Do:** search "acme" on People → **Expect:** everyone at Acme matches (company name is searched now, plus title/phones/all emails) _(both)_
+- [ ] **Do:** Status ▾ → Active → **Expect:** list narrows; trigger shows "● Active"; "No status" option matches only status-less contacts _(both)_
+- [ ] **Do:** Tag ▾ → #client → **Expect:** combined with status, narrows further (Jane only in test data); tag/untag a contact on its card while the filter is active → the list updates by itself _(both)_
+- [ ] **Do:** click the sort icon → **Expect:** flat "Recent" list (no letter headers, favorites still pinned, freshest first); click again → A–Z returns _(both)_
+- [ ] **Do:** click into search, ↓ ↓ Enter → **Expect:** highlight walks the rows and Enter opens the highlighted one; `/` refocuses search; Enter on a focused star/button still does its own thing _(both)_
+- [ ] **Do:** rows with title + company → **Expect:** secondary reads "Head of Product · Acme Corp" _(both)_
+
 ## Regression sweep
 - [ ] **Do:** Tasks → open a task detail → **Expect:** the right-rail links section (when a task has links) is unchanged — compact uppercase relation tags still there (only the contacts *page* variant got the quiet captions) _(both)_
 - [ ] **Do:** app-wide sanity in dark mode → **Expect:** native scrollbars everywhere now render dark (the `color-scheme` token change is global — spot-check Notes/Email if anything looks off) _(both)_

@@ -24,6 +24,7 @@ import type { MentionCandidate } from "../../features/spine/mention";
 import "../../features/contacts/projectors";
 import type { Contact, ContactFieldType } from "../../features/contacts/model";
 import { useContactsDirectory } from "../../features/contacts/hooks/use-contacts-directory";
+import { useDirectoryTags } from "../../features/contacts/hooks/use-directory-tags";
 import { useContactHub } from "../../features/contacts/hooks/use-contact-hub";
 import { useCompanyHub } from "../../features/contacts/hooks/use-company-hub";
 import { buildFollowupTask, followupLinkArgs } from "../../features/contacts/followup";
@@ -61,6 +62,7 @@ export function ContactsPage() {
 
   const workspaceId = selectedWorkspaceId ?? null;
   const directory = useContactsDirectory(runtime, workspaceId);
+  const directoryTags = useDirectoryTags(runtime, workspaceId);
   const [importOpen, setImportOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
 
@@ -332,6 +334,9 @@ export function ContactsPage() {
       companies={directory.bundle.companies}
       status={directory.status}
       selected={selected}
+      workspaceTags={directoryTags.tags}
+      tagLinks={directoryTags.links}
+      onRefreshTags={directoryTags.reload}
       onSelect={setSelected}
       onNew={canEdit ? () => setFormOpen(true) : undefined}
       onImport={canEdit ? () => setImportOpen(true) : undefined}

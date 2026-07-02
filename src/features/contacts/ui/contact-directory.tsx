@@ -1,21 +1,40 @@
-// The Contacts directory rail (CO-2 + v2): people OR companies, with a pinned
-// Favorites group and iOS-style A–Z letter separators, search, and add/import.
-// Rows are presentational; selection + data come from the page. Responsive down
-// to a narrow rail; tokens only (R7/R10).
+// The Contacts directory rail (CO-2 + v2 + FX-3): people OR companies with a
+// pinned Favorites group, iOS-style A–Z letter separators (or a flat Recent
+// list), search across the widened field set, status/tag filters, counts on
+// the segmented control, and arrow/Enter keyboard navigation. Rows are
+// presentational; selection + data come from the page. Tokens only (R7/R10).
 
-import { useEffect, useMemo, useState } from "react";
-import { Building2, Copy, Plus, Search, Star, Upload, User } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownAZ, Building2, Copy, History, Plus, Search, Star, Upload, User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { IconButton } from "@/components/ui/icon-button";
+import type { Tag, TagLink } from "../../tasks/model";
 import type { Company, Contact } from "../model";
 import { groupByLetter } from "../letter-index";
 import { findDuplicateGroups } from "../dedupe";
+import {
+  filterCompanies,
+  filterPeople,
+  personSecondary,
+  sortRecent,
+  STATUS_FILTER_NONE,
+  type DirectorySort,
+} from "../directory-query";
+import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";
 import { ContactStatusDot } from "./contact-status-badge";
 
 export type DirectoryFilter = "people" | "companies";
@@ -31,22 +50,39 @@ export function initials(name: string): string {
 }
 
 type RowProps = {
+  rowId: string;
   avatarUrl: string | null;
   name: string;
   secondary: string | null;
   status?: string;
   selected: boolean;
+  /** Keyboard-nav highlight (visual only; Tab/focus rings stay native). */
+  highlighted?: boolean;
   favorite?: boolean;
   onSelect: () => void;
   onToggleFavorite?: () => void;
 };
 
-function DirectoryRow({ avatarUrl, name, secondary, status, selected, favorite, onSelect, onToggleFavorite }: RowProps) {
+function DirectoryRow({
+  rowId,
+  avatarUrl,
+  name,
+  secondary,
+  status,
+  selected,
+  highlighted,
+  favorite,
+  onSelect,
+  onToggleFavorite,
+}: RowProps) {
   return (
     <div
+      id={rowId}
       className={cn(
-        "group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5",
-        selected ? "bg-accent" : "hover:bg-accent/60",
+        // scroll-mt keeps a keyboard-highlighted row clear of the sticky
+        // letter header when scrolled into view.
+        "group flex w-full scroll-mt-6 items-center gap-2.5 rounded-md px-2 py-1.5",
+        selected ? "bg-accent" : highlighted ? "bg-accent/50" : "hover:bg-accent/60",
       )}
     >
       <button
@@ -98,28 +134,33 @@ type Props = {
   companies: Company[];
   status: "loading" | "ready" | "error";
   selected: DirectorySelection | null;
+  /** Workspace tags + contact/company tag links (the tag filter's data). */
+  workspaceTags?: Tag[];
+  tagLinks?: TagLink[];
   onSelect: (sel: DirectorySelection) => void;
   onNew?: () => void;
   onImport?: () => void;
   onToggleFavorite?: (contactId: string) => void;
   onRetry?: () => void;
+  /** Refresh the tag-filter data (called when the tag menu opens). */
+  onRefreshTags?: () => void;
 };
 
-const FILTER_ITEMS = [
-  { value: "people", label: "People" },
-  { value: "companies", label: "Companies" },
-];
+const ALL = "__all__";
 
 export function ContactDirectory({
   contacts,
   companies,
   status,
   selected,
+  workspaceTags = [],
+  tagLinks = [],
   onSelect,
   onNew,
   onImport,
   onToggleFavorite,
   onRetry,
+  onRefreshTags,
 }: Props) {
   // Seed from the selection so a company deep link doesn't flash the People
   // tab on first paint.
@@ -127,6 +168,13 @@ export function ContactDirectory({
     selected?.type === "company" ? "companies" : "people",
   );
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [sort, setSort] = useState<DirectorySort>("alpha");
+  // Keyboard highlight is an ID, not an index — reordering (starring a row,
+  // an import landing) can't silently move it onto a different record.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   // Follow the selection's type (a URL deep link can select a company while
   // the People tab is up) — but only when the selection itself changes, so
@@ -137,34 +185,158 @@ export function ContactDirectory({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.type, selected?.id]);
 
-  const q = query.trim().toLowerCase();
-  const people = useMemo(
-    () => contacts.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q)),
-    [contacts, q],
+  const companyNameById = useMemo(
+    () => new Map(companies.map((c) => [c.id, c.name || "Unnamed company"])),
+    [companies],
   );
-  const orgs = useMemo(() => companies.filter((c) => !q || c.name.toLowerCase().includes(q)), [companies, q]);
 
-  const favorites = useMemo(() => people.filter((c) => c.isFavorite), [people]);
-  // Favorites are pinned above; exclude them from the alphabetical groups to
-  // avoid a confusing double-listing in one scroll.
-  const peopleGroups = useMemo(
-    () => groupByLetter(people.filter((c) => !c.isFavorite), (c) => c.name || "Unnamed"),
-    [people],
+  const people = useMemo(
+    () =>
+      filterPeople(contacts, {
+        query,
+        status: statusFilter,
+        tagId: tagFilter,
+        tagLinks,
+        companyNameById,
+      }),
+    [contacts, query, statusFilter, tagFilter, tagLinks, companyNameById],
   );
-  const orgGroups = useMemo(() => groupByLetter(orgs, (c) => c.name || "Unnamed company"), [orgs]);
+  const orgs = useMemo(
+    () => filterCompanies(companies, { query, tagId: tagFilter, tagLinks }),
+    [companies, query, tagFilter, tagLinks],
+  );
+
+  const favorites = useMemo(() => {
+    const favs = people.filter((c) => c.isFavorite);
+    return sort === "recent" ? sortRecent(favs) : favs;
+  }, [people, sort]);
+  // Favorites are pinned above; exclude them from the main list to avoid a
+  // confusing double-listing in one scroll.
+  const rest = useMemo(() => people.filter((c) => !c.isFavorite), [people]);
+  const peopleGroups = useMemo(
+    () => (sort === "alpha" ? groupByLetter(rest, (c) => c.name || "Unnamed") : []),
+    [rest, sort],
+  );
+  const peopleRecent = useMemo(() => (sort === "recent" ? sortRecent(rest) : []), [rest, sort]);
+  const orgGroups = useMemo(
+    () => (sort === "alpha" ? groupByLetter(orgs, (c) => c.name || "Unnamed company") : []),
+    [orgs, sort],
+  );
+  const orgsRecent = useMemo(() => (sort === "recent" ? sortRecent(orgs) : []), [orgs, sort]);
   const dupGroups = useMemo(() => findDuplicateGroups(contacts), [contacts]);
 
   const showingPeople = filter === "people";
   const isEmpty = (showingPeople ? people.length : orgs.length) === 0;
+  // Status only applies (and only shows) on the People tab.
+  const filtersActive = !!(tagFilter || (showingPeople && statusFilter));
+
+  // Filter options = the defaults ∪ any renamed/custom status actually in use
+  // (statuses are free strings — a renamed one must stay filterable).
+  const statusOptions = useMemo(() => {
+    const opts = [...DEFAULT_CONTACT_STATUSES];
+    const known = new Set(opts.map((o) => o.id));
+    for (const c of contacts) {
+      if (c.status && !known.has(c.status)) {
+        known.add(c.status);
+        opts.push(contactStatusMeta(c.status));
+      }
+    }
+    return opts;
+  }, [contacts]);
+
+  // The flat, render-ordered row list keyboard nav walks (favorites first).
+  const flatRows = useMemo<DirectorySelection[]>(() => {
+    if (showingPeople) {
+      const ordered = sort === "alpha" ? peopleGroups.flatMap((g) => g.items) : peopleRecent;
+      return [...favorites, ...ordered].map((c) => ({ type: "contact" as const, id: c.id }));
+    }
+    const ordered = sort === "alpha" ? orgGroups.flatMap((g) => g.items) : orgsRecent;
+    return ordered.map((c) => ({ type: "company" as const, id: c.id }));
+  }, [showingPeople, sort, favorites, peopleGroups, peopleRecent, orgGroups, orgsRecent]);
+
+  const highlightIndexById = useMemo(() => {
+    const map = new Map<string, number>();
+    flatRows.forEach((r, i) => map.set(r.id, i));
+    return map;
+  }, [flatRows]);
+  const highlightIndex = highlightId != null ? (highlightIndexById.get(highlightId) ?? -1) : -1;
+
+  // Any change to what's visible resets the keyboard highlight.
+  useEffect(() => setHighlightId(null), [query, statusFilter, tagFilter, sort, filter]);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    document.getElementById(`dir-row-${highlightId}`)?.scrollIntoView({ block: "nearest" });
+  }, [highlightId]);
+
+  function onKeyDown(event: React.KeyboardEvent) {
+    const target = event.target as HTMLElement | null;
+    const inInput = target?.tagName?.toLowerCase() === "input";
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      searchRef.current?.focus();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      // Segmented control / menu triggers own their arrow keys.
+      if (target?.closest('[data-slot="segmented-control"],[aria-haspopup]')) return;
+      event.preventDefault();
+      const next =
+        event.key === "ArrowDown"
+          ? Math.min(highlightIndex + 1, flatRows.length - 1)
+          : highlightIndex <= 0
+            ? highlightIndex // ArrowUp with nothing highlighted is a no-op
+            : highlightIndex - 1;
+      const row = flatRows[next];
+      if (row) setHighlightId(row.id);
+    } else if (event.key === "Enter") {
+      // Never steal Enter from a focused control (row buttons, stars, the
+      // dup banner, menu triggers) — only the search input / container path
+      // activates the highlight.
+      if (target?.closest("button,a,[role='menuitem'],[role='menuitemradio']")) return;
+      const row = highlightIndex >= 0 ? flatRows[highlightIndex] : undefined;
+      if (row) {
+        event.preventDefault();
+        onSelect(row);
+      }
+    } else if (event.key === "/" && !inInput) {
+      event.preventDefault();
+      searchRef.current?.focus();
+    }
+  }
+
+  const statusFilterLabel =
+    statusFilter === ""
+      ? "Status"
+      : statusFilter === STATUS_FILTER_NONE
+        ? "No status"
+        : contactStatusMeta(statusFilter).label;
+  const activeTag = tagFilter ? workspaceTags.find((t) => t.id === tagFilter) : undefined;
+
+  const rowProps = (c: Contact) => ({
+    rowId: `dir-row-${c.id}`,
+    avatarUrl: c.avatarUrl,
+    name: c.name || "Unnamed",
+    secondary: personSecondary(c, c.companyId ? (companyNameById.get(c.companyId) ?? null) : null),
+    status: c.status,
+    favorite: c.isFavorite,
+    selected: selected?.type === "contact" && selected.id === c.id,
+    highlighted: c.id === highlightId,
+    onSelect: () => onSelect({ type: "contact", id: c.id }),
+    onToggleFavorite: onToggleFavorite ? () => onToggleFavorite(c.id) : undefined,
+  });
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 p-2">
+    <div className="flex h-full min-h-0 flex-col gap-2 p-2" onKeyDown={onKeyDown}>
       <div className="flex w-full items-center gap-1">
         <SegmentedControl
           aria-label="Filter directory"
           value={filter}
           onValueChange={(v) => setFilter(v as DirectoryFilter)}
-          items={FILTER_ITEMS}
+          items={[
+            { value: "people", label: `People ${contacts.length}` },
+            { value: "companies", label: `Companies ${companies.length}` },
+          ]}
           size="sm"
         />
         <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -176,11 +348,79 @@ export function ContactDirectory({
       <div className="relative">
         <Search className="pointer-events-none absolute left-2 top-1/2 size-icon-sm -translate-y-1/2 text-muted-foreground" aria-hidden />
         <Input
+          ref={searchRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={showingPeople ? "Search people" : "Search companies"}
           aria-label="Search contacts"
           className="pl-7 pr-2"
+        />
+      </div>
+
+      {/* Filters + sort — quiet ghost controls on one row (FX-3 AC4). */}
+      <div className="flex items-center gap-1">
+        {showingPeople ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn("gap-1.5", statusFilter ? "text-foreground" : "text-muted-foreground")}
+              >
+                {statusFilter && statusFilter !== STATUS_FILTER_NONE ? (
+                  <ContactStatusDot status={statusFilter} />
+                ) : null}
+                {statusFilterLabel}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuRadioGroup value={statusFilter || ALL} onValueChange={(v) => setStatusFilter(v === ALL ? "" : v)}>
+                <DropdownMenuRadioItem value={ALL}>All statuses</DropdownMenuRadioItem>
+                {statusOptions.map((s) => (
+                  <DropdownMenuRadioItem key={s.id} value={s.id}>
+                    <span className="flex items-center gap-1.5">
+                      <ContactStatusDot status={s.id} />
+                      {s.label}
+                    </span>
+                  </DropdownMenuRadioItem>
+                ))}
+                <DropdownMenuRadioItem value={STATUS_FILTER_NONE}>No status</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+        <DropdownMenu onOpenChange={(open) => open && onRefreshTags?.()}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("gap-1.5", tagFilter ? "text-foreground" : "text-muted-foreground")}
+            >
+              {activeTag ? `#${activeTag.name}` : "Tag"}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {workspaceTags.length === 0 ? (
+              <p className="px-2 py-1.5 text-sm text-muted-foreground">No tags yet.</p>
+            ) : (
+              <DropdownMenuRadioGroup value={tagFilter || ALL} onValueChange={(v) => setTagFilter(v === ALL ? "" : v)}>
+                <DropdownMenuRadioItem value={ALL}>All tags</DropdownMenuRadioItem>
+                {workspaceTags.map((t) => (
+                  <DropdownMenuRadioItem key={t.id} value={t.id}>
+                    #{t.name}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <IconButton
+          icon={sort === "alpha" ? ArrowDownAZ : History}
+          label={sort === "alpha" ? "Sorted A–Z — switch to recent" : "Sorted by recent — switch to A–Z"}
+          size="sm"
+          variant="ghost"
+          className="ml-auto shrink-0"
+          onClick={() => setSort((s) => (s === "alpha" ? "recent" : "alpha"))}
         />
       </div>
 
@@ -217,11 +457,15 @@ export function ContactDirectory({
           ))}
         </div>
       ) : isEmpty ? (
-        q ? (
+        query.trim() || filtersActive ? (
           <EmptyState
             icon={Search}
             title="No results"
-            description={`No ${showingPeople ? "people" : "companies"} match “${query.trim()}”.`}
+            description={
+              query.trim()
+                ? `No ${showingPeople ? "people" : "companies"} match “${query.trim()}”.`
+                : "Nothing matches the current filters."
+            }
           />
         ) : (
           <EmptyState
@@ -243,54 +487,53 @@ export function ContactDirectory({
                   <>
                     <LetterHeader letter="★ Favorites" />
                     {favorites.map((c) => (
-                      <DirectoryRow
-                        key={c.id}
-                        avatarUrl={c.avatarUrl}
-                        name={c.name || "Unnamed"}
-                        secondary={c.title || c.email}
-                        status={c.status}
-                        favorite
-                        selected={selected?.type === "contact" && selected.id === c.id}
-                        onSelect={() => onSelect({ type: "contact", id: c.id })}
-                        onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(c.id) : undefined}
-                      />
+                      <DirectoryRow key={c.id} {...rowProps(c)} />
                     ))}
                   </>
                 ) : null}
-                {peopleGroups.map((group) => (
-                  <div key={group.letter}>
-                    <LetterHeader letter={group.letter} />
-                    {group.items.map((c) => (
-                      <DirectoryRow
-                        key={c.id}
-                        avatarUrl={c.avatarUrl}
-                        name={c.name || "Unnamed"}
-                        secondary={c.title || c.email}
-                        status={c.status}
-                        favorite={c.isFavorite}
-                        selected={selected?.type === "contact" && selected.id === c.id}
-                        onSelect={() => onSelect({ type: "contact", id: c.id })}
-                        onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(c.id) : undefined}
-                      />
-                    ))}
-                  </div>
-                ))}
+                {sort === "alpha" ? (
+                  peopleGroups.map((group) => (
+                    <div key={group.letter}>
+                      <LetterHeader letter={group.letter} />
+                      {group.items.map((c) => (
+                        <DirectoryRow key={c.id} {...rowProps(c)} />
+                      ))}
+                    </div>
+                  ))
+                ) : (
+                  peopleRecent.map((c) => <DirectoryRow key={c.id} {...rowProps(c)} />)
+                )}
               </>
-            ) : (
+            ) : sort === "alpha" ? (
               orgGroups.map((group) => (
                 <div key={group.letter}>
                   <LetterHeader letter={group.letter} />
                   {group.items.map((c) => (
                     <DirectoryRow
                       key={c.id}
+                      rowId={`dir-row-${c.id}`}
                       avatarUrl={c.avatarUrl}
                       name={c.name || "Unnamed company"}
                       secondary={c.domains[0] ?? c.website}
                       selected={selected?.type === "company" && selected.id === c.id}
+                      highlighted={c.id === highlightId}
                       onSelect={() => onSelect({ type: "company", id: c.id })}
                     />
                   ))}
                 </div>
+              ))
+            ) : (
+              orgsRecent.map((c) => (
+                <DirectoryRow
+                  key={c.id}
+                  rowId={`dir-row-${c.id}`}
+                  avatarUrl={c.avatarUrl}
+                  name={c.name || "Unnamed company"}
+                  secondary={c.domains[0] ?? c.website}
+                  selected={selected?.type === "company" && selected.id === c.id}
+                  highlighted={c.id === highlightId}
+                  onSelect={() => onSelect({ type: "company", id: c.id })}
+                />
               ))
             )}
           </div>

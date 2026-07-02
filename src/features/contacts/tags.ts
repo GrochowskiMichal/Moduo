@@ -4,6 +4,14 @@
 
 import type { Tag, TagLink } from "../tasks/model";
 
+/** Fired after any contact/company tag mutation so directory filters refresh. */
+export const CONTACT_TAGS_CHANGED_EVENT = "moduo:contact-tags:changed";
+
+export function dispatchContactTagsChanged(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(CONTACT_TAGS_CHANGED_EVENT));
+}
+
 /** The live tags attached to the focus entity, name-sorted (matches Tasks). */
 export function attachedTags(all: Tag[], links: TagLink[]): Tag[] {
   const linked = new Set(links.map((l) => l.tagId));

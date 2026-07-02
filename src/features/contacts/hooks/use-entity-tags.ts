@@ -11,7 +11,7 @@ import { pickTagColor, type LabelColor } from "../../../components/tag-colors";
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Tag, TagLink } from "../../tasks/model";
-import { attachedTags, findTagByName } from "../tags";
+import { attachedTags, dispatchContactTagsChanged, findTagByName } from "../tags";
 
 export function useEntityTags(
   runtime: ModuoRuntime | null,
@@ -60,6 +60,7 @@ export function useEntityTags(
         setLinks((prev) => prev.filter((l) => l.tagId !== tagId));
         runtime.tasks
           .detachTag({ workspaceId, tagId, entityType: focus.type, entityId: focus.id })
+          .then(() => dispatchContactTagsChanged())
           .catch((err) => {
             setLinks((prev) => [...prev, existing]);
             toast.error("Couldn’t remove the tag", { description: err instanceof Error ? err.message : undefined });
@@ -76,7 +77,10 @@ export function useEntityTags(
         setLinks((prev) => [...prev, temp]);
         runtime.tasks
           .attachTag({ workspaceId, tagId, entityType: focus.type, entityId: focus.id })
-          .then((saved) => setLinks((prev) => prev.map((l) => (l.id === temp.id ? saved : l))))
+          .then((saved) => {
+            setLinks((prev) => prev.map((l) => (l.id === temp.id ? saved : l)));
+            dispatchContactTagsChanged();
+          })
           .catch((err) => {
             setLinks((prev) => prev.filter((l) => l.id !== temp.id));
             toast.error("Couldn’t add the tag", { description: err instanceof Error ? err.message : undefined });
@@ -124,6 +128,7 @@ export function useEntityTags(
             entityId: focus.id,
           });
           setLinks((prev) => [...prev, link]);
+          dispatchContactTagsChanged();
         } catch (err) {
           toast.error("Couldn’t create the tag", { description: err instanceof Error ? err.message : undefined });
           if (savedTagId) {
@@ -165,7 +170,10 @@ export function useEntityTags(
       const prevLinks = links;
       setTags((p) => p.filter((t) => t.id !== tagId));
       setLinks((p) => p.filter((l) => l.tagId !== tagId));
-      runtime.tasks.deleteTag({ workspaceId, tagId }).catch((err) => {
+      runtime.tasks
+        .deleteTag({ workspaceId, tagId })
+        .then(() => dispatchContactTagsChanged())
+        .catch((err) => {
         setTags(prevTags);
         setLinks(prevLinks);
         toast.error("Couldn’t delete the tag", { description: err instanceof Error ? err.message : undefined });
