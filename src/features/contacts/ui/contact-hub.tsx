@@ -52,6 +52,7 @@ import { useContactSuggestions } from "../hooks/use-contact-suggestions";
 import { initials } from "./contact-directory";
 import { ActivityTrail } from "./activity-trail";
 import { ContactStatusBadge, ContactStatusDot } from "./contact-status-badge";
+import { EntityTagRow } from "./entity-tag-row";
 import { LinkedSections } from "./linked-sections";
 import { EntityLinkPicker } from "./entity-link-picker";
 
@@ -404,6 +405,17 @@ export function ContactHub(props: ContactHubProps) {
             ) : null}
             {contact.status ? <ContactStatusBadge status={contact.status} /> : null}
           </div>
+          {!editing ? (
+            // key: remount per entity so tag state can never leak across a
+            // focus switch (stale chips / late-mutation writes).
+            <EntityTagRow
+              key={`contact:${contact.id}`}
+              runtime={runtime}
+              workspaceId={workspaceId}
+              focus={{ type: "contact", id: contact.id }}
+              canEdit={canEdit}
+            />
+          ) : null}
         </div>
         {canEdit ? (
           <div className="flex shrink-0 items-center gap-0.5">

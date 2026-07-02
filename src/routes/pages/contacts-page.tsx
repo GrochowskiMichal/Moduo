@@ -377,6 +377,8 @@ export function ContactsPage() {
         rollup={companyHub.rollup}
         status={companyHub.status}
         activity={companyHub.activity}
+        runtime={runtime}
+        workspaceId={ws}
         canEdit={canEdit}
         currentUserId={userId ?? null}
         onSaveDetails={(patch) =>

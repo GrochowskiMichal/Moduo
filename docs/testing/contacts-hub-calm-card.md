@@ -49,6 +49,14 @@
 - [ ] **Do:** open `/contacts?type=contact&id=00000000-0000-0000-0000-000000000000` → **Expect:** after ~2s, a quiet "That contact no longer exists" toast and the URL clears to /contacts _(web)_
 - [ ] **Do:** create a new contact via the modal → **Expect:** it opens selected (URL carries its id) with no false "no longer exists" toast _(both)_
 
+## FX-2 — tags on contacts & companies (2026-07-02)
+- [ ] **Do:** open a contact → header shows a tag row under the subtitle ("Add tag" when empty) → **Expect:** the picker lists the same workspace tags Tasks uses (#deep-work etc.) _(both)_
+- [ ] **Do:** create a tag from the picker ("Create #…") → **Expect:** chip appears immediately (auto-colored), survives reload; the same tag is now offered in the Tasks tag picker too _(both)_
+- [ ] **Do:** × a chip → **Expect:** it detaches from this contact only — the tag still exists in the workspace pool _(both)_
+- [ ] **Do:** tag a company (e.g. Acme) → **Expect:** same behavior on the company header _(both)_
+- [ ] **Do:** switch quickly between two contacts → **Expect:** no flash of the previous contact's tags _(both)_
+- [ ] Cleanup note: test data left a `#client` tag on Jane Cooper + Acme Corp — remove if unwanted.
+
 ## Regression sweep
 - [ ] **Do:** Tasks → open a task detail → **Expect:** the right-rail links section (when a task has links) is unchanged — compact uppercase relation tags still there (only the contacts *page* variant got the quiet captions) _(both)_
 - [ ] **Do:** app-wide sanity in dark mode → **Expect:** native scrollbars everywhere now render dark (the `color-scheme` token change is global — spot-check Notes/Email if anything looks off) _(both)_

@@ -14,7 +14,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { EntityRef } from "@/lib/entity-links";
-import type { CompanyDetailsPatch } from "@/lib/runtime.types";
+import type { CompanyDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { ActivityEntry } from "../../tasks/model";
 import type { CompanyRollup } from "../company";
@@ -22,6 +22,7 @@ import type { Company } from "../model";
 import { ActivityTrail } from "./activity-trail";
 import { initials } from "./contact-directory";
 import { ContactStatusDot } from "./contact-status-badge";
+import { EntityTagRow } from "./entity-tag-row";
 import { LinkedSections } from "./linked-sections";
 
 const SECTION_HEADING = "font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground";
@@ -31,6 +32,9 @@ export type CompanyHubProps = {
   rollup: CompanyRollup;
   status: HubStatus;
   activity: ActivityEntry[];
+  /** For the header tag row (FX-2); safe to omit in stories (row stays empty). */
+  runtime?: ModuoRuntime | null;
+  workspaceId?: string | null;
   canEdit?: boolean;
   currentUserId?: string | null;
   /** Injected for deterministic stories/tests; defaults to now. */
@@ -68,6 +72,8 @@ export function CompanyHub({
   rollup,
   status,
   activity,
+  runtime = null,
+  workspaceId = null,
   canEdit = false,
   currentUserId = null,
   now = new Date(),
@@ -122,6 +128,16 @@ export function CompanyHub({
           )}
           {!editing && (company.domains[0] || company.website) ? (
             <p className="truncate text-sm text-muted-foreground">{company.domains[0] ?? company.website}</p>
+          ) : null}
+          {!editing ? (
+            <EntityTagRow
+              key={`company:${company.id}`}
+              runtime={runtime}
+              workspaceId={workspaceId}
+              focus={{ type: "company", id: company.id }}
+              canEdit={canEdit}
+              className="mt-1"
+            />
           ) : null}
         </div>
         {canEdit && onSaveDetails ? (
