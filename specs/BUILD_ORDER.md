@@ -41,6 +41,13 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in t
 - [ ] **FX-7 — Company-page parity (incl. `companies_op_delete` migration)** · fixpack block 7 · deps: FX-6
 - [ ] **FX-8 — Single-select custom fields** · fixpack block 8 · deps: —
 - [ ] **FX-9 — Drag-to-link on /contacts (first CT-3 consumer)** · fixpack block 9 · deps: FX-5
+## Tasks — Timeline view (the un-deferred lightweight Gantt) · [`specs/tasks-timeline.md`](./tasks-timeline.md)
+
+> A third Plan-mode view (List | Board | **Timeline**) riding existing data — no migration, no new module. Slotted per ROADMAP §Open Questions ("Wave 2 or shortly after"); planned light 2026-07-02 at the designer's request.
+
+- [ ] **TL-1 — Static timeline** · timeline block 1 · deps: — (Tasks module is shipped)
+- [ ] **TL-2 — Drag interactions** · timeline block 2 · deps: TL-1
+- [ ] **TL-3 — Dependency layer** · timeline block 3 · deps: TL-1, TL-2 (creation half is the designated cut if long)
 
 ---
 
