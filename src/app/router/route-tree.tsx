@@ -9,6 +9,7 @@ import { TasksPage } from "../../routes/pages/tasks-page";
 import { MindmapPage } from "../../routes/pages/mindmap-page";
 import { EmailPage } from "../../routes/pages/email-page";
 import { ContactsPage } from "../../routes/pages/contacts-page";
+import { validateContactsSearch } from "../../features/contacts/search";
 import { SettingsPage } from "../../routes/pages/settings-page";
 import { PaywallPage } from "../../routes/pages/paywall-page";
 
@@ -89,6 +90,8 @@ const contactsRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/contacts",
   component: ContactsPage,
+  // URL-held selection + palette action (fix pack FX-1 AC1/AC2).
+  validateSearch: validateContactsSearch,
 });
 
 // /crm is the throwaway exploratory route; /contacts is its planned destination

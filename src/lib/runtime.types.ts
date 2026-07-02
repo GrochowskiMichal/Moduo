@@ -376,6 +376,25 @@ export type ModuoRuntime = {
       entityType: string;
       entityId: string;
     }): Promise<void>;
+    /**
+     * All live workspace tags + the tag links attached to one entity. A light
+     * read for non-task surfaces (contact/company hubs) that shouldn't pull
+     * the whole tasks bundle just to render a tag row (fix pack FX-2).
+     */
+    listEntityTags(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<{ tags: Tag[]; links: TagLink[] }>;
+    /**
+     * All live workspace tags + every tag link for the given entity types —
+     * the directory's tag-filter read (fix pack FX-3). One indexed query pair;
+     * omit `entityTypes` for all links.
+     */
+    listTagLinks(input: {
+      workspaceId: string;
+      entityTypes?: string[];
+    }): Promise<{ tags: Tag[]; links: TagLink[] }>;
     /** Blocked-by dependency edge (blocker → blocked, spec §5c). Idempotent. */
     createTaskRelation(input: {
       workspaceId: string;

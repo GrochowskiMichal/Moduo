@@ -891,6 +891,43 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
     },
 
+    async listEntityTags({ workspaceId, entityType, entityId }) {
+      const [tagsRes, linksRes] = await Promise.all([
+        supabaseClient.from("tags").select("*")
+          .eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
+        supabaseClient.from("tag_links").select("*")
+          .eq("workspace_id", workspaceId)
+          .eq("entity_type", entityType).eq("entity_id", entityId),
+      ]);
+      const firstError = tagsRes.error || linksRes.error;
+      if (firstError) throw new Error(firstError.message);
+      return {
+        tags: (tagsRes.data ?? []).map(tagRowToModel),
+        links: (linksRes.data ?? []).map(tagLinkRowToModel),
+      };
+    },
+
+    async listTagLinks({ workspaceId, entityTypes }) {
+      // Explicit ceiling — PostgREST silently caps at 1000 otherwise; 5000
+      // covers alpha-scale workspaces (revisit with pagination if profiling
+      // ever shows a workspace near it).
+      let linksQuery = supabaseClient
+        .from("tag_links").select("*")
+        .eq("workspace_id", workspaceId).limit(5000);
+      if (entityTypes && entityTypes.length > 0) linksQuery = linksQuery.in("entity_type", entityTypes);
+      const [tagsRes, linksRes] = await Promise.all([
+        supabaseClient.from("tags").select("*")
+          .eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
+        linksQuery,
+      ]);
+      const firstError = tagsRes.error || linksRes.error;
+      if (firstError) throw new Error(firstError.message);
+      return {
+        tags: (tagsRes.data ?? []).map(tagRowToModel),
+        links: (linksRes.data ?? []).map(tagLinkRowToModel),
+      };
+    },
+
     async createTaskRelation({ workspaceId, blockerTaskId, blockedTaskId }) {
       // Idempotent like attachTag — re-adding an existing edge returns it.
       const { data: existing } = await supabaseClient

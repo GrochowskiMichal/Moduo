@@ -2,11 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   CheckSquare,
+  Contact as ContactIcon,
   FileText,
   GitBranch,
   Inbox,
   LayoutGrid,
   Settings as SettingsIcon,
+  Upload,
+  UserPlus,
 } from "lucide-react";
 
 import {
@@ -67,6 +70,32 @@ export function GlobalCommandPalette() {
     { id: "grid", label: "Open Grid", icon: LayoutGrid, run: go("/") },
     { id: "mindmap", label: "Open Mindmap", icon: GitBranch, run: go("/mindmap") },
     { id: "email", label: "Open Email", icon: Inbox, run: go("/email") },
+    { id: "contacts", label: "Open Contacts", icon: ContactIcon, run: go("/contacts") },
+  ];
+
+  // Contacts actions work from any page: navigate carrying an `action` search
+  // param; the contacts page opens the dialog and clears the param (FX-1 AC2).
+  const contactsActions: Action[] = [
+    {
+      id: "new-contact",
+      label: "New contact",
+      icon: UserPlus,
+      run: () => {
+        setOpen(false);
+        // Functional updater — an object literal would REPLACE the whole
+        // search and wipe an existing ?type&id selection on /contacts.
+        void navigate({ to: "/contacts", search: (prev) => ({ ...prev, action: "new" as const }) });
+      },
+    },
+    {
+      id: "import-contacts",
+      label: "Import contacts",
+      icon: Upload,
+      run: () => {
+        setOpen(false);
+        void navigate({ to: "/contacts", search: (prev) => ({ ...prev, action: "import" as const }) });
+      },
+    },
   ];
 
   const settingsActions: Action[] = [
@@ -89,6 +118,14 @@ export function GlobalCommandPalette() {
         <CommandEmpty>No results.</CommandEmpty>
         <CommandGroup heading="Navigate">
           {navActions.map(({ id, label, icon: Icon, run }) => (
+            <CommandItem key={id} onSelect={run}>
+              <Icon />
+              <span>{label}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+        <CommandGroup heading="Contacts">
+          {contactsActions.map(({ id, label, icon: Icon, run }) => (
             <CommandItem key={id} onSelect={run}>
               <Icon />
               <span>{label}</span>

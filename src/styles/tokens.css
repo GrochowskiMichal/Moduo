@@ -103,6 +103,10 @@
 
 :root,
 [data-theme="dark"] {
+  /* Native chrome (scrollbars, form controls, date pickers) follows the theme —
+     without this they render light-on-dark. */
+  color-scheme: dark;
+
   /* Surface elevation — Spotify-derived 3-layer.            */
   --background:           oklch(0 0 0);         /* pure black canvas   */
   --foreground:           var(--neutral-50);    /* primary text        */
@@ -161,6 +165,8 @@
  * ==========================================================================*/
 
 [data-theme="light"] {
+  color-scheme: light;
+
   --background:           var(--neutral-50);
   --foreground:           var(--neutral-950);
 
