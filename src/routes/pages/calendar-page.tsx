@@ -54,6 +54,7 @@ export function CalendarPage() {
   return (
     <CalendarPageView
       api={api}
+      runtime={runtime}
       userId={userId as string}
       workspaceId={selectedWorkspaceId as string}
     />

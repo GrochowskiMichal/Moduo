@@ -1,16 +1,30 @@
 // The Week/Day time grid. All vertical geometry rides `--cal-hour-h` (density-
 // scaled) multiplied by REAL elapsed minutes from grid-layout.ts — DST days
 // (23h/25h) render their own height and chip positions never drift; wall-clock
-// inputs (working-hours prefs, "center on now") are converted through
+// inputs (working-hours prefs, "center on now") convert through
 // wallClockToRealMinutes/minutesIntoDay first. Inline styles here are
 // runtime-computed geometry only (sanctioned); every color and radius is
 // token-routed.
+//
+// Two chip kinds render here (DESIGN_BRIEF §2): task blocks (the lens,
+// muted/outline, checkbox) and events (calendar-colored; external = mirrored,
+// read-only). CAL-2 adds the planning gestures: draw-to-create (ghost + quick
+// popover), drag to move, edge resize — native events only; external chips
+// resist with a read-only tooltip (no write path exists, structurally).
 //
 // Render economy: the 30s now-tick flows into the columns as ONE primitive
 // (`nowMinutes` on today's column, null elsewhere) and DayColumn is memoized,
 // so a tick re-renders today's column only — not the whole week.
 
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { Button } from "../../../components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,26 +37,44 @@ import {
   type DayGeometry,
 } from "../grid-layout";
 import { localDayKey, type CalendarView, type TaskBlock } from "../lens";
+import type { EventChip } from "../events";
 import type { CalendarPrefs } from "../prefs";
+import { EventChipView } from "./event-chip";
+import { EventQuickCreate, type QuickCreateDraft } from "./event-quick-create";
 import { TaskBlockChip } from "./task-block-chip";
-import { formatHourLabel } from "./time-format";
+import { formatHourLabel, formatTimeOfDay } from "./time-format";
 
 const GUTTER_W = "3.25rem";
 /** Chips shorter than this render the single-line compact layout. */
 const COMPACT_BELOW_MINUTES = 40;
-/** Stable identity for empty columns so the memoized DayColumn can bail out. */
+/** Stable identities for empty columns so memoized DayColumns can bail out. */
 const EMPTY_BLOCKS: TaskBlock[] = [];
+const EMPTY_EVENTS: EventChip[] = [];
+/** Pointer travel below this is a click, not a drag (px). */
+const CLICK_SLOP_PX = 4;
+/** Chip edge band that means "resize" instead of "move" (px). */
+const RESIZE_EDGE_PX = 6;
+
+export type MoveEventDeltas = { startDeltaMs: number; endDeltaMs: number };
 
 type Props = {
   view: CalendarView;
   days: Date[];
   blocksByDay: Map<string, TaskBlock[]>;
+  eventsByDay: Map<string, EventChip[]>;
+  allDayByDay: Map<string, EventChip[]>;
   prefs: CalendarPrefs;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
   canEdit: boolean;
   onToggleDone: (taskId: string) => void;
+  onCreateEvent: (draft: QuickCreateDraft) => void;
+  /** Occurrence-level drag/resize result — the page maps it onto the series. */
+  onMoveEvent: (eventId: string, deltas: MoveEventDeltas) => void;
+  onEventClick: (chip: EventChip, rect: DOMRect) => void;
+  selectedOccurrenceKey: string | null;
+  onSelectOccurrence: (key: string | null) => void;
 };
 
 /** Re-render tick for the now-line; catches up on tab wake. */
@@ -65,19 +97,64 @@ function y(minutes: number): string {
   return `calc(var(--cal-hour-h) * ${minutes / 60})`;
 }
 
+function snapMin(minutes: number, fine: boolean): number {
+  const step = fine ? 5 : 15;
+  return Math.round(minutes / step) * step;
+}
+
+type PendingCreate = { dayIdx: number; startMin: number; endMin: number };
+
+type DragVisual = {
+  dayIdx: number;
+  startMin: number;
+  endMin: number;
+  title: string;
+};
+
+type Gesture =
+  | {
+      kind: "draw";
+      dayIdx: number;
+      anchorMin: number;
+      moved: boolean;
+    }
+  | {
+      kind: "move" | "resize-start" | "resize-end";
+      chip: EventChip;
+      dayIdx: number;
+      startMin: number;
+      endMin: number;
+      grabOffsetMin: number;
+      moved: boolean;
+      rect: DOMRect;
+      /** Pointer-down position in px — the click-vs-drag slop reference. */
+      downX: number;
+      downY: number;
+    };
+
+type ColumnRect = { left: number; right: number; top: number; height: number };
+
 export function CalendarGrid({
   view,
   days,
   blocksByDay,
+  eventsByDay,
+  allDayByDay,
   prefs,
   loading,
   error,
   onRetry,
   canEdit,
   onToggleDone,
+  onCreateEvent,
+  onMoveEvent,
+  onEventClick,
+  selectedOccurrenceKey,
+  onSelectOccurrence,
 }: Props) {
   const now = useNowTick(30_000);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const geoms = useMemo(() => days.map(dayGeometry), [days]);
   const maxMinutes = useMemo(
@@ -94,10 +171,271 @@ export function CalendarGrid({
   );
 
   const todayKey = localDayKey(now);
-  const hasAnyBlocks = useMemo(
-    () => [...blocksByDay.values()].some((list) => list.length > 0),
-    [blocksByDay],
+  const hasAnyChips = useMemo(
+    () =>
+      [...blocksByDay.values()].some((l) => l.length > 0) ||
+      [...eventsByDay.values()].some((l) => l.length > 0),
+    [blocksByDay, eventsByDay],
   );
+  const hasAllDay = useMemo(
+    () => days.some((d) => (allDayByDay.get(localDayKey(d)) ?? []).length > 0),
+    [days, allDayByDay],
+  );
+
+  const [pending, setPending] = useState<PendingCreate | null>(null);
+  const [dragVisual, setDragVisual] = useState<DragVisual | null>(null);
+
+  // ── the pointer gesture engine (draw / move / resize) ─────────────────────
+  const gestureRef = useRef<Gesture | null>(null);
+  const columnRectsRef = useRef<ColumnRect[]>([]);
+  const geomsRef = useRef(geoms);
+  geomsRef.current = geoms;
+  const propsRef = useRef({ canEdit, onCreateEvent, onMoveEvent, onEventClick, onSelectOccurrence });
+  propsRef.current = { canEdit, onCreateEvent, onMoveEvent, onEventClick, onSelectOccurrence };
+
+  const measureColumns = useCallback(() => {
+    const root = gridRef.current;
+    if (!root) return [];
+    return [...root.querySelectorAll<HTMLElement>("[data-day-col]")].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, height: r.height };
+    });
+  }, []);
+
+  const pointToColumn = useCallback((clientX: number): number => {
+    const rects = columnRectsRef.current;
+    for (let i = 0; i < rects.length; i++) {
+      if (clientX >= rects[i].left && clientX <= rects[i].right) return i;
+    }
+    // Off the edge → clamp to nearest.
+    if (rects.length === 0) return 0;
+    return clientX < rects[0].left ? 0 : rects.length - 1;
+  }, []);
+
+  const pointToMinutes = useCallback((clientY: number, dayIdx: number): number => {
+    const rect = columnRectsRef.current[dayIdx];
+    const geom = geomsRef.current[dayIdx];
+    if (!rect || !geom) return 0;
+    const frac = (clientY - rect.top) / rect.height;
+    return Math.min(Math.max(frac * geom.totalMinutes, 0), geom.totalMinutes);
+  }, []);
+
+  const endGesture = useCallback(() => {
+    gestureRef.current = null;
+    setDragVisual(null);
+    window.removeEventListener("pointermove", onWindowPointerMove);
+    window.removeEventListener("pointerup", onWindowPointerUp);
+    window.removeEventListener("pointercancel", onWindowPointerCancel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Touch/pen cancellation or OS interception: drop the gesture, commit nothing. */
+  const onWindowPointerCancel = useCallback(() => {
+    endGesture();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onWindowPointerMove = useCallback((e: PointerEvent) => {
+    const g = gestureRef.current;
+    if (!g) return;
+    // Self-heal a lost pointerup (released outside the window/over an iframe).
+    if (e.buttons === 0) {
+      endGesture();
+      return;
+    }
+    // Rects go stale if the user wheel-scrolls mid-drag — re-measure live
+    // (7 getBoundingClientRect calls per move; cheap).
+    columnRectsRef.current = measureColumns();
+    const fine = e.altKey;
+    if (g.kind === "draw") {
+      const cur = snapMin(pointToMinutes(e.clientY, g.dayIdx), fine);
+      const start = Math.min(g.anchorMin, cur);
+      const end = Math.max(g.anchorMin, cur);
+      if (Math.abs(cur - g.anchorMin) >= 5) g.moved = true;
+      setDragVisual({
+        dayIdx: g.dayIdx,
+        startMin: start,
+        endMin: Math.max(end, start + (g.moved ? 15 : 30)),
+        title: "",
+      });
+      return;
+    }
+    // move / resize on an event chip — slop measured in px from pointer-down.
+    g.moved =
+      g.moved ||
+      Math.hypot(e.clientX - g.downX, e.clientY - g.downY) > CLICK_SLOP_PX;
+    const duration = g.endMin - g.startMin;
+    if (g.kind === "move") {
+      const dayIdx = pointToColumn(e.clientX);
+      const raw = pointToMinutes(e.clientY, dayIdx) - g.grabOffsetMin;
+      const start = snapMin(
+        Math.min(Math.max(raw, 0), geomsRef.current[dayIdx].totalMinutes - duration),
+        fine,
+      );
+      setDragVisual({ dayIdx, startMin: start, endMin: start + duration, title: g.chip.title });
+    } else if (g.kind === "resize-end") {
+      const cur = snapMin(pointToMinutes(e.clientY, g.dayIdx), fine);
+      setDragVisual({
+        dayIdx: g.dayIdx,
+        startMin: g.startMin,
+        endMin: Math.max(cur, g.startMin + 15),
+        title: g.chip.title,
+      });
+    } else {
+      const cur = snapMin(pointToMinutes(e.clientY, g.dayIdx), fine);
+      setDragVisual({
+        dayIdx: g.dayIdx,
+        startMin: Math.min(cur, g.endMin - 15),
+        endMin: g.endMin,
+        title: g.chip.title,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onWindowPointerUp = useCallback((e: PointerEvent) => {
+    const g = gestureRef.current;
+    if (!g) {
+      endGesture();
+      return;
+    }
+    const p = propsRef.current;
+    if (g.kind === "draw") {
+      const fine = e.altKey;
+      const cur = snapMin(pointToMinutes(e.clientY, g.dayIdx), fine);
+      let startMin: number;
+      let endMin: number;
+      if (g.moved) {
+        startMin = Math.min(g.anchorMin, cur);
+        endMin = Math.max(Math.max(g.anchorMin, cur), startMin + 15);
+      } else {
+        // Plain click on empty grid = a 30-minute ghost (DESIGN_BRIEF §4).
+        startMin = g.anchorMin;
+        endMin = g.anchorMin + 30;
+      }
+      const total = geomsRef.current[g.dayIdx].totalMinutes;
+      endMin = Math.min(endMin, total);
+      startMin = Math.min(startMin, endMin - 15);
+      setPending({ dayIdx: g.dayIdx, startMin, endMin });
+    } else if (g.moved) {
+      const v = dragVisualRef.current;
+      if (v) {
+        const geomFrom = geomsRef.current[g.dayIdx];
+        const geomTo = geomsRef.current[v.dayIdx];
+        const origStart = geomFrom.dayStartMs + g.startMin * 60_000;
+        const origEnd = geomFrom.dayStartMs + g.endMin * 60_000;
+        const nextStart = geomTo.dayStartMs + v.startMin * 60_000;
+        const nextEnd = geomTo.dayStartMs + v.endMin * 60_000;
+        p.onMoveEvent(g.chip.eventId, {
+          startDeltaMs: nextStart - origStart,
+          endDeltaMs: nextEnd - origEnd,
+        });
+      }
+    } else {
+      // No travel → a click: select + open the chip popover.
+      p.onSelectOccurrence(g.chip.occurrenceKey);
+      p.onEventClick(g.chip, g.rect);
+    }
+    endGesture();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // dragVisual is set via state for rendering; the up-handler needs the
+  // latest value without re-binding listeners.
+  const dragVisualRef = useRef<DragVisual | null>(null);
+  dragVisualRef.current = dragVisual;
+
+  const beginGesture = useCallback(
+    (g: Gesture) => {
+      gestureRef.current = g;
+      columnRectsRef.current = measureColumns();
+      window.addEventListener("pointermove", onWindowPointerMove);
+      window.addEventListener("pointerup", onWindowPointerUp);
+      window.addEventListener("pointercancel", onWindowPointerCancel);
+    },
+    [measureColumns, onWindowPointerMove, onWindowPointerUp, onWindowPointerCancel],
+  );
+
+  /** Draw-to-create: pointer down on empty column space. */
+  const onBackgroundPointerDown = useCallback(
+    (e: React.PointerEvent, dayIdx: number) => {
+      const p = propsRef.current;
+      p.onSelectOccurrence(null);
+      if (!p.canEdit || e.button !== 0) return;
+      if ((e.target as HTMLElement).closest("[data-chip]")) return;
+      e.preventDefault();
+      columnRectsRef.current = measureColumns();
+      const anchor = snapMin(pointToMinutes(e.clientY, dayIdx), e.altKey);
+      beginGesture({ kind: "draw", dayIdx, anchorMin: anchor, moved: false });
+      setPending(null);
+    },
+    [beginGesture, measureColumns, pointToMinutes],
+  );
+
+  /** Move/resize (native events) or click-select (all events). */
+  const onEventChipPointerDown = useCallback(
+    (e: React.PointerEvent, chip: EventChip, dayIdx: number, span: { topMinutes: number; heightMinutes: number }) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const p = propsRef.current;
+      if (!p.canEdit || chip.external) {
+        // External chips resist edits (read-only tooltip on the chip); a
+        // click still opens the popover/detail.
+        p.onSelectOccurrence(chip.occurrenceKey);
+        p.onEventClick(chip, rect);
+        return;
+      }
+      e.preventDefault();
+      columnRectsRef.current = measureColumns();
+      const offsetY = e.clientY - rect.top;
+      const kind =
+        offsetY <= RESIZE_EDGE_PX
+          ? "resize-start"
+          : offsetY >= rect.height - RESIZE_EDGE_PX
+            ? "resize-end"
+            : "move";
+      const geom = geomsRef.current[dayIdx];
+      const grabOffsetMin = (offsetY / rect.height) * span.heightMinutes;
+      beginGesture({
+        kind,
+        chip,
+        dayIdx,
+        startMin: span.topMinutes,
+        endMin: Math.min(span.topMinutes + span.heightMinutes, geom.totalMinutes),
+        grabOffsetMin,
+        moved: false,
+        rect,
+        downX: e.clientX,
+        downY: e.clientY,
+      });
+    },
+    [beginGesture, measureColumns],
+  );
+
+  const commitCreate = useCallback(
+    (draft: QuickCreateDraft) => {
+      setPending(null);
+      propsRef.current.onCreateEvent(draft);
+    },
+    [],
+  );
+  const cancelCreate = useCallback(() => setPending(null), []);
+  /** The popover's time edits move the ghost — the chip is the consent gesture. */
+  const adjustPendingTimes = useCallback((startMs: number, endMs: number) => {
+    setPending((p) => {
+      if (!p) return p;
+      const geom = geomsRef.current[p.dayIdx];
+      if (!geom) return p;
+      const startMin = Math.max((startMs - geom.dayStartMs) / 60_000, 0);
+      const endMin = Math.min((endMs - geom.dayStartMs) / 60_000, geom.totalMinutes);
+      if (endMin <= startMin) return p;
+      if (startMin === p.startMin && endMin === p.endMin) return p;
+      return { ...p, startMin, endMin };
+    });
+  }, []);
+
+  useEffect(() => () => endGesture(), [endGesture]);
 
   // On open: center around now (or 9:00 when today isn't visible), in REAL
   // minutes so DST days center correctly. Not re-run on prev/next navigation —
@@ -160,9 +498,53 @@ export function CalendarGrid({
         })}
       </div>
 
+      {/* all-day lane — pinned above the hours, only when it has content */}
+      {hasAllDay ? (
+        <div
+          className="grid shrink-0 border-b border-border py-1"
+          style={{ gridTemplateColumns: columns }}
+        >
+          <div className="pr-2 text-right text-2xs text-muted-foreground">all-day</div>
+          {days.map((day) => {
+            const key = localDayKey(day);
+            const chips = allDayByDay.get(key) ?? EMPTY_EVENTS;
+            return (
+              <div key={key} className="flex min-w-0 flex-col gap-0.5 border-l border-border px-0.5">
+                {chips.map((chip) => (
+                  <button
+                    key={chip.occurrenceKey}
+                    type="button"
+                    data-chip="event"
+                    className="block w-full text-left"
+                    style={{ height: "var(--ctrl-h-sm)" }}
+                    onClick={(e) => {
+                      onSelectOccurrence(chip.occurrenceKey);
+                      onEventClick(chip, (e.currentTarget as HTMLElement).getBoundingClientRect());
+                    }}
+                  >
+                    <EventChipView
+                      title={chip.title}
+                      startMs={chip.startMs}
+                      endMs={chip.endMs}
+                      compact
+                      allDay
+                      external={chip.external}
+                      recurring={chip.recurring}
+                      selected={selectedOccurrenceKey === chip.occurrenceKey}
+                      past={false}
+                    />
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
       {/* the hours grid */}
       <div ref={scrollRef} className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
         <div
+          ref={gridRef}
           className="grid"
           style={{ gridTemplateColumns: columns, height: y(maxMinutes) }}
         >
@@ -182,21 +564,37 @@ export function CalendarGrid({
           {days.map((day, i) => {
             const key = localDayKey(day);
             const isToday = key === todayKey;
+            const colSelected = selectedOccurrenceKey;
+            const events = eventsByDay.get(key) ?? EMPTY_EVENTS;
             return (
               <DayColumn
                 key={key}
+                dayIdx={i}
                 geom={geoms[i]}
                 blocks={blocksByDay.get(key) ?? EMPTY_BLOCKS}
+                events={events}
                 prefs={prefs}
                 nowMinutes={
                   isToday ? minutesIntoDay(now.getTime(), geoms[i]) : null
                 }
                 canEdit={canEdit}
                 onToggleDone={onToggleDone}
-                showLoadingChips={loading && !hasAnyBlocks && i < 2}
+                onBackgroundPointerDown={onBackgroundPointerDown}
+                onEventChipPointerDown={onEventChipPointerDown}
+                selectedKey={
+                  colSelected && events.some((c) => c.occurrenceKey === colSelected)
+                    ? colSelected
+                    : null
+                }
+                pending={pending?.dayIdx === i ? pending : null}
+                onCommitCreate={commitCreate}
+                onCancelCreate={cancelCreate}
+                onAdjustPendingTimes={adjustPendingTimes}
+                dragVisual={dragVisual?.dayIdx === i ? dragVisual : null}
+                showLoadingChips={loading && !hasAnyChips && i < 2}
                 emptyHint={
-                  isToday && !loading && !error && !hasAnyBlocks
-                    ? "Nothing scheduled — tasks with a time land here."
+                  isToday && !loading && !error && !hasAnyChips && !pending
+                    ? "Nothing scheduled — draw a block or schedule a task."
                     : null
                 }
               />
@@ -209,51 +607,84 @@ export function CalendarGrid({
 }
 
 const DayColumn = memo(function DayColumn({
+  dayIdx,
   geom,
   blocks,
+  events,
   prefs,
   nowMinutes,
   canEdit,
   onToggleDone,
+  onBackgroundPointerDown,
+  onEventChipPointerDown,
+  selectedKey,
+  pending,
+  onCommitCreate,
+  onCancelCreate,
+  onAdjustPendingTimes,
+  dragVisual,
   showLoadingChips,
   emptyHint,
 }: {
+  dayIdx: number;
   geom: DayGeometry;
   blocks: TaskBlock[];
+  events: EventChip[];
   prefs: CalendarPrefs;
   /** Real minutes into this day for the now-line; null off-today. */
   nowMinutes: number | null;
   canEdit: boolean;
   onToggleDone: (taskId: string) => void;
+  onBackgroundPointerDown: (e: React.PointerEvent, dayIdx: number) => void;
+  onEventChipPointerDown: (
+    e: React.PointerEvent,
+    chip: EventChip,
+    dayIdx: number,
+    span: { topMinutes: number; heightMinutes: number },
+  ) => void;
+  selectedKey: string | null;
+  pending: PendingCreate | null;
+  onCommitCreate: (draft: QuickCreateDraft) => void;
+  onCancelCreate: () => void;
+  onAdjustPendingTimes: (startMs: number, endMs: number) => void;
+  dragVisual: DragVisual | null;
   showLoadingChips: boolean;
   emptyHint: string | null;
 }) {
+  // Task blocks and events overlap freely and share the cluster layout.
   const layout = useMemo(
     () =>
-      layoutDayChips(
-        blocks.map((b) => ({ id: b.taskId, startMs: b.startMs, endMs: b.endMs })),
-      ),
-    [blocks],
+      layoutDayChips([
+        ...blocks.map((b) => ({ id: b.taskId, startMs: b.startMs, endMs: b.endMs })),
+        ...events.map((c) => ({ id: c.occurrenceKey, startMs: c.startMs, endMs: c.endMs })),
+      ]),
+    [blocks, events],
   );
-  const byId = useMemo(
+  const blockById = useMemo(
     () => new Map(blocks.map((b) => [b.taskId, b])),
     [blocks],
+  );
+  const eventByKey = useMemo(
+    () => new Map(events.map((c) => [c.occurrenceKey, c])),
+    [events],
   );
   // Wall-clock prefs → real minutes (DST-correct wash bounds).
   const washTop = wallClockToRealMinutes(prefs.workStartMinute, geom);
   const washBottom = wallClockToRealMinutes(prefs.workEndMinute, geom);
+  const nowMs = Date.now();
 
   return (
     <div
       data-day-col
       className="relative border-l border-border"
       style={{ height: y(geom.totalMinutes) }}
+      onPointerDown={(e) => onBackgroundPointerDown(e, dayIdx)}
     >
       {/* off-hours wash (the invisible working-hours bound, §10) */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 bg-muted/40"
-        style={{ height: y(washTop) }}
+        style={{ height: y(Math.min(washTop, geom.totalMinutes)) }}
       />
       {washBottom < geom.totalMinutes ? (
         <div
@@ -273,31 +704,65 @@ const DayColumn = memo(function DayColumn({
         />
       ))}
 
-      {/* task blocks */}
+      {/* chips (both kinds, one cluster space) */}
       {layout.placed.map((p) => {
-        const block = byId.get(p.id);
-        if (!block) return null;
-        const span = chipSpanInDay(block.startMs, block.endMs, geom);
+        const block = blockById.get(p.id);
+        if (block) {
+          const span = chipSpanInDay(block.startMs, block.endMs, geom);
+          if (!span) return null;
+          return (
+            <div
+              key={p.id}
+              data-chip="task"
+              className="absolute z-[1] pl-px pr-0.5"
+              style={{
+                top: y(span.topMinutes),
+                height: `max(${y(span.heightMinutes)}, 1.375rem)`,
+                left: `${(p.col / p.cols) * 100}%`,
+                width: `${100 / p.cols}%`,
+              }}
+            >
+              <TaskBlockChip
+                title={block.title}
+                startMs={block.startMs}
+                endMs={block.endMs}
+                done={block.done}
+                compact={span.heightMinutes < COMPACT_BELOW_MINUTES}
+                canEdit={canEdit}
+                onToggleDone={() => onToggleDone(block.taskId)}
+              />
+            </div>
+          );
+        }
+        const chip = eventByKey.get(p.id);
+        if (!chip) return null;
+        const span = chipSpanInDay(chip.startMs, chip.endMs, geom);
         if (!span) return null;
         return (
           <div
             key={p.id}
-            className="absolute z-[1] pl-px pr-0.5"
+            data-chip="event"
+            className={cn(
+              "absolute z-[1] pl-px pr-0.5",
+              canEdit && !chip.external && "cursor-grab",
+            )}
             style={{
               top: y(span.topMinutes),
               height: `max(${y(span.heightMinutes)}, 1.375rem)`,
               left: `${(p.col / p.cols) * 100}%`,
               width: `${100 / p.cols}%`,
             }}
+            onPointerDown={(e) => onEventChipPointerDown(e, chip, dayIdx, span)}
           >
-            <TaskBlockChip
-              title={block.title}
-              startMs={block.startMs}
-              endMs={block.endMs}
-              done={block.done}
+            <EventChipView
+              title={chip.title}
+              startMs={chip.startMs}
+              endMs={chip.endMs}
               compact={span.heightMinutes < COMPACT_BELOW_MINUTES}
-              canEdit={canEdit}
-              onToggleDone={() => onToggleDone(block.taskId)}
+              external={chip.external}
+              recurring={chip.recurring}
+              selected={selectedKey === chip.occurrenceKey}
+              past={chip.endMs < nowMs}
             />
           </div>
         );
@@ -308,7 +773,7 @@ const DayColumn = memo(function DayColumn({
         const span = chipSpanInDay(o.startMs, o.endMs, geom);
         if (!span) return null;
         const titles = o.ids
-          .map((id) => byId.get(id)?.title)
+          .map((id) => blockById.get(id)?.title ?? eventByKey.get(id)?.title)
           .filter(Boolean)
           .join(", ");
         return (
@@ -322,6 +787,43 @@ const DayColumn = memo(function DayColumn({
           </div>
         );
       })}
+
+      {/* the draw ghost (before release) / drag-move preview */}
+      {dragVisual ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0.5 z-[4] rounded-md border border-primary/50 bg-primary/15 px-1.5 py-0.5"
+          style={{
+            top: y(dragVisual.startMin),
+            height: `max(${y(dragVisual.endMin - dragVisual.startMin)}, 1.125rem)`,
+          }}
+        >
+          <span className="text-2xs text-muted-foreground">
+            {dragVisual.title ? `${dragVisual.title} · ` : ""}
+            {formatTimeOfDay(geom.dayStartMs + dragVisual.startMin * 60_000)} –{" "}
+            {formatTimeOfDay(geom.dayStartMs + dragVisual.endMin * 60_000)}
+          </span>
+        </div>
+      ) : null}
+
+      {/* the materialized ghost: inline title + quick-create popover */}
+      {pending ? (
+        <div
+          className="absolute inset-x-0.5 z-[5]"
+          style={{
+            top: y(pending.startMin),
+            height: `max(${y(pending.endMin - pending.startMin)}, 1.375rem)`,
+          }}
+        >
+          <EventQuickCreate
+            startMs={geom.dayStartMs + pending.startMin * 60_000}
+            endMs={geom.dayStartMs + pending.endMin * 60_000}
+            onCommit={onCommitCreate}
+            onCancel={onCancelCreate}
+            onTimesChange={onAdjustPendingTimes}
+          />
+        </div>
+      ) : null}
 
       {/* loading shimmer */}
       {showLoadingChips ? (
