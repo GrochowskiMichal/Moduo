@@ -27,6 +27,13 @@ import type {
   ContactsModuleBundle,
 } from "../features/contacts/model";
 import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
+import type {
+  CalendarAccountModel,
+  CalendarEventModel,
+  CalendarEventPatch,
+  CalendarMirrorEventInput,
+  CalendarModuleBundle,
+} from "../features/calendar/events";
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
 import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { NotificationItem } from "../features/spine/notifications";
@@ -339,6 +346,48 @@ export type ModuoRuntime = {
   };
 
   calendar: {
+    // ── Wave-2 module surface (workspace-scoped, Supabase-first) ──────────
+    // (Bundle/patch shapes live below the ModuoRuntime type.)
+    // Writes go through calendar_op_* RPCs (guard + write + entities upsert
+    // + attributed activity in one txn); reads are indexed SELECTs.
+    /** Events + accounts bundle. Reads DEGRADE to empty pre-migration. */
+    listModule(workspaceId: string): Promise<CalendarModuleBundle>;
+    createEvent(input: {
+      workspaceId: string;
+      title: string;
+      startsAt: string;
+      endsAt: string;
+      allDay?: boolean;
+      rrule?: string | null;
+      description?: string;
+    }): Promise<CalendarEventModel>;
+    updateEvent(input: {
+      workspaceId: string;
+      eventId: string;
+      patch: CalendarEventPatch;
+    }): Promise<CalendarEventModel>;
+    removeEvent(input: { workspaceId: string; eventId: string }): Promise<void>;
+    upsertAccount(input: {
+      workspaceId: string;
+      provider: string;
+      externalId: string;
+      displayLabel: string;
+      color?: string | null;
+      status?: string | null;
+      lastSyncAt?: string | null;
+    }): Promise<CalendarAccountModel>;
+    removeAccount(input: { workspaceId: string; accountId: string }): Promise<void>;
+    /** Batched idempotent mirror upsert (the desktop sync engine's write). */
+    mirrorEvents(input: {
+      workspaceId: string;
+      accountId: string;
+      events: CalendarMirrorEventInput[];
+      deletedExternalIds?: string[];
+    }): Promise<{ upserted: number; removed: number }>;
+
+    // ── LEGACY (pre-Wave-2) — the retired localStorage store's surface plus
+    // the desktop OAuth/sync engine. use-calendar.ts is the only consumer;
+    // fully retired/re-pointed with CAL-6. Do not call from new code. ──────
     listEvents(): Promise<any[]>;
     upsertEvent(event: any): Promise<boolean>;
     deleteEvent(eventId: string): Promise<boolean>;

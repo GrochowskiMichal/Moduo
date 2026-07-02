@@ -152,6 +152,18 @@ export const tauriRuntime: ModuoRuntime = {
   },
 
   calendar: {
+    // Cloud-first Wave-2 surface: Supabase-direct, same code path as web
+    // (calendar_op_* RPCs + the entities registry).
+    listModule: webRuntime.calendar.listModule,
+    createEvent: webRuntime.calendar.createEvent,
+    updateEvent: webRuntime.calendar.updateEvent,
+    removeEvent: webRuntime.calendar.removeEvent,
+    upsertAccount: webRuntime.calendar.upsertAccount,
+    removeAccount: webRuntime.calendar.removeAccount,
+    mirrorEvents: webRuntime.calendar.mirrorEvents,
+
+    // LEGACY desktop store + the preserved OAuth/sync engine (CAL-6 re-points
+    // its output at mirrorEvents).
     async listEvents() {
       return invoke<any[]>("calendar_events_list");
     },

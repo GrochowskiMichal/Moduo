@@ -6,6 +6,7 @@ import { OnboardingPage } from "../../routes/pages/onboarding-page";
 import { GridPage } from "../../routes/pages/grid-page";
 import { NotesPage } from "../../routes/pages/notes-page";
 import { TasksPage } from "../../routes/pages/tasks-page";
+import { CalendarPage } from "../../routes/pages/calendar-page";
 import { MindmapPage } from "../../routes/pages/mindmap-page";
 import { EmailPage } from "../../routes/pages/email-page";
 import { ContactsPage } from "../../routes/pages/contacts-page";
@@ -74,6 +75,14 @@ const tasksRoute = createRoute({
   component: TasksPage,
 });
 
+// The Wave 2 calendar (specs/calendar.md AC1) — the rebuild of the legacy
+// exploratory calendar, sanctioned as a top-level route in the plan round.
+const calendarRoute = createRoute({
+  getParentRoute: () => appGateRoute,
+  path: "/calendar",
+  component: CalendarPage,
+});
+
 const mindmapRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/mindmap",
@@ -118,6 +127,7 @@ export const routeTree = rootRoute.addChildren([
     legacyGridRoute,
     notesRoute,
     tasksRoute,
+    calendarRoute,
     mindmapRoute,
     emailRoute,
     contactsRoute,

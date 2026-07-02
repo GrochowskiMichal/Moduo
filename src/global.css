@@ -555,6 +555,19 @@ body,
 
 /* ═══ Mindmap UI ═══ */
 
+/* ═══ Thin scrollbars (app-wide utility; calendar grid + rail use it) ═══ */
+
+/* Two mechanisms on purpose: modern engines take the standard properties
+   (when `scrollbar-width` is non-auto, Chromium ignores the ::-webkit rules
+   below and would otherwise color the native thin scrollbar from
+   `color-scheme` — white on our dark surfaces, hence the explicit
+   scrollbar-color); older WebKit (Tauri on pre-18.2 macOS WKWebView) still
+   reads the ::-webkit-scrollbar block. Both paths are token-routed. */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
 .scrollbar-thin::-webkit-scrollbar {
   width: 4px;
 }

@@ -17,6 +17,10 @@ import type {
   ContactDateEntry,
   ContactFieldDef,
 } from "../features/contacts/model";
+import type {
+  CalendarAccountModel,
+  CalendarEventModel,
+} from "../features/calendar/events";
 import { sanitizeTimeBlocks, type ActivityEntry, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
@@ -718,6 +722,107 @@ export const webRuntime: ModuoRuntime = {
   },
 
   calendar: {
+    // ── Wave-2 module surface. Writes = calendar_op_* RPCs (guard + write +
+    // entities upsert + attributed activity); reads = indexed SELECTs that
+    // DEGRADE to empty pre-migration (the deploy-gap posture — the page still
+    // works as a task-lens calendar with zero calendar tables).
+    async listModule(workspaceId) {
+      try {
+        const [eventsRes, accountsRes] = await Promise.all([
+          supabaseClient
+            .from("calendar_events")
+            .select("*")
+            .eq("workspace_id", workspaceId)
+            .is("deleted_at", null)
+            .order("start_time", { ascending: true }),
+          supabaseClient
+            .from("calendar_accounts")
+            .select("*")
+            .eq("workspace_id", workspaceId)
+            .is("deleted_at", null)
+            .order("created_at", { ascending: true }),
+        ]);
+        // Accounts degrade independently: the events table pre-exists (legacy),
+        // calendar_accounts only lands with the migration.
+        const accounts = accountsRes.error
+          ? []
+          : (accountsRes.data ?? []).map(calendarAccountRowToModel);
+        if (eventsRes.error) return { events: [], accounts, degraded: true };
+        return {
+          events: (eventsRes.data ?? []).map(calendarEventRowToModel),
+          accounts,
+          degraded: Boolean(accountsRes.error),
+        };
+      } catch {
+        return { events: [], accounts: [], degraded: true };
+      }
+    },
+    async createEvent({ workspaceId, title, startsAt, endsAt, allDay, rrule, description }) {
+      const { data, error } = await supabaseClient.rpc("calendar_op_event_create", {
+        p_workspace_id: workspaceId,
+        p_title: title,
+        p_starts_at: startsAt,
+        p_ends_at: endsAt,
+        p_all_day: allDay ?? false,
+        p_rrule: rrule ?? null,
+        p_description: description ?? "",
+      });
+      if (error) throw new Error(error.message);
+      return calendarEventRowToModel(firstRow(data, "calendar_op_event_create"));
+    },
+    async updateEvent({ workspaceId, eventId, patch }) {
+      const { data, error } = await supabaseClient.rpc("calendar_op_event_update", {
+        p_workspace_id: workspaceId,
+        p_event_id: eventId,
+        p_patch: patch,
+      });
+      if (error) throw new Error(error.message);
+      return calendarEventRowToModel(firstRow(data, "calendar_op_event_update"));
+    },
+    async removeEvent({ workspaceId, eventId }) {
+      const { error } = await supabaseClient.rpc("calendar_op_event_delete", {
+        p_workspace_id: workspaceId,
+        p_event_id: eventId,
+      });
+      if (error) throw new Error(error.message);
+    },
+    async upsertAccount({ workspaceId, provider, externalId, displayLabel, color, status, lastSyncAt }) {
+      const { data, error } = await supabaseClient.rpc("calendar_op_account_upsert", {
+        p_workspace_id: workspaceId,
+        p_provider: provider,
+        p_external_id: externalId,
+        p_display_label: displayLabel,
+        p_color: color ?? null,
+        p_status: status ?? null,
+        p_last_sync_at: lastSyncAt ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return calendarAccountRowToModel(firstRow(data, "calendar_op_account_upsert"));
+    },
+    async removeAccount({ workspaceId, accountId }) {
+      const { error } = await supabaseClient.rpc("calendar_op_account_remove", {
+        p_workspace_id: workspaceId,
+        p_account_id: accountId,
+      });
+      if (error) throw new Error(error.message);
+    },
+    async mirrorEvents({ workspaceId, accountId, events, deletedExternalIds }) {
+      const { data, error } = await supabaseClient.rpc("calendar_op_mirror_events", {
+        p_workspace_id: workspaceId,
+        p_account_id: accountId,
+        p_events: events,
+        p_deleted_external_ids: deletedExternalIds ?? [],
+      });
+      if (error) throw new Error(error.message);
+      return {
+        upserted: Number(data?.upserted ?? 0),
+        removed: Number(data?.removed ?? 0),
+      };
+    },
+
+    // ── LEGACY (pre-Wave-2; use-calendar.ts only; retired with CAL-6). The
+    // migration's op-only RLS makes the direct writes below no-ops — they
+    // already error-swallow by contract.
     async listEvents() {
       const { data: { user } } = await supabaseClient.auth.getUser();
       if (!user) return [];
@@ -1857,5 +1962,47 @@ function contactFieldDefRowToModel(r: any): ContactFieldDef {
     type: r.type ?? "text",
     options: Array.isArray(r.options) ? r.options.map(String) : [],
     position: typeof r.position === "number" ? r.position : Number(r.position) || 0,
+  };
+}
+
+// ── Calendar module row⇄model mappers (Wave 2) ───────────────────────────────
+// snake_case legacy column names (start_time/end_time/recurrence_rule) stay in
+// the DB; the model speaks the Wave-2 vocabulary (startsAt/endsAt/rrule).
+
+function calendarEventRowToModel(r: any): CalendarEventModel {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id ?? null,
+    ownerId: r.owner_id ?? null,
+    sourceAccountId: r.source_account_id ?? null,
+    externalEventId: r.external_event_id ?? null,
+    calendarId: r.calendar_id ?? "moduo",
+    title: r.title ?? "",
+    description: r.description ?? "",
+    startsAt: r.start_time,
+    endsAt: r.end_time,
+    allDay: Boolean(r.all_day),
+    rrule: r.recurrence_rule ?? null,
+    status: r.status ?? "confirmed",
+    color: r.color ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+function calendarAccountRowToModel(r: any): CalendarAccountModel {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    ownerId: r.owner_id ?? null,
+    provider: r.provider ?? "",
+    externalId: r.external_id ?? "",
+    displayLabel: r.display_label ?? "",
+    isDefaultTarget: Boolean(r.is_default_target),
+    color: r.color ?? null,
+    lastSyncAt: r.last_sync_at ?? null,
+    status: r.status ?? "ok",
+    deletedAt: r.deleted_at ?? null,
   };
 }

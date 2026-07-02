@@ -163,6 +163,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       baseModulesNavItems.filter((tab) => {
         if (tab.module === "notes") return modulePermissions.notes !== "none";
         if (tab.module === "tasks") return modulePermissions.tasks !== "none";
+        // Calendar rides the Tasks permission lane at alpha (specs/calendar.md).
+        if (tab.module === "calendar") return modulePermissions.tasks !== "none";
         return true;
       }),
     [modulePermissions.notes, modulePermissions.tasks],
@@ -174,9 +176,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     }
   }, [isSettingsRoute, navigate, pathname, modulesNavItems]);
 
-  // ⌘1..⌘6 navigate to the Nth visible module tab. Six fixed useShortcut
-  // calls keeps hook order stable across renders; handlers no-op when the
-  // index exceeds the current visible list.
+  // ⌘1..⌘7 navigate to the Nth visible module tab. Fixed useShortcut calls
+  // keep hook order stable across renders; handlers no-op when the index
+  // exceeds the current visible list.
   const navigateToIndex = useCallback(
     (index: number) => {
       const item = modulesNavItems[index];
@@ -191,6 +193,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useShortcut("module-4", useCallback(() => navigateToIndex(3), [navigateToIndex]));
   useShortcut("module-5", useCallback(() => navigateToIndex(4), [navigateToIndex]));
   useShortcut("module-6", useCallback(() => navigateToIndex(5), [navigateToIndex]));
+  useShortcut("module-7", useCallback(() => navigateToIndex(6), [navigateToIndex]));
 
   useEffect(() => {
     writePanelsMap(featurePanels);

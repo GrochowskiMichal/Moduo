@@ -1,3 +1,10 @@
+// ⚠ LEGACY (pre-Wave-2). These types back the OLD localStorage calendar and
+// the desktop OAuth/sync engine only. The calendar of record is the Wave 2
+// rebuild: ../lens.ts (grid model, CalendarView = day|week), ../prefs.ts
+// (view state + prefs). Do NOT import CalendarViewMode into new grid code.
+// The localStorage event store retires with CAL-2; the OAuth/sync types are
+// reused by CAL-6's mirror (specs/calendar.md, assumption 4).
+
 export type CalendarViewMode = "day" | "week" | "month";
 
 export type CalendarProvider = "google" | "outlook" | "apple" | "local";
