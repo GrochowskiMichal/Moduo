@@ -1,3 +1,9 @@
+// ⚠ LEGACY (pre-Wave-2). The localStorage-backed calendar store + OAuth state
+// machine. Its ONLY remaining consumer is Settings → Integrations (the OAuth
+// engine survives as CAL-6's mirror source); the event store is superseded by
+// the Wave 2 lens/grid (specs/calendar.md) and retires with CAL-2/CAL-6.
+// Do not wire new features to this hook.
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   CalendarAccount,

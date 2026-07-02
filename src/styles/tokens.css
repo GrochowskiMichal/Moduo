@@ -388,6 +388,9 @@
   --icon-sm:  0.875rem;  /* 14 — default control + row icon   */
   --icon:     1rem;      /* 16 — primary / standalone         */
   --icon-lg:  1.25rem;   /* 20 — emphasis                     */
+  /* Calendar grid: height of one hour row. Density-scaled so the grid's
+     rhythm follows the density axis like rows/controls do. */
+  --cal-hour-h: 3.5rem;  /* 56 */
 }
 
 [data-density="compact"] {
@@ -404,6 +407,7 @@
   --icon-sm:  0.875rem;    /* 14   */
   --icon:     0.9375rem;   /* 15   */
   --icon-lg:  1.125rem;    /* 18   */
+  --cal-hour-h: 3rem;      /* 48   */
 }
 
 [data-density="dense"] {
@@ -420,6 +424,7 @@
   --icon-sm:  0.78125rem;  /* 12.5    */
   --icon:     0.875rem;    /* 14      */
   --icon-lg:  1rem;        /* 16      */
+  --cal-hour-h: 2.75rem;   /* 44      */
 }
 
 /* ============================================================================

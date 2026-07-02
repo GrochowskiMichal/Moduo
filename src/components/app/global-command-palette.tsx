@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  Calendar as CalendarIcon,
   CheckSquare,
   FileText,
   GitBranch,
@@ -64,6 +65,7 @@ export function GlobalCommandPalette() {
   const navActions: Action[] = [
     { id: "notes", label: "Open Notes", icon: FileText, run: go("/notes") },
     { id: "tasks", label: "Open Tasks", icon: CheckSquare, run: go("/tasks") },
+    { id: "calendar", label: "Open Calendar", icon: CalendarIcon, run: go("/calendar") },
     { id: "grid", label: "Open Grid", icon: LayoutGrid, run: go("/") },
     { id: "mindmap", label: "Open Mindmap", icon: GitBranch, run: go("/mindmap") },
     { id: "email", label: "Open Email", icon: Inbox, run: go("/email") },
