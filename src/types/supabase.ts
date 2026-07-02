@@ -2439,6 +2439,29 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      companies_op_delete: {
+        Args: { p_company_id: string; p_workspace_id: string }
+        Returns: {
+          avatar_url: string | null
+          created_at: string
+          custom: Json
+          deleted_at: string | null
+          domains: string[]
+          id: string
+          name: string
+          notes_inline: string
+          owner_id: string | null
+          updated_at: string
+          website: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "companies"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       companies_op_set_details: {
         Args: { p_company_id: string; p_patch: Json; p_workspace_id: string }
         Returns: {

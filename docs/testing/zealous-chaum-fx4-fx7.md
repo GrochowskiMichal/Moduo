@@ -1,6 +1,6 @@
-# Manual test checklist — Contacts v3 fix pack FX-4…FX-7
+# Manual test checklist — Contacts v3 fix pack FX-4…FX-9
 
-> Generated 2026-07-02 · branch `claude/zealous-chaum-0d9005` · **Live-verified:** no — `bun run verify` green (typecheck + lint + 440 unit tests) and the worktree source compiles + serves in a real rsbuild dev build (HTTP 200), but UI/round-trip live-verify was not run: the worktree has no installed deps for the bound preview sandbox, the hosted test trial is likely expired (paywall), and `companies_op_delete` is deploy-gated. Every AC's pure logic is unit-tested; this checklist is the render/round-trip confirmation.
+> Generated 2026-07-02 · branch `claude/zealous-chaum-0d9005` · **Live-verified:** partial — `bun run verify` green (typecheck + lint + 447 unit tests), the worktree source compiles + serves in a real rsbuild dev build (HTTP 200), and the `companies_op_delete` migration is **applied to prod + round-trip verified** (rolled-back txn). UI render/interaction was not driven here (bound preview sandbox + likely-expired hosted trial); this checklist is the render/interaction confirmation. Every AC's pure logic is unit-tested.
 > Run top-to-bottom on **web** (contacts is Supabase-direct on both surfaces). Requires **edit** permission on the workspace.
 
 ## FX-4 — Card quick wins (contact page)
@@ -46,7 +46,7 @@
 - [ ] **Do:** Drag a person already linked to the selected entity onto it again. → **Expect:** "Already linked" toast — no duplicate, no misleading Undo. _(web)_
 - [ ] **Do:** Click a directory row (don't drag). → **Expect:** It still selects normally; the favorite star still toggles; keyboard nav still works. _(web)_
 - [ ] **Do:** As a view-only member, try to drag a row. → **Expect:** No drag (rows aren't draggable); the hub shows no drop ring. _(web)_
-- [ ] **Note (recorded limitation):** dropping a person on a company creates the works-at link (person shows in People) but does **not** set the contact's header company chip — that still needs the card's "Set company". Not a bug.
+- [ ] **Do:** After dropping a person on a company, open that person's card. → **Expect:** Their header shows "works at <Company>" — the drop sets the denormalized company FK too, not just the spine edge (dual-write). _(web)_
 
 ## Edge cases
 - [ ] **Do:** Modal duplicate warning false positive (a real new person who shares a name). → **Expect:** Warning is informational; "Add contact" works. _(web)_
@@ -54,9 +54,9 @@
 - [ ] **Do:** View-only member on a contact/company page. → **Expect:** Status pill is a plain badge (no dropdown), no copy is fine, no modal/delete/add-person affordances. _(web)_
 
 ## Migrations / data
-- [ ] **Do:** Apply `supabase/migrations/20260702160000_companies_delete.sql` to the Supabase project and regenerate `src/types/supabase.ts`. Then run the FX-7 Delete-company check above. → **Expect:** RPC `companies_op_delete` exists, guarded (edit perm), soft-deletes + clears members' `company_id` + drops works-at edges + tombstones the registry, one txn. **Until applied, Delete company returns an RPC error (expected).**
+- [x] **`companies_op_delete` — APPLIED to prod 2026-07-02** (`wtoonrvuqumihpkbvwvs`; MCP reconnected). Authenticated round-trip verified in a rolled-back txn: soft-delete + members' `company_id` cleared + works-at edges dropped + registry tombstoned + `companies.delete` activity — all green, prod left byte-clean. `src/types/supabase.ts` updated. **Delete company now works live** — run the FX-7 delete check above end-to-end.
+- [x] **`moduo-mcp` edge function redeployed** (the connector was stale at v1) — the contacts/links/tasks agent tools are live (verify_jwt=false, workspace-API-key auth). Agent-surface only; not needed for the UI test pass.
 
 ## Known gaps / not-yet-testable
-- Full UI/round-trip live-verify not run (see header). The pure logic behind every AC is unit-tested (kind-constraints, dates/birthday, dedupe probe, parse multi-value, interaction-weighted last touch, company provenance, contact↔contact resolveKind).
-- `companies_op_delete` is deploy-gated (Supabase MCP not authorized in this session) — Delete company is unverifiable until the migration lands.
-- Drag-to-link onto a hub is **FX-9** (a later block), not covered here.
+- Full UI/interaction live-verify not driven here (bound preview sandbox + likely-expired hosted trial). The pure logic behind every AC is unit-tested (kind-constraints, dates/birthday, dedupe probe, parse multi-value, interaction-weighted last touch, company provenance, contact↔contact resolveKind); the `companies_op_delete` server invariants are round-trip verified on prod.
+- Drag-to-link is unsimulable with synthetic events in a worktree (dnd-kit rAF loop; gotchas) — the FX-9 drag checks above are a hands-on manual surface.
