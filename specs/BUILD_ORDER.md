@@ -28,6 +28,18 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in t
 - [x] **CO-4 — Linking + suggestions + company union + follow-up** · contacts block 4 · deps: CO-2, CT-3, CT-4, CT-6 · _done 2026-06-27 · `t/maciej/wave1-contacts-finish` (consumes the spine — adds no migration. **AC7**: `useContactSuggestions` (fetch `spine.suggestLinks` + score, **accept→`contacts.link(origin:'suggest')`** so it's contacts-attributed, dismiss→`spine.declineSuggestion`, optimistic+rollback, degrades to empty) + reused `LinkSuggestionStrip`; pure `suggest-link.ts` arg-mappers unit-tested. **AC5**: `EntityLinkPicker` (wraps CT-4 `MentionPicker`+`useMentionSearch` trigger='ref') → "Link existing…" writes `contacts.link`. **AC4**: pure `followup.ts` (`buildFollowupTask` via the Tasks `makeTask`/`endPosition`, `followupLinkArgs`) — "Add follow-up" = `seedInbox`→`upsertTask`→`contacts.link('follow-up')`, an ordinary task (no deal object), lands under Open work. **AC8**: pure `company.ts` `buildCompanyRollup` (People = denormalized members ∪ works-at-linked, union = company's + people's work one level up, intra-company edges excluded, deduped) + `useCompanyHub` (per-person `listLinks` fan-out + batched registry lookup) + `CompanyHub` pane; "Set company" + an accepted works-at suggestion both write the works-at link **and** `company_id`. Right `ContactContextStrip` (suggestions + quick actions + details) wired into the page; CompanyHub story + visual + `followup`/`link` e2e. Validator: no blockers (fixed accept rollback + the works-at dual-write). **Deferred (recorded):** drag-an-entity-onto-the-hub (CT-3's live drop consumer) — needs a page `DndContext` + live-verify (drags unsimulable here); the other 3 link gestures cover AC5. `setCompany` is two awaits (non-atomic; fine at alpha). verify green (241 tests); live-verify deferred (Storybook/Supabase unreachable).)_
 - [x] **CO-5 — MCP manifest + "Needs attention" widget (DoD)** · contacts block 5 · deps: CO-1, CO-2, CT-7 · _done 2026-06-27 · `t/maciej/wave1-contacts-finish` (**AC9 manifest**: `contactsModuleManifest` (reads list/get/search; writes the 6 `contacts_op_*`) in [`contacts/ops-manifest.ts`](../src/features/contacts/ops-manifest.ts) registered in `module-registry.ts` (+ test); connector-side [`moduo-mcp/modules/contacts.ts`](../supabase/functions/moduo-mcp/modules/contacts.ts) (`contacts_list`/`get`/`search` reads + create/update/set_status/link/unlink/import writes, workspace-scoped, mirrors links.ts helpers) registered in the connector registry. **AC11 widget**: pure [`needs-attention.ts`](../src/features/contacts/needs-attention.ts) `selectNeedsAttention` (overdue follow-up / no-touch>14d active / stale-lead>30d, strict thresholds, overdue wins, dormant/archived never flagged; 5 unit tests) + runtime `contacts.needsAttention` (3 reads: contacts + follow-up links + batched tasks; no fan-out) + `ContactsNeedsAttentionWidget` wired into the dashboard (type/valid-set/grid/panel) — quiet (muted icon+detail, never red), rows deep-link via `moduo:entity:open`; story + visual. **Validator-fixed (was BLOCKER):** `tasks.due_date` is a timestamptz, not YYYY-MM-DD — normalize to a local calendar date before the overdue compare (was off-by-one east of UTC). **Known limits (recorded):** last-touch uses `updatedAt` as a cheap proxy (CO-2 deferral); idleness keys off the *default* status ids (`active`/`lead`) — a renamed status isn't flagged; the `moduo:entity:open` host listener is still the shared CT-4/CT-7 deferral. Connector is a Deno fn (not in `bun run verify`) — deploy-gated. verify green (249 tests). **Wave 1 (Contacts) complete.**)_
 
+## Wave 2 — Calendar (the schedule-to-completion loop) · [`specs/calendar.md`](./calendar.md)
+
+> DoR-ready 2026-07-02. v1 = the loop + manual scheduling + **read-only** Google/Outlook (mirrored to Supabase). Key architecture call: **no `time_blocks` table** — a task block IS the task row (`scheduled_at`+`duration_minutes`, the "lens" model), so the loop rides *shipped* Tasks ops and works pre-deploy. UX detail: [`.design/calendar/DESIGN_BRIEF.md`](../.design/calendar/DESIGN_BRIEF.md); the Morgen bar: [`.design/calendar/COMPETITIVE_RESEARCH.md`](../.design/calendar/COMPETITIVE_RESEARCH.md).
+
+- [ ] **CAL-1 — Page shell + task-lens grid (no migration)** · calendar block 1 · deps: — (Wave 0/1 all merged)
+- [ ] **CAL-2 — Native events end-to-end (migration + ops + create/edit + repeats + detail)** · calendar block 2 · deps: CAL-1
+- [ ] **CAL-3 — Right-panel switcher + drag-to-schedule + complete-in-block** · calendar block 3 · deps: CAL-1
+- [ ] **CAL-4 — The loop: elapsed triage + the strip (move-to-today/review + undo)** · calendar block 4 · deps: CAL-3
+- [ ] **CAL-5 — Focus timer on blocks** · calendar block 5 · deps: CAL-3
+- [ ] **CAL-6 — External read-only (desktop mirror + accounts UI + attribution)** · calendar block 6 · deps: CAL-2
+- [ ] **CAL-7 — MCP manifest + "Today" dashboard widget (DoD)** · calendar block 7 · deps: CAL-2, CAL-3, CAL-4
+
 ---
 
 ## Running sessions & parallelism
@@ -45,6 +57,10 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in t
 | CT-1, CT-2, CO-1 | **CT-3** · **CT-4** · **CT-6** · **CO-2** · **CO-3** | ~5 |
 | CT-1–3, CT-5, CO-1–2 | **CT-7** · **CO-4** (needs CT-3/4/6 too) | 2 |
 | CT-7, CO-1–2 | **CO-5** | 1 |
+| *(Wave 2 start)* | **CAL-1** — the gate for the wave | 1 |
+| CAL-1 | **CAL-2** ∥ **CAL-3** (both add `runtime.web.ts` methods — the known contention file; sequence those edits or expect a small merge) | 2 |
+| CAL-2, CAL-3 | **CAL-4** · **CAL-5** · **CAL-6** | 3 |
+| CAL-2–4 | **CAL-7** | 1 |
 
 ### Serialization points — dep-independent ≠ conflict-free
 
@@ -59,4 +75,4 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 
 ---
 
-**Not yet specced** (await their wave; add their blocks here when their spec passes the Definition-of-Ready gate): Calendar → Notes → Finance → Email, plus the Dashboard rebuild. Order and rationale in [docs/ROADMAP.md](../docs/ROADMAP.md). The Cmd-K Search/Capture modes and the Universal Inbox screen are deferred spine sub-features (see `specs/connective-tissue.md` → Out of scope).
+**Not yet specced** (await their wave; add their blocks here when their spec passes the Definition-of-Ready gate): Notes → Finance → Email, plus the Dashboard rebuild. Order and rationale in [docs/ROADMAP.md](../docs/ROADMAP.md). The Cmd-K Search/Capture modes and the Universal Inbox screen are deferred spine sub-features (see `specs/connective-tissue.md` → Out of scope).
