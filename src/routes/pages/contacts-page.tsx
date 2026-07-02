@@ -391,13 +391,32 @@ export function ContactsPage() {
       toast("Already linked");
       return;
     }
-    void createLinkWithToast({
-      runtime,
-      workspaceId,
-      source: payload,
-      target,
-      onChanged: () => reloadFocus({ type: target.entityType, id: target.entityId }),
-    });
+    void (async () => {
+      const created = await createLinkWithToast({
+        runtime,
+        workspaceId,
+        source: payload,
+        target,
+        onChanged: () => reloadFocus({ type: target.entityType, id: target.entityId }),
+      });
+      // A person↔company works-at drop also sets the denormalized company_id FK
+      // (mirrors setCompany's dual-write) so the contact's header company chip
+      // reflects it, not just the spine edge. Best-effort — the link already exists.
+      if (created?.relationKind === "works-at") {
+        const contactId =
+          payload.entityType === "contact" ? payload.entityId : target.entityType === "contact" ? target.entityId : null;
+        const companyId =
+          payload.entityType === "company" ? payload.entityId : target.entityType === "company" ? target.entityId : null;
+        if (contactId && companyId) {
+          try {
+            await runtime.contacts.updateContact({ workspaceId, contactId, setCompany: { companyId } });
+            reloadFocus({ type: "contact", id: contactId });
+          } catch {
+            /* the link is what matters; the FK is a convenience */
+          }
+        }
+      }
+    })();
   }
 
   function addPersonToCompany(company: { id: string; name: string }) {
