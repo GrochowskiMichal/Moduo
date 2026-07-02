@@ -33,6 +33,13 @@
 - [ ] **Do:** open a contact with no details at all → **Expect:** no empty card frame renders (header + actions + last-touch only) _(both)_
 - [ ] **Do:** switch appearance (light/dark, mono/Geist, sharp/round) → **Expect:** the card, dividers, pills and captions follow tokens in every combination _(both)_
 
+## Round 2 (designer feedback, 2026-07-02)
+- [ ] **Do:** open any contact → **Expect:** linked work shows **fixed sections in order: Tasks · Notes · Emails · Events · Payments** — empty ones render a quiet one-liner ("Fills automatically when Email syncs." etc.), never disappear; cross-links to people/companies fall under **Other** (only when non-empty) _(both)_
+- [ ] **Do:** open a company → **Expect:** the same fixed sections under People (read-only) _(both)_
+- [ ] **Do:** view + edit a contact and a company → **Expect:** **no "note" row and no Note edit field anywhere** — attaching a Notes-module note (the "+ Note" action) is the only note concept; old inline notes are hidden, not deleted _(both)_
+- [ ] **Do:** edit → Custom fields → Add field → open the type select → **Expect:** text / number / url only — **no "date"** (dates belong to the Dates section) _(both)_
+- [ ] **Do:** look at the directory list → **Expect:** status dots form an aligned column at the row's outer edge; the favorite star sits **inside** the dot, hover-revealed (filled + always visible on favorites) _(both)_
+
 ## Regression sweep
 - [ ] **Do:** Tasks → open a task detail → **Expect:** the right-rail links section (when a task has links) is unchanged — compact uppercase relation tags still there (only the contacts *page* variant got the quiet captions) _(both)_
 - [ ] **Do:** app-wide sanity in dark mode → **Expect:** native scrollbars everywhere now render dark (the `color-scheme` token change is global — spot-check Notes/Email if anything looks off) _(both)_
