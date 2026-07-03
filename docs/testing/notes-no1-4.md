@@ -1,4 +1,4 @@
-# Manual test checklist — Notes rebuild NO-1..NO-3 (schema + sync engine + page shell)
+# Manual test checklist — Notes rebuild NO-1..NO-4 (schema + sync engine + page shell + grammar)
 
 > Generated 2026-07-03 · branch `claude/practical-brahmagupta-7cef0c` · **Live-verified:** partial — the whole UI flow was exercised on a local dev server with the real hosted session (deploy-gap mode) AND with stubbed `notes_op_*` RPCs (non-degraded mode); the **real server round-trip needs the migration applied first** (see Migrations below).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
@@ -36,6 +36,25 @@ The migration `20260703120000_notes_module.sql` **must be applied only AFTER thi
 - [ ] **Do:** row ⋯ → Icon → pick an emoji → **Expect:** icon replaces the file glyph; Remove icon restores it _(both)_
 - [ ] **Do:** row ⋯ → Pin → **Expect:** a Pinned section appears at top listing it (it stays in its tree spot too) _(both)_
 - [ ] **Do:** row ⋯ → Duplicate → **Expect:** "<title> (copy)" appears beside it WITH the full body content _(both — needs migration; copies the un-compacted tail too)_
+
+## Slash grammar & mentions (AC5 — NO-4)
+
+- [ ] **Do:** type `/` in a note → **Expect:** grouped menu (Basics · Insert · Embeds/mindmap last); type `child` → Page is the top hit; `toggle` → nothing _(both)_
+- [ ] **Do:** `/h2` ⏎, type a line → **Expect:** real H2; same for bullet/number/quote/code/divider/table (3×3) — `/todo` makes a humble checkbox that is NOT a task _(both)_
+- [ ] **Do:** `/contact` ⏎ → **Expect:** a search picker with focus IN its input; type + ⏎ inserts the person's chip inline; the note↔contact link appears on both hubs _(both — needs migration)_
+- [ ] **Do:** in the `/contact` picker type a brand-new name → **Expect:** a "Create …" row; picking it creates the contact AND inserts the chip (same for `/company`; `/event` and `/note` search-only) _(both — needs migration)_
+- [ ] **Do:** Escape (or click away) with the picker open → **Expect:** it closes, caret back in the note, nothing inserted _(both)_
+- [ ] **Do:** `/page` ⏎ → **Expect:** a page-row block appears in place, a real child note exists in the tree; clicking the row opens it; renaming the child updates the row; deleting the ROW leaves the child in the tree _(both)_
+- [ ] **Do:** sidebar + on the OPEN note's row → **Expect:** child created AND a page-row appended to the parent's body (repeat twice: no empty-paragraph pile-up between rows) _(both)_
+- [ ] **Do:** type `@` → **Expect:** workspace PEOPLE only (no tasks/notes/contacts); picking a teammate inserts their name and lands a notification in THEIR bell _(both — needs migration + a 2nd member)_
+- [ ] **Do:** `/mindmap` ⏎ → **Expect:** your mindmaps listed; picking embeds the familiar read-only canvas _(both)_
+
+## Markdown doors (AC11 — NO-4)
+
+- [ ] **Do:** paste a multi-block md doc (headings, `- [x]` list, quote, a `[label](moduo://…)` link) into an EMPTY note → **Expect:** real blocks — real checkboxes (toggleable), the moduo link renders as a chip _(both)_
+- [ ] **Do:** paste the same into the middle of an existing note → **Expect:** plain text (deliberate — the import wizard in NO-8 is the file door) _(both)_
+- [ ] **Do:** select several blocks incl. a chip + page-row, copy, paste into a plain-text editor → **Expect:** clean markdown; chips read `[label](moduo://type/id)`; paste back into Moduo stays rich _(both)_
+- [ ] **Do:** select ONE word, copy, paste elsewhere → **Expect:** just that word (never the whole paragraph) _(both)_
 
 ## Trash / Archive (AC12)
 
