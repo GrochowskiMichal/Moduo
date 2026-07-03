@@ -9,6 +9,11 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
+import {
+  noteRowToModel,
+  noteUpdateRowToModel,
+  trashWindowCutoffIso,
+} from "../features/notes/model";
 import type {
   Company,
   Contact,
@@ -472,60 +477,16 @@ export const webRuntime: ModuoRuntime = {
     },
   },
 
+  // LEGACY read-only surface (see runtime.types.ts) — the dashboard preview
+  // widget on web; the redb import reads through the tauri implementation.
   notes: {
     async list(workspaceId) {
       const { data, error } = await supabaseClient.from("notes").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position");
       if (error) throw new Error(error.message);
       return data ?? [];
     },
-    async upsert(note: any) {
-      // Map camelCase NoteMeta fields to snake_case DB columns
-      const row = {
-        id: note.id,
-        workspace_id: note.workspaceId ?? note.workspace_id,
-        created_by: note.ownerId ?? note.owner_id ?? note.created_by,
-        title: note.title,
-        parent_id: note.parentId ?? note.parent_id ?? null,
-        position: note.position,
-        created_at: note.createdAt ?? note.created_at,
-        updated_at: note.updatedAt ?? note.updated_at,
-        deleted_at: note.deletedAt ?? note.deleted_at ?? null,
-      };
-      const { data, error } = await supabaseClient.from("notes").upsert(row, { onConflict: "id" }).select().single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    async duplicate({ workspaceId, sourceNoteId }) {
-      const { data: source, error: srcErr } = await supabaseClient.from("notes").select("*").eq("id", sourceNoteId).single();
-      if (srcErr || !source) throw new Error("Source note not found");
-      const { data, error } = await supabaseClient.from("notes").insert({
-        workspace_id: workspaceId,
-        title: `${source.title} (copy)`,
-        parent_id: source.parent_id,
-        position: source.position + 1,
-        doc_state: source.doc_state,
-      }).select().single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    async move({ workspaceId, noteId, newParentId, newPosition }) {
-      const { data, error } = await supabaseClient.from("notes").update({
-        parent_id: newParentId,
-        position: parseInt(newPosition) || 0,
-        workspace_id: workspaceId,
-      }).eq("id", noteId).select().single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    async remove({ workspaceId: _w, noteId, deletedAt }) {
-      const { error } = await supabaseClient.from("notes").update({ deleted_at: deletedAt ?? new Date().toISOString() }).eq("id", noteId);
-      if (error) throw new Error(error.message);
-      return { noteId };
-    },
     async getDocState(_workspaceId, noteId) {
       const { data, error } = await supabaseClient.from("notes").select("doc_state").eq("id", noteId).single();
-      const b64len = data?.doc_state?.length ?? 0;
-      console.log(`%c[NOTES:getDocState] noteId=${noteId} b64len=${b64len} error=${error?.message ?? null}`, "color:#4af;font-weight:bold");
       if (error || !data) return null;
       return {
         snapshotB64: data.doc_state ?? "",
@@ -533,80 +494,278 @@ export const webRuntime: ModuoRuntime = {
         updates: [],
       };
     },
-    async applyCrdtUpdates(workspaceId, noteId, _clientId, updates) {
-      // Load existing snapshot so concurrent edits from other clients are merged in.
-      const existing = await webRuntime.notes.getDocState(workspaceId, noteId);
-      console.log(`%c[NOTES:applyCrdtUpdates] noteId=${noteId} existingB64len=${existing?.snapshotB64?.length ?? 0} incomingUpdates=${updates.length}`, "color:#fa4;font-weight:bold");
+  },
 
-      const doc = new Y.Doc();
-      // Pre-register root-v2 as YXmlElement BEFORE applying any updates so that
-      // child items (paragraph XmlElements, XmlText nodes) are correctly integrated
-      // into the typed structure. Without this, doc.get("root-v2") returns AbstractType
-      // which can't properly host XML children, causing text content to be lost on merge.
-      doc.get("root-v2", Y.XmlElement);
 
-      if (existing?.snapshotB64) {
-        try {
-          Y.applyUpdate(doc, decodeBase64ToUint8(existing.snapshotB64));
-          const root = doc.get("root-v2", Y.XmlElement);
-          const children = root.toArray();
-          console.log(`%c[NOTES:applyCrdtUpdates] after applying existing snapshot: rootType=${root.constructor.name} rootChildren=${children.length} firstChild=${children[0]?.constructor?.name ?? "none"} firstChildLen=${(children[0] as any)?._length ?? "n/a"}`, "color:#fa4");
-        } catch (e) {
-          console.error(`[NOTES:applyCrdtUpdates] failed to apply existing snapshot:`, e);
-        }
+  notesV2: {
+    // ── Wave-3 rebuild surface (NO-1). Writes = notes_op_* RPCs (guard +
+    // write + registry upsert + attributed activity); reads = indexed
+    // SELECTs that DEGRADE pre-migration: the v2 column list 42703s until
+    // the migration lands, so we fall back to the legacy columns and flag
+    // the bundle degraded. Explicit mutations throw honest errors instead.
+    async listMeta(workspaceId) {
+      const V2_COLS =
+        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, created_at, updated_at, deleted_at";
+      const LEGACY_COLS =
+        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
+      const cutoff = trashWindowCutoffIso(new Date());
+      const query = (cols: string) =>
+        supabaseClient
+          .from("notes")
+          .select(cols)
+          .eq("workspace_id", workspaceId)
+          .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`)
+          .order("position");
+      const res = await query(V2_COLS);
+      if (!res.error) {
+        return { notes: (res.data ?? []).map(noteRowToModel), degraded: false };
       }
-
-      for (const u of updates) {
-        if (u.updateB64) {
-          Y.applyUpdate(doc, decodeBase64ToUint8(u.updateB64));
-        }
-      }
-      const root = doc.get("root-v2", Y.XmlElement);
-      const children = root.toArray();
-      const mergedText = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
-      console.log(`%c[NOTES:applyCrdtUpdates] MERGED before save: rootType=${root.constructor.name} rootChildren=${children.length} firstChild=${children[0]?.constructor?.name ?? "none"} firstChildLen=${(children[0] as any)?._length ?? "n/a"} textPreview="${mergedText.slice(0, 60)}"`, "color:#4fa;font-weight:bold");
-
-      // Guard: the incoming updates are now full Y.Doc snapshots (see flush() in
-      // sync-engine.ts). If the merge result produced an empty body but the client's
-      // own snapshot contains text, the merge went wrong — use the client snapshot
-      // directly as the source of truth to prevent note body erasure.
-      let snapshotToSave: string;
-      if (!mergedText && updates.length > 0) {
-        const clientDoc = new Y.Doc();
-        clientDoc.get("root-v2", Y.XmlElement);
-        for (const u of updates) {
-          if (u.updateB64) {
-            try { Y.applyUpdate(clientDoc, decodeBase64ToUint8(u.updateB64)); } catch { /* ignore */ }
-          }
-        }
-        const clientRoot = clientDoc.get("root-v2", Y.XmlElement);
-        const clientChildren = clientRoot.toArray();
-        const clientText = clientChildren[0]
-          ? (clientChildren[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("")
-          : "";
-        if (clientText) {
-          console.warn(`[NOTES:applyCrdtUpdates] merge produced empty body but client snapshot has text — using client snapshot for ${noteId}`);
-          snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(clientDoc));
-        } else {
-          snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
-        }
-      } else {
-        snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
-      }
-
-      console.log(`%c[NOTES:applyCrdtUpdates] saving snapshot len=${snapshotToSave.length} to DB`, "color:#fa4");
-      const { error } = await supabaseClient.from("notes")
-        .update({ doc_state: snapshotToSave, updated_at: new Date().toISOString() })
-        .eq("id", noteId);
-      if (error) {
-        console.error(`[NOTES:applyCrdtUpdates] DB save FAILED:`, error.message);
-        throw new Error(error.message);
-      }
-      console.log(`%c[NOTES:applyCrdtUpdates] DB save OK`, "color:#4fa;font-weight:bold");
-      return { noteId, updates: [], existing: null };
+      // Degrade ONLY on the deploy gap (missing v2 columns = 42703). An
+      // outage/auth error must surface as an error, not an empty module.
+      if (res.error.code !== "42703") throw new Error(res.error.message);
+      const legacy = await query(LEGACY_COLS);
+      if (legacy.error) throw new Error(legacy.error.message);
+      return { notes: (legacy.data ?? []).map(noteRowToModel), degraded: true };
     },
-    async subscribeLocal(_workspaceId, noteId) {
-      return noteId ? `note:${noteId}` : "notes:all";
+
+    async pullDoc({ workspaceId, noteId, sinceUpdateId }) {
+      // Log FIRST, snapshot SECOND. A concurrent compaction between the two
+      // reads then only ever makes the snapshot NEWER than the log we hold —
+      // applying both stays lossless (Yjs is idempotent). The reverse order
+      // could pair a stale snapshot with a log missing its folded tail.
+      const updRes = await supabaseClient
+        .from("note_updates")
+        .select("id, client_id, client_seq, update_b64")
+        .eq("note_id", noteId)
+        .gt("id", sinceUpdateId ?? 0)
+        .order("id", { ascending: true });
+      const updates = updRes.error ? [] : (updRes.data ?? []).map(noteUpdateRowToModel);
+
+      const noteRes = await supabaseClient
+        .from("notes")
+        .select("doc_state, doc_version")
+        .eq("id", noteId)
+        .eq("workspace_id", workspaceId)
+        .single();
+      if (noteRes.error) {
+        if (noteRes.error.code !== "42703") throw new Error(noteRes.error.message);
+        // Pre-migration there is no doc_version column — degrade to the
+        // legacy snapshot-only shape rather than breaking the open note.
+        const legacy = await supabaseClient
+          .from("notes")
+          .select("doc_state")
+          .eq("id", noteId)
+          .eq("workspace_id", workspaceId)
+          .single();
+        if (legacy.error) throw new Error(legacy.error.message);
+        return { snapshotB64: legacy.data?.doc_state ?? null, docVersion: 0, updates: [] };
+      }
+      return {
+        snapshotB64: noteRes.data?.doc_state ?? null,
+        docVersion: noteRes.data?.doc_version ?? 0,
+        updates,
+      };
+    },
+
+    async create({ workspaceId, id, parentId, title, position, icon }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_create", {
+        p_workspace_id: workspaceId,
+        p_id: id ?? null,
+        p_parent_id: parentId ?? null,
+        p_title: title ?? "",
+        p_position: position ?? "",
+        p_icon: icon ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_create"));
+    },
+
+    async rename({ workspaceId, noteId, title }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_rename", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_title: title,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_rename"));
+    },
+
+    async move({ workspaceId, noteId, parentId, position }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_move", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_parent_id: parentId ?? null,
+        p_position: position ?? "",
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_move"));
+    },
+
+    async setMeta({ workspaceId, noteId, patch }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_set_meta", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_patch: patch,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_set_meta"));
+    },
+
+    async duplicate({ workspaceId, sourceNoteId, position }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_duplicate", {
+        p_workspace_id: workspaceId,
+        p_source_note_id: sourceNoteId,
+        p_position: position ?? "",
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_duplicate"));
+    },
+
+    async archive({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_archive", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_archive"));
+    },
+
+    async unarchive({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_unarchive", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_unarchive"));
+    },
+
+    async trash({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_trash", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        trashedIds: (data?.trashed_ids ?? []) as string[],
+        count: Number(data?.count ?? 0),
+      };
+    },
+
+    async restore({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_restore", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        restoredIds: (data?.restored_ids ?? []) as string[],
+        count: Number(data?.count ?? 0),
+      };
+    },
+
+    async purge({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_purge", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return { count: Number(data?.count ?? 0) };
+    },
+
+    async purgeExpired(workspaceId) {
+      // Module-load sweep (like tasks catch_up): degrade quietly pre-deploy —
+      // a missing RPC must never break opening /notes.
+      try {
+        const { data, error } = await supabaseClient.rpc("notes_op_purge_expired", {
+          p_workspace_id: workspaceId,
+        });
+        if (error) return { count: 0 };
+        return { count: Number(data?.count ?? 0) };
+      } catch {
+        return { count: 0 };
+      }
+    },
+
+    async publish({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_publish", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_publish"));
+    },
+
+    async unpublish({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_unpublish", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_unpublish"));
+    },
+
+    async pushUpdates({ workspaceId, noteId, clientId, updates, bodyText, bodyMd }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_apply_updates", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_client_id: clientId,
+        p_updates: updates,
+        p_body_text: bodyText ?? null,
+        p_body_md: bodyMd ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        inserted: Number(data?.inserted ?? 0),
+        duplicates: Number(data?.duplicates ?? 0),
+        maxUpdateId: data?.max_update_id == null ? null : Number(data.max_update_id),
+      };
+    },
+
+    async saveSnapshot({ workspaceId, noteId, snapshotB64, uptoUpdateId, bodyText, bodyMd }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_save_snapshot", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_snapshot_b64: snapshotB64,
+        p_upto_update_id: uptoUpdateId,
+        p_body_text: bodyText ?? null,
+        p_body_md: bodyMd ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        folded: Number(data?.folded ?? 0),
+        docVersion: Number(data?.doc_version ?? 0),
+      };
+    },
+
+    async importNotes({ workspaceId, rows }) {
+      const payload = rows.map((r) => ({
+        id: r.id ?? null,
+        parentId: r.parentId ?? null,
+        title: r.title ?? "",
+        icon: r.icon ?? null,
+        position: r.position ?? "",
+        docStateB64: r.docStateB64 ?? null,
+        bodyText: r.bodyText ?? "",
+        bodyMd: r.bodyMd ?? "",
+      }));
+      const { data, error } = await supabaseClient.rpc("notes_op_import", {
+        p_workspace_id: workspaceId,
+        p_rows: payload,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        imported: Number(data?.imported ?? 0),
+        skipped: Number(data?.skipped ?? 0),
+      };
+    },
+
+    async mention({ workspaceId, noteId, mentionedUserIds }) {
+      const { error } = await supabaseClient.rpc("notes_op_mention", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_mentioned_user_ids: mentionedUserIds,
+      });
+      if (error) throw new Error(error.message);
     },
   },
 

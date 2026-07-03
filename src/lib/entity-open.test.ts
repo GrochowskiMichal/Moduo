@@ -25,8 +25,11 @@ describe("entityOpenTarget", () => {
     expect(entityOpenTarget("project", "p1")).toEqual({ to: "/tasks" });
   });
 
-  it("routes notes and emails to their module pages", () => {
-    expect(entityOpenTarget("note", "n1")).toEqual({ to: "/notes" });
+  it("routes a note to /notes with URL selection (NO-3)", () => {
+    expect(entityOpenTarget("note", "n1")).toEqual({ to: "/notes", search: { id: "n1" } });
+  });
+
+  it("routes emails to their module page", () => {
     expect(entityOpenTarget("email", "e1")).toEqual({ to: "/email" });
   });
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  FilePlus2,
   Calendar as CalendarIcon,
   CheckSquare,
   Contact as ContactIcon,
@@ -64,6 +65,8 @@ export function GlobalCommandPalette() {
 
   const settingsShortcut = SHORTCUTS.find((s) => s.id === "settings");
   const settingsLabel = settingsShortcut ? formatShortcut(settingsShortcut) : "";
+  const newNoteShortcut = SHORTCUTS.find((s) => s.id === "new-note");
+  const newNoteLabel = newNoteShortcut ? formatShortcut(newNoteShortcut) : "";
 
   const navActions: Action[] = [
     { id: "notes", label: "Open Notes", icon: FileText, run: go("/notes") },
@@ -73,6 +76,20 @@ export function GlobalCommandPalette() {
     { id: "mindmap", label: "Open Mindmap", icon: GitBranch, run: go("/mindmap") },
     { id: "email", label: "Open Email", icon: Inbox, run: go("/email") },
     { id: "contacts", label: "Open Contacts", icon: ContactIcon, run: go("/contacts") },
+  ];
+
+  // Notes capture works from any page (Wave-3 AC1): same `action` pattern.
+  const notesActions: Action[] = [
+    {
+      id: "new-note",
+      label: "New note",
+      icon: FilePlus2,
+      shortcut: newNoteLabel,
+      run: () => {
+        setOpen(false);
+        void navigate({ to: "/notes", search: (prev) => ({ ...prev, action: "new" as const }) });
+      },
+    },
   ];
 
   // Contacts actions work from any page: navigate carrying an `action` search
@@ -123,6 +140,15 @@ export function GlobalCommandPalette() {
             <CommandItem key={id} onSelect={run}>
               <Icon />
               <span>{label}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+        <CommandGroup heading="Notes">
+          {notesActions.map(({ id, label, icon: Icon, shortcut, run }) => (
+            <CommandItem key={id} onSelect={run}>
+              <Icon />
+              <span>{label}</span>
+              {shortcut ? <CommandShortcut>{shortcut}</CommandShortcut> : null}
             </CommandItem>
           ))}
         </CommandGroup>
