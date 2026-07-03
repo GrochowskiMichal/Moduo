@@ -11,6 +11,7 @@ import {
   type LabelColor,
 } from "../../components/tag-colors";
 import type { CalendarAccountModel, CalendarEventModel } from "./events";
+import { parseSyncDescriptor } from "./sync";
 
 /** Human provider name for attribution ("Personal — Google"). */
 export function providerLabel(provider: string): string {
@@ -21,6 +22,8 @@ export function providerLabel(provider: string): string {
       return "Outlook";
     case "caldav":
       return "CalDAV";
+    case "ics":
+      return "ICS feed";
     case "moduo":
       return "Moduo";
     default:
@@ -95,6 +98,78 @@ export function visibleEvents(
   return events.filter(
     (e) => e.sourceAccountId === null || !hidden.has(e.sourceAccountId),
   );
+}
+
+// ── rail grouping (CAL-8) ─────────────────────────────────────────────────────
+//
+// The left rail (§3a) shows OAuth accounts as flat rows (Google/Outlook parity),
+// but a CalDAV server holds several calendars — each its own row — grouped under
+// a small account header; ICS feeds collapse under one "Feeds" header.
+
+export type RailAccountRow = {
+  account: CalendarAccountModel;
+  /** The calendar's own name within its account (falls back to the label). */
+  label: string;
+};
+
+export type RailGroup =
+  | { kind: "flat"; row: RailAccountRow }
+  | { kind: "group"; key: string; header: string; rows: RailAccountRow[] };
+
+/** A CalDAV account's group key + header (its server + username), or null. */
+function caldavGroupOf(
+  account: CalendarAccountModel,
+): { key: string; header: string; calendarName: string } | null {
+  const desc = parseSyncDescriptor(account.syncToken);
+  if (desc?.kind !== "caldav") return null;
+  return {
+    key: `caldav:${desc.serverUrl}|${desc.username}`,
+    header: desc.username || desc.serverUrl,
+    calendarName: desc.calendarName || account.displayLabel || providerLabel(account.provider),
+  };
+}
+
+/**
+ * Order external accounts into rail groups: OAuth accounts stay flat rows in
+ * their input order; CalDAV rows bucket under their (server, username) header;
+ * every ICS feed collapses under one "Feeds" header. Groups appear in the input
+ * order of their first member, so the rail stays stable across reloads.
+ */
+export function groupRailAccounts(accounts: CalendarAccountModel[]): RailGroup[] {
+  const out: RailGroup[] = [];
+  const groupIndex = new Map<string, number>(); // key → index in `out`
+
+  const ensureGroup = (key: string, header: string): RailGroup & { kind: "group" } => {
+    const existing = groupIndex.get(key);
+    if (existing !== undefined) return out[existing] as RailGroup & { kind: "group" };
+    const group: RailGroup & { kind: "group" } = { kind: "group", key, header, rows: [] };
+    groupIndex.set(key, out.length);
+    out.push(group);
+    return group;
+  };
+
+  for (const account of accounts) {
+    if (account.provider === "ics") {
+      ensureGroup("ics:feeds", "Feeds").rows.push({
+        account,
+        label: account.displayLabel || providerLabel(account.provider),
+      });
+      continue;
+    }
+    const caldav = caldavGroupOf(account);
+    if (caldav) {
+      ensureGroup(caldav.key, caldav.header).rows.push({
+        account,
+        label: caldav.calendarName,
+      });
+      continue;
+    }
+    out.push({
+      kind: "flat",
+      row: { account, label: account.displayLabel || providerLabel(account.provider) },
+    });
+  }
+  return out;
 }
 
 /** The freshest sync across accounts as a quiet age label, or null if none. */

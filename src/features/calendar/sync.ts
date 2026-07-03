@@ -5,10 +5,79 @@
 // loop is the `useCalendarSync` hook.
 
 /** Providers the desktop engine can fetch. */
-export type SyncableProvider = "google" | "microsoft";
+export type SyncableProvider = "google" | "microsoft" | "caldav" | "ics";
 
 export function isSyncableProvider(p: string): p is SyncableProvider {
-  return p === "google" || p === "microsoft";
+  return p === "google" || p === "microsoft" || p === "caldav" || p === "ics";
+}
+
+/** Providers whose raw fetch is ICS text (mapped by ics-mirror, not mirror). */
+export function isIcsProvider(p: SyncableProvider): p is "caldav" | "ics" {
+  return p === "caldav" || p === "ics";
+}
+
+/**
+ * The client-readable, NON-SECRET connection descriptor a CalDAV/ICS account
+ * row carries in `calendar_accounts.sync_token` (CAL-8, spec assumption 19) —
+ * rail grouping + Reconnect prefill read it; the password never leaves the OS
+ * keychain. `kind:'caldav'` rows are one-per-calendar (externalId = the
+ * calendar URL); `kind:'ics'` rows are one-per-feed (externalId = a URL hash,
+ * the feed URL itself is keychain-side).
+ */
+export type CalendarSyncDescriptor =
+  | {
+      kind: "caldav";
+      serverUrl: string;
+      username: string;
+      calendarUrl: string;
+      calendarName: string;
+    }
+  | { kind: "ics" };
+
+/** Build the JSON `sync_token` for a CalDAV calendar row (one row per calendar). */
+export function buildCaldavDescriptor(input: {
+  serverUrl: string;
+  username: string;
+  calendarUrl: string;
+  calendarName: string;
+}): string {
+  return JSON.stringify({
+    kind: "caldav",
+    serverUrl: input.serverUrl,
+    username: input.username,
+    calendarUrl: input.calendarUrl,
+    calendarName: input.calendarName,
+  });
+}
+
+/** Build the JSON `sync_token` for an ICS feed row. */
+export function buildIcsDescriptor(): string {
+  return JSON.stringify({ kind: "ics" });
+}
+
+/** Parse a row's sync_token; null = not a descriptor (legacy/OAuth/pre-deploy). */
+export function parseSyncDescriptor(syncToken: string | null | undefined): CalendarSyncDescriptor | null {
+  if (!syncToken) return null;
+  try {
+    const v = JSON.parse(syncToken) as Record<string, unknown>;
+    if (v?.kind === "ics") return { kind: "ics" };
+    if (
+      v?.kind === "caldav" &&
+      typeof v.serverUrl === "string" &&
+      typeof v.username === "string"
+    ) {
+      return {
+        kind: "caldav",
+        serverUrl: v.serverUrl,
+        username: v.username,
+        calendarUrl: typeof v.calendarUrl === "string" ? v.calendarUrl : "",
+        calendarName: typeof v.calendarName === "string" ? v.calendarName : "",
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**

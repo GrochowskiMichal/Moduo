@@ -231,7 +231,7 @@ Release the drawn ghost → the chip materializes with an **inline title input**
 | **Day-fullness signal** | reconsider post-alpha | Cut by Maciej: dishonest stats while much work is un-blocked. Revisit only with a credible capacity story. |
 | **Single-occurrence exceptions on native repeats** | v2 | v1 edits the series, says so plainly. |
 | **Booking links / Open-invites** | fast-follow after v2 | Research §1; the old `slot_bookings` plumbing stays untouched until then. |
-| **Apple/iCloud (CalDAV), ICS feeds** | with v2 sync round | Engine slot exists; Apple flow was never implemented. |
+| **Apple/iCloud (CalDAV), ICS feeds** | ~~with v2 sync round~~ **un-deferred → CAL-8** (2026-07-03, dogfood-blocking) | The designer's primary calendars are CalDAV/ICS basic-auth hostings; iCloud rides plain CalDAV + an app-specific password (no OAuth). Read-only, on the CAL-6 mirror. Spec: `specs/calendar.md` AC15–AC18. |
 
 Anti-goals (permanent, from BRIEF §2 + research §5): no opaque auto-scheduling, no meeting-scheduling NLP assistant, no rebuilt provider meeting stack (RSVP/timezone matrices), no red walls, no guilt.
 

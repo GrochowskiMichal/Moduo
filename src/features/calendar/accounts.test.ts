@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   accountSourceLabel,
+  groupRailAccounts,
   providerLabel,
   resolveAccountHues,
   syncAgeLabel,
   visibleEvents,
 } from "./accounts";
+import { buildCaldavDescriptor, buildIcsDescriptor } from "./sync";
 import type { CalendarAccountModel, CalendarEventModel } from "./events";
 
 function account(over: Partial<CalendarAccountModel>): CalendarAccountModel {
@@ -21,6 +23,7 @@ function account(over: Partial<CalendarAccountModel>): CalendarAccountModel {
     color: over.color ?? null,
     lastSyncAt: over.lastSyncAt ?? null,
     status: over.status ?? "ok",
+    syncToken: over.syncToken ?? null,
     deletedAt: null,
   };
 }
@@ -50,6 +53,8 @@ describe("accounts — attribution (AC12)", () => {
   it("names providers for the source line", () => {
     expect(providerLabel("google")).toBe("Google");
     expect(providerLabel("microsoft")).toBe("Outlook");
+    expect(providerLabel("caldav")).toBe("CalDAV");
+    expect(providerLabel("ics")).toBe("ICS feed");
     expect(accountSourceLabel(account({ displayLabel: "Work — a@co", provider: "microsoft" }))).toBe(
       "Work — a@co — Outlook",
     );
@@ -88,6 +93,67 @@ describe("accounts — attribution (AC12)", () => {
     expect(visibleEvents(evs, [])).toBe(evs);
   });
 
+  it("groups CalDAV calendars under their account header, feeds under Feeds, OAuth flat", () => {
+    const cd = (id: string, cal: string) =>
+      account({
+        id,
+        provider: "caldav",
+        displayLabel: `${cal} — me@fastmail.com`,
+        syncToken: buildCaldavDescriptor({
+          serverUrl: "https://caldav.fastmail.com",
+          username: "me@fastmail.com",
+          calendarUrl: `https://caldav.fastmail.com/dav/cal/${id}/`,
+          calendarName: cal,
+        }),
+      });
+    const groups = groupRailAccounts([
+      account({ id: "g1", provider: "google", displayLabel: "me@gmail.com" }),
+      cd("c1", "Personal"),
+      account({ id: "f1", provider: "ics", displayLabel: "Team holidays" }),
+      cd("c2", "Work"),
+      account({ id: "f2", provider: "ics", displayLabel: "Sports" }),
+    ]);
+    // Google flat first (input order), then the CalDAV group (first appearance),
+    // then the Feeds group — c2 joins the EXISTING caldav group even though a
+    // feed appeared between c1 and c2.
+    expect(groups.map((g) => (g.kind === "flat" ? `flat:${g.row.account.id}` : `group:${g.header}`)))
+      .toEqual(["flat:g1", "group:me@fastmail.com", "group:Feeds"]);
+    const caldavGroup = groups[1];
+    const feeds = groups[2];
+    if (caldavGroup.kind !== "group" || feeds.kind !== "group") throw new Error("shape");
+    expect(caldavGroup.rows.map((r) => r.label)).toEqual(["Personal", "Work"]);
+    expect(feeds.rows.map((r) => r.account.id)).toEqual(["f1", "f2"]);
+    expect(feeds.rows.map((r) => r.label)).toEqual(["Team holidays", "Sports"]);
+  });
+
+  it("splits CalDAV calendars from two different accounts into two groups", () => {
+    const row = (id: string, user: string) =>
+      account({
+        id,
+        provider: "caldav",
+        syncToken: buildCaldavDescriptor({
+          serverUrl: "https://caldav.icloud.com",
+          username: user,
+          calendarUrl: `https://caldav.icloud.com/${id}/`,
+          calendarName: id,
+        }),
+      });
+    const groups = groupRailAccounts([row("a", "me@icloud.com"), row("b", "partner@icloud.com")]);
+    expect(groups).toHaveLength(2);
+    expect(groups.every((g) => g.kind === "group")).toBe(true);
+  });
+
+  it("falls back to a flat row for a caldav account with an unparseable descriptor", () => {
+    const groups = groupRailAccounts([
+      account({ id: "x", provider: "caldav", syncToken: null, displayLabel: "Legacy" }),
+    ]);
+    expect(groups).toEqual([{ kind: "flat", row: { account: expect.anything(), label: "Legacy" } }]);
+  });
+
+  it("uses a plain ICS descriptor for feeds (no server fields needed)", () => {
+    expect(buildIcsDescriptor()).toBe('{"kind":"ics"}');
+  });
+
   it("labels the freshest sync age; null when never synced", () => {
     const now = new Date(2026, 6, 2, 12, 0).getTime();
     expect(
@@ -103,5 +169,31 @@ describe("accounts — attribution (AC12)", () => {
     expect(syncAgeLabel([account({ lastSyncAt: new Date(now - 20_000).toISOString() })], now)).toBe(
       "synced just now",
     );
+  });
+});
+
+describe("caldav credential cleanup (CAL-8b)", () => {
+  it("only deletes the shared keychain secret when the LAST calendar row of an account goes", async () => {
+    const { isLastCaldavRowForAccount } = await import("./caldav-connect");
+    const cd = (id: string, cal: string, user = "me@fastmail.com") =>
+      account({
+        id,
+        provider: "caldav",
+        syncToken: buildCaldavDescriptor({
+          serverUrl: "https://caldav.fastmail.com",
+          username: user,
+          calendarUrl: `https://caldav.fastmail.com/${id}/`,
+          calendarName: cal,
+        }),
+      });
+    const c1 = cd("c1", "Personal");
+    const c2 = cd("c2", "Work");
+    // Two rows share the account → removing one is NOT the last.
+    expect(isLastCaldavRowForAccount([c1, c2], c1)).toBe(false);
+    // Only one row left → removing it orphans the secret.
+    expect(isLastCaldavRowForAccount([c1], c1)).toBe(true);
+    // A different account's row doesn't keep this secret alive.
+    const other = cd("c3", "Family", "partner@fastmail.com");
+    expect(isLastCaldavRowForAccount([c1, other], c1)).toBe(true);
   });
 });
