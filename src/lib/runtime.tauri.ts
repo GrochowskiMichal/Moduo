@@ -13,6 +13,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { parseSyncDescriptor } from "../features/calendar/sync";
 import type {
   IntegrationStatusItem,
   ModuoRuntime,
@@ -164,7 +165,31 @@ export const tauriRuntime: ModuoRuntime = {
 
     // CAL-6b: fetch raw provider events via the OAuth engine so the frontend
     // maps + mirrors them to Supabase (the desktop is the sync writer).
-    async fetchExternalEvents({ provider, externalAccountId, timeMin, timeMax }) {
+    // CAL-8: caldav/ics ride the basic-auth engine — creds live in the OS
+    // keychain, addressed by (serverUrl, username) / the feed id; the raw
+    // result is ICS text mapped by ics-mirror.ts instead of mirror.ts.
+    async fetchExternalEvents({ provider, externalAccountId, timeMin, timeMax, syncToken }) {
+      if (provider === "caldav") {
+        // Decode via the canonical parser (one descriptor schema, one owner).
+        const desc = parseSyncDescriptor(syncToken);
+        if (desc?.kind !== "caldav") {
+          throw new Error("caldav_missing_descriptor:reconnect_account");
+        }
+        const events = await invoke<Record<string, unknown>[]>("calendar_caldav_events_sync", {
+          serverUrl: desc.serverUrl,
+          username: desc.username,
+          calendarUrl: externalAccountId,
+          timeMin,
+          timeMax,
+        });
+        return events ?? [];
+      }
+      if (provider === "ics") {
+        const events = await invoke<Record<string, unknown>[]>("calendar_ics_fetch", {
+          feedId: externalAccountId,
+        });
+        return events ?? [];
+      }
       const command =
         provider === "microsoft"
           ? "calendar_outlook_events_sync"

@@ -796,8 +796,8 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
     },
-    async upsertAccount({ workspaceId, provider, externalId, displayLabel, color, status, lastSyncAt }) {
-      const { data, error } = await supabaseClient.rpc("calendar_op_account_upsert", {
+    async upsertAccount({ workspaceId, provider, externalId, displayLabel, color, status, lastSyncAt, syncToken }) {
+      const args: Record<string, unknown> = {
         p_workspace_id: workspaceId,
         p_provider: provider,
         p_external_id: externalId,
@@ -805,7 +805,16 @@ export const webRuntime: ModuoRuntime = {
         p_color: color ?? null,
         p_status: status ?? null,
         p_last_sync_at: lastSyncAt ?? null,
-      });
+      };
+      // p_sync_token only exists post-CAL-8-migration; PostgREST matches RPCs
+      // by named args, so sending it against the older 7-arg function 404s.
+      // Send it ONLY for a non-null descriptor (CalDAV/ICS connect — which needs
+      // the migration anyway). null and undefined both OMIT it: post-migration
+      // the SQL `coalesce(p_sync_token, sync_token)` keeps the stored value for
+      // null too, so omitting is equivalent AND keeps OAuth callers (who pass
+      // `?? null` in the house style) working against a pre-migration database.
+      if (syncToken != null) args.p_sync_token = syncToken;
+      const { data, error } = await supabaseClient.rpc("calendar_op_account_upsert", args);
       if (error) throw new Error(error.message);
       return calendarAccountRowToModel(firstRow(data, "calendar_op_account_upsert"));
     },
@@ -2002,6 +2011,7 @@ function calendarAccountRowToModel(r: any): CalendarAccountModel {
     color: r.color ?? null,
     lastSyncAt: r.last_sync_at ?? null,
     status: r.status ?? "ok",
+    syncToken: r.sync_token ?? null,
     deletedAt: r.deleted_at ?? null,
   };
 }

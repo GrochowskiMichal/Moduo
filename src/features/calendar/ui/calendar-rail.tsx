@@ -24,7 +24,7 @@ import { LABEL_COLORS } from "../../../components/tag-colors";
 import { parseDayKey } from "../lens";
 import type { CalendarPrefs } from "../prefs";
 import type { CalendarAccountModel } from "../events";
-import { providerLabel } from "../accounts";
+import { groupRailAccounts, providerLabel } from "../accounts";
 
 type Props = {
   /** The grid's anchor day (local day start). */
@@ -41,6 +41,8 @@ type Props = {
   onToggleAccountVisibility: (accountId: string) => void;
   onRecolorAccount: (accountId: string, hue: string) => void;
   onRemoveAccount: (accountId: string) => void;
+  /** Repair a CalDAV account's password (password-only flow). */
+  onReconnectAccount?: (account: CalendarAccountModel) => void;
 };
 
 // Subtle density dot under days that carry events/blocks (§3a).
@@ -61,12 +63,15 @@ export function CalendarRail({
   onToggleAccountVisibility,
   onRecolorAccount,
   onRemoveAccount,
+  onReconnectAccount,
 }: Props) {
   const navigate = useNavigate();
   const [month, setMonth] = useState<Date>(anchor);
   useEffect(() => {
     setMonth(anchor);
   }, [anchor]);
+
+  const railGroups = useMemo(() => groupRailAccounts(accounts), [accounts]);
 
   const modifiers = useMemo(
     () => ({
@@ -78,6 +83,101 @@ export function CalendarRail({
   );
   const modifiersClassNames = useMemo(() => ({ busy: BUSY_DAY_CLASSES }), []);
   const hidden = useMemo(() => new Set(hiddenAccountIds), [hiddenAccountIds]);
+
+  const renderAccountRow = (account: CalendarAccountModel, label: string) => {
+    const isHidden = hidden.has(account.id);
+    const name = label || account.displayLabel || providerLabel(account.provider);
+    const canReconnect = Boolean(
+      onReconnectAccount && account.provider === "caldav" && account.status === "error",
+    );
+    return (
+      <div
+        key={account.id}
+        className="group flex items-center gap-2 rounded-md px-1 hover:bg-accent"
+        style={{ minHeight: "var(--row-h-sm)" }}
+      >
+        <span
+          data-label={accountHues[account.id]}
+          className="cal-swatch size-2.5 shrink-0 rounded-full data-[hidden=true]:opacity-30"
+          data-hidden={isHidden}
+          aria-hidden
+        />
+        <span
+          className={
+            "min-w-0 flex-1 truncate text-sm " +
+            (isHidden ? "text-muted-foreground" : "text-foreground")
+          }
+          title={`${name} — ${providerLabel(account.provider)}`}
+        >
+          {name}
+        </span>
+        {account.status === "error" ? (
+          canReconnect ? (
+            <button
+              type="button"
+              className="shrink-0 text-2xs text-warning hover:underline"
+              onClick={() => onReconnectAccount?.(account)}
+            >
+              Reconnect
+            </button>
+          ) : (
+            <span className="shrink-0 text-2xs text-warning">Sync error</span>
+          )
+        ) : null}
+        <IconButton
+          icon={isHidden ? EyeOff : Eye}
+          label={isHidden ? `Show ${name}` : `Hide ${name}`}
+          className={isHidden ? undefined : "opacity-0 group-hover:opacity-100"}
+          onClick={() => onToggleAccountVisibility(account.id)}
+        />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton
+              icon={MoreHorizontal}
+              label={`${name} options`}
+              className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => onToggleAccountVisibility(account.id)}>
+              {isHidden ? "Show on calendar" : "Hide from calendar"}
+            </DropdownMenuItem>
+            {canReconnect ? (
+              <DropdownMenuItem onSelect={() => onReconnectAccount?.(account)}>
+                Reconnect…
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Color</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {LABEL_COLORS.map((hue) => (
+                  <DropdownMenuItem
+                    key={hue}
+                    onSelect={() => onRecolorAccount(account.id, hue)}
+                    className="capitalize"
+                  >
+                    <span
+                      data-label={hue}
+                      className="cal-swatch size-2.5 rounded-full"
+                      aria-hidden
+                    />
+                    {hue}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => onRemoveAccount(account.id)}
+            >
+              Remove account
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
+  };
 
   return (
     <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
@@ -109,80 +209,19 @@ export function CalendarRail({
           <span className="min-w-0 flex-1 truncate text-sm text-foreground">Moduo</span>
         </div>
 
-        {/* Connected accounts (mirrored, read-only) — the account map. */}
-        {accounts.map((account) => {
-          const isHidden = hidden.has(account.id);
-          const name = account.displayLabel || providerLabel(account.provider);
+        {/* Connected accounts (mirrored, read-only) — the account map. OAuth
+            accounts are flat rows; CalDAV calendars group under their account
+            header, ICS feeds under "Feeds". */}
+        {railGroups.map((group) => {
+          if (group.kind === "flat") {
+            return renderAccountRow(group.row.account, group.row.label);
+          }
           return (
-            <div
-              key={account.id}
-              className="group flex items-center gap-2 rounded-md px-1 hover:bg-accent"
-              style={{ minHeight: "var(--row-h-sm)" }}
-            >
-              <span
-                data-label={accountHues[account.id]}
-                className="cal-swatch size-2.5 shrink-0 rounded-full data-[hidden=true]:opacity-30"
-                data-hidden={isHidden}
-                aria-hidden
-              />
-              <span
-                className={
-                  "min-w-0 flex-1 truncate text-sm " +
-                  (isHidden ? "text-muted-foreground" : "text-foreground")
-                }
-                title={`${name} — ${providerLabel(account.provider)}`}
-              >
-                {name}
-              </span>
-              {account.status === "error" ? (
-                <span className="shrink-0 text-2xs text-warning">Reconnect</span>
-              ) : null}
-              <IconButton
-                icon={isHidden ? EyeOff : Eye}
-                label={isHidden ? `Show ${name}` : `Hide ${name}`}
-                className={isHidden ? undefined : "opacity-0 group-hover:opacity-100"}
-                onClick={() => onToggleAccountVisibility(account.id)}
-              />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <IconButton
-                    icon={MoreHorizontal}
-                    label={`${name} options`}
-                    className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
-                  />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => onToggleAccountVisibility(account.id)}>
-                    {isHidden ? "Show on calendar" : "Hide from calendar"}
-                  </DropdownMenuItem>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>Color</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      {LABEL_COLORS.map((hue) => (
-                        <DropdownMenuItem
-                          key={hue}
-                          onSelect={() => onRecolorAccount(account.id, hue)}
-                          className="capitalize"
-                        >
-                          <span
-                            data-label={hue}
-                            className="cal-swatch size-2.5 rounded-full"
-                            aria-hidden
-                          />
-                          {hue}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onSelect={() => onRemoveAccount(account.id)}
-                  >
-                    Remove account
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+            <div key={group.key} className="flex flex-col gap-1">
+              <div className="px-1 pt-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
+                {group.header}
+              </div>
+              {group.rows.map((row) => renderAccountRow(row.account, row.label))}
             </div>
           );
         })}
