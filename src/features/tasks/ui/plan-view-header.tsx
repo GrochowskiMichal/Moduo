@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
-import { Columns3, List, Plus } from "lucide-react";
+import { ChartGantt, Columns3, List, Plus } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Toolbar } from "../../../components/ui/toolbar";
 
-export type PlanView = "list" | "board";
+export type PlanView = "list" | "board" | "timeline";
 
 /**
  * Shared header for both Plan-mode views: scope title on the left; an optional
@@ -75,6 +75,7 @@ export function ViewSwitcher({
       items={[
         { value: "list", icon: List, ariaLabel: "List view" },
         { value: "board", icon: Columns3, ariaLabel: "Board view" },
+        { value: "timeline", icon: ChartGantt, ariaLabel: "Timeline view" },
       ]}
     />
   );

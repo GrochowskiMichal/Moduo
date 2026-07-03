@@ -476,7 +476,7 @@ export function canNestUnder(
 // ── Blocked-by dependencies (Session 6 — spec §5c) ───────────────────────────
 
 /** An open task can be worked on; done/archived can't block anything. */
-function isOpen(task: Pick<Task, "status">): boolean {
+export function isOpen(task: Pick<Task, "status">): boolean {
   return task.status !== "done" && task.status !== "archived";
 }
 
