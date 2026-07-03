@@ -10,6 +10,7 @@
 
 import type { ElementNode, LexicalNode } from "lexical";
 import {
+  CHECK_LIST,
   ELEMENT_TRANSFORMERS,
   MULTILINE_ELEMENT_TRANSFORMERS,
   TEXT_FORMAT_TRANSFORMERS,
@@ -110,6 +111,9 @@ export const NOTES_TRANSFORMERS: Transformer[] = [
   PAGE_ROW_TRANSFORMER,
   EMBED_TRANSFORMER,
   HR_TRANSFORMER,
+  // CHECK_LIST is NOT in ELEMENT_TRANSFORMERS, and must precede the bullet
+  // transformer or `- [x]` imports as a literal-text bullet item.
+  CHECK_LIST,
   ...ELEMENT_TRANSFORMERS,
   ...MULTILINE_ELEMENT_TRANSFORMERS,
   ...TEXT_FORMAT_TRANSFORMERS,

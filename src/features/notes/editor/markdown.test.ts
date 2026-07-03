@@ -84,6 +84,19 @@ describe("markdown round-trip (AC11)", () => {
     expect(roundTrip(md)).toBe(md);
   });
 
+  it("checkboxes import as REAL check-list items, not literal-text bullets", () => {
+    const editor = makeEditor();
+    editor.update(
+      () => $convertFromMarkdownString("- [x] done\n- [ ] open", NOTES_TRANSFORMERS),
+      { discrete: true },
+    );
+    editor.read(() => {
+      const json = JSON.stringify(editor.getEditorState().toJSON());
+      expect(json).toContain('"listType":"check"');
+      expect(json).not.toContain("[x]"); // no literal marker text survives
+    });
+  });
+
   it("entity chips survive: [label](moduo://type/id)", () => {
     const md = "Talked to [Jane Doe](moduo://contact/abc-123) about the deal.";
     const out = roundTrip(md);
