@@ -89,6 +89,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useShortcut("new-item", () => dispatchCreateNew());
   const { runtime, userEmail } = useAuth();
   const { loading, modulePermissions } = useWorkspace();
+  // Global capture (Wave-3 Notes AC1): ⌘⇧N → a fresh note from anywhere.
+  useShortcut(
+    "new-note",
+    useCallback(() => {
+      if (modulePermissions.notes === "none") return;
+      void navigate({
+        to: "/notes",
+        search: (prev: Record<string, unknown>) => ({ ...prev, action: "new" as const }),
+      });
+    }, [navigate, modulePermissions.notes]),
+  );
   const currentFeature = routeToFeatureLayout(pathname);
   const isEmailRoute = pathname.startsWith("/email");
   const isSettingsRoute = pathname.startsWith("/settings");
@@ -148,8 +159,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         });
         return;
       }
-      if (target.to === "/contacts") {
-        void navigate({ to: "/contacts", search: target.search ?? {} });
+      if (target.search) {
+        void navigate({ to: target.to, search: target.search as any });
       } else {
         void navigate({ to: target.to });
       }

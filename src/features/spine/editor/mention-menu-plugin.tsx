@@ -6,7 +6,7 @@
 // (the op lands with CT-5; here it routes through the `onMentionPerson` seam and
 // inserts the person's name). Selection is funnelled through the pure
 // `resolveMention` + `executeMention`. The caret detection / positioning /
-// keyboard handling mirror the proven notes `SlashCommandPlugin`; only the
+// keyboard handling mirror the notes slash menu (now slash-menu-plugin); only the
 // trigger (`@`) and the menu content/actions differ. Tokens-only (DESIGN_RULES).
 
 import { useEffect, useRef, useState } from "react";
@@ -56,6 +56,9 @@ export type MentionMenuPluginProps = {
   currentUserId?: string | null;
   /** Host seam for the person-mention activity row (CT-5 wires the real op). */
   onMentionPerson?: (memberId: string, label: string) => Promise<void> | void;
+  /** `@` = workspace people ONLY (the Notes grammar, Wave-3 AC5) — entities
+   * leave the picker; they ride the `/` nouns instead. */
+  peopleOnly?: boolean;
 };
 
 const MENU_MIN_WIDTH = 240;
@@ -122,6 +125,7 @@ export function MentionMenuPlugin({
   sourceIcon,
   currentUserId,
   onMentionPerson,
+  peopleOnly = false,
 }: MentionMenuPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [menu, setMenu] = useState<MentionMenuState | null>(null);
@@ -135,6 +139,7 @@ export function MentionMenuPlugin({
     // Until the person-notification op is wired (CT-5), don't surface people as
     // silently-failing `@` candidates — entity mentions still work.
     includePeople: Boolean(onMentionPerson),
+    includeEntities: !peopleOnly,
     enabled: menu !== null,
   });
 
@@ -195,8 +200,12 @@ export function MentionMenuPlugin({
     // `notify-person` (text inserted above) — never `create-and-link` (that's a
     // `/ref`-only candidate). So the write just reconciles; on failure the chip
     // stays and Retry recovers the link (never silently lost).
+    const failCopy =
+      resolution.action === "notify-person"
+        ? "Couldn't send that mention."
+        : "Couldn't link that.";
     void executeMention(runtime, ctx, resolution).catch(() => {
-      toast.error("Couldn't link that.", {
+      toast.error(failCopy, {
         action: { label: "Retry", onClick: () => void executeMention(runtime, ctx, resolution) },
       });
     });
@@ -209,12 +218,24 @@ export function MentionMenuPlugin({
   commitRef.current = commit;
 
   // ── caret detection ─────────────────────────────────────────────────────────
+  // A people-only surface with no person handler has NOTHING to offer — never
+  // open a menu that can only say "No matches".
+  const canOffer = !peopleOnly || Boolean(onMentionPerson);
   useEffect(() => {
+    if (!canOffer) {
+      setMenu(null);
+      return;
+    }
     return editor.registerUpdateListener(() => {
       if (typeof window === "undefined") return;
       setMenu(resolveMentionMenuState(editor));
     });
-  }, [editor]);
+  }, [editor, canOffer]);
+
+  // Fresh query → fresh highlight (never a stale mid-list selection).
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [menu?.query]);
 
   // ── keyboard ────────────────────────────────────────────────────────────────
   useEffect(() => {

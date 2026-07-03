@@ -68,20 +68,17 @@ export const tauriRuntime: ModuoRuntime = {
   auth: webRuntime.auth,
   workspace: webRuntime.workspace,
 
+  // LEGACY read-only surface: redb reads for the one-time NO-2 import (the
+  // Rust write commands retired with the Wave-3 rebuild).
   notes: {
     list(workspaceId) { return invoke<any[]>("notes_list", { workspaceId }); },
-    upsert(note) { return invoke<any>("notes_upsert", { note }); },
-    duplicate(input) { return invoke<any>("notes_duplicate", { input }); },
-    move(input) { return invoke<any>("notes_move", { input }); },
-    remove(input) { return invoke<any>("notes_delete", { input }); },
     getDocState(workspaceId, noteId) { return invoke<any>("notes_get_doc_state", { workspaceId, noteId }); },
-    applyCrdtUpdates(workspaceId, noteId, clientId, updates) {
-      return invoke<any>("notes_apply_crdt_updates", { workspaceId, noteId, clientId, updates });
-    },
-    subscribeLocal(workspaceId, noteId) {
-      return invoke<string>("notes_subscribe_local", { workspaceId, noteId: noteId ?? null });
-    },
   },
+
+  // Wave-3 Notes rebuild: cloud-first, Supabase-direct — the same code path as
+  // web (notes_op_* RPCs + the entities registry). Desktop offline comes from
+  // the webview's IndexedDB (NO-2), not redb.
+  notesV2: webRuntime.notesV2,
 
   graph: {
     upsertNodesEdges(request) { return invoke<void>("graph_upsert_nodes_edges", { request }); },

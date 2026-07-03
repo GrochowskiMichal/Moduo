@@ -4,16 +4,17 @@
 // navigates. Pure so the route map is unit-testable.
 //
 // Contact/company get full URL selection (/contacts?type&id — the search
-// params the contacts route validates); task/note/email land on their module
-// page (fine-grained selection inside those modules is their own follow-up —
-// they hold selection in component state today). Unknown types return null;
-// the listener shows a quiet "not available yet" toast, never a crash.
+// params the contacts route validates); notes too (/notes?id, Wave-3 NO-3).
+// Task/email land on their module page (fine-grained selection inside those
+// modules is their own follow-up — they hold selection in component state
+// today). Unknown types return null; the listener shows a quiet "not
+// available yet" toast, never a crash.
 
 export const ENTITY_OPEN_EVENT = "moduo:entity:open";
 
 export type EntityOpenTarget = {
   to: "/contacts" | "/tasks" | "/notes" | "/email" | "/calendar";
-  search?: { type: "contact" | "company"; id: string };
+  search?: { type?: "contact" | "company"; id: string };
 };
 
 export function entityOpenTarget(type: string, id: string): EntityOpenTarget | null {
@@ -27,7 +28,7 @@ export function entityOpenTarget(type: string, id: string): EntityOpenTarget | n
     case "project":
       return { to: "/tasks" };
     case "note":
-      return { to: "/notes" };
+      return { to: "/notes", search: { id } };
     case "email":
       return { to: "/email" };
     case "event":

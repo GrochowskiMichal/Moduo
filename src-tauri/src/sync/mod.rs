@@ -9,7 +9,8 @@
 //!
 //! Conflict resolution:
 //! - Scalars: last-writer-wins via `updated_at` timestamps.
-//! - Note CRDT: `doc_state` field is left to the existing `notes_apply_crdt_updates` path.
+//! - Note CRDT: `doc_state` writes moved to the Wave-3 cloud sync engine
+//!   (`notesV2` in the JS layer); the old `notes_apply_crdt_updates` command is gone.
 
 use std::sync::Arc;
 use std::time::Duration;

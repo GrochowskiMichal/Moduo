@@ -69,6 +69,11 @@ export type MentionCommandProps = {
   loading?: boolean;
   placeholder?: string;
   emptyLabel?: string;
+  /** Focus the input on mount. Radix focuses Popover content for the
+   * Popover-based picker; a bare portal host (the slash menu's stage-2
+   * picker) MUST pass this or the surface is keyboard-stranded and keys
+   * fall through to the editor. */
+  autoFocusInput?: boolean;
 };
 
 /** The inner Command list — reusable by both the Popover picker and the caret menu. */
@@ -80,10 +85,16 @@ export function MentionCommand({
   loading,
   placeholder = "Search…",
   emptyLabel = "No matches.",
+  autoFocusInput = false,
 }: MentionCommandProps) {
   return (
     <Command shouldFilter={false}>
-      <CommandInput value={query} onValueChange={onQueryChange} placeholder={placeholder} />
+      <CommandInput
+        value={query}
+        onValueChange={onQueryChange}
+        placeholder={placeholder}
+        autoFocus={autoFocusInput}
+      />
       <CommandList>
         {loading ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Searching…</p>
