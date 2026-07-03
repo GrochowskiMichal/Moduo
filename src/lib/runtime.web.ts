@@ -477,60 +477,16 @@ export const webRuntime: ModuoRuntime = {
     },
   },
 
+  // LEGACY read-only surface (see runtime.types.ts) — the dashboard preview
+  // widget on web; the redb import reads through the tauri implementation.
   notes: {
     async list(workspaceId) {
       const { data, error } = await supabaseClient.from("notes").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position");
       if (error) throw new Error(error.message);
       return data ?? [];
     },
-    async upsert(note: any) {
-      // Map camelCase NoteMeta fields to snake_case DB columns
-      const row = {
-        id: note.id,
-        workspace_id: note.workspaceId ?? note.workspace_id,
-        created_by: note.ownerId ?? note.owner_id ?? note.created_by,
-        title: note.title,
-        parent_id: note.parentId ?? note.parent_id ?? null,
-        position: note.position,
-        created_at: note.createdAt ?? note.created_at,
-        updated_at: note.updatedAt ?? note.updated_at,
-        deleted_at: note.deletedAt ?? note.deleted_at ?? null,
-      };
-      const { data, error } = await supabaseClient.from("notes").upsert(row, { onConflict: "id" }).select().single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    async duplicate({ workspaceId, sourceNoteId }) {
-      const { data: source, error: srcErr } = await supabaseClient.from("notes").select("*").eq("id", sourceNoteId).single();
-      if (srcErr || !source) throw new Error("Source note not found");
-      const { data, error } = await supabaseClient.from("notes").insert({
-        workspace_id: workspaceId,
-        title: `${source.title} (copy)`,
-        parent_id: source.parent_id,
-        position: source.position + 1,
-        doc_state: source.doc_state,
-      }).select().single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    async move({ workspaceId, noteId, newParentId, newPosition }) {
-      const { data, error } = await supabaseClient.from("notes").update({
-        parent_id: newParentId,
-        position: parseInt(newPosition) || 0,
-        workspace_id: workspaceId,
-      }).eq("id", noteId).select().single();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    async remove({ workspaceId: _w, noteId, deletedAt }) {
-      const { error } = await supabaseClient.from("notes").update({ deleted_at: deletedAt ?? new Date().toISOString() }).eq("id", noteId);
-      if (error) throw new Error(error.message);
-      return { noteId };
-    },
     async getDocState(_workspaceId, noteId) {
       const { data, error } = await supabaseClient.from("notes").select("doc_state").eq("id", noteId).single();
-      const b64len = data?.doc_state?.length ?? 0;
-      console.log(`%c[NOTES:getDocState] noteId=${noteId} b64len=${b64len} error=${error?.message ?? null}`, "color:#4af;font-weight:bold");
       if (error || !data) return null;
       return {
         snapshotB64: data.doc_state ?? "",
@@ -538,82 +494,8 @@ export const webRuntime: ModuoRuntime = {
         updates: [],
       };
     },
-    async applyCrdtUpdates(workspaceId, noteId, _clientId, updates) {
-      // Load existing snapshot so concurrent edits from other clients are merged in.
-      const existing = await webRuntime.notes.getDocState(workspaceId, noteId);
-      console.log(`%c[NOTES:applyCrdtUpdates] noteId=${noteId} existingB64len=${existing?.snapshotB64?.length ?? 0} incomingUpdates=${updates.length}`, "color:#fa4;font-weight:bold");
-
-      const doc = new Y.Doc();
-      // Pre-register root-v2 as YXmlElement BEFORE applying any updates so that
-      // child items (paragraph XmlElements, XmlText nodes) are correctly integrated
-      // into the typed structure. Without this, doc.get("root-v2") returns AbstractType
-      // which can't properly host XML children, causing text content to be lost on merge.
-      doc.get("root-v2", Y.XmlElement);
-
-      if (existing?.snapshotB64) {
-        try {
-          Y.applyUpdate(doc, decodeBase64ToUint8(existing.snapshotB64));
-          const root = doc.get("root-v2", Y.XmlElement);
-          const children = root.toArray();
-          console.log(`%c[NOTES:applyCrdtUpdates] after applying existing snapshot: rootType=${root.constructor.name} rootChildren=${children.length} firstChild=${children[0]?.constructor?.name ?? "none"} firstChildLen=${(children[0] as any)?._length ?? "n/a"}`, "color:#fa4");
-        } catch (e) {
-          console.error(`[NOTES:applyCrdtUpdates] failed to apply existing snapshot:`, e);
-        }
-      }
-
-      for (const u of updates) {
-        if (u.updateB64) {
-          Y.applyUpdate(doc, decodeBase64ToUint8(u.updateB64));
-        }
-      }
-      const root = doc.get("root-v2", Y.XmlElement);
-      const children = root.toArray();
-      const mergedText = children[0] ? (children[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("") : "";
-      console.log(`%c[NOTES:applyCrdtUpdates] MERGED before save: rootType=${root.constructor.name} rootChildren=${children.length} firstChild=${children[0]?.constructor?.name ?? "none"} firstChildLen=${(children[0] as any)?._length ?? "n/a"} textPreview="${mergedText.slice(0, 60)}"`, "color:#4fa;font-weight:bold");
-
-      // Guard: the incoming updates are now full Y.Doc snapshots (see flush() in
-      // sync-engine.ts). If the merge result produced an empty body but the client's
-      // own snapshot contains text, the merge went wrong — use the client snapshot
-      // directly as the source of truth to prevent note body erasure.
-      let snapshotToSave: string;
-      if (!mergedText && updates.length > 0) {
-        const clientDoc = new Y.Doc();
-        clientDoc.get("root-v2", Y.XmlElement);
-        for (const u of updates) {
-          if (u.updateB64) {
-            try { Y.applyUpdate(clientDoc, decodeBase64ToUint8(u.updateB64)); } catch { /* ignore */ }
-          }
-        }
-        const clientRoot = clientDoc.get("root-v2", Y.XmlElement);
-        const clientChildren = clientRoot.toArray();
-        const clientText = clientChildren[0]
-          ? (clientChildren[0] as any).toArray?.().map((t: any) => t.toString?.() ?? "").join("")
-          : "";
-        if (clientText) {
-          console.warn(`[NOTES:applyCrdtUpdates] merge produced empty body but client snapshot has text — using client snapshot for ${noteId}`);
-          snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(clientDoc));
-        } else {
-          snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
-        }
-      } else {
-        snapshotToSave = encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
-      }
-
-      console.log(`%c[NOTES:applyCrdtUpdates] saving snapshot len=${snapshotToSave.length} to DB`, "color:#fa4");
-      const { error } = await supabaseClient.from("notes")
-        .update({ doc_state: snapshotToSave, updated_at: new Date().toISOString() })
-        .eq("id", noteId);
-      if (error) {
-        console.error(`[NOTES:applyCrdtUpdates] DB save FAILED:`, error.message);
-        throw new Error(error.message);
-      }
-      console.log(`%c[NOTES:applyCrdtUpdates] DB save OK`, "color:#4fa;font-weight:bold");
-      return { noteId, updates: [], existing: null };
-    },
-    async subscribeLocal(_workspaceId, noteId) {
-      return noteId ? `note:${noteId}` : "notes:all";
-    },
   },
+
 
   notesV2: {
     // ── Wave-3 rebuild surface (NO-1). Writes = notes_op_* RPCs (guard +

@@ -102,11 +102,11 @@ const IGNORED_PATHS: string[] = [
   "src/features/mindmap/ui/components/mindmap-toolbar.tsx",
   "src/features/mindmap/ui/custom-node.tsx",
   "src/features/mindmap/ui/mindmap-workspace.tsx",
-  "src/features/notes/editor/LexicalNoteEditor.tsx",
+  // Notes v2 rebuild (Wave 3): only the not-yet-reworked legacy editor
+  // surfaces stay exempt; the exemption dies entirely with NO-4's grammar
+  // rework (specs/notes.md assumption 14).
   "src/features/notes/editor/nodes/EmbeddedMindmap.tsx",
-  "src/features/notes/editor/nodes/EmbeddedTask.tsx",
   "src/features/notes/editor/plugins/SlashCommandPlugin.tsx",
-  "src/features/notes/ui/NotesSplitView.tsx",
   "src/features/plan/ui/calendar-view.tsx",
   "src/features/plan/ui/kanban-task-context-modal.tsx",
   "src/features/plan/ui/kanban-view.tsx",

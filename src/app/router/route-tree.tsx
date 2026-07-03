@@ -11,6 +11,7 @@ import { MindmapPage } from "../../routes/pages/mindmap-page";
 import { EmailPage } from "../../routes/pages/email-page";
 import { ContactsPage } from "../../routes/pages/contacts-page";
 import { validateContactsSearch } from "../../features/contacts/search";
+import { validateNotesSearch } from "../../features/notes/search";
 import { SettingsPage } from "../../routes/pages/settings-page";
 import { PaywallPage } from "../../routes/pages/paywall-page";
 
@@ -67,6 +68,7 @@ const notesRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/notes",
   component: NotesPage,
+  validateSearch: validateNotesSearch,
 });
 
 const tasksRoute = createRoute({

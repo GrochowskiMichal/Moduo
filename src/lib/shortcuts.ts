@@ -13,6 +13,7 @@ import { useEffect } from "react";
 export type ShortcutId =
   | "palette"
   | "new-item"
+  | "new-note"
   | "settings"
   | "workspace-switcher"
   | "notifications"
@@ -55,6 +56,18 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
     match: (event, isMac) =>
       (isMac ? event.metaKey : event.ctrlKey) &&
       !event.shiftKey &&
+      !event.altKey &&
+      event.key.toLowerCase() === "n",
+  },
+  {
+    // Global capture (Wave-3 Notes AC1): a fresh note from anywhere.
+    id: "new-note",
+    label: "New note",
+    mac: "⌘⇧N",
+    other: "Ctrl Shift N",
+    match: (event, isMac) =>
+      (isMac ? event.metaKey : event.ctrlKey) &&
+      event.shiftKey &&
       !event.altKey &&
       event.key.toLowerCase() === "n",
   },

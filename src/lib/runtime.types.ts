@@ -237,25 +237,15 @@ export type ModuoRuntime = {
     getMcpEndpoint(): string;
   };
 
+  /**
+   * LEGACY read-only notes surface. Two survivors: the one-time redb import
+   * (desktop reads the local store through them) and the legacy dashboard
+   * notes-preview widget. The write half died with the Wave-3 rebuild —
+   * mutations go through `notesV2`.
+   */
   notes: {
     list(workspaceId: string): Promise<any[]>;
-    upsert(note: any): Promise<any>;
-    duplicate(input: { workspaceId: string; sourceNoteId: string }): Promise<any>;
-    move(input: {
-      workspaceId: string;
-      noteId: string;
-      newParentId: string | null;
-      newPosition: string;
-    }): Promise<any>;
-    remove(input: { workspaceId: string; noteId: string; deletedAt?: string }): Promise<any>;
     getDocState(workspaceId: string, noteId: string): Promise<any>;
-    applyCrdtUpdates(
-      workspaceId: string,
-      noteId: string,
-      clientId: string,
-      updates: Array<{ idempotencyKey?: string; clientSeq: number; updateB64: string }>
-    ): Promise<any>;
-    subscribeLocal(workspaceId: string, noteId?: string | null): Promise<string>;
   };
 
   /**

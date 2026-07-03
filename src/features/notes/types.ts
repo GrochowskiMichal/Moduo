@@ -1,3 +1,11 @@
+/**
+ * LEGACY notes types. The Wave-3 rebuild's model lives in ./model.ts —
+ * these survive only for:
+ *   - `NoteMeta` / `NoteKind`: the legacy dashboard notes-preview widget
+ *     (untouched until the dashboard rework) + the redb-import read shape.
+ *   - `SlashCommand`: the legacy SlashCommandPlugin (reworked in NO-4).
+ */
+
 export type NoteKind = "category" | "folder" | "note";
 
 export type NoteMeta = {
@@ -16,30 +24,6 @@ export type NoteMeta = {
   updatedAt: string;
   deletedAt: string | null;
 };
-
-export type NoteTreeNode = NoteMeta & {
-  children: NoteTreeNode[];
-  depth: number;
-};
-
-export type SyncUpdate = {
-  id: number;
-  noteId: string;
-  clientId: string;
-  clientSeq: number;
-  updateB64: string;
-  createdAt: string;
-};
-
-export type SyncCursor = {
-  workspaceId: string;
-  noteId: string;
-  lastPulledUpdateId: number;
-  clientSeq: number;
-  lastCompactedUpdateId: number;
-};
-
-export type NotesSyncStatus = "offline" | "syncing" | "synced" | "error";
 
 export type SlashCommand = {
   id:
@@ -63,16 +47,4 @@ export type SlashCommand = {
   title: string;
   keywords: string[];
   group: "Basic" | "Lists" | "Blocks" | "Media" | "Embeds" | "Refs";
-};
-
-export type LocalOutboxEntry = {
-  id: string;
-  scopeKey: string;
-  workspaceId: string;
-  noteId: string;
-  ownerId: string;
-  clientId: string;
-  clientSeq: number;
-  updateB64: string;
-  createdAt: string;
 };
