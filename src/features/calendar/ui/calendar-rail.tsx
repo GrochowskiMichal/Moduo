@@ -1,17 +1,30 @@
-// The calendar left rail: mini-month navigator + the calendar list.
-// v1 lists the native Moduo calendar; connected accounts group under it with
-// CAL-6. Per-calendar visibility toggles arrive with CAL-2 (native events) —
-// shipping the eye before anything can hide would be a lying affordance.
-// "+ Connect calendar…" routes to Settings → Integrations.
+// The calendar left rail: mini-month navigator + the calendar list. The list is
+// the account map (CAL-6, §3a): native Moduo first, then each connected account
+// with its hue swatch + a visibility toggle. Hiding an account drops its
+// mirrored events from the grid. "+ Connect calendar…" routes to Settings.
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Eye, EyeOff, MoreHorizontal, Plus } from "lucide-react";
 
 import { Calendar } from "../../../components/ui/calendar";
 import { Button } from "../../../components/ui/button";
+import { IconButton } from "../../../components/ui/icon-button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
+import { LABEL_COLORS } from "../../../components/tag-colors";
 import { parseDayKey } from "../lens";
 import type { CalendarPrefs } from "../prefs";
+import type { CalendarAccountModel } from "../events";
+import { providerLabel } from "../accounts";
 
 type Props = {
   /** The grid's anchor day (local day start). */
@@ -20,6 +33,14 @@ type Props = {
   /** Local day keys carrying blocks — rendered as subtle density dots. */
   busyDayKeys: Set<string>;
   prefs: CalendarPrefs;
+  /** Connected external accounts (mirrored) — the account map. */
+  accounts: CalendarAccountModel[];
+  /** Account id → bounded hue name. */
+  accountHues: Record<string, string>;
+  hiddenAccountIds: string[];
+  onToggleAccountVisibility: (accountId: string) => void;
+  onRecolorAccount: (accountId: string, hue: string) => void;
+  onRemoveAccount: (accountId: string) => void;
 };
 
 // Subtle density dot under days that carry events/blocks (§3a).
@@ -29,7 +50,18 @@ const BUSY_DAY_CLASSES =
   "[&>button]:after:rounded-full [&>button]:after:bg-muted-foreground/50 " +
   "[&>button]:after:content-['']";
 
-export function CalendarRail({ anchor, onSelectDate, busyDayKeys, prefs }: Props) {
+export function CalendarRail({
+  anchor,
+  onSelectDate,
+  busyDayKeys,
+  prefs,
+  accounts,
+  accountHues,
+  hiddenAccountIds,
+  onToggleAccountVisibility,
+  onRecolorAccount,
+  onRemoveAccount,
+}: Props) {
   const navigate = useNavigate();
   const [month, setMonth] = useState<Date>(anchor);
   useEffect(() => {
@@ -45,6 +77,7 @@ export function CalendarRail({ anchor, onSelectDate, busyDayKeys, prefs }: Props
     [busyDayKeys],
   );
   const modifiersClassNames = useMemo(() => ({ busy: BUSY_DAY_CLASSES }), []);
+  const hidden = useMemo(() => new Set(hiddenAccountIds), [hiddenAccountIds]);
 
   return (
     <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
@@ -66,6 +99,8 @@ export function CalendarRail({ anchor, onSelectDate, busyDayKeys, prefs }: Props
         <div className="px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
           Calendars
         </div>
+
+        {/* Native Moduo — always on (the only writable calendar). */}
         <div
           className="flex items-center gap-2 rounded-md px-1"
           style={{ minHeight: "var(--row-h-sm)" }}
@@ -73,6 +108,85 @@ export function CalendarRail({ anchor, onSelectDate, busyDayKeys, prefs }: Props
           <span className="size-2.5 shrink-0 rounded-full bg-primary" aria-hidden />
           <span className="min-w-0 flex-1 truncate text-sm text-foreground">Moduo</span>
         </div>
+
+        {/* Connected accounts (mirrored, read-only) — the account map. */}
+        {accounts.map((account) => {
+          const isHidden = hidden.has(account.id);
+          const name = account.displayLabel || providerLabel(account.provider);
+          return (
+            <div
+              key={account.id}
+              className="group flex items-center gap-2 rounded-md px-1 hover:bg-accent"
+              style={{ minHeight: "var(--row-h-sm)" }}
+            >
+              <span
+                data-label={accountHues[account.id]}
+                className="cal-swatch size-2.5 shrink-0 rounded-full data-[hidden=true]:opacity-30"
+                data-hidden={isHidden}
+                aria-hidden
+              />
+              <span
+                className={
+                  "min-w-0 flex-1 truncate text-sm " +
+                  (isHidden ? "text-muted-foreground" : "text-foreground")
+                }
+                title={`${name} — ${providerLabel(account.provider)}`}
+              >
+                {name}
+              </span>
+              {account.status === "error" ? (
+                <span className="shrink-0 text-2xs text-warning">Reconnect</span>
+              ) : null}
+              <IconButton
+                icon={isHidden ? EyeOff : Eye}
+                label={isHidden ? `Show ${name}` : `Hide ${name}`}
+                className={isHidden ? undefined : "opacity-0 group-hover:opacity-100"}
+                onClick={() => onToggleAccountVisibility(account.id)}
+              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <IconButton
+                    icon={MoreHorizontal}
+                    label={`${name} options`}
+                    className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+                  />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => onToggleAccountVisibility(account.id)}>
+                    {isHidden ? "Show on calendar" : "Hide from calendar"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>Color</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      {LABEL_COLORS.map((hue) => (
+                        <DropdownMenuItem
+                          key={hue}
+                          onSelect={() => onRecolorAccount(account.id, hue)}
+                          className="capitalize"
+                        >
+                          <span
+                            data-label={hue}
+                            className="cal-swatch size-2.5 rounded-full"
+                            aria-hidden
+                          />
+                          {hue}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => onRemoveAccount(account.id)}
+                  >
+                    Remove account
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          );
+        })}
+
         <Button
           variant="ghost"
           size="sm"

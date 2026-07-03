@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { getRuntime, initRuntime } from "./runtime";
 import type { UserPreferences } from "./runtime.types";
 
-export type SyncDomain = "appearance" | "focus";
+export type SyncDomain = "appearance" | "focus" | "calendar";
 
 /** Opaque jsonb payload shape shared across the transport boundary. */
 type Json = Record<string, unknown>;
@@ -36,6 +36,7 @@ type SyncMeta = {
 const META_KEY: Record<SyncDomain, string> = {
   appearance: "moduo.appearance.sync",
   focus: "moduo.focus.sync",
+  calendar: "moduo.calendar.sync",
 };
 
 const EMPTY_META: SyncMeta = { userId: null, updatedAt: null, dirty: false };
@@ -98,9 +99,14 @@ export function getCloudPrefs(): Promise<UserPreferences | null> {
 
 function domainValue(prefs: UserPreferences | null, domain: SyncDomain): { value: Json | null; updatedAt: string | null } {
   if (!prefs) return { value: null, updatedAt: null };
-  return domain === "appearance"
-    ? { value: prefs.appearance, updatedAt: prefs.appearanceUpdatedAt }
-    : { value: prefs.focus, updatedAt: prefs.focusUpdatedAt };
+  switch (domain) {
+    case "appearance":
+      return { value: prefs.appearance, updatedAt: prefs.appearanceUpdatedAt };
+    case "focus":
+      return { value: prefs.focus, updatedAt: prefs.focusUpdatedAt };
+    case "calendar":
+      return { value: prefs.calendar, updatedAt: prefs.calendarUpdatedAt };
+  }
 }
 
 /** Push one domain's syncable subset. Returns false when offline / errored / signed out. */
@@ -111,7 +117,9 @@ export async function pushDomain(domain: SyncDomain, value: Json, updatedAt: str
     const patch =
       domain === "appearance"
         ? { appearance: value, appearanceUpdatedAt: updatedAt }
-        : { focus: value, focusUpdatedAt: updatedAt };
+        : domain === "focus"
+          ? { focus: value, focusUpdatedAt: updatedAt }
+          : { calendar: value, calendarUpdatedAt: updatedAt };
     const res = await rt.preferences.set(patch);
     return res !== null; // null = signed out
   } catch {

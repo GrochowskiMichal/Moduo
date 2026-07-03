@@ -1763,6 +1763,8 @@ export type Database = {
         Row: {
           appearance: Json
           appearance_updated_at: string
+          calendar: Json
+          calendar_updated_at: string
           created_at: string
           focus: Json
           focus_updated_at: string
@@ -1771,6 +1773,8 @@ export type Database = {
         Insert: {
           appearance?: Json
           appearance_updated_at?: string
+          calendar?: Json
+          calendar_updated_at?: string
           created_at?: string
           focus?: Json
           focus_updated_at?: string
@@ -1779,6 +1783,8 @@ export type Database = {
         Update: {
           appearance?: Json
           appearance_updated_at?: string
+          calendar?: Json
+          calendar_updated_at?: string
           created_at?: string
           focus?: Json
           focus_updated_at?: string

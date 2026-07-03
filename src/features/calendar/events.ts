@@ -88,6 +88,9 @@ export type EventChip = {
   allDay: boolean;
   external: boolean;
   recurring: boolean;
+  /** The mirrored account this chip belongs to (null = native Moduo) — the
+   * grid resolves its hue from this for external attribution (CAL-6). */
+  sourceAccountId: string | null;
 };
 
 export type EventChipsByDay = {
@@ -132,6 +135,7 @@ export function eventChipsInRange(
         allDay: event.allDay,
         external: !isNativeEvent(event),
         recurring: Boolean(event.rrule),
+        sourceAccountId: event.sourceAccountId,
       };
       if (event.allDay) {
         // One chip per covered local day, END-EXCLUSIVE on exact midnights

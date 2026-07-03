@@ -193,6 +193,25 @@ body,
   background-color: var(--label);
 }
 
+/* CAL-6: external calendar chips + the left-rail swatch carry their account hue
+   through the SAME [data-label] tokens as tags (§13b) — the raw provider hex
+   maps to a bounded label name, never an inline color. `.cal-swatch` is the
+   left-rail dot; `.cal-chip-external` tints the grid chip. */
+.cal-swatch {
+  background-color: var(--label);
+}
+
+.cal-chip-external {
+  background-color: var(--label-surface);
+  border-color: var(--label);
+}
+
+/* Hover feedback — external chips are clickable (open the popover), so match the
+   native chip's subtle deepen. `filter` is an effect, not a design-system color. */
+.cal-chip-external:hover {
+  filter: brightness(1.12);
+}
+
 /* TagChip v2: the "#" glyph carries the hue, the name stays neutral — a
    smaller, borderless chip (no dot, no pill). `.tag-chip-active` hues the whole
    label (the one fully-colored treatment, reserved for active filter chips). */

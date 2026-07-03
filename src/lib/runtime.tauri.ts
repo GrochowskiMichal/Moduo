@@ -162,6 +162,21 @@ export const tauriRuntime: ModuoRuntime = {
     removeAccount: webRuntime.calendar.removeAccount,
     mirrorEvents: webRuntime.calendar.mirrorEvents,
 
+    // CAL-6b: fetch raw provider events via the OAuth engine so the frontend
+    // maps + mirrors them to Supabase (the desktop is the sync writer).
+    async fetchExternalEvents({ provider, externalAccountId, timeMin, timeMax }) {
+      const command =
+        provider === "microsoft"
+          ? "calendar_outlook_events_sync"
+          : "calendar_google_events_sync";
+      const events = await invoke<Record<string, unknown>[]>(command, {
+        accountId: externalAccountId,
+        timeMin,
+        timeMax,
+      });
+      return events ?? [];
+    },
+
     // LEGACY desktop store + the preserved OAuth/sync engine (CAL-6 re-points
     // its output at mirrorEvents).
     async listEvents() {

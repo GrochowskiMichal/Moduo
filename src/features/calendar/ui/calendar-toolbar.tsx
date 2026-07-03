@@ -2,7 +2,7 @@
 // Controls sit on the standard rungs; the sync affordance (external
 // calendars) joins the right side with CAL-6.
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { IconButton } from "../../../components/ui/icon-button";
@@ -16,6 +16,10 @@ type Props = {
   onNext: () => void;
   onToday: () => void;
   onViewChange: (view: CalendarView) => void;
+  /** External-calendar sync age ("synced 12 min ago"); null when no accounts. */
+  syncLabel?: string | null;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 };
 
 const VIEW_ITEMS = [
@@ -30,6 +34,9 @@ export function CalendarToolbar({
   onNext,
   onToday,
   onViewChange,
+  syncLabel,
+  onRefresh,
+  refreshing = false,
 }: Props) {
   return (
     <div className="flex shrink-0 items-center gap-2 pb-3">
@@ -41,7 +48,20 @@ export function CalendarToolbar({
         Today
       </Button>
       <span className="font-display text-sm font-medium text-foreground">{label}</span>
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-1.5">
+        {onRefresh ? (
+          <div className="flex items-center gap-1">
+            {syncLabel ? (
+              <span className="text-2xs text-muted-foreground">{syncLabel}</span>
+            ) : null}
+            <IconButton
+              icon={RefreshCw}
+              label="Refresh calendars"
+              onClick={onRefresh}
+              className={refreshing ? "animate-spin motion-reduce:animate-none" : undefined}
+            />
+          </div>
+        ) : null}
         <SegmentedControl
           size="sm"
           aria-label="Calendar view"

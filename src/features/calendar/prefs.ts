@@ -121,6 +121,12 @@ export type CalendarPrefs = {
   /** 0 = Sunday … 6 = Saturday. */
   weekStartsOn: number;
   showWeekends: boolean;
+  /** Account ids toggled OFF in the left rail — their mirrored events hide from
+   * the grid (CAL-6, §3a). Persisted so a hidden calendar stays hidden. */
+  hiddenAccountIds: string[];
+  /** Per-account color override (a bounded label hue name; see tag-colors). The
+   * provider's own color is the default until the user recolors it. */
+  accountColors: Record<string, string>;
 };
 
 /** 08:00–18:00, Monday start, weekends shown (spec §10 defaults). */
@@ -129,6 +135,8 @@ export const DEFAULT_CALENDAR_PREFS: CalendarPrefs = {
   workEndMinute: 18 * 60,
   weekStartsOn: 1,
   showWeekends: true,
+  hiddenAccountIds: [],
+  accountColors: {},
 };
 
 function asMinute(v: unknown, fallback: number): number {
@@ -157,7 +165,23 @@ export function sanitizeCalendarPrefs(raw: unknown): CalendarPrefs {
       : d.weekStartsOn;
   const showWeekends =
     typeof o.showWeekends === "boolean" ? o.showWeekends : d.showWeekends;
-  return { workStartMinute, workEndMinute, weekStartsOn, showWeekends };
+  const hiddenAccountIds = Array.isArray(o.hiddenAccountIds)
+    ? o.hiddenAccountIds.filter((v): v is string => typeof v === "string")
+    : [];
+  const accountColors: Record<string, string> = {};
+  if (o.accountColors && typeof o.accountColors === "object") {
+    for (const [k, v] of Object.entries(o.accountColors as Record<string, unknown>)) {
+      if (typeof v === "string") accountColors[k] = v;
+    }
+  }
+  return {
+    workStartMinute,
+    workEndMinute,
+    weekStartsOn,
+    showWeekends,
+    hiddenAccountIds,
+    accountColors,
+  };
 }
 
 function prefsKey(userId: string): string {

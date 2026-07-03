@@ -88,12 +88,16 @@ function prefsRowToModel(row: {
   appearance_updated_at: string | null;
   focus: unknown;
   focus_updated_at: string | null;
+  calendar?: unknown;
+  calendar_updated_at?: string | null;
 }): UserPreferences {
   return {
     appearance: (row.appearance as Record<string, unknown> | null) ?? null,
     appearanceUpdatedAt: row.appearance_updated_at ?? null,
     focus: (row.focus as Record<string, unknown> | null) ?? null,
     focusUpdatedAt: row.focus_updated_at ?? null,
+    calendar: (row.calendar as Record<string, unknown> | null) ?? null,
+    calendarUpdatedAt: row.calendar_updated_at ?? null,
   };
 }
 
@@ -641,7 +645,9 @@ export const webRuntime: ModuoRuntime = {
       if (!user) return null;
       const { data, error } = await supabaseClient
         .from("user_preferences")
-        .select("appearance, appearance_updated_at, focus, focus_updated_at")
+        .select(
+          "appearance, appearance_updated_at, focus, focus_updated_at, calendar, calendar_updated_at",
+        )
         .eq("user_id", user.id)
         .maybeSingle();
       if (error) throw new Error(error.message);
@@ -658,10 +664,14 @@ export const webRuntime: ModuoRuntime = {
       if (patch.appearanceUpdatedAt !== undefined) row.appearance_updated_at = patch.appearanceUpdatedAt;
       if (patch.focus !== undefined) row.focus = patch.focus ?? {};
       if (patch.focusUpdatedAt !== undefined) row.focus_updated_at = patch.focusUpdatedAt;
+      if (patch.calendar !== undefined) row.calendar = patch.calendar ?? {};
+      if (patch.calendarUpdatedAt !== undefined) row.calendar_updated_at = patch.calendarUpdatedAt;
       const { data, error } = await supabaseClient
         .from("user_preferences")
         .upsert(row, { onConflict: "user_id" })
-        .select("appearance, appearance_updated_at, focus, focus_updated_at")
+        .select(
+          "appearance, appearance_updated_at, focus, focus_updated_at, calendar, calendar_updated_at",
+        )
         .single();
       if (error) throw new Error(error.message);
       return prefsRowToModel(data);
@@ -818,6 +828,10 @@ export const webRuntime: ModuoRuntime = {
         upserted: Number(data?.upserted ?? 0),
         removed: Number(data?.removed ?? 0),
       };
+    },
+    // Web is not the sync writer — the desktop app fetches from providers.
+    async fetchExternalEvents() {
+      return [];
     },
 
     // ── LEGACY (pre-Wave-2; use-calendar.ts only; retired with CAL-6). The
