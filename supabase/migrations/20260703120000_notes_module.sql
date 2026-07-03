@@ -15,6 +15,12 @@
 --   - `notes_module_permission` includes the api-key branch (scopes->>'notes')
 --     FROM DAY ONE — the three-module gotcha (see 20260702170000).
 --   - Kind backfill: category/folder retire; everything is a note.
+--
+-- ⚠ DEPLOY GATE: DO NOT APPLY BEFORE THE NO-3 CODE SHIPS. This migration
+-- drops the client-direct write policies the LEGACY notes editor still uses —
+-- once applied, the old editor's doc saves are RLS-filtered to 0 rows
+-- *silently*. Apply only after the Wave-3 notes page (NO-1..NO-3, one branch)
+-- is deployed; the new code degrades gracefully in the other direction.
 
 -- ── 1 · Extend `notes` in place ───────────────────────────────────────────────
 
@@ -31,7 +37,7 @@ ALTER TABLE public.notes
   ADD COLUMN IF NOT EXISTS search_tsv tsvector
     GENERATED ALWAYS AS (
       setweight(to_tsvector('simple', coalesce(title, '')), 'A') ||
-      setweight(to_tsvector('simple', left(coalesce(body_text, ''), 300000)), 'B')
+      setweight(to_tsvector('simple', left(coalesce(body_text, ''), 150000)), 'B')
     ) STORED;
 
 CREATE INDEX IF NOT EXISTS notes_search_tsv_idx
@@ -45,6 +51,19 @@ CREATE INDEX IF NOT EXISTS notes_parent_idx
 
 -- Everything is a note: category/folder kinds retire (DESIGN_BRIEF §1.2).
 UPDATE public.notes SET kind = 'note' WHERE kind IS DISTINCT FROM 'note';
+
+-- One-time legacy normalization: the old editor soft-deleted single rows, so
+-- prod can hold LIVE notes under trashed parents. Re-root them once so the
+-- subtree ops' invariant ("no live child under a trashed parent") holds for
+-- pre-migration data too — without this, the first purge sweep could take
+-- live descendants down with an expired parent.
+UPDATE public.notes n SET parent_id = NULL
+WHERE n.deleted_at IS NULL
+  AND n.parent_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM public.notes p
+    WHERE p.id = n.parent_id AND p.deleted_at IS NOT NULL
+  );
 
 -- ── 2 · note_updates — the append-only CRDT update log ──────────────────────
 
@@ -198,7 +217,8 @@ AS $$
     UNION ALL
     SELECT n.id, sub.depth + 1 FROM public.notes n
       JOIN sub ON n.parent_id = sub.id
-      WHERE sub.depth < 100
+      WHERE n.workspace_id = p_workspace_id
+        AND sub.depth < 100
   )
   SELECT DISTINCT id FROM sub;
 $$;
@@ -386,6 +406,12 @@ BEGIN
      src.doc_state, src.doc_version, src.body_text, src.body_md)
   RETURNING * INTO n;
 
+  -- The un-compacted update tail is part of the doc — copy it or the
+  -- duplicate silently lacks everything typed since the last compaction.
+  INSERT INTO public.note_updates (workspace_id, note_id, client_id, client_seq, update_b64)
+  SELECT u.workspace_id, n.id, u.client_id, u.client_seq, u.update_b64
+    FROM public.note_updates u WHERE u.note_id = src.id;
+
   PERFORM public.entities_op_upsert(
     p_workspace_id, 'note', n.id,
     coalesce(nullif(btrim(n.title), ''), 'Untitled'), 'note');
@@ -459,7 +485,6 @@ DECLARE
   n public.notes;
   v_now timestamptz := now();
   v_ids uuid[];
-  v_id uuid;
 BEGIN
   n := public.notes_op__guard_note(p_workspace_id, p_note_id);
 
@@ -471,11 +496,15 @@ BEGIN
 
   UPDATE public.notes
     SET deleted_at = v_now, updated_at = v_now
-    WHERE id = ANY (v_ids);
+    WHERE workspace_id = p_workspace_id AND id = ANY (v_ids);
 
-  FOREACH v_id IN ARRAY v_ids LOOP
-    PERFORM public.entities_op_tombstone(p_workspace_id, 'note', v_id);
-  END LOOP;
+  -- Registry tombstones inline: entities_op_tombstone re-guards through the
+  -- LINKS permission lane, which would reject an api key scoped notes-only.
+  -- The notes guard already ran; this op is the authority here.
+  UPDATE public.entities
+    SET deleted_at = v_now, updated_at = v_now
+    WHERE workspace_id = p_workspace_id AND entity_type = 'note'
+      AND entity_id = ANY (v_ids) AND deleted_at IS NULL;
 
   PERFORM public.module_activity_log(
     p_workspace_id, 'notes', 'note', n.id, 'notes.trash',
@@ -525,9 +554,10 @@ BEGIN
 
   UPDATE public.notes
     SET deleted_at = NULL, updated_at = now()
-    WHERE id = ANY (v_ids);
+    WHERE workspace_id = p_workspace_id AND id = ANY (v_ids);
   IF v_reroot THEN
-    UPDATE public.notes SET parent_id = NULL WHERE id = n.id;
+    UPDATE public.notes SET parent_id = NULL
+      WHERE workspace_id = p_workspace_id AND id = n.id;
   END IF;
 
   FOREACH v_id IN ARRAY v_ids LOOP
@@ -547,9 +577,12 @@ BEGIN
 END;
 $$;
 
--- Shared purge core: hard-delete a set of note ids (their note_updates go via
--- FK CASCADE), drop live links, keep registry tombstones (chips render the
--- standard tombstone treatment).
+-- Shared purge core: hard-delete a set of TRASHED note ids (their
+-- note_updates go via FK CASCADE), drop live links, keep registry tombstones
+-- (chips render the standard tombstone treatment). Live rows are NEVER
+-- deleted here — the set is re-filtered defensively, and any live child
+-- still pointing at a purged id re-roots first (legacy data can hold live
+-- children under trashed parents).
 CREATE OR REPLACE FUNCTION public.notes__purge_ids(
   p_workspace_id uuid,
   p_ids uuid[]
@@ -560,27 +593,42 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_id uuid;
+  v_ids uuid[];
+  v_count integer;
 BEGIN
-  IF p_ids IS NULL OR array_length(p_ids, 1) IS NULL THEN
+  SELECT array_agg(nn.id) INTO v_ids FROM public.notes nn
+    WHERE nn.workspace_id = p_workspace_id
+      AND nn.id = ANY (coalesce(p_ids, '{}'::uuid[]))
+      AND nn.deleted_at IS NOT NULL;
+  IF v_ids IS NULL THEN
     RETURN 0;
   END IF;
+
+  -- Re-root live survivors so the hard delete can't strand or cascade them.
+  UPDATE public.notes
+    SET parent_id = NULL, updated_at = now()
+    WHERE workspace_id = p_workspace_id
+      AND deleted_at IS NULL
+      AND parent_id = ANY (v_ids);
 
   UPDATE public.entity_links
     SET deleted_at = now()
     WHERE workspace_id = p_workspace_id
       AND deleted_at IS NULL
-      AND ((source_type = 'note' AND source_id = ANY (p_ids))
-        OR (target_type = 'note' AND target_id = ANY (p_ids)));
+      AND ((source_type = 'note' AND source_id = ANY (v_ids))
+        OR (target_type = 'note' AND target_id = ANY (v_ids)));
 
-  FOREACH v_id IN ARRAY p_ids LOOP
-    PERFORM public.entities_op_tombstone(p_workspace_id, 'note', v_id);
-  END LOOP;
+  -- Registry tombstones inline (see notes_op_trash for why not
+  -- entities_op_tombstone).
+  UPDATE public.entities
+    SET deleted_at = now(), updated_at = now()
+    WHERE workspace_id = p_workspace_id AND entity_type = 'note'
+      AND entity_id = ANY (v_ids) AND deleted_at IS NULL;
 
   DELETE FROM public.notes
-    WHERE workspace_id = p_workspace_id AND id = ANY (p_ids);
-
-  RETURN array_length(p_ids, 1);
+    WHERE workspace_id = p_workspace_id AND id = ANY (v_ids);
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
 END;
 $$;
 
@@ -606,6 +654,7 @@ BEGIN
 
   SELECT array_agg(s) INTO v_ids
     FROM public.notes__subtree_ids(p_workspace_id, p_note_id) s;
+  -- notes__purge_ids re-filters to trashed rows and re-roots live children.
   v_count := public.notes__purge_ids(p_workspace_id, v_ids);
 
   PERFORM public.module_activity_log(
@@ -655,8 +704,10 @@ BEGIN
 END;
 $$;
 
--- notes.publish / notes.unpublish — revocable read-only public link. A fresh
--- token per publish; unpublish clears BOTH so the old URL 404s instantly.
+-- notes.publish / notes.unpublish — revocable read-only public link.
+-- Re-publishing while already published keeps the live token (links keep
+-- working); unpublish clears BOTH published_at and the token, so the next
+-- publish mints a fresh token and every old URL 404s instantly.
 CREATE OR REPLACE FUNCTION public.notes_op_publish(
   p_workspace_id uuid,
   p_note_id uuid
@@ -938,6 +989,8 @@ BEGIN
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC', fn);
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM anon', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated', fn);
+    -- The MCP connector calls as service_role (NO-10's notes tools).
+    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);
   END LOOP;
 END;
 $$;
@@ -946,7 +999,7 @@ $$;
 -- directly by clients.
 REVOKE ALL ON FUNCTION public.notes_op__guard(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.notes_op__guard(uuid) FROM anon;
-GRANT EXECUTE ON FUNCTION public.notes_op__guard(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.notes_op__guard(uuid) FROM authenticated;
 REVOKE ALL ON FUNCTION public.notes_op__guard_note(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.notes_op__guard_note(uuid, uuid, boolean) FROM anon;
 REVOKE ALL ON FUNCTION public.notes__subtree_ids(uuid, uuid) FROM PUBLIC;

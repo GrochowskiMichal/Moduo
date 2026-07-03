@@ -634,20 +634,31 @@ export const webRuntime: ModuoRuntime = {
           .eq("workspace_id", workspaceId)
           .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`)
           .order("position");
-      try {
-        const res = await query(V2_COLS);
-        if (!res.error) {
-          return { notes: (res.data ?? []).map(noteRowToModel), degraded: false };
-        }
-        const legacy = await query(LEGACY_COLS);
-        if (legacy.error) return { notes: [], degraded: true };
-        return { notes: (legacy.data ?? []).map(noteRowToModel), degraded: true };
-      } catch {
-        return { notes: [], degraded: true };
+      const res = await query(V2_COLS);
+      if (!res.error) {
+        return { notes: (res.data ?? []).map(noteRowToModel), degraded: false };
       }
+      // Degrade ONLY on the deploy gap (missing v2 columns = 42703). An
+      // outage/auth error must surface as an error, not an empty module.
+      if (res.error.code !== "42703") throw new Error(res.error.message);
+      const legacy = await query(LEGACY_COLS);
+      if (legacy.error) throw new Error(legacy.error.message);
+      return { notes: (legacy.data ?? []).map(noteRowToModel), degraded: true };
     },
 
     async pullDoc({ workspaceId, noteId, sinceUpdateId }) {
+      // Log FIRST, snapshot SECOND. A concurrent compaction between the two
+      // reads then only ever makes the snapshot NEWER than the log we hold —
+      // applying both stays lossless (Yjs is idempotent). The reverse order
+      // could pair a stale snapshot with a log missing its folded tail.
+      const updRes = await supabaseClient
+        .from("note_updates")
+        .select("id, client_id, client_seq, update_b64")
+        .eq("note_id", noteId)
+        .gt("id", sinceUpdateId ?? 0)
+        .order("id", { ascending: true });
+      const updates = updRes.error ? [] : (updRes.data ?? []).map(noteUpdateRowToModel);
+
       const noteRes = await supabaseClient
         .from("notes")
         .select("doc_state, doc_version")
@@ -655,6 +666,7 @@ export const webRuntime: ModuoRuntime = {
         .eq("workspace_id", workspaceId)
         .single();
       if (noteRes.error) {
+        if (noteRes.error.code !== "42703") throw new Error(noteRes.error.message);
         // Pre-migration there is no doc_version column — degrade to the
         // legacy snapshot-only shape rather than breaking the open note.
         const legacy = await supabaseClient
@@ -666,13 +678,6 @@ export const webRuntime: ModuoRuntime = {
         if (legacy.error) throw new Error(legacy.error.message);
         return { snapshotB64: legacy.data?.doc_state ?? null, docVersion: 0, updates: [] };
       }
-      const updRes = await supabaseClient
-        .from("note_updates")
-        .select("id, client_id, client_seq, update_b64")
-        .eq("note_id", noteId)
-        .gt("id", sinceUpdateId ?? 0)
-        .order("id", { ascending: true });
-      const updates = updRes.error ? [] : (updRes.data ?? []).map(noteUpdateRowToModel);
       return {
         snapshotB64: noteRes.data?.doc_state ?? null,
         docVersion: noteRes.data?.doc_version ?? 0,
