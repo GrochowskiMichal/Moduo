@@ -9,6 +9,11 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
+import {
+  noteRowToModel,
+  noteUpdateRowToModel,
+  trashWindowCutoffIso,
+} from "../features/notes/model";
 import type {
   Company,
   Contact,
@@ -607,6 +612,273 @@ export const webRuntime: ModuoRuntime = {
     },
     async subscribeLocal(_workspaceId, noteId) {
       return noteId ? `note:${noteId}` : "notes:all";
+    },
+  },
+
+  notesV2: {
+    // ── Wave-3 rebuild surface (NO-1). Writes = notes_op_* RPCs (guard +
+    // write + registry upsert + attributed activity); reads = indexed
+    // SELECTs that DEGRADE pre-migration: the v2 column list 42703s until
+    // the migration lands, so we fall back to the legacy columns and flag
+    // the bundle degraded. Explicit mutations throw honest errors instead.
+    async listMeta(workspaceId) {
+      const V2_COLS =
+        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, created_at, updated_at, deleted_at";
+      const LEGACY_COLS =
+        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
+      const cutoff = trashWindowCutoffIso(new Date());
+      const query = (cols: string) =>
+        supabaseClient
+          .from("notes")
+          .select(cols)
+          .eq("workspace_id", workspaceId)
+          .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`)
+          .order("position");
+      try {
+        const res = await query(V2_COLS);
+        if (!res.error) {
+          return { notes: (res.data ?? []).map(noteRowToModel), degraded: false };
+        }
+        const legacy = await query(LEGACY_COLS);
+        if (legacy.error) return { notes: [], degraded: true };
+        return { notes: (legacy.data ?? []).map(noteRowToModel), degraded: true };
+      } catch {
+        return { notes: [], degraded: true };
+      }
+    },
+
+    async pullDoc({ workspaceId, noteId, sinceUpdateId }) {
+      const noteRes = await supabaseClient
+        .from("notes")
+        .select("doc_state, doc_version")
+        .eq("id", noteId)
+        .eq("workspace_id", workspaceId)
+        .single();
+      if (noteRes.error) {
+        // Pre-migration there is no doc_version column — degrade to the
+        // legacy snapshot-only shape rather than breaking the open note.
+        const legacy = await supabaseClient
+          .from("notes")
+          .select("doc_state")
+          .eq("id", noteId)
+          .eq("workspace_id", workspaceId)
+          .single();
+        if (legacy.error) throw new Error(legacy.error.message);
+        return { snapshotB64: legacy.data?.doc_state ?? null, docVersion: 0, updates: [] };
+      }
+      const updRes = await supabaseClient
+        .from("note_updates")
+        .select("id, client_id, client_seq, update_b64")
+        .eq("note_id", noteId)
+        .gt("id", sinceUpdateId ?? 0)
+        .order("id", { ascending: true });
+      const updates = updRes.error ? [] : (updRes.data ?? []).map(noteUpdateRowToModel);
+      return {
+        snapshotB64: noteRes.data?.doc_state ?? null,
+        docVersion: noteRes.data?.doc_version ?? 0,
+        updates,
+      };
+    },
+
+    async create({ workspaceId, id, parentId, title, position, icon }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_create", {
+        p_workspace_id: workspaceId,
+        p_id: id ?? null,
+        p_parent_id: parentId ?? null,
+        p_title: title ?? "",
+        p_position: position ?? "",
+        p_icon: icon ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_create"));
+    },
+
+    async rename({ workspaceId, noteId, title }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_rename", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_title: title,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_rename"));
+    },
+
+    async move({ workspaceId, noteId, parentId, position }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_move", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_parent_id: parentId ?? null,
+        p_position: position ?? "",
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_move"));
+    },
+
+    async setMeta({ workspaceId, noteId, patch }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_set_meta", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_patch: patch,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_set_meta"));
+    },
+
+    async duplicate({ workspaceId, sourceNoteId, position }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_duplicate", {
+        p_workspace_id: workspaceId,
+        p_source_note_id: sourceNoteId,
+        p_position: position ?? "",
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_duplicate"));
+    },
+
+    async archive({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_archive", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_archive"));
+    },
+
+    async unarchive({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_unarchive", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_unarchive"));
+    },
+
+    async trash({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_trash", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        trashedIds: (data?.trashed_ids ?? []) as string[],
+        count: Number(data?.count ?? 0),
+      };
+    },
+
+    async restore({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_restore", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        restoredIds: (data?.restored_ids ?? []) as string[],
+        count: Number(data?.count ?? 0),
+      };
+    },
+
+    async purge({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_purge", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return { count: Number(data?.count ?? 0) };
+    },
+
+    async purgeExpired(workspaceId) {
+      // Module-load sweep (like tasks catch_up): degrade quietly pre-deploy —
+      // a missing RPC must never break opening /notes.
+      try {
+        const { data, error } = await supabaseClient.rpc("notes_op_purge_expired", {
+          p_workspace_id: workspaceId,
+        });
+        if (error) return { count: 0 };
+        return { count: Number(data?.count ?? 0) };
+      } catch {
+        return { count: 0 };
+      }
+    },
+
+    async publish({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_publish", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_publish"));
+    },
+
+    async unpublish({ workspaceId, noteId }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_unpublish", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+      });
+      if (error) throw new Error(error.message);
+      return noteRowToModel(firstRow(data, "notes_op_unpublish"));
+    },
+
+    async pushUpdates({ workspaceId, noteId, clientId, updates, bodyText, bodyMd }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_apply_updates", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_client_id: clientId,
+        p_updates: updates,
+        p_body_text: bodyText ?? null,
+        p_body_md: bodyMd ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        inserted: Number(data?.inserted ?? 0),
+        duplicates: Number(data?.duplicates ?? 0),
+        maxUpdateId: data?.max_update_id == null ? null : Number(data.max_update_id),
+      };
+    },
+
+    async saveSnapshot({ workspaceId, noteId, snapshotB64, uptoUpdateId, bodyText, bodyMd }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_save_snapshot", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_snapshot_b64: snapshotB64,
+        p_upto_update_id: uptoUpdateId,
+        p_body_text: bodyText ?? null,
+        p_body_md: bodyMd ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        folded: Number(data?.folded ?? 0),
+        docVersion: Number(data?.doc_version ?? 0),
+      };
+    },
+
+    async importNotes({ workspaceId, rows }) {
+      const payload = rows.map((r) => ({
+        id: r.id ?? null,
+        parentId: r.parentId ?? null,
+        title: r.title ?? "",
+        icon: r.icon ?? null,
+        position: r.position ?? "",
+        docStateB64: r.docStateB64 ?? null,
+        bodyText: r.bodyText ?? "",
+        bodyMd: r.bodyMd ?? "",
+      }));
+      const { data, error } = await supabaseClient.rpc("notes_op_import", {
+        p_workspace_id: workspaceId,
+        p_rows: payload,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        imported: Number(data?.imported ?? 0),
+        skipped: Number(data?.skipped ?? 0),
+      };
+    },
+
+    async mention({ workspaceId, noteId, mentionedUserIds }) {
+      const { error } = await supabaseClient.rpc("notes_op_mention", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_mentioned_user_ids: mentionedUserIds,
+      });
+      if (error) throw new Error(error.message);
     },
   },
 

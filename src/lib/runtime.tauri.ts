@@ -83,6 +83,11 @@ export const tauriRuntime: ModuoRuntime = {
     },
   },
 
+  // Wave-3 Notes rebuild: cloud-first, Supabase-direct — the same code path as
+  // web (notes_op_* RPCs + the entities registry). Desktop offline comes from
+  // the webview's IndexedDB (NO-2), not redb.
+  notesV2: webRuntime.notesV2,
+
   graph: {
     upsertNodesEdges(request) { return invoke<void>("graph_upsert_nodes_edges", { request }); },
     queryRelated(workspaceId, nodeId, limit) { return invoke<any>("graph_query_related", { workspaceId, nodeId, limit }); },

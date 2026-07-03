@@ -34,6 +34,12 @@ import type {
   CalendarMirrorEventInput,
   CalendarModuleBundle,
 } from "../features/calendar/events";
+import type {
+  Note as NoteV2,
+  NoteDocPull,
+  NotesImportRow,
+  NotesV2Bundle,
+} from "../features/notes/model";
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
 import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { NotificationItem } from "../features/spine/notifications";
@@ -250,6 +256,89 @@ export type ModuoRuntime = {
       updates: Array<{ idempotencyKey?: string; clientSeq: number; updateB64: string }>
     ): Promise<any>;
     subscribeLocal(workspaceId: string, noteId?: string | null): Promise<string>;
+  };
+
+  /**
+   * Wave-3 Notes rebuild surface (specs/notes.md NO-1). Cloud-first on both
+   * platforms (desktop delegates wholesale). Writes = notes_op_* intent RPCs;
+   * reads degrade pre-migration (`degraded: true` on the bundle). The legacy
+   * `notes` namespace above retires with NO-2/NO-3.
+   */
+  notesV2: {
+    listMeta(workspaceId: string): Promise<NotesV2Bundle>;
+    /** Snapshot + update-log-since-cursor for one note (the sync engine's pull). */
+    pullDoc(input: {
+      workspaceId: string;
+      noteId: string;
+      sinceUpdateId?: number | null;
+    }): Promise<NoteDocPull>;
+    create(input: {
+      workspaceId: string;
+      id?: string | null;
+      parentId?: string | null;
+      title?: string;
+      position?: string;
+      icon?: string | null;
+    }): Promise<NoteV2>;
+    rename(input: { workspaceId: string; noteId: string; title: string }): Promise<NoteV2>;
+    move(input: {
+      workspaceId: string;
+      noteId: string;
+      parentId: string | null;
+      position: string;
+    }): Promise<NoteV2>;
+    setMeta(input: {
+      workspaceId: string;
+      noteId: string;
+      patch: { icon?: string | null; isPinned?: boolean };
+    }): Promise<NoteV2>;
+    duplicate(input: {
+      workspaceId: string;
+      sourceNoteId: string;
+      position?: string;
+    }): Promise<NoteV2>;
+    archive(input: { workspaceId: string; noteId: string }): Promise<NoteV2>;
+    unarchive(input: { workspaceId: string; noteId: string }): Promise<NoteV2>;
+    trash(input: { workspaceId: string; noteId: string }): Promise<{
+      trashedIds: string[];
+      count: number;
+    }>;
+    restore(input: { workspaceId: string; noteId: string }): Promise<{
+      restoredIds: string[];
+      count: number;
+    }>;
+    purge(input: { workspaceId: string; noteId: string }): Promise<{ count: number }>;
+    /** 30-day trash sweep on module load; degrades quietly pre-deploy. */
+    purgeExpired(workspaceId: string): Promise<{ count: number }>;
+    publish(input: { workspaceId: string; noteId: string }): Promise<NoteV2>;
+    unpublish(input: { workspaceId: string; noteId: string }): Promise<NoteV2>;
+    /** Idempotent outbox push (batched CRDT updates + optional derived body). */
+    pushUpdates(input: {
+      workspaceId: string;
+      noteId: string;
+      clientId: string;
+      updates: Array<{ clientSeq: number; updateB64: string }>;
+      bodyText?: string | null;
+      bodyMd?: string | null;
+    }): Promise<{ inserted: number; duplicates: number; maxUpdateId: number | null }>;
+    /** Client-driven compaction: fold the update log into the snapshot. */
+    saveSnapshot(input: {
+      workspaceId: string;
+      noteId: string;
+      snapshotB64: string;
+      uptoUpdateId: number;
+      bodyText?: string | null;
+      bodyMd?: string | null;
+    }): Promise<{ folded: number; docVersion: number }>;
+    importNotes(input: {
+      workspaceId: string;
+      rows: NotesImportRow[];
+    }): Promise<{ imported: number; skipped: number }>;
+    mention(input: {
+      workspaceId: string;
+      noteId: string;
+      mentionedUserIds: string[];
+    }): Promise<void>;
   };
 
   graph: {
