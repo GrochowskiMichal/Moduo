@@ -24,27 +24,3 @@ export type NoteMeta = {
   updatedAt: string;
   deletedAt: string | null;
 };
-
-export type SlashCommand = {
-  id:
-  | "paragraph"
-  | "h1"
-  | "h2"
-  | "h3"
-  | "bullet"
-  | "number"
-  | "todo"
-  | "quote"
-  | "code"
-  | "divider"
-  | "toggle"
-  | "table"
-  | "embed-mindmap"
-  | "embed-task"
-  | "ref-task"
-  | "ref-note"
-  | "ref-contact";
-  title: string;
-  keywords: string[];
-  group: "Basic" | "Lists" | "Blocks" | "Media" | "Embeds" | "Refs";
-};

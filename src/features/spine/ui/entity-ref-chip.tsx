@@ -8,7 +8,8 @@
 // values. Tombstoned targets render struck-through + dimmed ("Deleted [type]").
 
 import type { MouseEventHandler } from "react";
-import { cn } from "@/lib/utils";
+// Relative for the vitest graph (docs/gotchas.md — no @/ VALUE imports in test-reachable files).
+import { cn } from "../../../lib/utils";
 import { resolveEntityIcon } from "../icon-map";
 
 export type EntityRefChipProps = {

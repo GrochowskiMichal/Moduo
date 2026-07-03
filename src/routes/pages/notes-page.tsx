@@ -17,6 +17,10 @@ import { buildNoteSections, resolveDrop, type DropZone } from "../../features/no
 import { displayTitle } from "../../features/notes/title";
 import { NoteTreeSidebar } from "../../features/notes/ui/note-tree-sidebar";
 import { NoteEditor } from "../../features/notes/ui/note-editor";
+import {
+  INSERT_PAGE_ROW_EVENT,
+  type NotesEditorBridge,
+} from "../../features/notes/editor/notes-editor-bridge";
 import { betweenPositions, endPosition } from "../../features/tasks/helpers";
 import type { NotesSearch } from "../../features/notes/search";
 
@@ -91,6 +95,35 @@ export function NotesPage() {
     if (!notes.some((n) => n.id === selectedId)) select(null, true);
   }, [loading, selectedId, notes, select]);
 
+  // The editor ↔ module bridge (NO-4): page-rows read live titles, click-
+  // through selects, and /page creates a child of the open note.
+  const bridge = useMemo<NotesEditorBridge>(
+    () => ({
+      getNoteMeta: (id) => notes.find((n) => n.id === id) ?? null,
+      openNote: (id) => select(id),
+      createChildNote: () => (selectedId ? module.createNote(selectedId) : null),
+    }),
+    [notes, select, selectedId, module],
+  );
+
+  // Sidebar "+ child" while the parent is open ALSO mirrors a page-row into
+  // the parent's body (DESIGN_BRIEF §3c) — via the editor's canonical path.
+  const createChildFromSidebar = useCallback(
+    (parentId: string) => {
+      const id = module.createNote(parentId);
+      if (!id) return;
+      if (parentId === selectedId) {
+        window.dispatchEvent(
+          new CustomEvent(INSERT_PAGE_ROW_EVENT, {
+            detail: { parentId, childId: id },
+          }),
+        );
+      }
+      select(id, true);
+    },
+    [module, selectedId, select],
+  );
+
   const onDropRow = useCallback(
     (dragId: string, targetId: string, zone: DropZone) => {
       const drop = resolveDrop(notes, dragId, targetId, zone, {
@@ -134,7 +167,7 @@ export function NotesPage() {
       canEdit={canEdit}
       onSelect={(id) => select(id)}
       onCreateRoot={() => create(null)}
-      onCreateChild={(parentId) => create(parentId)}
+      onCreateChild={createChildFromSidebar}
       onDropRow={onDropRow}
       onTogglePin={module.togglePin}
       onSetIcon={module.setIcon}
@@ -191,6 +224,7 @@ export function NotesPage() {
             titleForLabel={displayTitle(selectedNote.title)}
             onTitleDerived={(title) => module.renameNote(selectedNote.id, title)}
             seedWelcome={welcomeNoteId === selectedNote.id}
+            bridge={bridge}
           />
         ) : selectedNote?.deletedAt ? (
           <div className="grid h-full place-content-center gap-2 text-center text-muted-foreground">

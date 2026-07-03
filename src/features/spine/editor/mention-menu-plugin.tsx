@@ -6,7 +6,7 @@
 // (the op lands with CT-5; here it routes through the `onMentionPerson` seam and
 // inserts the person's name). Selection is funnelled through the pure
 // `resolveMention` + `executeMention`. The caret detection / positioning /
-// keyboard handling mirror the proven notes `SlashCommandPlugin`; only the
+// keyboard handling mirror the notes slash menu (now slash-menu-plugin); only the
 // trigger (`@`) and the menu content/actions differ. Tokens-only (DESIGN_RULES).
 
 import { useEffect, useRef, useState } from "react";
@@ -56,6 +56,9 @@ export type MentionMenuPluginProps = {
   currentUserId?: string | null;
   /** Host seam for the person-mention activity row (CT-5 wires the real op). */
   onMentionPerson?: (memberId: string, label: string) => Promise<void> | void;
+  /** `@` = workspace people ONLY (the Notes grammar, Wave-3 AC5) — entities
+   * leave the picker; they ride the `/` nouns instead. */
+  peopleOnly?: boolean;
 };
 
 const MENU_MIN_WIDTH = 240;
@@ -122,6 +125,7 @@ export function MentionMenuPlugin({
   sourceIcon,
   currentUserId,
   onMentionPerson,
+  peopleOnly = false,
 }: MentionMenuPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [menu, setMenu] = useState<MentionMenuState | null>(null);
@@ -135,6 +139,7 @@ export function MentionMenuPlugin({
     // Until the person-notification op is wired (CT-5), don't surface people as
     // silently-failing `@` candidates — entity mentions still work.
     includePeople: Boolean(onMentionPerson),
+    includeEntities: !peopleOnly,
     enabled: menu !== null,
   });
 

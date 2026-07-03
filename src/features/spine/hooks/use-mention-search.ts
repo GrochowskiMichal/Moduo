@@ -34,6 +34,12 @@ type Options = {
    * false so `@person` is never shown as a silently-failing option.
    */
   includePeople?: boolean;
+  /**
+   * Offer entities as candidates. Default true; the Notes `@` surface passes
+   * false — its ratified grammar is `@` = people ONLY, entities ride the `/`
+   * nouns (Wave-3 NO-4, AC5).
+   */
+  includeEntities?: boolean;
   /** When false, the search is idle (no queries fired). Defaults to true. */
   enabled?: boolean;
   debounceMs?: number;
@@ -66,6 +72,7 @@ export function useMentionSearch({
   canCreate,
   currentUserId,
   includePeople = true,
+  includeEntities = true,
   enabled = true,
   debounceMs = 150,
 }: Options): UseMentionSearchResult {
@@ -88,18 +95,21 @@ export function useMentionSearch({
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          const records = await runtime.spine.searchEntities({
-            workspaceId,
-            query,
-            types: typesKey ? typesKey.split(",") : undefined,
-            limit: 8,
-          });
-          const ents: SearchedEntity[] = records.map((r) => ({
-            type: r.type,
-            id: r.id,
-            label: r.label,
-            icon: r.icon,
-          }));
+          let ents: SearchedEntity[] = [];
+          if (includeEntities) {
+            const records = await runtime.spine.searchEntities({
+              workspaceId,
+              query,
+              types: typesKey ? typesKey.split(",") : undefined,
+              limit: 8,
+            });
+            ents = records.map((r) => ({
+              type: r.type,
+              id: r.id,
+              label: r.label,
+              icon: r.icon,
+            }));
+          }
           let ppl: SearchedPerson[] = [];
           if (trigger === "mention" && includePeople) {
             const members = await runtime.workspace.listMembers(workspaceId);
@@ -124,7 +134,7 @@ export function useMentionSearch({
     }, debounceMs);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, runtime, workspaceId, trigger, query, typesKey, currentUserId, includePeople, debounceMs]);
+  }, [enabled, runtime, workspaceId, trigger, query, typesKey, currentUserId, includePeople, includeEntities, debounceMs]);
 
   const candidates = useMemo(
     () => buildMentionCandidates({ trigger, query, entities, people, createType, canCreate }),

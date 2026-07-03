@@ -43,14 +43,22 @@ import {
   KEY_TAB_COMMAND,
   OUTDENT_CONTENT_COMMAND,
 } from "lexical";
-import { SlashCommandPlugin } from "../editor/plugins/SlashCommandPlugin";
+import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
+import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
 import { EmbedNode } from "../editor/nodes/EmbedNode";
+import { $createPageRowNode, PageRowNode } from "../editor/nodes/page-row-node";
+import {
+  INSERT_PAGE_ROW_EVENT,
+  NotesEditorBridgeContext,
+  type InsertPageRowDetail,
+  type NotesEditorBridge,
+} from "../editor/notes-editor-bridge";
 import { EntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { useAuth } from "@/providers/auth-provider";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { deriveBody } from "../sync/doc-text";
-import { firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
+import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
 
 type Props = {
   engine: NotesSyncEngineV2;
@@ -62,6 +70,8 @@ type Props = {
   onTitleDerived: (title: string) => void;
   /** Seed the self-teaching welcome content once, when this doc is empty. */
   seedWelcome?: boolean;
+  /** Live module data + actions for page-rows and /page (NO-4). */
+  bridge: NotesEditorBridge;
 };
 
 function CodeHighlightingPlugin() {
@@ -149,6 +159,33 @@ function TitleDerivationPlugin({
   return null;
 }
 
+/** The sidebar's "+ child" mirrors into the OPEN parent as a page-row — via
+ * the canonical Lexical path, never raw Yjs XML (spec risk #10 posture). */
+function InsertPageRowPlugin({
+  noteId,
+  bridge,
+}: {
+  noteId: string;
+  bridge: NotesEditorBridge;
+}) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    const onInsert = (event: Event) => {
+      const detail = (event as CustomEvent<InsertPageRowDetail>).detail;
+      if (!detail || detail.parentId !== noteId || !detail.childId) return;
+      const label = displayTitle(bridge.getNoteMeta(detail.childId)?.title ?? "");
+      editor.update(() => {
+        const root = $getRoot();
+        root.append($createPageRowNode(detail.childId, label));
+        root.append($createParagraphNode());
+      });
+    };
+    window.addEventListener(INSERT_PAGE_ROW_EVENT, onInsert);
+    return () => window.removeEventListener(INSERT_PAGE_ROW_EVENT, onInsert);
+  }, [editor, noteId, bridge]);
+  return null;
+}
+
 /** One-shot self-teaching content for a fresh workspace's welcome note
  * (DESIGN_BRIEF §4). Canonical Lexical nodes → syncs like any typed content.
  * Task lines/chips join the demo as their blocks land (NO-4/NO-5). */
@@ -200,6 +237,7 @@ export function NoteEditor({
   titleForLabel,
   onTitleDerived,
   seedWelcome = false,
+  bridge,
 }: Props) {
   const { userId, runtime } = useAuth();
   const session = useMemo(() => engine.getOrCreateSession(noteId), [engine, noteId]);
@@ -245,6 +283,7 @@ export function NoteEditor({
         TableRowNode,
         EmbedNode,
         EntityRefNode,
+        PageRowNode,
       ],
       theme: {
         paragraph: "notes-p",
@@ -280,6 +319,7 @@ export function NoteEditor({
 
   return (
     <div className="notes-editor-v2 relative h-full min-h-0 overflow-auto bg-background">
+      <NotesEditorBridgeContext.Provider value={bridge}>
       <LexicalCollaboration key={`collab-${noteId}`}>
         <LexicalComposer initialConfig={initialConfig} key={noteId}>
           <RichTextPlugin
@@ -300,8 +340,9 @@ export function NoteEditor({
           <CodeHighlightingPlugin />
           <LinkPlugin />
           <TablePlugin />
-          <SlashCommandPlugin
+          <SlashMenuPlugin
             workspaceId={workspaceId}
+            runtime={runtime}
             source={{ type: "note", id: noteId }}
             sourceLabel={titleForLabel || "Untitled"}
           />
@@ -312,7 +353,22 @@ export function NoteEditor({
             sourceLabel={titleForLabel || "Untitled"}
             sourceIcon="note"
             currentUserId={userId}
+            // The Notes grammar: @ = workspace people ONLY (AC5); a mention
+            // writes the person-targeted activity row → their notification.
+            peopleOnly
+            onMentionPerson={
+              runtime && editable
+                ? (memberId) =>
+                    runtime.notesV2.mention({
+                      workspaceId,
+                      noteId,
+                      mentionedUserIds: [memberId],
+                    })
+                : undefined
+            }
           />
+          <MarkdownClipboardPlugin />
+          <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
           <CollaborationPluginV2__EXPERIMENTAL
             id={noteId}
             doc={session.doc}
@@ -324,6 +380,7 @@ export function NoteEditor({
           <WelcomeSeedPlugin enabled={seedWelcome && editable} />
         </LexicalComposer>
       </LexicalCollaboration>
+      </NotesEditorBridgeContext.Provider>
     </div>
   );
 }
