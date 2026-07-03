@@ -14,8 +14,10 @@ function manifest(module: string): ModuleManifest {
 }
 
 describe("module registry", () => {
-  it("registers the tasks, links, and contacts manifests (no regression)", () => {
-    expect(moduleManifests.map((m) => m.module)).toEqual(expect.arrayContaining(["tasks", "links", "contacts"]));
+  it("registers the tasks, links, contacts, and calendar manifests (no regression)", () => {
+    expect(moduleManifests.map((m) => m.module)).toEqual(
+      expect.arrayContaining(["tasks", "links", "contacts", "calendar"]),
+    );
   });
 
   it("every manifest conforms to the ModuleManifest shape", () => {
@@ -98,6 +100,41 @@ describe("contacts manifest", () => {
   it("exposes the read surface — list, get, search", () => {
     expect(contacts.resources.map((r) => r.name)).toEqual(
       expect.arrayContaining(["contacts.list", "contacts.get", "contacts.search"]),
+    );
+  });
+});
+
+describe("calendar manifest", () => {
+  const calendar = manifest("calendar");
+
+  it("rides the Tasks permission lane at alpha", () => {
+    expect(calendar.permissionKey).toBe("tasks");
+    expect(calendar.activityEntityTypes).toContain("event");
+  });
+
+  it("exposes the write surface — native-event ops + the loop verbs (AC14)", () => {
+    const ops = calendar.ops.map((o) => o.op);
+    expect(ops).toEqual(
+      expect.arrayContaining([
+        "calendar.create_event",
+        "calendar.update_event",
+        "calendar.delete_event",
+        "calendar.schedule_task",
+        "calendar.move_block",
+        "calendar.complete_block",
+        "calendar.roll_forward",
+      ]),
+    );
+    // The loop verbs ride the shipped Tasks ops (the lens model).
+    const byOp = Object.fromEntries(calendar.ops.map((o) => [o.op, o.rpc]));
+    expect(byOp["calendar.create_event"]).toBe("calendar_op_event_create");
+    expect(byOp["calendar.complete_block"]).toBe("tasks_op_set_status");
+    expect(byOp["calendar.roll_forward"]).toBe("tasks_op_reschedule");
+  });
+
+  it("exposes the read surface — list_events + the composed day (AC14)", () => {
+    expect(calendar.resources.map((r) => r.name)).toEqual(
+      expect.arrayContaining(["calendar.list_events", "calendar.day"]),
     );
   });
 });

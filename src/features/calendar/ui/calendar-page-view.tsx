@@ -14,6 +14,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
+import { toast } from "sonner";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import {
@@ -43,16 +44,34 @@ import {
   stepAnchor,
   taskBlocks,
   visibleRange,
+  DEFAULT_BLOCK_MINUTES,
   type CalendarView,
   type TaskBlock,
 } from "../lens";
 import { eventChipsInRange, type EventChip } from "../events";
 import {
+  accountSourceLabel,
+  resolveAccountHues,
+  syncAgeLabel,
+  visibleEvents,
+} from "../accounts";
+import { isElapsedBlock } from "../elapsed";
+import { findNextGap, type BusyInterval } from "../gap-finder";
+import {
+  planRollForward,
+  rollForwardMessage,
+  undoRollForward,
+  type RollContext,
+} from "../roll-forward";
+import { stripItems, type StripItem } from "../strip";
+import { tookLongerDeltaSeconds } from "../triage";
+import { canFocusBlock, loggedMessage } from "../focus";
+import {
   useCalendarModule,
   type CalendarModuleApi,
 } from "../hooks/use-calendar-module";
+import { useBlockFocus } from "../hooks/use-block-focus";
 import {
-  readCalendarPrefs,
   readPanelVariant,
   readViewState,
   writePanelVariant,
@@ -60,14 +79,19 @@ import {
   type CalendarViewState,
   type PanelVariantId,
 } from "../prefs";
+import { useCalendarPrefs } from "../hooks/use-calendar-prefs";
+import { useCalendarSync } from "../hooks/use-calendar-sync";
 import { CalendarGrid, type MoveEventDeltas, type MoveTaskResult } from "./calendar-grid";
 import { CalendarRail } from "./calendar-rail";
+import { CalendarStrip } from "./calendar-strip";
 import { CalendarTasksPanel } from "./calendar-tasks-panel";
 import { CalendarToolbar } from "./calendar-toolbar";
 import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
+import { FocusReadout } from "./focus-readout";
 import { RightPanelSwitcher, type RightPanelVariant } from "./right-panel-switcher";
 import { TaskPopover } from "./task-popover";
+import { formatTimeOfDay } from "./time-format";
 import type { QuickCreateDraft } from "./event-quick-create";
 
 type Props = {
@@ -84,6 +108,8 @@ type DetailTarget = { type: "event" | "task"; id: string } | null;
 /** Default duration when a drop schedules a task that has none (AC6). */
 const DEFAULT_DROP_MINUTES = 30;
 const DROP_SNAP_MINUTES = 15;
+/** The desktop app is the external-sync writer (CAL-6b); web only renders. */
+const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
   const [viewState, setViewState] = useState<CalendarViewState>(() =>
@@ -94,13 +120,84 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
     setViewState(readViewState(userId, workspaceId));
   }, [userId, workspaceId]);
 
-  const prefs = useMemo(() => readCalendarPrefs(userId), [userId]);
+  // Calendar prefs — reactive + cross-device synced (CAL-6b): working-hours,
+  // week start, weekends, per-account visibility + colors ride the
+  // user_preferences.calendar domain; view state stays per-device.
+  const { prefs, updatePrefs } = useCalendarPrefs(userId);
 
   const calendar: CalendarModuleApi = useCalendarModule(runtime, {
     userId,
     workspaceId,
     modulePermission: api.canEdit ? "edit" : api.canRead ? "view" : "none",
   });
+
+  // Attribution: each account's bounded hue + the visibility filter (§3a).
+  const accountHues = useMemo(
+    () => resolveAccountHues(calendar.accounts, prefs.accountColors),
+    [calendar.accounts, prefs.accountColors],
+  );
+  const shownEvents = useMemo(
+    () => visibleEvents(calendar.events, prefs.hiddenAccountIds),
+    [calendar.events, prefs.hiddenAccountIds],
+  );
+  const toggleAccountVisibility = useCallback(
+    (accountId: string) => {
+      updatePrefs((prev) => {
+        const hidden = new Set(prev.hiddenAccountIds);
+        if (hidden.has(accountId)) hidden.delete(accountId);
+        else hidden.add(accountId);
+        return { hiddenAccountIds: [...hidden] };
+      });
+    },
+    [updatePrefs],
+  );
+  // Desktop-only: fetch → map → mirror each account's provider events (CAL-6b).
+  const { syncNow } = useCalendarSync({
+    runtime,
+    workspaceId,
+    accounts: calendar.accounts,
+    events: calendar.events,
+    enabled: IS_DESKTOP,
+    onSynced: () => void calendar.reload(),
+  });
+
+  const setAccountColor = useCallback(
+    (accountId: string, hue: string) => {
+      updatePrefs((prev) => ({ accountColors: { ...prev.accountColors, [accountId]: hue } }));
+    },
+    [updatePrefs],
+  );
+  const removeAccount = useCallback(
+    (accountId: string) => {
+      if (!runtime || !workspaceId) return;
+      void runtime.calendar
+        .removeAccount({ workspaceId, accountId })
+        .then(() => {
+          // Prune the removed account's prefs so the maps don't accrue dead ids.
+          updatePrefs((prev) => {
+            const { [accountId]: _drop, ...accountColors } = prev.accountColors;
+            return {
+              hiddenAccountIds: prev.hiddenAccountIds.filter((id) => id !== accountId),
+              accountColors,
+            };
+          });
+          return calendar.reload();
+        })
+        .catch((e) =>
+          toast.error(e instanceof Error ? e.message : "Couldn't remove the calendar."),
+        );
+    },
+    [runtime, workspaceId, calendar, updatePrefs],
+  );
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshCalendars = useCallback(() => {
+    setRefreshing(true);
+    // Desktop: pull from providers first (no-op on web), then re-read Supabase.
+    void syncNow()
+      .then(() => Promise.all([calendar.reload(), api.reload()]))
+      .catch(() => toast.error("Couldn't refresh calendars — try again."))
+      .finally(() => setRefreshing(false));
+  }, [syncNow, calendar, api]);
 
   const anchor = useMemo(
     () => parseDayKey(viewState.anchor) ?? startOfLocalDay(new Date()),
@@ -113,8 +210,8 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
   const blocks = useMemo(() => taskBlocks(api.tasks, range), [api.tasks, range]);
   const grouped = useMemo(() => blocksByDay(blocks), [blocks]);
   const eventChips = useMemo(
-    () => eventChipsInRange(calendar.events, range),
-    [calendar.events, range],
+    () => eventChipsInRange(shownEvents, range),
+    [shownEvents, range],
   );
   const eventsById = useMemo(
     () => new Map(calendar.events.map((e) => [e.id, e])),
@@ -130,12 +227,12 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
       const d = new Date(t.scheduledAt);
       if (!Number.isNaN(d.getTime())) keys.add(localDayKey(d));
     }
-    for (const e of calendar.events) {
+    for (const e of shownEvents) {
       const d = new Date(e.startsAt);
       if (!Number.isNaN(d.getTime())) keys.add(localDayKey(d));
     }
     return keys;
-  }, [api.tasks, calendar.events]);
+  }, [api.tasks, shownEvents]);
 
   const update = useCallback(
     (next: CalendarViewState) => {
@@ -399,6 +496,184 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
     [api],
   );
 
+  // ── the completion loop (CAL-4) ───────────────────────────────────────────
+  // A gentle page tick so the strip count follows blocks as they elapse (the
+  // grid keeps its own 30s tick; this one only drives the strip membership).
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 60_000);
+    const onWake = () => setNowTick(Date.now());
+    document.addEventListener("visibilitychange", onWake);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onWake);
+    };
+  }, []);
+
+  // "Took longer" blocks acknowledged this session — suppressed from the strip
+  // and the in-grid triage until reload (the lens model has no per-block store
+  // to persist "worked"; the LOGGED TIME persists, this suppression doesn't).
+  const [workedTaskIds, setWorkedTaskIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const markWorked = useCallback((taskId: string, worked: boolean) => {
+    setWorkedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (worked) next.add(taskId);
+      else next.delete(taskId);
+      return next;
+    });
+  }, []);
+
+  const [reviewMode, setReviewMode] = useState(false);
+
+  // The focus session (CAL-5) — one at a time; accrues to the task's tracked
+  // total via the shipped time path.
+  const focus = useBlockFocus(api.addTimeSpent);
+
+  const strip = useMemo(
+    () => stripItems(api.tasks, nowTick, workedTaskIds),
+    [api.tasks, nowTick, workedTaskIds],
+  );
+
+  // Today's gap-finding context, built fresh at click time (accurate `now`,
+  // current busy set) rather than on a periodic tick.
+  const buildTodayContext = useCallback((): RollContext => {
+    const now = Date.now();
+    const todayStart = startOfLocalDay(new Date(now));
+    const todayRange = visibleRange("day", todayStart, prefs);
+    const todayKey = localDayKey(todayStart);
+    const todayBlocks = taskBlocks(api.tasks, todayRange);
+    const todayEvents =
+      eventChipsInRange(calendar.events, todayRange).timed.get(todayKey) ?? [];
+    const busy: BusyInterval[] = [
+      ...todayBlocks.map((b) => ({ startMs: b.startMs, endMs: b.endMs })),
+      ...todayEvents.map((c) => ({ startMs: c.startMs, endMs: c.endMs })),
+    ];
+    return {
+      nowMs: now,
+      dayStartMs: todayStart.getTime(),
+      workStartMinute: prefs.workStartMinute,
+      workEndMinute: prefs.workEndMinute,
+      busy,
+    };
+  }, [api.tasks, calendar.events, prefs]);
+
+  const onTriageLater = useCallback(
+    (taskId: string) => {
+      const task = api.tasks.find((t) => t.id === taskId);
+      if (!task?.scheduledAt) return;
+      const fromIso = task.scheduledAt;
+      const dur =
+        task.durationMinutes && task.durationMinutes > 0
+          ? task.durationMinutes
+          : DEFAULT_BLOCK_MINUTES;
+      const ctx = buildTodayContext();
+      const gap = findNextGap({ ...ctx, durationMinutes: dur });
+      if (gap == null) {
+        toast("No open slot left today — it's waiting in the strip below.");
+        return;
+      }
+      api.scheduleTaskAt(taskId, new Date(gap).toISOString());
+      toast(`Moved to ${formatTimeOfDay(gap)}`, {
+        duration: 8000,
+        action: { label: "Undo", onClick: () => api.scheduleTaskAt(taskId, fromIso) },
+      });
+    },
+    [api, buildTodayContext],
+  );
+
+  const onTriageLonger = useCallback(
+    (taskId: string) => {
+      const task = api.tasks.find((t) => t.id === taskId);
+      if (!task) return;
+      const delta = tookLongerDeltaSeconds({ durationMinutes: task.durationMinutes });
+      api.addTimeSpent(taskId, delta);
+      markWorked(taskId, true);
+      toast(`+${Math.round(delta / 60)}m logged · kept open`, {
+        duration: 8000,
+        action: {
+          // Subtract exactly what we added (reads the live total, floors at 0)
+          // so an interleaved focus flush on this task isn't clobbered.
+          label: "Undo",
+          onClick: () => {
+            api.addTimeSpent(taskId, -delta);
+            markWorked(taskId, false);
+          },
+        },
+      });
+    },
+    [api, markWorked],
+  );
+
+  const onTriageRemove = useCallback(
+    (taskId: string) => {
+      const task = api.tasks.find((t) => t.id === taskId);
+      if (!task?.scheduledAt) return;
+      const fromIso = task.scheduledAt;
+      api.unscheduleTask(taskId);
+      markWorked(taskId, false);
+      toast("Removed from the calendar", {
+        duration: 8000,
+        // Re-schedule from cleared state uses patchTask (the op needs an
+        // existing schedule to move) — an undo restore, not a fresh intent.
+        action: { label: "Undo", onClick: () => api.patchTask(taskId, { scheduledAt: fromIso }) },
+      });
+    },
+    [api, markWorked],
+  );
+
+  // Roll a queue of strip items into today's gaps; one Undo reverses all (AC9).
+  const rollForward = useCallback(
+    (items: StripItem[]) => {
+      // Only tasks still scheduled can be moved — the reschedule op no-ops on an
+      // already-unscheduled task, which would over-count the "Moved N" toast.
+      const live = items.filter((i) => {
+        const t = api.tasks.find((x) => x.id === i.taskId);
+        return Boolean(t?.scheduledAt);
+      });
+      if (live.length === 0) return;
+      const plan = planRollForward(live, buildTodayContext());
+      for (const p of plan.placements) {
+        api.scheduleTaskAt(p.taskId, new Date(p.toMs).toISOString());
+      }
+      const message = rollForwardMessage(plan);
+      if (plan.placements.length === 0) {
+        toast(message);
+        return;
+      }
+      toast(message, {
+        duration: 8000,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            for (const u of undoRollForward(plan.placements)) {
+              api.scheduleTaskAt(u.taskId, new Date(u.toMs).toISOString());
+            }
+          },
+        },
+      });
+    },
+    [api, buildTodayContext],
+  );
+
+  const openReview = useCallback(() => {
+    setReviewMode(true);
+    setPanelVariant("tasks");
+    const state = readFeaturePanelState("calendar");
+    if (!state.right) {
+      dispatchLayoutPanelsSet({ feature: "calendar", left: state.left, right: true });
+    }
+  }, [setPanelVariant]);
+
+  // Focus controls threaded to the popover.
+  const onStopFocus = useCallback(() => {
+    const result = focus.stop();
+    if (!result) return;
+    const task = api.tasks.find((t) => t.id === result.taskId);
+    toast(loggedMessage(result.seconds, task?.title ?? ""));
+  }, [focus, api.tasks]);
+
   const popoverEvent = eventPopover
     ? (eventsById.get(eventPopover.chip.eventId) ?? null)
     : null;
@@ -406,7 +681,7 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
     (sourceAccountId: string | null): string | null => {
       if (!sourceAccountId) return null;
       const account = calendar.accounts.find((a) => a.id === sourceAccountId);
-      return account ? `${account.displayLabel} — ${account.provider}` : null;
+      return account ? accountSourceLabel(account) : null;
     },
     [calendar.accounts],
   );
@@ -430,6 +705,23 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
             api={api}
             onOpenTask={(taskId) => openDetail({ type: "task", id: taskId })}
             onRequestCapture={() => setCaptureOpen(true)}
+            review={
+              reviewMode
+                ? {
+                    items: strip,
+                    onMove: (taskIds) => {
+                      const byId = new Map(strip.map((i) => [i.taskId, i]));
+                      rollForward(
+                        taskIds
+                          .map((id) => byId.get(id))
+                          .filter((i): i is StripItem => Boolean(i)),
+                      );
+                    },
+                    onRemove: onTriageRemove,
+                    onClose: () => setReviewMode(false),
+                  }
+                : null
+            }
           />
         ),
       },
@@ -478,6 +770,10 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
       setPanelVariant,
       userId,
       workspaceId,
+      reviewMode,
+      strip,
+      rollForward,
+      onTriageRemove,
     ],
   );
 
@@ -504,6 +800,12 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
             onSelectDate={goToDate}
             busyDayKeys={busyDayKeys}
             prefs={prefs}
+            accounts={calendar.accounts}
+            accountHues={accountHues}
+            hiddenAccountIds={prefs.hiddenAccountIds}
+            onToggleAccountVisibility={toggleAccountVisibility}
+            onRecolorAccount={setAccountColor}
+            onRemoveAccount={removeAccount}
           />
         }
         right={
@@ -522,6 +824,18 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
               onNext={() => step(1)}
               onToday={goToday}
               onViewChange={setView}
+              syncLabel={
+                calendar.accounts.length > 0 ? syncAgeLabel(calendar.accounts) : null
+              }
+              onRefresh={calendar.accounts.length > 0 ? refreshCalendars : undefined}
+              refreshing={refreshing}
+            />
+            <CalendarStrip
+              count={strip.length}
+              canEdit={api.canEdit}
+              reviewing={reviewMode}
+              onMoveToToday={() => rollForward(strip)}
+              onReview={openReview}
             />
             <CalendarGrid
               view={viewState.view}
@@ -545,6 +859,14 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
               onTaskClick={onTaskClick}
               selectedOccurrenceKey={selectedOccurrenceKey}
               onSelectOccurrence={setSelectedOccurrenceKey}
+              accountHues={accountHues}
+              workedTaskIds={workedTaskIds}
+              onTriageLater={onTriageLater}
+              onTriageLonger={onTriageLonger}
+              onTriageRemove={onTriageRemove}
+              focusTaskId={focus.taskId}
+              focusRunningSinceMs={focus.runningSinceMs}
+              focusBaseSeconds={focus.baseSeconds}
             />
           </div>
         }
@@ -583,10 +905,39 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
           block={taskPopover.block}
           anchorRect={taskPopover.rect}
           canEdit={api.canEdit}
+          elapsed={isElapsedBlock(taskPopover.block, nowTick)}
+          worked={workedTaskIds.has(taskPopover.block.taskId)}
+          canFocus={canFocusBlock(taskPopover.block, nowTick)}
+          focusing={focus.taskId === taskPopover.block.taskId}
+          focusRunning={focus.running && focus.taskId === taskPopover.block.taskId}
+          focusReadout={
+            focus.taskId === taskPopover.block.taskId ? (
+              <FocusReadout
+                runningSinceMs={focus.runningSinceMs}
+                baseSeconds={focus.baseSeconds}
+              />
+            ) : null
+          }
           onToggleDone={() => {
             onToggleDone(taskPopover.block.taskId);
             setTaskPopover(null);
           }}
+          onLater={() => {
+            onTriageLater(taskPopover.block.taskId);
+            setTaskPopover(null);
+          }}
+          onLonger={() => {
+            onTriageLonger(taskPopover.block.taskId);
+            setTaskPopover(null);
+          }}
+          onRemove={() => {
+            onTriageRemove(taskPopover.block.taskId);
+            setTaskPopover(null);
+          }}
+          onStartFocus={() => focus.start(taskPopover.block.taskId)}
+          onPauseFocus={() => focus.pause()}
+          onResumeFocus={() => focus.resume()}
+          onStopFocus={onStopFocus}
           onOpenDetail={() => {
             const id = taskPopover.block.taskId;
             setTaskPopover(null);

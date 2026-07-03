@@ -4,13 +4,18 @@
 // asDragPayload); the checkbox completes with the same op as everywhere.
 // Already-scheduled rows show their time and sink to the bottom of their
 // group — visibility beats purity.
+//
+// CAL-4 adds the Review sub-state (AC9): when the strip's "Review" is active a
+// curation section pins to the top — untick to exclude, "Move N to today",
+// rows drag onto the grid, per-row Remove. The normal groups stay below.
 
 import { useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import { CalendarCheck, GripVertical, Search } from "lucide-react";
+import { CalendarCheck, GripVertical, Search, X } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { cn } from "@/lib/utils";
 import { taskDrag } from "../../tasks/ui/dnd/task-dnd";
@@ -18,14 +23,25 @@ import { formatDue, formatScheduled } from "../../tasks/helpers";
 import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
 import type { Task } from "../../tasks/model";
 import { groupPanelTasks } from "../panel";
+import type { StripItem } from "../strip";
+import { formatDayLabel, formatTimeOfDay } from "./time-format";
+
+export type ReviewController = {
+  items: StripItem[];
+  onMove: (taskIds: string[]) => void;
+  onRemove: (taskId: string) => void;
+  onClose: () => void;
+};
 
 type Props = {
   api: TasksModuleApi;
   onOpenTask: (taskId: string) => void;
   onRequestCapture: () => void;
+  /** The strip's Review sub-state (AC9). Null when not reviewing. */
+  review?: ReviewController | null;
 };
 
-export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture }: Props) {
+export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture, review }: Props) {
   const [query, setQuery] = useState("");
   const groups = useMemo(
     () =>
@@ -42,6 +58,10 @@ export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture }: Props)
 
   return (
     <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
+      {review && review.items.length > 0 ? (
+        <ReviewSection review={review} canEdit={api.canEdit} />
+      ) : null}
+
       <div className="relative shrink-0">
         <Search
           aria-hidden
@@ -76,6 +96,111 @@ export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture }: Props)
       <TaskGroup title="Today" tasks={groups.today} api={api} onOpenTask={onOpenTask} />
       <TaskGroup title="Due soon" tasks={groups.dueSoon} api={api} onOpenTask={onOpenTask} />
       <TaskGroup title="Backlog" tasks={groups.backlog} api={api} onOpenTask={onOpenTask} />
+    </div>
+  );
+}
+
+// ── Review sub-state (the strip's curate-then-move path) ─────────────────────
+
+function ReviewSection({ review, canEdit }: { review: ReviewController; canEdit: boolean }) {
+  // Excluded ids (unticked). Default: everything included.
+  const [excluded, setExcluded] = useState<ReadonlySet<string>>(() => new Set());
+  const includedIds = review.items
+    .map((i) => i.taskId)
+    .filter((id) => !excluded.has(id));
+
+  return (
+    <div className="shrink-0 rounded-lg border border-border bg-card/40 p-2">
+      <div className="flex items-center gap-2 px-1">
+        <span className="min-w-0 flex-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          Unfinished from earlier ({review.items.length})
+        </span>
+        <IconButton icon={X} label="Close review" onClick={review.onClose} />
+      </div>
+
+      <div className="mt-1 flex flex-col gap-0.5">
+        {review.items.map((item) => (
+          <ReviewRow
+            key={item.taskId}
+            item={item}
+            canEdit={canEdit}
+            included={!excluded.has(item.taskId)}
+            onToggleInclude={() =>
+              setExcluded((prev) => {
+                const next = new Set(prev);
+                if (next.has(item.taskId)) next.delete(item.taskId);
+                else next.add(item.taskId);
+                return next;
+              })
+            }
+            onRemove={() => review.onRemove(item.taskId)}
+          />
+        ))}
+      </div>
+
+      {canEdit ? (
+        <div className="mt-2 flex px-1">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={includedIds.length === 0}
+            onClick={() => review.onMove(includedIds)}
+          >
+            Move {includedIds.length} to today
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ReviewRow({
+  item,
+  canEdit,
+  included,
+  onToggleInclude,
+  onRemove,
+}: {
+  item: StripItem;
+  canEdit: boolean;
+  included: boolean;
+  onToggleInclude: () => void;
+  onRemove: () => void;
+}) {
+  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
+    id: `cal-review-task:${item.taskId}`,
+    data: taskDrag(item.taskId, "list"),
+    disabled: !canEdit,
+  });
+  const origin = `${formatDayLabel(item.scheduledAtMs)} · ${formatTimeOfDay(item.scheduledAtMs)} · ${item.durationMinutes}m`;
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "group flex items-center gap-2 rounded-md px-1 py-0.5",
+        isDragging && "opacity-40",
+      )}
+    >
+      <input
+        type="checkbox"
+        checked={included}
+        disabled={!canEdit}
+        onChange={onToggleInclude}
+        aria-label={included ? `Exclude ${item.title}` : `Include ${item.title}`}
+        className="size-3.5 shrink-0 accent-primary"
+      />
+      <div
+        {...listeners}
+        {...attributes}
+        className="flex min-w-0 flex-1 cursor-grab flex-col"
+      >
+        <span className="truncate text-sm text-foreground">{item.title}</span>
+        <span className="truncate text-2xs text-muted-foreground">{origin}</span>
+      </div>
+      {canEdit ? (
+        <IconButton icon={X} label={`Remove ${item.title} from the schedule`} onClick={onRemove} />
+      ) : null}
     </div>
   );
 }
