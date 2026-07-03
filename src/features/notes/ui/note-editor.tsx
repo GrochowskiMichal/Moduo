@@ -11,7 +11,7 @@
  * grammar (they're editor-agnostic Lexical plugins).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as Y from "yjs";
 import { CodeHighlightNode, CodeNode, registerCodeHighlighting } from "@lexical/code";
 import { LinkNode } from "@lexical/link";
@@ -127,12 +127,17 @@ function TitleDerivationPlugin({
   doc: Y.Doc;
   onTitleDerived: (title: string) => void;
 }) {
+  // The callback rides a ref: an inline prop would re-run the effect on every
+  // page re-render (sync-status flips…), tearing down the pending debounce
+  // timer before it can ever fire (caught in NO-3 live-verify).
+  const callbackRef = useRef(onTitleDerived);
+  callbackRef.current = onTitleDerived;
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onUpdate = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        onTitleDerived(firstLineTitle(deriveBody(doc).text));
+        callbackRef.current(firstLineTitle(deriveBody(doc).text));
       }, TITLE_DEBOUNCE_MS);
     };
     doc.on("update", onUpdate);
@@ -140,7 +145,7 @@ function TitleDerivationPlugin({
       doc.off("update", onUpdate);
       if (timer) clearTimeout(timer);
     };
-  }, [doc, onTitleDerived]);
+  }, [doc]);
   return null;
 }
 
