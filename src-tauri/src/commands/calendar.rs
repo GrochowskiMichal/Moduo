@@ -146,17 +146,6 @@ fn google_calendar_events_url(calendar_id: &str) -> Result<Url, String> {
     Ok(url)
 }
 
-fn google_calendar_event_url(calendar_id: &str, event_id: &str) -> Result<Url, String> {
-    let mut url = google_calendar_events_url(calendar_id)?;
-    {
-        let mut segs = url
-            .path_segments_mut()
-            .map_err(|_| "google_url_invalid_base".to_string())?;
-        segs.push(event_id);
-    }
-    Ok(url)
-}
-
 fn random_b64url(bytes: usize) -> String {
     let mut data = vec![0u8; bytes];
     rand::rngs::OsRng.fill_bytes(&mut data);
@@ -542,45 +531,6 @@ pub async fn calendar_outlook_oauth_start(
     })
 }
 
-#[tauri::command]
-pub async fn calendar_events_list(
-    state: State<'_, AppState>,
-) -> Result<Vec<serde_json::Value>, String> {
-    state
-        .store
-        .list_calendar_events()
-        .map_err(|e| format!("calendar_events_list_failed:{e}"))
-}
-
-#[tauri::command]
-pub async fn calendar_events_upsert(
-    state: State<'_, AppState>,
-    event: serde_json::Value,
-) -> Result<(), String> {
-    let Some(id) = event
-        .get("id")
-        .and_then(|v| v.as_str())
-        .filter(|v| !v.trim().is_empty())
-    else {
-        return Err("calendar_events_upsert_missing_id".to_string());
-    };
-    state
-        .store
-        .put_calendar_event(id, &event)
-        .map_err(|e| format!("calendar_events_upsert_failed:{e}"))
-}
-
-#[tauri::command]
-pub async fn calendar_events_delete(
-    state: State<'_, AppState>,
-    event_id: String,
-) -> Result<(), String> {
-    state
-        .store
-        .remove_calendar_event(&event_id)
-        .map_err(|e| format!("calendar_events_delete_failed:{e}"))
-}
-
 fn google_access_token_for_account(state: &AppState, account_id: &str) -> Result<String, String> {
     let user_id = current_user_id(state);
     let Some(tokens) = load_calendar_tokens_from_keychain(
@@ -815,133 +765,6 @@ pub async fn calendar_outlook_events_sync(
     }
 
     Ok(results)
-}
-
-#[tauri::command]
-pub async fn calendar_google_event_upsert(
-    state: State<'_, AppState>,
-    account_id: String,
-    event: serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    let access_token = google_access_token_for_account(&state, &account_id)?;
-    let Some(calendar_source_id) = event.get("calendarId").and_then(|v| v.as_str()) else {
-        return Err("google_event_missing_calendarId".to_string());
-    };
-    let cal_id = calendar_source_id
-        .splitn(3, ':')
-        .nth(2)
-        .ok_or_else(|| "google_event_calendar_source_invalid".to_string())?;
-
-    let title = event
-        .get("title")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Untitled");
-    let description = event
-        .get("description")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let location = event.get("location").and_then(|v| v.as_str()).unwrap_or("");
-    let start_time = event
-        .get("startTime")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let end_time = event.get("endTime").and_then(|v| v.as_str()).unwrap_or("");
-    let all_day = event
-        .get("allDay")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-
-    let (start_obj, end_obj) = if all_day {
-        let start_date = start_time.split('T').next().unwrap_or(start_time);
-        let end_date = end_time.split('T').next().unwrap_or(end_time);
-        (
-            serde_json::json!({ "date": start_date }),
-            serde_json::json!({ "date": end_date }),
-        )
-    } else {
-        (
-            serde_json::json!({ "dateTime": start_time }),
-            serde_json::json!({ "dateTime": end_time }),
-        )
-    };
-
-    let payload = serde_json::json!({
-        "summary": title,
-        "description": description,
-        "location": location,
-        "start": start_obj,
-        "end": end_obj,
-    });
-
-    let external_id = event
-        .get("externalId")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let client = reqwest::Client::new();
-    let resp = if let Some(ref id) = external_id {
-        client
-            .put(google_calendar_event_url(cal_id, id)?)
-            .bearer_auth(&access_token)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| format!("google_event_update_request_failed:{e}"))?
-    } else {
-        client
-            .post(google_calendar_events_url(cal_id)?)
-            .bearer_auth(&access_token)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| format!("google_event_create_request_failed:{e}"))?
-    };
-    if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!("google_event_upsert_failed:{body}"));
-    }
-    let created = resp
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| format!("google_event_upsert_parse_failed:{e}"))?;
-    let new_external_id = created
-        .get("id")
-        .and_then(|v| v.as_str())
-        .filter(|v| !v.trim().is_empty())
-        .map(|v| v.to_string());
-
-    let mut merged = event;
-    if let Some(id) = new_external_id {
-        merged["externalProvider"] = serde_json::Value::String("google".to_string());
-        merged["externalId"] = serde_json::Value::String(id);
-    }
-
-    Ok(merged)
-}
-
-#[tauri::command]
-pub async fn calendar_google_event_delete(
-    state: State<'_, AppState>,
-    account_id: String,
-    calendar_source_id: String,
-    external_id: String,
-) -> Result<(), String> {
-    let access_token = google_access_token_for_account(&state, &account_id)?;
-    let cal_id = calendar_source_id
-        .splitn(3, ':')
-        .nth(2)
-        .ok_or_else(|| "google_event_calendar_source_invalid".to_string())?;
-    let client = reqwest::Client::new();
-    let resp = client
-        .delete(google_calendar_event_url(cal_id, &external_id)?)
-        .bearer_auth(&access_token)
-        .send()
-        .await
-        .map_err(|e| format!("google_event_delete_request_failed:{e}"))?;
-    if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!("google_event_delete_failed:{body}"));
-    }
-    Ok(())
 }
 
 #[tauri::command]

@@ -176,60 +176,6 @@ export const tauriRuntime: ModuoRuntime = {
       });
       return events ?? [];
     },
-
-    // LEGACY desktop store + the preserved OAuth/sync engine (CAL-6 re-points
-    // its output at mirrorEvents).
-    async listEvents() {
-      return invoke<any[]>("calendar_events_list");
-    },
-    async upsertEvent(event) {
-      try {
-        await invoke("calendar_events_upsert", { event });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async deleteEvent(eventId) {
-      try {
-        await invoke("calendar_events_delete", { eventId });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async upsertGoogleEvent(accountId, event) {
-      try {
-        return await invoke<any>("calendar_google_event_upsert", { accountId, event });
-      } catch {
-        return null;
-      }
-    },
-    async deleteGoogleEvent(accountId, eventId) {
-      try {
-        await invoke("calendar_google_event_delete", { accountId, eventId });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async syncGoogleEvents(accountId) {
-      try {
-        await invoke("calendar_google_events_sync", { accountId });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async startGoogleOAuth() {
-      return invoke<any>("calendar_google_oauth_start");
-    },
-    async startOutlookOAuth() {
-      return invoke<any>("calendar_outlook_oauth_start");
-    },
-    async startAppleOAuth() {
-      return invoke<any>("calendar_apple_oauth_start");
-    },
   },
 
   // Cloud-first: Supabase-direct, same code path as web. The redb-backed

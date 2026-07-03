@@ -66,8 +66,6 @@ pub const EMAIL_GRAPH_OUTBOX: TableDefinition<&str, &str> =
     TableDefinition::new("email_graph_outbox");
 pub const EMAIL_UI_STATE: TableDefinition<&str, &str> = TableDefinition::new("email_ui_state");
 
-pub const CALENDAR_EVENTS: TableDefinition<&str, &str> = TableDefinition::new("calendar_events");
-
 // Cloud sync tables
 pub const SYNC_CLOUD_OUTBOX: TableDefinition<&str, &str> =
     TableDefinition::new("sync_cloud_outbox");
@@ -124,8 +122,6 @@ impl RedbStore {
         let _ = write_txn.open_table(EMAIL_FLAG_OUTBOX)?;
         let _ = write_txn.open_table(EMAIL_GRAPH_OUTBOX)?;
         let _ = write_txn.open_table(EMAIL_UI_STATE)?;
-
-        let _ = write_txn.open_table(CALENDAR_EVENTS)?;
 
         let _ = write_txn.open_table(SYNC_CLOUD_OUTBOX)?;
         let _ = write_txn.open_table(SYNC_PULL_CURSOR)?;
@@ -748,18 +744,6 @@ impl RedbStore {
 
     pub fn get_email_ui_state(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
         self.get_json(EMAIL_UI_STATE, key)
-    }
-
-    pub fn put_calendar_event(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
-        self.put_json(CALENDAR_EVENTS, key, value)
-    }
-
-    pub fn list_calendar_events(&self) -> anyhow::Result<Vec<serde_json::Value>> {
-        self.list_json(CALENDAR_EVENTS)
-    }
-
-    pub fn remove_calendar_event(&self, key: &str) -> anyhow::Result<()> {
-        self.remove_key(CALENDAR_EVENTS, key)
     }
 
     // ─── Timetracking ─────────────────────────────────────────────────────────
