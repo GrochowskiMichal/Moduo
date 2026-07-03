@@ -833,30 +833,6 @@ export const webRuntime: ModuoRuntime = {
     async fetchExternalEvents() {
       return [];
     },
-
-    // ── LEGACY (pre-Wave-2; use-calendar.ts only; retired with CAL-6). The
-    // migration's op-only RLS makes the direct writes below no-ops — they
-    // already error-swallow by contract.
-    async listEvents() {
-      const { data: { user } } = await supabaseClient.auth.getUser();
-      if (!user) return [];
-      const { data } = await supabaseClient.from("calendar_events").select("*").eq("owner_id", user.id).is("deleted_at", null);
-      return data ?? [];
-    },
-    async upsertEvent(event) {
-      const { error } = await supabaseClient.from("calendar_events").upsert(event, { onConflict: "id" });
-      return !error;
-    },
-    async deleteEvent(eventId) {
-      const { error } = await supabaseClient.from("calendar_events").update({ deleted_at: new Date().toISOString() }).eq("id", eventId);
-      return !error;
-    },
-    async upsertGoogleEvent() { return null; },
-    async deleteGoogleEvent() { return false; },
-    async syncGoogleEvents() { return false; },
-    async startGoogleOAuth() { throw new Error(desktopOnly().message); },
-    async startOutlookOAuth() { throw new Error(desktopOnly().message); },
-    async startAppleOAuth() { throw new Error(desktopOnly().message); },
   },
 
   // ── Tasks module ───────────────────────────────────────────────────────────

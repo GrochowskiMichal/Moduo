@@ -542,45 +542,6 @@ pub async fn calendar_outlook_oauth_start(
     })
 }
 
-#[tauri::command]
-pub async fn calendar_events_list(
-    state: State<'_, AppState>,
-) -> Result<Vec<serde_json::Value>, String> {
-    state
-        .store
-        .list_calendar_events()
-        .map_err(|e| format!("calendar_events_list_failed:{e}"))
-}
-
-#[tauri::command]
-pub async fn calendar_events_upsert(
-    state: State<'_, AppState>,
-    event: serde_json::Value,
-) -> Result<(), String> {
-    let Some(id) = event
-        .get("id")
-        .and_then(|v| v.as_str())
-        .filter(|v| !v.trim().is_empty())
-    else {
-        return Err("calendar_events_upsert_missing_id".to_string());
-    };
-    state
-        .store
-        .put_calendar_event(id, &event)
-        .map_err(|e| format!("calendar_events_upsert_failed:{e}"))
-}
-
-#[tauri::command]
-pub async fn calendar_events_delete(
-    state: State<'_, AppState>,
-    event_id: String,
-) -> Result<(), String> {
-    state
-        .store
-        .remove_calendar_event(&event_id)
-        .map_err(|e| format!("calendar_events_delete_failed:{e}"))
-}
-
 fn google_access_token_for_account(state: &AppState, account_id: &str) -> Result<String, String> {
     let user_id = current_user_id(state);
     let Some(tokens) = load_calendar_tokens_from_keychain(

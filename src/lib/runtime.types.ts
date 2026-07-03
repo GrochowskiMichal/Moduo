@@ -400,19 +400,6 @@ export type ModuoRuntime = {
       timeMin: string;
       timeMax: string;
     }): Promise<Record<string, unknown>[]>;
-
-    // ── LEGACY (pre-Wave-2) — the retired localStorage store's surface plus
-    // the desktop OAuth/sync engine. use-calendar.ts is the only consumer;
-    // fully retired/re-pointed with CAL-6. Do not call from new code. ──────
-    listEvents(): Promise<any[]>;
-    upsertEvent(event: any): Promise<boolean>;
-    deleteEvent(eventId: string): Promise<boolean>;
-    upsertGoogleEvent(accountId: string, event: any): Promise<any | null>;
-    deleteGoogleEvent(accountId: string, eventId: string): Promise<boolean>;
-    syncGoogleEvents(accountId: string): Promise<boolean>;
-    startGoogleOAuth(): Promise<any>;
-    startOutlookOAuth(): Promise<any>;
-    startAppleOAuth(): Promise<any>;
   };
 
   /**
