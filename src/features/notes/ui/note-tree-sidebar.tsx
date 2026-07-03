@@ -103,12 +103,16 @@ export function NoteTreeSidebar(props: Props) {
   );
 
   // Raw pointer tracker while dragging — resolved at release, never from
-  // stale move-time state (docs/gotchas.md, TL-2).
+  // stale move-time state (docs/gotchas.md, TL-2). Hover state only changes
+  // on a (row, zone) boundary crossing, not per pixel.
   useEffect(() => {
     if (!dragId) return;
     const onMove = (e: PointerEvent) => {
       pointerRef.current = { x: e.clientX, y: e.clientY };
-      setHover(resolveHover(e.clientX, e.clientY));
+      const next = resolveHover(e.clientX, e.clientY);
+      setHover((prev) =>
+        prev?.id === next?.id && prev?.zone === next?.zone ? prev : next,
+      );
     };
     document.addEventListener("pointermove", onMove, { capture: true });
     return () => document.removeEventListener("pointermove", onMove, { capture: true });
@@ -263,7 +267,10 @@ export function NoteTreeSidebar(props: Props) {
       }}
     >
       {body}
-      <DragOverlay dropAnimation={null}>
+      {/* pointer-events-none is LOAD-BEARING: dnd-kit's overlay tracks the
+          cursor, so without it document.elementFromPoint always returns the
+          overlay itself and every drop resolves to nothing. */}
+      <DragOverlay dropAnimation={null} style={{ pointerEvents: "none" }}>
         {dragNote ? (
           <div className="flex max-w-52 items-center gap-1.5 rounded-md border border-border bg-popover px-2 py-1 text-sm text-foreground shadow-md">
             <RowIcon note={dragNote} />

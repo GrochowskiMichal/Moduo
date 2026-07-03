@@ -71,14 +71,25 @@ function midpointFraction(lo: string, hi: string | null): string {
   return POS_ALPHABET[digitLo]! + midpointFraction(lo.slice(1), null);
 }
 
-/** A position string that sorts after every existing position. */
+/** A position string that sorts after every existing position.
+ *
+ * "After" means LEXICOGRAPHICALLY after (that's the sort everywhere). Only a
+ * clean POS_WIDTH key takes the integer fast path — a longer key (a legacy
+ * 16-digit numeric position, or a subdivided variable-width key) decodes past
+ * float precision, where `+ POS_STEP` is absorbed and the round-trip returns
+ * the IDENTICAL string (verified: `"5000000000000000"` came back unchanged —
+ * duplicate keys forever). Those fall back to appending a mid digit, which
+ * always sorts strictly after its prefix. */
 export function endPosition(existing: Array<{ position: string }>): string {
-  let max = 0;
+  let maxStr = "";
   for (const item of existing) {
-    const n = decodePos(item.position);
-    if (n > max) max = n;
+    if (item.position > maxStr) maxStr = item.position;
   }
-  return encodePos(max + POS_STEP);
+  if (maxStr === "") return encodePos(POS_STEP);
+  if (maxStr.length === POS_WIDTH) {
+    return encodePos(decodePos(maxStr) + POS_STEP);
+  }
+  return maxStr + POS_MID_DIGIT;
 }
 
 /**
@@ -103,10 +114,12 @@ export function betweenPositions(a: string | null, b: string | null): string {
     return midpointFraction("", b);
   }
   if (b === null) {
-    // Open top — step past `a`. The column's max is always a clean key
-    // (subdivision only happens between two present neighbours), so the integer
-    // step stays consistent with `endPosition`.
-    return encodePos(decodePos(a) + POS_STEP);
+    // Open top — step past `a`. Only a clean key takes the integer step (a
+    // legacy over-width key decodes past float precision and the step gets
+    // absorbed — see endPosition); anything else appends a mid digit, which
+    // sorts strictly after `a`.
+    if (a.length === POS_WIDTH) return encodePos(decodePos(a) + POS_STEP);
+    return a + POS_MID_DIGIT;
   }
   // Degenerate bounds from a legacy collision (equal, or out of order) can't be
   // split — nudge deterministically past `a` rather than loop or tie.

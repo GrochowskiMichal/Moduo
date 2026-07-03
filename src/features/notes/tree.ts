@@ -93,16 +93,20 @@ export function buildNoteSections(notes: Note[]): NoteSections {
     return false;
   };
 
+  // Tree/Inbox exclude archived notes at EVERY level — an archived child
+  // leaves the tree for the Archive section (DESIGN_BRIEF §3g), it must not
+  // render in both.
+  const isActive = (n: Note) => !n.deletedAt && !n.isArchived;
   const activeRoots = liveRoots.filter((n) => !n.isArchived);
   const inbox: Note[] = [];
   const tree: NoteTreeNode[] = [];
   for (const root of activeRoots) {
     if (archivedByAncestry(root)) continue; // can't happen for roots, guard anyway
-    const liveChildren = (liveKids.get(root.id) ?? []).filter(isLive);
-    if (liveChildren.length === 0) {
+    const activeChildren = (liveKids.get(root.id) ?? []).filter(isActive);
+    if (activeChildren.length === 0) {
       inbox.push(root);
     } else {
-      tree.push(buildSubtree(root, liveKids, isLive));
+      tree.push(buildSubtree(root, liveKids, isActive));
     }
   }
   inbox.sort(byPosition);
@@ -197,9 +201,19 @@ export function resolveDrop(
   const target = byId.get(targetId);
   if (!target) return null;
 
+  const drag = byId.get(dragId);
+  if (!drag) return null;
+
   if (zone === "into") {
     if (wouldCreateCycle(notes, dragId, targetId)) return null;
     const children = siblingsOf(notes, targetId).filter((n) => n.id !== dragId);
+    // Already the last child of this target → true no-op.
+    if (
+      drag.parentId === targetId &&
+      children.every((c) => c.position <= drag.position)
+    ) {
+      return null;
+    }
     return { parentId: targetId, position: pos.endPosition(children) };
   }
 
@@ -211,6 +225,15 @@ export function resolveDrop(
   if (idx === -1) return null;
   const before = zone === "before" ? siblings[idx - 1] : siblings[idx];
   const after = zone === "before" ? siblings[idx] : siblings[idx + 1];
+  // Dropping right where the row already sits → no-op (no position churn).
+  const effDragParent = drag.parentId && byId.has(drag.parentId) ? drag.parentId : null;
+  if (
+    effDragParent === parentId &&
+    (!before || before.position <= drag.position) &&
+    (!after || drag.position <= after.position)
+  ) {
+    return null;
+  }
   return {
     parentId,
     position: pos.betweenPositions(before?.position ?? null, after?.position ?? null),

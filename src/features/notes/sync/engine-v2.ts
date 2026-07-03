@@ -31,6 +31,8 @@ import {
   readDocOutbox,
   readNoteState,
   writeNoteState,
+  openNotesDb,
+  type DocOutboxEntry,
   type MetaOutboxEntry,
   type NoteSyncState,
   readMetaOutbox,
@@ -62,7 +64,10 @@ export function getNotesClientId(): string {
     window.localStorage.setItem(CLIENT_ID_KEY, id);
     return id;
   } catch {
-    return "ephemeral";
+    // Storage-blocked: a SESSION-scoped id, never a shared literal — a
+    // constant here would make every such client dedupe against each other's
+    // (client_id, client_seq) keys server-side.
+    return crypto.randomUUID();
   }
 }
 
@@ -89,13 +94,32 @@ type NoteSession = {
   flushing: boolean;
   /** Set while a flush cycle re-runs because more edits arrived mid-push. */
   dirty: boolean;
+  /** Fallback queue for updates IndexedDB refused to persist (private mode,
+   * quota) — pushed like the durable queue, honest about volatility. */
+  memOutbox: DocOutboxEntry[];
+  /** Set when a pulled update failed to DECODE — the doc provably lacks
+   * content the cursor moved past, so compaction must not fold/delete the
+   * log this session (another client may still absorb those rows). */
+  compactVeto: boolean;
+  lastUsedAt: number;
   destroyed: boolean;
 };
+
+/** Keep at most this many idle note sessions alive (fast note switching)
+ * before closing the least-recently-used — each holds a Y.Doc + an
+ * IndexedDB connection for the whole workspace visit otherwise. */
+const MAX_IDLE_SESSIONS = 8;
 
 type StatusListener = (status: NotesSyncStatusV2) => void;
 
 export class NotesSyncEngineV2 {
   private readonly clientId = getNotesClientId();
+  /** Used instead of the durable clientId when IndexedDB is unavailable: the
+   * seq counter can't persist there, so a reload would restart at seq 1 under
+   * the SAME id and the server dedupe would silently drop the new content.
+   * A volatile identity makes every such session a fresh client. */
+  private readonly volatileClientId = crypto.randomUUID();
+  private idbOk: boolean | null = null;
   private readonly sessions = new Map<string, NoteSession>();
   private readonly statusListeners = new Set<StatusListener>();
   private status: NotesSyncStatusV2 = "synced";
@@ -141,11 +165,30 @@ export class NotesSyncEngineV2 {
     for (const l of this.statusListeners) l(status);
   }
 
+  private async resolveClientId(): Promise<string> {
+    if (this.idbOk === null) {
+      this.idbOk = Boolean(await openNotesDb());
+    }
+    return this.idbOk ? this.clientId : this.volatileClientId;
+  }
+
+  /** Anything still queued anywhere (durable OR memory)? */
+  private async hasQueuedUpdates(): Promise<boolean> {
+    for (const s of this.sessions.values()) {
+      if (s.memOutbox.length > 0) return true;
+    }
+    const ids = await listDocOutboxNoteIds(this.workspaceId);
+    return ids.length > 0;
+  }
+
   // ── sessions ────────────────────────────────────────────────────────────────
 
   getOrCreateSession(noteId: string): NoteSession {
     let s = this.sessions.get(noteId);
-    if (s) return s;
+    if (s) {
+      s.lastUsedAt = Date.now();
+      return s;
+    }
     const doc = new Y.Doc();
     // Pre-register the typed root BEFORE any update applies (the known
     // text-loss footgun — see the legacy engine + runtime applyCrdtUpdates).
@@ -181,9 +224,13 @@ export class NotesSyncEngineV2 {
       retryMs: RETRY_BASE_MS,
       flushing: false,
       dirty: false,
+      memOutbox: [],
+      compactVeto: false,
+      lastUsedAt: Date.now(),
       destroyed: false,
     };
     this.sessions.set(noteId, s);
+    this.evictIdleSessions(noteId);
     s.booted = this.boot(s);
 
     doc.on("update", (update: Uint8Array, origin: unknown) => {
@@ -227,17 +274,18 @@ export class NotesSyncEngineV2 {
       }
       const ids: number[] = [];
       for (const u of res.updates) {
-        if (u.clientId === this.clientId) {
-          // Our own echo — the content is already in the doc; only the cursor
-          // needs to advance past it.
-          ids.push(u.id);
-          continue;
-        }
+        // Own echoes apply too — Yjs makes it a no-op when the doc already
+        // has them, and a cache-evicted client NEEDS them (skipping by
+        // clientId lost history whenever local persistence didn't survive).
         try {
           Y.applyUpdate(s.doc, decodeBase64ToUint8(u.updateB64), "remote");
           ids.push(u.id);
         } catch (e) {
+          // The cursor still advances (or we'd re-pull a poison row forever),
+          // but the doc provably lacks this content now — compaction must not
+          // fold/delete the log this session.
           console.warn("[notes-sync] bad remote update ignored", e);
+          s.compactVeto = true;
           ids.push(u.id);
         }
       }
@@ -254,16 +302,29 @@ export class NotesSyncEngineV2 {
   private async enqueueLocalUpdate(s: NoteSession, update: Uint8Array): Promise<void> {
     const { seq, next } = assignSeq(s.state);
     s.state = next;
-    await Promise.all([
-      writeNoteState(s.state),
-      enqueueDocUpdate({
+    s.lastUsedAt = Date.now();
+    // Counter FIRST, entry second — a crash between them leaves a harmless
+    // seq gap. The reverse order could reuse a committed seq with different
+    // content on reload; the server's dedupe would then silently drop it.
+    await writeNoteState(s.state);
+    const persisted = await enqueueDocUpdate({
+      workspaceId: this.workspaceId,
+      noteId: s.noteId,
+      clientSeq: seq,
+      updateB64: encodeUint8ToBase64(update),
+      queuedAt: Date.now(),
+    });
+    if (!persisted) {
+      // IndexedDB refused (private mode / quota): queue in memory so the
+      // content still pushes — durable server-side even if not locally.
+      s.memOutbox.push({
         workspaceId: this.workspaceId,
         noteId: s.noteId,
         clientSeq: seq,
         updateB64: encodeUint8ToBase64(update),
         queuedAt: Date.now(),
-      }),
-    ]);
+      });
+    }
     this.setStatus("pending");
     this.scheduleFlush(s);
   }
@@ -284,20 +345,24 @@ export class NotesSyncEngineV2 {
     }
     s.flushing = true;
     try {
+      const clientId = await this.resolveClientId();
       for (;;) {
-        const queue = await readDocOutbox(s.noteId);
+        const durable = await readDocOutbox(s.noteId);
+        const queue = [...durable, ...s.memOutbox];
         if (queue.length === 0) break;
         const batch = planPushBatch(queue);
         const body = deriveBody(s.doc);
         const res = await this.runtime.notesV2.pushUpdates({
           workspaceId: this.workspaceId,
           noteId: s.noteId,
-          clientId: this.clientId,
+          clientId,
           updates: toPushPayload(batch),
           bodyText: body.text,
           bodyMd: body.md,
         });
         await deleteDocOutboxEntries(ackedKeys(batch));
+        const ackedSeqs = new Set(batch.map((e) => e.clientSeq));
+        s.memOutbox = s.memOutbox.filter((e) => !ackedSeqs.has(e.clientSeq));
         s.state = {
           ...s.state,
           updatesSinceCompact: s.state.updatesSinceCompact + res.inserted,
@@ -310,8 +375,7 @@ export class NotesSyncEngineV2 {
         s.dirty = false;
         this.scheduleFlush(s, 0);
       } else if (this.status === "pending") {
-        const anyQueued = await listDocOutboxNoteIds(this.workspaceId);
-        if (anyQueued.length === 0) this.setStatus("synced");
+        if (!(await this.hasQueuedUpdates())) this.setStatus("synced");
       }
     } catch (e) {
       if (isNetworkError(e)) {
@@ -348,11 +412,16 @@ export class NotesSyncEngineV2 {
   }
 
   /** Fold the update log into the snapshot. Pull first so the fold covers
-   * everything up to the cursor (our own unpulled pushes fold next cycle). */
+   * everything up to the cursor (our own unpulled pushes fold next cycle).
+   * Vetoed for the session once any pulled update failed to decode — folding
+   * then would DELETE log rows this doc never absorbed (global data loss;
+   * another client may still read them fine). */
   private async compact(s: NoteSession): Promise<void> {
     if (!this.runtime || s.destroyed) return;
+    if (s.compactVeto) return;
     try {
       await this.pull(s);
+      if (s.compactVeto) return; // the pull we just did may have tripped it
       const snapshot = encodeUint8ToBase64(Y.encodeStateAsUpdate(s.doc));
       const body = deriveBody(s.doc);
       await this.runtime.notesV2.saveSnapshot({
@@ -379,6 +448,26 @@ export class NotesSyncEngineV2 {
     yjsDocMap.set(noteId, session.doc);
     return session.provider;
   };
+
+  /** Close least-recently-used idle sessions past the cap — each holds a
+   * Y.Doc + a y-indexeddb connection otherwise for the whole visit. */
+  private evictIdleSessions(currentNoteId: string) {
+    if (this.sessions.size <= MAX_IDLE_SESSIONS) return;
+    const idle = [...this.sessions.values()]
+      .filter(
+        (s) =>
+          s.noteId !== currentNoteId &&
+          !s.flushing &&
+          s.memOutbox.length === 0 &&
+          s.flushTimer === null &&
+          s.retryTimer === null,
+      )
+      .sort((a, b) => a.lastUsedAt - b.lastUsedAt);
+    while (this.sessions.size > MAX_IDLE_SESSIONS && idle.length > 0) {
+      const victim = idle.shift()!;
+      void this.closeNote(victim.noteId);
+    }
+  }
 
   async flushNote(noteId: string): Promise<void> {
     const s = this.sessions.get(noteId);
@@ -460,15 +549,30 @@ export class NotesSyncEngineV2 {
     if (this.destroyed) return;
     await this.replayMetaOutbox();
     const queuedNoteIds = await listDocOutboxNoteIds(this.workspaceId);
+    const flushes: Promise<void>[] = [];
     for (const id of queuedNoteIds) {
       const s = this.sessions.get(id);
-      if (s) void this.flush(s);
+      if (s) flushes.push(this.flush(s));
     }
-    // Orphaned queues (note not open this session) push via a headless session.
+    for (const s of this.sessions.values()) {
+      if (s.memOutbox.length > 0 && !queuedNoteIds.includes(s.noteId)) {
+        flushes.push(this.flush(s));
+      }
+    }
+    // Orphaned queues (note not open this session) push via a headless flush.
     for (const id of queuedNoteIds) {
-      if (!this.sessions.has(id)) void this.flushHeadless(id);
+      if (!this.sessions.has(id)) flushes.push(this.flushHeadless(id));
     }
+    await Promise.all(flushes);
     for (const s of this.sessions.values()) void this.pull(s);
+    // A meta-only recovery (nothing doc-queued, replay drained) must also
+    // clear the offline dot — flush() only heals it when it had work to push.
+    if (this.status === "offline") {
+      const metaLeft = await readMetaOutbox(this.workspaceId);
+      if (metaLeft.length === 0 && !(await this.hasQueuedUpdates())) {
+        this.setStatus("synced");
+      }
+    }
   }
 
   private async flushOrphanedOutbox(): Promise<void> {
@@ -485,6 +589,7 @@ export class NotesSyncEngineV2 {
   private async flushHeadless(noteId: string): Promise<void> {
     if (!this.runtime) return;
     try {
+      const clientId = await this.resolveClientId();
       for (;;) {
         const queue = await readDocOutbox(noteId);
         if (queue.length === 0) break;
@@ -492,7 +597,7 @@ export class NotesSyncEngineV2 {
         await this.runtime.notesV2.pushUpdates({
           workspaceId: this.workspaceId,
           noteId,
-          clientId: this.clientId,
+          clientId,
           updates: toPushPayload(batch),
         });
         await deleteDocOutboxEntries(ackedKeys(batch));

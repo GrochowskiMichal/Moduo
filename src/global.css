@@ -312,8 +312,12 @@ body,
 /* ═══ Notes: Lexical theme — token-driven ═══ */
 
 /* Wave-3 editor: the first line IS the title (no separate title field) —
-   the leading block renders display-sized regardless of its node type. */
-.notes-editor-v2 [contenteditable] > :first-child {
+   the leading TEXT block renders display-sized. Scoped to paragraph/heading
+   so a note starting with a checklist/code/table doesn't blow up 3xl. */
+.notes-editor-v2 [contenteditable] > .notes-p:first-child,
+.notes-editor-v2 [contenteditable] > .notes-h1:first-child,
+.notes-editor-v2 [contenteditable] > .notes-h2:first-child,
+.notes-editor-v2 [contenteditable] > .notes-h3:first-child {
   margin-top: 0;
   margin-bottom: 0.75rem;
   font-family: var(--font-display);

@@ -147,10 +147,14 @@ export function writeNoteState(state: NoteSyncState): Promise<void> {
 
 // ── docOutbox ────────────────────────────────────────────────────────────────
 
-export function enqueueDocUpdate(entry: DocOutboxEntry): Promise<void> {
+/** Returns false when the entry could NOT be persisted (IndexedDB missing or
+ * failing) — the caller must fall back to an in-memory queue, never assume
+ * durability. */
+export function enqueueDocUpdate(entry: DocOutboxEntry): Promise<boolean> {
   return withStore("docOutbox", "readwrite", async (s) => {
     await req(s.add(entry));
-  }, undefined);
+    return true;
+  }, false);
 }
 
 export function readDocOutbox(noteId: string): Promise<DocOutboxEntry[]> {

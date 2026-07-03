@@ -37,6 +37,10 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const [syncStatus, setSyncStatus] = useState<NotesSyncStatusV2>("synced");
   const [welcomeNoteId, setWelcomeNoteId] = useState<string | null>(null);
   const reqRef = useRef(0);
+  const serverLoadedRef = useRef(false);
+  /** Optimistic creates whose op hasn't settled — merged into every server
+   * bundle so a concurrent load() can't clobber a just-captured note. */
+  const pendingCreatesRef = useRef(new Map<string, Note>());
   const notesRef = useRef<Note[]>([]);
   notesRef.current = notes;
 
@@ -70,7 +74,14 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     try {
       const bundle = await runtime!.notesV2.listMeta(workspaceId!);
       if (reqRef.current !== req) return;
-      setNotes(bundle.notes);
+      serverLoadedRef.current = true;
+      // Merge unsettled optimistic creates so a load racing a capture can't
+      // drop the just-created note (and deselect it via the stale-id sweep).
+      const merged = [...bundle.notes];
+      for (const [id, note] of pendingCreatesRef.current) {
+        if (!merged.some((n) => n.id === id)) merged.push(note);
+      }
+      setNotes(merged);
       setDegraded(bundle.degraded);
       setLoadError(null);
       setLoading(false);
@@ -90,13 +101,18 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     setNotes([]);
     setDegraded(false);
     setLoadError(null);
+    serverLoadedRef.current = false;
+    pendingCreatesRef.current.clear();
     if (!ready) {
       setLoading(false);
       return;
     }
     // Instant paint from the IDB cache (offline tree), then the live read.
+    // Guarded on "a server bundle has RESOLVED", not on load() having merely
+    // started — load() bumps reqRef synchronously, so the old guard never let
+    // the cache paint at all (offline boot rendered an empty list).
     void readMetaCache(workspaceId!).then((cached) => {
-      if (cancelled || !cached || reqRef.current > 0) return;
+      if (cancelled || !cached || serverLoadedRef.current) return;
       if (notesRef.current.length === 0 && cached.notes.length > 0) {
         setNotes((cached.notes as any[]).map((n) => n as Note));
         setLoading(false);
@@ -145,12 +161,21 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     const optimistic = welcomeOptimisticNote(id, workspaceId, userId);
     setNotes([optimistic]);
     setWelcomeNoteId(id);
+    pendingCreatesRef.current.set(id, optimistic);
     void runtime!.notesV2
       .create({ workspaceId, id, title: "Welcome to Notes", icon: "👋", position: endPosition([]) })
+      .then(() => pendingCreatesRef.current.delete(id))
       .catch(() => {
-        // degrade quietly — the seed is a nicety, never an error surface
+        // degrade quietly — the seed is a nicety, never an error surface —
+        // but don't burn the one-shot flag on a failed attempt.
+        pendingCreatesRef.current.delete(id);
         setNotes((prev) => prev.filter((n) => n.id !== id));
         setWelcomeNoteId(null);
+        try {
+          window.localStorage.removeItem(flag);
+        } catch {
+          // ignore
+        }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, loading, degraded, canEdit, workspaceId, notes.length]);
@@ -200,7 +225,12 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         deletedAt: null,
       };
       setNotes((prev) => [...prev, optimistic]);
-      guard(() => engine.runMetaOp("create", { workspaceId, id, parentId, title: "", position }));
+      pendingCreatesRef.current.set(id, optimistic);
+      guard(() =>
+        engine
+          .runMetaOp("create", { workspaceId, id, parentId, title: "", position })
+          .finally(() => pendingCreatesRef.current.delete(id)),
+      );
       return id;
     },
     [engine, canEdit, workspaceId, userId, guard],

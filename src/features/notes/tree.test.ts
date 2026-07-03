@@ -96,6 +96,30 @@ describe("buildNoteSections (AC2)", () => {
     expect(s.archive.some((t) => t.note.id === "kid")).toBe(false);
   });
 
+  it("an archived CHILD leaves the tree entirely (renders only in Archive)", () => {
+    const notes = [
+      note({ id: "proj" }),
+      note({ id: "active-kid", parentId: "proj" }),
+      note({ id: "old-kid", parentId: "proj", isArchived: true }),
+    ];
+    const s = buildNoteSections(notes);
+    // Archive root = the archived child, not its live parent
+    expect(s.archive.map((t) => t.note.id)).toEqual(["old-kid"]);
+    // The tree subtree must NOT include the archived child anymore
+    expect(s.tree.map((t) => t.note.id)).toEqual(["proj"]);
+    expect(s.tree[0]!.children.map((t) => t.note.id)).toEqual(["active-kid"]);
+  });
+
+  it("a parent whose only children are archived is Inbox, not tree", () => {
+    const notes = [
+      note({ id: "proj" }),
+      note({ id: "old-kid", parentId: "proj", isArchived: true }),
+    ];
+    const s = buildNoteSections(notes);
+    expect(s.inbox.map((n) => n.id)).toEqual(["proj"]);
+    expect(s.tree).toHaveLength(0);
+  });
+
   it("trash roots = trashed notes under a live/absent parent, subtree nested (AC12)", () => {
     const notes = [
       note({ id: "keep" }),
@@ -131,6 +155,42 @@ describe("wouldCreateCycle (AC2 — the move invariant)", () => {
   it("allows legal moves", () => {
     expect(wouldCreateCycle(notes, "d3", "d0")).toBe(false);
     expect(wouldCreateCycle(notes, "d2", null)).toBe(false);
+  });
+});
+
+describe("resolveDrop no-ops", () => {
+  const pos = {
+    endPosition: (existing: Array<{ position: string }>) => {
+      let max = "";
+      for (const e of existing) if (e.position > max) max = e.position;
+      return max + "z";
+    },
+    betweenPositions: (a: string | null, b: string | null) => `${a ?? ""}~${b ?? ""}`,
+  };
+
+  it("dropping a row right where it sits is a no-op (no position churn)", async () => {
+    const { resolveDrop } = await import("./tree");
+    const notes = [
+      note({ id: "a", position: "0100000000" }),
+      note({ id: "b", position: "0200000000" }),
+      note({ id: "c", position: "0300000000" }),
+    ];
+    // b dropped after a (its current slot) and before c (same slot)
+    expect(resolveDrop(notes, "b", "a", "after", pos)).toBeNull();
+    expect(resolveDrop(notes, "b", "c", "before", pos)).toBeNull();
+    // …but a REAL move still resolves
+    expect(resolveDrop(notes, "a", "c", "after", pos)).not.toBeNull();
+  });
+
+  it("dropping the last child 'into' its own parent is a no-op", async () => {
+    const { resolveDrop } = await import("./tree");
+    const notes = [
+      note({ id: "p" }),
+      note({ id: "k1", parentId: "p", position: "0100000000" }),
+      note({ id: "k2", parentId: "p", position: "0200000000" }),
+    ];
+    expect(resolveDrop(notes, "k2", "p", "into", pos)).toBeNull();
+    expect(resolveDrop(notes, "k1", "p", "into", pos)).not.toBeNull();
   });
 });
 
