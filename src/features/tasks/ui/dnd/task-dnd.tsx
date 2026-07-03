@@ -34,7 +34,7 @@ import { cn } from "../../../../lib/utils";
 // ── drag payload ─────────────────────────────────────────────────────────────
 
 /** Where a dragged task originated (lets a target react to cross-surface drags). */
-export type TaskDragSource = "list" | "board" | "queue";
+export type TaskDragSource = "list" | "board" | "queue" | "tray";
 
 /** The `data` every draggable task carries on its dnd-kit node. */
 export type TaskDragData = { type: "task"; taskId: string; from: TaskDragSource };
@@ -64,12 +64,18 @@ export type TaskDropTarget =
   // Drop onto another task → make the dragged task its subtask (one level).
   | { type: "onto-task"; taskId: string }
   // Board column → move (and re-rank to the column end on a bare column drop).
-  | { type: "column"; dim: "status" | "bucket"; value: string };
+  | { type: "column"; dim: "status" | "bucket"; value: string }
+  // The Timeline's lanes region — ONE droppable for the whole axis; the drop
+  // day is derived from the raw tracked pointer at drop time (dnd-kit's delta
+  // folds auto-scroll in — gotchas.md), not from per-day droppables.
+  | { type: "timeline-axis" };
 // Future, additive: | { type: "calendar-slot"; startsAt: string }
 
 export function asTaskDropTarget(data: unknown): TaskDropTarget | null {
   const t = (data as { type?: unknown } | null)?.type;
-  return t === "onto-task" || t === "column" ? (data as TaskDropTarget) : null;
+  return t === "onto-task" || t === "column" || t === "timeline-axis"
+    ? (data as TaskDropTarget)
+    : null;
 }
 
 // ── sensors ──────────────────────────────────────────────────────────────────
@@ -84,13 +90,21 @@ export function asTaskDropTarget(data: unknown): TaskDropTarget | null {
  * surfaces (e.g. nesting) have no sortable context, so they pass `sortable:false`
  * to fall back to the default step-and-detect keyboard behaviour.
  */
-export function useTaskDndSensors(opts?: { sortable?: boolean }) {
+export function useTaskDndSensors(opts?: { sortable?: boolean; keyboard?: boolean }) {
   const sortable = opts?.sortable ?? true;
+  // `keyboard: false` for surfaces whose DROP resolution is pointer-derived
+  // (the timeline axis): a keyboard "lift" there could never commit, and a
+  // drag affordance that silently no-ops is worse than none.
+  const keyboard = opts?.keyboard ?? true;
   return useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(
       KeyboardSensor,
-      sortable ? { coordinateGetter: sortableKeyboardCoordinates } : undefined,
+      keyboard
+        ? sortable
+          ? { coordinateGetter: sortableKeyboardCoordinates }
+          : undefined
+        : { keyboardCodes: { start: [], cancel: [], end: [] } },
     ),
   );
 }
