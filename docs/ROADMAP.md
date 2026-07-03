@@ -42,6 +42,7 @@
 **The great moment:** the day self-corrects — finish inside a block, unfinished work rolls forward, no wall of red.
 **Drop:** Morgen (and the Sunsama-style ritual). Tasks becomes "Linear-light that actually runs your day."
 **Fast-follow (post-core, ⚠ Q9):** Calendly-like booking links.
+**Fast-follow — CalDAV/ICS read-only (dogfood-blocking, surfaced 2026-07-03, light plan pending):** the designer's primary calendars live on non-Google/Outlook hostings (CalDAV/ICS, basic-auth — **no OAuth registration needed**, so this does NOT wait for the Wave-5 credentials pass). The CAL-6 mirror pipeline (accounts/mirror op/rail/attribution/visibility) is provider-agnostic and already shipped; the gap is a desktop CalDAV/ICS fetcher + a pure ical→mirror mapper + a connect dialog (~1–2 blocks, "CAL-8"). Until this lands, Morgen can't actually be dropped — it gates dogfooding the Wave-2 loop.
 
 ### Wave 3 — Notes rebuild (+ cloud-sync, the multiplayer enabler)
 **Goal:** a make-or-break leg cleared without database heaviness; notes become a planning surface and go cloud-synced.
