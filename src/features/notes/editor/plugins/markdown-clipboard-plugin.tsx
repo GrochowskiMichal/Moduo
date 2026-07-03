@@ -74,8 +74,21 @@ export function MarkdownClipboardPlugin() {
         editor.getEditorState().read(() => {
           const selection = $getSelection();
           if (!$isRangeSelection(selection) || selection.isCollapsed()) return;
-          const blocks = $selectionTopBlocks(selection.getNodes());
+          const nodes = selection.getNodes();
+          const blocks = $selectionTopBlocks(nodes);
           if (blocks.length === 0) return;
+          // A partial INLINE range must not over-share the whole block as
+          // text/plain — fall through to Lexical's default copy unless the
+          // selection carries a moduo node (whose md form is the point).
+          const hasModuoNode = nodes.some((n) => {
+            const t = n.getType();
+            return t === "entity-ref" || t === "page-row" || t === "embed";
+          });
+          const norm = (s: string) => s.replace(/\s+/g, "");
+          const coversWholeBlocks =
+            norm(selection.getTextContent()) ===
+            norm(blocks.map((b) => b.getTextContent()).join(""));
+          if (!hasModuoNode && !coversWholeBlocks) return;
           const md = blocksToMarkdown(blocks.map($nodeToMdJson));
           if (md === "") return;
           const html = $getHtmlContent(editor);

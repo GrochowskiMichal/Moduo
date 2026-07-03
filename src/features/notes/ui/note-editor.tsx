@@ -176,8 +176,16 @@ function InsertPageRowPlugin({
       const label = displayTitle(bridge.getNoteMeta(detail.childId)?.title ?? "");
       editor.update(() => {
         const root = $getRoot();
-        root.append($createPageRowNode(detail.childId, label));
-        root.append($createParagraphNode());
+        const row = $createPageRowNode(detail.childId, label);
+        const last = root.getLastChild();
+        // Reuse a trailing empty paragraph — repeated child-creates must not
+        // pile up `row, ∅, row, ∅…` junk.
+        if (last && last.getType() === "paragraph" && last.getTextContent().trim() === "") {
+          last.insertBefore(row);
+        } else {
+          root.append(row);
+          root.append($createParagraphNode());
+        }
       });
     };
     window.addEventListener(INSERT_PAGE_ROW_EVENT, onInsert);

@@ -70,9 +70,10 @@ export const HR_TRANSFORMER: ElementTransformer = {
   export: (node) => ($isHorizontalRuleNode(node) ? "---" : null),
   regExp: /^(?:---|\*\*\*|___)\s?$/,
   replace: (parentNode, _children, _match, isImport) => {
-    if (isImport) {
-      parentNode.replace($createHorizontalRuleNode());
-    }
+    // Only `false` means "not handled" — a void return on the typing path
+    // would eat a live-typed `---` if a markdown-shortcut plugin ever mounts.
+    if (!isImport) return false;
+    parentNode.replace($createHorizontalRuleNode());
   },
   type: "element",
 };
@@ -141,6 +142,7 @@ export type MdJsonNode = {
   tag?: string;
   listType?: string;
   checked?: boolean;
+  start?: number;
   value?: number;
   url?: string;
   label?: string;
@@ -189,7 +191,9 @@ function childrenToMd(node: MdJsonNode): string {
 
 function listToMd(node: MdJsonNode, indent: string): string {
   const lines: string[] = [];
-  let n = 1;
+  // Ordered lists serialize their starting number on the LIST node (`start`);
+  // per-item `value` is presentational.
+  let n = typeof node.start === "number" && node.start > 0 ? node.start : 1;
   for (const item of node.children ?? []) {
     const nested = (item.children ?? []).filter((c) => c.type === "list");
     const inline = (item.children ?? []).filter((c) => c.type !== "list");
@@ -197,7 +201,7 @@ function listToMd(node: MdJsonNode, indent: string): string {
     if (content.trim() !== "" || nested.length === 0) {
       const marker =
         node.listType === "number"
-          ? `${node.value && lines.length === 0 ? node.value : n}. `
+          ? `${n}. `
           : node.listType === "check"
             ? `- [${item.checked ? "x" : " "}] `
             : "- ";

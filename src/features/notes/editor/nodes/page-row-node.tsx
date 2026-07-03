@@ -6,15 +6,17 @@
  * `[title](moduo://note/<id>)` on its own line in markdown.
  */
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { ChevronRight, FileText } from "lucide-react";
 import {
+  $getNodeByKey,
   DecoratorNode,
   type LexicalNode,
   type NodeKey,
   type SerializedLexicalNode,
   type Spread,
 } from "lexical";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 import { displayTitle } from "../../title";
 
@@ -27,11 +29,35 @@ export type SerializedPageRowNode = Spread<
   SerializedLexicalNode
 >;
 
-function PageRowComponent({ noteId, label }: { noteId: string; label: string }) {
+function PageRowComponent({
+  nodeKey,
+  noteId,
+  label,
+}: {
+  nodeKey: NodeKey;
+  noteId: string;
+  label: string;
+}) {
+  const [editor] = useLexicalComposerContext();
   const bridge = useNotesEditorBridge();
   const meta = bridge?.getNoteMeta(noteId) ?? null;
   const title = meta ? displayTitle(meta.title) : label || "Untitled";
   const trashed = Boolean(meta?.deletedAt);
+
+  // Reconcile the PERSISTED label to the live title — md export/copy read
+  // __label, and without this every row minted before its child was titled
+  // exports "[Untitled](…)" forever. Edit-gated (a viewer must not write).
+  useEffect(() => {
+    if (!meta || trashed || !editor.isEditable()) return;
+    const live = displayTitle(meta.title);
+    if (live === label) return;
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey);
+      if ($isPageRowNode(node) && node.getLabel() !== live) {
+        node.setLabel(live);
+      }
+    });
+  }, [editor, nodeKey, meta, trashed, label]);
 
   return (
     <button
@@ -95,7 +121,11 @@ export class PageRowNode extends DecoratorNode<ReactNode> {
   }
 
   getLabel(): string {
-    return this.__label;
+    return this.getLatest().__label;
+  }
+
+  setLabel(label: string): void {
+    this.getWritable().__label = label;
   }
 
   createDOM(): HTMLElement {
@@ -113,7 +143,7 @@ export class PageRowNode extends DecoratorNode<ReactNode> {
   }
 
   decorate(): ReactNode {
-    return <PageRowComponent noteId={this.__noteId} label={this.__label} />;
+    return <PageRowComponent nodeKey={this.__key} noteId={this.__noteId} label={this.__label} />;
   }
 }
 

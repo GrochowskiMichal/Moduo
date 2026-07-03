@@ -200,8 +200,12 @@ export function MentionMenuPlugin({
     // `notify-person` (text inserted above) — never `create-and-link` (that's a
     // `/ref`-only candidate). So the write just reconciles; on failure the chip
     // stays and Retry recovers the link (never silently lost).
+    const failCopy =
+      resolution.action === "notify-person"
+        ? "Couldn't send that mention."
+        : "Couldn't link that.";
     void executeMention(runtime, ctx, resolution).catch(() => {
-      toast.error("Couldn't link that.", {
+      toast.error(failCopy, {
         action: { label: "Retry", onClick: () => void executeMention(runtime, ctx, resolution) },
       });
     });
@@ -214,12 +218,24 @@ export function MentionMenuPlugin({
   commitRef.current = commit;
 
   // ── caret detection ─────────────────────────────────────────────────────────
+  // A people-only surface with no person handler has NOTHING to offer — never
+  // open a menu that can only say "No matches".
+  const canOffer = !peopleOnly || Boolean(onMentionPerson);
   useEffect(() => {
+    if (!canOffer) {
+      setMenu(null);
+      return;
+    }
     return editor.registerUpdateListener(() => {
       if (typeof window === "undefined") return;
       setMenu(resolveMentionMenuState(editor));
     });
-  }, [editor]);
+  }, [editor, canOffer]);
+
+  // Fresh query → fresh highlight (never a stale mid-list selection).
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [menu?.query]);
 
   // ── keyboard ────────────────────────────────────────────────────────────────
   useEffect(() => {

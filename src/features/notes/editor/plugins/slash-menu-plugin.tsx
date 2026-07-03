@@ -227,6 +227,7 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
   const [picker, setPicker] = useState<PickerState | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [pickerQuery, setPickerQuery] = useState("");
+  const pickerPortalRef = useRef<HTMLDivElement | null>(null);
 
   const commands = filterSlashCommands(menu?.query ?? "");
 
@@ -252,8 +253,43 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
     createType: canCreate ? pickerType : null,
     canCreate,
     includePeople: false,
-    enabled: picker !== null,
+    enabled: picker !== null && picker.command !== "mindmap",
   });
+
+  // Mindmaps never registered into the entities registry — their candidates
+  // come from the module's own store (the legacy plugin's source), filtered
+  // client-side. "Kept working, no new investment" (§3c).
+  const [mindmapCandidates, setMindmapCandidates] = useState<MentionCandidate[]>([]);
+  useEffect(() => {
+    if (picker?.command !== "mindmap" || !runtime || !workspaceId) return;
+    let cancelled = false;
+    void import("@/features/mindmap/ui/mindmap-storage")
+      .then(async ({ listMindmaps }) => {
+        const maps = await listMindmaps(runtime, workspaceId);
+        if (cancelled) return;
+        setMindmapCandidates(
+          maps.map((m) => ({
+            kind: "entity" as const,
+            ref: { type: "mindmap", id: m.id },
+            label: m.name,
+            icon: null,
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setMindmapCandidates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [picker?.command, runtime, workspaceId]);
+
+  const pickerCandidates =
+    picker?.command === "mindmap"
+      ? mindmapCandidates.filter((c) =>
+          c.label.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
+        )
+      : search.candidates;
 
   useEffect(() => {
     search.setQuery(pickerQuery);
@@ -264,11 +300,47 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
     setSelectedIndex((current) => Math.min(current, Math.max(0, commands.length - 1)));
   }, [commands.length]);
 
-  const closeAll = () => {
+  // A fresh query means a fresh list — never a stale mid-list highlight.
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [menu?.query]);
+
+  const closeAll = (refocusEditor = false) => {
     setMenu(null);
     setPicker(null);
     setPickerQuery("");
+    setSelectedIndex(0);
+    if (refocusEditor) editor.focus();
   };
+
+  // Focus the picker input AFTER Lexical's own post-update focus restore —
+  // a plain autoFocus mounts too early and the editor steals focus back,
+  // stranding the keyboard in the document body (validator BLOCKER).
+  useEffect(() => {
+    if (!picker) return;
+    const id = setTimeout(() => {
+      pickerPortalRef.current
+        ?.querySelector<HTMLInputElement>("[cmdk-input]")
+        ?.focus();
+    }, 30);
+    return () => clearTimeout(id);
+  }, [picker]);
+
+  // The stage-2 picker's dismissal paths: Escape inside the picker (the
+  // editor's KEY_ESCAPE only fires while the EDITOR has focus) and any
+  // pointer-down outside it.
+  useEffect(() => {
+    if (!picker) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const portal = pickerPortalRef.current;
+      if (portal && event.target instanceof Node && portal.contains(event.target)) return;
+      closeAll();
+    };
+    document.addEventListener("pointerdown", onPointerDown, { capture: true });
+    return () =>
+      document.removeEventListener("pointerdown", onPointerDown, { capture: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picker]);
 
   const ctx: MentionContext = {
     workspaceId: workspaceId ?? "",
@@ -297,21 +369,20 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
 
     if (active.command === "mindmap") {
       if (candidate.kind !== "entity") return;
-      editor.focus();
+      closeAll(true);
       editor.update(() => {
         $insertNodes([
           $createEmbedNode("mindmap", candidate.ref.id),
           $createParagraphNode(),
         ]);
       });
-      closeAll();
       return;
     }
 
     const resolution = resolveMention({ trigger: "ref", candidate });
     if (resolution.action === "link") {
       // Optimistic chip; the link write reconciles behind it.
-      editor.focus();
+      closeAll(true);
       editor.update(() => {
         const selection = $getSelection();
         if (!$isRangeSelection(selection)) return;
@@ -325,7 +396,6 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
           $createTextNode(" "),
         ]);
       });
-      closeAll();
       void executeMention(runtime, ctx, resolution).catch(() => {
         toast.error("Couldn't link that.", {
           action: { label: "Retry", onClick: () => void executeMention(runtime, ctx, resolution) },
@@ -335,7 +405,7 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
     }
 
     if (resolution.action === "create-and-link") {
-      closeAll();
+      closeAll(true);
       void executeMention(runtime, ctx, resolution)
         .then((created) => {
           if (!created) return;
@@ -477,17 +547,28 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
   if (picker) {
     return createPortal(
       <div
+        ref={pickerPortalRef}
         className="fixed z-50 w-72 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-lg"
         style={{ top: picker.top, left: picker.left }}
+        onKeyDown={(event) => {
+          // Focus lives in the picker's input — the editor's Escape handler
+          // can't fire; own the dismissal here.
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            closeAll(true);
+          }
+        }}
       >
         <MentionCommand
-          candidates={search.candidates}
+          candidates={pickerCandidates}
           query={pickerQuery}
           onQueryChange={setPickerQuery}
           onSelect={commitPick}
-          loading={search.loading}
+          loading={picker.command === "mindmap" ? false : search.loading}
           placeholder={`Search ${picker.command}s…`}
           emptyLabel={`No ${picker.command} found.`}
+          autoFocusInput
         />
       </div>,
       document.body,
