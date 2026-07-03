@@ -126,6 +126,10 @@ const EXPLICIT_KINDS: Record<string, RelationKind> = {
   "invoice>company": "paid-by",
   "contact>company": "works-at",
   "company>contact": "works-at",
+  // Person↔person is always a plain reference — never `attachment`/`paid-by`
+  // (the "Ben Okafor · Attachment" bug, FX-5). Explicit so a default change can't
+  // regress it; the kind-constraints matrix is the belt to this suspenders.
+  "contact>contact": "references",
 };
 
 export function resolveKind(sourceType: string, targetType: string): RelationKind {

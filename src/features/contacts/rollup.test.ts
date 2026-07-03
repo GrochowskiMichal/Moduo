@@ -79,11 +79,41 @@ describe("buildContactRollup", () => {
     expect(sections.find((s) => s.key === "open-work")?.count).toBe(2);
   });
 
-  it("last-touch is the most recent of activity and link timestamps", () => {
-    // activity (06-25) is newer than every link → it wins, with its verb.
+  it("prefers a real interaction (a link) over a record edit for last touch (FX-4 AC7)", () => {
+    // set_status (06-25) is a record edit; the newest interaction is the t1 link
+    // (06-24), so the link wins even though it's older — a record edit never
+    // beats an interaction for the verb.
     const r = buildContactRollup(input());
+    expect(r.lastTouchAt).toBe("2026-06-24T09:00:00Z");
+    expect(r.lastTouchActivity).toBeNull();
+  });
+
+  it("falls back to a record edit only when no interaction exists (FX-4 AC7)", () => {
+    const r = buildContactRollup(
+      input({
+        links: [],
+        activity: [
+          activity("contacts.update", "2026-06-25T10:00:00Z"),
+          activity("contacts.create", "2026-06-20T09:00:00Z"),
+        ],
+      }),
+    );
     expect(r.lastTouchAt).toBe("2026-06-25T10:00:00Z");
-    expect(r.lastTouchActivity?.op).toBe("contacts.set_status");
+    expect(r.lastTouchActivity?.op).toBe("contacts.update");
+  });
+
+  it("a comment (interaction) beats a newer record edit for the verb (FX-4 AC7)", () => {
+    const r = buildContactRollup(
+      input({
+        links: [],
+        activity: [
+          activity("contacts.update", "2026-06-26T10:00:00Z"), // newer record edit
+          activity("comments.add", "2026-06-24T10:00:00Z"), // older interaction
+        ],
+      }),
+    );
+    expect(r.lastTouchActivity?.op).toBe("comments.add");
+    expect(r.lastTouchAt).toBe("2026-06-24T10:00:00Z");
   });
 
   it("a link newer than any activity becomes the last touch (verb-less)", () => {
@@ -113,7 +143,8 @@ describe("buildContactRollup", () => {
 
 describe("lastTouchLine", () => {
   it("reads as a quiet sentence with verb, relative time, and open count", () => {
-    expect(lastTouchLine(buildContactRollup(input()), NOW)).toBe("Last touch: set status 2 days ago · 1 open task");
+    // The t1 link (06-24, an interaction) wins over the 06-25 record edit (FX-4).
+    expect(lastTouchLine(buildContactRollup(input()), NOW)).toBe("Last touch: linked 3 days ago · 1 open task");
   });
 
   it("says 'No activity yet' for an empty contact (never an error tone)", () => {

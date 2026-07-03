@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { parseContactText } from "./parse-contact";
+import { channelsFromValues, parseContactText, parsedContactChannels } from "./parse-contact";
 
 describe("parseContactText — signature blob", () => {
   const blob = "Jane Doe\nHead of Ops at Acme\njane@acme.com\n+1 555 123 4567";
@@ -155,5 +155,24 @@ describe("parseContactText — defensive edges", () => {
     expect(p.phones).toEqual(["+44 20 7946 0958"]);
     expect(p.title).toBe("VP Engineering");
     expect(p.company).toBe("Globex");
+  });
+});
+
+describe("parsedContactChannels — multi-value fill (FX-6 AC9)", () => {
+  it("carries every parsed email + phone as labelled channels, first primary", () => {
+    const parsed = parseContactText("Jane Doe\njane@a.com\njane@b.com\nMobile: +1 555 0100");
+    const { emails, phones } = parsedContactChannels(parsed);
+    expect(emails.map((e) => e.value)).toEqual(["jane@a.com", "jane@b.com"]);
+    expect(emails[0]!.primary).toBe(true);
+    expect(emails[1]!.primary).toBe(false);
+    expect(phones).toHaveLength(1);
+    expect(phones[0]!.value).toBe("+1 555 0100");
+    expect(phones[0]!.primary).toBe(true);
+  });
+
+  it("channelsFromValues drops blanks and duplicates, marking the first primary", () => {
+    const rows = channelsFromValues(["a@x.com", "", "A@X.com", "b@x.com"]);
+    expect(rows.map((r) => r.value)).toEqual(["a@x.com", "b@x.com"]);
+    expect(rows[0]!.primary).toBe(true);
   });
 });
