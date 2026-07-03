@@ -24,6 +24,8 @@ describe("calendar prefs domain — sane defaults + round-trip", () => {
       workEndMinute: 1080,
       weekStartsOn: 1,
       showWeekends: true,
+      hiddenAccountIds: [],
+      accountColors: {},
     });
   });
 
@@ -33,6 +35,8 @@ describe("calendar prefs domain — sane defaults + round-trip", () => {
       workEndMinute: 1020,
       weekStartsOn: 0,
       showWeekends: false,
+      hiddenAccountIds: ["acct-1"],
+      accountColors: { "acct-1": "teal" },
     };
     expect(sanitizeCalendarPrefs(JSON.parse(JSON.stringify(prefs)))).toEqual(prefs);
   });

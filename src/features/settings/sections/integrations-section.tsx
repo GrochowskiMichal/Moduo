@@ -1,24 +1,37 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Calendar, Video } from "lucide-react";
 
-import type { CalendarAccount, CalendarSource } from "../../calendar/types";
-import {
-  CALENDAR_ACCOUNTS_UPDATED_EVENT,
-  readLocalAccounts,
-  readLocalSources,
-  writeLocalAccounts,
-  writeLocalSources,
-} from "../../calendar/hooks/use-calendar";
+import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
+import type { CalendarAccountModel } from "../../calendar/events";
+import { providerLabel } from "../../calendar/accounts";
 import { Button } from "../../../components/ui/button";
 
 import { SettingsSectionShell } from "./section-shell";
 
 type IntegrationStatus = { provider: string; connected: boolean };
 
+/** Desktop-only OAuth: on web the connect buttons explain where to go. */
+const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+type OAuthResult = {
+  accountId: string;
+  email: string;
+  displayName: string;
+  calendars: { id: string; name: string; color: string }[];
+};
+
+const CAL_PROVIDERS = [
+  { key: "google" as const, label: "Google Calendar", command: "calendar_google_oauth_start" },
+  { key: "microsoft" as const, label: "Outlook Calendar", command: "calendar_outlook_oauth_start" },
+];
+
 export function IntegrationsSection() {
-  const [calAccounts, setCalAccounts] = useState<CalendarAccount[]>([]);
-  const [calSources, setCalSources] = useState<CalendarSource[]>([]);
+  const { runtime } = useAuth();
+  const { selectedWorkspaceId: workspaceId } = useWorkspace();
+
+  const [calAccounts, setCalAccounts] = useState<CalendarAccountModel[]>([]);
   const [calBusy, setCalBusy] = useState<string | null>(null);
   const [calError, setCalError] = useState<string | null>(null);
 
@@ -27,15 +40,24 @@ export function IntegrationsSection() {
   const [videoBusy, setVideoBusy] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
 
+  const loadAccounts = useCallback(async () => {
+    if (!runtime || !workspaceId) return;
+    try {
+      const bundle = await runtime.calendar.listModule(workspaceId);
+      setCalAccounts(bundle.accounts.filter((a) => a.provider !== "moduo"));
+    } catch (e) {
+      setCalError(e instanceof Error ? e.message : String(e));
+    }
+  }, [runtime, workspaceId]);
+
   useEffect(() => {
-    setCalAccounts(readLocalAccounts());
-    setCalSources(readLocalSources());
+    void loadAccounts();
     const loadVideo = async () => {
+      if (!IS_DESKTOP) return;
       setVideoLoading(true);
       setVideoError(null);
       try {
-        const result = await invoke<IntegrationStatus[]>("integration_get_status");
-        setVideoStatuses(result);
+        setVideoStatuses(await invoke<IntegrationStatus[]>("integration_get_status"));
       } catch (e) {
         setVideoError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -43,55 +65,26 @@ export function IntegrationsSection() {
       }
     };
     void loadVideo();
-  }, []);
+  }, [loadAccounts]);
 
-  useEffect(() => {
-    const handler = () => {
-      setCalAccounts(readLocalAccounts());
-      setCalSources(readLocalSources());
-    };
-    window.addEventListener(CALENDAR_ACCOUNTS_UPDATED_EVENT, handler);
-    return () => window.removeEventListener(CALENDAR_ACCOUNTS_UPDATED_EVENT, handler);
-  }, []);
-
-  const handleConnectGoogleCalendar = async () => {
-    setCalBusy("google");
+  const handleConnect = async (provider: "google" | "microsoft", command: string) => {
+    if (!IS_DESKTOP || !runtime || !workspaceId) return;
+    setCalBusy(provider);
     setCalError(null);
     try {
-      const result = await invoke<{
-        accountId: string;
-        email: string;
-        displayName: string;
-        calendars: { id: string; name: string; color: string }[];
-      }>("calendar_google_oauth_start");
-      const newAccount: CalendarAccount = {
-        id: result.accountId,
-        provider: "google",
-        email: result.email,
-        displayName: result.displayName,
-        connected: true,
+      const result = await invoke<OAuthResult>(command);
+      // Register the account in Supabase so web + desktop both see it. The
+      // provider event sync (fetch → mirror) runs from the desktop engine.
+      await runtime.calendar.upsertAccount({
+        workspaceId,
+        provider,
+        externalId: result.accountId,
+        displayLabel: result.email || result.displayName,
+        color: null,
+        status: "ok",
         lastSyncAt: new Date().toISOString(),
-      };
-      const newSrcs: CalendarSource[] = result.calendars.map((c) => ({
-        id: c.id,
-        accountId: result.accountId,
-        name: c.name,
-        color: c.color || "#4285f4",
-        visible: true,
-      }));
-      const cur = readLocalAccounts();
-      const idx = cur.findIndex((a) => a.id === newAccount.id);
-      const nextAccounts =
-        idx === -1 ? [...cur, newAccount] : cur.map((a, i) => (i === idx ? newAccount : a));
-      const curSrcs = readLocalSources();
-      const byId = new Map(curSrcs.map((s) => [s.id, s]));
-      for (const s of newSrcs) byId.set(s.id, s);
-      const nextSources = Array.from(byId.values());
-      writeLocalAccounts(nextAccounts);
-      writeLocalSources(nextSources);
-      setCalAccounts(nextAccounts);
-      setCalSources(nextSources);
-      window.dispatchEvent(new CustomEvent(CALENDAR_ACCOUNTS_UPDATED_EVENT));
+      });
+      await loadAccounts();
     } catch (e) {
       setCalError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -99,14 +92,17 @@ export function IntegrationsSection() {
     }
   };
 
-  const handleDisconnectCalendarAccount = (accountId: string) => {
-    const nextAccounts = readLocalAccounts().filter((a) => a.id !== accountId);
-    const nextSources = readLocalSources().filter((s) => s.accountId !== accountId);
-    writeLocalAccounts(nextAccounts);
-    writeLocalSources(nextSources);
-    setCalAccounts(nextAccounts);
-    setCalSources(nextSources);
-    window.dispatchEvent(new CustomEvent(CALENDAR_ACCOUNTS_UPDATED_EVENT));
+  const handleDisconnect = async (accountId: string) => {
+    if (!runtime || !workspaceId) return;
+    setCalBusy(accountId);
+    try {
+      await runtime.calendar.removeAccount({ workspaceId, accountId });
+      await loadAccounts();
+    } catch (e) {
+      setCalError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCalBusy(null);
+    }
   };
 
   const handleVideoConnect = async (provider: "zoom" | "google_meet") => {
@@ -137,8 +133,6 @@ export function IntegrationsSection() {
     }
   };
 
-  const googleAccounts = calAccounts.filter((a) => a.provider === "google");
-
   return (
     <SettingsSectionShell
       title="Integrations"
@@ -146,66 +140,85 @@ export function IntegrationsSection() {
     >
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-base text-foreground">Calendar</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Connected calendars are read-only in Moduo — your events appear here and on the web,
+          but edits stay in the source calendar.
+        </p>
 
-        <div className="mt-4 rounded-md border border-border bg-muted/40 p-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
-                <Calendar className="size-4" />
-              </span>
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-foreground">Google Calendar</span>
-                <span className="text-xs text-muted-foreground">
-                  {googleAccounts.length > 0
-                    ? `${googleAccounts.length} account${googleAccounts.length === 1 ? "" : "s"} connected`
-                    : "Not connected"}
-                </span>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleConnectGoogleCalendar()}
-              disabled={calBusy === "google"}
-            >
-              {calBusy === "google" ? "Connecting…" : "Connect account"}
-            </Button>
-          </div>
-
-          {googleAccounts.length > 0 ? (
-            <ul className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
-              {googleAccounts.map((acc) => {
-                const sources = calSources.filter((s) => s.accountId === acc.id);
-                return (
-                  <li
-                    key={acc.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-foreground">{acc.email}</p>
-                      {sources.length > 0 ? (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {sources.map((s) => s.name).join(", ")}
-                        </p>
-                      ) : null}
+        <div className="mt-4 flex flex-col gap-2">
+          {CAL_PROVIDERS.map(({ key, label, command }) => {
+            const connected = calAccounts.filter((a) => a.provider === key);
+            return (
+              <div key={key} className="rounded-md border border-border bg-muted/40 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
+                      <Calendar className="size-4" />
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-foreground">{label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {connected.length > 0
+                          ? `${connected.length} account${connected.length === 1 ? "" : "s"} connected`
+                          : IS_DESKTOP
+                            ? "Not connected"
+                            : "Connect from the desktop app"}
+                      </span>
                     </div>
+                  </div>
+                  {IS_DESKTOP ? (
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      onClick={() => handleDisconnectCalendarAccount(acc.id)}
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => void handleConnect(key, command)}
+                      disabled={calBusy === key}
                     >
-                      Disconnect
+                      {calBusy === key ? "Connecting…" : "Connect account"}
                     </Button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
+                  ) : (
+                    <Button type="button" variant="outline" size="sm" disabled>
+                      Desktop only
+                    </Button>
+                  )}
+                </div>
+
+                {connected.length > 0 ? (
+                  <ul className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+                    {connected.map((acc) => (
+                      <li
+                        key={acc.id}
+                        className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-foreground">
+                            {acc.displayLabel || providerLabel(acc.provider)}
+                          </p>
+                          {acc.status === "error" ? (
+                            <p className="truncate text-xs text-warning">
+                              Sync error — reconnect from the desktop app
+                            </p>
+                          ) : null}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void handleDisconnect(acc.id)}
+                          disabled={calBusy === acc.id}
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          {calBusy === acc.id ? "Removing…" : "Disconnect"}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
           {calError ? (
-            <p className="mt-3 text-xs text-destructive" role="alert">
+            <p className="text-xs text-destructive" role="alert">
               {calError}
             </p>
           ) : null}
@@ -237,30 +250,42 @@ export function IntegrationsSection() {
                   <div className="flex flex-col">
                     <span className="text-sm font-medium text-foreground">{label}</span>
                     <span className="text-xs text-muted-foreground">
-                      {videoLoading ? "Loading…" : connected ? "Connected" : "Not connected"}
+                      {!IS_DESKTOP
+                        ? "Desktop only"
+                        : videoLoading
+                          ? "Loading…"
+                          : connected
+                            ? "Connected"
+                            : "Not connected"}
                     </span>
                   </div>
                 </div>
-                {connected ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void handleVideoDisconnect(provider)}
-                    disabled={busy}
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    {busy ? "Disconnecting…" : "Disconnect"}
-                  </Button>
+                {IS_DESKTOP ? (
+                  connected ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void handleVideoDisconnect(provider)}
+                      disabled={busy}
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      {busy ? "Disconnecting…" : "Disconnect"}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleVideoConnect(provider)}
+                      disabled={busy || videoLoading}
+                    >
+                      {busy ? "Connecting…" : "Connect"}
+                    </Button>
+                  )
                 ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleVideoConnect(provider)}
-                    disabled={busy || videoLoading}
-                  >
-                    {busy ? "Connecting…" : "Connect"}
+                  <Button type="button" variant="outline" size="sm" disabled>
+                    Desktop only
                   </Button>
                 )}
               </div>

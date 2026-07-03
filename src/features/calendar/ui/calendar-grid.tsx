@@ -40,14 +40,19 @@ import {
 import { localDayKey, type CalendarView, type TaskBlock } from "../lens";
 import type { EventChip } from "../events";
 import type { CalendarPrefs } from "../prefs";
+import { isElapsedBlock } from "../elapsed";
 import { EventChipView } from "./event-chip";
 import { EventQuickCreate, type QuickCreateDraft } from "./event-quick-create";
+import { FocusReadout } from "./focus-readout";
 import { TaskBlockChip } from "./task-block-chip";
 import { formatHourLabel, formatTimeOfDay } from "./time-format";
 
 const GUTTER_W = "3.25rem";
 /** Chips shorter than this render the single-line compact layout. */
 const COMPACT_BELOW_MINUTES = 40;
+/** An elapsed block needs at least this rendered height for the inline triage
+ * row (Later · Longer · Remove); shorter ones defer to the popover. */
+const TRIAGE_MIN_MINUTES = 55;
 /** Stable identities for empty columns so memoized DayColumns can bail out. */
 const EMPTY_BLOCKS: TaskBlock[] = [];
 const EMPTY_EVENTS: EventChip[] = [];
@@ -85,6 +90,18 @@ type Props = {
   onTaskClick: (block: TaskBlock, rect: DOMRect) => void;
   selectedOccurrenceKey: string | null;
   onSelectOccurrence: (key: string | null) => void;
+  /** Account id → bounded hue name for external-event attribution (CAL-6). */
+  accountHues: Record<string, string>;
+  // ── the loop (CAL-4) + focus (CAL-5) ──
+  /** Tasks whose elapsed block was "took longer"-acknowledged this session. */
+  workedTaskIds: ReadonlySet<string>;
+  onTriageLater: (taskId: string) => void;
+  onTriageLonger: (taskId: string) => void;
+  onTriageRemove: (taskId: string) => void;
+  /** The single focus session's task + readout clock (null when idle). */
+  focusTaskId: string | null;
+  focusRunningSinceMs: number | null;
+  focusBaseSeconds: number;
 };
 
 /** Re-render tick for the now-line; catches up on tab wake. */
@@ -163,6 +180,14 @@ export function CalendarGrid({
   onTaskClick,
   selectedOccurrenceKey,
   onSelectOccurrence,
+  accountHues,
+  workedTaskIds,
+  onTriageLater,
+  onTriageLonger,
+  onTriageRemove,
+  focusTaskId,
+  focusRunningSinceMs,
+  focusBaseSeconds,
 }: Props) {
   const now = useNowTick(30_000);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -606,6 +631,7 @@ export function CalendarGrid({
                       compact
                       allDay
                       external={chip.external}
+                      colorLabel={chip.sourceAccountId ? accountHues[chip.sourceAccountId] : undefined}
                       recurring={chip.recurring}
                       selected={selectedOccurrenceKey === chip.occurrenceKey}
                       past={false}
@@ -651,10 +677,23 @@ export function CalendarGrid({
                 geom={geoms[i]}
                 blocks={blocksByDay.get(key) ?? EMPTY_BLOCKS}
                 events={events}
+                accountHues={accountHues}
                 prefs={prefs}
                 nowMinutes={
                   isToday ? minutesIntoDay(now.getTime(), geoms[i]) : null
                 }
+                // Elapsed detection needs an absolute `now`: the live tick on
+                // today (re-renders that column per tick), a stable day-past
+                // flag elsewhere (past columns are all-elapsed, future none).
+                tickNowMs={isToday ? now.getTime() : null}
+                dayEndPast={geoms[i].dayEndMs <= now.getTime()}
+                workedTaskIds={workedTaskIds}
+                onTriageLater={onTriageLater}
+                onTriageLonger={onTriageLonger}
+                onTriageRemove={onTriageRemove}
+                focusTaskId={focusTaskId}
+                focusRunningSinceMs={focusRunningSinceMs}
+                focusBaseSeconds={focusBaseSeconds}
                 canEdit={canEdit}
                 onToggleDone={onToggleDone}
                 onBackgroundPointerDown={onBackgroundPointerDown}
@@ -691,8 +730,18 @@ const DayColumn = memo(function DayColumn({
   geom,
   blocks,
   events,
+  accountHues,
   prefs,
   nowMinutes,
+  tickNowMs,
+  dayEndPast,
+  workedTaskIds,
+  onTriageLater,
+  onTriageLonger,
+  onTriageRemove,
+  focusTaskId,
+  focusRunningSinceMs,
+  focusBaseSeconds,
   canEdit,
   onToggleDone,
   onBackgroundPointerDown,
@@ -712,9 +761,21 @@ const DayColumn = memo(function DayColumn({
   geom: DayGeometry;
   blocks: TaskBlock[];
   events: EventChip[];
+  accountHues: Record<string, string>;
   prefs: CalendarPrefs;
   /** Real minutes into this day for the now-line; null off-today. */
   nowMinutes: number | null;
+  /** Absolute tick `now` for today's column; null elsewhere. */
+  tickNowMs: number | null;
+  /** True when this whole day is behind now (past columns are all-elapsed). */
+  dayEndPast: boolean;
+  workedTaskIds: ReadonlySet<string>;
+  onTriageLater: (taskId: string) => void;
+  onTriageLonger: (taskId: string) => void;
+  onTriageRemove: (taskId: string) => void;
+  focusTaskId: string | null;
+  focusRunningSinceMs: number | null;
+  focusBaseSeconds: number;
   canEdit: boolean;
   onToggleDone: (taskId: string) => void;
   onBackgroundPointerDown: (e: React.PointerEvent, dayIdx: number) => void;
@@ -767,7 +828,12 @@ const DayColumn = memo(function DayColumn({
   // Wall-clock prefs → real minutes (DST-correct wash bounds).
   const washTop = wallClockToRealMinutes(prefs.workStartMinute, geom);
   const washBottom = wallClockToRealMinutes(prefs.workEndMinute, geom);
-  const nowMs = Date.now();
+  // Absolute "now" for elapsed detection + event past-styling: the live tick on
+  // today, else the day-past flag collapses to +∞ (a fully-past day → EVERY open
+  // block/event on it is elapsed/past, incl. midnight-spanners whose end sits in
+  // the next day) or the day start (a future day → none), so those columns skip
+  // the 30s tick.
+  const nowMs = tickNowMs ?? (dayEndPast ? Number.POSITIVE_INFINITY : geom.dayStartMs);
 
   return (
     <div
@@ -811,6 +877,10 @@ const DayColumn = memo(function DayColumn({
         if (block) {
           const span = chipSpanInDay(block.startMs, block.endMs, geom);
           if (!span) return null;
+          const elapsed = isElapsedBlock(block, nowMs);
+          const worked = workedTaskIds.has(block.taskId);
+          const focusing = focusTaskId === block.taskId;
+          const awaitingTriage = elapsed && !block.done && !worked;
           return (
             <div
               key={p.id}
@@ -835,6 +905,21 @@ const DayColumn = memo(function DayColumn({
                 compact={span.heightMinutes < COMPACT_BELOW_MINUTES}
                 canEdit={canEdit}
                 onToggleDone={() => onToggleDone(block.taskId)}
+                elapsed={elapsed}
+                worked={worked}
+                showTriage={awaitingTriage && span.heightMinutes >= TRIAGE_MIN_MINUTES}
+                onLater={() => onTriageLater(block.taskId)}
+                onLonger={() => onTriageLonger(block.taskId)}
+                onRemove={() => onTriageRemove(block.taskId)}
+                focusing={focusing}
+                focusReadout={
+                  focusing ? (
+                    <FocusReadout
+                      runningSinceMs={focusRunningSinceMs}
+                      baseSeconds={focusBaseSeconds}
+                    />
+                  ) : null
+                }
               />
             </div>
           );
@@ -865,6 +950,7 @@ const DayColumn = memo(function DayColumn({
               endMs={chip.endMs}
               compact={span.heightMinutes < COMPACT_BELOW_MINUTES}
               external={chip.external}
+              colorLabel={chip.sourceAccountId ? accountHues[chip.sourceAccountId] : undefined}
               recurring={chip.recurring}
               selected={selectedKey === chip.occurrenceKey}
               past={chip.endMs < nowMs}

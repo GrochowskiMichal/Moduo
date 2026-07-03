@@ -471,10 +471,13 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
    * Lightweight time-tracking: fold an elapsed work delta (seconds) into the
    * task's persisted total through the normal save path. Reads the current
    * total from the source of truth so repeated flushes accumulate cleanly.
+   * A NEGATIVE delta subtracts (the Calendar "took longer" undo) — reading the
+   * live total means it removes exactly its own contribution, never clobbering
+   * time accrued in between (the result still floors at 0).
    */
   const addTimeSpent = useCallback(
     (id: string, deltaSeconds: number) => {
-      if (!Number.isFinite(deltaSeconds) || deltaSeconds < 1) return;
+      if (!Number.isFinite(deltaSeconds) || Math.abs(deltaSeconds) < 1) return;
       const t = bundle.tasks.find((x) => x.id === id);
       if (!t) return;
       patchTask(id, { timeSpentSeconds: Math.max(0, (t.timeSpentSeconds ?? 0) + Math.round(deltaSeconds)) });
@@ -517,6 +520,26 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     (id: string) => {
       applyOp(id, { scheduledAt: null }, () =>
         runtime!.tasks.opUnschedule({ workspaceId: workspaceId!, taskId: id }),
+      );
+    },
+    [applyOp, runtime, workspaceId],
+  );
+
+  /**
+   * Move an already-scheduled task to an ABSOLUTE clock time via the attributed
+   * reschedule op (writes `tasks.reschedule` activity) — the Calendar loop's
+   * roll-forward path (Later today / Move to today). Distinct from
+   * {@link rescheduleScheduledAt}, which is days-relative. The server op no-ops
+   * if the task has nothing scheduled to move (a triage race).
+   */
+  const scheduleTaskAt = useCallback(
+    (id: string, scheduledAt: string) => {
+      applyOp(id, { scheduledAt }, () =>
+        runtime!.tasks.opReschedule({
+          workspaceId: workspaceId!,
+          taskId: id,
+          scheduledAt,
+        }),
       );
     },
     [applyOp, runtime, workspaceId],
@@ -1086,6 +1109,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     setTimeSpent,
     rescheduleScheduledAt,
     unscheduleTask,
+    scheduleTaskAt,
     toggleCommit,
     rescheduleFromToday,
     skipOccurrence,

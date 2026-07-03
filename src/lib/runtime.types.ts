@@ -134,6 +134,8 @@ export type UserPreferences = {
   appearanceUpdatedAt: string | null;
   focus: Record<string, unknown> | null;
   focusUpdatedAt: string | null;
+  calendar: Record<string, unknown> | null;
+  calendarUpdatedAt: string | null;
 };
 
 export type ModuoRuntime = {
@@ -384,6 +386,20 @@ export type ModuoRuntime = {
       events: CalendarMirrorEventInput[];
       deletedExternalIds?: string[];
     }): Promise<{ upserted: number; removed: number }>;
+
+    /**
+     * Desktop only (CAL-6b): fetch a connected account's RAW provider events
+     * for a window via the Tauri OAuth engine. The frontend maps them
+     * (mirror.ts) and pushes them through {@link mirrorEvents}. Web returns []
+     * (the sync writer is the desktop app). `externalAccountId` is the provider
+     * account id (the keychain key / the cloud account's `externalId`).
+     */
+    fetchExternalEvents(input: {
+      provider: "google" | "microsoft";
+      externalAccountId: string;
+      timeMin: string;
+      timeMax: string;
+    }): Promise<Record<string, unknown>[]>;
 
     // ── LEGACY (pre-Wave-2) — the retired localStorage store's surface plus
     // the desktop OAuth/sync engine. use-calendar.ts is the only consumer;

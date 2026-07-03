@@ -189,6 +189,7 @@ pub fn run() {
             commands::calendar::calendar_events_upsert,
             commands::calendar::calendar_events_delete,
             commands::calendar::calendar_google_events_sync,
+            commands::calendar::calendar_outlook_events_sync,
             commands::calendar::calendar_google_event_upsert,
             commands::calendar::calendar_google_event_delete,
             commands::integrations::integration_connect_zoom,

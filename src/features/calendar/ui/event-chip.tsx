@@ -18,6 +18,9 @@ type Props = {
   selected: boolean;
   past: boolean;
   allDay?: boolean;
+  /** External chips carry their account hue (a bounded label name); native
+   * (Moduo) events stay on the primary tint. */
+  colorLabel?: string;
 };
 
 export function EventChipView({
@@ -30,6 +33,7 @@ export function EventChipView({
   selected,
   past,
   allDay = false,
+  colorLabel,
 }: Props) {
   const timeLabel = allDay
     ? "All day"
@@ -37,11 +41,14 @@ export function EventChipView({
   return (
     <div
       data-chip="event"
+      data-label={external ? colorLabel : undefined}
       title={`${title} · ${timeLabel}${external ? " · read-only" : ""}`}
       className={cn(
         "flex h-full w-full flex-col overflow-hidden rounded-md border px-1.5 py-0.5 text-left",
-        "border-primary/35 bg-primary/10",
-        "transition-colors duration-(--motion-fast) ease-(--ease-out) hover:bg-primary/15",
+        "transition-colors duration-(--motion-fast) ease-(--ease-out)",
+        external
+          ? "cal-chip-external"
+          : "border-primary/35 bg-primary/10 hover:bg-primary/15",
         past && "opacity-60",
         selected && "ring-2 ring-ring",
         compact && "flex-row items-center gap-1.5 py-0",

@@ -12,7 +12,7 @@
 export const ENTITY_OPEN_EVENT = "moduo:entity:open";
 
 export type EntityOpenTarget = {
-  to: "/contacts" | "/tasks" | "/notes" | "/email";
+  to: "/contacts" | "/tasks" | "/notes" | "/email" | "/calendar";
   search?: { type: "contact" | "company"; id: string };
 };
 
@@ -30,6 +30,8 @@ export function entityOpenTarget(type: string, id: string): EntityOpenTarget | n
       return { to: "/notes" };
     case "email":
       return { to: "/email" };
+    case "event":
+      return { to: "/calendar" };
     default:
       return null;
   }

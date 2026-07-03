@@ -30,10 +30,13 @@ describe("entityOpenTarget", () => {
     expect(entityOpenTarget("email", "e1")).toEqual({ to: "/email" });
   });
 
-  it("returns null for types with no page yet (payment, event, unknown)", () => {
+  it("routes an event to the calendar page (CAL-7)", () => {
+    expect(entityOpenTarget("event", "ev1")).toEqual({ to: "/calendar" });
+  });
+
+  it("returns null for types with no page yet (payment, unknown)", () => {
     expect(entityOpenTarget("payment", "x")).toBeNull();
     expect(entityOpenTarget("invoice", "x")).toBeNull();
-    expect(entityOpenTarget("event", "x")).toBeNull();
     expect(entityOpenTarget("", "x")).toBeNull();
   });
 
