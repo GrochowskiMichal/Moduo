@@ -61,6 +61,13 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in t
 - [ ] **TL-2 — Drag interactions** · timeline block 2 · deps: TL-1
 - [ ] **TL-3 — Dependency layer** · timeline block 3 · deps: TL-1, TL-2 (creation half is the designated cut if long)
 
+## Housekeeping & pre-alpha (between waves — designer-requested 2026-07-03)
+
+> Small, wave-independent blocks that keep the codebase honest on the way to the alpha. CLEAN-1 can run any time; MCP-1 is deliberately **pre-alpha** (the per-module manifests keep shipping with each wave's DoD at near-zero cost — the dedicated pass is the hardening round, not the build).
+
+- [ ] **CLEAN-1 — Legacy dead-code sweep (calendar first)** · deps: — · Remove the orphaned legacy calendar store end-to-end: [`use-calendar.ts`](../src/features/calendar/hooks/use-calendar.ts) (nothing imports it since CAL-6), the legacy shapes in `calendar/types.ts` (`CalendarViewMode`/`CalendarAccount`/`CalendarSource`/legacy `CalendarEvent`), the LEGACY `runtime.calendar` surface on web+tauri (`listEvents`/`upsertEvent`/`deleteEvent`/`upsertGoogleEvent`/`deleteGoogleEvent`/`syncGoogleEvents`/`startGoogleOAuth`/`startOutlookOAuth`/`startAppleOAuth` — the OAuth *engine commands in Rust stay*, only the dead JS bindings go), the redb calendar commands (`calendar_events_list/upsert/delete` + the `CALENDAR_EVENTS` redb table access), and the `moduo:calendar:*-v1` localStorage keys. Grep for consumers before each removal; extend the sweep to any other zero-consumer exports found along the way (knip-style pass). No behavior change; verify green is the gate.
+- [ ] **MCP-1 — Pre-alpha connector hardening** · deps: the alpha feature set (post-Notes/Finance/Email at the earliest, immediately pre-alpha at the latest) · Redeploy `moduo-mcp` (picks up the calendar module + anything since the last deploy), then a **keyed round-trip per module** (view + edit scopes: tasks, links, contacts, calendar, +notes/finance/email as they land) against the hosted workspace — the api-key permission gotcha proved reads can pass while writes are silently dead, so every module's write path gets exercised with a real scoped key; fix findings; refresh `docs/moduo-mcp-connector.md`. *(Note: the 20260702170000 permission fix is already live server-side — the deployed connector's contacts/spine/tasks writes work today; the redeploy mainly adds the calendar tools.)*
+
 ---
 
 ## Running sessions & parallelism
