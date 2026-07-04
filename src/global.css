@@ -469,6 +469,28 @@ body,
   place-items: center;
 }
 
+/* Task lines (NO-5) — a checkbox line that grew up, never a card. The
+ * checkbox/meta chrome renders in the plugin's OVERLAY outside the
+ * contenteditable (Lexical reclaims foreign DOM inside its root); this block
+ * only reserves the gutters the overlay draws into. */
+.notes-task-line {
+  position: relative;
+  margin: 0.25rem 0;
+  padding: 0.125rem 7rem 0.125rem 1.75rem;
+  border-radius: var(--radius-sm);
+  min-height: 1.75rem;
+}
+
+.notes-task-line[data-done="true"] {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: var(--border);
+}
+
+.notes-task-line[data-pending="true"] {
+  color: var(--muted-foreground);
+}
+
 .notes-inline-code,
 .notes-code-block {
   font-family: var(--font-mono);

@@ -4,23 +4,34 @@
  * arrives with NO-7 (hidden until then). Selection is URL-held (?id=).
  */
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CloudOff } from "lucide-react";
+import { CloudOff, X } from "lucide-react";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { onCreateNew } from "../../components/app/create-events";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
 import { useNotesModule } from "../../features/notes/hooks/use-notes-module";
-import { buildNoteSections, resolveDrop, type DropZone } from "../../features/notes/tree";
+import { useNotesTaskBridge } from "../../features/notes/hooks/use-notes-task-bridge";
+import {
+  buildNoteSections,
+  descendantIds,
+  resolveDrop,
+  type DropZone,
+} from "../../features/notes/tree";
 import { displayTitle } from "../../features/notes/title";
+import { extractTaskLineIds } from "../../features/notes/sync/doc-text";
+import { taskLinksForNote } from "../../features/notes/tasks/detach";
+import type { EntityLink } from "../../lib/entity-links";
 import { NoteTreeSidebar } from "../../features/notes/ui/note-tree-sidebar";
 import { NoteEditor } from "../../features/notes/ui/note-editor";
 import {
   INSERT_PAGE_ROW_EVENT,
   type NotesEditorBridge,
 } from "../../features/notes/editor/notes-editor-bridge";
+import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
+import { TaskDetailPanel } from "../../features/tasks/ui/task-detail-panel";
 import { betweenPositions, endPosition } from "../../features/tasks/helpers";
 import type { NotesSearch } from "../../features/notes/search";
 
@@ -95,6 +106,44 @@ export function NotesPage() {
     if (!notes.some((n) => n.id === selectedId)) select(null, true);
   }, [loading, selectedId, notes, select]);
 
+  // Task lines (NO-5): the Tasks module rides along so lines render live
+  // rows, the `/task` picker searches real tasks, and the Task-detail rail
+  // edits without leaving /notes.
+  const tasksApi = useTasksModule(runtime, {
+    userId,
+    workspaceId: selectedWorkspaceId,
+    modulePermission: modulePermissions.tasks,
+  });
+
+  // Task-detail rail variant — meta click opens it; note switch closes it.
+  const [taskDetailId, setTaskDetailId] = useState<string | null>(null);
+  useEffect(() => {
+    setTaskDetailId(null);
+  }, [selectedId]);
+
+  // "Reflects on refresh/refocus" (AC3): re-pull the tasks bundle when the
+  // window regains focus, min 5s apart.
+  const lastFocusReload = useRef(0);
+  useEffect(() => {
+    const onFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusReload.current < 5000) return;
+      lastFocusReload.current = now;
+      void tasksApi.reload();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [tasksApi.reload]);
+
+  const taskBridge = useNotesTaskBridge({
+    runtime,
+    workspaceId: selectedWorkspaceId,
+    noteId: selectedId,
+    noteLabel: displayTitle(selectedNote?.title ?? ""),
+    tasksApi,
+    onOpenTaskDetail: setTaskDetailId,
+  });
+
   // The editor ↔ module bridge (NO-4): page-rows read live titles, click-
   // through selects, and /page creates a child of the open note.
   const bridge = useMemo<NotesEditorBridge>(
@@ -102,8 +151,9 @@ export function NotesPage() {
       getNoteMeta: (id) => notes.find((n) => n.id === id) ?? null,
       openNote: (id) => select(id),
       createChildNote: () => (selectedId ? module.createNote(selectedId) : null),
+      tasks: taskBridge,
     }),
-    [notes, select, selectedId, module],
+    [notes, select, selectedId, module, taskBridge],
   );
 
   // Sidebar "+ child" while the parent is open ALSO mirrors a page-row into
@@ -122,6 +172,87 @@ export function NotesPage() {
       select(id, true);
     },
     [module, selectedId, select],
+  );
+
+  // Trashing a note with task lines: tasks soft-detach and survive, folded
+  // into the ONE trash toast (AC4) — the note↔task links are dropped (real
+  // detach, not just copy) and the toast's Undo restores note AND links.
+  // The docs are read via the sync engine so unopened notes work too —
+  // gesture note + descendants (capped) — best-effort: a slow boot falls
+  // back to the plain trash toast, never blocks the gesture.
+  const trashWithTaskDetach = useCallback(
+    async (id: string) => {
+      const noteIds = [id, ...descendantIds(notes, id)].slice(0, 20);
+      const taskIdsByNote = new Map<string, string[]>();
+      if (engine) {
+        for (const noteId of noteIds) {
+          try {
+            const session = engine.getOrCreateSession(noteId);
+            await Promise.race([
+              session.booted,
+              new Promise((resolve) => setTimeout(resolve, 800)),
+            ]);
+            const ids = extractTaskLineIds(session.doc);
+            if (ids.length > 0) taskIdsByNote.set(noteId, ids);
+          } catch {
+            // skip this doc — honest undercount beats blocking the gesture
+          }
+        }
+      }
+      const allTaskIds = [...new Set([...taskIdsByNote.values()].flat())];
+
+      // Drop the note↔task links (the actual detach); remember them so the
+      // toast's Undo can put them back (links_op_create is idempotent).
+      const dropped: {
+        source: { type: string; id: string };
+        target: { type: string; id: string };
+        relationKind: EntityLink["relationKind"];
+        origin: EntityLink["origin"];
+      }[] = [];
+      if (runtime && selectedWorkspaceId && taskIdsByNote.size > 0) {
+        try {
+          for (const [noteId, ids] of taskIdsByNote) {
+            const links = await runtime.spine.listLinks({
+              workspaceId: selectedWorkspaceId,
+              entityType: "note",
+              entityId: noteId,
+            });
+            const toDrop = taskLinksForNote(links, noteId, new Set(ids));
+            for (const l of toDrop) {
+              await runtime.spine.deleteLink({
+                workspaceId: selectedWorkspaceId,
+                linkId: l.id,
+              });
+              dropped.push({
+                source: { type: l.sourceType, id: l.sourceId },
+                target: { type: l.targetType, id: l.targetId },
+                relationKind: l.relationKind,
+                origin: l.origin,
+              });
+            }
+          }
+        } catch {
+          // link drop is best-effort; trash itself must never fail on it
+        }
+      }
+
+      module.trashNote(
+        id,
+        allTaskIds.length > 0
+          ? {
+              detachedTaskIds: allTaskIds,
+              onDeleteTasks: (ids) => ids.forEach((taskId) => tasksApi.deleteTask(taskId)),
+              onUndo: () => {
+                if (!runtime || !selectedWorkspaceId) return;
+                for (const l of dropped) {
+                  void runtime.spine.createLink({ workspaceId: selectedWorkspaceId, ...l });
+                }
+              },
+            }
+          : undefined,
+      );
+    },
+    [engine, module, tasksApi, notes, runtime, selectedWorkspaceId],
   );
 
   const onDropRow = useCallback(
@@ -178,7 +309,7 @@ export function NotesPage() {
       }
       onArchive={(id, archived) => module.archiveNote(id, archived)}
       onTrash={(id) => {
-        module.trashNote(id);
+        void trashWithTaskDetach(id);
         if (selectedId === id) select(null, true);
       }}
       onRestore={module.restoreNote}
@@ -257,5 +388,55 @@ export function NotesPage() {
     </div>
   );
 
-  return <FeaturePanelsShell feature="notes" left={sidebar} center={center} hideRight />;
+  // Task-detail rail variant (NO-5): the Tasks module's own detail panel for
+  // the focused task line — full editing without visiting /tasks. NO-7 folds
+  // this into the lifted right-panel switcher; until then it's the only
+  // right-panel occupant and the panel stays hidden otherwise.
+  // Bridge lookup (bundle + just-minted overlay) so "Details" works the
+  // instant a mint lands, before the bundle reload catches up.
+  const detailTask = taskDetailId ? taskBridge.getTask(taskDetailId) : null;
+
+  const right = detailTask ? (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Task detail
+        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Close task detail"
+              onClick={() => setTaskDetailId(null)}
+            >
+              <X className="size-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="left">Close</TooltipContent>
+        </Tooltip>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+        <TaskDetailPanel
+          task={detailTask}
+          buckets={tasksApi.buckets}
+          inbox={tasksApi.inbox}
+          canEdit={tasksApi.canEdit}
+          onRequestCapture={() => {}}
+          onSelectTask={setTaskDetailId}
+          api={tasksApi}
+        />
+      </div>
+    </div>
+  ) : undefined;
+
+  return (
+    <FeaturePanelsShell
+      feature="notes"
+      left={sidebar}
+      center={center}
+      right={right}
+      hideRight={!detailTask}
+    />
+  );
 }

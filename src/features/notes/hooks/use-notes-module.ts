@@ -316,16 +316,47 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   );
 
   const trashNote = useCallback(
-    (noteId: string) => {
+    (
+      noteId: string,
+      opts?: {
+        /** Task lines inside the trashed subtree (NO-5): tasks survive — fold
+         * "N tasks detached · Delete them too?" into the ONE trash toast
+         * (never a second toast, DESIGN_BRIEF §3b). */
+        detachedTaskIds?: string[];
+        onDeleteTasks?: (taskIds: string[]) => void;
+        /** Runs alongside restore on Undo (the page re-creates the dropped
+         * note↔task links). */
+        onUndo?: () => void;
+      },
+    ) => {
       if (!engine || !workspaceId) return;
       const now = new Date().toISOString();
       const ids = new Set([noteId, ...descendantIds(notesRef.current, noteId)]);
       setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, deletedAt: now } : n)));
       guard(() => engine.runMetaOp("trash", { workspaceId, noteId }));
       const extra = ids.size - 1;
-      toast(`Moved to Trash${extra > 0 ? ` (+${extra} nested)` : ""}`, {
+      const taskIds = opts?.detachedTaskIds ?? [];
+      const n = taskIds.length;
+      const label = `Moved to Trash${extra > 0 ? ` (+${extra} nested)` : ""}${
+        n > 0 ? ` · ${n} task${n === 1 ? "" : "s"} detached` : ""
+      }`;
+      toast(label, {
         duration: 8000,
-        action: { label: "Undo", onClick: () => restoreNote(noteId) },
+        description: n > 0 ? "The tasks still live in Tasks." : undefined,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            restoreNote(noteId);
+            opts?.onUndo?.();
+          },
+        },
+        cancel:
+          n > 0 && opts?.onDeleteTasks
+            ? {
+                label: n === 1 ? "Delete task" : "Delete tasks",
+                onClick: () => opts.onDeleteTasks?.(taskIds),
+              }
+            : undefined,
       });
     },
     [engine, workspaceId, guard, restoreNote],

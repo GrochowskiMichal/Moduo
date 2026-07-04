@@ -15,13 +15,35 @@ import * as Y from "yjs";
 
 type Mode = "text" | "md";
 
+/** Task-line serialization shared by both shapes (lexical-yjs stores element
+ * nodes as XmlText embeds with `__`-prefixed attributes; tests/legacy walkers
+ * use plain XmlElements). */
+function taskLineToString(taskId: unknown, done: unknown, title: string, mode: Mode): string {
+  if (mode === "text") return title.trim();
+  const box = done ? "x" : " ";
+  const id = typeof taskId === "string" && taskId !== "" ? taskId : null;
+  return id
+    ? `- [${box}] ${title.trim()} <!-- moduo:task:${id} -->`
+    : `- [${box}] ${title.trim()}`;
+}
+
 function walkXmlText(node: Y.XmlText, mode: Mode): string {
   const parts: string[] = [];
   for (const op of node.toDelta()) {
     const v = op.insert as unknown;
     if (typeof v === "string") parts.push(v);
     else if (v instanceof Y.XmlElement) parts.push(walkXmlElement(v, mode));
-    else if (v instanceof Y.XmlText) parts.push(walkXmlText(v, mode));
+    else if (v instanceof Y.XmlText) {
+      const inner = walkXmlText(v, mode);
+      if (v.getAttribute("__type") === "task-line") {
+        parts.push(
+          taskLineToString(v.getAttribute("__taskId"), v.getAttribute("__done"), inner, mode) +
+            "\n",
+        );
+      } else {
+        parts.push(inner);
+      }
+    }
   }
   return parts.join("");
 }
@@ -65,6 +87,15 @@ function walkXmlElement(node: Y.XmlElement, mode: Mode): string {
         }
       } else if (childName === "horizontalrule") {
         if (mode === "md") parts.push("---");
+      } else if (childName === "task-line") {
+        parts.push(
+          taskLineToString(
+            child.getAttribute("__taskId") ?? child.getAttribute("taskId"),
+            child.getAttribute("__done") ?? child.getAttribute("done"),
+            childText,
+            mode,
+          ),
+        );
       } else {
         if (childText) parts.push(childText);
       }
@@ -103,4 +134,33 @@ function serialize(doc: Y.Doc, mode: Mode): string {
 /** Both derived bodies in one walk pair. Cheap enough per flush. */
 export function deriveBody(doc: Y.Doc): { text: string; md: string } {
   return { text: serialize(doc, "text"), md: serialize(doc, "md") };
+}
+
+/** Task ids referenced by task lines in a doc — the trash flow detaches them
+ * (NO-5 AC4) without needing a live editor. Covers both shared shapes. */
+export function extractTaskLineIds(doc: Y.Doc): string[] {
+  const ids = new Set<string>();
+  const visitText = (node: Y.XmlText) => {
+    if (node.getAttribute("__type") === "task-line") {
+      const id = node.getAttribute("__taskId") as unknown;
+      if (typeof id === "string" && id !== "") ids.add(id);
+    }
+    for (const op of node.toDelta()) {
+      const v = op.insert as unknown;
+      if (v instanceof Y.XmlText) visitText(v);
+      else if (v instanceof Y.XmlElement) visitElement(v);
+    }
+  };
+  const visitElement = (node: Y.XmlElement) => {
+    if (node.nodeName === "task-line") {
+      const id = (node.getAttribute("__taskId") ?? node.getAttribute("taskId")) as unknown;
+      if (typeof id === "string" && id !== "") ids.add(id);
+    }
+    for (const child of node.toArray()) {
+      if (child instanceof Y.XmlText) visitText(child);
+      else if (child instanceof Y.XmlElement) visitElement(child);
+    }
+  };
+  visitElement(doc.getXmlElement("root-v2"));
+  return [...ids];
 }

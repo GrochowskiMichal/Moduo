@@ -57,6 +57,17 @@ describe("allowedKinds", () => {
     expect(allowedKinds("contact", "contact")).not.toContain("follow-up");
   });
 
+  it("note↔task allows spawned-from + references (task lines, NO-5 AC3) — nonsense kinds stay out", () => {
+    const kinds = allowedKinds("note", "task");
+    expect(kinds).toContain("spawned-from"); // minted from the note
+    expect(kinds).toContain("references"); // linked-existing
+    expect(kinds).not.toContain("attachment");
+    expect(kinds).not.toContain("works-at");
+    expect(kinds).not.toContain("paid-by");
+    expect(kinds).not.toContain("blocks"); // a note never blocks work
+    expect(allowedKinds("task", "note")).toEqual(kinds); // symmetric
+  });
+
   it("is symmetric in its arguments", () => {
     for (const [a, b] of [["contact", "company"], ["email", "task"], ["payment", "contact"]] as const) {
       expect(allowedKinds(a, b)).toEqual(allowedKinds(b, a));

@@ -65,8 +65,11 @@ import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionCommand } from "@/features/spine/ui/mention-picker";
 import { $createEmbedNode } from "../nodes/EmbedNode";
 import { $createPageRowNode } from "../nodes/page-row-node";
+import { $createTaskLineNode } from "../nodes/task-line-node";
+import { degradePendingLine, stampMintedTask } from "./task-line-plugin";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 import { displayTitle } from "../../title";
+import { filterTaskCandidates, shouldOfferCreate } from "../../tasks/task-line";
 import {
   filterSlashCommands,
   type SlashCommandDef,
@@ -241,8 +244,8 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
   selectedIndexRef.current = selectedIndex;
 
   // Entity search for the picker stage. Create-and-link only where a creator
-  // exists (contact/company — DESIGN_BRIEF §3c: event no at v1, note/task no
-  // here: /page creates notes, task-create arrives with NO-5's task lines).
+  // exists (contact/company — DESIGN_BRIEF §3c: event no at v1; /page creates
+  // notes). `/task` and `/mindmap` bypass the registry search below.
   const pickerType = picker ? PICKER_TYPES[picker.command] : null;
   const canCreate = picker?.command === "contact" || picker?.command === "company";
   const search = useMentionSearch({
@@ -253,8 +256,27 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
     createType: canCreate ? pickerType : null,
     canCreate,
     includePeople: false,
-    enabled: picker !== null && picker.command !== "mindmap",
+    enabled: picker !== null && picker.command !== "mindmap" && picker.command !== "task",
   });
+
+  // `/task` candidates come from the loaded tasks bundle, not the registry
+  // (the registry only knows already-linked tasks): fuzzy over open work +
+  // "Create task '<text>'" as the top row when nothing matches exactly
+  // (DESIGN_BRIEF §3b). The picker inserts a task LINE, never a chip.
+  const taskCandidates: MentionCandidate[] =
+    picker?.command === "task" && bridge
+      ? (() => {
+          const matches = filterTaskCandidates(bridge.tasks.listLinkableTasks(), pickerQuery);
+          const list: MentionCandidate[] = [];
+          if (bridge.tasks.canEditTasks && shouldOfferCreate(pickerQuery, matches)) {
+            list.push({ kind: "create", entityType: "task", label: pickerQuery.trim() });
+          }
+          for (const t of matches) {
+            list.push({ kind: "entity", ref: { type: "task", id: t.id }, label: t.title, icon: null });
+          }
+          return list;
+        })()
+      : [];
 
   // Mindmaps never registered into the entities registry — their candidates
   // come from the module's own store (the legacy plugin's source), filtered
@@ -289,7 +311,9 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
       ? mindmapCandidates.filter((c) =>
           c.label.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
         )
-      : search.candidates;
+      : picker?.command === "task"
+        ? taskCandidates
+        : search.candidates;
 
   useEffect(() => {
     search.setQuery(pickerQuery);
@@ -376,6 +400,57 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
           $createParagraphNode(),
         ]);
       });
+      return;
+    }
+
+    // `/task` — the great moment (NO-5): both picks insert a task LINE block.
+    // Create inserts PENDING and stamps the REAL id when the mint resolves
+    // (never a `tmp-` id — the known race); linking an existing task writes
+    // a `references` back-link (minted mints get `spawned-from` in the page).
+    if (active.command === "task") {
+      const tasksBridge = bridge?.tasks ?? null;
+      if (!tasksBridge) return;
+      closeAll(true);
+
+      if (candidate.kind === "entity") {
+        const task = tasksBridge.getTask(candidate.ref.id);
+        editor.update(() => {
+          const line = $createTaskLineNode(
+            candidate.ref.id,
+            task ? task.status === "done" : false,
+          );
+          line.append($createTextNode(task?.title ?? candidate.label));
+          $insertNodes([line]);
+          line.selectEnd();
+        });
+        if (task) tasksBridge.linkExistingTask(task);
+        return;
+      }
+
+      if (candidate.kind === "create") {
+        const title = candidate.label.trim();
+        if (title === "") return;
+        let nodeKey: NodeKey | null = null;
+        editor.update(() => {
+          const line = $createTaskLineNode(null, false);
+          line.append($createTextNode(title));
+          $insertNodes([line]);
+          line.selectEnd();
+          nodeKey = line.getKey();
+        });
+        if (!nodeKey) return;
+        const key = nodeKey;
+        void tasksBridge.mintTask(title).then((task) => {
+          if (!task) {
+            degradePendingLine(editor, key);
+            return;
+          }
+          if (!stampMintedTask(editor, key, task)) {
+            // The pending line vanished while minting — take the task back.
+            tasksBridge.revertMintIfJustMinted(task.id);
+          }
+        });
+      }
       return;
     }
 
