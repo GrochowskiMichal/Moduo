@@ -331,6 +331,54 @@ pub struct EmailMailboxStatusRow {
     pub starred: usize,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSendAttachmentInput {
+    pub filename: String,
+    pub mime_type: String,
+    /// Absolute path on disk; bytes are read at send time (never held in redb).
+    pub path: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSendMessageInput {
+    pub account_id: String,
+    pub to: Vec<String>,
+    #[serde(default)]
+    pub cc: Vec<String>,
+    #[serde(default)]
+    pub bcc: Vec<String>,
+    #[serde(default)]
+    pub subject: String,
+    #[serde(default)]
+    pub text_body: String,
+    #[serde(default)]
+    pub html_body: Option<String>,
+    /// Parent Message-ID for a reply.
+    #[serde(default)]
+    pub in_reply_to: Option<String>,
+    /// The thread's Message-ID chain.
+    #[serde(default)]
+    pub references: Vec<String>,
+    #[serde(default)]
+    pub attachments: Vec<EmailSendAttachmentInput>,
+    /// Optional client-supplied Message-ID; generated if absent.
+    #[serde(default)]
+    pub message_id: Option<String>,
+    #[serde(default)]
+    pub from_name: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSendMessageResult {
+    /// The bracketed Message-ID the mail was sent with (for Sent-matching / follow-ups).
+    pub message_id: String,
+    /// Whether a copy was APPENDed to Sent (false for Gmail, which auto-saves).
+    pub saved_to_sent: bool,
+}
+
 impl EmailConfig {
     pub(super) fn imap_host(&self) -> &str {
         if let Some(custom) = self.imap_host.as_deref() {

@@ -30,6 +30,9 @@ export function entityOpenTarget(type: string, id: string): EntityOpenTarget | n
     case "note":
       return { to: "/notes", search: { id } };
     case "email":
+    case "email_thread":
+      // Thread selection inside /email is EM-4's job (component state today,
+      // like tasks); routing to the module page is the EM-3 substrate.
       return { to: "/email" };
     case "event":
       return { to: "/calendar" };
