@@ -19,7 +19,12 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
-import { Marked } from "https://esm.sh/marked@12?target=deno";
+// npm: specifier (esm.sh timed out at deploy-bundle time). NOTE: this fn is
+// DEPLOYED but the page-render approach is BLOCKED — Supabase rewrites a GET's
+// text/html → text/plain, so a browser can't render it. See NO-9b + gotchas
+// ("Supabase Edge Functions CANNOT serve rendered HTML"). The token/subtree/404
+// logic here is correct and reusable once it's reworked to return JSON (option A).
+import { Marked } from "npm:marked@12";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
