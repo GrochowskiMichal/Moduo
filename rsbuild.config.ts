@@ -33,6 +33,10 @@ const stripePriceTeamYearly = readLocalEnvValue("PUBLIC_STRIPE_PRICE_TEAM_YEARLY
 // PostHog — disabled until needed; leave empty so analytics.ts is a no-op
 const posthogKey = readLocalEnvValue("PUBLIC_POSTHOG_KEY");
 const posthogHost = readLocalEnvValue("PUBLIC_POSTHOG_HOST");
+// Deployed web origin for public share links (NO-9b). On web, window.location
+// .origin is used when unset; desktop (tauri://) needs this to point at the
+// deployed web app so a shared /p/<token> link resolves.
+const publicWebOrigin = readLocalEnvValue("PUBLIC_WEB_ORIGIN");
 
 // MODUO_TARGET: "web" for web builds, "desktop" for Tauri builds (default).
 const target = (process.env.MODUO_TARGET as string | undefined) ?? "desktop";
@@ -60,6 +64,7 @@ export default defineConfig({
       "import.meta.env.PUBLIC_STRIPE_PRICE_TEAM_YEARLY": JSON.stringify(stripePriceTeamYearly),
       "import.meta.env.PUBLIC_POSTHOG_KEY": JSON.stringify(posthogKey),
       "import.meta.env.PUBLIC_POSTHOG_HOST": JSON.stringify(posthogHost),
+      "import.meta.env.PUBLIC_WEB_ORIGIN": JSON.stringify(publicWebOrigin),
       "globalThis.__PUBLIC_ALPHA_VANTAGE_API_KEY__": JSON.stringify(alphaVantageKey),
       "globalThis.__PUBLIC_FINNHUB_API_KEY__": JSON.stringify(finnhubKey),
       "globalThis.__PUBLIC_MARKETSTACK_API_KEY__": JSON.stringify(marketstackKey),

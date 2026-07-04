@@ -14,6 +14,7 @@ import { validateContactsSearch } from "../../features/contacts/search";
 import { validateNotesSearch } from "../../features/notes/search";
 import { SettingsPage } from "../../routes/pages/settings-page";
 import { PaywallPage } from "../../routes/pages/paywall-page";
+import { PublishedNotePage } from "../../routes/pages/published-note-page";
 
 function RootLayout() {
   return (
@@ -43,6 +44,19 @@ const paywallRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/paywall",
   component: PaywallPage,
+});
+
+// Public, unauthenticated reader for a published note (NO-9b). Direct child of
+// the root route — a sibling of /auth, OUTSIDE the app gate, so an anonymous
+// visitor can read it. `?note=<id>` selects a child page within the subtree.
+const publishedNoteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/p/$token",
+  component: PublishedNotePage,
+  validateSearch: (search: Record<string, unknown>): { note?: string } => {
+    const note = typeof search.note === "string" && search.note ? search.note : undefined;
+    return note ? { note } : {};
+  },
 });
 
 const appGateRoute = createRoute({
@@ -124,6 +138,7 @@ export const routeTree = rootRoute.addChildren([
   authRoute,
   onboardingRoute,
   paywallRoute,
+  publishedNoteRoute,
   appGateRoute.addChildren([
     homeRoute,
     legacyGridRoute,
