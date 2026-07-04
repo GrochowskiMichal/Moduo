@@ -9,7 +9,7 @@
 
 use lettre::message::header::{self, ContentType};
 use lettre::message::{Attachment, Mailbox, Mailboxes, Message, MultiPart, SinglePart};
-use lettre::transport::smtp::authentication::Credentials;
+use lettre::transport::smtp::authentication::{Credentials, Mechanism};
 use lettre::{Address, SmtpTransport, Transport};
 
 use super::model::EmailConfig;
@@ -183,8 +183,15 @@ pub(super) fn build_message(spec: &MailSendSpec) -> Result<Message, String> {
     Ok(message)
 }
 
-/// Build a TLS-enforced SMTP transport for the given host/port.
-fn build_transport(host: &str, port: u16, creds: Credentials) -> Result<SmtpTransport, String> {
+/// Build a TLS-enforced SMTP transport for the given host/port. When `mechanism`
+/// is `Some` (XOAUTH2 for OAuth accounts) it is pinned so lettre doesn't fall back
+/// to a PLAIN/LOGIN attempt with the bearer token.
+fn build_transport(
+    host: &str,
+    port: u16,
+    creds: Credentials,
+    mechanism: Option<Mechanism>,
+) -> Result<SmtpTransport, String> {
     let builder = match smtp_tls_mode(port) {
         SmtpSecurity::ImplicitTls => {
             SmtpTransport::relay(host).map_err(|e| format!("smtp_tls_setup_failed:{e}"))?
@@ -193,13 +200,29 @@ fn build_transport(host: &str, port: u16, creds: Credentials) -> Result<SmtpTran
             SmtpTransport::starttls_relay(host).map_err(|e| format!("smtp_starttls_setup_failed:{e}"))?
         }
     };
-    Ok(builder.port(port).credentials(creds).build())
+    let builder = builder.port(port).credentials(creds);
+    let builder = match mechanism {
+        Some(m) => builder.authentication(vec![m]),
+        None => builder,
+    };
+    Ok(builder.build())
 }
 
-/// Send an already-built message over the account's TLS transport.
+/// Send an already-built message over the account's TLS transport. OAuth accounts
+/// authenticate via XOAUTH2 (username + access token as the "password"); password
+/// accounts use their stored password with lettre's default mechanism negotiation.
 pub(super) fn send_prepared(config: &EmailConfig, message: &Message) -> Result<(), String> {
-    let creds = Credentials::new(config.email.clone(), config.password.clone());
-    let transport = build_transport(config.smtp_host(), config.smtp_port(), creds)?;
+    let (creds, mechanism) = match config.oauth_access_token.as_deref() {
+        Some(token) => (
+            Credentials::new(config.email.clone(), token.to_string()),
+            Some(Mechanism::Xoauth2),
+        ),
+        None => (
+            Credentials::new(config.email.clone(), config.password.clone()),
+            None,
+        ),
+    };
+    let transport = build_transport(config.smtp_host(), config.smtp_port(), creds, mechanism)?;
     transport
         .send(message)
         .map(|_| ())

@@ -4,7 +4,13 @@ pub(super) const EMAIL_SECRET_KEY_PREFIX: &str = "secret::";
 pub(super) const EMAIL_ACTIVITY_UI_STATE_KEY: &str = "activity_state_v2";
 pub(super) const EMAIL_FOLDER_UI_STATE_PREFIX: &str = "folder_state::";
 pub(super) const DEFAULT_WORKSPACE_ID: &str = "__global__";
-pub(super) const DEFAULT_MAILBOX_LIMIT: usize = 50;
+/// Initial per-folder envelope sync depth (EM-4): the most-recent N UIDs, capped
+/// further to [`SYNC_ENVELOPE_WINDOW_DAYS`] (whichever is smaller). Extended from
+/// the legacy 50 so local search / threading cover a real window of history.
+pub(super) const SYNC_ENVELOPE_WINDOW_UIDS: u32 = 1000;
+/// Don't store envelopes older than this on the initial window fetch (paired with
+/// the UID cap above).
+pub(super) const SYNC_ENVELOPE_WINDOW_DAYS: i64 = 90;
 pub(super) const ALL_ACCOUNTS_ID: &str = "__all_accounts__";
 pub(super) const FLAG_RECONCILE_WINDOW: u32 = 200;
 pub(super) const FLAG_RECONCILE_WINDOW_LIGHT: u32 = 75;

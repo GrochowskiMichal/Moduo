@@ -1,5 +1,5 @@
-import { EmailWorkspace } from "../../features/email/ui/email-workspace";
+import { EmailPageView } from "../../features/email/ui/email-page-view";
 
 export function EmailPage() {
-    return <EmailWorkspace />;
+    return <EmailPageView />;
 }

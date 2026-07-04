@@ -1,6 +1,6 @@
 use tauri::State;
 
-use super::account_config::{ensure_account_config, get_password_for_account, mailbox_candidates};
+use super::account_config::{ensure_account_config, mailbox_candidates};
 use super::connection::open_imap_session;
 use super::model::{EmailConfig, EmailSendMessageInput, EmailSendMessageResult};
 use super::smtp::{build_message, generate_message_id, send_message, send_prepared, MailAttachment, MailSendSpec};
@@ -22,21 +22,27 @@ pub async fn email_send_saved(
     };
 
     let account = accounts[index].clone();
-    let Some(password) = get_password_for_account(&state, &account.id)? else {
-        accounts[index].status = "reauth_required".to_string();
-        accounts[index].last_error = Some("missing_account_secret".to_string());
-        write_accounts(&state, &accounts)?;
-        return Err("account_reauth_required".to_string());
-    };
-
-    let config = EmailConfig {
-        provider: account.provider,
-        email: account.email,
-        password,
-        imap_host: account.imap_host,
-        smtp_host: account.smtp_host,
-        imap_port: account.imap_port,
-        smtp_port: account.smtp_port,
+    // Refresh an expiring OAuth token, then build the config (which branches
+    // password vs XOAUTH2) — so this legacy path works for OAuth accounts too.
+    if let Err(err) = super::oauth::ensure_fresh_access(&state, &account.id, &account.provider).await
+    {
+        if err == "account_reauth_required" {
+            accounts[index].status = "reauth_required".to_string();
+            accounts[index].last_error = Some("oauth_reauth_required".to_string());
+            write_accounts(&state, &accounts)?;
+            return Err(err);
+        }
+    }
+    let config = match ensure_account_config(&state, &account) {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            if err == "account_reauth_required" {
+                accounts[index].status = "reauth_required".to_string();
+                accounts[index].last_error = Some("missing_account_secret".to_string());
+                write_accounts(&state, &accounts)?;
+            }
+            return Err(err);
+        }
     };
 
     // SMTP send is blocking I/O — run on a dedicated thread.
@@ -75,6 +81,18 @@ pub async fn email_send_message(
         return Err("account_not_found".to_string());
     };
     let account = accounts[index].clone();
+
+    // Refresh an expiring OAuth token before the blocking send reads it (EM-2).
+    if let Err(err) = super::oauth::ensure_fresh_access(&state, &account.id, &account.provider).await
+    {
+        if err == "account_reauth_required" {
+            accounts[index].status = "reauth_required".to_string();
+            accounts[index].last_error = Some("oauth_reauth_required".to_string());
+            write_accounts(&state, &accounts)?;
+            return Err(err);
+        }
+        // Transient refresh failure — fall through and let the send attempt surface it.
+    }
 
     let config = match ensure_account_config(&state, &account) {
         Ok(cfg) => cfg,

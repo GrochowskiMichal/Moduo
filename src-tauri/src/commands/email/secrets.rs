@@ -16,24 +16,27 @@ use super::account_config::account_secret_key;
 use super::constants::EMAIL_NAMESPACE;
 use crate::AppState;
 
-/// A stored mail credential. `Password` is the only variant at EM-1; EM-2 adds an
-/// `Oauth` variant carrying refreshable Google tokens (the enum tag leaves room so
-/// the keychain payload shape doesn't have to change).
+/// A stored mail credential. `Password` covers app-password / custom-IMAP accounts;
+/// `Oauth` (EM-2) carries refreshable Google tokens for a "Sign in with Google"
+/// Gmail account. The serde tag (`"kind"`) discriminates them in the keychain
+/// payload so both live under the same keychain scope.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(super) enum StoredMailSecret {
-    Password { password: String },
+    Password {
+        password: String,
+    },
+    Oauth {
+        access_token: String,
+        /// Long-lived; a refresh response usually omits it, so we keep the original.
+        refresh_token: Option<String>,
+        /// Absolute Unix-seconds expiry of `access_token` (issue time + `expires_in`).
+        expires_at: i64,
+    },
 }
 
-impl StoredMailSecret {
-    /// The password to authenticate IMAP/SMTP with. OAuth (EM-2) will resolve an
-    /// access token here instead.
-    pub(super) fn password(&self) -> Option<&str> {
-        match self {
-            StoredMailSecret::Password { password } => Some(password),
-        }
-    }
-}
+// Consumers destructure `StoredMailSecret` directly (see `ensure_account_config`),
+// so the type carries no accessor methods.
 
 /// Keychain account handle for an email account, scoped per signed-in user so two
 /// users on one machine never collide (mirrors the calendar/CalDAV convention
@@ -172,12 +175,43 @@ fn backend(state: &AppState) -> AppSecretBackend<'_> {
     }
 }
 
-/// The password to use for an account's IMAP/SMTP login (keychain-first, lazy
-/// migration). `None` means the account must be reconnected.
-pub(super) fn get_password(state: &AppState, account_id: &str) -> Result<Option<String>, String> {
+/// The account's stored secret of any kind (password OR oauth), keychain-first.
+/// `None` means the account must be reconnected.
+pub(super) fn get_secret(
+    state: &AppState,
+    account_id: &str,
+) -> Result<Option<StoredMailSecret>, String> {
     let user_id = session_user_id(state);
-    let secret = resolve_secret(&backend(state), user_id.as_deref(), account_id)?;
-    Ok(secret.and_then(|s| s.password().map(str::to_string)))
+    resolve_secret(&backend(state), user_id.as_deref(), account_id)
+}
+
+/// Whether the account has *any* usable secret (password or oauth). Used by the
+/// account list to decide `reauth_required` — an OAuth account has no password, so
+/// a `get_password`-based check would wrongly flag it.
+pub(super) fn account_has_secret(state: &AppState, account_id: &str) -> Result<bool, String> {
+    Ok(get_secret(state, account_id)?.is_some())
+}
+
+/// Store an account's OAuth tokens in the OS keychain (Gmail "Sign in with Google"
+/// connect + refresh). Requires an authenticated session — same guard as
+/// [`save_password`].
+pub(super) fn save_oauth_secret(
+    state: &AppState,
+    account_id: &str,
+    access_token: &str,
+    refresh_token: Option<&str>,
+    expires_at: i64,
+) -> Result<(), String> {
+    let user_id = session_user_id(state).ok_or_else(|| "email_no_session".to_string())?;
+    let kc_account = email_keychain_account(&user_id, account_id);
+    let encoded = serde_json::to_string(&StoredMailSecret::Oauth {
+        access_token: access_token.to_string(),
+        refresh_token: refresh_token.map(str::to_string),
+        expires_at,
+    })
+    .map_err(|e| format!("email_secret_serialize_failed:{e}"))?;
+    crate::keychain::set_secret(&state.config.keychain_service, &kc_account, &encoded)
+        .map_err(|e| format!("email_secret_store_failed:{e}"))
 }
 
 /// Store an account password in the OS keychain (connect flow). Requires an
@@ -216,6 +250,13 @@ pub(super) fn delete_account_secret(state: &AppState, account_id: &str) -> Resul
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    fn password_of(secret: &StoredMailSecret) -> Option<&str> {
+        match secret {
+            StoredMailSecret::Password { password } => Some(password),
+            StoredMailSecret::Oauth { .. } => None,
+        }
+    }
 
     /// In-memory backend recording call counts + a locked-keychain toggle.
     #[derive(Default)]
@@ -264,7 +305,7 @@ mod tests {
             .insert(ACCT.to_string(), "hunter2".to_string());
 
         let got = resolve_secret(&b, Some(USER), ACCT).unwrap().unwrap();
-        assert_eq!(got.password(), Some("hunter2"));
+        assert_eq!(password_of(&got), Some("hunter2"));
 
         // Keychain now holds it under the user-scoped account handle...
         let kc_account = email_keychain_account(USER, ACCT);
@@ -292,7 +333,7 @@ mod tests {
         );
 
         let got = resolve_secret(&b, Some(USER), ACCT).unwrap().unwrap();
-        assert_eq!(got.password(), Some("fromkeychain"));
+        assert_eq!(password_of(&got), Some("fromkeychain"));
         // The legacy store is never touched on a keychain hit.
         assert_eq!(*b.legacy_reads.borrow(), 0);
     }
@@ -307,7 +348,7 @@ mod tests {
 
         // The send/read must still succeed from the legacy copy...
         let got = resolve_secret(&b, Some(USER), ACCT).unwrap().unwrap();
-        assert_eq!(got.password(), Some("hunter2"));
+        assert_eq!(password_of(&got), Some("hunter2"));
         // ...and the legacy secret must NOT be dropped (migration retries later).
         assert_eq!(b.legacy.borrow().get(ACCT).map(String::as_str), Some("hunter2"));
     }
@@ -329,7 +370,7 @@ mod tests {
             .insert(ACCT.to_string(), "hunter2".to_string());
 
         let got = resolve_secret(&b, None, ACCT).unwrap().unwrap();
-        assert_eq!(got.password(), Some("hunter2"));
+        assert_eq!(password_of(&got), Some("hunter2"));
         assert!(
             b.keychain.borrow().is_empty(),
             "must not write the keychain without a session scope"
@@ -349,5 +390,24 @@ mod tests {
         let json = serde_json::to_string(&secret).unwrap();
         assert!(json.contains("\"kind\":\"password\""));
         assert_eq!(decode_secret(&json).unwrap(), secret);
+    }
+
+    #[test]
+    fn oauth_secret_round_trips_and_exposes_the_right_accessor() {
+        let secret = StoredMailSecret::Oauth {
+            access_token: "ya29.access".to_string(),
+            refresh_token: Some("1//refresh".to_string()),
+            expires_at: 1_700_000_000,
+        };
+        let json = serde_json::to_string(&secret).unwrap();
+        assert!(json.contains("\"kind\":\"oauth\""), "{json}");
+        assert_eq!(decode_secret(&json).unwrap(), secret);
+        // An oauth secret carries the access token, never a password (so the
+        // XOAUTH2 path is taken and the basic-auth path is never reachable).
+        let StoredMailSecret::Oauth { access_token, .. } = &secret else {
+            panic!("expected an oauth secret");
+        };
+        assert_eq!(access_token, "ya29.access");
+        assert_eq!(password_of(&secret), None);
     }
 }

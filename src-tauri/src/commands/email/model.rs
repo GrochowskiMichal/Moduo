@@ -26,6 +26,11 @@ pub struct EmailConfig {
     pub provider: String,
     pub email: String,
     pub password: String,
+    /// When set, the account authenticates via XOAUTH2 (Gmail OAuth) using this
+    /// access token instead of `password` (which is empty for OAuth accounts). The
+    /// caller refreshes it before building the config (EM-2).
+    #[serde(default)]
+    pub oauth_access_token: Option<String>,
     pub imap_host: Option<String>,
     pub smtp_host: Option<String>,
     pub imap_port: Option<u16>,
@@ -142,6 +147,10 @@ pub(super) struct StoredEnvelope {
     pub(super) size: Option<u32>,
     pub(super) message_id: Option<String>,
     pub(super) in_reply_to: Option<String>,
+    /// The `References` header chain (root-first), stored so threading survives a
+    /// missing intermediate message (EM-4). Defaulted for pre-EM-4 rows.
+    #[serde(default)]
+    pub(super) references: Vec<String>,
     pub(super) thread_id: String,
     pub(super) updated_at: String,
 }
@@ -180,6 +189,30 @@ pub(super) struct StoredFlagOutboxEntry {
     pub(super) uid: u32,
     pub(super) flag: String,
     pub(super) value: bool,
+    pub(super) retry_count: u32,
+    pub(super) next_retry_at: String,
+    pub(super) last_error: Option<String>,
+    pub(super) created_at: String,
+    pub(super) updated_at: String,
+}
+
+/// A queued triage op (archive/move/delete) — the generalized sibling of
+/// [`StoredFlagOutboxEntry`]. Optimistic-local + queued-remote (EM-5).
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct StoredMailOpEntry {
+    pub(super) id: String,
+    pub(super) account_id: String,
+    pub(super) folder: String,
+    pub(super) uid: u32,
+    /// `"archive"` | `"move"` | `"delete"`.
+    pub(super) op: String,
+    /// Destination folder for a `move` (the UI-level folder or a raw mailbox name).
+    pub(super) dest_folder: Option<String>,
+    /// Set once the COPY step has committed, so a retry after an EXPUNGE failure
+    /// skips it (else the message would be copied to the destination twice).
+    #[serde(default)]
+    pub(super) copied: bool,
     pub(super) retry_count: u32,
     pub(super) next_retry_at: String,
     pub(super) last_error: Option<String>,
@@ -229,6 +262,8 @@ pub struct EmailEnvelopeDto {
     pub size: Option<u32>,
     pub message_id: Option<String>,
     pub in_reply_to: Option<String>,
+    #[serde(default)]
+    pub references: Vec<String>,
     pub thread_id: String,
     pub has_cached_body: bool,
 }
@@ -239,6 +274,61 @@ pub struct EmailListEnvelopesResult {
     pub envelopes: Vec<EmailEnvelopeDto>,
     pub total: usize,
     pub synced_at: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailGetThreadInput {
+    pub account_id: String,
+    pub thread_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailGetThreadResult {
+    pub thread_id: String,
+    /// The thread's messages across all folders, oldest → newest.
+    pub messages: Vec<EmailEnvelopeDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailListFoldersInput {
+    pub account_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailFolderDto {
+    /// The raw IMAP mailbox name (what a move targets).
+    pub name: String,
+    /// A friendlier leaf label for display.
+    pub display_name: String,
+    /// The hierarchy delimiter reported by LIST (e.g. `/` or `.`), if any.
+    pub delimiter: Option<String>,
+    /// True for a `\Noselect` container that can't hold messages.
+    pub selectable: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailApplyMessageOpInput {
+    pub account_id: String,
+    pub folder: String,
+    pub uid: u32,
+    /// `"archive"` | `"move"` | `"delete"`.
+    pub op: String,
+    /// Destination for a `move` (required for `move`, ignored otherwise).
+    #[serde(default)]
+    pub dest_folder: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailApplyMessageOpResult {
+    pub accepted: bool,
+    /// True if the IMAP step ran immediately (else it's queued for retry).
+    pub synced: bool,
 }
 
 #[derive(Deserialize)]

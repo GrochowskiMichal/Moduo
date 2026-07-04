@@ -1,8 +1,8 @@
 use tauri::State;
 
 use super::account_config::{
-    account_id, get_password_for_account, normalize_email, normalize_optional_host,
-    normalize_optional_port, normalize_provider, validate_connection,
+    account_id, normalize_email, normalize_optional_host, normalize_optional_port,
+    normalize_provider, validate_connection,
 };
 use super::model::{
     EmailAccountConnectInput, EmailAccountPublic, EmailConfig, StoredEmailAccount,
@@ -22,7 +22,9 @@ pub async fn email_accounts_list(
     let mut changed = false;
 
     for account in accounts.iter_mut() {
-        let has_secret = get_password_for_account(&state, &account.id)?.is_some();
+        // "any secret" (password OR oauth) — an OAuth account carries no password,
+        // so a password-only check would wrongly flag it reauth_required.
+        let has_secret = secrets::account_has_secret(&state, &account.id)?;
         if has_secret {
             if account.status == "reauth_required" {
                 account.status = "active".to_string();
@@ -78,6 +80,7 @@ pub async fn email_account_connect_and_save(
         provider: provider.clone(),
         email: email.clone(),
         password: input.password.clone(),
+        oauth_access_token: None,
         imap_host: imap_host.clone(),
         smtp_host: smtp_host.clone(),
         imap_port,

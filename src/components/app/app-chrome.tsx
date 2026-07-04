@@ -49,9 +49,11 @@ type ModuleTabProps = {
   active: boolean;
   index: number;
   onClick: () => void;
+  /** Unread count for a badged tab (Email, AC3). 0 = no dot. */
+  badgeCount?: number;
 };
 
-function ModuleTab({ item, active, index, onClick }: ModuleTabProps) {
+function ModuleTab({ item, active, index, onClick, badgeCount = 0 }: ModuleTabProps) {
   const shortcutId = `module-${index + 1}` as ShortcutId;
   const shortcut = SHORTCUTS.find((s) => s.id === shortcutId);
   const hint = shortcut ? formatShortcut(shortcut) : "";
@@ -66,7 +68,17 @@ function ModuleTab({ item, active, index, onClick }: ModuleTabProps) {
         onClick={onClick}
         className={`flex h-8 flex-row items-center gap-2 rounded-md px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${active ? "bg-accent text-foreground" : "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"}`}
       >
-        <Icon name={item.iconName} size={14} />
+        <span className="relative flex">
+          <Icon name={item.iconName} size={14} />
+          {badgeCount > 0 ? (
+            <span
+              className="absolute -right-1 -top-1 size-1.5 rounded-full bg-primary"
+              aria-hidden
+            >
+              <span className="sr-only">{badgeCount} unread</span>
+            </span>
+          ) : null}
+        </span>
         <span data-slot="module-tab-label" className="text-sm">
           {item.label}
         </span>
@@ -109,6 +121,18 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const [featurePanels, setFeaturePanels] = useState(() => readPanelsMap());
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
+  // Email unread badge (AC3): the Email page broadcasts its count on change.
+  const [emailUnread, setEmailUnread] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onEmailUnread = (event: Event) => {
+      const detail = (event as CustomEvent<{ count?: number }>).detail;
+      setEmailUnread(typeof detail?.count === "number" ? detail.count : 0);
+    };
+    window.addEventListener("moduo:email:unread", onEmailUnread);
+    return () => window.removeEventListener("moduo:email:unread", onEmailUnread);
+  }, []);
 
   useEffect(() => {
     if (!runtime || typeof window === "undefined") return;
@@ -270,9 +294,12 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useEffect(() => {
     if (!runtime || typeof document === "undefined" || typeof window === "undefined") return;
     if (!isEmailRoute) return;
+    // Desktop-only: `email.syncNow` is a Tauri command that rejects on web — don't
+    // arm the interval there (it would throw an unhandled rejection every tick).
+    if (!("__TAURI_INTERNALS__" in window)) return;
     const timer = window.setInterval(() => {
       if (document.visibilityState === "hidden") return;
-      void runtime.email.syncNow({ folder: "inbox" });
+      void runtime.email.syncNow({ folder: "inbox" }).catch(() => {});
     }, 5 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, [isEmailRoute, runtime]);
@@ -393,6 +420,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                 active={active}
                 index={index}
                 onClick={() => void navigate({ to: tab.href })}
+                badgeCount={tab.module === "email" ? emailUnread : 0}
               />
             );
           })}

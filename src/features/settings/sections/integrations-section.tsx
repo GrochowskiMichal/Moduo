@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Calendar, Globe, Video } from "lucide-react";
+import { Calendar, Globe, Mail, Video } from "lucide-react";
 
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
@@ -11,6 +11,8 @@ import {
   CalendarConnectDialog,
   IcsFeedDialog,
 } from "../../calendar/ui/calendar-connect-dialog";
+import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
+import type { SavedAccount } from "../../email/model/email-types";
 import { Button } from "../../../components/ui/button";
 
 import { SettingsSectionShell } from "./section-shell";
@@ -43,6 +45,12 @@ export function IntegrationsSection() {
   const [icsOpen, setIcsOpen] = useState(false);
   const [reconnectTarget, setReconnectTarget] = useState<CalendarAccountModel | null>(null);
 
+  const [emailAccounts, setEmailAccounts] = useState<SavedAccount[]>([]);
+  const [emailBusy, setEmailBusy] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailConnectOpen, setEmailConnectOpen] = useState(false);
+  const [emailReconnectTarget, setEmailReconnectTarget] = useState<SavedAccount | null>(null);
+
   const [videoStatuses, setVideoStatuses] = useState<IntegrationStatus[]>([]);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoBusy, setVideoBusy] = useState<string | null>(null);
@@ -58,8 +66,19 @@ export function IntegrationsSection() {
     }
   }, [runtime, workspaceId]);
 
+  const loadEmailAccounts = useCallback(async () => {
+    if (!IS_DESKTOP || !runtime) return;
+    setEmailError(null);
+    try {
+      setEmailAccounts((await runtime.email.listAccounts()) as SavedAccount[]);
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e));
+    }
+  }, [runtime]);
+
   useEffect(() => {
     void loadAccounts();
+    void loadEmailAccounts();
     const loadVideo = async () => {
       if (!IS_DESKTOP) return;
       setVideoLoading(true);
@@ -73,7 +92,7 @@ export function IntegrationsSection() {
       }
     };
     void loadVideo();
-  }, [loadAccounts]);
+  }, [loadAccounts, loadEmailAccounts]);
 
   const handleConnect = async (provider: "google" | "microsoft", command: string) => {
     if (!IS_DESKTOP || !runtime || !workspaceId) return;
@@ -118,6 +137,20 @@ export function IntegrationsSection() {
       setCalError(e instanceof Error ? e.message : String(e));
     } finally {
       setCalBusy(null);
+    }
+  };
+
+  const handleEmailDisconnect = async (account: SavedAccount) => {
+    if (!IS_DESKTOP || !runtime) return;
+    setEmailBusy(account.id);
+    setEmailError(null);
+    try {
+      await runtime.email.disconnect(account.id);
+      await loadEmailAccounts();
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEmailBusy(null);
     }
   };
 
@@ -183,6 +216,23 @@ export function IntegrationsSection() {
             runtime={runtime}
             workspaceId={workspaceId}
             onDone={() => void loadAccounts()}
+          />
+        </>
+      ) : null}
+      {IS_DESKTOP ? (
+        <>
+          <EmailConnectDialog
+            open={emailConnectOpen}
+            onOpenChange={setEmailConnectOpen}
+            onConnected={() => void loadEmailAccounts()}
+          />
+          <EmailConnectDialog
+            open={emailReconnectTarget !== null}
+            onOpenChange={(open) => {
+              if (!open) setEmailReconnectTarget(null);
+            }}
+            isReconnect={emailReconnectTarget ?? undefined}
+            onConnected={() => void loadEmailAccounts()}
           />
         </>
       ) : null}
@@ -364,6 +414,99 @@ export function IntegrationsSection() {
           {calError ? (
             <p className="text-xs text-destructive" role="alert">
               {calError}
+            </p>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-6">
+        <h3 className="font-display text-base text-foreground">Email</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {IS_DESKTOP
+            ? "Connect Gmail, iCloud, or any IMAP mailbox. Credentials are stored in your device keychain."
+            : "Email accounts are managed on the desktop app."}
+        </p>
+
+        <div className="mt-4 flex flex-col gap-2">
+          <div className="rounded-md border border-border bg-muted/40 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
+                  <Mail className="size-4" />
+                </span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-foreground">Mailboxes</span>
+                  <span className="text-xs text-muted-foreground">
+                    {emailAccounts.length > 0
+                      ? `${emailAccounts.length} account${emailAccounts.length === 1 ? "" : "s"} connected`
+                      : IS_DESKTOP
+                        ? "Not connected"
+                        : "Connect from the desktop app"}
+                  </span>
+                </div>
+              </div>
+              {IS_DESKTOP ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEmailConnectOpen(true)}
+                >
+                  Connect email account
+                </Button>
+              ) : null}
+            </div>
+
+            {emailAccounts.length > 0 ? (
+              <ul className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+                {emailAccounts.map((acc) => (
+                  <li
+                    key={acc.id}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-foreground">{acc.email}</p>
+                      {acc.status === "active" ? (
+                        <p className="text-xs text-success">Connected</p>
+                      ) : acc.status === "reauth_required" ? (
+                        <p className="text-xs text-warning">Sign-in expired — reconnect to fix</p>
+                      ) : (
+                        <p className="truncate text-xs text-destructive">
+                          {acc.lastError ? `Error — ${acc.lastError}` : "Connection error"}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {acc.status === "reauth_required" ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEmailReconnectTarget(acc)}
+                        >
+                          Reconnect
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void handleEmailDisconnect(acc)}
+                        disabled={emailBusy === acc.id}
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        {emailBusy === acc.id ? "Removing…" : "Disconnect"}
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+
+          {emailError ? (
+            <p className="text-xs text-destructive" role="alert">
+              {emailError}
             </p>
           ) : null}
         </div>

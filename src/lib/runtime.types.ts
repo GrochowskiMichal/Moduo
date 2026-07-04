@@ -442,6 +442,22 @@ export type ModuoRuntime = {
       subject: string;
       body: string;
     }): Promise<boolean>;
+    /** Gmail "Sign in with Google" (EM-2, desktop-only): runs the PKCE flow,
+     *  stores tokens in the OS keychain, registers the account. */
+    startGoogleOAuth(input: { workspaceId?: string | null }): Promise<any>;
+    /** All messages of a thread (EM-4), oldest→newest, across folders. */
+    getThread(input: { accountId: string; threadId: string }): Promise<any>;
+    /** LIST the account's server folders, delimiter-aware (EM-5). */
+    listFolders(input: { accountId: string }): Promise<any[]>;
+    /** Archive / move / delete a message via the op outbox (EM-5). Optimistic —
+     *  the row leaves the current folder locally, the IMAP step queues + retries. */
+    applyMessageOp(input: {
+      accountId: string;
+      folder: string;
+      uid: number;
+      op: "archive" | "move" | "delete";
+      destFolder?: string | null;
+    }): Promise<any>;
 
     // ── EM-3 cloud "tissue" surface (Supabase-first, both platforms) ────────
     // A thread reaches the cloud ONLY via a deliberate action (convert / link /
