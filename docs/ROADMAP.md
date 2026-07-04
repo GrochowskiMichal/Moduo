@@ -20,7 +20,7 @@
 
 > Effort is relative (S/M/L/XL). "Drop:" = the competitor app the founder can stop opening once the wave lands. Full per-idea scores are in the [Scored Backlog](#scored-backlog) appendix.
 
-> **⚠ Alpha scope update (2026-07-04, designer call):** **Finance (Wave 4) and Email (Wave 5) are OUT of the v1/alpha scope** — kept here for post-alpha, *not* deleted. **The Dashboard rebuild and the mindmap rethink are pulled INTO the alpha scope** (to be planned via `/plan` after the Wave-3 Notes ledger finishes — NO-6…NO-10). Net alpha = Waves 0–3 + Dashboard rework + Mindmap rework, then the `MCP-1` pre-alpha hardening pass. See [docs/decisions.md](./decisions.md) (2026-07-04 entry) and [specs/BUILD_ORDER.md](../specs/BUILD_ORDER.md).
+> **⚠ Alpha scope update (2026-07-04, designer call):** **Finance (Wave 4) is OUT of the v1/alpha scope** — kept here for post-alpha, *not* deleted. **The Dashboard rebuild and the mindmap rethink are pulled INTO the alpha scope.** **Email was deferred with Finance in the morning call, then pulled BACK IN the same day (pm):** the designer's `/plan email` round made **Email the NEXT build, ahead of the Dashboard/Mindmap reworks** — spec DoR-ready at [specs/email.md](../specs/email.md) (EM-1…EM-11 in BUILD_ORDER). Net order = Waves 0–3 (done) → **Email** → Dashboard rework → Mindmap rework → the `MCP-1` pre-alpha hardening pass. See [docs/decisions.md](./decisions.md) (both 2026-07-04 entries) and [specs/BUILD_ORDER.md](../specs/BUILD_ORDER.md).
 
 ### Wave 0 — Spine core + platform foundation
 **Goal:** the connective tissue exists and is testable with Tasks + the next module; the app is fast, exports cleanly, and onboards into a working state.
@@ -59,8 +59,8 @@
 **The great moment:** a receipt email auto-attaches to the transaction, linked to the client and the invoice.
 **Drop:** the finance-app gap (the duct-taped PayPal + Clockify + spreadsheet stack). *This is the founder's #1 personal pain — high dogfood pull.*
 
-### Wave 5 — Email (desktop-first hybrid, Spark replacement) — ⏸ POST-ALPHA (out of v1, designer call 2026-07-04; kept for later, not deleted)
-> **⏸ Deferred out of the v1/alpha scope (2026-07-04).** Follows Finance by sequence (heaviest/last leg); retained as the post-alpha email leg. The shared Google/Microsoft OAuth-credentials pass (see the shared-infra note below) defers with it.
+### Wave 5 — Email (desktop-first hybrid, Spark replacement) — ▶ PULLED FORWARD (2026-07-04 pm designer call: NEXT build, ahead of Dashboard/Mindmap)
+> **▶ Back in scope, next to build (2026-07-04 pm — reverses the same-day morning deferral for Email only; Finance stays post-alpha).** DoR-ready spec: [specs/email.md](../specs/email.md) (EM-1…EM-11); interview deltas in [.design/email/DESIGN_BRIEF.md](../.design/email/DESIGN_BRIEF.md) §1 — headline changes vs this wave's original sketch: **lazy tissue-only metadata sync** (whole-inbox mirror dropped for privacy; the early-sync §C.8 idea is moot with Finance deferred), **scheduled send cut** (no relay, no caveat-shipping), **Outlook post-v1** (OAuth-only provider; Google OAuth ships now in testing mode for personal Gmail alongside app passwords), full Spark-parity bar before the founder switches.
 **Goal:** the unique territory the task/calendar/note pack can't reach — a real email engine in the tissue.
 **Build:** email as a true **in-app pane** (Rust IMAP engine; **not** an iframe) across the 6 accounts · metadata→Supabase so email links into the tissue on every client · **convert email → task in one gesture, auto-linked to the contact** · email follow-up tracking (snooze→task/notification with back-link) · feeds the Universal Inbox.
 **The great moment:** convert an email to a task linked to its sender, never leaving the inbox.
