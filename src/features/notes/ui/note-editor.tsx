@@ -60,6 +60,9 @@ import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { useAuth } from "@/providers/auth-provider";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { deriveBody } from "../sync/doc-text";
+import { $convertFromMarkdownString } from "@lexical/markdown";
+import { NOTES_TRANSFORMERS } from "../editor/markdown";
+import { peekNoteSeed, takeNoteSeed } from "../import-seed";
 import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
 
 type Props = {
@@ -247,6 +250,34 @@ function WelcomeSeedPlugin({ enabled }: { enabled: boolean }) {
   return null;
 }
 
+/** Materialize an imported note's body (NO-8): the batched import writes
+ * body_md but not the CRDT doc; on first open this session, convert the pending
+ * markdown into the empty doc via the same transformers the paste path uses. */
+function SeedFromMarkdownPlugin({ noteId, enabled }: { noteId: string; enabled: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    if (!enabled) return;
+    // Peek (don't consume) — a fast unmount before the deferred apply must not
+    // lose the seed; it re-applies on the next open (validator M2). Consume
+    // only once it's actually applied, or the doc is already materialized.
+    const md = peekNoteSeed(noteId);
+    if (!md) return;
+    const id = setTimeout(() => {
+      editor.update(() => {
+        const root = $getRoot();
+        if (root.getTextContent().trim() !== "") {
+          takeNoteSeed(noteId); // already materialized — drop the stale seed
+          return;
+        }
+        $convertFromMarkdownString(md, NOTES_TRANSFORMERS);
+        takeNoteSeed(noteId);
+      });
+    }, 140);
+    return () => clearTimeout(id);
+  }, [editor, noteId, enabled]);
+  return null;
+}
+
 export function NoteEditor({
   engine,
   workspaceId,
@@ -398,6 +429,7 @@ export function NoteEditor({
           <SyncFromYjsPlugin doc={session.doc} />
           <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
           <WelcomeSeedPlugin enabled={seedWelcome && editable} />
+          <SeedFromMarkdownPlugin noteId={noteId} enabled={editable} />
         </LexicalComposer>
       </LexicalCollaboration>
       </NotesEditorBridgeContext.Provider>

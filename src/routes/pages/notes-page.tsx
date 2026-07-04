@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CloudOff, X } from "lucide-react";
+import { CloudOff } from "lucide-react";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
@@ -21,7 +21,7 @@ import {
   type DropZone,
 } from "../../features/notes/tree";
 import { displayTitle } from "../../features/notes/title";
-import { extractTaskLineIds } from "../../features/notes/sync/doc-text";
+import { deriveBody, extractTaskLineIds } from "../../features/notes/sync/doc-text";
 import { taskLinksForNote } from "../../features/notes/tasks/detach";
 import type { EntityLink } from "../../lib/entity-links";
 import { NoteTreeSidebar } from "../../features/notes/ui/note-tree-sidebar";
@@ -33,10 +33,34 @@ import {
 import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
 import { TaskDetailPanel } from "../../features/tasks/ui/task-detail-panel";
 import { betweenPositions, endPosition } from "../../features/tasks/helpers";
-import type { NotesSearch } from "../../features/notes/search";
+import { shapeNoteSearchResults, type NotesSearch } from "../../features/notes/search";
+import { NoteImportDialog } from "../../features/notes/ui/note-import-dialog";
+import {
+  buildZipEntries,
+  downloadTextFile,
+  downloadZip,
+  noteFileName,
+  safeFileStem,
+} from "../../features/notes/export";
+import { useNoteRealtime } from "../../features/notes/hooks/use-note-realtime";
+import { NotePresenceAvatars } from "../../features/notes/ui/note-presence-avatars";
+import { nameFromEmail } from "../../features/notes/sync/notes-realtime";
+import { toast } from "sonner";
+import { RightPanelSwitcher, type RightPanelVariant } from "../../components/app/right-panel-switcher";
+import { NoteDetailPanel } from "../../features/notes/ui/note-detail-panel";
+import { NoteCommentsPanel } from "../../features/notes/ui/note-comments-panel";
+import { NoteOutlinePanel } from "../../features/notes/ui/note-outline-panel";
+import { findQuoteOffset } from "../../features/notes/comments/quote";
+import {
+  readNotesPanelVariant,
+  writeNotesPanelVariant,
+  type NotesPanelVariantId,
+} from "../../features/notes/panel-prefs";
+import type { OutlineHeading } from "../../features/notes/outline";
+import type { EntityRef } from "../../lib/entity-links";
 
 export function NotesPage() {
-  const { runtime, userId, configError } = useAuth();
+  const { runtime, userId, userEmail, configError } = useAuth();
   const { selectedWorkspaceId, modulePermissions } = useWorkspace();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as NotesSearch;
@@ -271,6 +295,136 @@ export function NotesPage() {
     runtime && userId && selectedWorkspaceId && !configError && modulePermissions.notes !== "none",
   );
 
+  // Live multiplayer (NO-6, AC7): a broadcast + presence channel for the open
+  // note — near-live edits + a viewer facepile. No-ops without a note/identity.
+  const selfName = useMemo(() => nameFromEmail(userEmail), [userEmail]);
+  const { viewers } = useNoteRealtime({
+    engine: engine ?? null,
+    noteId: selectedNote && !selectedNote.deletedAt ? selectedNote.id : null,
+    enabled: canRender && Boolean(selectedWorkspaceId),
+    selfUserId: userId,
+    selfName,
+  });
+
+  // Right-panel variant (NO-7): remembered per user+workspace.
+  const [panelVariant, setPanelVariant] = useState<NotesPanelVariantId>("detail");
+  useEffect(() => {
+    if (userId && selectedWorkspaceId) setPanelVariant(readNotesPanelVariant(userId, selectedWorkspaceId));
+  }, [userId, selectedWorkspaceId]);
+  const changePanelVariant = useCallback(
+    (v: NotesPanelVariantId) => {
+      setPanelVariant(v);
+      if (userId && selectedWorkspaceId) writeNotesPanelVariant(userId, selectedWorkspaceId, v);
+    },
+    [userId, selectedWorkspaceId],
+  );
+
+  // Detail hub "open" — notes select in place; other entities deep-link out.
+  const handleOpenEntity = useCallback(
+    (ref: EntityRef) => {
+      if (ref.type === "note") {
+        select(ref.id);
+        return;
+      }
+      window.dispatchEvent(
+        new CustomEvent("moduo:entity:open", { detail: { type: ref.type, id: ref.id } }),
+      );
+    },
+    [select],
+  );
+
+  // Quote-comments (AC9): grab the editor's current selection; scroll the editor
+  // to a quoted snippet (best-effort — edited-away text degrades quietly).
+  const getSelectionQuote = useCallback((): string | null => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+    const editorEl = document.querySelector(".notes-editor-v2");
+    const anchor = sel.anchorNode;
+    if (!editorEl || !anchor || !editorEl.contains(anchor)) return null;
+    return sel.toString().trim() || null;
+  }, []);
+  const scrollToQuote = useCallback((quote: string) => {
+    const editorEl = document.querySelector(".notes-editor-v2");
+    if (!editorEl) return;
+    if (findQuoteOffset(editorEl.textContent ?? "", quote) === null) {
+      toast.info("That text isn’t in the note anymore.");
+      return;
+    }
+    const firstWord = quote.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+    for (const b of editorEl.querySelectorAll("p, h1, h2, h3, h4, li, blockquote")) {
+      if ((b.textContent ?? "").toLowerCase().includes(firstWord)) {
+        b.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+    }
+  }, []);
+  const outlineNavigate = useCallback((h: OutlineHeading) => {
+    const editorEl = document.querySelector(".notes-editor-v2");
+    if (!editorEl) return;
+    const headings = editorEl.querySelectorAll("h1, h2, h3, h4, h5, h6");
+    headings[h.index - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  // Markdown interchange (NO-8): import wizard + per-note / subtree export.
+  const [importOpen, setImportOpen] = useState(false);
+  const exportNote = useCallback(
+    async (id: string, title: string) => {
+      const name = displayTitle(title);
+      let md = "";
+      if (engine && id === selectedId) {
+        // The open note derives freshest from its live doc; others read body_md.
+        md = deriveBody(engine.getOrCreateSession(id).doc).md;
+      }
+      // Fall back to the server body_md when the note isn't open OR its live doc
+      // is still empty (e.g. a just-imported note not yet materialized) — M2/m3.
+      if (!md && runtime && selectedWorkspaceId) {
+        const docs = await runtime.notesV2.fetchExportDocs({
+          workspaceId: selectedWorkspaceId,
+          ids: [id],
+        });
+        md = docs[0]?.bodyMd ?? "";
+      }
+      downloadTextFile(noteFileName(name), md || `# ${name}\n`);
+    },
+    [engine, selectedId, runtime, selectedWorkspaceId],
+  );
+  const exportTree = useCallback(
+    async (id: string) => {
+      if (!runtime || !selectedWorkspaceId) return;
+      const ids = [id, ...descendantIds(notes, id)];
+      const byId = new Map(notes.map((n) => [n.id, n]));
+      const docs = await runtime.notesV2.fetchExportDocs({ workspaceId: selectedWorkspaceId, ids });
+      const mdById = new Map(docs.map((d) => [d.id, d.bodyMd]));
+      // Folder path = the note's ancestor titles from the export root down.
+      const pathOf = (nid: string): string[] => {
+        if (nid === id) return [];
+        const chain: string[] = [];
+        let cur = byId.get(nid)?.parentId ?? null;
+        while (cur && chain.length < 12) {
+          const p = byId.get(cur);
+          if (!p) break;
+          chain.unshift(displayTitle(p.title));
+          if (cur === id) break;
+          cur = p.parentId ?? null;
+        }
+        return chain;
+      };
+      const zipNotes = ids
+        .filter((nid) => byId.has(nid))
+        .map((nid) => ({
+          id: nid,
+          title: displayTitle(byId.get(nid)!.title),
+          md: mdById.get(nid) ?? "",
+          pathSegments: pathOf(nid),
+        }));
+      downloadZip(
+        `${safeFileStem(displayTitle(byId.get(id)?.title ?? "notes"))}.zip`,
+        buildZipEntries(zipNotes),
+      );
+    },
+    [runtime, selectedWorkspaceId, notes],
+  );
+
   if (!canRender) {
     return (
       <FeaturePanelsShell
@@ -317,6 +471,17 @@ export function NotesPage() {
         void module.purgeNote(id);
         if (selectedId === id) select(null, true);
       }}
+      onSearch={
+        runtime && selectedWorkspaceId && !degraded
+          ? (q) =>
+              runtime.notesV2
+                .search({ workspaceId: selectedWorkspaceId, query: q })
+                .then((rows) => shapeNoteSearchResults(rows, q))
+          : undefined
+      }
+      onImport={canEdit ? () => setImportOpen(true) : undefined}
+      onExportNote={exportNote}
+      onExportTree={exportTree}
     />
   ) : null;
 
@@ -332,16 +497,19 @@ export function NotesPage() {
           Couldn't refresh notes — showing what's saved on this device.
         </div>
       ) : null}
-      {syncStatus === "offline" ? (
-        <div className="absolute right-3 top-3 z-10">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex items-center rounded-full bg-muted p-1.5 text-muted-foreground">
-                <CloudOff className="size-3.5" aria-label="Saved locally" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="left">Saved locally — will sync</TooltipContent>
-          </Tooltip>
+      {viewers.length > 0 || syncStatus === "offline" ? (
+        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+          <NotePresenceAvatars viewers={viewers} />
+          {syncStatus === "offline" ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center rounded-full bg-muted p-1.5 text-muted-foreground">
+                  <CloudOff className="size-3.5" aria-label="Saved locally" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="left">Saved locally — will sync</TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
       ) : null}
       <div className="min-h-0 flex-1">
@@ -388,55 +556,105 @@ export function NotesPage() {
     </div>
   );
 
-  // Task-detail rail variant (NO-5): the Tasks module's own detail panel for
-  // the focused task line — full editing without visiting /tasks. NO-7 folds
-  // this into the lifted right-panel switcher; until then it's the only
-  // right-panel occupant and the panel stays hidden otherwise.
-  // Bridge lookup (bundle + just-minted overlay) so "Details" works the
-  // instant a mint lands, before the bundle reload catches up.
+  // The right panel is now the switchable surface (NO-7): Detail · Comments ·
+  // Outline for the open note, plus a transient Task-detail variant that a
+  // focused task line (NO-5) prepends and activates.
+  // Bridge lookup (bundle + just-minted overlay) so it works the instant a mint
+  // lands, before the bundle reload catches up.
   const detailTask = taskDetailId ? taskBridge.getTask(taskDetailId) : null;
+  const noteForPanel = selectedNote && !selectedNote.deletedAt ? selectedNote : null;
+  const panelSession = noteForPanel && engine ? engine.getOrCreateSession(noteForPanel.id) : null;
 
-  const right = detailTask ? (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Task detail
-        </span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Close task detail"
-              onClick={() => setTaskDetailId(null)}
-            >
-              <X className="size-3.5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="left">Close</TooltipContent>
-        </Tooltip>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-        <TaskDetailPanel
-          task={detailTask}
-          buckets={tasksApi.buckets}
-          inbox={tasksApi.inbox}
-          canEdit={tasksApi.canEdit}
-          onRequestCapture={() => {}}
-          onSelectTask={setTaskDetailId}
-          api={tasksApi}
-        />
-      </div>
-    </div>
-  ) : undefined;
+  const noteVariants: RightPanelVariant[] =
+    noteForPanel && selectedWorkspaceId
+      ? [
+          {
+            id: "detail",
+            label: "Detail",
+            render: () => (
+              <NoteDetailPanel
+                runtime={runtime}
+                workspaceId={selectedWorkspaceId}
+                noteId={noteForPanel.id}
+                canEdit={canEdit && !degraded}
+                currentUserId={userId}
+                onOpenEntity={handleOpenEntity}
+              />
+            ),
+          },
+          {
+            id: "comments",
+            label: "Comments",
+            render: () => (
+              <NoteCommentsPanel
+                runtime={runtime}
+                workspaceId={selectedWorkspaceId}
+                noteId={noteForPanel.id}
+                noteLabel={displayTitle(noteForPanel.title)}
+                canComment={modulePermissions.notes !== "none"}
+                currentUserId={userId}
+                getSelectionQuote={getSelectionQuote}
+                onScrollToQuote={scrollToQuote}
+              />
+            ),
+          },
+          {
+            id: "outline",
+            label: "Outline",
+            render: () => <NoteOutlinePanel doc={panelSession?.doc ?? null} onNavigate={outlineNavigate} />,
+          },
+        ]
+      : [];
+
+  const taskVariant: RightPanelVariant | null = detailTask
+    ? {
+        id: "task",
+        label: "Task",
+        render: () => (
+          <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
+            <TaskDetailPanel
+              task={detailTask}
+              buckets={tasksApi.buckets}
+              inbox={tasksApi.inbox}
+              canEdit={tasksApi.canEdit}
+              onRequestCapture={() => {}}
+              onSelectTask={setTaskDetailId}
+              api={tasksApi}
+            />
+          </div>
+        ),
+      }
+    : null;
+
+  const panelVariants = taskVariant ? [taskVariant, ...noteVariants] : noteVariants;
+  const activePanel = taskVariant ? "task" : panelVariant;
+  const onPanelChange = (id: string) => {
+    if (id === "task") return;
+    setTaskDetailId(null); // leaving the Task tab closes the focused task
+    changePanelVariant(id as NotesPanelVariantId);
+  };
+
+  const right =
+    noteForPanel && panelVariants.length > 0 ? (
+      <RightPanelSwitcher variants={panelVariants} activeId={activePanel} onChange={onPanelChange} />
+    ) : undefined;
 
   return (
-    <FeaturePanelsShell
-      feature="notes"
-      left={sidebar}
-      center={center}
-      right={right}
-      hideRight={!detailTask}
-    />
+    <>
+      <FeaturePanelsShell
+        feature="notes"
+        left={sidebar}
+        center={center}
+        right={right}
+        hideRight={!right}
+      />
+      <NoteImportDialog
+        runtime={runtime}
+        workspaceId={selectedWorkspaceId}
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={module.refresh}
+      />
+    </>
   );
 }

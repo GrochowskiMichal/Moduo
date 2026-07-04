@@ -20,6 +20,8 @@
 
 > Effort is relative (S/M/L/XL). "Drop:" = the competitor app the founder can stop opening once the wave lands. Full per-idea scores are in the [Scored Backlog](#scored-backlog) appendix.
 
+> **⚠ Alpha scope update (2026-07-04, designer call):** **Finance (Wave 4) and Email (Wave 5) are OUT of the v1/alpha scope** — kept here for post-alpha, *not* deleted. **The Dashboard rebuild and the mindmap rethink are pulled INTO the alpha scope** (to be planned via `/plan` after the Wave-3 Notes ledger finishes — NO-6…NO-10). Net alpha = Waves 0–3 + Dashboard rework + Mindmap rework, then the `MCP-1` pre-alpha hardening pass. See [docs/decisions.md](./decisions.md) (2026-07-04 entry) and [specs/BUILD_ORDER.md](../specs/BUILD_ORDER.md).
+
 ### Wave 0 — Spine core + platform foundation
 **Goal:** the connective tissue exists and is testable with Tasks + the next module; the app is fast, exports cleanly, and onboards into a working state.
 **Build:**
@@ -50,13 +52,15 @@
 **The great moment:** a checkbox in a note is a first-class task that schedules and completes.
 **Drop:** Notion (for docs/notes). Enables sharing notes with a partner (multiplayer).
 
-### Wave 4 — Finance (Midday-lite, CSV-first, no bank layer) ⚠ time-tracking + email metadata deps (Q8, Q10)
+### Wave 4 — Finance (Midday-lite, CSV-first, no bank layer) — ⏸ POST-ALPHA (out of v1, designer call 2026-07-04; kept for later, not deleted) ⚠ time-tracking + email metadata deps (Q8, Q10)
+> **⏸ Deferred out of the v1/alpha scope (2026-07-04).** Retained as the post-alpha finance leg; nothing in Waves 0–3 or the Dashboard/Mindmap reworks depends on it.
 **Goal:** answer "How much did I make last month, and where did it go?" in one app.
 **Build:** **money-flow overview widget** ("You made $X — here's where it went," zero setup) · CSV-first transaction import with column mapping (+ pre-built QuickBooks/Lunch Money/Mint mappings) · per-row business/personal + per-client tagging with bulk rules · custom categories · **invoicing with tracked lifecycle** (sent→viewed→paid/overdue, linked to the contact) · no invoice cap on free/entry tier · overdue-invoice auto-surfaces as a task/notification on the contact · time-tracking → invoice line items (revive the paused module — Q10) · tax-reserve / "safe to pay yourself" widget · retrospective clarity, **not** zero-based budgeting · native multi-currency · auto-match receipt emails to transactions (needs email metadata — Q8) · recurring/quarterly-tax dates auto-appear on the calendar.
 **The great moment:** a receipt email auto-attaches to the transaction, linked to the client and the invoice.
 **Drop:** the finance-app gap (the duct-taped PayPal + Clockify + spreadsheet stack). *This is the founder's #1 personal pain — high dogfood pull.*
 
-### Wave 5 — Email (desktop-first hybrid, Spark replacement)
+### Wave 5 — Email (desktop-first hybrid, Spark replacement) — ⏸ POST-ALPHA (out of v1, designer call 2026-07-04; kept for later, not deleted)
+> **⏸ Deferred out of the v1/alpha scope (2026-07-04).** Follows Finance by sequence (heaviest/last leg); retained as the post-alpha email leg. The shared Google/Microsoft OAuth-credentials pass (see the shared-infra note below) defers with it.
 **Goal:** the unique territory the task/calendar/note pack can't reach — a real email engine in the tissue.
 **Build:** email as a true **in-app pane** (Rust IMAP engine; **not** an iframe) across the 6 accounts · metadata→Supabase so email links into the tissue on every client · **convert email → task in one gesture, auto-linked to the contact** · email follow-up tracking (snooze→task/notification with back-link) · feeds the Universal Inbox.
 **The great moment:** convert an email to a task linked to its sender, never leaving the inbox.

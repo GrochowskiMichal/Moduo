@@ -23,15 +23,19 @@ import {
   ArchiveRestore,
   ChevronRight,
   Copy,
+  Download,
   FileText,
+  FolderTree,
   Globe,
   MoreHorizontal,
   Pin,
   PinOff,
   Plus,
   RotateCcw,
+  Search,
   Smile,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import {
@@ -58,6 +62,7 @@ import type { Note } from "../model";
 import { trashDaysLeft } from "../model";
 import { displayTitle } from "../title";
 import type { DropZone, NoteSections, NoteTreeNode } from "../tree";
+import type { NoteSearchResult } from "../search";
 
 const ICON_CHOICES = ["📝", "📒", "📌", "💡", "🗂️", "🎯", "🧠", "📚", "🛠️", "🧾", "🌱", "🎨"];
 
@@ -79,15 +84,58 @@ type Props = {
   onTrash: (id: string) => void;
   onRestore: (id: string) => void;
   onPurge: (id: string) => void;
+  /** Full-text search (NO-8, AC8) — the page wires this to the runtime; when
+   * absent (e.g. stories), the search box is hidden. */
+  onSearch?: (query: string) => Promise<NoteSearchResult[]>;
+  /** Open the markdown import wizard (NO-8). */
+  onImport?: () => void;
+  /** Export a single note as `.md` / a note + its subtree as a `.zip` (NO-8). */
+  onExportNote?: (id: string, title: string) => void;
+  onExportTree?: (id: string, title: string) => void;
 };
 
 export function NoteTreeSidebar(props: Props) {
-  const { workspaceId, sections, canEdit, onDropRow } = props;
+  const { workspaceId, sections, canEdit, onDropRow, onSearch } = props;
   const [expanded, setExpanded] = useState<Set<string>>(() => readExpanded(workspaceId));
   const [dragId, setDragId] = useState<string | null>(null);
   const [hover, setHover] = useState<HoverTarget>(null);
   const [purgeTarget, setPurgeTarget] = useState<Note | null>(null);
   const pointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Full-text search (NO-8): debounced; when a query is present the results
+  // replace the tree until it's cleared.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<NoteSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!onSearch || !q) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    let active = true;
+    setSearching(true);
+    const timer = setTimeout(() => {
+      void onSearch(q)
+        .then((res) => {
+          if (active) {
+            setSearchResults(res);
+            setSearching(false);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setSearchResults([]);
+            setSearching(false);
+          }
+        });
+    }, 200);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, onSearch]);
 
   const toggleExpand = useCallback(
     (id: string) => {
@@ -152,19 +200,95 @@ export function NoteTreeSidebar(props: Props) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between px-3 pb-1 pt-3">
         <span className="font-display text-sm font-semibold text-foreground">Notes</span>
-        {canEdit ? (
-          <button
-            type="button"
-            onClick={props.onCreateRoot}
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            title="New note (⌘N)"
-            aria-label="New note"
-          >
-            <Plus className="size-4" />
-          </button>
-        ) : null}
+        <div className="flex items-center gap-0.5">
+          {canEdit && props.onImport ? (
+            <button
+              type="button"
+              onClick={props.onImport}
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              title="Import notes"
+              aria-label="Import notes"
+            >
+              <Upload className="size-4" />
+            </button>
+          ) : null}
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={props.onCreateRoot}
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              title="New note (⌘N)"
+              aria-label="New note"
+            >
+              <Plus className="size-4" />
+            </button>
+          ) : null}
+        </div>
       </div>
+      {onSearch ? (
+        <div className="px-3 pb-1.5">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search notes…"
+              aria-label="Search notes"
+              className="w-full rounded-md bg-muted py-1.5 pl-7 pr-7 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                aria-label="Clear search"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <X className="size-3.5" />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 pb-6">
+        {searchQuery.trim() ? (
+          searching && searchResults.length === 0 ? (
+            <p className="px-2 py-6 text-center text-sm text-muted-foreground">Searching…</p>
+          ) : searchResults.length === 0 ? (
+            <p className="px-2 py-6 text-center text-sm text-muted-foreground">No matches.</p>
+          ) : (
+            <ul className="space-y-0.5 pt-1">
+              {searchResults.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    onClick={() => props.onSelect(r.id)}
+                    className={cn(
+                      "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      r.id === props.selectedId && "bg-accent",
+                    )}
+                  >
+                    <span className="flex w-full items-center gap-1.5">
+                      <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                        {displayTitle(r.title)}
+                      </span>
+                      {r.archived ? (
+                        <span className="shrink-0 text-2xs text-muted-foreground">Archived</span>
+                      ) : null}
+                    </span>
+                    {r.snippet ? (
+                      <span className="line-clamp-2 pl-5 text-xs text-muted-foreground">{r.snippet}</span>
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : (
+          <>
         {sections.pinned.length > 0 ? (
           <Section title="Pinned">
             {sections.pinned.map((n) => (
@@ -222,6 +346,8 @@ export function NoteTreeSidebar(props: Props) {
             ))}
           </Section>
         ) : null}
+          </>
+        )}
       </div>
 
       <Dialog open={purgeTarget !== null} onOpenChange={(open) => !open && setPurgeTarget(null)}>
@@ -519,6 +645,16 @@ function RowMenu({ note, ctx, variant }: { note: Note; ctx: RowCtx; variant: Row
         <DropdownMenuItem onSelect={() => void ctx.onDuplicate(note.id)}>
           <Copy className="size-4" /> Duplicate
         </DropdownMenuItem>
+        {ctx.onExportNote ? (
+          <DropdownMenuItem onSelect={() => ctx.onExportNote!(note.id, note.title)}>
+            <Download className="size-4" /> Export as Markdown
+          </DropdownMenuItem>
+        ) : null}
+        {ctx.onExportTree ? (
+          <DropdownMenuItem onSelect={() => ctx.onExportTree!(note.id, note.title)}>
+            <FolderTree className="size-4" /> Export subtree as .zip
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         {variant === "archive" || note.isArchived ? (
           <DropdownMenuItem onSelect={() => ctx.onArchive(note.id, false)}>

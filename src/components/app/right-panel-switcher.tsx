@@ -1,13 +1,13 @@
-// The right-panel variant switcher — the Moduo-wide IA principle's first
-// adopter (DESIGN_BRIEF §5, decisions.md (e)): the right panel is a
-// user-switchable surface with per-module hand-picked variants, never a
-// hardcoded single purpose. Built inside Calendar but SHAPED FOR EXTRACTION:
-// a typed variant registry + one header control. When the second module
-// adopts it, lift this file (types + component, unchanged) into the app shell.
+// The right-panel variant switcher — the Moduo-wide IA principle's shared
+// surface (DESIGN_BRIEF §5, decisions.md): the right panel is user-switchable
+// with per-module hand-picked variants, never a hardcoded single purpose.
+// Built inside Calendar (its first adopter) and SHAPED FOR EXTRACTION; lifted
+// to the app shell here when Notes (NO-7) became the second adopter — types +
+// component unchanged, Calendar now imports from this location.
 
 import type { ReactNode } from "react";
 
-import { SegmentedControl } from "../../../components/ui/segmented-control";
+import { SegmentedControl } from "../ui/segmented-control";
 
 /** One entry in a module's hand-picked right-panel variant list. */
 export type RightPanelVariant = {
