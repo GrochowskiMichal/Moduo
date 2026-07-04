@@ -2276,6 +2276,7 @@ export type Database = {
           p_last_sync_at?: string
           p_provider: string
           p_status?: string
+          p_sync_token?: string
           p_workspace_id: string
         }
         Returns: {

@@ -49,6 +49,9 @@ import {
   type TaskBlock,
 } from "../lens";
 import { eventChipsInRange, type EventChip } from "../events";
+import type { CalendarAccountModel } from "../events";
+import { cleanupCredentialsForRemoval } from "../caldav-connect";
+import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import {
   accountSourceLabel,
   resolveAccountHues,
@@ -170,9 +173,19 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
   const removeAccount = useCallback(
     (accountId: string) => {
       if (!runtime || !workspaceId) return;
-      void runtime.calendar
-        .removeAccount({ workspaceId, accountId })
-        .then(() => {
+      const removed = calendar.accounts.find((a) => a.id === accountId);
+      void (async () => {
+        try {
+          // Clean up any OS-keychain secret (CalDAV last-row / ICS feed) before
+          // the row is gone, then cascade-remove in Supabase.
+          if (removed) {
+            await cleanupCredentialsForRemoval({
+              isDesktop: IS_DESKTOP,
+              removed,
+              allAccounts: calendar.accounts,
+            });
+          }
+          await runtime.calendar.removeAccount({ workspaceId, accountId });
           // Prune the removed account's prefs so the maps don't accrue dead ids.
           updatePrefs((prev) => {
             const { [accountId]: _drop, ...accountColors } = prev.accountColors;
@@ -181,14 +194,15 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
               accountColors,
             };
           });
-          return calendar.reload();
-        })
-        .catch((e) =>
-          toast.error(e instanceof Error ? e.message : "Couldn't remove the calendar."),
-        );
+          await calendar.reload();
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "Couldn't remove the calendar.");
+        }
+      })();
     },
     [runtime, workspaceId, calendar, updatePrefs],
   );
+  const [reconnectTarget, setReconnectTarget] = useState<CalendarAccountModel | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const refreshCalendars = useCallback(() => {
     setRefreshing(true);
@@ -806,6 +820,7 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
             onToggleAccountVisibility={toggleAccountVisibility}
             onRecolorAccount={setAccountColor}
             onRemoveAccount={removeAccount}
+            onReconnectAccount={IS_DESKTOP ? setReconnectTarget : undefined}
           />
         }
         right={
@@ -978,6 +993,19 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {runtime && workspaceId ? (
+        <CalendarConnectDialog
+          open={reconnectTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setReconnectTarget(null);
+          }}
+          runtime={runtime}
+          workspaceId={workspaceId}
+          reconnect={reconnectTarget ?? undefined}
+          onDone={() => void calendar.reload()}
+        />
+      ) : null}
     </DndContext>
   );
 }

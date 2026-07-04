@@ -37,6 +37,8 @@ export type CalendarAccountModel = {
   color: string | null;
   lastSyncAt: string | null;
   status: string;
+  /** CAL-8: the CalDAV/ICS connection descriptor JSON (see `CalendarSyncDescriptor` in sync.ts); null for OAuth/native rows. */
+  syncToken: string | null;
   deletedAt: string | null;
 };
 

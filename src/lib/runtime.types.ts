@@ -456,6 +456,12 @@ export type ModuoRuntime = {
       color?: string | null;
       status?: string | null;
       lastSyncAt?: string | null;
+      /**
+       * CAL-8: the CalDAV/ICS connection descriptor JSON. OMIT (undefined) to
+       * keep the stored value — the RPC param is only sent when provided, so
+       * OAuth callers keep working against a pre-CAL-8 database.
+       */
+      syncToken?: string | null;
     }): Promise<CalendarAccountModel>;
     removeAccount(input: { workspaceId: string; accountId: string }): Promise<void>;
     /** Batched idempotent mirror upsert (the desktop sync engine's write). */
@@ -474,10 +480,12 @@ export type ModuoRuntime = {
      * account id (the keychain key / the cloud account's `externalId`).
      */
     fetchExternalEvents(input: {
-      provider: "google" | "microsoft";
+      provider: "google" | "microsoft" | "caldav" | "ics";
       externalAccountId: string;
       timeMin: string;
       timeMax: string;
+      /** CAL-8: the account row's connection descriptor (caldav needs server+username; ignored by OAuth providers). */
+      syncToken?: string | null;
     }): Promise<Record<string, unknown>[]>;
   };
 
