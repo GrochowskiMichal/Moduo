@@ -55,7 +55,7 @@ export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
   // ── Insert (entities — a noun inserts that entity) ──────────────────────────
   { id: "page", title: "Page", description: "New child note, right here", keywords: ["child", "subpage", "subnote", "new"], group: "Insert" },
   { id: "note", title: "Note", description: "Link an existing note", keywords: ["ref", "reference", "link"], group: "Insert" },
-  { id: "task", title: "Task", description: "Reference a task", keywords: ["todo-task", "work"], group: "Insert" },
+  { id: "task", title: "Task", description: "Task line — create or link a real task", keywords: ["todo-task", "work"], group: "Insert" },
   { id: "contact", title: "Contact", description: "Attach a person's card", keywords: ["person", "people", "crm"], group: "Insert" },
   { id: "company", title: "Company", description: "Attach a company", keywords: ["org", "organization", "business"], group: "Insert" },
   { id: "event", title: "Event", description: "Reference a calendar event", keywords: ["calendar", "meeting"], group: "Insert" },

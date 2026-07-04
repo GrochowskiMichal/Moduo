@@ -18,6 +18,7 @@ import { $getRoot } from "lexical";
 import { EntityRefNode } from "../../spine/editor/entity-ref-node";
 import { EmbedNode } from "./nodes/EmbedNode";
 import { PageRowNode } from "./nodes/page-row-node";
+import { TaskLineNode } from "./nodes/task-line-node";
 import {
   blocksToMarkdown,
   looksLikeMarkdown,
@@ -44,6 +45,7 @@ function makeEditor() {
       EntityRefNode,
       EmbedNode,
       PageRowNode,
+      TaskLineNode,
     ],
     onError: (e: Error) => {
       throw e;
@@ -101,6 +103,48 @@ describe("markdown round-trip (AC11)", () => {
     const md = "Talked to [Jane Doe](moduo://contact/abc-123) about the deal.";
     const out = roundTrip(md);
     expect(out).toBe(md);
+  });
+
+  it("task lines round-trip: `- [ ] title <!-- moduo:task:id -->` (NO-5 AC3/AC11)", () => {
+    const md = [
+      "- [ ] Ship the report <!-- moduo:task:task-123 -->",
+      "",
+      "- [x] Email Anna <!-- moduo:task:task-456 -->",
+    ].join("\n");
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("a task line imports as a REAL task-line block carrying the id — never a checklist item", () => {
+    const editor = makeEditor();
+    editor.update(
+      () =>
+        $convertFromMarkdownString(
+          "- [x] Ship it <!-- moduo:task:task-9 -->",
+          NOTES_TRANSFORMERS,
+        ),
+      { discrete: true },
+    );
+    editor.read(() => {
+      const json = JSON.stringify(editor.getEditorState().toJSON());
+      expect(json).toContain('"type":"task-line"');
+      expect(json).toContain('"taskId":"task-9"');
+      expect(json).toContain('"done":true');
+      expect(json).not.toContain("moduo:task"); // comment stripped from the text
+      expect(json).not.toContain('"listType":"check"');
+    });
+  });
+
+  it("a plain checkbox WITHOUT the id comment stays a humble checklist item (checkboxes never mint)", () => {
+    const editor = makeEditor();
+    editor.update(
+      () => $convertFromMarkdownString("- [ ] shopping list item", NOTES_TRANSFORMERS),
+      { discrete: true },
+    );
+    editor.read(() => {
+      const json = JSON.stringify(editor.getEditorState().toJSON());
+      expect(json).toContain('"listType":"check"');
+      expect(json).not.toContain('"type":"task-line"');
+    });
   });
 
   it("a standalone note link becomes a PAGE-ROW block (and exports back)", () => {
@@ -209,6 +253,26 @@ describe("blocksToMarkdown (the selection copy walker)", () => {
         "",
         "[Child page](moduo://note/n2)",
       ].join("\n"),
+    );
+  });
+
+  it("emits task lines with the stable-id comment (pending mints stay humble checkboxes)", () => {
+    const blocks: MdJsonNode[] = [
+      {
+        type: "task-line",
+        taskId: "task-1",
+        done: true,
+        children: [{ type: "text", text: "Ship it" }],
+      },
+      {
+        type: "task-line",
+        taskId: null, // mid-mint — no id to carry yet
+        done: false,
+        children: [{ type: "text", text: "Still minting" }],
+      },
+    ];
+    expect(blocksToMarkdown(blocks)).toBe(
+      ["- [x] Ship it <!-- moduo:task:task-1 -->", "", "- [ ] Still minting"].join("\n"),
     );
   });
 });

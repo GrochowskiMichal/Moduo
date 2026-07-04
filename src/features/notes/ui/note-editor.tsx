@@ -45,7 +45,9 @@ import {
 } from "lexical";
 import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
+import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
 import { EmbedNode } from "../editor/nodes/EmbedNode";
+import { TaskLineNode } from "../editor/nodes/task-line-node";
 import { $createPageRowNode, PageRowNode } from "../editor/nodes/page-row-node";
 import {
   INSERT_PAGE_ROW_EVENT,
@@ -221,6 +223,14 @@ function WelcomeSeedPlugin({ enabled }: { enabled: boolean }) {
             "Type / for blocks (headings, lists, checkboxes), or @ to mention a teammate. Notes nest: create a child page from the sidebar's + and drag rows to organize.",
           ),
         );
+        // Teach the task-line gesture without minting a demo task into the
+        // real Tasks Inbox — the seed stays inert (NO-5 decision).
+        const p3 = $createParagraphNode();
+        p3.append(
+          $createTextNode(
+            "Checkboxes below stay humble checkboxes. When a line is real work, type /task (or hover a checkbox and press ⌘⇧T) — the line becomes a live task, synced with Tasks both ways.",
+          ),
+        );
         const list = $createListNode("check");
         const li1 = $createListItemNode(true);
         li1.append($createTextNode("Open Notes"));
@@ -229,7 +239,7 @@ function WelcomeSeedPlugin({ enabled }: { enabled: boolean }) {
         const li3 = $createListItemNode(false);
         li3.append($createTextNode("Delete this note whenever you're done with it"));
         list.append(li1, li2, li3);
-        root.append(h1, p1, p2, list);
+        root.append(h1, p1, p2, p3, list);
       });
     }, 120);
     return () => clearTimeout(id);
@@ -292,6 +302,7 @@ export function NoteEditor({
         EmbedNode,
         EntityRefNode,
         PageRowNode,
+        TaskLineNode,
       ],
       theme: {
         paragraph: "notes-p",
@@ -376,6 +387,7 @@ export function NoteEditor({
             }
           />
           <MarkdownClipboardPlugin />
+          <TaskLinePlugin editable={editable} noteId={noteId} />
           <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
           <CollaborationPluginV2__EXPERIMENTAL
             id={noteId}

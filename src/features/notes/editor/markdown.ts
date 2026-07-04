@@ -24,14 +24,62 @@ import {
   $isHorizontalRuleNode,
   HorizontalRuleNode,
 } from "@lexical/react/LexicalHorizontalRuleNode";
+import { $isTextNode } from "lexical";
 import {
   $createEntityRefNode,
   EntityRefNode,
 } from "../../spine/editor/entity-ref-node";
 import { $createPageRowNode, $isPageRowNode, PageRowNode } from "./nodes/page-row-node";
 import { $createEmbedNode, $isEmbedNode, EmbedNode } from "./nodes/EmbedNode";
+import {
+  $createTaskLineNode,
+  $isTaskLineNode,
+  TaskLineNode,
+} from "./nodes/task-line-node";
 
 const MODUO_URI = /moduo:\/\/([a-z][a-z-]*)\/([A-Za-z0-9-]+)/;
+
+/** The task-line stable-id convention: `- [ ] Title <!-- moduo:task:<id> -->`
+ * (DESIGN_BRIEF §3f — readable md, lossless enough to re-import). */
+const TASK_ID_COMMENT = /\s*<!--\s*moduo:task:([A-Za-z0-9-]+)\s*-->\s*$/;
+
+/** `- [x] Title <!-- moduo:task:<id> -->` ⇄ a task line. Must sit BEFORE
+ * CHECK_LIST in the set — without the id comment the line is (and stays) a
+ * humble checkbox; with it, the task line wins the match. A PENDING line
+ * (no id yet) exports as a plain checkbox — honest, nothing to rehydrate. */
+export const TASK_LINE_TRANSFORMER: ElementTransformer = {
+  dependencies: [TaskLineNode],
+  export: (node, traverseChildren) => {
+    if (!$isTaskLineNode(node)) return null;
+    const taskId = node.getTaskId();
+    const box = node.getDone() ? "x" : " ";
+    const title = traverseChildren(node);
+    return taskId === null
+      ? `- [${box}] ${title}`
+      : `- [${box}] ${title} <!-- moduo:task:${taskId} -->`;
+  },
+  // Consume only the checkbox prefix (the importer inline-parses the rest);
+  // the lookahead gates the match on the trailing id comment.
+  regExp: /^- \[( |x|X)\] (?=.*<!--\s*moduo:task:[A-Za-z0-9-]+\s*-->\s*$)/,
+  replace: (parentNode, children, match) => {
+    const line = $createTaskLineNode(null, match[1] !== " ");
+    children.forEach((child) => line.append(child));
+    // The id rides the last text run — extract it, strip the comment.
+    const last = line.getLastChild();
+    if ($isTextNode(last)) {
+      const text = last.getTextContent();
+      const idMatch = text.match(TASK_ID_COMMENT);
+      if (idMatch) {
+        line.setTaskId(idMatch[1]!);
+        const stripped = text.replace(TASK_ID_COMMENT, "");
+        if (stripped === "") last.remove();
+        else last.setTextContent(stripped);
+      }
+    }
+    parentNode.replace(line);
+  },
+  type: "element",
+};
 
 /** `[title](moduo://note/<id>)` alone on a line ⇄ a page-row block. */
 export const PAGE_ROW_TRANSFORMER: ElementTransformer = {
@@ -112,6 +160,8 @@ export const NOTES_TRANSFORMERS: Transformer[] = [
   PAGE_ROW_TRANSFORMER,
   EMBED_TRANSFORMER,
   HR_TRANSFORMER,
+  // Task lines carry an id comment CHECK_LIST would swallow — they go first.
+  TASK_LINE_TRANSFORMER,
   // CHECK_LIST is NOT in ELEMENT_TRANSFORMERS, and must precede the bullet
   // transformer or `- [x]` imports as a literal-text bullet item.
   CHECK_LIST,
@@ -151,6 +201,8 @@ export type MdJsonNode = {
   noteId?: string;
   kind?: string;
   itemId?: string;
+  taskId?: string | null;
+  done?: boolean;
   children?: MdJsonNode[];
 };
 
@@ -230,6 +282,13 @@ function blockToMd(node: MdJsonNode): string {
       return listToMd(node, "");
     case "horizontalrule":
       return "---";
+    case "task-line": {
+      const box = node.done ? "x" : " ";
+      const title = childrenToMd(node);
+      return node.taskId
+        ? `- [${box}] ${title} <!-- moduo:task:${node.taskId} -->`
+        : `- [${box}] ${title}`;
+    }
     case "page-row":
       return `[${(node.label || "Untitled").replace(/\]/g, "")}](moduo://note/${node.noteId})`;
     case "embed":

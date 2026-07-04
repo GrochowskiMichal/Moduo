@@ -82,7 +82,7 @@ export function MarkdownClipboardPlugin() {
           // selection carries a moduo node (whose md form is the point).
           const hasModuoNode = nodes.some((n) => {
             const t = n.getType();
-            return t === "entity-ref" || t === "page-row" || t === "embed";
+            return t === "entity-ref" || t === "page-row" || t === "embed" || t === "task-line";
           });
           const norm = (s: string) => s.replace(/\s+/g, "");
           const coversWholeBlocks =
