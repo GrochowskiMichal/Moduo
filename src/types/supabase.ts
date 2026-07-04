@@ -904,12 +904,60 @@ export type Database = {
           },
         ]
       }
+      note_updates: {
+        Row: {
+          client_id: string
+          client_seq: number
+          created_at: string
+          id: number
+          note_id: string
+          update_b64: string
+          workspace_id: string
+        }
+        Insert: {
+          client_id: string
+          client_seq: number
+          created_at?: string
+          id?: never
+          note_id: string
+          update_b64: string
+          workspace_id: string
+        }
+        Update: {
+          client_id?: string
+          client_seq?: number
+          created_at?: string
+          id?: never
+          note_id?: string
+          update_b64?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "note_updates_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "note_updates_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notes: {
         Row: {
+          body_md: string
+          body_text: string
           created_at: string
           created_by: string | null
           deleted_at: string | null
           doc_state: string | null
+          doc_version: number
           icon: string | null
           id: string
           is_archived: boolean
@@ -917,6 +965,9 @@ export type Database = {
           kind: string
           parent_id: string | null
           position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
           share_permission: string
           share_scope: string
           tags: Json
@@ -925,10 +976,13 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          body_md?: string
+          body_text?: string
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           doc_state?: string | null
+          doc_version?: number
           icon?: string | null
           id?: string
           is_archived?: boolean
@@ -936,6 +990,9 @@ export type Database = {
           kind?: string
           parent_id?: string | null
           position?: string
+          publish_token?: string | null
+          published_at?: string | null
+          search_tsv?: unknown
           share_permission?: string
           share_scope?: string
           tags?: Json
@@ -944,10 +1001,13 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          body_md?: string
+          body_text?: string
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           doc_state?: string | null
+          doc_version?: number
           icon?: string | null
           id?: string
           is_archived?: boolean
@@ -955,6 +1015,9 @@ export type Database = {
           kind?: string
           parent_id?: string | null
           position?: string
+          publish_token?: string | null
+          published_at?: string | null
+          search_tsv?: unknown
           share_permission?: string
           share_scope?: string
           tags?: Json
@@ -3021,6 +3084,429 @@ export type Database = {
         Returns: undefined
       }
       module_api_key_id: { Args: never; Returns: string }
+      notes__purge_ids: {
+        Args: { p_ids: string[]; p_workspace_id: string }
+        Returns: number
+      }
+      notes__subtree_ids: {
+        Args: { p_note_id: string; p_workspace_id: string }
+        Returns: string[]
+      }
+      notes_module_permission: {
+        Args: { p_workspace_id: string }
+        Returns: string
+      }
+      notes_op__guard: { Args: { p_workspace_id: string }; Returns: undefined }
+      notes_op__guard_note: {
+        Args: {
+          p_include_trashed?: boolean
+          p_note_id: string
+          p_workspace_id: string
+        }
+        Returns: {
+          body_md: string
+          body_text: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_state: string | null
+          doc_version: number
+          icon: string | null
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
+          share_permission: string
+          share_scope: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes_op_apply_updates: {
+        Args: {
+          p_body_md?: string
+          p_body_text?: string
+          p_client_id: string
+          p_note_id: string
+          p_updates: Json
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
+      notes_op_archive: {
+        Args: { p_note_id: string; p_workspace_id: string }
+        Returns: {
+          body_md: string
+          body_text: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_state: string | null
+          doc_version: number
+          icon: string | null
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
+          share_permission: string
+          share_scope: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes_op_create: {
+        Args: {
+          p_icon?: string
+          p_id?: string
+          p_parent_id?: string
+          p_position?: string
+          p_title?: string
+          p_workspace_id: string
+        }
+        Returns: {
+          body_md: string
+          body_text: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_state: string | null
+          doc_version: number
+          icon: string | null
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
+          share_permission: string
+          share_scope: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes_op_duplicate: {
+        Args: {
+          p_position?: string
+          p_source_note_id: string
+          p_workspace_id: string
+        }
+        Returns: {
+          body_md: string
+          body_text: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_state: string | null
+          doc_version: number
+          icon: string | null
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
+          share_permission: string
+          share_scope: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes_op_import: {
+        Args: { p_rows: Json; p_workspace_id: string }
+        Returns: Json
+      }
+      notes_op_mention: {
+        Args: {
+          p_mentioned_user_ids: string[]
+          p_note_id: string
+          p_workspace_id: string
+        }
+        Returns: undefined
+      }
+      notes_op_move: {
+        Args: {
+          p_note_id: string
+          p_parent_id?: string
+          p_position?: string
+          p_workspace_id: string
+        }
+        Returns: {
+          body_md: string
+          body_text: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_state: string | null
+          doc_version: number
+          icon: string | null
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
+          share_permission: string
+          share_scope: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes_op_publish: {
+        Args: { p_note_id: string; p_workspace_id: string }
+        Returns: {
+          body_md: string
+          body_text: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_state: string | null
+          doc_version: number
+          icon: string | null
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
+          share_permission: string
+          share_scope: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes_op_purge: {
+        Args: { p_note_id: string; p_workspace_id: string }
+        Returns: Json
+      }
+      notes_op_purge_expired: {
+        Args: { p_workspace_id: string }
+        Returns: Json
+      }
+      notes_op_rename: {
+        Args: { p_note_id: string; p_title: string; p_workspace_id: string }
+        Returns: {
+          body_md: string
+          body_text: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_state: string | null
+          doc_version: number
+          icon: string | null
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
+          share_permission: string
+          share_scope: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes_op_restore: {
+        Args: { p_note_id: string; p_workspace_id: string }
+        Returns: Json
+      }
+      notes_op_save_snapshot: {
+        Args: {
+          p_body_md?: string
+          p_body_text?: string
+          p_note_id: string
+          p_snapshot_b64: string
+          p_upto_update_id: number
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
+      notes_op_set_meta: {
+        Args: { p_note_id: string; p_patch: Json; p_workspace_id: string }
+        Returns: {
+          body_md: string
+          body_text: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_state: string | null
+          doc_version: number
+          icon: string | null
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
+          share_permission: string
+          share_scope: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes_op_trash: {
+        Args: { p_note_id: string; p_workspace_id: string }
+        Returns: Json
+      }
+      notes_op_unarchive: {
+        Args: { p_note_id: string; p_workspace_id: string }
+        Returns: {
+          body_md: string
+          body_text: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_state: string | null
+          doc_version: number
+          icon: string | null
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
+          share_permission: string
+          share_scope: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes_op_unpublish: {
+        Args: { p_note_id: string; p_workspace_id: string }
+        Returns: {
+          body_md: string
+          body_text: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_state: string | null
+          doc_version: number
+          icon: string | null
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          kind: string
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          search_tsv: unknown
+          share_permission: string
+          share_scope: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       notifications_list: {
         Args: { p_limit?: number; p_workspace_id: string }
         Returns: {
