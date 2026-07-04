@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { toast } from "sonner";
+
+import { ENTITY_OPEN_EVENT, entityOpenTarget } from "../../lib/entity-open";
 
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
@@ -86,6 +89,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useShortcut("new-item", () => dispatchCreateNew());
   const { runtime, userEmail } = useAuth();
   const { loading, modulePermissions } = useWorkspace();
+  // Global capture (Wave-3 Notes AC1): ⌘⇧N → a fresh note from anywhere.
+  useShortcut(
+    "new-note",
+    useCallback(() => {
+      if (modulePermissions.notes === "none") return;
+      void navigate({
+        to: "/notes",
+        search: (prev: Record<string, unknown>) => ({ ...prev, action: "new" as const }),
+      });
+    }, [navigate, modulePermissions.notes]),
+  );
   const currentFeature = routeToFeatureLayout(pathname);
   const isEmailRoute = pathname.startsWith("/email");
   const isSettingsRoute = pathname.startsWith("/settings");
@@ -130,11 +144,38 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [runtime]);
 
+  // The host listener for the spine's deep-link event (FX-1 AC1). Every linked
+  // row, entity-ref chip, and dashboard widget dispatches `moduo:entity:open`;
+  // this is the one place that routes it. Unknown types get a quiet toast.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onEntityOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ type?: string; id?: string }>).detail;
+      if (!detail?.type || !detail.id) return;
+      const target = entityOpenTarget(detail.type, detail.id);
+      if (!target) {
+        toast("Nothing to open yet", {
+          description: `There's no page for "${detail.type}" yet.`,
+        });
+        return;
+      }
+      if (target.search) {
+        void navigate({ to: target.to, search: target.search as any });
+      } else {
+        void navigate({ to: target.to });
+      }
+    };
+    window.addEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
+    return () => window.removeEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
+  }, [navigate]);
+
   const modulesNavItems = useMemo(
     () =>
       baseModulesNavItems.filter((tab) => {
         if (tab.module === "notes") return modulePermissions.notes !== "none";
         if (tab.module === "tasks") return modulePermissions.tasks !== "none";
+        // Calendar rides the Tasks permission lane at alpha (specs/calendar.md).
+        if (tab.module === "calendar") return modulePermissions.tasks !== "none";
         return true;
       }),
     [modulePermissions.notes, modulePermissions.tasks],
@@ -146,9 +187,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     }
   }, [isSettingsRoute, navigate, pathname, modulesNavItems]);
 
-  // ⌘1..⌘6 navigate to the Nth visible module tab. Six fixed useShortcut
-  // calls keeps hook order stable across renders; handlers no-op when the
-  // index exceeds the current visible list.
+  // ⌘1..⌘7 navigate to the Nth visible module tab. Fixed useShortcut calls
+  // keep hook order stable across renders; handlers no-op when the index
+  // exceeds the current visible list.
   const navigateToIndex = useCallback(
     (index: number) => {
       const item = modulesNavItems[index];
@@ -163,6 +204,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useShortcut("module-4", useCallback(() => navigateToIndex(3), [navigateToIndex]));
   useShortcut("module-5", useCallback(() => navigateToIndex(4), [navigateToIndex]));
   useShortcut("module-6", useCallback(() => navigateToIndex(5), [navigateToIndex]));
+  useShortcut("module-7", useCallback(() => navigateToIndex(6), [navigateToIndex]));
 
   useEffect(() => {
     writePanelsMap(featurePanels);

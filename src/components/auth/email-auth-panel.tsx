@@ -615,7 +615,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
                 >
                   <CircleHelp className="size-4" />
                 </button>
-                <div className="pointer-events-none invisible absolute right-0 top-full z-20 mt-2 w-[320px] rounded-xl border border-border bg-popover p-3 text-popover-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:opacity-100">
+                <div className="pointer-events-none invisible absolute right-0 top-full z-20 mt-2 w-[320px] rounded-xl border border-border bg-popover p-3 text-popover-foreground opacity-0 shadow-lg transition-all duration-[var(--motion-base)] group-hover:visible group-hover:opacity-100">
                   <p className="text-xs leading-5 text-muted-foreground">
                     This 12-word phrase is your vault root key. Keep it private and offline.
                   </p>

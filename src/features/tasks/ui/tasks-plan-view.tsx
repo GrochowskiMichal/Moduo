@@ -15,10 +15,12 @@ import { CaptureModal } from "./capture-modal";
 import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
+import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import type { PlanView } from "./plan-view-header";
 import { TaskBoardView, type BoardGroupBy } from "./task-board-view";
 import { TaskDetailPanel } from "./task-detail-panel";
 import { TaskListView } from "./task-list-view";
+import { TaskTimelineView } from "./task-timeline-view";
 import { ActiveTagFilters, TagFilterButton } from "./task-tag-filter";
 
 type Props = {
@@ -54,9 +56,10 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   const [mode, setMode] = useState<TasksMode>(
     () => (readLS(workspaceId, "mode") === "execute" ? "execute" : "plan"),
   );
-  const [view, setView] = useState<PlanView>(
-    () => (readLS(workspaceId, "view") === "board" ? "board" : "list"),
-  );
+  const [view, setView] = useState<PlanView>(() => {
+    const stored = readLS(workspaceId, "view");
+    return stored === "board" || stored === "timeline" ? stored : "list";
+  });
   // Provisional selection (last-opened bucket, never "all"); the time-block-aware
   // default is resolved once the bucket bundle has loaded (see effect below).
   const [selection, setSelection] = useState<string>(
@@ -67,6 +70,9 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   );
   const [boardGroupBy, setBoardGroupBy] = useState<BoardGroupBy>(
     () => (readLS(workspaceId, "boardGroupBy") === "bucket" ? "bucket" : "status"),
+  );
+  const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
+    sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
   );
   const [captureOpen, setCaptureOpen] = useState(false);
   const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
@@ -103,6 +109,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   useEffect(() => writeLS(workspaceId, "view", view), [workspaceId, view]);
   useEffect(() => writeLS(workspaceId, "groupBy", groupBy), [workspaceId, groupBy]);
   useEffect(() => writeLS(workspaceId, "boardGroupBy", boardGroupBy), [workspaceId, boardGroupBy]);
+  useEffect(() => writeLS(workspaceId, "timelineZoom", timelineZoom), [workspaceId, timelineZoom]);
 
   // Remember the last concrete bucket scope (never "all" / "today") so the next
   // open can land back on it (spec §9.2).
@@ -383,6 +390,12 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         {...sharedViewProps}
         boardGroupBy={boardGroupBy}
         onBoardGroupByChange={setBoardGroupBy}
+      />
+    ) : view === "timeline" ? (
+      <TaskTimelineView
+        {...sharedViewProps}
+        zoom={timelineZoom}
+        onZoomChange={setTimelineZoom}
       />
     ) : (
       <TaskListView

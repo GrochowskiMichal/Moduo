@@ -59,6 +59,10 @@ export function WidgetsPanel({ isLocked, onToggleLock }: { isLocked: boolean; on
       <WidgetSource type="countdown" label="Countdown" description="Live countdown to a target date & time" disabled={isLocked} />
       <WidgetSource type="todolist" label="To-do List" description="Checklist with title and actionable items" disabled={isLocked} />
       <WidgetSource type="job-tracker" label="Job Application Tracker" description="Track applications, stages, salary, and offer links" disabled={isLocked} />
+      <WidgetSource type="recently-linked" label="Recently Linked" description="Latest connections across your workspace; click to open" disabled={isLocked} />
+      <WidgetSource type="contacts-needs-attention" label="Needs Attention" description="Contacts with an overdue follow-up, no recent touch, or a stale lead" disabled={isLocked} />
+      <WidgetSource type="contacts-reconnect" label="Reconnect" description="People you’ve gone quiet on — a gentle nudge to reach out" disabled={isLocked} />
+      <WidgetSource type="calendar-today" label="Today" description="What’s left on your calendar today, plus unfinished work to move forward" disabled={isLocked} />
       <WidgetSource type="feed" label="Feed" description="Activity stream from your workspace" disabled />
       <WidgetSource type="world-clock" label="World Clock" description="Multi-city world clock view" disabled />
       <WidgetSource type="server-api-status" label="Live Status (Servers & APIs)" description="Monitor uptime and incidents for selected services" disabled />

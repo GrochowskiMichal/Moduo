@@ -1,4 +1,4 @@
-export type WidgetType = "notes" | "clock" | "weather" | "stock" | "crypto" | "pomodoro" | "hydration" | "countdown" | "todolist" | "job-tracker";
+export type WidgetType = "notes" | "clock" | "weather" | "stock" | "crypto" | "pomodoro" | "hydration" | "countdown" | "todolist" | "job-tracker" | "recently-linked" | "contacts-needs-attention" | "contacts-reconnect" | "calendar-today";
 
 export type TodoListItem = {
   id: string;

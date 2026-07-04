@@ -42,6 +42,7 @@
 **The great moment:** the day self-corrects — finish inside a block, unfinished work rolls forward, no wall of red.
 **Drop:** Morgen (and the Sunsama-style ritual). Tasks becomes "Linear-light that actually runs your day."
 **Fast-follow (post-core, ⚠ Q9):** Calendly-like booking links.
+**Fast-follow — CalDAV/ICS read-only (dogfood-blocking, surfaced 2026-07-03, planned same day → CAL-8a/CAL-8b in BUILD_ORDER):** the designer's primary calendars live on non-Google/Outlook hostings (CalDAV/ICS, basic-auth — **no OAuth registration needed**, so this does NOT wait for the Wave-5 credentials pass). The CAL-6 mirror pipeline (accounts/mirror op/rail/attribution/visibility) is provider-agnostic and already shipped; CAL-8 adds the desktop CalDAV/ICS fetcher (Rust), the pure ical→mirror mapper (ical.js, occurrence expansion), and the connect dialog (presets: iCloud · Fastmail · Nextcloud · Other; grouped per-calendar rail rows; ICS feeds included; https-only). Spec: `specs/calendar.md` AC15–AC18 + assumptions 13–21. Until this lands, Morgen can't actually be dropped — it gates dogfooding the Wave-2 loop.
 
 ### Wave 3 — Notes rebuild (+ cloud-sync, the multiplayer enabler)
 **Goal:** a make-or-break leg cleared without database heaviness; notes become a planning surface and go cloud-synced.
@@ -60,12 +61,14 @@
 **Build:** email as a true **in-app pane** (Rust IMAP engine; **not** an iframe) across the 6 accounts · metadata→Supabase so email links into the tissue on every client · **convert email → task in one gesture, auto-linked to the contact** · email follow-up tracking (snooze→task/notification with back-link) · feeds the Universal Inbox.
 **The great moment:** convert an email to a task linked to its sender, never leaving the inbox.
 **Drop:** Spark. *Most expensive module — desktop-first deliberately avoids building/operating a web mail backend at alpha (see [data-layers.md §6](./data-layers.md)).*
+**Shared-infra note (2026-07-03):** the Google/Microsoft **OAuth app registration + credentials** for email is the same consent-screen/app-registration pass the calendar mirror needs — do it once here with both calendar + mail scopes, and the calendar external-sync round-trip (engine shipped in Wave 2/CAL-6b, verified except for real creds) becomes a 15-minute checkbox inside this wave. If external calendars are wanted during the **dogfood** period before Wave 5, the registration alone can be pulled forward as a standalone ~1-hour setup — nothing else about email needs to move.
 
 ### Cross-cutting (runs across all waves)
 - **GTM/trust:** per-seat **no-minimum** pricing + free student tier (⚠ Q3) · consolidation savings calculator on the landing page · "your data is yours" lossless export as a launch feature · surface the local-first "lite"/offline roadmap · (maybe) JetBrains-style perpetual-fallback license.
 - **Multiplayer:** ambient glanceable shared state (who's on what / what changed) in dashboard widgets — **not** chat, not mandatory status updates.
 - **Quality mandate:** every module clears its category bar + one great moment before the next wave starts.
-- **MCP:** each module ships its read/write tools as part of definition-of-done.
+- **MCP:** each module ships its read/write tools as part of definition-of-done (near-zero marginal cost — keep this). A **dedicated hardening pass (`MCP-1` in [specs/BUILD_ORDER.md](../specs/BUILD_ORDER.md)) runs pre-alpha**, not now: connector redeploy + a keyed write round-trip per module (the 2026-07-02 api-key gotcha proved reads can pass while writes are silently dead).
+- **Housekeeping:** legacy/dead code is removed in explicit sweep blocks between waves (`CLEAN-1` in BUILD_ORDER — calendar's retired store is first), not ad-hoc inside feature blocks.
 
 ---
 

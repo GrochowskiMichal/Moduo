@@ -36,6 +36,7 @@ import {
   PopoverTrigger,
 } from "../../../components/ui/popover";
 import { PropertyRow } from "../../../components/ui/property-row";
+import { Field, Mirror } from "../../../components/ui/field";
 import { TagChip } from "../../../components/tag-chip";
 import { TagPicker } from "../../../components/tag-picker";
 import { DateField } from "../../../components/ui/date-field";
@@ -925,17 +926,6 @@ function DetailEmptyState({
 
 // ── small building blocks ──────────────────────────────────────────────────────
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <span className="block font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
-
 function LevelSelect({
   value,
   disabled,
@@ -963,15 +953,6 @@ function LevelSelect({
         ))}
       </SelectContent>
     </Select>
-  );
-}
-
-function Mirror({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span className="shrink-0 text-muted-foreground/70">{icon}</span>
-      {children}
-    </span>
   );
 }
 

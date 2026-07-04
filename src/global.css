@@ -193,6 +193,25 @@ body,
   background-color: var(--label);
 }
 
+/* CAL-6: external calendar chips + the left-rail swatch carry their account hue
+   through the SAME [data-label] tokens as tags (§13b) — the raw provider hex
+   maps to a bounded label name, never an inline color. `.cal-swatch` is the
+   left-rail dot; `.cal-chip-external` tints the grid chip. */
+.cal-swatch {
+  background-color: var(--label);
+}
+
+.cal-chip-external {
+  background-color: var(--label-surface);
+  border-color: var(--label);
+}
+
+/* Hover feedback — external chips are clickable (open the popover), so match the
+   native chip's subtle deepen. `filter` is an effect, not a design-system color. */
+.cal-chip-external:hover {
+  filter: brightness(1.12);
+}
+
 /* TagChip v2: the "#" glyph carries the hue, the name stays neutral — a
    smaller, borderless chip (no dot, no pill). `.tag-chip-active` hues the whole
    label (the one fully-colored treatment, reserved for active filter chips). */
@@ -291,6 +310,23 @@ body,
 }
 
 /* ═══ Notes: Lexical theme — token-driven ═══ */
+
+/* Wave-3 editor: the first line IS the title (no separate title field) —
+   the leading TEXT block renders display-sized. Scoped to paragraph/heading
+   so a note starting with a checklist/code/table doesn't blow up 3xl. */
+.notes-editor-v2 [contenteditable] > .notes-p:first-child,
+.notes-editor-v2 [contenteditable] > .notes-h1:first-child,
+.notes-editor-v2 [contenteditable] > .notes-h2:first-child,
+.notes-editor-v2 [contenteditable] > .notes-h3:first-child {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  color: var(--foreground);
+}
 
 .notes-p {
   margin: 0 0 0.625rem;
@@ -433,6 +469,28 @@ body,
   place-items: center;
 }
 
+/* Task lines (NO-5) — a checkbox line that grew up, never a card. The
+ * checkbox/meta chrome renders in the plugin's OVERLAY outside the
+ * contenteditable (Lexical reclaims foreign DOM inside its root); this block
+ * only reserves the gutters the overlay draws into. */
+.notes-task-line {
+  position: relative;
+  margin: 0.25rem 0;
+  padding: 0.125rem 7rem 0.125rem 1.75rem;
+  border-radius: var(--radius-sm);
+  min-height: 1.75rem;
+}
+
+.notes-task-line[data-done="true"] {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: var(--border);
+}
+
+.notes-task-line[data-pending="true"] {
+  color: var(--muted-foreground);
+}
+
 .notes-inline-code,
 .notes-code-block {
   font-family: var(--font-mono);
@@ -554,6 +612,19 @@ body,
 }
 
 /* ═══ Mindmap UI ═══ */
+
+/* ═══ Thin scrollbars (app-wide utility; calendar grid + rail use it) ═══ */
+
+/* Two mechanisms on purpose: modern engines take the standard properties
+   (when `scrollbar-width` is non-auto, Chromium ignores the ::-webkit rules
+   below and would otherwise color the native thin scrollbar from
+   `color-scheme` — white on our dark surfaces, hence the explicit
+   scrollbar-color); older WebKit (Tauri on pre-18.2 macOS WKWebView) still
+   reads the ::-webkit-scrollbar block. Both paths are token-routed. */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
 
 .scrollbar-thin::-webkit-scrollbar {
   width: 4px;

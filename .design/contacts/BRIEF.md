@@ -134,7 +134,7 @@ module_activity  -- existing append-only trail; Contacts writes entity_type 'con
 
 **Roll-up is a read, not stored state.** `contacts.get` returns the contact row plus a derived bundle: linked entities (via `entity_links`), each resolved to a snippet by its owning module, grouped by `relation_kind`, ordered by activity recency — with last-touch and open-items computed on the fly (or via a cached materialized view if profiling demands it). Nothing is written to keep a contact "current"; it is current by construction.
 
-Polymorphic integrity follows the spine-wide decision (trigger validation vs. central `entities` registry) — Contacts does not solve it locally; it inherits whatever §5/Open-Questions lands.
+Polymorphic integrity follows the spine-wide decision — **RESOLVED (2026-06-24): the central `entities` registry** ([connective-tissue/DESIGN_BRIEF.md](../connective-tissue/DESIGN_BRIEF.md) §Data Model; [docs/decisions.md](../../docs/decisions.md)). Contacts does not solve it locally; it upserts `entities` in each op and FKs its links through the registry, adopting the shared definition verbatim.
 
 ---
 
@@ -160,4 +160,4 @@ Polymorphic integrity follows the spine-wide decision (trigger validation vs. ce
 - **Definition of done (module contract):** intent-op RPCs + actor attribution + `module_activity` writes + `ModuleManifest` in `module-registry.ts` + MCP tools + the "Needs attention" dashboard widget. Not done until all are present.
 - **Sequencing within the module:** (1) `contacts`/`companies` tables + RLS + intent ops; (2) adopt `entity_links` + roll-up read engine; (3) CSV import (the adoption gate, must be early); (4) auto-suggest; (5) MCP manifest + dashboard widget.
 
-Grounding files: `/Users/maciej/Documents/Coding/moduohyb/.claude/worktrees/quizzical-faraday-86739c/docs/data-layers.md` (spine §5, email §6, open questions), `/Users/maciej/Documents/Coding/moduohyb/.claude/worktrees/quizzical-faraday-86739c/src/lib/module-manifest.ts` (manifest shape), `/Users/maciej/Documents/Coding/moduohyb/.claude/worktrees/quizzical-faraday-86739c/docs/moduo-module-contract.md` (four-pillar contract).
+Grounding files (repo-relative): [`docs/data-layers.md`](../../docs/data-layers.md) (spine §5, email §6, open questions), [`src/lib/module-manifest.ts`](../../src/lib/module-manifest.ts) (manifest shape), [`docs/moduo-module-contract.md`](../../docs/moduo-module-contract.md) (four-pillar contract). Execution contract: [`specs/contacts.md`](../../specs/contacts.md).

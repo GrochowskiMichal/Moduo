@@ -127,6 +127,21 @@ describe("betweenPositions", () => {
     expect(betweenPositions(k, k)).toBe(out); // deterministic
   });
 
+  it("legacy over-width keys (16-digit notes positions) never collide", () => {
+    // parseInt(base36) on a 16-char key is past float precision — the old
+    // integer fast path absorbed +STEP and returned the IDENTICAL string.
+    const legacy = "5000000000000000";
+    const after = endPosition([{ position: legacy }]);
+    expect(after).not.toBe(legacy);
+    expect(after > legacy).toBe(true);
+    // Open-top step past a legacy key also stays strictly after it.
+    const stepped = betweenPositions(legacy, null);
+    expect(stepped > legacy).toBe(true);
+    // And the result keeps working as a bound for the next insert.
+    const between = betweenPositions(legacy, after);
+    expect(between > legacy && between < after).toBe(true);
+  });
+
   it("keeps open ends consistent with endPosition", () => {
     const a = endPosition([]);
     // Open top steps by STEP — same key endPosition would mint after `a`.

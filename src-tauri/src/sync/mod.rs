@@ -9,7 +9,8 @@
 //!
 //! Conflict resolution:
 //! - Scalars: last-writer-wins via `updated_at` timestamps.
-//! - Note CRDT: `doc_state` field is left to the existing `notes_apply_crdt_updates` path.
+//! - Note CRDT: `doc_state` writes moved to the Wave-3 cloud sync engine
+//!   (`notesV2` in the JS layer); the old `notes_apply_crdt_updates` command is gone.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,10 +32,7 @@ const MAX_ATTEMPTS: u8 = 5;
 
 // Tables that are synced outbound from redb → Supabase.
 // Keys are redb table names → Supabase REST endpoint path segments.
-const SYNC_TABLES: &[(&str, &str)] = &[
-    ("notes_meta", "notes"),
-    ("calendar_events", "calendar_events"),
-];
+const SYNC_TABLES: &[(&str, &str)] = &[("notes_meta", "notes")];
 
 // Tables pulled from Supabase → redb (read-only inbound merge).
 const PULL_TABLES: &[&str] = &["notes"];

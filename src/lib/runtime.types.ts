@@ -16,6 +16,55 @@ import type {
   TaskStatus,
   TimeBlockMap,
 } from "../features/tasks/model";
+import type {
+  Company,
+  Contact,
+  ContactChannel,
+  ContactCustomValue,
+  ContactDateEntry,
+  ContactFieldDef,
+  ContactFieldType,
+  ContactsModuleBundle,
+} from "../features/contacts/model";
+import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
+import type {
+  CalendarAccountModel,
+  CalendarEventModel,
+  CalendarEventPatch,
+  CalendarMirrorEventInput,
+  CalendarModuleBundle,
+} from "../features/calendar/events";
+import type {
+  Note as NoteV2,
+  NoteDocPull,
+  NotesImportRow,
+  NotesV2Bundle,
+} from "../features/notes/model";
+import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
+import type { ReconnectItem } from "../features/contacts/reconnect";
+import type { NotificationItem } from "../features/spine/notifications";
+import type { RawLinkSuggestion } from "../features/spine/suggest";
+import type { RecentLinkItem } from "../features/spine/recent";
+import type {
+  EntityLink,
+  EntityRecord,
+  EntityRef,
+  LinkOrigin,
+  RelationKind,
+} from "./entity-links";
+
+/** A comment on any registered entity (spine block CT-5). */
+export type SpineComment = {
+  id: string;
+  workspaceId: string;
+  entityType: string;
+  entityId: string;
+  body: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
 
 export type RuntimeSession = {
   access_token: string;
@@ -91,6 +140,8 @@ export type UserPreferences = {
   appearanceUpdatedAt: string | null;
   focus: Record<string, unknown> | null;
   focusUpdatedAt: string | null;
+  calendar: Record<string, unknown> | null;
+  calendarUpdatedAt: string | null;
 };
 
 export type ModuoRuntime = {
@@ -186,25 +237,98 @@ export type ModuoRuntime = {
     getMcpEndpoint(): string;
   };
 
+  /**
+   * LEGACY read-only notes surface. Two survivors: the one-time redb import
+   * (desktop reads the local store through them) and the legacy dashboard
+   * notes-preview widget. The write half died with the Wave-3 rebuild —
+   * mutations go through `notesV2`.
+   */
   notes: {
     list(workspaceId: string): Promise<any[]>;
-    upsert(note: any): Promise<any>;
-    duplicate(input: { workspaceId: string; sourceNoteId: string }): Promise<any>;
+    getDocState(workspaceId: string, noteId: string): Promise<any>;
+  };
+
+  /**
+   * Wave-3 Notes rebuild surface (specs/notes.md NO-1). Cloud-first on both
+   * platforms (desktop delegates wholesale). Writes = notes_op_* intent RPCs;
+   * reads degrade pre-migration (`degraded: true` on the bundle). The legacy
+   * `notes` namespace above retires with NO-2/NO-3.
+   */
+  notesV2: {
+    listMeta(workspaceId: string): Promise<NotesV2Bundle>;
+    /** Snapshot + update-log-since-cursor for one note (the sync engine's pull). */
+    pullDoc(input: {
+      workspaceId: string;
+      noteId: string;
+      sinceUpdateId?: number | null;
+    }): Promise<NoteDocPull>;
+    create(input: {
+      workspaceId: string;
+      id?: string | null;
+      parentId?: string | null;
+      title?: string;
+      position?: string;
+      icon?: string | null;
+    }): Promise<NoteV2>;
+    rename(input: { workspaceId: string; noteId: string; title: string }): Promise<NoteV2>;
     move(input: {
       workspaceId: string;
       noteId: string;
-      newParentId: string | null;
-      newPosition: string;
-    }): Promise<any>;
-    remove(input: { workspaceId: string; noteId: string; deletedAt?: string }): Promise<any>;
-    getDocState(workspaceId: string, noteId: string): Promise<any>;
-    applyCrdtUpdates(
-      workspaceId: string,
-      noteId: string,
-      clientId: string,
-      updates: Array<{ idempotencyKey?: string; clientSeq: number; updateB64: string }>
-    ): Promise<any>;
-    subscribeLocal(workspaceId: string, noteId?: string | null): Promise<string>;
+      parentId: string | null;
+      position: string;
+    }): Promise<NoteV2>;
+    setMeta(input: {
+      workspaceId: string;
+      noteId: string;
+      patch: { icon?: string | null; isPinned?: boolean };
+    }): Promise<NoteV2>;
+    duplicate(input: {
+      workspaceId: string;
+      sourceNoteId: string;
+      position?: string;
+    }): Promise<NoteV2>;
+    archive(input: { workspaceId: string; noteId: string }): Promise<NoteV2>;
+    unarchive(input: { workspaceId: string; noteId: string }): Promise<NoteV2>;
+    trash(input: { workspaceId: string; noteId: string }): Promise<{
+      trashedIds: string[];
+      count: number;
+    }>;
+    restore(input: { workspaceId: string; noteId: string }): Promise<{
+      restoredIds: string[];
+      count: number;
+    }>;
+    purge(input: { workspaceId: string; noteId: string }): Promise<{ count: number }>;
+    /** 30-day trash sweep on module load; degrades quietly pre-deploy. */
+    purgeExpired(workspaceId: string): Promise<{ count: number }>;
+    publish(input: { workspaceId: string; noteId: string }): Promise<NoteV2>;
+    unpublish(input: { workspaceId: string; noteId: string }): Promise<NoteV2>;
+    /** Idempotent outbox push (batched CRDT updates + optional derived body). */
+    pushUpdates(input: {
+      workspaceId: string;
+      noteId: string;
+      clientId: string;
+      updates: Array<{ clientSeq: number; updateB64: string }>;
+      bodyText?: string | null;
+      bodyMd?: string | null;
+    }): Promise<{ inserted: number; duplicates: number; maxUpdateId: number | null }>;
+    /** Client-driven compaction: fold the update log into the snapshot. */
+    saveSnapshot(input: {
+      workspaceId: string;
+      noteId: string;
+      snapshotB64: string;
+      uptoUpdateId: number;
+      bodyText?: string | null;
+      bodyMd?: string | null;
+    }): Promise<{ folded: number; docVersion: number }>;
+    importNotes(input: {
+      workspaceId: string;
+      rows: NotesImportRow[];
+    }): Promise<{ imported: number; skipped: number }>;
+    mention(input: {
+      workspaceId: string;
+      noteId: string;
+      mentionedUserIds: string[];
+    }): Promise<void>;
   };
 
   graph: {
@@ -303,15 +427,66 @@ export type ModuoRuntime = {
   };
 
   calendar: {
-    listEvents(): Promise<any[]>;
-    upsertEvent(event: any): Promise<boolean>;
-    deleteEvent(eventId: string): Promise<boolean>;
-    upsertGoogleEvent(accountId: string, event: any): Promise<any | null>;
-    deleteGoogleEvent(accountId: string, eventId: string): Promise<boolean>;
-    syncGoogleEvents(accountId: string): Promise<boolean>;
-    startGoogleOAuth(): Promise<any>;
-    startOutlookOAuth(): Promise<any>;
-    startAppleOAuth(): Promise<any>;
+    // ── Wave-2 module surface (workspace-scoped, Supabase-first) ──────────
+    // (Bundle/patch shapes live below the ModuoRuntime type.)
+    // Writes go through calendar_op_* RPCs (guard + write + entities upsert
+    // + attributed activity in one txn); reads are indexed SELECTs.
+    /** Events + accounts bundle. Reads DEGRADE to empty pre-migration. */
+    listModule(workspaceId: string): Promise<CalendarModuleBundle>;
+    createEvent(input: {
+      workspaceId: string;
+      title: string;
+      startsAt: string;
+      endsAt: string;
+      allDay?: boolean;
+      rrule?: string | null;
+      description?: string;
+    }): Promise<CalendarEventModel>;
+    updateEvent(input: {
+      workspaceId: string;
+      eventId: string;
+      patch: CalendarEventPatch;
+    }): Promise<CalendarEventModel>;
+    removeEvent(input: { workspaceId: string; eventId: string }): Promise<void>;
+    upsertAccount(input: {
+      workspaceId: string;
+      provider: string;
+      externalId: string;
+      displayLabel: string;
+      color?: string | null;
+      status?: string | null;
+      lastSyncAt?: string | null;
+      /**
+       * CAL-8: the CalDAV/ICS connection descriptor JSON. OMIT (undefined) to
+       * keep the stored value — the RPC param is only sent when provided, so
+       * OAuth callers keep working against a pre-CAL-8 database.
+       */
+      syncToken?: string | null;
+    }): Promise<CalendarAccountModel>;
+    removeAccount(input: { workspaceId: string; accountId: string }): Promise<void>;
+    /** Batched idempotent mirror upsert (the desktop sync engine's write). */
+    mirrorEvents(input: {
+      workspaceId: string;
+      accountId: string;
+      events: CalendarMirrorEventInput[];
+      deletedExternalIds?: string[];
+    }): Promise<{ upserted: number; removed: number }>;
+
+    /**
+     * Desktop only (CAL-6b): fetch a connected account's RAW provider events
+     * for a window via the Tauri OAuth engine. The frontend maps them
+     * (mirror.ts) and pushes them through {@link mirrorEvents}. Web returns []
+     * (the sync writer is the desktop app). `externalAccountId` is the provider
+     * account id (the keychain key / the cloud account's `externalId`).
+     */
+    fetchExternalEvents(input: {
+      provider: "google" | "microsoft" | "caldav" | "ics";
+      externalAccountId: string;
+      timeMin: string;
+      timeMax: string;
+      /** CAL-8: the account row's connection descriptor (caldav needs server+username; ignored by OAuth providers). */
+      syncToken?: string | null;
+    }): Promise<Record<string, unknown>[]>;
   };
 
   /**
@@ -340,6 +515,25 @@ export type ModuoRuntime = {
       entityType: string;
       entityId: string;
     }): Promise<void>;
+    /**
+     * All live workspace tags + the tag links attached to one entity. A light
+     * read for non-task surfaces (contact/company hubs) that shouldn't pull
+     * the whole tasks bundle just to render a tag row (fix pack FX-2).
+     */
+    listEntityTags(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<{ tags: Tag[]; links: TagLink[] }>;
+    /**
+     * All live workspace tags + every tag link for the given entity types —
+     * the directory's tag-filter read (fix pack FX-3). One indexed query pair;
+     * omit `entityTypes` for all links.
+     */
+    listTagLinks(input: {
+      workspaceId: string;
+      entityTypes?: string[];
+    }): Promise<{ tags: Tag[]; links: TagLink[] }>;
     /** Blocked-by dependency edge (blocker → blocked, spec §5c). Idempotent. */
     createTaskRelation(input: {
       workspaceId: string;
@@ -388,6 +582,281 @@ export type ModuoRuntime = {
       entityType: string;
       entityId: string;
       limit?: number;
+      /** Scope to one module (e.g. "tasks"). Omit to read across all modules —
+       * what a spine entity (contact/company) needs, since its activity is logged
+       * under module='contacts', not 'tasks'. */
+      module?: string;
     }): Promise<ActivityEntry[]>;
   };
+
+  /**
+   * Connective-tissue spine — the link substrate (specs/connective-tissue.md
+   * block CT-1). Any entity links/attaches/relates to any other through one
+   * typed `entity_links` table FK'd into the central `entities` registry.
+   * Cloud-first: web hits Supabase directly; desktop delegates to the web
+   * runtime (same code path). All mutations go through `links_op_*` /
+   * `entities_op_*` RPCs (permission guard + write + attributed activity row in
+   * one transaction); reads are direct SELECTs over the indexed tables.
+   */
+  spine: {
+    /**
+     * Every live link touching an entity (matched on either end). Block CT-2
+     * builds the grouped hub roll-up on top of this single indexed read.
+     */
+    listLinks(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<EntityLink[]>;
+    /**
+     * Create a typed link. Idempotent + direction-agnostic (a duplicate pair+kind
+     * no-ops and returns the existing row); rejects self-links and unknown kinds.
+     * Registers both endpoints in the registry in the same transaction. Optional
+     * labels/icons seed the registry projection for the @mention/search picker.
+     */
+    createLink(input: {
+      workspaceId: string;
+      source: EntityRef;
+      target: EntityRef;
+      relationKind?: RelationKind;
+      origin?: LinkOrigin;
+      sourceLabel?: string;
+      sourceIcon?: string | null;
+      targetLabel?: string;
+      targetIcon?: string | null;
+    }): Promise<EntityLink>;
+    /** Re-type an existing link (optimistic re-group in the hub). No-op if unchanged. */
+    setLinkKind(input: {
+      workspaceId: string;
+      linkId: string;
+      relationKind: RelationKind;
+    }): Promise<EntityLink>;
+    /** Soft-delete a link (Undo-friendly; idempotent). Returns the tombstoned row. */
+    deleteLink(input: { workspaceId: string; linkId: string }): Promise<EntityLink | null>;
+    /**
+     * Search the central registry for the @mention / `/ref` / link picker.
+     * Excludes tombstones; optionally scoped to a set of entity types.
+     */
+    searchEntities(input: {
+      workspaceId: string;
+      query?: string;
+      types?: string[];
+      limit?: number;
+    }): Promise<EntityRecord[]>;
+    /**
+     * Batch-read registry records for a set of refs — the hub snippet/label
+     * projection for one roll-up. Includes tombstones (so the hub can dim
+     * deleted targets), unlike `searchEntities`.
+     */
+    getEntities(input: { workspaceId: string; refs: EntityRef[] }): Promise<EntityRecord[]>;
+    /**
+     * Tombstone a registry entry (the delete half of the registry contract) — a
+     * module's own delete op calls this; exposed for testing + pre-adoption use.
+     */
+    tombstoneEntity(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<void>;
+
+    // ── Comments + notifications (block CT-5) ────────────────────────────────
+    /**
+     * Add a comment to any entity. `mentionedUserIds` (workspace members
+     * @-mentioned in the body) become notifications for those members (AC9).
+     * Goes through `comments_op_add` (guard + registry ensure + attributed
+     * activity in one transaction).
+     */
+    addComment(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+      body: string;
+      mentionedUserIds?: string[];
+      entityLabel?: string;
+      entityIcon?: string | null;
+    }): Promise<SpineComment>;
+    /**
+     * The derived notification feed: `module_activity` rows targeting me,
+     * overlaid with my read state, newest first (AC10). The NotificationCenter
+     * groups these by target then verb.
+     */
+    listNotifications(input: { workspaceId: string; limit?: number }): Promise<NotificationItem[]>;
+    /** Mark one notification (activity row) read. Idempotent. */
+    markNotificationRead(input: { workspaceId: string; activityId: string }): Promise<void>;
+    /** Mark every targeting-me notification in the workspace read. */
+    markAllNotificationsRead(input: { workspaceId: string }): Promise<void>;
+
+    // ── Deterministic auto-suggested links (block CT-6) ──────────────────────
+    /**
+     * Deterministic auto-suggested links for a focus entity (AC11). Computed
+     * server-side from non-ML signals only (shared tags, matching email
+     * domains, ±time-window co-activity), already excluding self /
+     * already-linked / previously-declined pairs. Returns RAW per-signal rows;
+     * `scoreSuggestions` ranks them. Requires edit access (the strip is a link
+     * gesture); callers degrade gracefully on permission/RPC error.
+     */
+    suggestLinks(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+      limit?: number;
+    }): Promise<RawLinkSuggestion[]>;
+    /**
+     * Record a "no" for a suggested pair so it is never re-offered (AC11).
+     * Writes `link_suggestion_declines` (direction-agnostic, idempotent).
+     * Accepting a suggestion is just `createLink({ origin: "suggest" })`.
+     */
+    declineSuggestion(input: {
+      workspaceId: string;
+      source: EntityRef;
+      target: EntityRef;
+    }): Promise<void>;
+
+    /**
+     * The workspace's most recent links, both endpoints resolved from the
+     * registry — the "Recently linked" dashboard widget read (AC12). One indexed
+     * `entity_links` read + one batched registry lookup, shaped newest-first.
+     */
+    recentLinks(input: { workspaceId: string; limit?: number }): Promise<RecentLinkItem[]>;
+  };
+
+  /**
+   * Contacts module (light CRM) — block CO-1. People + companies are hub
+   * entities whose pages roll up from the spine. Cloud-first: web hits Supabase
+   * directly; desktop delegates to the web runtime (same code path). All
+   * invariant-bearing writes go through `contacts_op_*` / `companies_op_*` RPCs
+   * (permission guard + write + `entities` registry upsert + attributed activity
+   * in one transaction); reads are direct SELECTs over the indexed tables.
+   */
+  contacts: {
+    /** People + companies for the directory (CO-2 builds the UI on this). */
+    list(workspaceId: string): Promise<ContactsModuleBundle>;
+    createContact(input: {
+      workspaceId: string;
+      name: string;
+      email?: string | null;
+      phone?: string | null;
+      title?: string | null;
+      companyId?: string | null;
+      status?: string;
+      notesInline?: string;
+    }): Promise<Contact>;
+    updateContact(input: {
+      workspaceId: string;
+      contactId: string;
+      name?: string;
+      email?: string | null;
+      phone?: string | null;
+      title?: string | null;
+      notesInline?: string;
+      /** Pass to set/clear the denormalized company FK (canonical edge is the link). */
+      setCompany?: { companyId: string | null };
+    }): Promise<Contact>;
+    /** Optimistic, flat status change (AC3). Accepts any renamed/custom label. */
+    setStatus(input: { workspaceId: string; contactId: string; status: string }): Promise<Contact>;
+    createCompany(input: {
+      workspaceId: string;
+      name: string;
+      domains?: string[];
+      website?: string | null;
+      notesInline?: string;
+    }): Promise<Company>;
+    updateCompany(input: {
+      workspaceId: string;
+      companyId: string;
+      name?: string;
+      domains?: string[];
+      website?: string | null;
+      notesInline?: string;
+    }): Promise<Company>;
+    /**
+     * Link a contact/company to any other entity via the spine, attributed to
+     * Contacts (`contacts_op_link`). Idempotent + direction-agnostic.
+     */
+    link(input: {
+      workspaceId: string;
+      contact: EntityRef;
+      target: EntityRef;
+      relationKind?: RelationKind;
+      origin?: LinkOrigin;
+      contactLabel?: string;
+      targetLabel?: string;
+      targetIcon?: string | null;
+    }): Promise<EntityLink>;
+    /** Soft-delete a link the contact owns (Undo-friendly; idempotent). */
+    unlink(input: { workspaceId: string; linkId: string }): Promise<EntityLink | null>;
+    /** Soft-delete a contact: drops its links + tombstones the registry entry. */
+    deleteContact(input: { workspaceId: string; contactId: string }): Promise<Contact>;
+    /**
+     * Soft-delete a company (FX-7): clears members' denormalized company_id,
+     * drops every link touching it (works-at included), tombstones the registry
+     * entry. Member contacts survive — only their company chip clears.
+     */
+    deleteCompany(input: { workspaceId: string; companyId: string }): Promise<Company>;
+    /**
+     * Bulk CSV import (AC6) — one attributed, activity-logged op. The client
+     * parses + previews dedupe; this writes the confirmed plan (create / merge
+     * rows) in a single transaction and returns the counts + affected ids.
+     */
+    importContacts(input: {
+      workspaceId: string;
+      rows: ContactImportRow[];
+    }): Promise<ContactImportResult>;
+    /**
+     * Contacts that need attention (AC11) — overdue follow-ups, no-touch active
+     * contacts (>14d), stale leads (>30d). The "Needs attention" dashboard widget
+     * read; an indexed contacts + follow-up-links + tasks read, shaped by the pure
+     * selector. Degrades to fewer signals before the contacts migration deploys.
+     */
+    needsAttention(input: { workspaceId: string }): Promise<NeedsAttentionItem[]>;
+    /** Contacts you've gone quiet on (oldest last-touch first) — the Reconnect widget. */
+    reconnect(input: { workspaceId: string }): Promise<ReconnectItem[]>;
+    /**
+     * Apply a partial detail patch to a contact (the inline-edit card's save) —
+     * any of name/title/notesInline/status/isFavorite/companyId + the labelled
+     * lists (emails/phones/addresses/urls/dates) + custom. Derives the scalar
+     * email/phone from each list's primary. (v2.)
+     */
+    setContactDetails(input: { workspaceId: string; contactId: string; patch: ContactDetailsPatch }): Promise<Contact>;
+    /** Toggle the per-workspace favorite flag. */
+    setFavorite(input: { workspaceId: string; contactId: string; value: boolean }): Promise<Contact>;
+    /** Apply a partial detail patch to a company (name/website/domains/notes/custom). */
+    setCompanyDetails(input: { workspaceId: string; companyId: string; patch: CompanyDetailsPatch }): Promise<Company>;
+    /** Create/upsert a workspace custom-field definition (the "add field" picker). */
+    addFieldDef(input: {
+      workspaceId: string;
+      key: string;
+      label?: string;
+      type?: ContactFieldType;
+      options?: string[];
+      position?: number;
+    }): Promise<ContactFieldDef>;
+    /** Remove a custom-field definition (values remain in the blobs, just unsurfaced). */
+    deleteFieldDef(input: { workspaceId: string; fieldId: string }): Promise<void>;
+  };
 };
+
+/** Partial patch for `setContactDetails` — camelCase keys mirror the SQL op. */
+export type ContactDetailsPatch = Partial<{
+  name: string;
+  title: string | null;
+  notesInline: string;
+  status: string;
+  isFavorite: boolean;
+  companyId: string | null;
+  emails: ContactChannel[];
+  phones: ContactChannel[];
+  addresses: ContactChannel[];
+  urls: ContactChannel[];
+  dates: ContactDateEntry[];
+  custom: Record<string, ContactCustomValue>;
+}>;
+
+/** Partial patch for `setCompanyDetails`. */
+export type CompanyDetailsPatch = Partial<{
+  name: string;
+  website: string | null;
+  domains: string[];
+  notesInline: string;
+  custom: Record<string, ContactCustomValue>;
+}>;

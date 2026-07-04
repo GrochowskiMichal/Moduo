@@ -13,6 +13,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { parseSyncDescriptor } from "../features/calendar/sync";
 import type {
   IntegrationStatusItem,
   ModuoRuntime,
@@ -68,20 +69,17 @@ export const tauriRuntime: ModuoRuntime = {
   auth: webRuntime.auth,
   workspace: webRuntime.workspace,
 
+  // LEGACY read-only surface: redb reads for the one-time NO-2 import (the
+  // Rust write commands retired with the Wave-3 rebuild).
   notes: {
     list(workspaceId) { return invoke<any[]>("notes_list", { workspaceId }); },
-    upsert(note) { return invoke<any>("notes_upsert", { note }); },
-    duplicate(input) { return invoke<any>("notes_duplicate", { input }); },
-    move(input) { return invoke<any>("notes_move", { input }); },
-    remove(input) { return invoke<any>("notes_delete", { input }); },
     getDocState(workspaceId, noteId) { return invoke<any>("notes_get_doc_state", { workspaceId, noteId }); },
-    applyCrdtUpdates(workspaceId, noteId, clientId, updates) {
-      return invoke<any>("notes_apply_crdt_updates", { workspaceId, noteId, clientId, updates });
-    },
-    subscribeLocal(workspaceId, noteId) {
-      return invoke<string>("notes_subscribe_local", { workspaceId, noteId: noteId ?? null });
-    },
   },
+
+  // Wave-3 Notes rebuild: cloud-first, Supabase-direct — the same code path as
+  // web (notes_op_* RPCs + the entities registry). Desktop offline comes from
+  // the webview's IndexedDB (NO-2), not redb.
+  notesV2: webRuntime.notesV2,
 
   graph: {
     upsertNodesEdges(request) { return invoke<void>("graph_upsert_nodes_edges", { request }); },
@@ -152,62 +150,67 @@ export const tauriRuntime: ModuoRuntime = {
   },
 
   calendar: {
-    async listEvents() {
-      return invoke<any[]>("calendar_events_list");
-    },
-    async upsertEvent(event) {
-      try {
-        await invoke("calendar_events_upsert", { event });
-        return true;
-      } catch {
-        return false;
+    // Cloud-first Wave-2 surface: Supabase-direct, same code path as web
+    // (calendar_op_* RPCs + the entities registry).
+    listModule: webRuntime.calendar.listModule,
+    createEvent: webRuntime.calendar.createEvent,
+    updateEvent: webRuntime.calendar.updateEvent,
+    removeEvent: webRuntime.calendar.removeEvent,
+    upsertAccount: webRuntime.calendar.upsertAccount,
+    removeAccount: webRuntime.calendar.removeAccount,
+    mirrorEvents: webRuntime.calendar.mirrorEvents,
+
+    // CAL-6b: fetch raw provider events via the OAuth engine so the frontend
+    // maps + mirrors them to Supabase (the desktop is the sync writer).
+    // CAL-8: caldav/ics ride the basic-auth engine — creds live in the OS
+    // keychain, addressed by (serverUrl, username) / the feed id; the raw
+    // result is ICS text mapped by ics-mirror.ts instead of mirror.ts.
+    async fetchExternalEvents({ provider, externalAccountId, timeMin, timeMax, syncToken }) {
+      if (provider === "caldav") {
+        // Decode via the canonical parser (one descriptor schema, one owner).
+        const desc = parseSyncDescriptor(syncToken);
+        if (desc?.kind !== "caldav") {
+          throw new Error("caldav_missing_descriptor:reconnect_account");
+        }
+        const events = await invoke<Record<string, unknown>[]>("calendar_caldav_events_sync", {
+          serverUrl: desc.serverUrl,
+          username: desc.username,
+          calendarUrl: externalAccountId,
+          timeMin,
+          timeMax,
+        });
+        return events ?? [];
       }
-    },
-    async deleteEvent(eventId) {
-      try {
-        await invoke("calendar_events_delete", { eventId });
-        return true;
-      } catch {
-        return false;
+      if (provider === "ics") {
+        const events = await invoke<Record<string, unknown>[]>("calendar_ics_fetch", {
+          feedId: externalAccountId,
+        });
+        return events ?? [];
       }
-    },
-    async upsertGoogleEvent(accountId, event) {
-      try {
-        return await invoke<any>("calendar_google_event_upsert", { accountId, event });
-      } catch {
-        return null;
-      }
-    },
-    async deleteGoogleEvent(accountId, eventId) {
-      try {
-        await invoke("calendar_google_event_delete", { accountId, eventId });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async syncGoogleEvents(accountId) {
-      try {
-        await invoke("calendar_google_events_sync", { accountId });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async startGoogleOAuth() {
-      return invoke<any>("calendar_google_oauth_start");
-    },
-    async startOutlookOAuth() {
-      return invoke<any>("calendar_outlook_oauth_start");
-    },
-    async startAppleOAuth() {
-      return invoke<any>("calendar_apple_oauth_start");
+      const command =
+        provider === "microsoft"
+          ? "calendar_outlook_events_sync"
+          : "calendar_google_events_sync";
+      const events = await invoke<Record<string, unknown>[]>(command, {
+        accountId: externalAccountId,
+        timeMin,
+        timeMax,
+      });
+      return events ?? [];
     },
   },
 
   // Cloud-first: Supabase-direct, same code path as web. The redb-backed
   // tasks_module_* commands stay registered for the lite version.
   tasks: webRuntime.tasks,
+
+  // Cloud-first: the connective-tissue spine is Supabase-direct on both
+  // surfaces (entity_links FK'd into the entities registry). Same code path.
+  spine: webRuntime.spine,
+
+  // Cloud-first: Contacts is Supabase-direct on both surfaces (contacts_op_* /
+  // companies_op_* RPCs + the entities registry). Same code path as web.
+  contacts: webRuntime.contacts,
 
   // Cloud-first per-user settings. Delegates to the web runtime today; the
   // future offline-lite build can wrap this with a local queue + replay.

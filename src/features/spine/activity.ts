@@ -1,0 +1,83 @@
+// The spine's activity-rendering vocabulary: one quiet, factual sentence per
+// spine intent op (links / comments / contacts link ops), mirroring the Tasks
+// trail (src/features/tasks/activity.ts) — a mirror, never a wall. AC4: every
+// spine mutation logs an attributed `module_activity` row; this is how that row
+// reads. Newest-first in the hub trail and the notification card.
+
+import { RELATION_KIND_LABELS, isRelationKind } from "../../lib/entity-links";
+
+/** The minimal shape an activity/notification row needs to render an actor. */
+export type SpineActorFields = {
+  actorType?: string | null;
+  actorId?: string | null;
+  actorLabel?: string | null;
+};
+
+/** Who did it — "You", the recorded display name, or a quiet fallback. */
+export function spineActorName(entry: SpineActorFields, currentUserId: string | null): string {
+  if (entry.actorId && currentUserId && entry.actorId === currentUserId) return "You";
+  if (entry.actorLabel) return entry.actorLabel;
+  if (entry.actorType === "agent") return "An agent";
+  if (entry.actorType === "api_key") return "An API client";
+  return "Someone";
+}
+
+const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+
+/** Phrase a relation kind for an activity line ("works at", "a follow-up"…). */
+function kindPhrase(kind: string | null): string {
+  if (kind && isRelationKind(kind)) {
+    return (RELATION_KIND_LABELS[kind] ?? kind).toLowerCase();
+  }
+  return "references";
+}
+
+/**
+ * The action sentence (lowercase start — rendered after the actor name).
+ * Unknown ops fall back to the raw op name so the trail never lies by omission
+ * when a newer client adds ops.
+ */
+export function spineActivityLine(entry: { op: string; payload?: Record<string, unknown> | null }): string {
+  const p = entry.payload ?? {};
+  switch (entry.op) {
+    case "links.create":
+    case "contacts.link": {
+      const kind = str(p.relation_kind);
+      if (kind === "follow-up") return "added a follow-up";
+      if (kind === "attachment") return "attached this";
+      if (kind === "works-at") return "linked a workplace";
+      if (kind === "mentions") return "mentioned this";
+      return kind && kind !== "references" ? `linked this (${kindPhrase(kind)})` : "linked this";
+    }
+    case "links.set_kind": {
+      const to = str(p.to);
+      return to ? `changed a link to ${kindPhrase(to)}` : "changed a link";
+    }
+    case "links.delete":
+    case "contacts.unlink":
+      return "removed a link";
+    case "comments.add": {
+      const excerpt = str(p.excerpt);
+      return excerpt ? `commented: “${excerpt}”` : "left a comment";
+    }
+    // ── Contacts module ops (logged under module='contacts') ──────────────────
+    case "contacts.create":
+      return "added this contact";
+    case "contacts.update":
+      return "updated this contact";
+    case "contacts.delete":
+      return "deleted this contact";
+    case "contacts.set_status": {
+      const to = str(p.to);
+      return to ? `set status to ${to}` : "changed the status";
+    }
+    case "contacts.import":
+      return p.merged === true ? "updated this contact from an import" : "imported this contact";
+    case "companies.create":
+      return "added this company";
+    case "companies.update":
+      return "updated this company";
+    default:
+      return entry.op;
+  }
+}
