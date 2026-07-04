@@ -30,6 +30,7 @@ mod graph_outbox;
 mod model;
 mod parsing;
 mod realtime;
+mod secrets;
 pub mod send_commands;
 mod smtp;
 mod storage;

@@ -176,6 +176,7 @@ pub fn run() {
             commands::email::email_apply_flag,
             commands::email::email_get_mailbox_status,
             commands::email::send_commands::email_send_saved,
+            commands::email::send_commands::email_send_message,
             commands::calendar::calendar_google_oauth_start,
             commands::calendar::calendar_outlook_oauth_start,
             commands::calendar::calendar_apple_oauth_start,

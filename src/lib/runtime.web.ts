@@ -36,6 +36,8 @@ import type { EntityLink, EntityRecord } from "./entity-links";
 import type {
   AuthChangeEvent,
   AuthListener,
+  EmailAccountRef,
+  EmailThreadRef,
   IntegrationStatusItem,
   LocalAuthState,
   ModuoRuntime,
@@ -959,6 +961,121 @@ export const webRuntime: ModuoRuntime = {
     async applyFlag() { throw new Error(desktopOnly().message); },
     async getMailboxStatus() { return []; },
     async sendSaved() { throw new Error(desktopOnly().message); },
+
+    // ── EM-3 cloud tissue surface (Supabase-first; works on web + desktop) ──
+    async listModule(workspaceId) {
+      try {
+        const [accountsRes, refsRes] = await Promise.all([
+          supabaseClient
+            .from("email_accounts")
+            .select("*")
+            .eq("workspace_id", workspaceId)
+            .is("deleted_at", null)
+            .order("created_at", { ascending: true }),
+          supabaseClient
+            .from("email_refs")
+            .select("*")
+            .eq("workspace_id", workspaceId)
+            .is("deleted_at", null)
+            .order("updated_at", { ascending: false }),
+        ]);
+        // Either table missing (pre-migration) → degrade to empty, never crash.
+        if (accountsRes.error || refsRes.error) {
+          return { accounts: [], refs: [], degraded: true };
+        }
+        return {
+          accounts: (accountsRes.data ?? []).map(emailAccountRowToModel),
+          refs: (refsRes.data ?? []).map(emailRefRowToModel),
+          degraded: false,
+        };
+      } catch {
+        return { accounts: [], refs: [], degraded: true };
+      }
+    },
+    async upsertAccountRef({ workspaceId, provider, address, signatureHtml, color, status, unreadCount }) {
+      const { data, error } = await supabaseClient.rpc("email_op_account_upsert", {
+        p_workspace_id: workspaceId,
+        p_provider: provider,
+        p_address: address,
+        p_signature_html: signatureHtml ?? null,
+        p_color: color ?? null,
+        p_status: status ?? null,
+        p_unread_count: unreadCount ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return emailAccountRowToModel(firstRow(data, "email_op_account_upsert"));
+    },
+    async removeAccountRef({ workspaceId, accountId }) {
+      const { error } = await supabaseClient.rpc("email_op_account_remove", {
+        p_workspace_id: workspaceId,
+        p_account_id: accountId,
+      });
+      if (error) throw new Error(error.message);
+    },
+    async upsertRef({ workspaceId, threadKey, accountId, messageKey, fromAddr, fromName, subject, snippet, sentAt }) {
+      const { data, error } = await supabaseClient.rpc("email_op_ref_upsert", {
+        p_workspace_id: workspaceId,
+        p_thread_key: threadKey,
+        p_account_id: accountId ?? null,
+        p_message_key: messageKey ?? null,
+        p_from_addr: fromAddr ?? null,
+        p_from_name: fromName ?? null,
+        p_subject: subject ?? "",
+        p_snippet: snippet ?? "",
+        p_sent_at: sentAt ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return emailRefRowToModel(firstRow(data, "email_op_ref_upsert"));
+    },
+    async snooze({ workspaceId, refId, snoozeUntil }) {
+      const { data, error } = await supabaseClient.rpc("email_op_snooze", {
+        p_workspace_id: workspaceId,
+        p_ref_id: refId,
+        p_snooze_until: snoozeUntil,
+      });
+      if (error) throw new Error(error.message);
+      return emailRefRowToModel(firstRow(data, "email_op_snooze"));
+    },
+    async unsnooze({ workspaceId, refId }) {
+      const { data, error } = await supabaseClient.rpc("email_op_unsnooze", {
+        p_workspace_id: workspaceId,
+        p_ref_id: refId,
+      });
+      if (error) throw new Error(error.message);
+      return emailRefRowToModel(firstRow(data, "email_op_unsnooze"));
+    },
+    async followUp({ workspaceId, refId, followUpAt }) {
+      const { data, error } = await supabaseClient.rpc("email_op_follow_up", {
+        p_workspace_id: workspaceId,
+        p_ref_id: refId,
+        p_follow_up_at: followUpAt,
+      });
+      if (error) throw new Error(error.message);
+      return emailRefRowToModel(firstRow(data, "email_op_follow_up"));
+    },
+    async clearFollowUp({ workspaceId, refId }) {
+      const { data, error } = await supabaseClient.rpc("email_op_clear_follow_up", {
+        p_workspace_id: workspaceId,
+        p_ref_id: refId,
+      });
+      if (error) throw new Error(error.message);
+      return emailRefRowToModel(firstRow(data, "email_op_clear_follow_up"));
+    },
+    async linkThread({ workspaceId, threadId, targetType, targetId, relationKind, origin, threadLabel, targetLabel, targetIcon }) {
+      const { data, error } = await supabaseClient.rpc("email_op_link", {
+        p_workspace_id: workspaceId,
+        p_thread_id: threadId,
+        p_target_type: targetType,
+        p_target_id: targetId,
+        p_relation_kind: relationKind ?? "references",
+        p_origin: origin ?? "manual",
+        p_thread_label: threadLabel ?? null,
+        p_target_label: targetLabel ?? null,
+        p_target_icon: targetIcon ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return firstRow(data, "email_op_link");
+    },
   },
 
   integrations: {
@@ -1909,6 +2026,47 @@ function firstRow(data: unknown, fn: string): any {
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error(`The ${fn} operation returned nothing.`);
   return row;
+}
+
+// ── Email module (EM-3) row → model mappers ───────────────────────────────────
+function emailAccountRowToModel(r: any): EmailAccountRef {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    ownerId: r.owner_id,
+    provider: r.provider,
+    address: r.address,
+    status: r.status,
+    signatureHtml: r.signature_html ?? "",
+    unreadCount: r.unread_count ?? 0,
+    color: r.color ?? null,
+    lastSyncAt: r.last_sync_at ?? null,
+    lastError: r.last_error ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function emailRefRowToModel(r: any): EmailThreadRef {
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    ownerId: r.owner_id,
+    accountId: r.account_id ?? null,
+    threadKey: r.thread_key,
+    messageKey: r.message_key ?? null,
+    fromAddr: r.from_addr ?? null,
+    fromName: r.from_name ?? null,
+    subject: r.subject ?? "",
+    snippet: r.snippet ?? "",
+    sentAt: r.sent_at ?? null,
+    isSnoozed: Boolean(r.is_snoozed),
+    snoozeUntil: r.snooze_until ?? null,
+    followUpAt: r.follow_up_at ?? null,
+    followUpClearedAt: r.follow_up_cleared_at ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
 }
 
 // ── Tasks module: Inbox seeding + row<->model mappers ─────────────────────────

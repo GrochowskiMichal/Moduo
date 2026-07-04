@@ -1,5 +1,5 @@
 use super::connection::{open_imap_session, ImapSession};
-use super::constants::{EMAIL_NAMESPACE, EMAIL_SECRET_KEY_PREFIX};
+use super::constants::EMAIL_SECRET_KEY_PREFIX;
 use super::model::{EmailConfig, StoredEmailAccount};
 use crate::AppState;
 
@@ -44,17 +44,9 @@ pub(super) fn get_password_for_account(
     state: &AppState,
     account_id: &str,
 ) -> Result<Option<String>, String> {
-    let key = account_secret_key(account_id);
-    let raw = state
-        .store
-        .kv_get(EMAIL_NAMESPACE, &key)
-        .map_err(|e| e.to_string())?;
-    match raw {
-        None => Ok(None),
-        Some(value) => serde_json::from_value::<String>(value)
-            .map(Some)
-            .map_err(|e| e.to_string()),
-    }
+    // Keychain-first, with a one-time lazy migration off the legacy redb-cleartext
+    // store (see `secrets.rs`).
+    super::secrets::get_password(state, account_id)
 }
 
 pub(super) fn mailbox_candidates(provider: &str, folder: &str) -> Vec<String> {

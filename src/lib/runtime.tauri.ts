@@ -132,6 +132,16 @@ export const tauriRuntime: ModuoRuntime = {
     applyFlag(input) { return invoke<any>("email_apply_flag", { input }); },
     getMailboxStatus(input) { return invoke<any[]>("email_get_mailbox_status", { input: input ?? {} }); },
     sendSaved(input) { return invoke<boolean>("email_send_saved", input); },
+    // EM-3 cloud tissue methods are Supabase-direct — identical on both platforms.
+    listModule: webRuntime.email.listModule,
+    upsertAccountRef: webRuntime.email.upsertAccountRef,
+    removeAccountRef: webRuntime.email.removeAccountRef,
+    upsertRef: webRuntime.email.upsertRef,
+    snooze: webRuntime.email.snooze,
+    unsnooze: webRuntime.email.unsnooze,
+    followUp: webRuntime.email.followUp,
+    clearFollowUp: webRuntime.email.clearFollowUp,
+    linkThread: webRuntime.email.linkThread,
   },
 
   integrations: {

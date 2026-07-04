@@ -442,6 +442,52 @@ export type ModuoRuntime = {
       subject: string;
       body: string;
     }): Promise<boolean>;
+
+    // ── EM-3 cloud "tissue" surface (Supabase-first, both platforms) ────────
+    // A thread reaches the cloud ONLY via a deliberate action (convert / link /
+    // snooze / follow-up / tag); plain reading writes nothing (AC14 privacy).
+    // Reads DEGRADE to empty pre-migration; writes = email_op_* RPCs.
+    /** Owner's account registry + the workspace's tissue thread refs. */
+    listModule(workspaceId: string): Promise<EmailModuleBundle>;
+    /** Register/refresh the cloud row for a desktop-connected account (no secret). */
+    upsertAccountRef(input: {
+      workspaceId: string;
+      provider: string;
+      address: string;
+      signatureHtml?: string | null;
+      color?: string | null;
+      status?: string | null;
+      unreadCount?: number | null;
+    }): Promise<EmailAccountRef>;
+    removeAccountRef(input: { workspaceId: string; accountId: string }): Promise<void>;
+    /** Pull a thread into the tissue (idempotent by thread key); registers the entity. */
+    upsertRef(input: {
+      workspaceId: string;
+      threadKey: string;
+      accountId?: string | null;
+      messageKey?: string | null;
+      fromAddr?: string | null;
+      fromName?: string | null;
+      subject?: string;
+      snippet?: string;
+      sentAt?: string | null;
+    }): Promise<EmailThreadRef>;
+    snooze(input: { workspaceId: string; refId: string; snoozeUntil: string }): Promise<EmailThreadRef>;
+    unsnooze(input: { workspaceId: string; refId: string }): Promise<EmailThreadRef>;
+    followUp(input: { workspaceId: string; refId: string; followUpAt: string }): Promise<EmailThreadRef>;
+    clearFollowUp(input: { workspaceId: string; refId: string }): Promise<EmailThreadRef>;
+    /** Link an email_thread to any entity through the spine keystone (idempotent). */
+    linkThread(input: {
+      workspaceId: string;
+      threadId: string;
+      targetType: string;
+      targetId: string;
+      relationKind?: string;
+      origin?: string;
+      threadLabel?: string | null;
+      targetLabel?: string | null;
+      targetIcon?: string | null;
+    }): Promise<unknown>;
   };
 
   integrations: {
@@ -866,6 +912,52 @@ export type ModuoRuntime = {
     /** Remove a custom-field definition (values remain in the blobs, just unsurfaced). */
     deleteFieldDef(input: { workspaceId: string; fieldId: string }): Promise<void>;
   };
+};
+
+// ── Email module (EM-3 cloud tissue) ─────────────────────────────────────────
+/** An account's cloud registry row (address/status/signature/hue) — NO secrets. */
+export type EmailAccountRef = {
+  id: string;
+  workspaceId: string;
+  ownerId: string;
+  provider: string;
+  address: string;
+  status: string;
+  signatureHtml: string;
+  unreadCount: number;
+  color: string | null;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** A tissue thread ref (entity_type 'email_thread') — a deliberately-linked email. */
+export type EmailThreadRef = {
+  id: string;
+  workspaceId: string;
+  ownerId: string;
+  accountId: string | null;
+  threadKey: string;
+  messageKey: string | null;
+  fromAddr: string | null;
+  fromName: string | null;
+  subject: string;
+  snippet: string;
+  sentAt: string | null;
+  isSnoozed: boolean;
+  snoozeUntil: string | null;
+  followUpAt: string | null;
+  followUpClearedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EmailModuleBundle = {
+  accounts: EmailAccountRef[];
+  refs: EmailThreadRef[];
+  /** True when the migration isn't applied yet (surfaces degrade, never crash). */
+  degraded: boolean;
 };
 
 /** Partial patch for `setContactDetails` — camelCase keys mirror the SQL op. */

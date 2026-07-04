@@ -67,3 +67,7 @@ ds-bundle/
 .design-sync/ds-types/
 .design-sync/*.log
 .claude/SESSION_TITLE
+
+# Email live-test credentials (EM-1 imap_live harness — MODUO_TEST_IMAP_CREDS_PATH)
+*.creds.json
+*.imap-creds.json

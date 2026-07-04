@@ -1,13 +1,13 @@
 use tauri::State;
 
 use super::account_config::{
-    account_id, account_secret_key, get_password_for_account, normalize_email,
-    normalize_optional_host, normalize_optional_port, normalize_provider, validate_connection,
+    account_id, get_password_for_account, normalize_email, normalize_optional_host,
+    normalize_optional_port, normalize_provider, validate_connection,
 };
-use super::constants::EMAIL_NAMESPACE;
 use super::model::{
     EmailAccountConnectInput, EmailAccountPublic, EmailConfig, StoredEmailAccount,
 };
+use super::secrets;
 use super::realtime::schedule_idle_worker_reconcile;
 use super::storage::{
     read_accounts, remove_account_v2, upsert_account_v2, write_accounts,
@@ -89,14 +89,8 @@ pub async fn email_account_connect_and_save(
         .map_err(|e| format!("connect_task_failed:{e}"))??;
 
     let id = account_id(&provider, &email, imap_host.as_deref());
-    state
-        .store
-        .kv_set(
-            EMAIL_NAMESPACE,
-            &account_secret_key(&id),
-            &serde_json::to_value(&input.password).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| format!("email_secret_store_failed:{e}"))?;
+    // Secret goes to the OS keychain — never redb-cleartext, never the cloud.
+    secrets::save_password(&state, &id, &input.password)?;
 
     let mut accounts = read_accounts(&state)?;
     if let Some(existing) = accounts.iter_mut().find(|account| account.id == id) {
@@ -149,9 +143,7 @@ pub async fn email_account_disconnect(
     accounts.retain(|account| account.id != account_id);
     write_accounts(&state, &accounts)?;
 
-    let _ = state
-        .store
-        .kv_remove(EMAIL_NAMESPACE, &account_secret_key(&account_id));
+    let _ = secrets::delete_account_secret(&state, &account_id);
     remove_account_v2(&state, &account_id);
     schedule_idle_worker_reconcile(&app, false);
     Ok(())
