@@ -15,6 +15,7 @@ import { EntityLinkSuggestions } from "@/features/spine/ui/link-suggestion-strip
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import type { ActivityEntry } from "@/features/tasks/model";
+import { NOTE_DETAIL_REFRESH_EVENT } from "../editor/notes-editor-bridge";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -36,6 +37,14 @@ export function NoteDetailPanel({
   const focus: EntityRef = { type: "note", id: noteId };
   const { status, sections, reload } = useEntityHub(runtime, workspaceId, focus);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
+
+  // A drag-onto-hub link (NO-7b) is written by the page; re-pull so the new edge
+  // appears without a re-select.
+  useEffect(() => {
+    const onRefresh = () => reload();
+    window.addEventListener(NOTE_DETAIL_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(NOTE_DETAIL_REFRESH_EVENT, onRefresh);
+  }, [reload]);
 
   useEffect(() => {
     if (!runtime || !workspaceId) {

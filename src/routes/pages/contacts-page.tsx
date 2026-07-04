@@ -42,6 +42,8 @@ import { ContactImportDialog } from "../../features/contacts/ui/contact-import-d
 import { ContactFormDialog, type ContactFormValues } from "../../features/contacts/ui/contact-form-dialog";
 import { CompanyFormDialog, type CompanyFormValues } from "../../features/contacts/ui/company-form-dialog";
 import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
+import { RightPanelSwitcher, type RightPanelVariant } from "../../components/app/right-panel-switcher";
+import { LinkedNotesPanel } from "../../features/notes/ui/linked-notes-panel";
 
 function openEntity(ref: EntityRef) {
   if (typeof window === "undefined") return;
@@ -587,13 +589,46 @@ export function ContactsPage() {
     );
   }
 
+  // The "Notes" right-panel rail (NO-7b, AC8): linked notes + New-linked-note for
+  // the selected contact/company. Contacts had no right panel before this — the
+  // switcher is single-variant today, extension-ready per the IA principle.
+  const railFocus = contactFocus ?? companyFocus;
+  const railLabel = selectedContact?.name ?? selectedCompany?.name ?? undefined;
+  const railIcon = selectedContact ? "contact" : selectedCompany ? "building-2" : null;
+  const notesRailVariants: RightPanelVariant[] = railFocus
+    ? [
+        {
+          id: "notes",
+          label: "Notes",
+          render: () => (
+            <LinkedNotesPanel
+              runtime={runtime}
+              workspaceId={ws}
+              focus={railFocus}
+              focusLabel={railLabel}
+              focusIcon={railIcon}
+              canEdit={canEdit}
+              onOpenNote={(id) => openEntity({ type: "note", id })}
+              onLinked={() => {
+                if (railFocus) reloadFocus(railFocus);
+              }}
+            />
+          ),
+        },
+      ]
+    : [];
+  const right =
+    railFocus && notesRailVariants.length > 0 ? (
+      <RightPanelSwitcher variants={notesRailVariants} activeId="notes" onChange={() => {}} />
+    ) : undefined;
+
   return (
     <>
       {/* DndContext scopes drag-to-link (FX-9): directory rows (drag sources) +
           the center hub (drop target) both sit inside it. pointerWithin only —
           an out-of-hub release is a no-op, never a stray link (gotchas). */}
       <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={onDragEnd}>
-        <FeaturePanelsShell feature="contacts" hideRight left={left} center={center} />
+        <FeaturePanelsShell feature="contacts" left={left} center={center} right={right} hideRight={!right} />
       </DndContext>
       {canEdit ? (
         <ContactImportDialog
