@@ -704,6 +704,37 @@ export const webRuntime: ModuoRuntime = {
       return noteRowToModel(firstRow(data, "notes_op_unpublish"));
     },
 
+    // The public read URL for a published note (NO-9). The edge function
+    // renders the subtree from body_md by token; keeping SUPABASE_URL
+    // encapsulated here means the UI never touches env directly.
+    publishedUrl(token) {
+      return `${SUPABASE_URL}/functions/v1/notes-public?token=${encodeURIComponent(token)}`;
+    },
+
+    async recent({ workspaceId, limit }) {
+      const { data, error } = await supabaseClient
+        .from("notes")
+        .select("id, title, body_text, updated_at, is_archived, published_at, deleted_at")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .order("updated_at", { ascending: false })
+        .limit(limit ?? 8);
+      // Pre-migration the v2 columns 42703 — degrade to no rows (a widget must
+      // never wall), like listMeta/search.
+      if (error) {
+        if (error.code === "42703") return [];
+        throw new Error(error.message);
+      }
+      return (Array.isArray(data) ? data : []).map((r: any) => ({
+        id: r.id as string,
+        title: (r.title as string) ?? "",
+        bodyText: (r.body_text as string) ?? "",
+        updatedAt: (r.updated_at as string) ?? "",
+        isArchived: Boolean(r.is_archived),
+        publishedAt: (r.published_at as string | null) ?? null,
+      }));
+    },
+
     async pushUpdates({ workspaceId, noteId, clientId, updates, bodyText, bodyMd }) {
       const { data, error } = await supabaseClient.rpc("notes_op_apply_updates", {
         p_workspace_id: workspaceId,

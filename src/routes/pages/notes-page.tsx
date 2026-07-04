@@ -44,6 +44,7 @@ import {
 } from "../../features/notes/export";
 import { useNoteRealtime } from "../../features/notes/hooks/use-note-realtime";
 import { NotePresenceAvatars } from "../../features/notes/ui/note-presence-avatars";
+import { NotePublishControl } from "../../features/notes/ui/note-publish-control";
 import { nameFromEmail } from "../../features/notes/sync/notes-realtime";
 import { toast } from "sonner";
 import { RightPanelSwitcher, type RightPanelVariant } from "../../components/app/right-panel-switcher";
@@ -497,7 +498,29 @@ export function NotesPage() {
           Couldn't refresh notes — showing what's saved on this device.
         </div>
       ) : null}
-      {viewers.length > 0 || syncStatus === "offline" ? (
+      {selectedNote && !selectedNote.deletedAt && !degraded && runtime ? (
+        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+          <NotePresenceAvatars viewers={viewers} />
+          {syncStatus === "offline" ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center rounded-full bg-muted p-1.5 text-muted-foreground">
+                  <CloudOff className="size-3.5" aria-label="Saved locally" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="left">Saved locally — will sync</TooltipContent>
+            </Tooltip>
+          ) : null}
+          <NotePublishControl
+            note={selectedNote}
+            notes={notes}
+            canEdit={canEdit}
+            publishedUrl={(token) => runtime.notesV2.publishedUrl(token)}
+            onPublish={() => module.publishNote(selectedNote.id)}
+            onUnpublish={() => module.unpublishNote(selectedNote.id)}
+          />
+        </div>
+      ) : viewers.length > 0 || syncStatus === "offline" ? (
         <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
           <NotePresenceAvatars viewers={viewers} />
           {syncStatus === "offline" ? (

@@ -13,6 +13,7 @@ import { PomodoroWidget } from "./widgets/pomodoro-widget";
 import { RecentlyLinkedWidget } from "./widgets/recently-linked-widget";
 import { ContactsNeedsAttentionWidget } from "./widgets/contacts-needs-attention-widget";
 import { CalendarTodayWidget } from "./widgets/calendar-today-widget";
+import { RecentNotesWidget } from "./widgets/recent-notes-widget";
 import { ContactsReconnectWidget } from "./widgets/contacts-reconnect-widget";
 import { StockWidget } from "./widgets/stock-widget";
 import { TodoListWidget } from "./widgets/todo-list-widget";
@@ -127,6 +128,15 @@ export function DashboardGrid({
           ) : null}
           {widget.type === "calendar-today" ? (
             <CalendarTodayWidget
+              runtime={runtime}
+              workspaceId={workspaceId}
+              config={widget.config}
+              isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
+            />
+          ) : null}
+          {widget.type === "recent-notes" ? (
+            <RecentNotesWidget
               runtime={runtime}
               workspaceId={workspaceId}
               config={widget.config}

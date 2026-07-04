@@ -302,6 +302,21 @@ export type ModuoRuntime = {
     purgeExpired(workspaceId: string): Promise<{ count: number }>;
     publish(input: { workspaceId: string; noteId: string }): Promise<NoteV2>;
     unpublish(input: { workspaceId: string; noteId: string }): Promise<NoteV2>;
+    /** Public read URL for a published note's token (NO-9, the notes-public
+     * edge function renders the subtree from body_md). Pure string builder. */
+    publishedUrl(token: string): string;
+    /** Recently-touched notes for the dashboard widget (NO-10). Trashed
+     * excluded; degrades to [] pre-migration (a widget never walls). */
+    recent(input: { workspaceId: string; limit?: number }): Promise<
+      {
+        id: string;
+        title: string;
+        bodyText: string;
+        updatedAt: string;
+        isArchived: boolean;
+        publishedAt: string | null;
+      }[]
+    >;
     /** Idempotent outbox push (batched CRDT updates + optional derived body). */
     pushUpdates(input: {
       workspaceId: string;

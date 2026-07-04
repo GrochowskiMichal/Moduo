@@ -14,9 +14,9 @@ function manifest(module: string): ModuleManifest {
 }
 
 describe("module registry", () => {
-  it("registers the tasks, links, contacts, and calendar manifests (no regression)", () => {
+  it("registers the tasks, links, contacts, calendar, and notes manifests (no regression)", () => {
     expect(moduleManifests.map((m) => m.module)).toEqual(
-      expect.arrayContaining(["tasks", "links", "contacts", "calendar"]),
+      expect.arrayContaining(["tasks", "links", "contacts", "calendar", "notes"]),
     );
   });
 
