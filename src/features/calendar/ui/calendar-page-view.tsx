@@ -93,6 +93,8 @@ import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
 import { FocusReadout } from "./focus-readout";
 import { RightPanelSwitcher, type RightPanelVariant } from "../../../components/app/right-panel-switcher";
+import { LinkedNotesPanel } from "../../notes/ui/linked-notes-panel";
+import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import { TaskPopover } from "./task-popover";
 import { formatTimeOfDay } from "./time-format";
 import type { QuickCreateDraft } from "./event-quick-create";
@@ -773,10 +775,30 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
             </div>
           ),
       },
+      {
+        // "Notes" rail (NO-7b, AC8): the notes linked to the selected event/task,
+        // plus New-linked-note. Focus follows the same detail selection.
+        id: "notes",
+        label: "Notes",
+        render: () => (
+          <LinkedNotesPanel
+            runtime={runtime}
+            workspaceId={workspaceId}
+            focus={detailTarget ? { type: detailTarget.type, id: detailTarget.id } : null}
+            focusLabel={detailEvent?.title ?? detailTask?.title ?? undefined}
+            focusIcon={detailTarget?.type === "event" ? "calendar" : detailTarget?.type === "task" ? "check-square" : null}
+            canEdit={calendar.canEdit}
+            onOpenNote={(id) =>
+              window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "note", id } }))
+            }
+          />
+        ),
+      },
     ],
     [
       api,
       calendar,
+      detailTarget,
       detailEvent,
       detailTask,
       openDetail,

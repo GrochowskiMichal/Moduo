@@ -12,12 +12,14 @@ import {
   DragOverlay,
   PointerSensor,
   pointerWithin,
+  useDndMonitor,
   useDraggable,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { entityDrag } from "@/lib/drag-payload";
 import {
   Archive,
   ArchiveRestore,
@@ -92,10 +94,14 @@ type Props = {
   /** Export a single note as `.md` / a note + its subtree as a `.zip` (NO-8). */
   onExportNote?: (id: string, title: string) => void;
   onExportTree?: (id: string, title: string) => void;
+  /** "external" = the page owns the DndContext (NO-7b: so a note can be dragged
+   * into the editor / onto the Detail hub); reorder binds via a monitor. Default
+   * "internal" (own DndContext) keeps stories + standalone usage working. */
+  dndMode?: "internal" | "external";
 };
 
 export function NoteTreeSidebar(props: Props) {
-  const { workspaceId, sections, canEdit, onDropRow, onSearch } = props;
+  const { workspaceId, sections, canEdit, onDropRow, onSearch, dndMode = "internal" } = props;
   const [expanded, setExpanded] = useState<Set<string>>(() => readExpanded(workspaceId));
   const [dragId, setDragId] = useState<string | null>(null);
   const [hover, setHover] = useState<HoverTarget>(null);
@@ -378,7 +384,44 @@ export function NoteTreeSidebar(props: Props) {
     </div>
   );
 
+  const onDragCancel = () => {
+    setDragId(null);
+    setHover(null);
+  };
+
+  // pointer-events-none is LOAD-BEARING: dnd-kit's overlay tracks the cursor, so
+  // without it document.elementFromPoint always returns the overlay itself and
+  // every drop resolves to nothing.
+  const overlay = (
+    <DragOverlay dropAnimation={null} style={{ pointerEvents: "none" }}>
+      {dragNote ? (
+        <div className="flex max-w-52 items-center gap-1.5 rounded-md border border-border bg-popover px-2 py-1 text-sm text-foreground shadow-md">
+          <RowIcon note={dragNote} />
+          <span className="truncate">{displayTitle(dragNote.title)}</span>
+        </div>
+      ) : null}
+    </DragOverlay>
+  );
+
+  // View-only: no drag machinery in EITHER mode (rows are never draggable).
   if (!canEdit) return body;
+
+  // External mode: the page provides the DndContext (a note can be dropped into
+  // the editor or onto the Detail hub); we bind reorder via a monitor + keep our
+  // own overlay. Reorder resolves by raw pointer at release, so it only fires
+  // over a note row — editor/hub drops leave it a quiet no-op.
+  if (dndMode === "external") {
+    return (
+      <SidebarDragMonitor
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragCancel={onDragCancel}
+      >
+        {body}
+        {overlay}
+      </SidebarDragMonitor>
+    );
+  }
 
   return (
     <DndContext
@@ -387,25 +430,29 @@ export function NoteTreeSidebar(props: Props) {
       autoScroll={false}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onDragCancel={() => {
-        setDragId(null);
-        setHover(null);
-      }}
+      onDragCancel={onDragCancel}
     >
       {body}
-      {/* pointer-events-none is LOAD-BEARING: dnd-kit's overlay tracks the
-          cursor, so without it document.elementFromPoint always returns the
-          overlay itself and every drop resolves to nothing. */}
-      <DragOverlay dropAnimation={null} style={{ pointerEvents: "none" }}>
-        {dragNote ? (
-          <div className="flex max-w-52 items-center gap-1.5 rounded-md border border-border bg-popover px-2 py-1 text-sm text-foreground shadow-md">
-            <RowIcon note={dragNote} />
-            <span className="truncate">{displayTitle(dragNote.title)}</span>
-          </div>
-        ) : null}
-      </DragOverlay>
+      {overlay}
     </DndContext>
   );
+}
+
+/** Binds the sidebar's reorder handlers to a DndContext the PAGE owns (NO-7b
+ * external mode) via a monitor. Must render inside that context. */
+function SidebarDragMonitor({
+  onDragStart,
+  onDragEnd,
+  onDragCancel,
+  children,
+}: {
+  onDragStart: (e: DragStartEvent) => void;
+  onDragEnd: (e: DragEndEvent) => void;
+  onDragCancel: () => void;
+  children: React.ReactNode;
+}) {
+  useDndMonitor({ onDragStart, onDragEnd, onDragCancel });
+  return <>{children}</>;
 }
 
 // ── rows ─────────────────────────────────────────────────────────────────────
@@ -551,16 +598,26 @@ function NoteRow({
   );
 
   if (ctx.canEdit && variant === "live") {
-    return <DraggableRow id={note.id}>{inner}</DraggableRow>;
+    return <DraggableRow note={note}>{inner}</DraggableRow>;
   }
   return inner;
 }
 
 /** Wrapper so useDraggable only ever runs under the DndContext (gotchas.md —
  * never call it conditionally inside one component). Listeners only: the row
- * keeps its own click/keyboard semantics, no extra tab stop. */
-function DraggableRow({ id, children }: { id: string; children: React.ReactNode }) {
-  const { setNodeRef, listeners, isDragging } = useDraggable({ id });
+ * keeps its own click/keyboard semantics, no extra tab stop.
+ *
+ * `id` stays the bare note id (reorder reads `active.id`); the CT-3 `data`
+ * payload (NO-7b) is what the editor/hub drop targets read to insert a chip /
+ * create a link. The two coexist — reorder and link-drop are spatially disjoint. */
+function DraggableRow({ note, children }: { note: Note; children: React.ReactNode }) {
+  const { setNodeRef, listeners, isDragging } = useDraggable({
+    id: note.id,
+    data: entityDrag(
+      { type: "note", id: note.id },
+      { label: displayTitle(note.title), icon: note.icon, from: "notes-sidebar" },
+    ),
+  });
   return (
     <div ref={setNodeRef} {...listeners} className={cn("cursor-grab", isDragging && "opacity-50")}>
       {children}

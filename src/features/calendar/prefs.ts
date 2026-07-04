@@ -89,7 +89,9 @@ export function writeViewState(
 
 // ── right-panel variant (localStorage, per user+workspace — §10) ────────────
 
-export type PanelVariantId = "tasks" | "detail";
+export type PanelVariantId = "tasks" | "detail" | "notes";
+
+const PANEL_VARIANT_IDS: readonly PanelVariantId[] = ["tasks", "detail", "notes"];
 
 function panelVariantKey(userId: string, workspaceId: string): string {
   return `moduo:calendar:panel-variant:${userId}:${workspaceId}`;
@@ -98,7 +100,7 @@ function panelVariantKey(userId: string, workspaceId: string): string {
 export function readPanelVariant(userId: string, workspaceId: string): PanelVariantId {
   return readStored(
     panelVariantKey(userId, workspaceId),
-    (raw) => (raw === "detail" ? "detail" : "tasks"),
+    (raw) => (PANEL_VARIANT_IDS.includes(raw as PanelVariantId) ? (raw as PanelVariantId) : "tasks"),
     () => "tasks" as PanelVariantId,
   );
 }

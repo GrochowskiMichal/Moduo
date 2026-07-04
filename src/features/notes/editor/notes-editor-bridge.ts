@@ -81,3 +81,26 @@ export function useNotesEditorBridge(): NotesEditorBridge | null {
 export const INSERT_PAGE_ROW_EVENT = "moduo:notes:insert-page-row";
 
 export type InsertPageRowDetail = { parentId: string; childId: string };
+
+/** Window event the page fires when an entity is dropped INTO the open editor
+ * (NO-7b): the editor inserts a reference chip at the drop point — a chip only,
+ * NOT an `entity_links` write (that's the drag-onto-row/hub gesture). Routed
+ * through the same window-event bridge as page-rows so the drop handler stays
+ * outside Lexical while the insert rides the canonical editor path. */
+export const INSERT_ENTITY_CHIP_EVENT = "moduo:notes:insert-entity-chip";
+
+export type InsertEntityChipDetail = {
+  /** The open note this chip belongs to — the plugin ignores other notes. */
+  noteId: string;
+  entityType: string;
+  entityId: string;
+  label: string;
+  icon: string | null;
+  /** Release coordinates → the chip lands at the drop point (best-effort). */
+  clientX?: number;
+  clientY?: number;
+};
+
+/** Window event the page fires after a drag-onto-hub link lands (NO-7b) so the
+ * Detail rail (which owns its own hub read) re-pulls and shows the new edge. */
+export const NOTE_DETAIL_REFRESH_EVENT = "moduo:notes:detail-refresh";

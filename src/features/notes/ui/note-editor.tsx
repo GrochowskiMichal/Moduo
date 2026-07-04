@@ -34,10 +34,13 @@ import { TableNode, TableCellNode, TableRowNode } from "@lexical/table";
 import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $createParagraphNode,
+  $createRangeSelection,
   $createTextNode,
   $getRoot,
   $getSelection,
+  $isParagraphNode,
   $isRangeSelection,
+  $setSelection,
   COMMAND_PRIORITY_HIGH,
   INDENT_CONTENT_COMMAND,
   KEY_TAB_COMMAND,
@@ -50,12 +53,14 @@ import { EmbedNode } from "../editor/nodes/EmbedNode";
 import { TaskLineNode } from "../editor/nodes/task-line-node";
 import { $createPageRowNode, PageRowNode } from "../editor/nodes/page-row-node";
 import {
+  INSERT_ENTITY_CHIP_EVENT,
   INSERT_PAGE_ROW_EVENT,
   NotesEditorBridgeContext,
+  type InsertEntityChipDetail,
   type InsertPageRowDetail,
   type NotesEditorBridge,
 } from "../editor/notes-editor-bridge";
-import { EntityRefNode } from "@/features/spine/editor/entity-ref-node";
+import { $createEntityRefNode, EntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { useAuth } from "@/providers/auth-provider";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
@@ -196,6 +201,68 @@ function InsertPageRowPlugin({
     window.addEventListener(INSERT_PAGE_ROW_EVENT, onInsert);
     return () => window.removeEventListener(INSERT_PAGE_ROW_EVENT, onInsert);
   }, [editor, noteId, bridge]);
+  return null;
+}
+
+/** Drag-into-editor (NO-7b): the page fires this when an entity is dropped onto
+ * the open editor. Insert a reference chip at the drop point — a chip only, no
+ * `entity_links` write (that's the drag-onto-row/hub gesture). The DOM caret at
+ * the release coordinates maps to a Lexical selection via `applyDOMRange`; a
+ * miss (dropped on padding/outside content) falls back to appending at the end. */
+function InsertEntityChipPlugin({ noteId, editable }: { noteId: string; editable: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    if (!editable) return;
+    const onInsert = (event: Event) => {
+      const d = (event as CustomEvent<InsertEntityChipDetail>).detail;
+      if (!d || d.noteId !== noteId || !d.entityId) return;
+      const input = {
+        entityType: d.entityType,
+        entityId: d.entityId,
+        label: d.label,
+        icon: d.icon,
+      };
+      editor.update(() => {
+        // Best-effort placement at the drop caret.
+        let dropSel: ReturnType<typeof $createRangeSelection> | null = null;
+        if (
+          d.clientX != null &&
+          d.clientY != null &&
+          typeof document.caretRangeFromPoint === "function"
+        ) {
+          const domRange = document.caretRangeFromPoint(d.clientX, d.clientY);
+          if (domRange) {
+            try {
+              const sel = $createRangeSelection();
+              sel.applyDOMRange(domRange);
+              dropSel = sel;
+            } catch {
+              dropSel = null;
+            }
+          }
+        }
+        if (dropSel) {
+          $setSelection(dropSel);
+          dropSel.insertNodes([$createEntityRefNode(input), $createTextNode(" ")]);
+          return;
+        }
+        // Fallback: append at the end, reusing a trailing empty paragraph.
+        const root = $getRoot();
+        const chip = $createEntityRefNode(input);
+        const space = $createTextNode(" ");
+        const last = root.getLastChild();
+        if (last && $isParagraphNode(last) && last.getTextContent().trim() === "") {
+          last.append(chip, space);
+        } else {
+          const p = $createParagraphNode();
+          p.append(chip, space);
+          root.append(p);
+        }
+      });
+    };
+    window.addEventListener(INSERT_ENTITY_CHIP_EVENT, onInsert);
+    return () => window.removeEventListener(INSERT_ENTITY_CHIP_EVENT, onInsert);
+  }, [editor, noteId, editable]);
   return null;
 }
 
@@ -420,6 +487,7 @@ export function NoteEditor({
           <MarkdownClipboardPlugin />
           <TaskLinePlugin editable={editable} noteId={noteId} />
           <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
+          <InsertEntityChipPlugin noteId={noteId} editable={editable} />
           <CollaborationPluginV2__EXPERIMENTAL
             id={noteId}
             doc={session.doc}
