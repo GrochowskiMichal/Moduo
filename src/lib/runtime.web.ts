@@ -961,6 +961,10 @@ export const webRuntime: ModuoRuntime = {
     async applyFlag() { throw new Error(desktopOnly().message); },
     async getMailboxStatus() { return []; },
     async sendSaved() { throw new Error(desktopOnly().message); },
+    async startGoogleOAuth() { throw new Error(desktopOnly().message); },
+    async getThread() { throw new Error(desktopOnly().message); },
+    async listFolders() { return []; },
+    async applyMessageOp() { throw new Error(desktopOnly().message); },
 
     // ── EM-3 cloud tissue surface (Supabase-first; works on web + desktop) ──
     async listModule(workspaceId) {

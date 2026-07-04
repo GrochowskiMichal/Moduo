@@ -5,8 +5,8 @@ use crate::AppState;
 
 use super::connection::{open_imap_session, ImapSession};
 use super::parsing::{
-    decode_header_value_bytes, parse_address, thread_id_from, to_millis_from_date,
-    truncate_with_ellipsis,
+    decode_header_value_bytes, parse_address, parse_references, thread_id_from, to_millis_from_date,
+    truncate_with_ellipsis, within_sync_window,
 };
 use super::storage::{
     envelope_key, list_envelopes_filtered, load_folder_cursor, message_key, parse_json_value,
@@ -15,8 +15,8 @@ use super::storage::{
 };
 use super::{
     ensure_account_config, now_iso, queue_graph_upsert_for_envelope, select_mailbox_for_folder,
-    StoredEmailAccount, StoredEnvelope, DEFAULT_MAILBOX_LIMIT, FLAG_RECONCILE_WINDOW,
-    FLAG_RECONCILE_WINDOW_LIGHT,
+    StoredEmailAccount, StoredEnvelope, FLAG_RECONCILE_WINDOW, FLAG_RECONCILE_WINDOW_LIGHT,
+    SYNC_ENVELOPE_WINDOW_DAYS, SYNC_ENVELOPE_WINDOW_UIDS,
 };
 
 pub(super) fn fetch_envelopes_for_uids(
@@ -39,7 +39,7 @@ pub(super) fn fetch_envelopes_for_uids(
     let fetches = session
         .uid_fetch(
             query,
-            "(UID ENVELOPE FLAGS RFC822.SIZE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID IN-REPLY-TO)])",
+            "(UID ENVELOPE FLAGS RFC822.SIZE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID IN-REPLY-TO REFERENCES)])",
         )
         .map_err(|e| format!("uid_fetch_failed:{}", e))?;
 
@@ -107,6 +107,8 @@ pub(super) fn fetch_envelopes_for_uids(
             .as_ref()
             .map(|v| decode_header_value_bytes(v))
             .filter(|v| !v.is_empty());
+        // References isn't in the ENVELOPE — parse it from the fetched header block.
+        let references = item.header().map(parse_references).unwrap_or_default();
         let preview = truncate_with_ellipsis(&subject, 120);
         let timestamp_ms = to_millis_from_date(&date);
         let mut read = false;
@@ -120,7 +122,12 @@ pub(super) fn fetch_envelopes_for_uids(
             }
         }
 
-        let thread_id = thread_id_from(&subject, in_reply_to.as_deref(), message_id.as_deref());
+        let thread_id = thread_id_from(
+            &subject,
+            &references,
+            in_reply_to.as_deref(),
+            message_id.as_deref(),
+        );
         let message_key = message_key(&account.id, uid_validity, uid);
         rows.push(StoredEnvelope {
             id: format!("{}::{}::{}", account.id, folder, uid),
@@ -142,6 +149,7 @@ pub(super) fn fetch_envelopes_for_uids(
             size: item.size,
             message_id,
             in_reply_to,
+            references,
             thread_id,
             updated_at: now_iso(),
         });
@@ -230,7 +238,7 @@ pub(super) fn sync_account_folder_envelopes(
             .unwrap_or(true);
 
     let uids_to_fetch = if should_full_reset {
-        let start_uid = uid_window_start(latest_uid, DEFAULT_MAILBOX_LIMIT as u32);
+        let start_uid = uid_window_start(latest_uid, SYNC_ENVELOPE_WINDOW_UIDS);
         collect_uid_range(start_uid, latest_uid)
     } else {
         let last_seen = current_cursor
@@ -239,15 +247,22 @@ pub(super) fn sync_account_folder_envelopes(
             .unwrap_or_default();
         let mut delta = collect_uid_range(last_seen.saturating_add(1), latest_uid);
         if delta.is_empty() && (current_local.is_empty() || force_sync) {
-            let start_uid = uid_window_start(latest_uid, DEFAULT_MAILBOX_LIMIT as u32);
+            let start_uid = uid_window_start(latest_uid, SYNC_ENVELOPE_WINDOW_UIDS);
             delta = collect_uid_range(start_uid, latest_uid);
         }
         delta
     };
 
+    // Bound the initial window to ~90 days as well as the UID cap (whichever is
+    // smaller) — a high-volume folder shouldn't drag in a year of history.
+    let window_cutoff_now_ms = chrono::Utc::now().timestamp_millis();
     for chunk in uids_to_fetch.chunks(50) {
         let rows = fetch_envelopes_for_uids(&mut session, account, folder, uid_validity, chunk)?;
         for row in rows {
+            if !within_sync_window(row.timestamp_ms, window_cutoff_now_ms, SYNC_ENVELOPE_WINDOW_DAYS)
+            {
+                continue;
+            }
             upsert_envelope(state, &row)?;
             let _ = queue_graph_upsert_for_envelope(state, &row);
         }
@@ -342,7 +357,7 @@ pub(super) fn sync_account_folder_envelopes(
     // Safety net: if server reports messages but local index is empty, rebuild latest window.
     let post_reconcile_count = list_envelopes_filtered(state, Some(&account.id), folder)?.len();
     if post_reconcile_count == 0 && exists > 0 && latest_uid > 0 {
-        let recovery_start = uid_window_start(latest_uid, DEFAULT_MAILBOX_LIMIT as u32);
+        let recovery_start = uid_window_start(latest_uid, SYNC_ENVELOPE_WINDOW_UIDS);
         let recovery_uids = collect_uid_range(recovery_start, latest_uid);
         for chunk in recovery_uids.chunks(50) {
             let rows =

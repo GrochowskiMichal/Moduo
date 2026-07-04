@@ -8,6 +8,7 @@ pub mod integrations;
 pub mod local_store;
 pub mod migration;
 pub mod notes;
+pub mod oauth_flow;
 pub mod system;
 pub mod tasks_module;
 pub mod timetracking;

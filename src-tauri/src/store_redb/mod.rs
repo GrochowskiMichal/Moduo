@@ -64,6 +64,8 @@ pub const EMAIL_FLAG_OUTBOX: TableDefinition<&str, &str> =
     TableDefinition::new("email_flag_outbox");
 pub const EMAIL_GRAPH_OUTBOX: TableDefinition<&str, &str> =
     TableDefinition::new("email_graph_outbox");
+/// Triage op outbox (archive/move/delete), mirrors the flag outbox (EM-5).
+pub const EMAIL_OP_OUTBOX: TableDefinition<&str, &str> = TableDefinition::new("email_op_outbox");
 pub const EMAIL_UI_STATE: TableDefinition<&str, &str> = TableDefinition::new("email_ui_state");
 
 // Cloud sync tables
@@ -121,6 +123,7 @@ impl RedbStore {
         let _ = write_txn.open_table(EMAIL_BODY_LRU)?;
         let _ = write_txn.open_table(EMAIL_FLAG_OUTBOX)?;
         let _ = write_txn.open_table(EMAIL_GRAPH_OUTBOX)?;
+        let _ = write_txn.open_table(EMAIL_OP_OUTBOX)?;
         let _ = write_txn.open_table(EMAIL_UI_STATE)?;
 
         let _ = write_txn.open_table(SYNC_CLOUD_OUTBOX)?;
@@ -237,6 +240,7 @@ impl RedbStore {
             EMAIL_BODY_LRU,
             EMAIL_FLAG_OUTBOX,
             EMAIL_GRAPH_OUTBOX,
+            EMAIL_OP_OUTBOX,
             EMAIL_UI_STATE,
             TT_ENTRIES,
             TT_CATEGORIES,
@@ -736,6 +740,18 @@ impl RedbStore {
 
     pub fn remove_email_graph_outbox(&self, key: &str) -> anyhow::Result<()> {
         self.remove_key(EMAIL_GRAPH_OUTBOX, key)
+    }
+
+    pub fn put_email_op_outbox(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+        self.put_json(EMAIL_OP_OUTBOX, key, value)
+    }
+
+    pub fn list_email_op_outbox(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_OP_OUTBOX)
+    }
+
+    pub fn remove_email_op_outbox(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_OP_OUTBOX, key)
     }
 
     pub fn put_email_ui_state(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {

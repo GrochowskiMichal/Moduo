@@ -47,28 +47,97 @@ pub(super) fn decode_maybe_mime_header(raw: &str) -> String {
     raw.to_string()
 }
 
+fn thread_key(bytes: &[u8]) -> String {
+    format!(
+        "thread:{}",
+        uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, bytes)
+    )
+}
+
+/// Derive a stable thread id for a message (EM-4). Keys on the **References root**
+/// (the oldest ancestor's Message-ID) so an A←B←C chain collapses to ONE thread
+/// even when an intermediate message isn't in the mailbox — the old code keyed on
+/// `In-Reply-To` (the immediate parent), which split every 3+ message chain. Falls
+/// back to In-Reply-To → own Message-ID → normalized subject.
 pub(super) fn thread_id_from(
     subject: &str,
+    references: &[String],
     in_reply_to: Option<&str>,
     message_id: Option<&str>,
 ) -> String {
-    if let Some(reply) = in_reply_to.filter(|v| !v.trim().is_empty()) {
-        return format!(
-            "thread:{}",
-            uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, reply.as_bytes())
-        );
+    if let Some(root) = references
+        .iter()
+        .map(|value| value.trim())
+        .find(|value| !value.is_empty())
+    {
+        return thread_key(root.as_bytes());
     }
-    if let Some(msg_id) = message_id.filter(|v| !v.trim().is_empty()) {
-        return format!(
-            "thread:{}",
-            uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, msg_id.as_bytes())
-        );
+    if let Some(reply) = in_reply_to.map(str::trim).filter(|v| !v.is_empty()) {
+        return thread_key(reply.as_bytes());
     }
-    let normalized = normalize_subject_for_thread(subject);
-    format!(
-        "thread:{}",
-        uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, normalized.as_bytes())
-    )
+    if let Some(msg_id) = message_id.map(str::trim).filter(|v| !v.is_empty()) {
+        return thread_key(msg_id.as_bytes());
+    }
+    thread_key(normalize_subject_for_thread(subject).as_bytes())
+}
+
+/// Extract every `<...>` Message-ID token (brackets kept, so they match the
+/// ENVELOPE-derived `message_id`) from a header value, in order.
+fn extract_angle_ids(value: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut rest = value;
+    while let Some(start) = rest.find('<') {
+        let Some(end_rel) = rest[start..].find('>') else {
+            break;
+        };
+        let token = rest[start..start + end_rel + 1].trim();
+        if token.len() > 2 {
+            ids.push(token.to_string());
+        }
+        rest = &rest[start + end_rel + 1..];
+    }
+    ids
+}
+
+/// Parse the `References` header (root-first) from a fetched HEADER.FIELDS block,
+/// unfolding continuation lines. Case-insensitive; returns `<id>` tokens in order.
+pub(super) fn parse_references(header_block: &[u8]) -> Vec<String> {
+    let text = String::from_utf8_lossy(header_block).replace("\r\n", "\n");
+    let mut value = String::new();
+    let mut in_refs = false;
+    for line in text.split('\n') {
+        if in_refs {
+            // Folded continuation lines start with whitespace.
+            if line.starts_with(' ') || line.starts_with('\t') {
+                value.push(' ');
+                value.push_str(line.trim());
+                continue;
+            }
+            break;
+        }
+        // Byte-compare the header name so a malformed non-ASCII line can't panic on
+        // a mid-char `line[..11]` slice. "references:" is 11 ASCII bytes, so after a
+        // match, byte 11 is a valid char boundary for the value slice.
+        if line
+            .as_bytes()
+            .get(..11)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"references:"))
+        {
+            value.push_str(line[11..].trim());
+            in_refs = true;
+        }
+    }
+    extract_angle_ids(&value)
+}
+
+/// Whether a message is recent enough to store on the initial sync window (EM-4).
+/// An unknown/zero timestamp is kept (never dropped for a missing date).
+pub(super) fn within_sync_window(timestamp_ms: i64, now_ms: i64, days: i64) -> bool {
+    if timestamp_ms <= 0 {
+        return true;
+    }
+    let cutoff = now_ms.saturating_sub(days.saturating_mul(86_400_000));
+    timestamp_ms >= cutoff
 }
 
 pub(super) fn normalize_body_text(text: &str) -> String {
@@ -236,5 +305,82 @@ pub(super) fn extract_domain(email: &str) -> Option<String> {
         None
     } else {
         Some(normalized)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_b_c_chain_threads_together_via_references_root() {
+        // A is the root (no references / in-reply-to). B replies to A. C replies to
+        // B and carries the full References chain (root-first). All three must key
+        // on A's Message-ID — the split-chain bug is fixed.
+        let a = thread_id_from("Kickoff", &[], None, Some("<a@x.com>"));
+        let b = thread_id_from(
+            "Re: Kickoff",
+            &["<a@x.com>".to_string()],
+            Some("<a@x.com>"),
+            Some("<b@x.com>"),
+        );
+        let c = thread_id_from(
+            "Re: Kickoff",
+            &["<a@x.com>".to_string(), "<b@x.com>".to_string()],
+            Some("<b@x.com>"),
+            Some("<c@x.com>"),
+        );
+        assert_eq!(a, b, "B must thread with A");
+        assert_eq!(a, c, "C must thread with A even though B may be missing");
+    }
+
+    #[test]
+    fn references_root_beats_in_reply_to_parent() {
+        // A message whose In-Reply-To is the parent but References is the root must
+        // key on the ROOT (this is exactly what split threads before).
+        let keyed_on_root = thread_id_from(
+            "Re: Deep thread",
+            &["<root@x.com>".to_string(), "<mid@x.com>".to_string()],
+            Some("<mid@x.com>"),
+            Some("<leaf@x.com>"),
+        );
+        let root_self = thread_id_from("Deep thread", &[], None, Some("<root@x.com>"));
+        assert_eq!(keyed_on_root, root_self);
+    }
+
+    #[test]
+    fn no_headers_falls_back_to_normalized_subject() {
+        let a = thread_id_from("Re: Lunch?", &[], None, None);
+        let b = thread_id_from("Fwd: lunch?", &[], None, None);
+        assert_eq!(a, b, "Re:/Fwd: + case are stripped for the subject fallback");
+    }
+
+    #[test]
+    fn parse_references_reads_folded_multi_id_header() {
+        let header = b"Message-ID: <leaf@x.com>\r\nReferences: <root@x.com>\r\n <mid@x.com>\r\nIn-Reply-To: <mid@x.com>\r\n";
+        let refs = parse_references(header);
+        assert_eq!(refs, vec!["<root@x.com>", "<mid@x.com>"]);
+        // The trimmed-References merge: the root is first, so it drives threading.
+        assert_eq!(
+            thread_id_from("Re: x", &refs, Some("<mid@x.com>"), Some("<leaf@x.com>")),
+            thread_id_from("x", &[], None, Some("<root@x.com>"))
+        );
+    }
+
+    #[test]
+    fn parse_references_absent_is_empty() {
+        assert!(parse_references(b"Message-ID: <a@x.com>\r\n").is_empty());
+        assert!(parse_references(b"").is_empty());
+    }
+
+    #[test]
+    fn sync_window_keeps_recent_and_unknown_drops_old() {
+        let now = 1_000 * 86_400_000; // day 1000 in ms
+        let day = 86_400_000_i64;
+        assert!(within_sync_window(now - 10 * day, now, 90));
+        assert!(within_sync_window(now - 89 * day, now, 90));
+        assert!(!within_sync_window(now - 120 * day, now, 90));
+        // Unknown date (0) is kept, never dropped for a missing header.
+        assert!(within_sync_window(0, now, 90));
     }
 }
