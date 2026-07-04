@@ -704,11 +704,15 @@ export const webRuntime: ModuoRuntime = {
       return noteRowToModel(firstRow(data, "notes_op_unpublish"));
     },
 
-    // The public read URL for a published note (NO-9). The edge function
-    // renders the subtree from body_md by token; keeping SUPABASE_URL
-    // encapsulated here means the UI never touches env directly.
+    // The public read URL for a published note (NO-9b): the app's own
+    // `/p/<token>` route (a public SPA page that renders body_md client-side —
+    // Supabase edge functions can't serve HTML). On web, window.location.origin
+    // is correct wherever served; desktop (tauri://) needs PUBLIC_WEB_ORIGIN set
+    // to the deployed web origin.
     publishedUrl(token) {
-      return `${SUPABASE_URL}/functions/v1/notes-public?token=${encodeURIComponent(token)}`;
+      const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(/\/+$/, "");
+      const origin = configured || (typeof window !== "undefined" ? window.location.origin : "");
+      return `${origin}/p/${encodeURIComponent(token)}`;
     },
 
     async recent({ workspaceId, limit }) {

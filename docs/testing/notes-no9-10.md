@@ -12,8 +12,8 @@
 - [ ] **Do:** Click **Unpublish** → **Expect:** button returns to **Publish** (ghost); the note leaves the Published section; the previously-copied link now 404s (see below). _(web)_
 - [ ] **Do:** As a **view-only** member, open a note → **Expect:** the Publish control still shows state but the publish/unpublish actions are absent/disabled (no publish affordance for viewers). _(web)_
 
-## Public page — the edge renderer (NO-9) — ⚠ BLOCKED, see NO-9b
-> The `notes-public` edge fn is deployed and its backend logic is correct (token resolution, subtree, 404s), but **Supabase rewrites a GET's `text/html` → `text/plain`**, so a browser shows raw source, not a page. These checks CANNOT pass until NO-9b ships a real render surface (public SPA route or Storage). The steps below describe the intended behavior once unblocked.
+## Public page — the `/p/<token>` SPA route (NO-9b — LIVE-VERIFIED)
+> Resolved: the edge fn now returns JSON and the public `/p/<token>` SPA route renders it client-side (react-markdown). Deployed (`notes-public` v2, `verify_jwt=false`) and **live-verified in a real browser** — the checks below passed. Caveat: an *external* share link needs the web app deployed to a public origin (on the local/dev web server the link resolves to `localhost`, which is fine for your own testing); desktop builds need `PUBLIC_WEB_ORIGIN` set to that origin.
 - [ ] **Do:** Open the copied public URL in a fresh browser / incognito (no login) → **Expect:** a clean read-only page: the note title + its markdown body, a left nav listing the subtree, no app chrome, footer "Published with Moduo". _(web, public)_
 - [ ] **Do:** View source / check headers → **Expect:** `<meta name="robots" content="noindex, nofollow">` and an `x-robots-tag: noindex` response header. _(web)_
 - [ ] **Do:** In the public nav, click a child page → **Expect:** it loads under `?token=…&note=<childId>`; only pages inside the published subtree are listed/reachable. _(web)_
