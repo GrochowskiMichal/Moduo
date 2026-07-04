@@ -1,8 +1,8 @@
 # Manual test checklist — Notes NO-9 (Publish to web) + NO-10 (DoD: MCP + widget)
 
-> Generated 2026-07-04 · branch `claude/hungry-euler-447bb8` · **Live-verified:** no — the NO-1 notes migration is still **unapplied to prod**, so every server-touching path below (publish ops, the public renderer, the notes MCP tools, the recent-notes read) is manual **post-deploy**. Pure logic + wiring are unit-tested (718 green) and validator-confirmed; rendering is deploy-gap-safe (degrades to empty/quiet).
+> Generated 2026-07-04 · branch `claude/hungry-euler-447bb8` · **Migrations APPLIED to prod 2026-07-04** (`20260703120000_notes_module` + `20260704120000_notes_archive_unpublishes`; org `wtoonrvuqumihpkbvwvs` verified; authed rolled-back round-trip green — publish mints a token, archive clears it). Server ops are now LIVE. Pure logic + wiring are unit-tested (719 green) + validator-confirmed. **Still to deploy before a full pass:** the `notes-public` edge fn (`verify_jwt=false`), a `moduo-mcp` redeploy (notes tools), and an app build carrying NO-1..NO-10.
 >
-> **Prereqs:** (1) apply migration `20260703120000_notes_module.sql` to the target project (it is deploy-GATED — apply only after the Wave-3 notes code is live); (2) **deploy two edge functions**: `notes-public` (deploy with `verify_jwt = false` — it's a public page) and a redeploy of `moduo-mcp` (picks up the new `notes` connector module); (3) a workspace API key with the `notes` scope set to `edit` for the MCP checks.
+> **Prereqs for the checklist:** (1) migrations — DONE; (2) **deploy two edge functions**: `notes-public` (`verify_jwt = false` — public page) + redeploy `moduo-mcp` (notes connector module); (3) run the app on the Wave-3 notes code (⚠ the migration dropped the legacy editor's write policies — an old build silently can't save notes); (4) a workspace API key with `notes` scope = `edit` for the MCP checks.
 
 ## Publish to web — the header control (NO-9, web)
 - [ ] **Do:** Open a note in `/notes`, click **Publish** (Globe, top-right of the editor) → **Expect:** popover flips to "Live on the web" with a public URL, Copy, "Open public page", and Unpublish. _(web)_
