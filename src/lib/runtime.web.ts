@@ -767,6 +767,49 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
     },
+
+    async search({ workspaceId, query, limit }) {
+      const q = query.trim();
+      if (!q) return [];
+      const { data, error } = await supabaseClient
+        .from("notes")
+        .select("id, title, body_text, is_archived, deleted_at")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .textSearch("search_tsv", q, { type: "websearch", config: "simple" })
+        .limit(limit ?? 30);
+      // Pre-migration the v2 columns (search_tsv/body_text/is_archived) 42703 —
+      // degrade to no results rather than an error, like listMeta.
+      if (error) {
+        if (error.code === "42703") return [];
+        throw new Error(error.message);
+      }
+      return (Array.isArray(data) ? data : []).map((r: any) => ({
+        id: r.id as string,
+        title: (r.title as string) ?? "",
+        bodyText: (r.body_text as string) ?? "",
+        isArchived: Boolean(r.is_archived),
+        deletedAt: (r.deleted_at as string | null) ?? null,
+      }));
+    },
+
+    async fetchExportDocs({ workspaceId, ids }) {
+      if (ids.length === 0) return [];
+      const { data, error } = await supabaseClient
+        .from("notes")
+        .select("id, title, body_md")
+        .eq("workspace_id", workspaceId)
+        .in("id", ids);
+      if (error) {
+        if (error.code === "42703") return [];
+        throw new Error(error.message);
+      }
+      return (Array.isArray(data) ? data : []).map((r: any) => ({
+        id: r.id as string,
+        title: (r.title as string) ?? "",
+        bodyMd: (r.body_md as string) ?? "",
+      }));
+    },
   },
 
   graph: {
@@ -1446,6 +1489,21 @@ export const webRuntime: ModuoRuntime = {
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
+    },
+
+    async listComments({ workspaceId, entityType, entityId }) {
+      const { data, error } = await supabaseClient
+        .from("comments")
+        .select(
+          "id, workspace_id, entity_type, entity_id, body, created_by, created_at, updated_at, deleted_at",
+        )
+        .eq("workspace_id", workspaceId)
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      return (Array.isArray(data) ? data : []).map(commentRowToModel);
     },
 
     async listNotifications({ workspaceId, limit }) {

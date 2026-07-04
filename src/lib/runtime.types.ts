@@ -329,6 +329,16 @@ export type ModuoRuntime = {
       noteId: string;
       mentionedUserIds: string[];
     }): Promise<void>;
+    /** Full-text sidebar search (NO-8, AC8) over the server `search_tsv` GIN
+     * index; trashed excluded, archived flagged. Degrades to [] pre-migration. */
+    search(input: { workspaceId: string; query: string; limit?: number }): Promise<
+      { id: string; title: string; bodyText: string; isArchived: boolean; deletedAt: string | null }[]
+    >;
+    /** `body_md` for a set of notes — the per-note / tree markdown export source. */
+    fetchExportDocs(input: {
+      workspaceId: string;
+      ids: string[];
+    }): Promise<{ id: string; title: string; bodyMd: string }[]>;
   };
 
   graph: {
@@ -675,6 +685,13 @@ export type ModuoRuntime = {
       entityLabel?: string;
       entityIcon?: string | null;
     }): Promise<SpineComment>;
+    /** Read an entity's comment thread (oldest first, tombstones excluded) —
+     * the Comments rail (NO-7 AC9). Direct member-read SELECT (RLS-guarded). */
+    listComments(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<SpineComment[]>;
     /**
      * The derived notification feed: `module_activity` rows targeting me,
      * overlaid with my read state, newest first (AC10). The NotificationCenter

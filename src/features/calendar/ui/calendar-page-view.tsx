@@ -92,7 +92,7 @@ import { CalendarToolbar } from "./calendar-toolbar";
 import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
 import { FocusReadout } from "./focus-readout";
-import { RightPanelSwitcher, type RightPanelVariant } from "./right-panel-switcher";
+import { RightPanelSwitcher, type RightPanelVariant } from "../../../components/app/right-panel-switcher";
 import { TaskPopover } from "./task-popover";
 import { formatTimeOfDay } from "./time-format";
 import type { QuickCreateDraft } from "./event-quick-create";
