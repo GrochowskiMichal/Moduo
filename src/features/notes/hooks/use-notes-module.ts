@@ -297,8 +297,33 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const archiveNote = useCallback(
     (noteId: string, archived: boolean) => {
       if (!engine || !workspaceId) return;
-      patchLocal(noteId, { isArchived: archived });
-      guard(() => engine.runMetaOp(archived ? "archive" : "unarchive", { workspaceId, noteId }));
+      if (!archived) {
+        // Unarchive is a clean inverse of the flag only — a note that was taken
+        // offline by archiving must be re-published explicitly (token is gone).
+        patchLocal(noteId, { isArchived: false });
+        guard(() => engine.runMetaOp("unarchive", { workspaceId, noteId }));
+        return;
+      }
+      // Archiving takes the note (with its subtree) offline: the server clears
+      // publish_token across the subtree (any public link 404s). Mirror it
+      // optimistically and tell the user their link is gone (designer call).
+      const descendants = new Set(descendantIds(notesRef.current, noteId));
+      const wasPublished = notesRef.current.some(
+        (n) => (n.id === noteId || descendants.has(n.id)) && n.publishedAt && n.publishToken,
+      );
+      setNotes((prev) =>
+        prev.map((n) => {
+          if (n.id === noteId) return { ...n, isArchived: true, publishedAt: null, publishToken: null };
+          if (descendants.has(n.id)) return { ...n, publishedAt: null, publishToken: null };
+          return n;
+        }),
+      );
+      guard(() => engine.runMetaOp("archive", { workspaceId, noteId }));
+      if (wasPublished) {
+        toast("Archived — the public link was turned off.", {
+          description: "Publish it again from the note header to share a fresh link.",
+        });
+      }
     },
     [engine, workspaceId, patchLocal, guard],
   );
@@ -377,6 +402,40 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     [runtime, canEdit, workspaceId],
   );
 
+  // Publish/unpublish need the server-minted token back (NO-9) — connectivity
+  // required, no optimistic queue. The returned note carries published_at +
+  // publish_token; patch it so the Published section + control reflect at once.
+  const publishNote = useCallback(
+    async (noteId: string): Promise<string | null> => {
+      if (!runtime || !canEdit || !workspaceId) return null;
+      try {
+        const updated = await runtime.notesV2.publish({ workspaceId, noteId });
+        patchLocal(noteId, {
+          publishedAt: updated.publishedAt,
+          publishToken: updated.publishToken,
+        });
+        return updated.publishToken;
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't publish the note.");
+        return null;
+      }
+    },
+    [runtime, canEdit, workspaceId, patchLocal],
+  );
+
+  const unpublishNote = useCallback(
+    async (noteId: string): Promise<void> => {
+      if (!runtime || !canEdit || !workspaceId) return;
+      try {
+        await runtime.notesV2.unpublish({ workspaceId, noteId });
+        patchLocal(noteId, { publishedAt: null, publishToken: null });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't unpublish the note.");
+      }
+    },
+    [runtime, canEdit, workspaceId, patchLocal],
+  );
+
   return {
     notes,
     loading,
@@ -397,6 +456,8 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     trashNote,
     restoreNote,
     purgeNote,
+    publishNote,
+    unpublishNote,
   };
 }
 
