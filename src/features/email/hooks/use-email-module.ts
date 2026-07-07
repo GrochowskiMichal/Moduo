@@ -7,7 +7,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import { isAwaitingFollowUp, isSnoozeDue } from "../refs";
+import {
+  buildRefUpsertArgs,
+  isAwaitingFollowUp,
+  isSnoozeDue,
+  type EmailRefUpsertArgs,
+} from "../refs";
 import { shapeInboxThreads } from "../threads";
 import type {
   EmailEnvelope,
@@ -16,7 +21,7 @@ import type {
 } from "../model/email-types";
 import type { EmailAccountRef, EmailThreadRef } from "../../../lib/runtime.types";
 
-/** How long a triage action can be undone before the IMAP op commits. */
+/** How long a triage/snooze action can be undone before the IMAP op commits. */
 export const TRIAGE_UNDO_MS = 8000;
 
 export type TriageOp = "archive" | "move" | "delete";
@@ -36,6 +41,31 @@ type PendingTriage = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+type PendingSnooze = {
+  threadId: string;
+  accountId: string;
+  at: Date;
+  /** The tissue-ref payload, snapshotted at snooze time (thread may leave state). */
+  refArgs: EmailRefUpsertArgs;
+  envelopes: EmailEnvelope[];
+  timer: ReturnType<typeof setTimeout>;
+};
+
+/** Build the `email_op_ref_upsert` payload from a thread row (snooze/follow-up). */
+function refArgsFromThread(thread: EmailThread): EmailRefUpsertArgs {
+  return buildRefUpsertArgs({
+    threadKey: thread.threadId,
+    accountId: thread.accountId,
+    fromAddr: thread.fromEmail || null,
+    fromName: thread.fromName || null,
+    subject: thread.subject || null,
+    snippet: thread.snippet || null,
+    sentAt: Number.isFinite(thread.timestampMs)
+      ? new Date(thread.timestampMs).toISOString()
+      : null,
+  });
+}
+
 export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
   const [accounts, setAccounts] = useState<SavedAccount[]>([]);
   const [envelopes, setEnvelopes] = useState<EmailEnvelope[]>([]);
@@ -45,8 +75,15 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Threads optimistically snoozed this session (hidden before the cloud confirms
+  // is_snoozed), so the row disappears the instant you snooze it.
+  const [optimisticSnoozed, setOptimisticSnoozed] = useState<Set<string>>(
+    () => new Set(),
+  );
+
   const reqRef = useRef(0);
   const pendingRef = useRef<Map<string, PendingTriage>>(new Map());
+  const pendingSnoozeRef = useRef<Map<string, PendingSnooze>>(new Map());
   const folder = "inbox";
 
   const load = useCallback(
@@ -97,20 +134,65 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
     void load(false);
   }, [load]);
 
-  // Commit any still-pending triage immediately on unmount (don't lose ops).
+  /**
+   * Re-pull just the cloud tissue (accounts + refs) without the full-load loading
+   * flash. Used after a snooze/follow-up write and by the 60s restore orchestrator
+   * so the rail counts + snoozed-hide set stay fresh without a skeleton flicker.
+   */
+  const refreshTissue = useCallback(async () => {
+    if (!runtime || !workspaceId) return;
+    try {
+      const bundle = await runtime.email.listModule(workspaceId);
+      setTissueRefs(bundle.refs ?? []);
+      setTissueAccounts(bundle.accounts ?? []);
+    } catch {
+      /* best-effort */
+    }
+  }, [runtime, workspaceId]);
+
+  // Keep a live ref for use inside setTimeout callbacks (avoid stale closures).
+  const refreshTissueRef = useRef(refreshTissue);
+  refreshTissueRef.current = refreshTissue;
+  const workspaceIdRef = useRef(workspaceId);
+  workspaceIdRef.current = workspaceId;
+
+  // Commit any still-pending triage/snooze immediately on unmount (don't lose ops).
   useEffect(() => {
-    const pending = pendingRef.current;
+    const pendingTriages = pendingRef.current;
+    const pendingSnoozes = pendingSnoozeRef.current;
     return () => {
-      for (const entry of pending.values()) {
+      for (const entry of pendingTriages.values()) {
         clearTimeout(entry.timer);
         void commitTriage(runtime, entry);
       }
-      pending.clear();
+      pendingTriages.clear();
+      for (const entry of pendingSnoozes.values()) {
+        clearTimeout(entry.timer);
+        void commitSnooze(runtime, workspaceIdRef.current, entry);
+      }
+      pendingSnoozes.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runtime]);
 
-  const threads = useMemo(() => shapeInboxThreads(envelopes, accounts), [envelopes, accounts]);
+  // Threads whose messages are snoozed away from the inbox — the server-side move
+  // to Moduo/Snoozed drops them on the next sync, but until then (and for the
+  // local-hide fallback where the mail never physically leaves) the cloud
+  // `is_snoozed` flag + the optimistic set keep the inbox honest.
+  const hiddenThreadKeys = useMemo(() => {
+    const set = new Set(optimisticSnoozed);
+    for (const ref of tissueRefs) {
+      if (ref.isSnoozed) set.add(ref.threadKey);
+    }
+    return set;
+  }, [tissueRefs, optimisticSnoozed]);
+
+  const threads = useMemo(() => {
+    const shaped = shapeInboxThreads(envelopes, accounts);
+    return hiddenThreadKeys.size === 0
+      ? shaped
+      : shaped.filter((t) => !hiddenThreadKeys.has(t.threadId));
+  }, [envelopes, accounts, hiddenThreadKeys]);
 
   const syncNow = useCallback(async () => {
     if (!runtime || !isDesktop) return;
@@ -229,6 +311,119 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
     [runtime, envelopes],
   );
 
+  /**
+   * Snooze a thread (AC6). Hides it immediately and returns an `undo` fn; the cloud
+   * state + IMAP move to Moduo/Snoozed only fire after {@link TRIAGE_UNDO_MS} (or on
+   * unmount), so Undo before then is a pure local restore — mirrors triage().
+   */
+  const snooze = useCallback(
+    (thread: EmailThread, at: Date): (() => void) => {
+      const threadId = thread.threadId;
+      const targets = envelopes.filter(
+        (e) => e.accountId === thread.accountId && e.threadId === threadId,
+      );
+      setOptimisticSnoozed((prev) => {
+        const next = new Set(prev);
+        next.add(threadId);
+        return next;
+      });
+
+      const key = `${thread.accountId}::${threadId}`;
+      const existing = pendingSnoozeRef.current.get(key);
+      if (existing) clearTimeout(existing.timer);
+
+      const timer = setTimeout(() => {
+        const entry = pendingSnoozeRef.current.get(key);
+        pendingSnoozeRef.current.delete(key);
+        if (!entry) return;
+        void commitSnooze(runtime, workspaceIdRef.current, entry).then(() => {
+          // The cloud is_snoozed now keeps it hidden; drop the optimistic marker.
+          void refreshTissueRef.current().then(() =>
+            setOptimisticSnoozed((prev) => {
+              const next = new Set(prev);
+              next.delete(threadId);
+              return next;
+            }),
+          );
+        });
+      }, TRIAGE_UNDO_MS);
+
+      pendingSnoozeRef.current.set(key, {
+        threadId,
+        accountId: thread.accountId,
+        at,
+        refArgs: refArgsFromThread(thread),
+        envelopes: targets,
+        timer,
+      });
+
+      return () => {
+        const entry = pendingSnoozeRef.current.get(key);
+        if (!entry) return;
+        clearTimeout(entry.timer);
+        pendingSnoozeRef.current.delete(key);
+        setOptimisticSnoozed((prev) => {
+          const next = new Set(prev);
+          next.delete(threadId);
+          return next;
+        });
+      };
+    },
+    [runtime, envelopes],
+  );
+
+  /** Bring a snoozed thread back to the inbox now (cloud unsnooze + IMAP restore). */
+  const unsnooze = useCallback(
+    async (ref: EmailThreadRef) => {
+      if (!runtime || !workspaceId) return;
+      try {
+        await runtime.email.unsnooze({ workspaceId, refId: ref.id });
+        if (isDesktop && ref.accountId) {
+          await runtime.email.snoozeRestore({
+            accountId: ref.accountId,
+            threadId: ref.threadKey,
+          });
+        }
+      } finally {
+        setOptimisticSnoozed((prev) => {
+          const next = new Set(prev);
+          next.delete(ref.threadKey);
+          return next;
+        });
+        await refreshTissue();
+      }
+    },
+    [runtime, workspaceId, isDesktop, refreshTissue],
+  );
+
+  /** Arm a "remind me if no reply by X" follow-up on a thread (AC7). */
+  const setFollowUp = useCallback(
+    async (thread: EmailThread, at: Date) => {
+      if (!runtime || !workspaceId) return;
+      const ref = await runtime.email.upsertRef({
+        workspaceId,
+        ...refArgsFromThread(thread),
+      });
+      await runtime.email.followUp({
+        workspaceId,
+        refId: ref.id,
+        followUpAt: at.toISOString(),
+      });
+      await refreshTissue();
+    },
+    [runtime, workspaceId, refreshTissue],
+  );
+
+  /** Clear a follow-up manually (the counterpart-reply path clears it silently). */
+  const clearFollowUpFor = useCallback(
+    async (ref: EmailThreadRef) => {
+      if (!runtime || !workspaceId) return;
+      await runtime.email.clearFollowUp({ workspaceId, refId: ref.id });
+      await refreshTissue();
+    },
+    [runtime, workspaceId, refreshTissue],
+  );
+
   const getThread = useCallback(
     async (accountId: string, threadId: string): Promise<EmailEnvelope[]> => {
       if (!runtime || !isDesktop) return [];
@@ -267,16 +462,48 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
     followUps,
     folder,
     reload: () => load(false),
+    refreshTissue,
     syncNow,
     toggleStar,
     markRead,
     triage,
+    snooze,
+    unsnooze,
+    setFollowUp,
+    clearFollowUpFor,
     getThread,
     getBody,
   };
 }
 
 export type EmailModuleApi = ReturnType<typeof useEmailModule>;
+
+async function commitSnooze(
+  runtime: ModuoRuntime | null,
+  workspaceId: string | null,
+  entry: PendingSnooze,
+): Promise<void> {
+  if (!runtime || !workspaceId) return;
+  try {
+    // 1. Ensure the tissue ref (idempotent) so snooze state has a backing row.
+    const ref = await runtime.email.upsertRef({ workspaceId, ...entry.refArgs });
+    // 2. Cloud snooze state (drives the rail count, web view, restore + widget).
+    await runtime.email.snooze({
+      workspaceId,
+      refId: ref.id,
+      snoozeUntil: entry.at.toISOString(),
+    });
+    // 3. Server move to Moduo/Snoozed (best-effort; local-hide fallback in Rust).
+    await runtime.email.snoozeThread({
+      accountId: entry.accountId,
+      threadId: entry.threadId,
+      uids: entry.envelopes.map((e) => e.uid),
+    });
+  } catch {
+    /* best-effort — the optimistic hide clears on next reload if the cloud is
+       degraded pre-migration; nothing is lost server-side. */
+  }
+}
 
 async function commitTriage(runtime: ModuoRuntime | null, entry: PendingTriage): Promise<void> {
   if (!runtime) return;

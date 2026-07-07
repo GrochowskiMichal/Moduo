@@ -7,7 +7,7 @@
 // Presentational — every action is a callback.
 
 import { forwardRef } from "react";
-import { Check, Clock3, Pin, Trash2 } from "lucide-react";
+import { Check, Clock3, CornerUpLeft, Pin, Trash2 } from "lucide-react";
 
 import { IconButton } from "../../../components/ui/icon-button";
 import { EmptyState } from "../../../components/ui/empty-state";
@@ -27,6 +27,7 @@ type Props = {
   onSelectThread: (thread: EmailThread) => void;
   onArchive: (thread: EmailThread) => void;
   onSnooze: (thread: EmailThread) => void;
+  onFollowUp: (thread: EmailThread) => void;
   onDelete: (thread: EmailThread) => void;
   onRetry: () => void;
 };
@@ -54,10 +55,21 @@ const ThreadRow = forwardRef<
     onSelect: () => void;
     onArchive: () => void;
     onSnooze: () => void;
+    onFollowUp: () => void;
     onDelete: () => void;
   }
 >(function ThreadRow(
-  { thread, selected, showAccountDot, hue, onSelect, onArchive, onSnooze, onDelete },
+  {
+    thread,
+    selected,
+    showAccountDot,
+    hue,
+    onSelect,
+    onArchive,
+    onSnooze,
+    onFollowUp,
+    onDelete,
+  },
   ref,
 ) {
   const unread = thread.unread;
@@ -153,6 +165,14 @@ const ThreadRow = forwardRef<
           }}
         />
         <IconButton
+          icon={CornerUpLeft}
+          label="Remind me to follow up"
+          onClick={(e) => {
+            e.stopPropagation();
+            onFollowUp();
+          }}
+        />
+        <IconButton
           icon={Trash2}
           label="Delete (#)"
           onClick={(e) => {
@@ -175,6 +195,7 @@ export function EmailThreadList({
   onSelectThread,
   onArchive,
   onSnooze,
+  onFollowUp,
   onDelete,
   onRetry,
 }: Props) {
@@ -235,6 +256,7 @@ export function EmailThreadList({
           onSelect={() => onSelectThread(thread)}
           onArchive={() => onArchive(thread)}
           onSnooze={() => onSnooze(thread)}
+          onFollowUp={() => onFollowUp(thread)}
           onDelete={() => onDelete(thread)}
         />
       ))}

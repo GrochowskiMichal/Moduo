@@ -458,6 +458,45 @@ export type ModuoRuntime = {
       op: "archive" | "move" | "delete";
       destFolder?: string | null;
     }): Promise<any>;
+    /** Snooze a thread — move its inbox messages to Moduo/Snoozed (create-if-
+     *  missing, delimiter-aware). `local_hide` = the server refused the folder;
+     *  the caller keeps the thread hidden locally instead (EM-6). */
+    snoozeThread(input: {
+      accountId: string;
+      threadId: string;
+      uids: number[];
+    }): Promise<{ strategy: "server_move" | "local_hide"; mailbox: string | null }>;
+    /** Restore a snoozed thread — move its messages from Moduo/Snoozed back to the
+     *  inbox. Idempotent (0 when nothing matches / the folder is absent). */
+    snoozeRestore(input: {
+      accountId: string;
+      threadId: string;
+    }): Promise<{ restored: number }>;
+    /** Send a message (reply/forward/new) — HTML+plain multipart, cc/bcc, reply
+     *  headers, attachments from disk paths; copy to Sent (Gmail skips). EM-7. */
+    sendMessage(input: EmailSendInput): Promise<{ messageId: string; savedToSent: boolean }>;
+    /** A received message's attachment metadata (no bytes; EM-7/AC4). */
+    listAttachments(input: {
+      accountId: string;
+      folder: string;
+      uid: number;
+    }): Promise<EmailAttachmentMeta[]>;
+    /** Decode one attachment + write it to disk via a native Save dialog. */
+    saveAttachment(input: {
+      accountId: string;
+      folder: string;
+      uid: number;
+      attachmentId: string;
+      defaultFilename: string;
+    }): Promise<{ saved: boolean; path: string | null }>;
+    /** Native multi-file open dialog → paths for composing. */
+    pickAttachments(): Promise<EmailPickedAttachment[]>;
+    /** Small inline `cid:` images (<2MB) for substituting into the reader HTML. */
+    getInlineImages(input: {
+      accountId: string;
+      folder: string;
+      uid: number;
+    }): Promise<EmailInlineImage[]>;
 
     // ── EM-3 cloud "tissue" surface (Supabase-first, both platforms) ────────
     // A thread reaches the cloud ONLY via a deliberate action (convert / link /
@@ -490,8 +529,16 @@ export type ModuoRuntime = {
     }): Promise<EmailThreadRef>;
     snooze(input: { workspaceId: string; refId: string; snoozeUntil: string }): Promise<EmailThreadRef>;
     unsnooze(input: { workspaceId: string; refId: string }): Promise<EmailThreadRef>;
+    /** A snooze became due: unsnooze the ref + write the owner-targeted due
+     *  activity (→ one notification). Called by the restore scheduler (EM-6). */
+    snoozeDue(input: { workspaceId: string; refId: string }): Promise<EmailThreadRef>;
     followUp(input: { workspaceId: string; refId: string; followUpAt: string }): Promise<EmailThreadRef>;
     clearFollowUp(input: { workspaceId: string; refId: string }): Promise<EmailThreadRef>;
+    /** A follow-up deadline passed with no reply: one-shot due notification.
+     *  Returns null when there's nothing to do (not awaiting / already notified). */
+    followUpDue(input: { workspaceId: string; refId: string }): Promise<EmailThreadRef | null>;
+    /** Remove a tissue ref + its links + registry entry (convert-undo cleanup, EM-8). */
+    removeRef(input: { workspaceId: string; refId: string }): Promise<void>;
     /** Link an email_thread to any entity through the spine keystone (idempotent). */
     linkThread(input: {
       workspaceId: string;
@@ -928,6 +975,48 @@ export type ModuoRuntime = {
     /** Remove a custom-field definition (values remain in the blobs, just unsurfaced). */
     deleteFieldDef(input: { workspaceId: string; fieldId: string }): Promise<void>;
   };
+};
+
+// ── Email compose + attachments (EM-7, desktop engine) ───────────────────────
+/** A received message's attachment metadata (bytes fetched on demand, EM-7). */
+export type EmailAttachmentMeta = {
+  id: string;
+  filename: string;
+  mime: string;
+  size: number;
+  isInline: boolean;
+  contentId: string | null;
+};
+
+/** A file picked for composing (send reads bytes from the path at send time). */
+export type EmailPickedAttachment = {
+  path: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+};
+
+/** A small inline cid image, for substituting `cid:` refs in the reader HTML. */
+export type EmailInlineImage = {
+  contentId: string;
+  mime: string;
+  dataBase64: string;
+};
+
+/** The full send request (maps to the Rust `email_send_message`). */
+export type EmailSendInput = {
+  accountId: string;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  textBody: string;
+  htmlBody: string | null;
+  inReplyTo: string | null;
+  references: string[];
+  attachments: { filename: string; mimeType: string; path: string }[];
+  messageId?: string | null;
+  fromName?: string | null;
 };
 
 // ── Email module (EM-3 cloud tissue) ─────────────────────────────────────────

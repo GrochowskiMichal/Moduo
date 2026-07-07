@@ -21,6 +21,9 @@ import type { SavedAccount } from "../model/email-types";
 /** `null` = the Unified scope; a string = one account's id. */
 export type EmailScope = string | null;
 
+/** Which center surface is showing: the inbox, or a tissue destination. */
+export type EmailView = "inbox" | "snoozed" | "followups";
+
 type Props = {
   accounts: SavedAccount[];
   /** Account id → bounded hue name (from resolveAccountHues). */
@@ -31,6 +34,9 @@ type Props = {
   unreadByAccount: Record<string, number>;
   selectedAccountId: EmailScope;
   onSelectScope: (scope: EmailScope) => void;
+  /** The active center view — the inbox scope rows highlight only in "inbox". */
+  activeView: EmailView;
+  onSelectView: (view: EmailView) => void;
   snoozedCount: number;
   followUpCount: number;
   /** Opens the connect dialog in fresh mode. */
@@ -61,6 +67,8 @@ export function EmailRail({
   unreadByAccount,
   selectedAccountId,
   onSelectScope,
+  activeView,
+  onSelectView,
   snoozedCount,
   followUpCount,
   onConnect,
@@ -70,6 +78,8 @@ export function EmailRail({
     "group flex w-full items-center gap-2 rounded-md px-2 text-left transition-colors";
   const rowIdle = "hover:bg-accent";
   const rowActive = "bg-accent";
+  // Inbox scope rows only read as "active" while the inbox itself is showing.
+  const inboxView = activeView === "inbox";
 
   return (
     <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
@@ -77,9 +87,9 @@ export function EmailRail({
       <div className="flex flex-col gap-0.5">
         <button
           type="button"
-          aria-current={selectedAccountId === null ? "true" : undefined}
+          aria-current={inboxView && selectedAccountId === null ? "true" : undefined}
           onClick={() => onSelectScope(null)}
-          className={`${rowBase} ${selectedAccountId === null ? rowActive : rowIdle}`}
+          className={`${rowBase} ${inboxView && selectedAccountId === null ? rowActive : rowIdle}`}
           style={{ minHeight: "var(--row-h)" }}
         >
           <Inbox
@@ -89,7 +99,7 @@ export function EmailRail({
           <span
             className={
               "min-w-0 flex-1 truncate text-sm " +
-              (selectedAccountId === null
+              (inboxView && selectedAccountId === null
                 ? "font-medium text-foreground"
                 : "text-foreground")
             }
@@ -107,7 +117,7 @@ export function EmailRail({
             Accounts
           </div>
           {accounts.map((account) => {
-            const active = selectedAccountId === account.id;
+            const active = inboxView && selectedAccountId === account.id;
             const label = account.email || providerLabel(account.provider);
             const unread = unreadByAccount[account.id] ?? 0;
             return (
@@ -175,24 +185,44 @@ export function EmailRail({
         </div>
       ) : null}
 
-      {/* Destinations — Snoozed + Follow-ups (counts only for now, EM-6). */}
+      {/* Destinations — Snoozed + Follow-ups (click to view the tissue refs). */}
       <div className="flex flex-col gap-0.5">
-        <div
-          className="flex items-center gap-2 rounded-md px-2 text-muted-foreground"
+        <button
+          type="button"
+          aria-current={activeView === "snoozed" ? "true" : undefined}
+          onClick={() => onSelectView("snoozed")}
+          className={`${rowBase} ${activeView === "snoozed" ? rowActive : rowIdle}`}
           style={{ minHeight: "var(--row-h-sm)" }}
         >
-          <Clock3 className="size-icon-sm shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1 truncate text-sm">Snoozed</span>
-          <CountPill count={snoozedCount} muted />
-        </div>
-        <div
-          className="flex items-center gap-2 rounded-md px-2 text-muted-foreground"
+          <Clock3 className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
+          <span
+            className={
+              "min-w-0 flex-1 truncate text-sm " +
+              (activeView === "snoozed" ? "font-medium text-foreground" : "text-foreground")
+            }
+          >
+            Snoozed
+          </span>
+          <CountPill count={snoozedCount} muted={activeView !== "snoozed"} />
+        </button>
+        <button
+          type="button"
+          aria-current={activeView === "followups" ? "true" : undefined}
+          onClick={() => onSelectView("followups")}
+          className={`${rowBase} ${activeView === "followups" ? rowActive : rowIdle}`}
           style={{ minHeight: "var(--row-h-sm)" }}
         >
-          <CornerUpLeft className="size-icon-sm shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1 truncate text-sm">Follow-ups</span>
-          <CountPill count={followUpCount} muted />
-        </div>
+          <CornerUpLeft className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
+          <span
+            className={
+              "min-w-0 flex-1 truncate text-sm " +
+              (activeView === "followups" ? "font-medium text-foreground" : "text-foreground")
+            }
+          >
+            Follow-ups
+          </span>
+          <CountPill count={followUpCount} muted={activeView !== "followups"} />
+        </button>
       </div>
 
       <div className="mt-auto pt-1">
