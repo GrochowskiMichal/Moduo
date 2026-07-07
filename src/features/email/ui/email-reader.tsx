@@ -8,10 +8,22 @@
 // non-token surface (foreign HTML), sandboxed.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Mail } from "lucide-react";
+import {
+  ChevronDown,
+  Download,
+  Forward,
+  ListChecks,
+  Mail,
+  Paperclip,
+  Reply,
+  ReplyAll,
+} from "lucide-react";
 
 import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
+import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
+import type { EmailAttachmentMeta, EmailInlineImage } from "../../../lib/runtime.types";
+import type { ComposeMode } from "../compose";
 import { formatEmailDetailDate } from "../utils/email-format";
 import { buildEmailSrcDoc } from "../utils/email-html";
 import type { EmailEnvelope, EmailThread } from "../model/email-types";
@@ -31,7 +43,48 @@ type Props = {
     folder: string,
     uid: number,
   ) => Promise<{ body: string; bodyHtml: string | null } | null>;
+  /** Start a reply/forward off the current thread (EM-7). Absent on web. */
+  onReply?: (mode: ComposeMode) => void;
+  /** Convert the thread to a task (EM-8, the great moment). */
+  onConvert?: () => void;
+  /** List a message's attachments (EM-7/AC4). Absent on web. */
+  listAttachments?: (
+    accountId: string,
+    folder: string,
+    uid: number,
+  ) => Promise<EmailAttachmentMeta[]>;
+  /** Decode + save one attachment to disk via a native dialog (EM-7/AC4). */
+  saveAttachment?: (
+    accountId: string,
+    folder: string,
+    uid: number,
+    attachmentId: string,
+    defaultFilename: string,
+  ) => Promise<{ saved: boolean; path: string | null }>;
+  /** Small inline cid images (<2MB) to substitute into the body HTML (EM-7/AC4). */
+  getInlineImages?: (
+    accountId: string,
+    folder: string,
+    uid: number,
+  ) => Promise<EmailInlineImage[]>;
 };
+
+function humanSize(bytes: number): string {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Replace `cid:<id>` refs in the body HTML with inline data URIs. */
+function substituteCidImages(html: string, images: EmailInlineImage[]): string {
+  let out = html;
+  for (const img of images) {
+    const dataUri = `data:${img.mime};base64,${img.dataBase64}`;
+    out = out.split(`cid:${img.contentId}`).join(dataUri);
+  }
+  return out;
+}
 
 function initials(name: string, email: string): string {
   const src = name.trim() || email.trim();
@@ -46,13 +99,52 @@ function MessageCard({
   message,
   defaultExpanded,
   getBody,
+  listAttachments,
+  saveAttachment,
+  getInlineImages,
 }: {
   message: EmailEnvelope;
   defaultExpanded: boolean;
   getBody: Props["getBody"];
+  listAttachments?: Props["listAttachments"];
+  saveAttachment?: Props["saveAttachment"];
+  getInlineImages?: Props["getInlineImages"];
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [body, setBody] = useState<BodyState>({ status: "idle" });
+  const [attachments, setAttachments] = useState<EmailAttachmentMeta[]>([]);
+  const [inlineImages, setInlineImages] = useState<EmailInlineImage[]>([]);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  // Fetch attachment metadata once the message is expanded (bytes stay on the
+  // server until a save). Inline cid parts are excluded from the chip row.
+  useEffect(() => {
+    if (!expanded || !listAttachments) return;
+    let active = true;
+    void (async () => {
+      try {
+        const list = await listAttachments(message.accountId, message.folder, message.uid);
+        if (active) setAttachments(list.filter((a) => !a.isInline));
+      } catch {
+        /* attachments are best-effort */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [expanded, listAttachments, message.accountId, message.folder, message.uid]);
+
+  const onSave = async (att: EmailAttachmentMeta) => {
+    if (!saveAttachment) return;
+    setSavingId(att.id);
+    try {
+      await saveAttachment(message.accountId, message.folder, message.uid, att.id, att.filename);
+    } catch {
+      /* cancelled / failed — no-op */
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!expanded || body.status !== "idle") return;
@@ -78,13 +170,32 @@ function MessageCard({
     };
   }, [expanded, body.status, getBody, message.accountId, message.folder, message.uid]);
 
-  const srcDoc = useMemo(
-    () =>
-      body.status === "ready" && body.bodyHtml && body.bodyHtml.trim().length > 0
-        ? buildEmailSrcDoc(body.bodyHtml)
-        : null,
-    [body],
-  );
+  // Fetch inline cid images only when the body actually references one.
+  useEffect(() => {
+    if (!getInlineImages) return;
+    if (body.status !== "ready" || !body.bodyHtml || !body.bodyHtml.includes("cid:")) return;
+    let active = true;
+    void getInlineImages(message.accountId, message.folder, message.uid)
+      .then((imgs) => {
+        if (active) setInlineImages(imgs);
+      })
+      .catch(() => {
+        /* inline images are best-effort */
+      });
+    return () => {
+      active = false;
+    };
+  }, [getInlineImages, body.status, body.bodyHtml, message.accountId, message.folder, message.uid]);
+
+  const srcDoc = useMemo(() => {
+    if (body.status !== "ready" || !body.bodyHtml || body.bodyHtml.trim().length === 0) {
+      return null;
+    }
+    const html = inlineImages.length
+      ? substituteCidImages(body.bodyHtml, inlineImages)
+      : body.bodyHtml;
+    return buildEmailSrcDoc(html);
+  }, [body, inlineImages]);
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -135,6 +246,32 @@ function MessageCard({
       {/* Body — only when expanded. */}
       {expanded ? (
         <div className="border-t border-border px-3 py-3">
+          {attachments.length > 0 ? (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {attachments.map((att) => (
+                <button
+                  key={att.id}
+                  type="button"
+                  disabled={savingId === att.id}
+                  onClick={() => void onSave(att)}
+                  title={`Save ${att.filename}`}
+                  className="group flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-foreground transition-colors hover:bg-accent disabled:opacity-60"
+                >
+                  <Paperclip className="size-icon-xs shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="max-w-48 truncate">{att.filename}</span>
+                  {att.size ? (
+                    <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                      {humanSize(att.size)}
+                    </span>
+                  ) : null}
+                  <Download
+                    className="size-icon-xs shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                    aria-hidden
+                  />
+                </button>
+              ))}
+            </div>
+          ) : null}
           {body.status === "loading" || body.status === "idle" ? (
             <div className="flex flex-col gap-2" aria-busy="true">
               <div className="h-3 w-1/3 animate-pulse rounded bg-muted" />
@@ -167,7 +304,16 @@ function MessageCard({
   );
 }
 
-export function EmailReader({ thread, getThread, getBody }: Props) {
+export function EmailReader({
+  thread,
+  getThread,
+  getBody,
+  onReply,
+  onConvert,
+  listAttachments,
+  saveAttachment,
+  getInlineImages,
+}: Props) {
   const [messages, setMessages] = useState<EmailEnvelope[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -210,7 +356,31 @@ export function EmailReader({ thread, getThread, getBody }: Props) {
 
   return (
     <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
-      <h2 className="shrink-0 text-sm font-medium text-foreground">{thread.subject}</h2>
+      <div className="flex shrink-0 items-start justify-between gap-2">
+        <h2 className="min-w-0 flex-1 text-sm font-medium text-foreground">{thread.subject}</h2>
+        {onReply ? (
+          <div className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => onReply("reply")}>
+              <Reply aria-hidden />
+              Reply
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => onReply("reply-all")}>
+              <ReplyAll aria-hidden />
+              All
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => onReply("forward")}>
+              <Forward aria-hidden />
+              Forward
+            </Button>
+            {onConvert ? (
+              <Button variant="ghost" size="sm" onClick={onConvert}>
+                <ListChecks aria-hidden />
+                To task
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       {status === "loading" ? (
         <div className="flex flex-col gap-2" aria-busy="true">
@@ -231,6 +401,9 @@ export function EmailReader({ thread, getThread, getBody }: Props) {
               message={message}
               defaultExpanded={i === lastIndex}
               getBody={getBody}
+              listAttachments={listAttachments}
+              saveAttachment={saveAttachment}
+              getInlineImages={getInlineImages}
             />
           ))}
         </div>

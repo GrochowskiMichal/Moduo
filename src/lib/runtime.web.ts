@@ -965,6 +965,13 @@ export const webRuntime: ModuoRuntime = {
     async getThread() { throw new Error(desktopOnly().message); },
     async listFolders() { return []; },
     async applyMessageOp() { throw new Error(desktopOnly().message); },
+    async snoozeThread() { throw new Error(desktopOnly().message); },
+    async snoozeRestore() { throw new Error(desktopOnly().message); },
+    async sendMessage() { throw new Error(desktopOnly().message); },
+    async listAttachments() { return []; },
+    async saveAttachment() { throw new Error(desktopOnly().message); },
+    async pickAttachments() { return []; },
+    async getInlineImages() { return []; },
 
     // ── EM-3 cloud tissue surface (Supabase-first; works on web + desktop) ──
     async listModule(workspaceId) {
@@ -1048,6 +1055,14 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
       return emailRefRowToModel(firstRow(data, "email_op_unsnooze"));
     },
+    async snoozeDue({ workspaceId, refId }) {
+      const { data, error } = await supabaseClient.rpc("email_op_snooze_due", {
+        p_workspace_id: workspaceId,
+        p_ref_id: refId,
+      });
+      if (error) throw new Error(error.message);
+      return emailRefRowToModel(firstRow(data, "email_op_snooze_due"));
+    },
     async followUp({ workspaceId, refId, followUpAt }) {
       const { data, error } = await supabaseClient.rpc("email_op_follow_up", {
         p_workspace_id: workspaceId,
@@ -1064,6 +1079,24 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
       return emailRefRowToModel(firstRow(data, "email_op_clear_follow_up"));
+    },
+    async followUpDue({ workspaceId, refId }) {
+      const { data, error } = await supabaseClient.rpc("email_op_follow_up_due", {
+        p_workspace_id: workspaceId,
+        p_ref_id: refId,
+      });
+      if (error) throw new Error(error.message);
+      // Returns SQL NULL (→ no row) when there's nothing to do; not an error.
+      // Guard on row.id too (the all-NULL-composite gotcha) like deleteLink does.
+      const row = Array.isArray(data) ? data[0] : data;
+      return row?.id ? emailRefRowToModel(row) : null;
+    },
+    async removeRef({ workspaceId, refId }) {
+      const { error } = await supabaseClient.rpc("email_op_ref_remove", {
+        p_workspace_id: workspaceId,
+        p_ref_id: refId,
+      });
+      if (error) throw new Error(error.message);
     },
     async linkThread({ workspaceId, threadId, targetType, targetId, relationKind, origin, threadLabel, targetLabel, targetIcon }) {
       const { data, error } = await supabaseClient.rpc("email_op_link", {

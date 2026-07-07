@@ -97,6 +97,26 @@ pub(super) fn fetch_envelopes_for_uids(
         } else {
             String::new()
         };
+        let cc = if let Some(cc_list) = &env.cc {
+            cc_list
+                .iter()
+                .filter_map(|addr| {
+                    let (_, email) = parse_address(
+                        addr.mailbox.as_deref(),
+                        addr.host.as_deref(),
+                        addr.name.as_deref(),
+                    );
+                    if email.is_empty() {
+                        None
+                    } else {
+                        Some(email)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        } else {
+            String::new()
+        };
         let message_id = env
             .message_id
             .as_ref()
@@ -140,6 +160,7 @@ pub(super) fn fetch_envelopes_for_uids(
             sender,
             sender_email,
             to,
+            cc,
             subject,
             preview,
             date,

@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import type { LabelColor } from "../../../components/tag-colors";
 import type { SavedAccount } from "../model/email-types";
-import { EmailRail, type EmailScope } from "./email-rail";
+import { EmailRail, type EmailScope, type EmailView } from "./email-rail";
 
 const accounts: SavedAccount[] = [
   {
@@ -46,6 +46,7 @@ const unreadByAccount: Record<string, number> = {
 
 function Harness({ startScope = null as EmailScope }) {
   const [scope, setScope] = useState<EmailScope>(startScope);
+  const [view, setView] = useState<EmailView>("inbox");
   return (
     <div className="w-64 rounded-xl border border-border bg-card p-3">
       <EmailRail
@@ -54,7 +55,12 @@ function Harness({ startScope = null as EmailScope }) {
         unifiedUnread={15}
         unreadByAccount={unreadByAccount}
         selectedAccountId={scope}
-        onSelectScope={setScope}
+        onSelectScope={(s) => {
+          setScope(s);
+          setView("inbox");
+        }}
+        activeView={view}
+        onSelectView={setView}
         snoozedCount={4}
         followUpCount={2}
         onConnect={() => {}}
@@ -85,6 +91,7 @@ export const AccountSelected: Story = {
 export const NoAccounts: Story = {
   render: () => {
     const [scope, setScope] = useState<EmailScope>(null);
+    const [view, setView] = useState<EmailView>("inbox");
     return (
       <div className="w-64 rounded-xl border border-border bg-card p-3">
         <EmailRail
@@ -94,6 +101,8 @@ export const NoAccounts: Story = {
           unreadByAccount={{}}
           selectedAccountId={scope}
           onSelectScope={setScope}
+          activeView={view}
+          onSelectView={setView}
           snoozedCount={0}
           followUpCount={0}
           onConnect={() => {}}

@@ -24,6 +24,7 @@ use crate::AppState;
 
 pub mod account_commands;
 mod account_config;
+pub mod attachments;
 mod body_fetch;
 mod connection;
 mod constants;
@@ -37,6 +38,7 @@ mod realtime;
 mod secrets;
 pub mod send_commands;
 mod smtp;
+pub mod snooze;
 mod storage;
 mod sync;
 
@@ -199,6 +201,7 @@ fn envelope_to_dto(state: &AppState, item: StoredEnvelope) -> EmailEnvelopeDto {
         sender: decode_maybe_mime_header(&item.sender),
         sender_email: item.sender_email,
         to: item.to,
+        cc: item.cc,
         subject: decode_maybe_mime_header(&item.subject),
         preview: decode_maybe_mime_header(&item.preview),
         date: item.date,

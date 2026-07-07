@@ -96,6 +96,7 @@ function Harness({
         onSelectThread={(t) => setSelected(t.threadId)}
         onArchive={() => {}}
         onSnooze={() => {}}
+        onFollowUp={() => {}}
         onDelete={() => {}}
         onRetry={() => {}}
       />

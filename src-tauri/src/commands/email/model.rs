@@ -138,6 +138,10 @@ pub(super) struct StoredEnvelope {
     pub(super) sender: String,
     pub(super) sender_email: String,
     pub(super) to: String,
+    /// The `Cc` recipients (comma-joined emails), captured so reply-all keeps
+    /// everyone who was CC'd. Defaulted for pre-Cc rows.
+    #[serde(default)]
+    pub(super) cc: String,
     pub(super) subject: String,
     pub(super) preview: String,
     pub(super) date: String,
@@ -254,6 +258,8 @@ pub struct EmailEnvelopeDto {
     pub sender: String,
     pub sender_email: String,
     pub to: String,
+    #[serde(default)]
+    pub cc: String,
     pub subject: String,
     pub preview: String,
     pub date: String,
@@ -467,6 +473,83 @@ pub struct EmailSendMessageResult {
     pub message_id: String,
     /// Whether a copy was APPENDed to Sent (false for Gmail, which auto-saves).
     pub saved_to_sent: bool,
+}
+
+// ── Attachments (EM-7) ─────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailListAttachmentsInput {
+    pub account_id: String,
+    pub folder: String,
+    pub uid: u32,
+}
+
+/// Metadata for one attachment on a received message. Bytes are NEVER carried
+/// here — they're fetched on demand by [`EmailSaveAttachmentInput`].
+#[derive(Serialize, Clone, PartialEq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailAttachmentMeta {
+    /// Stable id = the part's dotted index path through the MIME tree (e.g. `"1.2"`),
+    /// so a save can re-locate the exact part deterministically.
+    pub id: String,
+    pub filename: String,
+    pub mime: String,
+    /// Decoded byte length (Content-Transfer-Encoding unapplied).
+    pub size: u32,
+    pub is_inline: bool,
+    pub content_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSaveAttachmentInput {
+    pub account_id: String,
+    pub folder: String,
+    pub uid: u32,
+    /// The [`EmailAttachmentMeta::id`] (index path) to save.
+    pub attachment_id: String,
+    /// Prefilled name for the Save dialog.
+    pub default_filename: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSaveAttachmentResult {
+    /// False when the user cancels the Save dialog.
+    pub saved: bool,
+    /// The chosen path (absolute), present only when `saved`.
+    pub path: Option<String>,
+}
+
+/// A file the user picked in the compose OPEN dialog. The send path reads the bytes
+/// from `path` at send time — nothing is held in redb.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailPickedAttachment {
+    pub path: String,
+    pub filename: String,
+    pub mime_type: String,
+    pub size: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailGetInlineImagesInput {
+    pub account_id: String,
+    pub folder: String,
+    pub uid: u32,
+}
+
+/// A small inline `cid:` image, base64-encoded, for substituting
+/// `<img src="cid:...">` in the reader HTML.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailInlineImage {
+    /// The Content-ID WITHOUT the surrounding angle brackets.
+    pub content_id: String,
+    pub mime: String,
+    pub data_base64: String,
 }
 
 impl EmailConfig {

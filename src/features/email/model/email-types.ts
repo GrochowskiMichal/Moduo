@@ -48,6 +48,8 @@ export interface EmailEnvelope {
   sender: string;
   senderEmail: string;
   to: string;
+  /** Cc recipients (comma-joined) — captured so reply-all keeps them (EM-8). */
+  cc?: string;
   subject: string;
   preview: string;
   date: string;

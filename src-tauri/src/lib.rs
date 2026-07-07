@@ -99,6 +99,7 @@ fn perform_one_time_auth_v3_reset(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let config = config::AppConfig::from_env();
             let db_path =
@@ -179,8 +180,14 @@ pub fn run() {
             commands::email::email_list_folders,
             commands::email::email_apply_message_op,
             commands::email::email_get_mailbox_status,
+            commands::email::snooze::email_snooze_thread,
+            commands::email::snooze::email_snooze_restore,
             commands::email::send_commands::email_send_saved,
             commands::email::send_commands::email_send_message,
+            commands::email::attachments::email_list_attachments,
+            commands::email::attachments::email_save_attachment,
+            commands::email::attachments::email_pick_attachments,
+            commands::email::attachments::email_get_inline_images,
             commands::calendar::calendar_google_oauth_start,
             commands::calendar::calendar_outlook_oauth_start,
             commands::calendar::calendar_apple_oauth_start,
