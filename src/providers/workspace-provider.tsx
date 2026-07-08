@@ -1,5 +1,6 @@
 import { PropsWithChildren, useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./auth-provider";
+import type { NotificationItem } from "../features/spine/notifications";
 import type {
   WorkspaceInvite,
   WorkspaceMember,
@@ -16,6 +17,24 @@ import {
 } from "../features/workspaces/workspace-context";
 import { mapInvite, mapMember, mapNotification, mapWorkspace, storageKey } from "../features/workspaces/workspace-mappers";
 
+/** Map a legacy workspace notification into the source-agnostic feed item. */
+function legacyNotificationToItem(n: WorkspaceNotification): NotificationItem {
+  return {
+    id: n.id,
+    source: "workspace",
+    workspaceId: n.workspaceId,
+    targetType: n.sourceResourceType,
+    targetId: n.sourceResourceId,
+    op: n.eventType,
+    payload: n.payload,
+    actorType: "user",
+    actorId: n.actorUserId,
+    actorLabel: null,
+    createdAt: n.createdAt,
+    readAt: n.readAt,
+  };
+}
+
 export function WorkspaceProvider({ children }: PropsWithChildren) {
   const { runtime, userId } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -25,7 +44,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
   const [notificationsScope, setNotificationsScope] = useState<NotificationScope>("workspace");
   const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCountWorkspace, setUnreadCountWorkspace] = useState(0);
   const [unreadCountGlobal, setUnreadCountGlobal] = useState(0);
 
@@ -109,7 +128,25 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
 
     setNotificationsLoading(true);
     try {
-      const all = (await runtime.workspace.listNotifications()).map(mapNotification);
+      // Legacy workspace feed (invites / membership) → the normalized item shape.
+      const legacy: NotificationItem[] = (await runtime.workspace.listNotifications())
+        .map(mapNotification)
+        .map(legacyNotificationToItem);
+      // Spine-derived feed (block CT-5): module_activity rows targeting me. It's
+      // workspace-scoped, so fetch for the selected workspace. Degrade gracefully
+      // if the migration isn't deployed yet (the RPC 404s) — the bell keeps
+      // showing the legacy feed rather than breaking.
+      let spine: NotificationItem[] = [];
+      if (selectedWorkspaceId) {
+        try {
+          spine = await runtime.spine.listNotifications({ workspaceId: selectedWorkspaceId });
+        } catch {
+          spine = [];
+        }
+      }
+      const all = [...spine, ...legacy].sort((a, b) =>
+        a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+      );
       const workspaceFeed = all.filter((item) => item.workspaceId === selectedWorkspaceId);
       const globalFeed = all;
       const activeFeed = notificationsScope === "workspace" ? workspaceFeed : globalFeed;
@@ -219,9 +256,17 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   );
 
   const markNotificationRead = useCallback(
-    async (notificationId: string) => {
+    async (item: NotificationItem) => {
       if (!runtime) return;
-      await runtime.workspace.markNotificationRead(notificationId);
+      // Route to the op that owns the row: the spine activity-id op, or the
+      // legacy workspace-notification op.
+      if (item.source === "spine") {
+        if (item.workspaceId) {
+          await runtime.spine.markNotificationRead({ workspaceId: item.workspaceId, activityId: item.id });
+        }
+      } else {
+        await runtime.workspace.markNotificationRead(item.id);
+      }
       await refreshNotifications();
     },
     [refreshNotifications, runtime]
@@ -230,8 +275,15 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const markAllNotificationsRead = useCallback(async () => {
     if (!runtime) return;
     await runtime.workspace.markAllNotificationsRead();
+    if (selectedWorkspaceId) {
+      try {
+        await runtime.spine.markAllNotificationsRead({ workspaceId: selectedWorkspaceId });
+      } catch {
+        // Spine notifications migration not deployed yet — legacy mark-all still ran.
+      }
+    }
     await refreshNotifications();
-  }, [refreshNotifications, runtime]);
+  }, [refreshNotifications, runtime, selectedWorkspaceId]);
 
   useEffect(() => {
     if (!runtime || !userId) {

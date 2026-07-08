@@ -3,7 +3,6 @@ import { Navigate } from "@tanstack/react-router";
 import { useAuth } from "../../providers/auth-provider";
 import { WorkspaceProvider, useWorkspace } from "../../providers/workspace-provider";
 import { AppChrome } from "../../components/app/app-chrome";
-import { useSlotBookingsSync } from "../../features/plan/hooks/use-slot-bookings-sync";
 import { supabaseClient } from "../../lib/runtime.web";
 
 function WorkspaceGate() {
@@ -100,7 +99,6 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
 
 export function AppGate() {
   const { isSignedIn, loading } = useAuth();
-  useSlotBookingsSync();
 
   if (loading) return null;
   if (!isSignedIn) return <Navigate to="/auth" replace />;

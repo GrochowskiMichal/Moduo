@@ -1,6 +1,5 @@
 import { useDroppable } from "@dnd-kit/core";
 import type { ModuoRuntime } from "../../../lib/runtime";
-import type { Task, TaskProject, TaskWorkflowState } from "../../tasks/types";
 import type { NoteMeta } from "../../notes/types";
 import type { WidgetConfig, WidgetInstance } from "../types";
 import { WidgetContainer } from "./widget-container";
@@ -11,8 +10,13 @@ import { HydrationWidget } from "./widgets/hydration-widget";
 import { JobTrackerWidget } from "./widgets/job-tracker-widget";
 import { NotesWidget } from "./widgets/notes-widget";
 import { PomodoroWidget } from "./widgets/pomodoro-widget";
+import { RecentlyLinkedWidget } from "./widgets/recently-linked-widget";
+import { ContactsNeedsAttentionWidget } from "./widgets/contacts-needs-attention-widget";
+import { CalendarTodayWidget } from "./widgets/calendar-today-widget";
+import { RecentNotesWidget } from "./widgets/recent-notes-widget";
+import { EmailInboxWidget } from "./widgets/email-inbox-widget";
+import { ContactsReconnectWidget } from "./widgets/contacts-reconnect-widget";
 import { StockWidget } from "./widgets/stock-widget";
-import { TasksWidget } from "./widgets/tasks-widget";
 import { TodoListWidget } from "./widgets/todo-list-widget";
 import { WeatherWidget } from "./widgets/weather-widget";
 
@@ -23,9 +27,6 @@ type Props = {
   runtime: ModuoRuntime | null;
   workspaceId: string;
   notes: NoteMeta[];
-  tasks: Task[];
-  projects: TaskProject[];
-  states: TaskWorkflowState[];
   onResize: (id: string, w: number, h: number) => void;
   onRemove: (id: string) => void;
   onUpdateConfig: (id: string, patch: Partial<WidgetConfig>) => void;
@@ -38,9 +39,6 @@ export function DashboardGrid({
   runtime,
   workspaceId,
   notes,
-  tasks,
-  projects,
-  states,
   onResize,
   onRemove,
   onUpdateConfig,
@@ -75,16 +73,6 @@ export function DashboardGrid({
               onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
             />
           ) : null}
-          {widget.type === "tasks" ? (
-            <TasksWidget
-              tasks={tasks}
-              projects={projects}
-              states={states}
-              config={widget.config}
-              isLocked={isLocked}
-              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
-            />
-          ) : null}
           {widget.type === "clock" ? (
             <ClockWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
           ) : null}
@@ -111,6 +99,60 @@ export function DashboardGrid({
           ) : null}
           {widget.type === "job-tracker" ? (
             <JobTrackerWidget config={widget.config} isLocked={isLocked} onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)} />
+          ) : null}
+          {widget.type === "recently-linked" ? (
+            <RecentlyLinkedWidget
+              runtime={runtime}
+              workspaceId={workspaceId}
+              config={widget.config}
+              isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
+            />
+          ) : null}
+          {widget.type === "contacts-needs-attention" ? (
+            <ContactsNeedsAttentionWidget
+              runtime={runtime}
+              workspaceId={workspaceId}
+              config={widget.config}
+              isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
+            />
+          ) : null}
+          {widget.type === "contacts-reconnect" ? (
+            <ContactsReconnectWidget
+              runtime={runtime}
+              workspaceId={workspaceId}
+              config={widget.config}
+              isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
+            />
+          ) : null}
+          {widget.type === "calendar-today" ? (
+            <CalendarTodayWidget
+              runtime={runtime}
+              workspaceId={workspaceId}
+              config={widget.config}
+              isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
+            />
+          ) : null}
+          {widget.type === "recent-notes" ? (
+            <RecentNotesWidget
+              runtime={runtime}
+              workspaceId={workspaceId}
+              config={widget.config}
+              isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
+            />
+          ) : null}
+          {widget.type === "email-inbox" ? (
+            <EmailInboxWidget
+              runtime={runtime}
+              workspaceId={workspaceId}
+              config={widget.config}
+              isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
+            />
           ) : null}
         </WidgetContainer>
       ))}

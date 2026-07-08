@@ -3,6 +3,7 @@ import {
   Calendar,
   CheckSquare,
   Clock3,
+  Contact,
   DollarSign,
   Edit2,
   Edit3,
@@ -59,6 +60,7 @@ export type IconName =
   | "pen-tool"
   | "git-branch"
   | "folder"
+  | "contact"
   | "bar-chart-2"
   | "dollar-sign"
   | "search"
@@ -96,6 +98,7 @@ const ICONS: Record<IconName, any> = {
   "pen-tool": PenTool,
   "git-branch": GitBranch,
   folder: Folder,
+  contact: Contact,
   "bar-chart-2": BarChart2,
   "dollar-sign": DollarSign,
   search: Search,

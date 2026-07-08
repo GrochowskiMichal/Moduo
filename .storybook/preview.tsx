@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { Decorator, Preview } from "@storybook/react";
 import {
   Outlet,
@@ -16,6 +16,7 @@ import "@fontsource/nunito/700.css";
 
 import { AuthContext, type AuthContextValue } from "../src/providers/auth-provider";
 import { WorkspaceContext, type WorkspaceContextValue } from "../src/providers/workspace-provider";
+import { TooltipProvider } from "../src/components/ui/tooltip";
 
 const mockAuth: AuthContextValue = {
   userId: "storybook-user",
@@ -87,14 +88,82 @@ const withAppProviders: Decorator = (Story, context) => {
   return (
     <AuthContext.Provider value={mockAuth}>
       <WorkspaceContext.Provider value={mockWorkspace}>
-        <RouterShell />
+        <TooltipProvider>
+          <RouterShell />
+        </TooltipProvider>
       </WorkspaceContext.Provider>
     </AuthContext.Provider>
   );
 };
 
+// Mirrors the app's Appearance settings (src/lib/appearance.ts) so density and
+// text-size can be spot-checked per story from the toolbar.
+function AppearanceSync({
+  density,
+  textSize,
+  shade,
+  children,
+}: {
+  density: string;
+  textSize: string;
+  shade: string;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-density", density);
+    root.setAttribute("data-text-size", textSize);
+    root.setAttribute("data-shade", shade);
+  }, [density, textSize, shade]);
+  return <>{children}</>;
+}
+
+const withAppearance: Decorator = (Story, context) => (
+  <AppearanceSync
+    density={(context.globals.density as string) ?? "comfortable"}
+    textSize={(context.globals.textSize as string) ?? "normal"}
+    shade={(context.globals.shade as string) ?? "black"}
+  >
+    <Story />
+  </AppearanceSync>
+);
+
 const preview: Preview = {
-  decorators: [withAppProviders],
+  decorators: [withAppearance, withAppProviders],
+  globalTypes: {
+    density: {
+      description: "Appearance → density",
+      toolbar: {
+        title: "Density",
+        icon: "ruler",
+        items: ["comfortable", "compact", "dense"],
+        dynamicTitle: true,
+      },
+    },
+    textSize: {
+      description: "Appearance → body text size",
+      toolbar: {
+        title: "Text size",
+        icon: "paragraph",
+        items: ["small", "normal", "large"],
+        dynamicTitle: true,
+      },
+    },
+    shade: {
+      description: "Appearance → dark-surface shade",
+      toolbar: {
+        title: "Shade",
+        icon: "paintbrush",
+        items: ["black", "warm", "cool", "slate", "plum", "forest"],
+        dynamicTitle: true,
+      },
+    },
+  },
+  initialGlobals: {
+    density: "comfortable",
+    textSize: "normal",
+    shade: "black",
+  },
   parameters: {
     actions: { argTypesRegex: "^on[A-Z].*" },
     controls: {

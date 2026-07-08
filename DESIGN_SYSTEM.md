@@ -5,6 +5,8 @@ The full reference. [CLAUDE.md](./CLAUDE.md) holds the short rules; this documen
 > If you're reading this as a human: skim the rules section, then the recipes. If you're Claude: the rules section is the contract.
 >
 > Source artefacts: [.design/foundation/](./.design/foundation/) — grill summary, brief, IA, tokens reference.
+>
+> The terse, checkable **relational** rules (control rungs, radius-by-role, type roles, accent policy, motion) live in [DESIGN_RULES.md](./DESIGN_RULES.md) — that file is what the design-quality skill enforces.
 
 ## Contract
 
@@ -54,9 +56,7 @@ Playwright runs visual snapshot tests for every primitive's Storybook story. New
 
 ### 6. No new fonts outside the picker
 
-The font roles are:
-- **Display**: Pilat Extended (default), Geist Sans, Cal Sans, Fraunces.
-- **Body**: Geist Sans (default), Inter, Source Serif Pro, Geist Mono.
+There is **one font picker** (`data-font`, default Geist). The chosen family drives the whole UI — both the display and body roles resolve to it; hierarchy comes from weight/size, not a second typeface. Options: Geist, Inter, Pilat Extended, Cal Sans, Fraunces, Source Serif Pro, Geist Mono. `font-mono` stays mono for code.
 
 If a feature wants a new font, it's a design-system change, not a feature change. Discuss before adding.
 
@@ -71,12 +71,13 @@ User preferences map to `data-*` attributes on `<html>`. The cascade does the wo
 | Attribute | Values | Default |
 | --- | --- | --- |
 | `data-theme` | `dark`, `light` | `dark` |
+| `data-shade` | `black`, `warm`, `cool`, `slate`, `plum`, `forest` | `black` |
 | `data-accent` | `pink`, `violet`, `blue`, `green`, `amber`, `red`, `teal`, `mono` | `pink` |
-| `data-density` | `comfortable`, `compact` | `comfortable` |
+| `data-density` | `comfortable`, `compact`, `dense` | `comfortable` |
 | `data-radius` | `sharp`, `soft`, `round` | `soft` |
-| `data-font-display` | `pilat`, `geist`, `cal`, `fraunces` | `pilat` |
-| `data-font-body` | `geist`, `inter`, `serif`, `mono` | `geist` |
-| `data-text-size` | `small`, `normal`, `large` | `normal` |
+| `data-font` | `geist`, `inter`, `pilat`, `cal`, `fraunces`, `serif`, `mono` | `geist` |
+
+(`data-text-size` was retired 2026-06-13 — density is the size axis.)
 
 The Settings page is the UI for setting these. The values persist to Tauri-backed local storage and are applied on app launch before first paint.
 
@@ -197,16 +198,90 @@ This rule does not change tokens; it constrains how component code composes
 them. The Stylelint config can't enforce it — the design-review skill catches
 regressions during the visual sweep.
 
-## Stylelint enforcement (to be added)
+## Typography roles (primary vs. secondary)
 
-A Stylelint config will land alongside the redesign work. It enforces:
+Components map to a *role*, never to a hardcoded family, so the user's font
+choice always flows through. Today a single picker (`data-font`, default Geist)
+drives **both** roles to one family — so display vs. body differ by weight,
+size, and `tabular-nums`, not by typeface. The role split is kept so a distinct
+display face can return later without touching component code:
 
-- `declaration-property-value-disallowed-list` — no `color: #xxx`, `background: #xxx`, `border-color: #xxx` etc. outside `tokens.css`.
-- `selector-class-pattern` — bans `bg-\[#`, `p-\[\d+px\]`, `text-\[\d+px\]`, `rounded-\[\d+px\]`, `font-\[` in className strings (via a custom rule or a regex check in CI).
-- `unit-disallowed-list` — `px` for spacing/radius/typography (rem is allowed). `px` is OK for hairlines (1px borders).
-- `font-family-no-missing-generic-family-keyword` — every font stack must end in a generic family.
+- **Primary = `font-display`** — structure & app chrome: headings, section /
+  eyebrow labels, control labels, **buttons**, menu / select triggers, and
+  titles (task titles, page titles, the capture title + description).
+- **Secondary = body** (the default; use `font-sans` to force it back where a
+  primary ancestor would otherwise win) — content & context: dates, counters,
+  row meta / badges, contextual descriptions, the capture-modal footer.
 
-Until the config lands, the rules are honour-system. Claude reads them; humans review them.
+Rules:
+- **Buttons are always primary.** The `Button` primitive sets `font-display` in
+  its base — never body, never mono.
+- `font-mono` is **code only** (it's also a selectable *body* alternate, but UI
+  chrome must not depend on the body font being mono — that's why chrome uses
+  `font-display`).
+- Eyebrow / section labels use **`text-2xs`** (a token that scales with the
+  Appearance → text-size setting).
+
+## Casing
+
+**Sentence case** across the UI. Saved here as the single convention for all new
+copy:
+
+- Buttons, labels, menu items, headings: "New task", "Do last", "Group",
+  "Mark done", "Add description".
+- Standalone status words and proper nouns stay capitalized: "Done", "Today",
+  "Inbox", "Skip".
+- Counts read like "2 / 2 Done".
+- Acronyms and proper nouns as-is (CRM, Inbox).
+
+## Enforcement
+
+Three layers enforce the contract:
+
+1. **`bun run lint:css`** (Stylelint, `.stylelintrc.json`) — `color-no-hex` + `declaration-strict-value`: any `*color` / `fill` / `stroke` / `background-color` in CSS must be a `var(--…)` token (or transparent/currentColor/none/inherit). `tokens.css` is exempt; `global.css` is warn-level.
+2. **`bun run lint:tw`** (`scripts/check-arbitrary-tw.ts`) — scans `.ts/.tsx` for arbitrary Tailwind + inline-style hardcodes: raw hex / color-functions across every color utility, arbitrary font-size / radius / spacing / shadow, the motion-token bypass (`duration-200` / `duration-[180ms]`), and static `style={{ color: "#…" }}`. The sanctioned `[var(--token)]` escape hatch and one-off *geometry* (`top-` / `h-` / `w-` / `translate-[…]`) are allowed. A curated ignore list quarantines the pre-foundation legacy backlog; remove an entry when its feature brief lands.
+3. **The `moduo-design-quality` skill** — the review layer for what a regex can't see: the relational rules in `DESIGN_RULES.md` (R1–R10), contrast, interaction states, overflow/clipping. It runs in `/execute`'s validator pass and before shipping.
+
+Both lint gates run in CI (`.github/workflows/checks.yml`). The concentric-radius rule (R3) and the other relational rules are skill/review-enforced, not lint-enforced.
+
+## Control / type / icon ladders + primitives (Session 11)
+
+Established during the Tasks rebuild; **reusable across modules** (Notes adopts next).
+
+- **Control rung = a fixed bundle** so any two controls on a row stack pixel-perfect:
+  height (`--ctrl-h-sm`/`--ctrl-h`/`--ctrl-h-lg`), font (`font-display text-base`
+  — 14px across rungs; size changes height/padding only, never the font size),
+  icon (`size-icon-sm`), radius `rounded-md`. Put a control row in **`Toolbar`**;
+  keep every child on one rung.
+- **Type roles:** chrome (headings, control labels, button text, **section
+  eyebrows**) = `font-display`; **content** (task/note titles, select *values*,
+  descriptions, metadata, numerics) = `font-sans` (body). Numerics add
+  `tabular-nums`. Eyebrows are body at `text-2xs` (the wide display face read too
+  large at 11px). Titles render as **content → body**, not display.
+- **Icon-size ladder** (density-scaling): `--icon-xs/-sm/-/-lg` → `size-icon-xs`
+  … `size-icon-lg`. Bind control svg defaults to the rung; don't hardcode `size-4`.
+- **Fields:** `FieldShell` cva drives Input/Textarea/SelectTrigger. Variants
+  `filled` (default well) · **`ghost`** (borderless-until-focus — detail-panel /
+  inline) · `bare` (plain text). Focus = offset-less `ring-2 ring-ring/50`.
+- **New primitives in `src/components/ui/`:** `SegmentedControl` (the one toggle —
+  no bespoke segmented controls), `IconButton` (required tooltip+label),
+  `Toolbar`, `Calendar` + `DateField` (no native `<input type=date>`),
+  `CompleteToggle`, `EmptyState`. `TagChip` v2 = colored `#` + neutral name (no
+  dot/pill); active filter chip = full-hue.
+
+### Motion (Session 11)
+Restrained + a **fade/micro-blur** signature. Tokens are load-bearing — no raw
+ms/cubic. `--motion-fade` for opacity/color (survives reduced-motion at ~80ms);
+`--motion-*`/`--ease-*` for movement (zeroed under reduced-motion). `--blur-veil`
+for overlay/popover/mode-shift fade+blur-in (→0 reduced). One sanctioned delight:
+the check-off `.check-pop`. Reveal-on-hover **reserves space + fades opacity**
+(never `hidden`→`flex`, which reflows). No spring-heavy / sparkle / glow motion.
+
+### Accent-usage policy (Session 11)
+Accent (`--primary`/`--ring`) appears ONLY on: (1) one primary action per surface
+(`bg-primary` — never two competing); (2) current selection (the `--selected-bg`
+tint + bar/border recipe); (3) the focus ring; (4) the quiet done-check. Segmented
+toggles, priority/energy, and chrome stay **neutral**. Verified AA on all 8 accents.
 
 ## Open questions / future work
 

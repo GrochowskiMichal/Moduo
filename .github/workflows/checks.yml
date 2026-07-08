@@ -37,3 +37,6 @@ jobs:
 
       - name: CSS lint
         run: bun run lint:css
+
+      - name: Unit tests
+        run: bun run test

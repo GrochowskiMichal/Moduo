@@ -26,7 +26,8 @@ export function EmbeddedMindmap({ mindmapId }: { mindmapId: string }) {
         let active = true;
         const loadMindmap = async () => {
             try {
-                const { runtime } = await import("../../../../lib/runtime");
+                const { getRuntime } = await import("../../../../lib/runtime");
+                const runtime = getRuntime();
                 if (!runtime) return;
 
                 const wss = await runtime.workspace.list();

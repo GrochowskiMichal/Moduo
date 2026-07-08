@@ -4,6 +4,7 @@ export type SettingsSectionId =
   | "workspace"
   | "integrations"
   | "preferences"
+  | "focus"
   | "advanced"
   | "about";
 
@@ -25,6 +26,7 @@ export function isSettingsSectionId(value: unknown): value is SettingsSectionId 
     value === "workspace" ||
     value === "integrations" ||
     value === "preferences" ||
+    value === "focus" ||
     value === "advanced" ||
     value === "about"
   );

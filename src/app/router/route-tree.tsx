@@ -1,30 +1,20 @@
-import { createRootRoute, createRoute, Navigate, Outlet, redirect } from "@tanstack/react-router";
+import { createRootRoute, createRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AuthProvider } from "../../providers/auth-provider";
 import { AppGate } from "../../routes/layouts/app-gate";
 import { AuthPage } from "../../routes/pages/auth-page";
 import { OnboardingPage } from "../../routes/pages/onboarding-page";
 import { GridPage } from "../../routes/pages/grid-page";
 import { NotesPage } from "../../routes/pages/notes-page";
+import { TasksPage } from "../../routes/pages/tasks-page";
+import { CalendarPage } from "../../routes/pages/calendar-page";
 import { MindmapPage } from "../../routes/pages/mindmap-page";
-import { TemplatesPage } from "../../routes/pages/templates-page";
 import { EmailPage } from "../../routes/pages/email-page";
-import { GroundPage } from "../../routes/pages/ground-page";
-import { CrmPage } from "../../routes/pages/crm-page";
-import { FormsPage } from "../../routes/pages/forms-page";
-import { ActivityPage } from "../../routes/pages/activity-page";
-import { FeedPage } from "../../routes/pages/feed-page";
-import { FilesPage } from "../../routes/pages/files-page";
-import { BrainstormPage } from "../../routes/pages/brainstorm-page";
-import { ExpansesPage } from "../../routes/pages/expanses-page";
-import { RevenuePage } from "../../routes/pages/revenue-page";
-import { KpiOkrPage } from "../../routes/pages/kpi-okr-page";
-import { StatsPage } from "../../routes/pages/stats-page";
-import { AnalyticsPage } from "../../routes/pages/analytics-page";
-import { RecordingsPage } from "../../routes/pages/recordings-page";
-import { TimetrackingPage } from "../../routes/pages/timetracking-page";
-import { RoadmapPage } from "../../routes/pages/roadmap-page";
+import { ContactsPage } from "../../routes/pages/contacts-page";
+import { validateContactsSearch } from "../../features/contacts/search";
+import { validateNotesSearch } from "../../features/notes/search";
 import { SettingsPage } from "../../routes/pages/settings-page";
 import { PaywallPage } from "../../routes/pages/paywall-page";
+import { PublishedNotePage } from "../../routes/pages/published-note-page";
 
 function RootLayout() {
   return (
@@ -56,6 +46,19 @@ const paywallRoute = createRoute({
   component: PaywallPage,
 });
 
+// Public, unauthenticated reader for a published note (NO-9b). Direct child of
+// the root route — a sibling of /auth, OUTSIDE the app gate, so an anonymous
+// visitor can read it. `?note=<id>` selects a child page within the subtree.
+const publishedNoteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/p/$token",
+  component: PublishedNotePage,
+  validateSearch: (search: Record<string, unknown>): { note?: string } => {
+    const note = typeof search.note === "string" && search.note ? search.note : undefined;
+    return note ? { note } : {};
+  },
+});
+
 const appGateRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app-gate",
@@ -79,12 +82,21 @@ const notesRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/notes",
   component: NotesPage,
+  validateSearch: validateNotesSearch,
 });
 
 const tasksRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/tasks",
-  component: () => <Navigate to="/ground" replace />,
+  component: TasksPage,
+});
+
+// The Wave 2 calendar (specs/calendar.md AC1) — the rebuild of the legacy
+// exploratory calendar, sanctioned as a top-level route in the plan round.
+const calendarRoute = createRoute({
+  getParentRoute: () => appGateRoute,
+  path: "/calendar",
+  component: CalendarPage,
 });
 
 const mindmapRoute = createRoute({
@@ -93,112 +105,27 @@ const mindmapRoute = createRoute({
   component: MindmapPage,
 });
 
-const templatesRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/templates",
-  component: TemplatesPage,
-});
-
 const emailRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/email",
   component: EmailPage,
 });
 
-const calendarRoute = createRoute({
+const contactsRoute = createRoute({
   getParentRoute: () => appGateRoute,
-  path: "/calendar",
-  component: () => <Navigate to="/ground" replace />,
+  path: "/contacts",
+  component: ContactsPage,
+  // URL-held selection + palette action (fix pack FX-1 AC1/AC2).
+  validateSearch: validateContactsSearch,
 });
 
-const groundRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/ground",
-  component: GroundPage,
-});
-
-const crmRoute = createRoute({
+// /crm is the throwaway exploratory route; /contacts is its planned destination
+// (specs/contacts.md AC10). Redirect stale deep-links so they don't 404.
+const legacyCrmRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/crm",
-  component: CrmPage,
-});
-
-const formsRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/forms",
-  component: FormsPage,
-});
-
-const activityRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/activity",
-  component: ActivityPage,
-});
-
-const feedRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/feed",
-  component: FeedPage,
-});
-
-const filesRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/files",
-  component: FilesPage,
-});
-
-const brainstormRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/brainstorm",
-  component: BrainstormPage,
-});
-
-const expansesRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/expanses",
-  component: ExpansesPage,
-});
-
-const revenueRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/revenue",
-  component: RevenuePage,
-});
-
-const kpiOkrRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/kpi-okr",
-  component: KpiOkrPage,
-});
-
-const statsRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/stats",
-  component: StatsPage,
-});
-
-const analyticsRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/analytics",
-  component: AnalyticsPage,
-});
-
-const recordingsRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/recordings",
-  component: RecordingsPage,
-});
-
-const timetrackingRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/timetracking",
-  component: TimetrackingPage,
-});
-
-const roadmapRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/roadmap",
-  component: RoadmapPage,
+  beforeLoad: () => { throw redirect({ to: "/contacts", replace: true }); },
+  component: () => null,
 });
 
 const settingsRoute = createRoute({
@@ -211,30 +138,17 @@ export const routeTree = rootRoute.addChildren([
   authRoute,
   onboardingRoute,
   paywallRoute,
+  publishedNoteRoute,
   appGateRoute.addChildren([
     homeRoute,
     legacyGridRoute,
     notesRoute,
     tasksRoute,
-    groundRoute,
-    mindmapRoute,
-    templatesRoute,
-    emailRoute,
     calendarRoute,
-    crmRoute,
-    formsRoute,
-    activityRoute,
-    feedRoute,
-    filesRoute,
-    brainstormRoute,
-    expansesRoute,
-    revenueRoute,
-    kpiOkrRoute,
-    statsRoute,
-    analyticsRoute,
-    recordingsRoute,
-    timetrackingRoute,
-    roadmapRoute,
+    mindmapRoute,
+    emailRoute,
+    contactsRoute,
+    legacyCrmRoute,
     settingsRoute,
   ]),
 ]);

@@ -2,25 +2,10 @@ export type FeatureLayoutKey =
   | "grid"
   | "notes"
   | "tasks"
-  | "ground"
   | "mindmap"
-  | "templates"
   | "email"
   | "calendar"
-  | "crm"
-  | "forms"
-  | "activity"
-  | "feed"
-  | "files"
-  | "brainstorm"
-  | "expanses"
-  | "revenue"
-  | "kpi-okr"
-  | "stats"
-  | "analytics"
-  | "recordings"
-  | "timetracking"
-  | "roadmap"
+  | "contacts"
   | "settings";
 
 export type FeaturePanelState = {
@@ -41,51 +26,21 @@ function cloneDefaultMap(): FeaturePanelsMap {
     grid: { ...defaultState },
     notes: { ...defaultState },
     tasks: { ...defaultState },
-    ground: { left: false, right: false },
     mindmap: { ...defaultState },
-    templates: { ...defaultState },
     email: { ...defaultState },
     calendar: { ...defaultState },
-    crm: { ...defaultState },
-    forms: { ...defaultState },
-    activity: { ...defaultState },
-    feed: { ...defaultState },
-    files: { ...defaultState },
-    brainstorm: { ...defaultState },
-    expanses: { ...defaultState },
-    revenue: { ...defaultState },
-    "kpi-okr": { ...defaultState },
-    stats: { ...defaultState },
-    analytics: { ...defaultState },
-    recordings: { ...defaultState },
-    timetracking: { ...defaultState },
-    roadmap: { ...defaultState },
+    contacts: { ...defaultState },
     settings: { left: true, right: false },
   };
 }
 
 export function routeToFeatureLayout(pathname: string): FeatureLayoutKey {
   if (pathname === "/") return "grid";
-  if (pathname === "/tasks") return "ground";
-  if (pathname === "/ground") return "ground";
+  if (pathname === "/tasks") return "tasks";
+  if (pathname === "/calendar") return "calendar";
   if (pathname === "/mindmap") return "mindmap";
-  if (pathname === "/templates") return "templates";
   if (pathname === "/email") return "email";
-  if (pathname === "/calendar") return "ground";
-  if (pathname === "/crm") return "crm";
-  if (pathname === "/forms") return "forms";
-  if (pathname === "/activity") return "activity";
-  if (pathname === "/feed") return "feed";
-  if (pathname === "/files") return "files";
-  if (pathname === "/brainstorm") return "brainstorm";
-  if (pathname === "/expanses") return "expanses";
-  if (pathname === "/revenue") return "revenue";
-  if (pathname === "/kpi-okr") return "kpi-okr";
-  if (pathname === "/stats") return "stats";
-  if (pathname === "/analytics") return "analytics";
-  if (pathname === "/recordings") return "recordings";
-  if (pathname === "/timetracking") return "timetracking";
-  if (pathname === "/roadmap") return "roadmap";
+  if (pathname === "/contacts") return "contacts";
   if (pathname === "/settings") return "settings";
   return "notes";
 }

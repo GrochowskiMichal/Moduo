@@ -4,8 +4,8 @@ use crate::email_sync::EmailSyncCursorRecord;
 use crate::AppState;
 
 use super::{
-    now_iso, StoredBodyCache, StoredBodyLru, StoredEmailAccount, StoredEmailAccountV2,
-    StoredEnvelope, ALL_ACCOUNTS_ID, DEFAULT_WORKSPACE_ID, EMAIL_ACCOUNTS_KEY,
+    now_iso, StoredBodyCache, StoredBodyLru, StoredBodyText, StoredEmailAccount,
+    StoredEmailAccountV2, StoredEnvelope, ALL_ACCOUNTS_ID, DEFAULT_WORKSPACE_ID, EMAIL_ACCOUNTS_KEY,
     EMAIL_BODY_MAX_BYTES_PER_ACCOUNT, EMAIL_BODY_MAX_ITEMS_PER_ACCOUNT, EMAIL_NAMESPACE,
 };
 
@@ -368,6 +368,12 @@ pub(super) fn remove_body_cache(
         .store
         .remove_email_body(&body_key(account_id, folder, uid))
         .map_err(|e| e.to_string())?;
+    // Co-prune the local-search body-text sidecar (EM-9) — same key, so it never
+    // outlives its body.
+    state
+        .store
+        .remove_email_body_text(&body_key(account_id, folder, uid))
+        .map_err(|e| e.to_string())?;
     let lru_rows = state
         .store
         .list_email_body_lru()
@@ -474,6 +480,22 @@ pub(super) fn persist_body_cache(state: &AppState, body: &StoredBodyCache) -> Re
         .put_email_body_lru(
             &lru.key,
             &serde_json::to_value(&lru).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+    // Write the local-search body-text sidecar (EM-9): an 8KB lowercase copy,
+    // keyed like the body so remove_body_cache co-prunes it.
+    let text_row = StoredBodyText {
+        key: body.key.clone(),
+        account_id: body.account_id.clone(),
+        folder: body.folder.clone(),
+        uid: body.uid,
+        text: super::search::body_search_text(&body.body),
+    };
+    state
+        .store
+        .put_email_body_text(
+            &text_row.key,
+            &serde_json::to_value(&text_row).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
     prune_body_cache_lru(state, &body.account_id)

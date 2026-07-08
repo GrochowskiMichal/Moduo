@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod caldav;
 pub mod calendar;
 pub mod email;
 pub mod embeddings;
@@ -7,8 +8,9 @@ pub mod integrations;
 pub mod local_store;
 pub mod migration;
 pub mod notes;
+pub mod oauth_flow;
 pub mod system;
-pub mod tasks;
+pub mod tasks_module;
 pub mod timetracking;
 pub mod window;
 pub mod workspace;

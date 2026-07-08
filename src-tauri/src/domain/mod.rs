@@ -106,106 +106,208 @@ pub struct NoteDocState {
     pub updates: Vec<NoteCrdtUpdate>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectLabel {
-    pub name: String,
-    pub color: String,
+// ─────────────────────────────────────────────────────────────────────────────
+// Tasks module v1 — ADHD bucket / commit / execute model.
+//
+// This is the spec'd Tasks module (docs/moduo-tasks-feature-spec.md §11): buckets
+// (exclusive categories), tasks with both due_date and scheduled_at, a today's
+// commit queue, recurrence, energy, and a computed `drifted` signal. It is the
+// canonical (and only) Tasks model; the legacy Linear-style
+// TaskProject/TaskWorkflowState/TaskItem model and its `features/plan` UI were
+// removed.
+//
+// Field names serialize as camelCase (TS interop); enum values serialize as
+// snake_case to match the spec vocabulary and the Supabase column values.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Fixed task lifecycle status. Replaces the legacy per-project `state_id`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    Todo,
+    InProgress,
+    Done,
+    Archived,
 }
 
+impl Default for TaskStatus {
+    fn default() -> Self {
+        TaskStatus::Todo
+    }
+}
+
+/// Optional per-task energy estimate — *how demanding* a task is to do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EnergyLevel {
+    Low,
+    Medium,
+    High,
+}
+
+/// Optional per-task priority — *how important* a task is to get done. Distinct
+/// from [`EnergyLevel`] (demand). Ambient signal only — never rendered as red /
+/// alarming (design principles 4 & 5). Mirrors `EnergyLevel`'s shape; an
+/// `urgent` tier is a non-breaking future extension.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PriorityLevel {
+    Low,
+    Medium,
+    High,
+}
+
+/// Recurrence definition (rrule.js-compatible). Produced by the capture parser.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TaskProject {
+pub struct RecurrenceRule {
+    /// RFC 5545 RRULE string, e.g. "FREQ=DAILY;INTERVAL=1".
+    pub rrule: String,
+    /// Optional anchor datetime (DTSTART), ISO 8601.
+    pub dtstart: Option<String>,
+    /// Precomputed next occurrence datetime, ISO 8601.
+    pub next_occurrence: Option<String>,
+}
+
+/// A user-defined, exclusive category for tasks. One task lives in exactly one
+/// bucket. `is_system` marks the reserved, undeletable Inbox.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bucket {
     pub id: String,
     pub workspace_id: String,
     pub owner_id: String,
     pub name: String,
-    pub description: String,
-    pub logo_url: Option<String>,
     #[serde(default)]
-    pub labels: Vec<ProjectLabel>,
+    pub is_system: bool,
+    /// Optional, presentational section label. Buckets sharing a `group` render
+    /// under a collapsible rail section (improvement-plan Session 4). Stored in
+    /// the `group_label` column on the cloud side (reserved-word avoidance).
+    #[serde(default)]
+    pub group: Option<String>,
+    /// Lexorank-style ordering string.
     pub position: String,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
 }
 
+/// A task in the Tasks module. `drifted` is intentionally NOT stored — it is
+/// derived at read time via [`Task::is_drifted`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TaskWorkflowState {
+pub struct Task {
     pub id: String,
     pub workspace_id: String,
     pub owner_id: String,
-    pub project_id: String,
-    pub name: String,
-    pub kind: String,
-    pub icon: Option<String>,
-    pub color: Option<String>,
-    pub position: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub deleted_at: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskItem {
-    pub id: String,
-    pub workspace_id: String,
-    pub owner_id: String,
-    pub project_id: String,
-    pub task_code: Option<String>,
-    pub parent_task_id: Option<String>,
-    pub child_of_task_id: Option<String>,
+    /// Required: the bucket this task belongs to (Inbox as fallback).
+    pub bucket_id: String,
+    /// Optional parent task — subtasks are exactly one level deep (a task with
+    /// a parent is never itself a parent). `serde(default)` keeps existing redb
+    /// rows (written before this field) deserializable.
     #[serde(default)]
-    pub blocked_by_task_ids: Vec<String>,
-    pub duplicate_of_task_id: Option<String>,
-    pub state_id: String,
-    pub assignee_id: Option<String>,
+    pub parent_id: Option<String>,
     pub title: String,
+    #[serde(default)]
     pub description: String,
-    pub tags: Vec<String>,
-    pub priority: i16,
+    /// When the task is due.
     pub due_date: Option<String>,
+    /// When the task is planned to a clock time. Plain field — works with the
+    /// Calendar module hidden. Store as RFC3339 UTC for correct drift compares.
+    pub scheduled_at: Option<String>,
+    /// Estimated/blocked duration in minutes (default-on-drop, resizable).
+    pub duration_minutes: Option<i64>,
+    pub recurrence: Option<RecurrenceRule>,
+    /// How demanding the task is to do.
+    pub energy_level: Option<EnergyLevel>,
+    /// How important the task is to get done. Optional, ambient. `serde(default)`
+    /// keeps existing redb rows (written before this field) deserializable.
+    #[serde(default)]
+    pub priority: Option<PriorityLevel>,
+    #[serde(default)]
+    pub status: TaskStatus,
+    /// Today's-commit-queue membership: the date (YYYY-MM-DD) committed for.
+    pub committed_for: Option<String>,
+    /// Ordering within the commit queue.
+    pub commit_order: Option<i64>,
+    /// Ambient count of reschedules. Never blocking (design principle 5).
+    #[serde(default)]
+    pub reschedule_count: i64,
+    /// Lexorank-style ordering string for list/board position.
     pub position: String,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
 }
 
+impl Task {
+    /// Computed `drifted`: a scheduled task whose time has passed without
+    /// completion. `drifted = scheduled_at < now AND status NOT IN (done,
+    /// archived)`. `now` is an RFC3339 UTC timestamp; comparison is lexical,
+    /// which is correct for same-format UTC timestamps.
+    pub fn is_drifted(&self, now: &str) -> bool {
+        if matches!(self.status, TaskStatus::Done | TaskStatus::Archived) {
+            return false;
+        }
+        match &self.scheduled_at {
+            Some(scheduled) => scheduled.as_str() < now,
+            None => false,
+        }
+    }
+}
+
+/// A workspace-level, cross-cutting label. Attached to entities via [`TagLink`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TaskComment {
+pub struct Tag {
     pub id: String,
     pub workspace_id: String,
     pub owner_id: String,
-    pub task_id: String,
-    pub body: String,
+    pub name: String,
+    pub color: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
 }
 
+/// Polymorphic association joining a [`Tag`] to any entity (task, note, …).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TaskActivity {
+pub struct TagLink {
     pub id: String,
     pub workspace_id: String,
-    pub task_id: String,
-    pub actor_user_id: String,
-    pub action: String,
-    pub payload: serde_json::Value,
+    pub tag_id: String,
+    /// Target entity type. Known: "task" | "note" | "email".
+    pub entity_type: String,
+    pub entity_id: String,
     pub created_at: String,
 }
 
+/// A directed dependency edge: `blocker_task_id` blocks `blocked_task_id`
+/// (spec §5c). *Blocked* is computed at read time, never stored; the edge
+/// graph is a DAG. Parity-only for now — desktop tasks ride the web runtime,
+/// and redb has no relations table yet (lite version concern).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskRelation {
+    pub id: String,
+    pub workspace_id: String,
+    pub blocker_task_id: String,
+    pub blocked_task_id: String,
+    pub created_at: String,
+}
+
+/// Read bundle for the Tasks module, scoped to a workspace.
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct TasksBundle {
-    pub projects: Vec<TaskProject>,
-    pub states: Vec<TaskWorkflowState>,
-    pub tasks: Vec<TaskItem>,
-    pub comments: Vec<TaskComment>,
-    pub activities: Vec<TaskActivity>,
+pub struct TasksModuleBundle {
+    pub buckets: Vec<Bucket>,
+    pub tasks: Vec<Task>,
+    pub tags: Vec<Tag>,
+    pub tag_links: Vec<TagLink>,
+    /// Blocked-by edges. `serde(default)` keeps pre-Session-6 payloads valid.
+    #[serde(default)]
+    pub task_relations: Vec<TaskRelation>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -342,4 +444,74 @@ pub struct TimetrackingBundle {
     pub rules: Vec<CategoryRule>,
     pub projects: Vec<TimeProject>,
     pub focus_sessions: Vec<FocusSession>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn task_with(scheduled_at: Option<&str>, status: TaskStatus) -> Task {
+        Task {
+            id: "t1".into(),
+            workspace_id: "w1".into(),
+            owner_id: "u1".into(),
+            bucket_id: "b1".into(),
+            parent_id: None,
+            title: "x".into(),
+            description: String::new(),
+            due_date: None,
+            scheduled_at: scheduled_at.map(|s| s.to_string()),
+            duration_minutes: None,
+            recurrence: None,
+            energy_level: None,
+            priority: None,
+            status,
+            committed_for: None,
+            commit_order: None,
+            reschedule_count: 0,
+            position: String::new(),
+            created_at: "2026-06-06T00:00:00Z".into(),
+            updated_at: "2026-06-06T00:00:00Z".into(),
+            deleted_at: None,
+        }
+    }
+
+    const NOW: &str = "2026-06-06T12:00:00Z";
+
+    #[test]
+    fn drifted_when_scheduled_in_past_and_open() {
+        let task = task_with(Some("2026-06-06T08:00:00Z"), TaskStatus::Todo);
+        assert!(task.is_drifted(NOW));
+        let task = task_with(Some("2026-06-06T08:00:00Z"), TaskStatus::InProgress);
+        assert!(task.is_drifted(NOW));
+    }
+
+    #[test]
+    fn not_drifted_when_scheduled_in_future() {
+        let task = task_with(Some("2026-06-06T18:00:00Z"), TaskStatus::Todo);
+        assert!(!task.is_drifted(NOW));
+    }
+
+    #[test]
+    fn not_drifted_when_done_or_archived() {
+        let task = task_with(Some("2026-06-06T08:00:00Z"), TaskStatus::Done);
+        assert!(!task.is_drifted(NOW));
+        let task = task_with(Some("2026-06-06T08:00:00Z"), TaskStatus::Archived);
+        assert!(!task.is_drifted(NOW));
+    }
+
+    #[test]
+    fn not_drifted_when_unscheduled() {
+        let task = task_with(None, TaskStatus::Todo);
+        assert!(!task.is_drifted(NOW));
+    }
+
+    #[test]
+    fn status_serializes_as_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::InProgress).unwrap(),
+            "\"in_progress\""
+        );
+        assert_eq!(TaskStatus::default(), TaskStatus::Todo);
+    }
 }

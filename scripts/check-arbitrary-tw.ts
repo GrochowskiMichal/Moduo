@@ -1,9 +1,14 @@
 #!/usr/bin/env bun
 /**
- * Scans src/**\/*.{ts,tsx} for arbitrary Tailwind values that bypass the
- * design-system tokens (raw hex colors, pixel sizing, custom fonts). Allowed
- * paths in IGNORED_PATHS are skipped (e.g. the React-Native compatibility
- * shim, which is intentionally untouched). Exits non-zero on hits.
+ * Scans src/**\/*.{ts,tsx} for arbitrary Tailwind values (and inline styles)
+ * that bypass the design-system tokens — raw hex / color-function colors across
+ * every color utility, arbitrary font-size / radius / spacing / shadow, the
+ * motion-token bypass (duration-200 / duration-[180ms]), and static hex in
+ * inline `style={{}}` props. Enforces CLAUDE.md design-system rules 1–3 and
+ * DESIGN_RULES.md (token surface). Allowed: the sanctioned `[var(--token)]`
+ * escape hatch, and one-off *geometry* (top-/left-/h-/w-/translate-/inset-[…])
+ * which is never a design-system property. Paths in IGNORED_PATHS are skipped
+ * (the RN shim + the curated legacy backlog). Exits non-zero on hits.
  */
 
 import { promises as fs } from "node:fs";
@@ -11,17 +16,53 @@ import path from "node:path";
 
 type Pattern = { name: string; regex: RegExp };
 
+// Color utilities that must use a semantic token, never an arbitrary value.
+const COLOR_UTILS =
+  "bg|text|border|ring|ring-offset|outline|decoration|divide|fill|stroke|caret|accent|from|via|to|shadow";
+
 const PATTERNS: Pattern[] = [
-  { name: "bg-[#hex]", regex: /\bbg-\[#[0-9a-fA-F]{3,8}\b/g },
-  { name: "p-[Npx]", regex: /\bp-\[\d+(?:\.\d+)?px\]/g },
-  { name: "text-[Npx]", regex: /\btext-\[\d+(?:\.\d+)?px\]/g },
-  { name: "rounded-[Npx]", regex: /\brounded-\[\d+(?:\.\d+)?px\]/g },
-  { name: "font-[name]", regex: /\bfont-\[[^\]\s]+\]/g },
+  // Raw hex in any color utility: bg-[#fff], text-[#d4d8e1], border-[#222]…
+  { name: "color-[#hex]", regex: new RegExp(`\\b(?:${COLOR_UTILS})-\\[#[0-9a-fA-F]{3,8}\\b`, "g") },
+  // Color functions in any color utility: bg-[rgb(...)], text-[oklch(...)]…
+  {
+    name: "color-[fn]",
+    regex: new RegExp(`\\b(?:${COLOR_UTILS})-\\[(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch|color|hwb)\\(`, "g"),
+  },
+  // Arbitrary font-size (px/rem/em) — use the text-* scale.
+  { name: "text-[size]", regex: /\btext-\[\d+(?:\.\d+)?(?:px|rem|em)\]/g },
+  // Arbitrary radius incl. side variants (rounded-t-[…], rounded-tl-[…]).
+  { name: "rounded-[size]", regex: /\brounded(?:-[a-z]{1,2})?-\[\d+(?:\.\d+)?(?:px|rem|em|%)\]/g },
+  // Arbitrary spacing: padding / margin / gap / space — NOT geometry (h/w/top/…).
+  {
+    name: "spacing-[size]",
+    regex: /\b(?:p|px|py|pt|pr|pb|pl|ps|pe|m|mx|my|mt|mr|mb|ml|ms|me|gap|gap-x|gap-y|space-x|space-y)-\[\d+(?:\.\d+)?(?:px|rem|em)\]/g,
+  },
+  // Arbitrary shadow with a RAW color (#/rgb/hsl/oklch). Token-colored shadows
+  // (e.g. an active-tab underline `shadow-[inset_0_-2px_0_0_var(--primary)]`)
+  // are allowed — the violation is the hardcoded color, not the geometry.
+  { name: "shadow-[rawcolor]", regex: /\bshadow-\[[^\]]*(?:#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(|okl(?:ch|ab)\()[^\]]*\]/g },
+  // Custom font family/weight — use font-display/-sans/-mono.
+  { name: "font-[name]", regex: /\bfont-\[(?!var\()[^\]\s]+\]/g },
+  // Motion-token bypass — use duration-[var(--motion-*)] / the motion tokens.
+  { name: "duration-[ms]", regex: /\bduration-\[(?!var\()[^\]]+\]/g },
+  { name: "duration-NNN", regex: /\bduration-\d+\b/g },
+  { name: "ease-[curve]", regex: /\bease-\[(?!var\()[^\]]+\]/g },
+  // Static hex in inline style={{}} design props (runtime values like
+  // `color: priority.color` are not quoted hex, so they don't match).
+  {
+    name: "style hex literal",
+    regex: /\b(?:color|background|backgroundColor|border(?:Top|Right|Bottom|Left)?Color|outlineColor|fill|stroke|caretColor|boxShadow|textShadow)\s*:\s*["'`]#[0-9a-fA-F]{3,8}/g,
+  },
 ];
 
 const IGNORED_PATHS: string[] = [
   // React Native compatibility shim — intentionally untouched per CLAUDE.md.
   "src/tw",
+
+  // Subframe-generated code (synced from the Subframe project via the CLI).
+  // Not hand-authored; it carries Subframe's own theme idioms, so it's exempt
+  // from the design-system gate. The Subframe theme mirrors tokens.css.
+  "src/ui",
 
   // Legacy baseline: files that still hold pre-foundation arbitrary
   // Tailwind values. Each is queued for its own per-feature brief; the
@@ -47,15 +88,24 @@ const IGNORED_PATHS: string[] = [
   "src/features/dashboard/ui/widgets/weather-widget.tsx",
   "src/features/dashboard/ui/widgets/widget-shell.tsx",
   "src/features/email/ui/email-workspace.tsx",
+  // Children the structural refactor extracted out of the (already-exempt)
+  // email-workspace + mindmap-workspace above. Same pre-foundation legacy
+  // values, just relocated; queued to migrate with their feature briefs.
+  "src/features/email/ui/email-account-sidebar.tsx",
+  "src/features/email/ui/email-compose-panel.tsx",
+  "src/features/email/ui/email-connection-setup.tsx",
+  "src/features/email/ui/email-message-detail.tsx",
+  "src/features/email/ui/email-message-list.tsx",
+  "src/features/mindmap/ui/edge-style-menu.tsx",
+  "src/features/mindmap/ui/mindmap-empty-state.tsx",
   "src/features/mindmap/ui/components/mindmap-relations.tsx",
   "src/features/mindmap/ui/components/mindmap-toolbar.tsx",
   "src/features/mindmap/ui/custom-node.tsx",
   "src/features/mindmap/ui/mindmap-workspace.tsx",
-  "src/features/notes/editor/LexicalNoteEditor.tsx",
+  // Notes v2 rebuild (Wave 3): the slash menu + editor chrome are rebuilt
+  // tokens-only; the sole survivor is the untouched legacy mindmap embed
+  // (its rethink is a future wave).
   "src/features/notes/editor/nodes/EmbeddedMindmap.tsx",
-  "src/features/notes/editor/nodes/EmbeddedTask.tsx",
-  "src/features/notes/editor/plugins/SlashCommandPlugin.tsx",
-  "src/features/notes/ui/NotesSplitView.tsx",
   "src/features/plan/ui/calendar-view.tsx",
   "src/features/plan/ui/kanban-task-context-modal.tsx",
   "src/features/plan/ui/kanban-view.tsx",
@@ -70,6 +120,14 @@ const IGNORED_PATHS: string[] = [
   "src/features/templates/ui/templates-preview.tsx",
   "src/routes/pages/onboarding-page.tsx",
   "src/routes/pages/paywall-page.tsx",
+
+  // Hardcoded color CONSTANTS / defaults (not Tailwind classes) surfaced when
+  // the gate's color coverage was widened. Deferred to the curated label-color
+  // palette work (an open question in DESIGN_SYSTEM.md) + the per-feature briefs
+  // for mindmap (legacy) and calendar (not built yet).
+  "src/features/mindmap/ui/components/mindmap-mini-map.tsx",
+  "src/features/mindmap/ui/types.ts",
+  "src/features/calendar/hooks/use-slot-bookings-sync.ts",
 ];
 
 const PROJECT_ROOT = process.cwd();

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    macOS 26 Tahoe Liquid Glass app icon. CFBundleIconName points at the
+    "Moduo" icon set compiled into Contents/Resources/Assets.car (see
+    scripts/icons/build-liquid-icon.ts + bundle.resources in tauri.conf.json).
+    Tauri merges this file into the generated Info.plist on `tauri build`.
+    macOS 25 and earlier ignore this key and fall back to CFBundleIconFile
+    (icons/icon.icns), which Tauri sets automatically.
+  -->
+  <key>CFBundleIconName</key>
+  <string>Moduo</string>
+</dict>
+</plist>
