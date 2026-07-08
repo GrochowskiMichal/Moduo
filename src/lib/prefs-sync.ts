@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { getRuntime, initRuntime } from "./runtime";
 import type { UserPreferences } from "./runtime.types";
 
-export type SyncDomain = "appearance" | "focus" | "calendar";
+export type SyncDomain = "appearance" | "focus" | "calendar" | "email";
 
 /** Opaque jsonb payload shape shared across the transport boundary. */
 type Json = Record<string, unknown>;
@@ -37,6 +37,7 @@ const META_KEY: Record<SyncDomain, string> = {
   appearance: "moduo.appearance.sync",
   focus: "moduo.focus.sync",
   calendar: "moduo.calendar.sync",
+  email: "moduo.email.sync",
 };
 
 const EMPTY_META: SyncMeta = { userId: null, updatedAt: null, dirty: false };
@@ -106,6 +107,8 @@ function domainValue(prefs: UserPreferences | null, domain: SyncDomain): { value
       return { value: prefs.focus, updatedAt: prefs.focusUpdatedAt };
     case "calendar":
       return { value: prefs.calendar, updatedAt: prefs.calendarUpdatedAt };
+    case "email":
+      return { value: prefs.email, updatedAt: prefs.emailUpdatedAt };
   }
 }
 
@@ -119,7 +122,9 @@ export async function pushDomain(domain: SyncDomain, value: Json, updatedAt: str
         ? { appearance: value, appearanceUpdatedAt: updatedAt }
         : domain === "focus"
           ? { focus: value, focusUpdatedAt: updatedAt }
-          : { calendar: value, calendarUpdatedAt: updatedAt };
+          : domain === "calendar"
+            ? { calendar: value, calendarUpdatedAt: updatedAt }
+            : { email: value, emailUpdatedAt: updatedAt };
     const res = await rt.preferences.set(patch);
     return res !== null; // null = signed out
   } catch {

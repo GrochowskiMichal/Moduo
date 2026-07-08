@@ -142,6 +142,8 @@ export type UserPreferences = {
   focusUpdatedAt: string | null;
   calendar: Record<string, unknown> | null;
   calendarUpdatedAt: string | null;
+  email: Record<string, unknown> | null;
+  emailUpdatedAt: string | null;
 };
 
 export type ModuoRuntime = {
@@ -497,6 +499,21 @@ export type ModuoRuntime = {
       folder: string;
       uid: number;
     }): Promise<EmailInlineImage[]>;
+    /** Local body-text search (EM-9): scan the 8KB body-text sidecar → matching
+     *  envelopes. The instant sender/subject match is done client-side over the
+     *  in-memory envelopes; this covers deep-body hits the preview misses. */
+    searchBodies(input: {
+      accountId?: string | null;
+      folder?: string | null;
+      query: string;
+    }): Promise<any[]>;
+    /** Per-account server escalation (EM-9): Gmail X-GM-RAW / IMAP SEARCH with an
+     *  honest status. Hits are upserted so a result's body fetches normally. */
+    searchServer(input: {
+      accountId: string;
+      query: string;
+      limit?: number;
+    }): Promise<{ status: "ok" | "timeout" | "unsupported" | "error"; message?: string | null; envelopes: any[] }>;
 
     // ── EM-3 cloud "tissue" surface (Supabase-first, both platforms) ────────
     // A thread reaches the cloud ONLY via a deliberate action (convert / link /

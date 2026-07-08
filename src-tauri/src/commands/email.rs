@@ -35,6 +35,7 @@ pub mod oauth;
 mod ops;
 mod parsing;
 mod realtime;
+pub mod search;
 mod secrets;
 pub mod send_commands;
 mod smtp;
@@ -211,6 +212,9 @@ fn envelope_to_dto(state: &AppState, item: StoredEnvelope) -> EmailEnvelopeDto {
         message_id: item.message_id,
         in_reply_to: item.in_reply_to,
         references: item.references,
+        list_unsubscribe: item.list_unsubscribe,
+        precedence: item.precedence,
+        auto_submitted: item.auto_submitted,
         thread_id: item.thread_id,
         has_cached_body,
     }

@@ -60,6 +60,10 @@ pub const EMAIL_ENVELOPE_ORDER: TableDefinition<&str, &str> =
     TableDefinition::new("email_envelope_order");
 pub const EMAIL_BODIES: TableDefinition<&str, &str> = TableDefinition::new("email_bodies");
 pub const EMAIL_BODY_LRU: TableDefinition<&str, &str> = TableDefinition::new("email_body_lru");
+/// Local-search body-text sidecar (EM-9): an 8KB-truncated lowercase copy of each
+/// cached body, keyed like the body cache (`account::folder::uid`) and co-pruned
+/// with the body LRU so it never outlives its body.
+pub const EMAIL_BODY_TEXT: TableDefinition<&str, &str> = TableDefinition::new("email_body_text");
 pub const EMAIL_FLAG_OUTBOX: TableDefinition<&str, &str> =
     TableDefinition::new("email_flag_outbox");
 pub const EMAIL_GRAPH_OUTBOX: TableDefinition<&str, &str> =
@@ -121,6 +125,7 @@ impl RedbStore {
         let _ = write_txn.open_table(EMAIL_ENVELOPE_ORDER)?;
         let _ = write_txn.open_table(EMAIL_BODIES)?;
         let _ = write_txn.open_table(EMAIL_BODY_LRU)?;
+        let _ = write_txn.open_table(EMAIL_BODY_TEXT)?;
         let _ = write_txn.open_table(EMAIL_FLAG_OUTBOX)?;
         let _ = write_txn.open_table(EMAIL_GRAPH_OUTBOX)?;
         let _ = write_txn.open_table(EMAIL_OP_OUTBOX)?;
@@ -238,6 +243,7 @@ impl RedbStore {
             EMAIL_ENVELOPE_ORDER,
             EMAIL_BODIES,
             EMAIL_BODY_LRU,
+            EMAIL_BODY_TEXT,
             EMAIL_FLAG_OUTBOX,
             EMAIL_GRAPH_OUTBOX,
             EMAIL_OP_OUTBOX,
@@ -708,6 +714,18 @@ impl RedbStore {
 
     pub fn remove_email_body_lru(&self, key: &str) -> anyhow::Result<()> {
         self.remove_key(EMAIL_BODY_LRU, key)
+    }
+
+    pub fn put_email_body_text(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+        self.put_json(EMAIL_BODY_TEXT, key, value)
+    }
+
+    pub fn list_email_body_text(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_BODY_TEXT)
+    }
+
+    pub fn remove_email_body_text(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_BODY_TEXT, key)
     }
 
     pub fn put_email_flag_outbox(

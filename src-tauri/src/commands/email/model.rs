@@ -155,6 +155,15 @@ pub(super) struct StoredEnvelope {
     /// missing intermediate message (EM-4). Defaulted for pre-EM-4 rows.
     #[serde(default)]
     pub(super) references: Vec<String>,
+    /// Smart-inbox classification signals (EM-10), parsed from HEADER.FIELDS.
+    /// `List-Unsubscribe` present → newsletter; `Precedence` bulk/list/auto and
+    /// `Auto-Submitted` (≠ no) → notification. Defaulted for pre-EM-10 rows.
+    #[serde(default)]
+    pub(super) list_unsubscribe: Option<String>,
+    #[serde(default)]
+    pub(super) precedence: Option<String>,
+    #[serde(default)]
+    pub(super) auto_submitted: Option<String>,
     pub(super) thread_id: String,
     pub(super) updated_at: String,
 }
@@ -182,6 +191,18 @@ pub(super) struct StoredBodyLru {
     pub(super) folder: String,
     pub(super) uid: u32,
     pub(super) last_accessed_at: String,
+}
+
+/// Local-search body-text sidecar row (EM-9): an 8KB-truncated lowercase copy of a
+/// cached body, keyed like the body cache so it co-prunes with the body LRU.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct StoredBodyText {
+    pub(super) key: String,
+    pub(super) account_id: String,
+    pub(super) folder: String,
+    pub(super) uid: u32,
+    pub(super) text: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -270,6 +291,14 @@ pub struct EmailEnvelopeDto {
     pub in_reply_to: Option<String>,
     #[serde(default)]
     pub references: Vec<String>,
+    /// Smart-inbox signals (EM-10). Presence of `list_unsubscribe` and the
+    /// `precedence` / `auto_submitted` values drive the client classifier.
+    #[serde(default)]
+    pub list_unsubscribe: Option<String>,
+    #[serde(default)]
+    pub precedence: Option<String>,
+    #[serde(default)]
+    pub auto_submitted: Option<String>,
     pub thread_id: String,
     pub has_cached_body: bool,
 }

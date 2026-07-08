@@ -5,8 +5,8 @@ use crate::AppState;
 
 use super::connection::{open_imap_session, ImapSession};
 use super::parsing::{
-    decode_header_value_bytes, parse_address, parse_references, thread_id_from, to_millis_from_date,
-    truncate_with_ellipsis, within_sync_window,
+    decode_header_value_bytes, parse_address, parse_header_value, parse_references, thread_id_from,
+    to_millis_from_date, truncate_with_ellipsis, within_sync_window,
 };
 use super::storage::{
     envelope_key, list_envelopes_filtered, load_folder_cursor, message_key, parse_json_value,
@@ -39,7 +39,7 @@ pub(super) fn fetch_envelopes_for_uids(
     let fetches = session
         .uid_fetch(
             query,
-            "(UID ENVELOPE FLAGS RFC822.SIZE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID IN-REPLY-TO REFERENCES)])",
+            "(UID ENVELOPE FLAGS RFC822.SIZE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID IN-REPLY-TO REFERENCES LIST-UNSUBSCRIBE PRECEDENCE AUTO-SUBMITTED)])",
         )
         .map_err(|e| format!("uid_fetch_failed:{}", e))?;
 
@@ -127,8 +127,14 @@ pub(super) fn fetch_envelopes_for_uids(
             .as_ref()
             .map(|v| decode_header_value_bytes(v))
             .filter(|v| !v.is_empty());
-        // References isn't in the ENVELOPE — parse it from the fetched header block.
-        let references = item.header().map(parse_references).unwrap_or_default();
+        // References + the smart-inbox signals aren't in the ENVELOPE — parse them
+        // from the fetched HEADER.FIELDS block (read once).
+        let header_block = item.header();
+        let references = header_block.map(parse_references).unwrap_or_default();
+        let list_unsubscribe =
+            header_block.and_then(|h| parse_header_value(h, "list-unsubscribe"));
+        let precedence = header_block.and_then(|h| parse_header_value(h, "precedence"));
+        let auto_submitted = header_block.and_then(|h| parse_header_value(h, "auto-submitted"));
         let preview = truncate_with_ellipsis(&subject, 120);
         let timestamp_ms = to_millis_from_date(&date);
         let mut read = false;
@@ -171,6 +177,9 @@ pub(super) fn fetch_envelopes_for_uids(
             message_id,
             in_reply_to,
             references,
+            list_unsubscribe,
+            precedence,
+            auto_submitted,
             thread_id,
             updated_at: now_iso(),
         });

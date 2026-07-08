@@ -31,6 +31,13 @@ describe("entityOpenTarget", () => {
 
   it("routes emails to their module page", () => {
     expect(entityOpenTarget("email", "e1")).toEqual({ to: "/email" });
+    expect(entityOpenTarget("email_thread", "r1")).toEqual({ to: "/email" });
+  });
+
+  it("routes an id-less email open to the inbox (the widget's per-account rows, EM-11)", () => {
+    // Email has no URL thread-selection yet, so an id-less 'open my inbox' is
+    // valid — it must NOT be swallowed by the id guard.
+    expect(entityOpenTarget("email", "")).toEqual({ to: "/email" });
   });
 
   it("routes an event to the calendar page (CAL-7)", () => {

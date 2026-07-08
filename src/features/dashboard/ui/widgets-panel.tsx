@@ -64,6 +64,7 @@ export function WidgetsPanel({ isLocked, onToggleLock }: { isLocked: boolean; on
       <WidgetSource type="contacts-reconnect" label="Reconnect" description="People you’ve gone quiet on — a gentle nudge to reach out" disabled={isLocked} />
       <WidgetSource type="calendar-today" label="Today" description="What’s left on your calendar today, plus unfinished work to move forward" disabled={isLocked} />
       <WidgetSource type="recent-notes" label="Recent Notes" description="Recently touched notes across your workspace; click to open" disabled={isLocked} />
+      <WidgetSource type="email-inbox" label="Inbox & Follow-ups" description="Unread per account, threads returning today, and follow-ups awaiting a reply" disabled={isLocked} />
       <WidgetSource type="feed" label="Feed" description="Activity stream from your workspace" disabled />
       <WidgetSource type="world-clock" label="World Clock" description="Multi-city world clock view" disabled />
       <WidgetSource type="server-api-status" label="Live Status (Servers & APIs)" description="Monitor uptime and incidents for selected services" disabled />

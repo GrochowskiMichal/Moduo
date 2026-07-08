@@ -14,6 +14,7 @@ import { RecentlyLinkedWidget } from "./widgets/recently-linked-widget";
 import { ContactsNeedsAttentionWidget } from "./widgets/contacts-needs-attention-widget";
 import { CalendarTodayWidget } from "./widgets/calendar-today-widget";
 import { RecentNotesWidget } from "./widgets/recent-notes-widget";
+import { EmailInboxWidget } from "./widgets/email-inbox-widget";
 import { ContactsReconnectWidget } from "./widgets/contacts-reconnect-widget";
 import { StockWidget } from "./widgets/stock-widget";
 import { TodoListWidget } from "./widgets/todo-list-widget";
@@ -137,6 +138,15 @@ export function DashboardGrid({
           ) : null}
           {widget.type === "recent-notes" ? (
             <RecentNotesWidget
+              runtime={runtime}
+              workspaceId={workspaceId}
+              config={widget.config}
+              isLocked={isLocked}
+              onUpdateConfig={(patch) => onUpdateConfig(widget.id, patch)}
+            />
+          ) : null}
+          {widget.type === "email-inbox" ? (
+            <EmailInboxWidget
               runtime={runtime}
               workspaceId={workspaceId}
               config={widget.config}

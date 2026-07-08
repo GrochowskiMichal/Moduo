@@ -175,8 +175,11 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     if (typeof window === "undefined") return;
     const onEntityOpen = (event: Event) => {
       const detail = (event as CustomEvent<{ type?: string; id?: string }>).detail;
-      if (!detail?.type || !detail.id) return;
-      const target = entityOpenTarget(detail.type, detail.id);
+      // An id is required for entity selection, but email routes to /email with
+      // or without one (an id-less "open my inbox" from the widget) — let
+      // entityOpenTarget decide (it returns null for id-less non-email → toast).
+      if (!detail?.type) return;
+      const target = entityOpenTarget(detail.type, detail.id ?? "");
       if (!target) {
         toast("Nothing to open yet", {
           description: `There's no page for "${detail.type}" yet.`,

@@ -1829,6 +1829,8 @@ export type Database = {
           calendar: Json
           calendar_updated_at: string
           created_at: string
+          email: Json
+          email_updated_at: string
           focus: Json
           focus_updated_at: string
           user_id: string
@@ -1839,6 +1841,8 @@ export type Database = {
           calendar?: Json
           calendar_updated_at?: string
           created_at?: string
+          email?: Json
+          email_updated_at?: string
           focus?: Json
           focus_updated_at?: string
           user_id: string
@@ -1849,6 +1853,8 @@ export type Database = {
           calendar?: Json
           calendar_updated_at?: string
           created_at?: string
+          email?: Json
+          email_updated_at?: string
           focus?: Json
           focus_updated_at?: string
           user_id?: string

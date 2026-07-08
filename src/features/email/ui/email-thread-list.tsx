@@ -2,21 +2,40 @@
 // sender(s), subject, snippet, time, the account hue dot (Unified scope only),
 // unread WEIGHT (font-medium/foreground vs muted — never color-only), a pin glyph
 // when starred, and a thread-count chip when messageCount > 1. Hovering a row
-// reveals quick-triage icon-buttons (Done / Snooze / Delete), each tooltip'd.
-// Selection is id-based and lifted to the page; clicking a row selects + opens it.
-// Presentational — every action is a callback.
+// reveals quick-triage icon-buttons (Done / Snooze / Follow-up / Delete) + a ⋯
+// menu for the smart-inbox per-sender override (EM-10), each tooltip'd. When
+// `sections` is passed, rows are grouped under Personal / Notifications /
+// Newsletters headers (EM-10); otherwise a flat list (search results, EM-9).
+// Selection is id-based and lifted to the page. Presentational — actions callback.
 
-import { forwardRef } from "react";
-import { Check, Clock3, CornerUpLeft, Pin, Trash2 } from "lucide-react";
+import { forwardRef, type ReactNode } from "react";
+import { Check, Clock3, CornerUpLeft, MoreHorizontal, Pin, Trash2 } from "lucide-react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
 import { IconButton } from "../../../components/ui/icon-button";
 import { EmptyState } from "../../../components/ui/empty-state";
 import type { LabelColor } from "../../../components/tag-colors";
+import {
+  EMAIL_SECTIONS,
+  SECTION_LABEL,
+  type EmailSection,
+  type EmailSectionGroup,
+} from "../classify";
 import { formatEmailDate } from "../utils/email-format";
 import type { EmailThread } from "../model/email-types";
 
 type Props = {
+  /** Flat rows (search results / a single scope). Ignored when `sections` is set. */
   threads: EmailThread[];
+  /** Smart-inbox grouped rows (EM-10). When present, renders section headers. */
+  sections?: EmailSectionGroup[] | null;
   loading: boolean;
   error: string | null;
   /** The selected thread's threadId (id-based so it survives reordering). */
@@ -30,6 +49,14 @@ type Props = {
   onFollowUp: (thread: EmailThread) => void;
   onDelete: (thread: EmailThread) => void;
   onRetry: () => void;
+  /** Set/clear the sender's smart-inbox override (EM-10). Enables the ⋯ menu. */
+  onSetSection?: (thread: EmailThread, section: EmailSection | null) => void;
+  /** The sender's current override (a check in the menu), if any. */
+  overrideFor?: (thread: EmailThread) => EmailSection | null;
+  /** Rendered below the list (the EM-9 server-escalation footer). */
+  footer?: ReactNode;
+  /** Empty-state copy override (search "no results" vs inbox zero). */
+  empty?: { title: string; description: string };
 };
 
 const SKELETON_ROWS = 6;
@@ -57,6 +84,8 @@ const ThreadRow = forwardRef<
     onSnooze: () => void;
     onFollowUp: () => void;
     onDelete: () => void;
+    onSetSection?: (section: EmailSection | null) => void;
+    activeOverride?: EmailSection | null;
   }
 >(function ThreadRow(
   {
@@ -69,6 +98,8 @@ const ThreadRow = forwardRef<
     onSnooze,
     onFollowUp,
     onDelete,
+    onSetSection,
+    activeOverride,
   },
   ref,
 ) {
@@ -180,6 +211,42 @@ const ThreadRow = forwardRef<
             onDelete();
           }}
         />
+        {onSetSection ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton
+                icon={MoreHorizontal}
+                label="Sort this sender…"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuLabel className="max-w-56 truncate font-normal text-muted-foreground">
+                Always put {thread.fromEmail || senderText(thread)} in
+              </DropdownMenuLabel>
+              {EMAIL_SECTIONS.map((section) => (
+                <DropdownMenuItem
+                  key={section}
+                  onSelect={() => onSetSection(section)}
+                  className={activeOverride === section ? "font-medium" : undefined}
+                >
+                  {SECTION_LABEL[section]}
+                  {activeOverride === section ? (
+                    <Check className="ml-auto size-icon-xs" aria-hidden />
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+              {activeOverride ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => onSetSection(null)}>
+                    Reset to automatic
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </div>
     </button>
   );
@@ -187,6 +254,7 @@ const ThreadRow = forwardRef<
 
 export function EmailThreadList({
   threads,
+  sections,
   loading,
   error,
   selectedThreadId,
@@ -198,8 +266,17 @@ export function EmailThreadList({
   onFollowUp,
   onDelete,
   onRetry,
+  onSetSection,
+  overrideFor,
+  footer,
+  empty,
 }: Props) {
-  if (loading && threads.length === 0) {
+  const hasSections = !!sections;
+  const flatCount = hasSections
+    ? sections.reduce((n, g) => n + g.threads.length, 0)
+    : threads.length;
+
+  if (loading && flatCount === 0) {
     return (
       <div className="flex flex-col gap-1 p-1" aria-busy="true" aria-label="Loading inbox">
         {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
@@ -216,7 +293,7 @@ export function EmailThreadList({
     );
   }
 
-  if (error && threads.length === 0) {
+  if (error && flatCount === 0) {
     return (
       <EmptyState
         title="Couldn't load your inbox"
@@ -234,32 +311,60 @@ export function EmailThreadList({
     );
   }
 
-  if (threads.length === 0) {
+  if (flatCount === 0) {
     return (
-      <EmptyState
-        icon={Check}
-        title="Inbox zero"
-        description="Nothing to triage right now. New mail lands here."
-      />
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex-1">
+          <EmptyState
+            icon={Check}
+            title={empty?.title ?? "Inbox zero"}
+            description={empty?.description ?? "Nothing to triage right now. New mail lands here."}
+          />
+        </div>
+        {footer}
+      </div>
     );
   }
 
+  const renderRow = (thread: EmailThread) => (
+    <ThreadRow
+      key={`${thread.accountId}::${thread.threadId}`}
+      thread={thread}
+      selected={selectedThreadId === thread.threadId}
+      showAccountDot={showAccountDot}
+      hue={accountHues[thread.accountId] ?? "gray"}
+      onSelect={() => onSelectThread(thread)}
+      onArchive={() => onArchive(thread)}
+      onSnooze={() => onSnooze(thread)}
+      onFollowUp={() => onFollowUp(thread)}
+      onDelete={() => onDelete(thread)}
+      onSetSection={onSetSection ? (section) => onSetSection(thread, section) : undefined}
+      activeOverride={overrideFor?.(thread) ?? null}
+    />
+  );
+
   return (
-    <div className="flex flex-col gap-0.5 p-1">
-      {threads.map((thread) => (
-        <ThreadRow
-          key={`${thread.accountId}::${thread.threadId}`}
-          thread={thread}
-          selected={selectedThreadId === thread.threadId}
-          showAccountDot={showAccountDot}
-          hue={accountHues[thread.accountId] ?? "gray"}
-          onSelect={() => onSelectThread(thread)}
-          onArchive={() => onArchive(thread)}
-          onSnooze={() => onSnooze(thread)}
-          onFollowUp={() => onFollowUp(thread)}
-          onDelete={() => onDelete(thread)}
-        />
-      ))}
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {hasSections ? (
+        <div className="flex flex-col gap-1 p-1">
+          {sections.map((group) => (
+            <section key={group.section} className="flex flex-col gap-0.5">
+              <header className="flex items-center gap-2 px-2.5 pb-0.5 pt-2">
+                <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {group.label}
+                </span>
+                <span className="text-2xs tabular-nums text-muted-foreground/70">
+                  {group.threads.length}
+                </span>
+              </header>
+              {group.threads.map(renderRow)}
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-0.5 p-1">{threads.map(renderRow)}</div>
+      )}
+      {footer}
     </div>
   );
 }

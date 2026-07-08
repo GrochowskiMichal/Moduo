@@ -130,6 +130,46 @@ pub(super) fn parse_references(header_block: &[u8]) -> Vec<String> {
     extract_angle_ids(&value)
 }
 
+/// Extract a single non-repeating header's value from a fetched HEADER.FIELDS
+/// block, unfolding continuation lines. `name_lower` is the lowercase header name
+/// WITHOUT the colon (e.g. `"precedence"`). Case-insensitive; returns the trimmed
+/// value, or `None` when the header is absent or empty. Drives the smart-inbox
+/// signals (List-Unsubscribe / Precedence / Auto-Submitted, EM-10).
+pub(super) fn parse_header_value(header_block: &[u8], name_lower: &str) -> Option<String> {
+    let text = String::from_utf8_lossy(header_block).replace("\r\n", "\n");
+    let prefix_len = name_lower.len() + 1; // name + ':'
+    let mut value = String::new();
+    let mut in_header = false;
+    for line in text.split('\n') {
+        if in_header {
+            // Folded continuation lines start with whitespace.
+            if line.starts_with(' ') || line.starts_with('\t') {
+                value.push(' ');
+                value.push_str(line.trim());
+                continue;
+            }
+            break;
+        }
+        // Byte-compare "name:" so a malformed non-ASCII line can't panic on a
+        // mid-char slice (mirrors parse_references). `:` is ASCII, so byte
+        // `prefix_len` is a valid char boundary for the value slice.
+        let matches_name = line.as_bytes().get(..prefix_len).is_some_and(|prefix| {
+            prefix[prefix_len - 1] == b':'
+                && prefix[..prefix_len - 1].eq_ignore_ascii_case(name_lower.as_bytes())
+        });
+        if matches_name {
+            value.push_str(line[prefix_len..].trim());
+            in_header = true;
+        }
+    }
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
 /// Whether a message is recent enough to store on the initial sync window (EM-4).
 /// An unknown/zero timestamp is kept (never dropped for a missing date).
 pub(super) fn within_sync_window(timestamp_ms: i64, now_ms: i64, days: i64) -> bool {
@@ -311,6 +351,20 @@ pub(super) fn extract_domain(email: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_header_value_is_case_insensitive_and_unfolds() {
+        let block = b"Message-ID: <a@x.com>\r\nPrecedence: bulk\r\nList-Unsubscribe: <https://x/u>,\r\n <mailto:u@x>\r\n";
+        assert_eq!(parse_header_value(block, "precedence").as_deref(), Some("bulk"));
+        // Continuation lines fold into one value.
+        assert_eq!(
+            parse_header_value(block, "list-unsubscribe").as_deref(),
+            Some("<https://x/u>, <mailto:u@x>")
+        );
+        // Absent header → None; a name that is a prefix of another doesn't match.
+        assert_eq!(parse_header_value(block, "auto-submitted"), None);
+        assert_eq!(parse_header_value(block, "list"), None);
+    }
 
     #[test]
     fn a_b_c_chain_threads_together_via_references_root() {

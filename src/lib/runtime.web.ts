@@ -97,6 +97,8 @@ function prefsRowToModel(row: {
   focus_updated_at: string | null;
   calendar?: unknown;
   calendar_updated_at?: string | null;
+  email?: unknown;
+  email_updated_at?: string | null;
 }): UserPreferences {
   return {
     appearance: (row.appearance as Record<string, unknown> | null) ?? null,
@@ -105,7 +107,23 @@ function prefsRowToModel(row: {
     focusUpdatedAt: row.focus_updated_at ?? null,
     calendar: (row.calendar as Record<string, unknown> | null) ?? null,
     calendarUpdatedAt: row.calendar_updated_at ?? null,
+    email: (row.email as Record<string, unknown> | null) ?? null,
+    emailUpdatedAt: row.email_updated_at ?? null,
   };
+}
+
+// Deploy-gap guard for the EM-10 `email` prefs domain: the column may not be
+// applied yet. The base columns are always present; email is appended only while
+// available, and the first missing-column error flips it off until reload (auto-
+// heals once the migration deploys). Keeps the hot appearance/focus/calendar read
+// from breaking pre-migration.
+const PREFS_COLS_BASE =
+  "appearance, appearance_updated_at, focus, focus_updated_at, calendar, calendar_updated_at";
+const PREFS_COLS_FULL = `${PREFS_COLS_BASE}, email, email_updated_at`;
+let emailPrefsColumnAvailable = true;
+function isMissingEmailColumn(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  return err.code === "42703" || /column\b.*\bemail\b.*does not exist/i.test(err.message ?? "");
 }
 
 // LocalStore backed by localStorage for web
@@ -882,16 +900,26 @@ export const webRuntime: ModuoRuntime = {
     async get() {
       const { data: { user } } = await supabaseClient.auth.getUser();
       if (!user) return null;
-      const { data, error } = await supabaseClient
+      // `.select()` needs a literal for the typed client's parser; the runtime
+      // column set is dynamic (deploy gap), so cast to the full literal shape —
+      // prefsRowToModel tolerates a missing email column at runtime.
+      const cols = (emailPrefsColumnAvailable ? PREFS_COLS_FULL : PREFS_COLS_BASE) as typeof PREFS_COLS_FULL;
+      let res = await supabaseClient
         .from("user_preferences")
-        .select(
-          "appearance, appearance_updated_at, focus, focus_updated_at, calendar, calendar_updated_at",
-        )
+        .select(cols)
         .eq("user_id", user.id)
         .maybeSingle();
-      if (error) throw new Error(error.message);
-      if (!data) return null;
-      return prefsRowToModel(data);
+      if (res.error && emailPrefsColumnAvailable && isMissingEmailColumn(res.error)) {
+        emailPrefsColumnAvailable = false; // deploy gap — email column not applied yet
+        res = await supabaseClient
+          .from("user_preferences")
+          .select(PREFS_COLS_BASE as typeof PREFS_COLS_FULL)
+          .eq("user_id", user.id)
+          .maybeSingle();
+      }
+      if (res.error) throw new Error(res.error.message);
+      if (!res.data) return null;
+      return prefsRowToModel(res.data);
     },
     async set(patch) {
       const { data: { user } } = await supabaseClient.auth.getUser();
@@ -905,15 +933,32 @@ export const webRuntime: ModuoRuntime = {
       if (patch.focusUpdatedAt !== undefined) row.focus_updated_at = patch.focusUpdatedAt;
       if (patch.calendar !== undefined) row.calendar = patch.calendar ?? {};
       if (patch.calendarUpdatedAt !== undefined) row.calendar_updated_at = patch.calendarUpdatedAt;
-      const { data, error } = await supabaseClient
+      if (emailPrefsColumnAvailable) {
+        if (patch.email !== undefined) row.email = patch.email ?? {};
+        if (patch.emailUpdatedAt !== undefined) row.email_updated_at = patch.emailUpdatedAt;
+      }
+      const cols = (emailPrefsColumnAvailable ? PREFS_COLS_FULL : PREFS_COLS_BASE) as typeof PREFS_COLS_FULL;
+      let res = await supabaseClient
         .from("user_preferences")
         .upsert(row, { onConflict: "user_id" })
-        .select(
-          "appearance, appearance_updated_at, focus, focus_updated_at, calendar, calendar_updated_at",
-        )
+        .select(cols)
         .single();
-      if (error) throw new Error(error.message);
-      return prefsRowToModel(data);
+      if (res.error && emailPrefsColumnAvailable && isMissingEmailColumn(res.error)) {
+        emailPrefsColumnAvailable = false; // deploy gap — retry without the email domain
+        // NB: an email-only push pre-migration then succeeds as a `{user_id}` no-op,
+        // so prefs-sync clears its dirty flag though nothing synced. Benign — the
+        // override stays in localStorage; it re-pushes on the next local edit once
+        // the column exists. (Other domains in the same row are never dropped.)
+        delete row.email;
+        delete row.email_updated_at;
+        res = await supabaseClient
+          .from("user_preferences")
+          .upsert(row, { onConflict: "user_id" })
+          .select(PREFS_COLS_BASE as typeof PREFS_COLS_FULL)
+          .single();
+      }
+      if (res.error) throw new Error(res.error.message);
+      return prefsRowToModel(res.data);
     },
   },
 
@@ -972,6 +1017,9 @@ export const webRuntime: ModuoRuntime = {
     async saveAttachment() { throw new Error(desktopOnly().message); },
     async pickAttachments() { return []; },
     async getInlineImages() { return []; },
+    // Local search rides the desktop engine cache — web has no envelopes to scan.
+    async searchBodies() { return []; },
+    async searchServer() { return { status: "unsupported", message: null, envelopes: [] }; },
 
     // ── EM-3 cloud tissue surface (Supabase-first; works on web + desktop) ──
     async listModule(workspaceId) {
