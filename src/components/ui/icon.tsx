@@ -11,6 +11,7 @@ import {
   Folder,
   GitBranch,
   Grid2x2,
+  House,
   LogOut,
   Mail,
   PenTool,
@@ -50,6 +51,7 @@ export type IconName =
   | "log-out"
   | "trash-2"
   | "grid"
+  | "home"
   | "calendar"
   | "file-text"
   | "mail"
@@ -88,6 +90,7 @@ const ICONS: Record<IconName, any> = {
   "log-out": LogOut,
   "trash-2": Trash2,
   grid: Grid2x2,
+  home: House,
   calendar: Calendar,
   "file-text": FileText,
   mail: Mail,

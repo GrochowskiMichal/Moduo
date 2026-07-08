@@ -3,7 +3,7 @@ import { AuthProvider } from "../../providers/auth-provider";
 import { AppGate } from "../../routes/layouts/app-gate";
 import { AuthPage } from "../../routes/pages/auth-page";
 import { OnboardingPage } from "../../routes/pages/onboarding-page";
-import { GridPage } from "../../routes/pages/grid-page";
+import { HomePage } from "../../routes/pages/home-page";
 import { NotesPage } from "../../routes/pages/notes-page";
 import { TasksPage } from "../../routes/pages/tasks-page";
 import { CalendarPage } from "../../routes/pages/calendar-page";
@@ -68,7 +68,7 @@ const appGateRoute = createRoute({
 const homeRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/",
-  component: GridPage,
+  component: HomePage,
 });
 
 const legacyGridRoute = createRoute({
