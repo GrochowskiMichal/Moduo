@@ -60,6 +60,10 @@ export function shapeInboxThreads(
       starred: sorted.some((env) => env.starred),
       folder: latest.folder,
       latestUid: latest.uid,
+      // Smart-inbox signals ride the newest message (EM-10).
+      listUnsubscribe: latest.listUnsubscribe ?? null,
+      precedence: latest.precedence ?? null,
+      autoSubmitted: latest.autoSubmitted ?? null,
     });
   }
 

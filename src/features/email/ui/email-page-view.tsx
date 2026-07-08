@@ -5,7 +5,7 @@
 // (no desktop engine) it degrades to a calm read-only note + any linked-email
 // cards from the cloud tissue — no fake compose/triage. Replaces EmailWorkspace.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Mail, PenSquare } from "lucide-react";
 
@@ -29,6 +29,15 @@ import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { endPosition, makeTask } from "../../tasks/helpers";
 import { resolveAccountHues } from "../accounts";
 import { threadsForAccount, unreadCount } from "../threads";
+import {
+  flattenSections,
+  groupThreadsBySection,
+  senderKey,
+  type EmailSection,
+} from "../classify";
+import { useEmailPrefs } from "../hooks/use-email-prefs";
+import { useEmailSearch } from "../hooks/use-email-search";
+import { EmailSearchFooter, EmailSearchInput } from "./email-search-bar";
 import { formatSnoozeUntil } from "../snooze";
 import { buildRefUpsertArgs } from "../refs";
 import { blankDraft, buildComposeDraft, type ComposeMode } from "../compose";
@@ -71,6 +80,41 @@ function isTypingTarget(target: EventTarget | null): boolean {
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
   return Boolean(
     el.closest("[role='dialog'], [role='menu'], [role='listbox'], [role='combobox']"),
+  );
+}
+
+/** One tissue email card for the web read-only view (AC15). */
+function WebTissueCard({ thread, meta }: { thread: EmailThreadRef; meta?: string | null }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-baseline gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+          {thread.fromName?.trim() || thread.fromAddr || "Unknown sender"}
+        </span>
+        {thread.sentAt ? (
+          <time className="shrink-0 text-2xs tabular-nums text-muted-foreground" dateTime={thread.sentAt}>
+            {formatEmailDate(thread.sentAt)}
+          </time>
+        ) : null}
+      </div>
+      <div className="truncate text-sm text-foreground">{thread.subject || "(No subject)"}</div>
+      {thread.snippet ? (
+        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{thread.snippet}</p>
+      ) : null}
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <span className="text-2xs text-muted-foreground">{meta ?? ""}</span>
+        <span className="text-2xs text-muted-foreground/70">Continue on desktop</span>
+      </div>
+    </div>
+  );
+}
+
+function WebTissueSection({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      {children}
+    </div>
   );
 }
 
@@ -146,10 +190,62 @@ export function EmailPageView() {
 
   const unifiedUnread = useMemo(() => unreadCount(email.threads), [email.threads]);
 
-  // The selected thread object (id-based lookup so it survives reordering).
+  // ── smart inbox (EM-10) + search (EM-9) ────────────────────────────────────
+  const emailPrefs = useEmailPrefs(userId ?? "");
+  const search = useEmailSearch({
+    runtime,
+    envelopes: email.envelopes,
+    accounts: email.accounts,
+    isDesktop: IS_DESKTOP,
+    accountId: selectedAccountId,
+  });
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Known-sender signal: a from-address that resolves to a contact pulls the
+  // thread into Personal even under bulk headers (brief §5).
+  const knownSenderKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of contacts) {
+      if (c.email) set.add(c.email.trim().toLowerCase());
+      for (const ch of c.emails ?? []) {
+        if (ch.value) set.add(ch.value.trim().toLowerCase());
+      }
+    }
+    return set;
+  }, [contacts]);
+
+  // Group the scope's threads into Personal / Notifications / Newsletters, honoring
+  // per-sender overrides + the known-sender pull-back.
+  const sections = useMemo(
+    () =>
+      groupThreadsBySection(scopedThreads, {
+        overrides: emailPrefs.prefs.senderOverrides,
+        isKnownSender: (key) => knownSenderKeys.has(key),
+      }),
+    [scopedThreads, emailPrefs.prefs.senderOverrides, knownSenderKeys],
+  );
+
+  // The rows in display/keyboard order: search results when searching, else the
+  // section-flattened inbox.
+  const orderedThreads = useMemo(
+    () => (search.active ? search.results : flattenSections(sections)),
+    [search.active, search.results, sections],
+  );
+
+  const overrideFor = useCallback(
+    (thread: EmailThread): EmailSection | null =>
+      emailPrefs.prefs.senderOverrides[senderKey(thread.fromEmail)] ?? null,
+    [emailPrefs.prefs.senderOverrides],
+  );
+
+  // The selected thread object — looked up across the ordered rows AND the inbox
+  // scope so opening a search result (and keeping the reader while searching) work.
   const selectedThread = useMemo(
-    () => scopedThreads.find((t) => t.threadId === selectedThreadId) ?? null,
-    [scopedThreads, selectedThreadId],
+    () =>
+      orderedThreads.find((t) => t.threadId === selectedThreadId) ??
+      scopedThreads.find((t) => t.threadId === selectedThreadId) ??
+      null,
+    [orderedThreads, scopedThreads, selectedThreadId],
   );
 
   // If the selected thread leaves the scope (filter change / triage), drop it.
@@ -612,10 +708,11 @@ export function EmailPageView() {
     [email],
   );
 
-  // ── keyboard triage (EM-5, §2). Selection walks by index within the scope,
-  // but is tracked as a threadId so it survives reordering. ─────────────────
-  const scopedRef = useRef<EmailThread[]>(scopedThreads);
-  scopedRef.current = scopedThreads;
+  // ── keyboard triage (EM-5, §2). Selection walks by index within the visible
+  // order (sections-flattened or search results), tracked as a threadId so it
+  // survives reordering. ────────────────────────────────────────────────────
+  const scopedRef = useRef<EmailThread[]>(orderedThreads);
+  scopedRef.current = orderedThreads;
   const selectedIdRef = useRef<string | null>(selectedThreadId);
   selectedIdRef.current = selectedThreadId;
 
@@ -668,6 +765,10 @@ export function EmailPageView() {
           break;
         case "t":
           if (current) void runConvert(current);
+          break;
+        case "/":
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
           break;
         default:
           return;
@@ -773,8 +874,21 @@ export function EmailPageView() {
     ],
   );
 
-  // ── web: read-only tissue view (no desktop engine) ─────────────────────────
+  // ── web: read-only tissue view (no desktop engine, AC15) ───────────────────
   if (!IS_DESKTOP) {
+    const now = new Date();
+    // Recently pulled-into-tissue threads, newest first, minus those already shown
+    // under Snoozed / Follow-ups so a thread appears once.
+    const shownIds = new Set([
+      ...email.snoozed.map((r) => r.id),
+      ...email.followUps.map((r) => r.id),
+    ]);
+    const recentLinked = [...email.tissueRefs]
+      .filter((r) => !shownIds.has(r.id))
+      .sort((a, b) => Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || ""))
+      .slice(0, 12);
+    const hasAny =
+      email.snoozed.length > 0 || email.followUps.length > 0 || recentLinked.length > 0;
     return (
       <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
         <div className="rounded-lg border border-border bg-card p-4">
@@ -783,48 +897,49 @@ export function EmailPageView() {
             Open Moduo on desktop to use email
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Your mailbox lives on the desktop app. Linked emails still show up here.
+            Your mailbox lives on the desktop app. Snoozed, follow-ups, and linked emails show here.
           </p>
         </div>
 
-        {email.tissueRefs.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-              Linked emails
-            </div>
-            {email.tissueRefs.map((ref) => (
-              <div key={ref.id} className="rounded-lg border border-border bg-card p-3">
-                <div className="flex items-baseline gap-2">
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                    {ref.fromName?.trim() || ref.fromAddr || "Unknown sender"}
-                  </span>
-                  {ref.sentAt ? (
-                    <time
-                      className="shrink-0 text-2xs tabular-nums text-muted-foreground"
-                      dateTime={ref.sentAt}
-                    >
-                      {formatEmailDate(ref.sentAt)}
-                    </time>
-                  ) : null}
-                </div>
-                <div className="truncate text-sm text-foreground">
-                  {ref.subject || "(No subject)"}
-                </div>
-                {ref.snippet ? (
-                  <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                    {ref.snippet}
-                  </p>
-                ) : null}
-              </div>
+        {email.snoozed.length > 0 ? (
+          <WebTissueSection label="Snoozed">
+            {email.snoozed.map((ref) => (
+              <WebTissueCard
+                key={ref.id}
+                thread={ref}
+                meta={ref.snoozeUntil ? `Returns ${formatSnoozeUntil(ref.snoozeUntil, now)}` : null}
+              />
             ))}
-          </div>
-        ) : (
+          </WebTissueSection>
+        ) : null}
+
+        {email.followUps.length > 0 ? (
+          <WebTissueSection label="Follow-ups due">
+            {email.followUps.map((ref) => (
+              <WebTissueCard
+                key={ref.id}
+                thread={ref}
+                meta={ref.followUpAt ? `Reply by ${formatEmailDate(ref.followUpAt)}` : null}
+              />
+            ))}
+          </WebTissueSection>
+        ) : null}
+
+        {recentLinked.length > 0 ? (
+          <WebTissueSection label="Recently linked">
+            {recentLinked.map((ref) => (
+              <WebTissueCard key={ref.id} thread={ref} />
+            ))}
+          </WebTissueSection>
+        ) : null}
+
+        {!hasAny ? (
           <EmptyState
             icon={Mail}
             title="Nothing linked yet"
-            description="Emails you convert or link on desktop will appear here."
+            description="Emails you convert, link, snooze, or follow up on desktop appear here."
           />
-        )}
+        ) : null}
       </div>
     );
   }
@@ -862,15 +977,52 @@ export function EmailPageView() {
         }
         center={
           <div className="relative flex h-full min-h-0 flex-col">
-            <div className="flex shrink-0 items-center justify-end border-b border-border px-2 py-1.5">
+            <div className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1.5">
+              <EmailSearchInput
+                ref={searchInputRef}
+                query={search.query}
+                onQuery={search.setQuery}
+                onClear={search.clear}
+              />
               <Button size="sm" onClick={startNew}>
                 <PenSquare aria-hidden />
                 New message
               </Button>
             </div>
-            {view === "inbox" ? (
+            {search.active ? (
+              <EmailThreadList
+                threads={search.results}
+                loading={false}
+                error={null}
+                selectedThreadId={selectedThreadId}
+                showAccountDot={selectedAccountId === null}
+                accountHues={accountHues}
+                onSelectThread={openThread}
+                onArchive={runArchive}
+                onSnooze={openSnooze}
+                onFollowUp={openFollowUp}
+                onDelete={runDelete}
+                onRetry={() => void email.reload()}
+                empty={{
+                  title: "No matches",
+                  description: "Nothing here matches — try the full-mailbox search below.",
+                }}
+                footer={
+                  <EmailSearchFooter
+                    accounts={
+                      selectedAccountId
+                        ? email.accounts.filter((a) => a.id === selectedAccountId)
+                        : email.accounts
+                    }
+                    serverStates={search.serverStates}
+                    onEscalate={search.escalate}
+                  />
+                }
+              />
+            ) : view === "inbox" ? (
               <EmailThreadList
                 threads={scopedThreads}
+                sections={sections}
                 loading={email.loading}
                 error={email.error}
                 selectedThreadId={selectedThreadId}
@@ -882,6 +1034,10 @@ export function EmailPageView() {
                 onFollowUp={openFollowUp}
                 onDelete={runDelete}
                 onRetry={() => void email.reload()}
+                onSetSection={(thread, section) =>
+                  emailPrefs.setSenderOverride(thread.fromEmail, section)
+                }
+                overrideFor={overrideFor}
               />
             ) : (
               <EmailDestinationList

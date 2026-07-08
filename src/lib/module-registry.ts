@@ -7,6 +7,7 @@ import { linksModuleManifest } from "../features/spine/ops-manifest";
 import { contactsModuleManifest } from "../features/contacts/ops-manifest";
 import { calendarModuleManifest } from "../features/calendar/ops-manifest";
 import { notesModuleManifest } from "../features/notes/ops-manifest";
+import { emailModuleManifest } from "../features/email/ops-manifest";
 import type { ModuleManifest } from "./module-manifest";
 
 export const moduleManifests: ModuleManifest[] = [
@@ -15,4 +16,5 @@ export const moduleManifests: ModuleManifest[] = [
   contactsModuleManifest,
   calendarModuleManifest,
   notesModuleManifest,
+  emailModuleManifest,
 ];

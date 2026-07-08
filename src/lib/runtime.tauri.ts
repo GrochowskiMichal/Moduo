@@ -143,6 +143,8 @@ export const tauriRuntime: ModuoRuntime = {
     saveAttachment(input) { return invoke<any>("email_save_attachment", { input }); },
     pickAttachments() { return invoke<any[]>("email_pick_attachments", {}); },
     getInlineImages(input) { return invoke<any[]>("email_get_inline_images", { input }); },
+    searchBodies(input) { return invoke<any[]>("email_search_bodies", { input }); },
+    searchServer(input) { return invoke<any>("email_search_server", { input }); },
     // EM-3 cloud tissue methods are Supabase-direct — identical on both platforms.
     listModule: webRuntime.email.listModule,
     upsertAccountRef: webRuntime.email.upsertAccountRef,

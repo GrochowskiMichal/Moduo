@@ -59,6 +59,10 @@ export interface EmailEnvelope {
   messageId?: string | null;
   inReplyTo?: string | null;
   references?: string[];
+  /** Smart-inbox signals (EM-10), parsed from HEADER.FIELDS. */
+  listUnsubscribe?: string | null;
+  precedence?: string | null;
+  autoSubmitted?: string | null;
   threadId: string;
   hasCachedBody: boolean;
 }
@@ -86,6 +90,10 @@ export interface EmailThread {
   folder: string;
   /** UID of the newest message (for opening / prefetch). */
   latestUid: number;
+  /** Smart-inbox signals from the newest message (EM-10) — drive classification. */
+  listUnsubscribe?: string | null;
+  precedence?: string | null;
+  autoSubmitted?: string | null;
 }
 
 /** A server folder from `email_list_folders` (for the move popover). */

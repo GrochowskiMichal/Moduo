@@ -188,6 +188,8 @@ pub fn run() {
             commands::email::attachments::email_save_attachment,
             commands::email::attachments::email_pick_attachments,
             commands::email::attachments::email_get_inline_images,
+            commands::email::search::email_search_bodies,
+            commands::email::search::email_search_server,
             commands::calendar::calendar_google_oauth_start,
             commands::calendar::calendar_outlook_oauth_start,
             commands::calendar::calendar_apple_oauth_start,

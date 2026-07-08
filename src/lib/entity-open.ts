@@ -18,6 +18,11 @@ export type EntityOpenTarget = {
 };
 
 export function entityOpenTarget(type: string, id: string): EntityOpenTarget | null {
+  // Email routes to its module page regardless of id — thread selection inside
+  // /email isn't URL-held yet (component state, like tasks). So an id-less
+  // "open my inbox" (the widget's per-account unread rows) is valid and must be
+  // handled BEFORE the id guard below.
+  if (type === "email" || type === "email_thread") return { to: "/email" };
   if (!id) return null;
   switch (type) {
     case "contact":
@@ -29,11 +34,6 @@ export function entityOpenTarget(type: string, id: string): EntityOpenTarget | n
       return { to: "/tasks" };
     case "note":
       return { to: "/notes", search: { id } };
-    case "email":
-    case "email_thread":
-      // Thread selection inside /email is EM-4's job (component state today,
-      // like tasks); routing to the module page is the EM-3 substrate.
-      return { to: "/email" };
     case "event":
       return { to: "/calendar" };
     default:

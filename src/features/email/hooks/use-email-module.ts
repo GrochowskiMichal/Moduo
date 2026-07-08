@@ -194,6 +194,40 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
       : shaped.filter((t) => !hiddenThreadKeys.has(t.threadId));
   }, [envelopes, accounts, hiddenThreadKeys]);
 
+  // EM-11 (AC18): the desktop registers its accounts in the cloud + pushes each
+  // account's inbox unread to `email_accounts.unread_count`, so the web tissue
+  // view + the "Inbox & follow-ups" widget can read them. Owner-scoped metadata
+  // (NOT tissue content — AC14 stands). Debounced + deduped by count so optimistic
+  // triage doesn't spam writes; degrades quietly pre-migration / signed out.
+  const pushedUnreadRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (!isDesktop || !runtime || !workspaceId || accounts.length === 0) return;
+    const unreadByAccount: Record<string, number> = {};
+    for (const t of threads) {
+      unreadByAccount[t.accountId] = (unreadByAccount[t.accountId] ?? 0) + t.unreadCount;
+    }
+    const handle = setTimeout(() => {
+      for (const account of accounts) {
+        const unread = unreadByAccount[account.id] ?? 0;
+        if (pushedUnreadRef.current[account.id] === unread) continue; // unchanged
+        pushedUnreadRef.current[account.id] = unread;
+        void runtime.email
+          .upsertAccountRef({
+            workspaceId,
+            provider: account.provider,
+            address: account.email,
+            status: account.status,
+            unreadCount: unread,
+          })
+          .catch(() => {
+            // Deploy gap / signed out — let the next change retry (drop the cache).
+            delete pushedUnreadRef.current[account.id];
+          });
+      }
+    }, 1500);
+    return () => clearTimeout(handle);
+  }, [isDesktop, runtime, workspaceId, accounts, threads]);
+
   const syncNow = useCallback(async () => {
     if (!runtime || !isDesktop) return;
     setSyncing(true);
