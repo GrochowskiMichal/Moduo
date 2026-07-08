@@ -102,6 +102,21 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in t
 
 > **Email parallel lanes:** EM-3 ∥ (EM-1 → EM-2). After EM-4: EM-5 / EM-7 / EM-9 / EM-10 are dep-independent (EM-7/9/10 file-disjoint enough to parallelize; EM-3 owns the module's only migration). EM-6 needs EM-3+EM-5; EM-8 needs EM-3+EM-4; EM-11 last.
 
+## Wave 6 — Dashboard rebuild ("Home") · [`specs/dashboard-rebuild.md`](./dashboard-rebuild.md)
+
+> DoR-ready 2026-07-08 (designer interview: 5 rounds, 19 ratified decisions). Ground-up rebuild: the old free-form canvas + Mike's personal widgets are **deleted**; the replacement is an iPadOS-style bounded **8×4 non-scrolling grid** (cells stretch with the window, composition never reflows), S/M/L/XL size presets, push & auto-compact physics (pure engine, vitest-first), calm edit mode, multi-page dots, Supabase-synced layouts (`dashboard_layouts` + `habits`, preference-class — no intent ops), 15-widget catalog porting every module-contract widget (recently-linked · needs-attention · reconnect · calendar-today · email-inbox) + new Quick capture / Habits / Pinned-item. Nav becomes **Home** (route stays `/`).
+
+- [ ] **DB-1 — Grid engine (pure)** · dashboard block 1 · deps: —
+- [ ] **DB-2 — Shell swap + static render (deletes the old module)** · dashboard block 2 · deps: DB-1
+- [ ] **DB-3 — Edit mode + drag** · dashboard block 3 · deps: DB-2
+- [ ] **DB-4 — Persistence + pages (migration)** · dashboard block 4 · deps: DB-3
+- [ ] **DB-5 — Registry + module widgets** · dashboard block 5 · deps: DB-2
+- [ ] **DB-6 — Utility + new widgets** · dashboard block 6 · deps: DB-5
+- [ ] **DB-7 — Habits (migration + widget)** · dashboard block 7 · deps: DB-5
+- [ ] **DB-8 — Gallery + config + polish (DoD)** · dashboard block 8 · deps: DB-3, DB-4, DB-5, DB-6, DB-7
+
+> **Dashboard parallel lanes:** DB-5 ∥ (DB-3 → DB-4) after DB-2; DB-6 ∥ DB-7 after DB-5. Contention: `runtime.types`/`runtime.web.ts`/`runtime.tauri.ts` (DB-4 vs DB-7 — sequence those edits) + `supabase/migrations/` timestamps.
+
 ## Housekeeping & pre-alpha (between waves — designer-requested 2026-07-03)
 
 > Small, wave-independent blocks that keep the codebase honest on the way to the alpha. CLEAN-1 can run any time; MCP-1 is deliberately **pre-alpha** (the per-module manifests keep shipping with each wave's DoD at near-zero cost — the dedicated pass is the hardening round, not the build).
@@ -145,6 +160,6 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 
 ---
 
-**Alpha scope — not yet specced** (await `/plan`; add their blocks here when the spec passes the Definition-of-Ready gate): **the Dashboard rebuild** and **the mindmap rethink** (both designer-flagged 2026-07-03, pulled INTO alpha scope 2026-07-04 — to be `/plan`ned **after** the Email ledger per the 2026-07-04 pm sequence call). Then **MCP-1** (above) as the pre-alpha hardening pass.
+**Alpha scope — not yet specced** (await `/plan`; add their blocks here when the spec passes the Definition-of-Ready gate): **the mindmap rethink** (designer-flagged 2026-07-03, pulled INTO alpha scope 2026-07-04). ~~The Dashboard rebuild~~ — **specced 2026-07-08** → Wave 6 above (DB-1…DB-8). Then **MCP-1** (above) as the pre-alpha hardening pass.
 
 **Post-alpha / out of v1** (designer calls 2026-07-04 — kept for later, *not* deleted): **Finance** (Midday-lite, ROADMAP Wave 4). **Email was pulled BACK IN the same day** (pm designer call — EM-1…EM-11 above, next to build); its post-v1 remainder: Outlook/Workspace-Google providers, send-as aliases, scheduled send, full web client (the relay decision). Rationale in [docs/ROADMAP.md](../docs/ROADMAP.md) + [docs/decisions.md](../docs/decisions.md) (2026-07-04 entries). The Cmd-K Search/Capture modes and the Universal Inbox screen are deferred spine sub-features (see `specs/connective-tissue.md` → Out of scope).
