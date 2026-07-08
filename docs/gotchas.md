@@ -49,6 +49,7 @@ Things that have bitten us, so they don't bite again. **Read before debugging; a
 ## Claude Code / skills
 
 - **Global skills are shared with Junction.** `~/.agents/skills/*` and `~/.claude/skills/impeccable/` are loaded by *every* project. Do **not** edit them for Moduo work — Moduo-specific skills/commands live **repo-local** in `.claude/skills/` and `.claude/commands/`. → `.claude/skills/`
+- **A reserved built-in slash command silently shadows a same-named project skill — the built-in wins and the skill is unreachable.** Our workflow skills were named `plan`/`execute`/`wrap`; `/plan` is a reserved built-in (enter plan mode), so typing `/plan` hit the gated built-in ("isn't available in this environment") and NEVER ran the project skill — invocable only via the Skill tool, not the slash command. **Renamed 2026-07-08 to the stage-numbered `/s1` (plan) · `/s2` (execute) · `/s3` (wrap)** (bare numbers = terse + collision-proof; the command name comes from the **directory** name, `name:` frontmatter is display-only). When adding a project skill, avoid the reserved list (`/plan`, `/review`, `/simplify`, `/verify`, `/loop`, `/run`, `/init`, `/compact`, `/ultraplan`, `/ultrareview`, … — all single words); a hyphenated or numbered name is safe. No restart/cache-clear needed — Claude Code watches skill dirs live (a fresh session or `/reload-skills` picks up the rename). → `.claude/skills/s1|s2|s3/`
 
 ## Storybook / live-verify
 

@@ -2,8 +2,8 @@
 
 > **Status of record for "what's next."** One flat, dependency-respecting sequence of every execution block across all ready specs, with a checkbox each. This is the single entry point a fresh session reads to know what to build next — the per-block detail lives in each spec's *Execution blocks* table.
 >
-> **How `/execute` uses this:** if you name a block, it builds that one. If you don't (e.g. `/execute next`), it takes the **first unchecked block below whose dependencies are all ticked**, states which it picked and why, then builds it. On success it ticks the box here.
-> **How `/wrap` uses this:** at session end it reconciles this file (ticks any block completed that session) and syncs each spec's `Status:` line.
+> **How `/s2` uses this:** if you name a block, it builds that one. If you don't (e.g. `/s2 next`), it takes the **first unchecked block below whose dependencies are all ticked**, states which it picked and why, then builds it. On success it ticks the box here.
+> **How `/s3` uses this:** at session end it reconciles this file (ticks any block completed that session) and syncs each spec's `Status:` line.
 > **Invariant:** every block's dependencies appear **above** it, so strict top-to-bottom is always a valid order. Items at the same depth with disjoint deps may be built in parallel/any order.
 
 Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in the trailing note).
@@ -128,7 +128,7 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in t
 
 ## Running sessions & parallelism
 
-**Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `main`/`develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/execute next` (auto-picks the first ready block above) or name one (`/execute CT-3`).
+**Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `main`/`develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).
 
 **A block is "ready" only when all its deps are *merged into the base the session branches from*.** So parallelism is **fan-out after each merge barrier**, not "start all 12 at once": land a block → merge it into `maciej` → start the next round's sessions off the updated `maciej`. A session whose base is missing its deps is building on sand (the stale-base trap — gotchas.md).
 
@@ -160,6 +160,6 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 
 ---
 
-**Alpha scope — not yet specced** (await `/plan`; add their blocks here when the spec passes the Definition-of-Ready gate): **the mindmap rethink** (designer-flagged 2026-07-03, pulled INTO alpha scope 2026-07-04). ~~The Dashboard rebuild~~ — **specced 2026-07-08** → Wave 6 above (DB-1…DB-8). Then **MCP-1** (above) as the pre-alpha hardening pass.
+**Alpha scope — not yet specced** (await `/s1`; add their blocks here when the spec passes the Definition-of-Ready gate): **the mindmap rethink** (designer-flagged 2026-07-03, pulled INTO alpha scope 2026-07-04). ~~The Dashboard rebuild~~ — **specced 2026-07-08** → Wave 6 above (DB-1…DB-8). Then **MCP-1** (above) as the pre-alpha hardening pass.
 
 **Post-alpha / out of v1** (designer calls 2026-07-04 — kept for later, *not* deleted): **Finance** (Midday-lite, ROADMAP Wave 4). **Email was pulled BACK IN the same day** (pm designer call — EM-1…EM-11 above, next to build); its post-v1 remainder: Outlook/Workspace-Google providers, send-as aliases, scheduled send, full web client (the relay decision). Rationale in [docs/ROADMAP.md](../docs/ROADMAP.md) + [docs/decisions.md](../docs/decisions.md) (2026-07-04 entries). The Cmd-K Search/Capture modes and the Universal Inbox screen are deferred spine sub-features (see `specs/connective-tissue.md` → Out of scope).

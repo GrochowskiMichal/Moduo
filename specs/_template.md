@@ -1,6 +1,6 @@
 <!--
   SPEC TEMPLATE — copy to specs/<feature>.md and fill every section.
-  Produced by /plan; consumed by /execute. The user is a product designer, not an
+  Produced by /s1; consumed by /s2. The user is a product designer, not an
   engineer: this captures PRODUCT intent in plain language, and the agent fills the
   technical layer (Assumptions, Tests, Execution blocks) by research, not by asking.
 
@@ -73,13 +73,13 @@
 
 ## Out of scope
 
-<!-- Explicit non-goals, so /execute doesn't gold-plate. Include the depth-ceiling line for the module if relevant. -->
+<!-- Explicit non-goals, so /s2 doesn't gold-plate. Include the depth-ceiling line for the module if relevant. -->
 
 ---
 
 ## Definition-of-Ready gate
 
-> **/execute must not start a block until this is all true.** This replaces the user's mental "is the spec complete?" checklist. If any item fails, go back to grilling/research — do not start building.
+> **/s2 must not start a block until this is all true.** This replaces the user's mental "is the spec complete?" checklist. If any item fails, go back to grilling/research — do not start building.
 
 - [ ] **Scope, Product behavior, Edge cases, Acceptance criteria** are all filled and unambiguous.
 - [ ] **Every acceptance criterion has at least one test** in *Tests that prove them*, with its plain-English note.
