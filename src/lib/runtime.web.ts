@@ -39,6 +39,7 @@ import type {
   AuthListener,
   EmailAccountRef,
   EmailThreadRef,
+  HabitRow,
   IntegrationStatusItem,
   LocalAuthState,
   ModuoRuntime,
@@ -133,6 +134,21 @@ const LS_PREFIX = "moduo:ls:";
 /** The single dashboard's `layout_key` in the (legacy, reused) dashboard_layouts
  * table — one Home layout per user+workspace (DB-4). */
 const DASHBOARD_LAYOUT_KEY = "home";
+
+/** Map a raw `habits` row to the HabitRow model (DB-7). The client is untyped,
+ * so column renames are silent — keep this in lockstep with the migration. */
+function mapHabitRow(r: any): HabitRow {
+  return {
+    id: r.id as string,
+    workspaceId: (r.workspace_id as string) ?? "",
+    name: (r.name as string) ?? "",
+    emoji: (r.emoji as string) ?? "",
+    position: (r.position as string) ?? "",
+    checks: Array.isArray(r.checks) ? (r.checks as string[]) : [],
+    createdAt: (r.created_at as string) ?? "",
+    updatedAt: (r.updated_at as string) ?? "",
+  };
+}
 
 // ── Capabilities ──────────────────────────────────────────────────────────────
 
@@ -996,6 +1012,61 @@ export const webRuntime: ModuoRuntime = {
         },
         { onConflict: "user_id,workspace_id,layout_key" },
       );
+      if (error) throw new Error(error.message);
+    },
+  },
+
+  habits: {
+    async list(workspaceId) {
+      const {
+        data: { user },
+      } = await supabaseClient.auth.getUser();
+      if (!user) return [];
+      const { data, error } = await supabaseClient
+        .from("habits")
+        .select("id, workspace_id, name, emoji, position, checks, created_at, updated_at")
+        .eq("user_id", user.id)
+        .eq("workspace_id", workspaceId)
+        .order("position", { ascending: true });
+      // The habits table is deploy-gated — a missing relation degrades to [] (a
+      // widget must never wall), like notesV2.recent's 42703 guard.
+      if (error) {
+        if (error.code === "42P01" || error.code === "PGRST205") return [];
+        throw new Error(error.message);
+      }
+      return (Array.isArray(data) ? data : []).map(mapHabitRow);
+    },
+    async upsert({ id, workspaceId, name, emoji, position }) {
+      const {
+        data: { user },
+      } = await supabaseClient.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+      const row = {
+        ...(id ? { id } : {}),
+        user_id: user.id,
+        workspace_id: workspaceId,
+        name,
+        emoji,
+        position,
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = await supabaseClient
+        .from("habits")
+        .upsert(row)
+        .select("id, workspace_id, name, emoji, position, checks, created_at, updated_at")
+        .single();
+      if (error) throw new Error(error.message);
+      return mapHabitRow(data);
+    },
+    async setChecks({ id, checks }) {
+      const { error } = await supabaseClient
+        .from("habits")
+        .update({ checks, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    async remove(id) {
+      const { error } = await supabaseClient.from("habits").delete().eq("id", id);
       if (error) throw new Error(error.message);
     },
   },

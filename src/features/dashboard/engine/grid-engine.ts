@@ -319,6 +319,28 @@ export function setPageWidgets(
   };
 }
 
+/**
+ * Merge a config patch into a widget (found by id across all pages). Position-
+ * preserving — a config change never moves/compacts widgets (DB-6). Immutable:
+ * fresh page/widget/config objects. Used by self-configuring widgets (Weather
+ * city, Countdown target, Pinned entity) and DB-8's config popover.
+ */
+export function updateWidgetConfig(
+  layout: DashboardLayout,
+  id: string,
+  patch: Record<string, unknown>,
+): DashboardLayout {
+  return {
+    version: 1,
+    pages: layout.pages.map((page) => ({
+      ...page,
+      widgets: page.widgets.map((w) =>
+        w.id === id ? { ...w, config: { ...w.config, ...patch } } : w,
+      ),
+    })),
+  };
+}
+
 // ── Sanitisation (AC11) ─────────────────────────────────────────────────────
 //
 // Persisted JSONB is untrusted (hand-edited rows, older/newer clients, partial

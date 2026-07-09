@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import {
   ContextMenu,
@@ -6,8 +7,14 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { useWorkspace } from "@/features/workspaces/workspace-context";
+import { getRuntime } from "@/lib/runtime";
+import type { RuntimeCapabilities } from "@/lib/runtime.types";
 
+import { DashboardDataProvider } from "../context/dashboard-data-context";
+import { WidgetActionsProvider } from "../context/widget-actions-context";
 import {
+  DASHBOARD_OPEN_GALLERY_EVENT,
   DASHBOARD_PAGE_ACTION_EVENT,
   DASHBOARD_TOGGLE_EDIT_EVENT,
   type DashboardPageAction,
@@ -15,12 +22,24 @@ import {
   dispatchDashboardPager,
 } from "../edit-mode-events";
 import { removeWidget, resizeWidget } from "../engine/grid-engine";
-import type { WidgetSize } from "../engine/types";
+import type { WidgetSize, WidgetType } from "../engine/types";
+import { galleryTypes } from "../registry/catalog";
 import { useDashboardLayout } from "../hooks/use-dashboard-layout";
 import { useEditMode } from "../hooks/use-edit-mode";
 import { useGridDrag } from "../hooks/use-grid-drag";
 import { DashboardPager } from "./dashboard-pager";
+import { GalleryDialog } from "./gallery-dialog";
 import { GridSkeleton } from "./grid-skeleton";
+
+const WEB_FALLBACK_CAPS: RuntimeCapabilities = {
+  isDesktop: false,
+  isWeb: true,
+  hasEmail: false,
+  hasTimeTracking: false,
+  hasCalendarOAuth: false,
+  hasLocalMnemonic: false,
+  hasOfflineMode: false,
+};
 
 /**
  * The Home feature root. Full-bleed — it owns the whole content area (no
@@ -34,8 +53,28 @@ import { GridSkeleton } from "./grid-skeleton";
  */
 export function DashboardPage() {
   const dash = useDashboardLayout();
+  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
   const editMode = useEditMode();
   const { editing, exit, enter, toggle } = editMode;
+  const [galleryOpen, setGalleryOpen] = useState(false);
+
+  // The types offered in the Add gallery — permission + platform filtered (AC8/AC9).
+  const galleryAvailable = useMemo<WidgetType[]>(() => {
+    const caps = getRuntime()?.capabilities ?? WEB_FALLBACK_CAPS;
+    return galleryTypes(
+      { tasks: modulePermissions.tasks, notes: modulePermissions.notes },
+      caps,
+    );
+  }, [modulePermissions.tasks, modulePermissions.notes]);
+
+  const onAddWidget = (type: WidgetType, size: WidgetSize): boolean => {
+    const added = dash.tryAddWidget(type, size);
+    return added;
+  };
+  const onAddWidgetToNewPage = (type: WidgetType, size: WidgetSize) => {
+    dash.addWidgetToNewPage(type, size);
+    toast("Added to a new page");
+  };
 
   const activePage = dash.layout.pages[dash.activeIndex] ?? dash.layout.pages[0];
   const { goToIndex, activeIndex, addPage, removePage } = dash;
@@ -77,6 +116,13 @@ export function DashboardPage() {
     return () => window.removeEventListener(DASHBOARD_TOGGLE_EDIT_EVENT, onToggle);
   }, [toggle]);
 
+  // The edit-mode "Add" control (app-chrome) opens the gallery (AC9).
+  useEffect(() => {
+    const onOpen = () => setGalleryOpen(true);
+    window.addEventListener(DASHBOARD_OPEN_GALLERY_EVENT, onOpen);
+    return () => window.removeEventListener(DASHBOARD_OPEN_GALLERY_EVENT, onOpen);
+  }, []);
+
   // The page dots live in the app-chrome bottom-bar LEFT slot. Broadcast the
   // pager shape so they render, and handle the actions they dispatch back.
   const activePageId = activePage.id;
@@ -110,36 +156,48 @@ export function DashboardPage() {
   }, [goToIndex, activeIndex]);
 
   return (
-    <div className="relative flex h-full min-h-0 w-full flex-col bg-background">
-      {/* Right-click → Edit/Done. Desktop-only surface: on a touchscreen Radix's
-          own long-press-to-open (~700ms) would race the drag hook's long-press-
-          to-edit (450ms); mobile is out of scope, so this stays a known latent. */}
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div className="flex min-h-0 flex-1 flex-col p-4">
-            {dash.loading ? (
-              <GridSkeleton />
-            ) : (
-              <DashboardPager
-                layout={dash.layout}
-                activeIndex={dash.activeIndex}
-                editing={editing}
-                drag={drag}
-                gridRef={gridRef}
-                onWidgetPointerDown={startWidgetDrag}
-                onRemove={onRemove}
-                onResize={onResize}
-                onPage={(dir) => dash.goToIndex(dash.activeIndex + dir)}
-              />
-            )}
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem onSelect={editing ? exit : enter}>
-            {editing ? "Done editing" : "Edit dashboard"}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-    </div>
+    <DashboardDataProvider layout={dash.layout} workspaceId={selectedWorkspaceId}>
+      <WidgetActionsProvider actions={{ updateConfig: dash.updateWidgetConfig }}>
+        <div className="relative flex h-full min-h-0 w-full flex-col bg-background">
+          {/* Right-click → Edit/Done. Desktop-only surface: on a touchscreen Radix's
+              own long-press-to-open (~700ms) would race the drag hook's long-press-
+              to-edit (450ms); mobile is out of scope, so this stays a known latent. */}
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div className="flex min-h-0 flex-1 flex-col p-4">
+                {dash.loading ? (
+                  <GridSkeleton />
+                ) : (
+                  <DashboardPager
+                    layout={dash.layout}
+                    activeIndex={dash.activeIndex}
+                    editing={editing}
+                    drag={drag}
+                    gridRef={gridRef}
+                    onWidgetPointerDown={startWidgetDrag}
+                    onRemove={onRemove}
+                    onResize={onResize}
+                    onPage={(dir) => dash.goToIndex(dash.activeIndex + dir)}
+                  />
+                )}
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem onSelect={editing ? exit : enter}>
+                {editing ? "Done editing" : "Edit dashboard"}
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+
+          <GalleryDialog
+            open={galleryOpen}
+            onOpenChange={setGalleryOpen}
+            available={galleryAvailable}
+            onAdd={onAddWidget}
+            onAddToNewPage={onAddWidgetToNewPage}
+          />
+        </div>
+      </WidgetActionsProvider>
+    </DashboardDataProvider>
   );
 }

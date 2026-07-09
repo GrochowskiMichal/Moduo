@@ -508,6 +508,57 @@ export type Database = {
           },
         ]
       }
+      habits: {
+        Row: {
+          checks: Json
+          created_at: string
+          emoji: string
+          id: string
+          name: string
+          position: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          checks?: Json
+          created_at?: string
+          emoji?: string
+          id?: string
+          name: string
+          position?: string
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          checks?: Json
+          created_at?: string
+          emoji?: string
+          id?: string
+          name?: string
+          position?: string
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "habits_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entities: {
         Row: {
           created_at: string

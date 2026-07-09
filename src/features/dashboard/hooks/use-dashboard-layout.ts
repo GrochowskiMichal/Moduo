@@ -7,11 +7,14 @@ import { createLayoutRepo } from "../data/layout-repo";
 import { createDefaultLayout } from "../engine/default-layout";
 import {
   addPage as addPageOp,
+  addWidget as addWidgetOp,
   removePage as removePageOp,
   sanitizeLayout,
   setPageWidgets,
+  updateWidgetConfig as updateWidgetConfigOp,
 } from "../engine/grid-engine";
-import type { DashboardLayout, WidgetInstance } from "../engine/types";
+import type { DashboardLayout, WidgetInstance, WidgetSize, WidgetType } from "../engine/types";
+import { newWidgetInstance } from "../registry/instance";
 
 /** Per-device active-page memory (decision 12 — never synced, avoids cross-device flips). */
 const ACTIVE_PAGE_PREFIX = "moduo:dashboard:active-page:";
@@ -52,6 +55,12 @@ export interface DashboardLayoutApi {
   setActivePage: (pageId: string) => void;
   goToIndex: (index: number) => void;
   commitWidgets: (pageId: string, widgets: WidgetInstance[]) => void;
+  /** Merge a config patch into a widget (by id), position-preserving (DB-6). */
+  updateWidgetConfig: (widgetId: string, patch: Record<string, unknown>) => void;
+  /** Add a widget to the active page; false when it can't fit (AC9 → offer a new page). */
+  tryAddWidget: (type: WidgetType, size: WidgetSize) => boolean;
+  /** Add a widget to a fresh page and jump to it (AC9's "add to a new page"). */
+  addWidgetToNewPage: (type: WidgetType, size: WidgetSize) => void;
   addPage: () => void;
   removePage: (pageId: string) => void;
 }
@@ -151,6 +160,40 @@ export function useDashboardLayout(): DashboardLayoutApi {
     [persist],
   );
 
+  const updateWidgetConfig = useCallback(
+    (widgetId: string, patch: Record<string, unknown>) => {
+      persist(updateWidgetConfigOp(layoutRef.current, widgetId, patch));
+    },
+    [persist],
+  );
+
+  const tryAddWidget = useCallback(
+    (type: WidgetType, size: WidgetSize): boolean => {
+      const layout = layoutRef.current;
+      const active =
+        layout.pages.find((p) => p.id === activePageIdRef.current) ?? layout.pages[0];
+      if (!active) return false;
+      const placed = addWidgetOp(active.widgets, newWidgetInstance(type, size));
+      if (!placed) return false; // page full — the caller offers a new page (AC9)
+      persist(setPageWidgets(layout, active.id, placed));
+      return true;
+    },
+    [persist],
+  );
+
+  const addWidgetToNewPage = useCallback(
+    (type: WidgetType, size: WidgetSize) => {
+      const id = newPageId();
+      const withPage = addPageOp(layoutRef.current, id);
+      const page = withPage.pages.find((p) => p.id === id);
+      const instance = newWidgetInstance(type, size);
+      const placed = page ? (addWidgetOp(page.widgets, instance) ?? [instance]) : [instance];
+      persist(setPageWidgets(withPage, id, placed));
+      setActivePage(id);
+    },
+    [persist, setActivePage],
+  );
+
   const addPage = useCallback(() => {
     const id = newPageId();
     persist(addPageOp(layoutRef.current, id));
@@ -189,6 +232,9 @@ export function useDashboardLayout(): DashboardLayoutApi {
     setActivePage,
     goToIndex,
     commitWidgets,
+    updateWidgetConfig,
+    tryAddWidget,
+    addWidgetToNewPage,
     addPage,
     removePage,
   };

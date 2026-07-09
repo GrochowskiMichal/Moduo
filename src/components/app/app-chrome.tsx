@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ChevronsLeft, ChevronsRight, Pencil } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   DASHBOARD_EDIT_CHANGED_EVENT,
   DASHBOARD_PAGER_EVENT,
   type DashboardPagerInfo,
+  dispatchDashboardOpenGallery,
   dispatchDashboardPageAction,
   dispatchDashboardToggleEdit,
 } from "../../features/dashboard/edit-mode-events";
@@ -218,7 +219,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onEntityOpen = (event: Event) => {
-      const detail = (event as CustomEvent<{ type?: string; id?: string }>).detail;
+      const detail = (event as CustomEvent<{ type?: string; id?: string; to?: string }>).detail;
+      // A dashboard widget header opens its whole module with an explicit route
+      // (no entity id) — navigate directly, bypassing the id-based route map.
+      if (detail?.to) {
+        void navigate({ to: detail.to as any });
+        return;
+      }
       // An id is required for entity selection, but email routes to /email with
       // or without one (an id-less "open my inbox" from the widget) — let
       // entityOpenTarget decide (it returns null for id-less non-email → toast).
@@ -523,9 +530,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             // Home has no side panels — this slot (where the right panel toggle
             // sits elsewhere) holds the dashboard's Edit/Done control instead.
             dashboardEditing ? (
-              <Button variant="secondary" size="sm" onClick={() => dispatchDashboardToggleEdit()}>
-                Done
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <IconButton
+                  icon={Plus}
+                  label="Add widget"
+                  size="md"
+                  onClick={() => dispatchDashboardOpenGallery()}
+                />
+                <Button variant="secondary" size="sm" onClick={() => dispatchDashboardToggleEdit()}>
+                  Done
+                </Button>
+              </div>
             ) : (
               <IconButton
                 icon={Pencil}

@@ -1,6 +1,6 @@
 # Spec: Dashboard rebuild — "Home"
 
-> Status: **In progress** — DB-1 (engine) + DB-2 (Home shell) landed 2026-07-08; DB-3 (edit mode + drag) + DB-4 (persistence + pages, no migration — reused the legacy `dashboard_layouts` table) landed 2026-07-09; DB-5 (registry + widgets) next · Owner: maciej · Related briefs: `.design/foundation/DESIGN_BRIEF.md`, `.design/foundation/INFORMATION_ARCHITECTURE.md` (no `.design/dashboard/` brief exists — §Product behavior below is the ratified interaction spec, from the 2026-07-08 planning interview)
+> Status: **Complete** — DB-1…DB-8 all landed (DB-1/DB-2 2026-07-08; DB-3…DB-8 2026-07-09). The `habits` table (DB-7) is applied to prod. Home is the iPadOS-style 8×4 grid with 16 widget types, edit-mode drag, multi-page persistence, the Add-widget gallery, and per-widget config popovers. Test checklist: [docs/testing/dashboard-db5-8.md](../docs/testing/dashboard-db5-8.md). · Owner: maciej · Related briefs: `.design/foundation/DESIGN_BRIEF.md`, `.design/foundation/INFORMATION_ARCHITECTURE.md` (no `.design/dashboard/` brief exists — §Product behavior below is the ratified interaction spec, from the 2026-07-08 planning interview)
 
 ## Scope
 

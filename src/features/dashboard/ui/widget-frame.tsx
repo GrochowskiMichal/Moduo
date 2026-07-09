@@ -5,49 +5,78 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
-import { WIDGET_SIZES, type WidgetInstance, type WidgetSize } from "../engine/types";
-
-/** Prettify a widget type into a human label ("quick-capture" → "Quick capture").
- * DB-5 replaces this with the registry's declared name + the real widget body. */
-function prettyType(type: string): string {
-  const words = type.replace(/-/g, " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
+import { useWidgetActions } from "../context/widget-actions-context";
+import { type WidgetInstance, type WidgetSize } from "../engine/types";
+import { allowedSizesFor, widgetMeta } from "../registry/catalog";
+import { getConfigForm } from "../registry/config-forms";
+import { openModuleRoute } from "../widget-nav";
+import { WidgetBody } from "./widget-body";
+import { WidgetConfigButton } from "./widget-config-button";
 
 export interface WidgetFrameProps {
   widget: WidgetInstance;
   /** Edit mode reveals the remove + resize controls (AC4). */
   editing?: boolean;
-  /** The sizes this widget may take (DB-5 passes the type's declared set; defaults to all four). */
+  /** The sizes this widget may take (defaults to the type's declared set). */
   allowedSizes?: readonly WidgetSize[];
   onRemove?: (id: string) => void;
   onResize?: (id: string, size: WidgetSize) => void;
 }
 
 /**
- * The card chrome that wraps every widget on the grid. DB-2 rendered a titled
- * placeholder; DB-3 adds the edit-mode affordances (remove ✕ + a size popover).
- * DB-5 swaps the placeholder body for the registry component. The controls sit in
- * an absolutely-positioned cluster so revealing them never reflows the card, and
- * they carry `data-no-drag` so pressing one can't start a widget drag.
+ * The card chrome that wraps every widget on the grid. The header shows the
+ * registry label (a deep-link into the module when the type declares one) and
+ * the body is the registry-driven widget (DB-5); DB-3's edit-mode affordances
+ * (remove ✕ + a size popover) sit in an absolutely-positioned cluster so
+ * revealing them never reflows the card, and carry `data-no-drag` so pressing
+ * one can't start a widget drag.
  */
 export function WidgetFrame({
   widget,
   editing = false,
-  allowedSizes = WIDGET_SIZES,
+  allowedSizes,
   onRemove,
   onResize,
 }: WidgetFrameProps) {
   const [sizeOpen, setSizeOpen] = useState(false);
+  const meta = widgetMeta(widget.type);
+  const sizes = allowedSizes ?? allowedSizesFor(widget.type);
+  const { updateConfig } = useWidgetActions();
+  const boundUpdateConfig = (patch: Record<string, unknown>) => updateConfig(widget.id, patch);
+  const hasConfig = Boolean(getConfigForm(widget.type));
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden rounded-lg border border-border bg-card">
-      <div className="px-3 py-2">
-        <span className="font-display text-sm font-medium text-foreground">
-          {prettyType(widget.type)}
-        </span>
+    <div className="group relative flex h-full w-full flex-col overflow-hidden rounded-lg border border-border bg-card">
+      <div className="shrink-0 px-3 py-2">
+        {meta.openRoute && !editing ? (
+          <button
+            type="button"
+            onClick={() => openModuleRoute(meta.openRoute!)}
+            className="max-w-full truncate rounded-sm font-display text-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {meta.label}
+          </button>
+        ) : (
+          <span className="block truncate font-display text-sm font-medium text-foreground">
+            {meta.label}
+          </span>
+        )}
       </div>
-      <div className="flex-1" aria-hidden />
+
+      <div className="min-h-0 flex-1">
+        <WidgetBody widget={widget} />
+      </div>
+
+      {/* Config (AC10): a `⋯` popover — hover-revealed in normal mode. */}
+      {!editing && hasConfig ? (
+        <div
+          data-no-drag
+          className="absolute right-1.5 top-1.5 opacity-0 transition-opacity duration-[var(--motion-fade)] focus-within:opacity-100 group-hover:opacity-100"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <WidgetConfigButton widget={widget} updateConfig={boundUpdateConfig} />
+        </div>
+      ) : null}
 
       {editing ? (
         <div
@@ -56,7 +85,8 @@ export function WidgetFrame({
           // The cluster owns its presses so they resolve as clicks, never a drag.
           onPointerDown={(e) => e.stopPropagation()}
         >
-          {onResize && allowedSizes.length > 1 ? (
+          <WidgetConfigButton widget={widget} updateConfig={boundUpdateConfig} />
+          {onResize && sizes.length > 1 ? (
             <Popover open={sizeOpen} onOpenChange={setSizeOpen}>
               <PopoverTrigger asChild>
                 <IconButton icon={Maximize2} label="Resize widget" />
@@ -70,7 +100,7 @@ export function WidgetFrame({
                   aria-label="Widget size"
                   size="sm"
                   value={widget.size}
-                  items={allowedSizes.map((s) => ({ value: s, label: s }))}
+                  items={sizes.map((s) => ({ value: s, label: s }))}
                   onValueChange={(next) => {
                     onResize(widget.id, next as WidgetSize);
                     setSizeOpen(false);
