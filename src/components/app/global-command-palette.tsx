@@ -7,8 +7,8 @@ import {
   Contact as ContactIcon,
   FileText,
   GitBranch,
+  House,
   Inbox,
-  LayoutGrid,
   Settings as SettingsIcon,
   Upload,
   UserPlus,
@@ -69,10 +69,10 @@ export function GlobalCommandPalette() {
   const newNoteLabel = newNoteShortcut ? formatShortcut(newNoteShortcut) : "";
 
   const navActions: Action[] = [
+    { id: "home", label: "Open Home", icon: House, run: go("/") },
     { id: "notes", label: "Open Notes", icon: FileText, run: go("/notes") },
     { id: "tasks", label: "Open Tasks", icon: CheckSquare, run: go("/tasks") },
     { id: "calendar", label: "Open Calendar", icon: CalendarIcon, run: go("/calendar") },
-    { id: "grid", label: "Open Grid", icon: LayoutGrid, run: go("/") },
     { id: "mindmap", label: "Open Mindmap", icon: GitBranch, run: go("/mindmap") },
     { id: "email", label: "Open Email", icon: Inbox, run: go("/email") },
     { id: "contacts", label: "Open Contacts", icon: ContactIcon, run: go("/contacts") },

@@ -23,7 +23,8 @@ const defaultState: FeaturePanelState = { left: true, right: true };
 
 function cloneDefaultMap(): FeaturePanelsMap {
   return {
-    grid: { ...defaultState },
+    // Home ("grid" key) is full-bleed — no side panels.
+    grid: { left: false, right: false },
     notes: { ...defaultState },
     tasks: { ...defaultState },
     mindmap: { ...defaultState },

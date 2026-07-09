@@ -1,11 +1,11 @@
 ---
-name: plan
-description: Moduo planning session — grill the designer exhaustively on product/UX/edge-cases, research the technical layer yourself (Explore + web, never ask the designer how), fill specs/_template.md, decompose into context-sized execution blocks, and end at the Definition-of-Ready gate. Read-only, writes no code. Use before building any feature; run in Plan Mode. Not for the design-specific phase sequence (that is design-flow) or for building (that is /execute).
+name: s1
+description: Stage 1 — Plan. Moduo planning session — grill the designer exhaustively on product/UX/edge-cases, research the technical layer yourself (Explore + web, never ask the designer how), fill specs/_template.md, decompose into context-sized execution blocks, and end at the Definition-of-Ready gate. Read-only, writes no code. Use before building any feature; run in Plan Mode. Not for the design-specific phase sequence (that is design-flow) or for building (that is /s2).
 ---
 
-# /plan — extract the product, decide the tech, produce a ready spec
+# /s1 — plan: extract the product, decide the tech, produce a ready spec
 
-You are planning a Moduo feature with a **product designer, not an engineer**. Your job: extract everything only they know (product, UX, edge cases, scope, priorities) and decide everything they can't (infra, data model, libraries) by research. End with an approved spec that `/execute` can build block-by-block without ever stopping to ask a new question.
+You are planning a Moduo feature with a **product designer, not an engineer**. Your job: extract everything only they know (product, UX, edge cases, scope, priorities) and decide everything they can't (infra, data model, libraries) by research. End with an approved spec that `/s2` can build block-by-block without ever stopping to ask a new question.
 
 **Write no code. This is read-only research + questioning until the spec is approved.** Run in Plan Mode.
 
@@ -31,4 +31,4 @@ You are planning a Moduo feature with a **product designer, not an engineer**. Y
 
 ## 5. Definition-of-Ready gate
 - Walk the DoR checklist at the bottom of the spec. If anything fails, return to grilling/research. When all boxes pass, state **"Ready to execute."** and list the blocks in order.
-- Then hand off: the designer approves, switches to **auto mode**, and runs `/execute` per block.
+- Then hand off: the designer approves, switches to **auto mode**, and runs `/s2` per block.

@@ -115,6 +115,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const currentFeature = routeToFeatureLayout(pathname);
   const isEmailRoute = pathname.startsWith("/email");
   const isSettingsRoute = pathname.startsWith("/settings");
+  // Home is full-bleed (no FeaturePanelsShell) — the panel toggles have nothing
+  // to act on there, so hide them.
+  const isHomeRoute = pathname === "/";
 
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
@@ -387,11 +390,11 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     profileInitial;
 
   const toggleLeftPanel = () => {
-    if (isSettingsRoute) return;
+    if (isSettingsRoute || isHomeRoute) return;
     setPanelsForFeature(currentFeature, !currentPanels.left, currentPanels.right);
   };
   const toggleRightPanel = () => {
-    if (isSettingsRoute) return;
+    if (isSettingsRoute || isHomeRoute) return;
     setPanelsForFeature(currentFeature, currentPanels.left, !currentPanels.right);
   };
 
@@ -448,22 +451,24 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         style={{ height: "var(--bar-h)" }}
       >
         <div className="flex flex-1 flex-row items-center justify-start">
-          <Tooltip>
-            <TooltipTrigger
-              className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              onClick={toggleLeftPanel}
-              aria-label={currentPanels.left ? "Collapse left panel" : "Expand left panel"}
-            >
-              {currentPanels.left ? <ChevronsLeft size={16} /> : <ChevronsRight size={16} />}
-            </TooltipTrigger>
-            <TooltipContent>
-              {currentPanels.left ? "Collapse left panel" : "Expand left panel"}
-            </TooltipContent>
-          </Tooltip>
+          {!isHomeRoute ? (
+            <Tooltip>
+              <TooltipTrigger
+                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                onClick={toggleLeftPanel}
+                aria-label={currentPanels.left ? "Collapse left panel" : "Expand left panel"}
+              >
+                {currentPanels.left ? <ChevronsLeft size={16} /> : <ChevronsRight size={16} />}
+              </TooltipTrigger>
+              <TooltipContent>
+                {currentPanels.left ? "Collapse left panel" : "Expand left panel"}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
         <GlobalBottomBar />
         <div className="flex flex-1 flex-row items-center justify-end">
-          {!isSettingsRoute ? (
+          {!isSettingsRoute && !isHomeRoute ? (
             <Tooltip>
               <TooltipTrigger
                 className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"

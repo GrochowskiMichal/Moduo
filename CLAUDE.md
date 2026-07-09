@@ -10,13 +10,13 @@ Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind CSS v4. Supabas
 
 The user is a **product designer, not an engineer** — authoritative on product, UX, edge cases, scope, and priorities; not on infrastructure, data models, or testing. Build around that asymmetry: extract product knowledge relentlessly, and research/decide the technical layer yourself.
 
-**Planning (`/plan`, read-only — write no code):**
+**Planning (`/s1`, read-only — write no code):**
 
 - Grill exhaustively on product behavior, user goals, UX, states, edge cases, acceptance criteria, scope, and priorities until nothing is ambiguous — err toward 50–100 questions up front, not 10 mid-build.
 - **Never ask the user implementation, infra, data-model, or library questions.** Research them yourself (Explore subagent + web), decide, and record the decision + its assumption in the spec. Surface a technical choice only when it genuinely changes the product (a cost/speed/UX tradeoff a user would feel) — framed in product terms, with a recommendation.
 - Resolve every technical unknown during planning so execution never has to stop and ask. End with the Definition-of-Ready gate in `specs/_template.md`.
 
-**Execution (`/execute`, auto mode):**
+**Execution (`/s2`, auto mode):**
 
 - **Stay silent between tool calls.** When a block completes, output ONE summary — **Changed** · **Test this** · **Next** — plus, only when applicable: **⚠ Broke** (what failed + your options), **🔎 Found** (context that changes the plan/spec), **❓ Your call** (a decision you can't make alone). Never suppress breakage, a blocker, or a needed decision for brevity. The only acceptable mid-run interruption is a hard blocker you can't resolve by research.
 - A block is done when **`bun run verify` passes** (typecheck + lint + tests) and the validator (`/review`) finds nothing blocking.
@@ -25,7 +25,7 @@ The user is a **product designer, not an engineer** — authoritative on product
 
 ## Active plan
 
-The plan of record is [docs/ROADMAP.md](./docs/ROADMAP.md) (waves 0–5, the scored backlog, and the numbered open questions/risks that gate parts of the plan). At session start, read it plus the north-star docs it links, and build in wave order unless the user directs otherwise — don't start a module before its wave, and check `§Open Questions & Risks` before building anything marked ⚠. The **live, block-level execution ledger** is [specs/BUILD_ORDER.md](./specs/BUILD_ORDER.md) — the ordered list of ready execution blocks with status, dependencies, and parallel-session lanes; `/execute next` builds the next ready block from it. [docs/improvement-plan.md](./docs/improvement-plan.md) is the **completed** Tasks-era execution log — history, not the live plan.
+The plan of record is [docs/ROADMAP.md](./docs/ROADMAP.md) (waves 0–5, the scored backlog, and the numbered open questions/risks that gate parts of the plan). At session start, read it plus the north-star docs it links, and build in wave order unless the user directs otherwise — don't start a module before its wave, and check `§Open Questions & Risks` before building anything marked ⚠. The **live, block-level execution ledger** is [specs/BUILD_ORDER.md](./specs/BUILD_ORDER.md) — the ordered list of ready execution blocks with status, dependencies, and parallel-session lanes; `/s2 next` builds the next ready block from it. [docs/improvement-plan.md](./docs/improvement-plan.md) is the **completed** Tasks-era execution log — history, not the live plan.
 
 ## Product north star (READ BEFORE DESIGNING ANY MODULE)
 
