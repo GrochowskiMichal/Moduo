@@ -40,6 +40,7 @@ import type {
   NotesImportRow,
   NotesV2Bundle,
 } from "../features/notes/model";
+import type { DashboardLayout } from "../features/dashboard/engine/types";
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
 import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { NotificationItem } from "../features/spine/notifications";
@@ -144,6 +145,12 @@ export type UserPreferences = {
   calendarUpdatedAt: string | null;
   email: Record<string, unknown> | null;
   emailUpdatedAt: string | null;
+};
+
+/** A stored dashboard layout + its client-set LWW timestamp (DB-4). */
+export type StoredDashboardLayout = {
+  layout: DashboardLayout;
+  updatedAt: string;
 };
 
 export type ModuoRuntime = {
@@ -383,6 +390,19 @@ export type ModuoRuntime = {
   preferences: {
     get(): Promise<UserPreferences | null>;
     set(patch: Partial<UserPreferences>): Promise<UserPreferences | null>;
+  };
+
+  /**
+   * The Home dashboard layout for one user+workspace (DB-4). Preference-class:
+   * a direct RLS upsert (no intent op, no activity, no registry) into the
+   * `dashboard_layouts` table keyed by (user_id, workspace_id, 'home'). The whole
+   * `{version, pages}` composition is one atomic JSONB blob; `updatedAt` is
+   * client-set so the local cache and cloud reconcile last-write-wins. Returns
+   * null when signed out or when no row exists yet (fresh user → curated default).
+   */
+  dashboard: {
+    get(workspaceId: string): Promise<StoredDashboardLayout | null>;
+    save(input: { workspaceId: string; layout: DashboardLayout; updatedAt: string }): Promise<void>;
   };
 
   window: {
