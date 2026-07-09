@@ -13,6 +13,8 @@ export const DASHBOARD_PAGER_EVENT = "moduo:dashboard:pager";
 export const DASHBOARD_TOGGLE_EDIT_EVENT = "moduo:dashboard:toggle-edit";
 /** Chrome → Home: a page action from the bottom-bar dots (switch / add / remove). */
 export const DASHBOARD_PAGE_ACTION_EVENT = "moduo:dashboard:page-action";
+/** Chrome → Home: open the Add-widget gallery (the edit-mode "Add" control). */
+export const DASHBOARD_OPEN_GALLERY_EVENT = "moduo:dashboard:open-gallery";
 
 export interface DashboardPagerInfo {
   count: number;
@@ -42,4 +44,9 @@ export function dispatchDashboardToggleEdit(): void {
 export function dispatchDashboardPageAction(action: DashboardPageAction): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(DASHBOARD_PAGE_ACTION_EVENT, { detail: action }));
+}
+
+export function dispatchDashboardOpenGallery(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(DASHBOARD_OPEN_GALLERY_EVENT));
 }

@@ -153,6 +153,19 @@ export type StoredDashboardLayout = {
   updatedAt: string;
 };
 
+/** One habit row (DB-7). Preference-class, user-scoped; `checks` are local-date
+ * strings ('YYYY-MM-DD'). Streaks are computed client-side. */
+export type HabitRow = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  emoji: string;
+  position: string;
+  checks: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ModuoRuntime = {
   capabilities: RuntimeCapabilities;
 
@@ -403,6 +416,24 @@ export type ModuoRuntime = {
   dashboard: {
     get(workspaceId: string): Promise<StoredDashboardLayout | null>;
     save(input: { workspaceId: string; layout: DashboardLayout; updatedAt: string }): Promise<void>;
+  };
+
+  /**
+   * Habits (DB-7) — preference-class, user-scoped CRUD (no intent ops). `list`
+   * degrades to [] pre-migration (the table is deploy-gated); writes throw so the
+   * widget's optimistic update can roll back.
+   */
+  habits: {
+    list(workspaceId: string): Promise<HabitRow[]>;
+    upsert(input: {
+      id?: string;
+      workspaceId: string;
+      name: string;
+      emoji: string;
+      position: string;
+    }): Promise<HabitRow>;
+    setChecks(input: { id: string; checks: string[] }): Promise<void>;
+    remove(id: string): Promise<void>;
   };
 
   window: {

@@ -245,4 +245,8 @@ export const tauriRuntime: ModuoRuntime = {
   // Dashboard layout — Supabase-direct (preference-class), identical on both
   // platforms, so the desktop delegates wholesale.
   dashboard: webRuntime.dashboard,
+
+  // Habits — Supabase-direct (preference-class), identical on both platforms,
+  // so the desktop delegates wholesale (DB-7).
+  habits: webRuntime.habits,
 };
