@@ -1,6 +1,6 @@
 # Spec: Dashboard rebuild — "Home"
 
-> Status: **In progress** — DB-1 (engine) + DB-2 (Home shell, old module deleted) landed 2026-07-08; DB-3 (edit mode + drag) next · Owner: maciej · Related briefs: `.design/foundation/DESIGN_BRIEF.md`, `.design/foundation/INFORMATION_ARCHITECTURE.md` (no `.design/dashboard/` brief exists — §Product behavior below is the ratified interaction spec, from the 2026-07-08 planning interview)
+> Status: **In progress** — DB-1 (engine) + DB-2 (Home shell) landed 2026-07-08; DB-3 (edit mode + drag) + DB-4 (persistence + pages, no migration — reused the legacy `dashboard_layouts` table) landed 2026-07-09; DB-5 (registry + widgets) next · Owner: maciej · Related briefs: `.design/foundation/DESIGN_BRIEF.md`, `.design/foundation/INFORMATION_ARCHITECTURE.md` (no `.design/dashboard/` brief exists — §Product behavior below is the ratified interaction spec, from the 2026-07-08 planning interview)
 
 ## Scope
 

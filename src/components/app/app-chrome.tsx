@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  DASHBOARD_EDIT_CHANGED_EVENT,
+  DASHBOARD_PAGER_EVENT,
+  type DashboardPagerInfo,
+  dispatchDashboardPageAction,
+  dispatchDashboardToggleEdit,
+} from "../../features/dashboard/edit-mode-events";
+import { PageDots } from "../../features/dashboard/ui/page-dots";
 import { ENTITY_OPEN_EVENT, entityOpenTarget } from "../../lib/entity-open";
 
 import { useAuth } from "../../providers/auth-provider";
@@ -27,7 +35,9 @@ import {
   type FeatureLayoutKey,
   type LayoutPanelsApplyDetail,
 } from "../../features/layout/panel-events";
+import { Button } from "../ui/button";
 import { Icon } from "../ui/icon";
+import { IconButton } from "../ui/icon-button";
 import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { WorkspaceSwitcher } from "../workspace-switcher";
@@ -136,6 +146,37 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     window.addEventListener("moduo:email:unread", onEmailUnread);
     return () => window.removeEventListener("moduo:email:unread", onEmailUnread);
   }, []);
+
+  // Home edit mode: the Home page broadcasts its edit state; the bottom-bar
+  // control (the panel-toggle slot, empty on Home) mirrors it + toggles it.
+  const [dashboardEditing, setDashboardEditing] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onEditChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ editing?: boolean }>).detail;
+      setDashboardEditing(Boolean(detail?.editing));
+    };
+    window.addEventListener(DASHBOARD_EDIT_CHANGED_EVENT, onEditChanged);
+    return () => window.removeEventListener(DASHBOARD_EDIT_CHANGED_EVENT, onEditChanged);
+  }, []);
+  // The page dots (bottom-bar LEFT slot on Home) mirror the pager shape.
+  const [dashboardPager, setDashboardPager] = useState<DashboardPagerInfo>({ count: 1, activeIndex: 0 });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPager = (event: Event) => {
+      const detail = (event as CustomEvent<DashboardPagerInfo>).detail;
+      if (detail) setDashboardPager(detail);
+    };
+    window.addEventListener(DASHBOARD_PAGER_EVENT, onPager);
+    return () => window.removeEventListener(DASHBOARD_PAGER_EVENT, onPager);
+  }, []);
+  // Leaving Home resets the mirrors so returning always starts clean.
+  useEffect(() => {
+    if (!isHomeRoute) {
+      setDashboardEditing(false);
+      setDashboardPager({ count: 1, activeIndex: 0 });
+    }
+  }, [isHomeRoute]);
 
   useEffect(() => {
     if (!runtime || typeof window === "undefined") return;
@@ -451,7 +492,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         style={{ height: "var(--bar-h)" }}
       >
         <div className="flex flex-1 flex-row items-center justify-start">
-          {!isHomeRoute ? (
+          {isHomeRoute ? (
+            // Home has no left panel — this slot holds the dashboard page dots.
+            <PageDots
+              count={dashboardPager.count}
+              activeIndex={dashboardPager.activeIndex}
+              onSelect={(index) => dispatchDashboardPageAction({ type: "goto", index })}
+              editing={dashboardEditing}
+              onAddPage={() => dispatchDashboardPageAction({ type: "add" })}
+              onRemovePage={() => dispatchDashboardPageAction({ type: "remove" })}
+            />
+          ) : (
             <Tooltip>
               <TooltipTrigger
                 className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -464,11 +515,26 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                 {currentPanels.left ? "Collapse left panel" : "Expand left panel"}
               </TooltipContent>
             </Tooltip>
-          ) : null}
+          )}
         </div>
         <GlobalBottomBar />
         <div className="flex flex-1 flex-row items-center justify-end">
-          {!isSettingsRoute && !isHomeRoute ? (
+          {isHomeRoute ? (
+            // Home has no side panels — this slot (where the right panel toggle
+            // sits elsewhere) holds the dashboard's Edit/Done control instead.
+            dashboardEditing ? (
+              <Button variant="secondary" size="sm" onClick={() => dispatchDashboardToggleEdit()}>
+                Done
+              </Button>
+            ) : (
+              <IconButton
+                icon={Pencil}
+                label="Edit dashboard"
+                size="md"
+                onClick={() => dispatchDashboardToggleEdit()}
+              />
+            )
+          ) : !isSettingsRoute ? (
             <Tooltip>
               <TooltipTrigger
                 className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"

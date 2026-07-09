@@ -32,6 +32,7 @@ import type { RawLinkSuggestion } from "../features/spine/suggest";
 import { shapeRecentLinks, type RecentLinkItem } from "../features/spine/recent";
 import { selectNeedsAttention, type OverdueFollowup } from "../features/contacts/needs-attention";
 import { selectReconnect } from "../features/contacts/reconnect";
+import type { DashboardLayout } from "../features/dashboard/engine/types";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import type {
   AuthChangeEvent,
@@ -128,6 +129,10 @@ function isMissingEmailColumn(err: { code?: string; message?: string } | null): 
 
 // LocalStore backed by localStorage for web
 const LS_PREFIX = "moduo:ls:";
+
+/** The single dashboard's `layout_key` in the (legacy, reused) dashboard_layouts
+ * table — one Home layout per user+workspace (DB-4). */
+const DASHBOARD_LAYOUT_KEY = "home";
 
 // ── Capabilities ──────────────────────────────────────────────────────────────
 
@@ -959,6 +964,39 @@ export const webRuntime: ModuoRuntime = {
       }
       if (res.error) throw new Error(res.error.message);
       return prefsRowToModel(res.data);
+    },
+  },
+
+  dashboard: {
+    async get(workspaceId) {
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (!user) return null;
+      const { data, error } = await supabaseClient
+        .from("dashboard_layouts")
+        .select("layout_data, updated_at")
+        .eq("user_id", user.id)
+        .eq("workspace_id", workspaceId)
+        .eq("layout_key", DASHBOARD_LAYOUT_KEY)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return null;
+      const row = data as { layout_data: DashboardLayout; updated_at: string };
+      return { layout: row.layout_data, updatedAt: row.updated_at };
+    },
+    async save({ workspaceId, layout, updatedAt }) {
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (!user) return;
+      const { error } = await supabaseClient.from("dashboard_layouts").upsert(
+        {
+          user_id: user.id,
+          workspace_id: workspaceId,
+          layout_key: DASHBOARD_LAYOUT_KEY,
+          layout_data: layout,
+          updated_at: updatedAt,
+        },
+        { onConflict: "user_id,workspace_id,layout_key" },
+      );
+      if (error) throw new Error(error.message);
     },
   },
 

@@ -284,6 +284,41 @@ export function commitLayout(widgets: readonly WidgetInstance[]): WidgetInstance
   return compact(widgets);
 }
 
+// ── Page-level ops (DB-4) ────────────────────────────────────────────────────
+//
+// A layout is one-or-more pages; these are the pure, immutable page mutations the
+// pager/edit-mode wire to. Widget geometry stays per-page; nothing here touches
+// the grid math above.
+
+/** Append a fresh empty page. The caller supplies a unique id (a uuid at the app layer). */
+export function addPage(layout: DashboardLayout, newPageId: string): DashboardLayout {
+  return { version: 1, pages: [...layout.pages, { id: newPageId, widgets: [] }] };
+}
+
+/**
+ * Remove a page. No-op when it's the last one — a dashboard always keeps ≥1 page
+ * (AC5, the "can't delete the last page away" edge case) — and no-op when the id
+ * isn't present, so callers never have to guard.
+ */
+export function removePage(layout: DashboardLayout, pageId: string): DashboardLayout {
+  if (layout.pages.length <= 1) return layout;
+  const pages = layout.pages.filter((p) => p.id !== pageId);
+  if (pages.length === layout.pages.length) return layout;
+  return { version: 1, pages };
+}
+
+/** Replace one page's widgets (the drag/resize/remove commit target). New layout, no mutation. */
+export function setPageWidgets(
+  layout: DashboardLayout,
+  pageId: string,
+  widgets: WidgetInstance[],
+): DashboardLayout {
+  return {
+    version: 1,
+    pages: layout.pages.map((p) => (p.id === pageId ? { ...p, widgets } : p)),
+  };
+}
+
 // ── Sanitisation (AC11) ─────────────────────────────────────────────────────
 //
 // Persisted JSONB is untrusted (hand-edited rows, older/newer clients, partial

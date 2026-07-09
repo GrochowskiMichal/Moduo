@@ -241,4 +241,8 @@ export const tauriRuntime: ModuoRuntime = {
   // Cloud-first per-user settings. Delegates to the web runtime today; the
   // future offline-lite build can wrap this with a local queue + replay.
   preferences: webRuntime.preferences,
+
+  // Dashboard layout — Supabase-direct (preference-class), identical on both
+  // platforms, so the desktop delegates wholesale.
+  dashboard: webRuntime.dashboard,
 };
