@@ -31,17 +31,23 @@ export type EmailPrefs = {
   /** Smart-inbox override: lowercased sender address → forced section. Wins over
    * the deterministic rules; teaches the inbox (brief §5). */
   senderOverrides: Record<string, EmailSection>;
+  /** Lowercased sender addresses whose remote images always load (DF-6 —
+   * remote content is blocked by default in the reader). */
+  imageAllowedSenders: string[];
 };
 
 export const DEFAULT_EMAIL_PREFS: EmailPrefs = {
   senderOverrides: {},
+  imageAllowedSenders: [],
 };
 
 const SECTION_SET = new Set<string>(EMAIL_SECTIONS);
 
 /** Coerce any stored/synced value into a valid prefs object (round-trips). */
 export function sanitizeEmailPrefs(raw: unknown): EmailPrefs {
-  if (!raw || typeof raw !== "object") return { senderOverrides: {} };
+  if (!raw || typeof raw !== "object") {
+    return { senderOverrides: {}, imageAllowedSenders: [] };
+  }
   const o = raw as Record<string, unknown>;
   const senderOverrides: Record<string, EmailSection> = {};
   if (o.senderOverrides && typeof o.senderOverrides === "object") {
@@ -52,7 +58,19 @@ export function sanitizeEmailPrefs(raw: unknown): EmailPrefs {
       }
     }
   }
-  return { senderOverrides };
+  const imageAllowedSenders: string[] = [];
+  if (Array.isArray(o.imageAllowedSenders)) {
+    const seen = new Set<string>();
+    for (const entry of o.imageAllowedSenders) {
+      if (typeof entry !== "string") continue;
+      const key = entry.trim().toLowerCase();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        imageAllowedSenders.push(key);
+      }
+    }
+  }
+  return { senderOverrides, imageAllowedSenders };
 }
 
 function prefsKey(userId: string): string {
@@ -63,6 +81,7 @@ export function readEmailPrefs(userId: string): EmailPrefs {
   return readStored(prefsKey(userId), sanitizeEmailPrefs, () => ({
     ...DEFAULT_EMAIL_PREFS,
     senderOverrides: {},
+    imageAllowedSenders: [],
   }));
 }
 
