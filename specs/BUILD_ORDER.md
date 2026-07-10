@@ -117,6 +117,40 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in t
 
 > **Dashboard parallel lanes:** DB-5 ∥ (DB-3 → DB-4) after DB-2; DB-6 ∥ DB-7 after DB-5. Contention: `runtime.types`/`runtime.web.ts`/`runtime.tauri.ts` (DB-4 vs DB-7 — sequence those edits) + `supabase/migrations/` timestamps.
 
+## Dogfood fixes (DF) — from the whole-app critique · [`docs/reviews/whole-app-critique-2026-07-plan.md`](../docs/reviews/whole-app-critique-2026-07-plan.md) *(the spec — block details, ratified designer calls, ACs live there)*
+
+> Ratified 2026-07-10 from [the whole-app critique](../docs/reviews/whole-app-critique-2026-07.md) (re-based on PR #73). Three waves: **A = trust-killers before dogfood**, **B = making the moat felt**, **C = one-product cohesion + pulled-forward spine features**. Runs BEFORE MCP-1. Lanes below; don't run two blocks touching `entity-open.ts`/app-chrome concurrently (DF-1/DF-2/DF-10).
+
+**Wave A — trust-killers**
+- [ ] **DF-1 — Deep-link selection: Tasks** · deps: — · lane tasks · URL-held `?id=` selection on `/tasks` + carry the id in `entity-open.ts` (kills the #1 dead-end: dashboard widget rows, contact rollups, note chips land unselected).
+- [ ] **DF-2 — Deep-link selection: Calendar + Email** · deps: DF-1 (pattern) · lane calendar/email · `?event=` → navigate-to-day + select; email accepts an inbound thread target (desktop select + scroll; web → tissue card).
+- [ ] **DF-3 — Trial/billing fix pack** · deps: — · lane platform · trial-banner raw fetch → shared `supabaseClient` (kills the silent empty-apikey 401); minimal Settings → Billing section (plan/trial + Stripe hosted portal — ratified); fix onboarding copy; log the gate's fail-open path.
+- [ ] **DF-4 — Hide Mindmap for alpha** · deps: — · lane platform · ratified: remove from nav/palette/⌘N shortcuts (reverse the five-wiring gotcha), keep the route; remove the leaked "feature coming soon" right-panel placeholder.
+- [ ] **DF-5 — Destructive-action safety pack (app-wide undo grammar)** · deps: — · lane contacts/cross · 8s Undo for **Tasks-module task delete** (today ⌘⌫ = silent permanent — the app's sharpest edge, critique §8.3), contact delete, calendar event delete; tag-delete feedback; habit undo 4s→8s; destructive verb out of the toast `cancel` slot; API-key revoke confirm; company-delete guard + clear-company affordance.
+- [ ] **DF-6 — Email daily-use pack (desktop)** · deps: — · lane email · remote images **blocked by default** (ratified) + per-sender allow; reader iframe auto-height; visible sync state + manual refresh + broken-account banner on All-inboxes; convert-to-task compensating cleanup on failure.
+
+**Wave B — making the moat felt**
+- [ ] **DF-7 — Rollup snippets + company parity** · deps: — · lane contacts/spine · snippet projectors for task/note/event/email rows (the hub stops being a flat name list); CompanyHub last-touch line.
+- [ ] **DF-8 — Tasks joins the spine** · deps: DF-1 · lane tasks · EntityHub (linked notes/emails/contacts/events) in the task detail panel + accept drag-to-link drops.
+- [ ] **DF-9 — Notification generation v1** · deps: — · lane spine · ratified quiet set ONLY: @mention (exists) · snooze/follow-up-due (exists) · assigned-to-you · blocked-task-unblocked; route `email_thread` in `notificationDeepLink`. Bell UI already groups — generation only.
+- [ ] **DF-10 — Palette searches entities** · deps: — · lane platform · wire `runtime.spine.searchEntities` into the command palette (debounced, grouped, deep-links via DF-1/DF-2); fix the lying placeholder copy.
+- [ ] **DF-11 — Focus session survives navigation** · deps: — · lane tasks · lift the Execute timer to app-level; quiet chrome timer chip (ratified); capture affordance inside Focus when the queue empties.
+- [ ] **DF-12 — Boot fetch consolidation** · deps: — · lane platform · one auth/user + one profiles + one workspaces fetch per boot (shared cache); stop `dashboard_layouts` writing during read; dedupe notifications reads. (Counts are real — no StrictMode.)
+- [ ] **DF-13 — Notes editor baseline + public page reach** · deps: — · lane notes · MarkdownShortcutPlugin + ⌘B/⌘I + minimal selection toolbar; unify checkbox shape (round `CompleteToggle`); persistent right-panel summon affordance; public page: mobile child-nav toggle + authored order (edge-fn position field).
+
+**Wave C — cohesion + pulled-forward spine features**
+- [ ] **DF-14 — Selection + accent unification** · deps: — · lane design-system · one selection recipe (`--selected-bg` + dimmed hover) across contacts/notes/email/calendar; de-tint the five appearance pickers (R5); `moduo-design-quality` audit as gate.
+- [ ] **DF-15 — Home first-run composition** · deps: — · lane dashboard · ratified: recompose default with ~2 free slots (designer look-approves the draft); content anchors/fills its frame; fallback heading → **"Open"**; toasts off the edit controls.
+- [ ] **DF-16 — Dead-chrome + copy sweep** · deps: — · lane platform · ratified per-module ⌘N/"+" create (Calendar quick-create · Contacts dialog · Email compose · Home capture-focus); feature-settings no-op button; About/paywall cloud-first copy; `?` shortcuts sheet; workspace label at 1 workspace; palette permission-filter.
+- [ ] **DF-17 — Legacy deletions** · deps: — · lane cleanup · delete the dead `email-workspace.tsx` tree (~108 hex, stories-only); token-route `EmbeddedMindmap.tsx`; mindmap dead code per DF-4; onboarding/paywall re-skin onto tokens.
+- [ ] **DF-18 — Eyebrow / header / toolbar standardization** · deps: — · lane design-system · one eyebrow spec as a component; one detail-panel title scale; calendar/contacts/notes toolbars onto `Toolbar`; extend `lint:tw` to named palette utilities.
+- [ ] **DF-19 — Settings overhaul** · deps: **short /s1 first** · lane platform · ratified 2026-07-10: full feature pass ("Settings … currently subpar — we need more"); /s1 grills section architecture, API-keys home, billing's final home (absorbs DF-3), integrations, appearance layout, synced-vs-device messaging.
+- [ ] **DF-20 — Global capture command bar** · deps: — · lane spine · pulled into Wave C (ratified): capture-anywhere line → task by default, `/note` `/event` `/contact` prefixes; reuses the quick-capture write path.
+- [ ] **DF-21 — Universal Inbox** · deps: DF-9 + **short /s1 first** · lane spine · pulled into Wave C (ratified): one cross-module attention surface; /s1 decides route vs Home widget vs the bell sheet growing up.
+- [ ] **DF-22 — Cross-pane drag-to-link** · deps: DF-8 · lane spine · pulled into Wave C (ratified): one app-level DndContext; per-module contexts become `useDndMonitor` consumers (NO-7b pattern). Riskiest — last in lane.
+- [ ] **DF-23 — @mention + /ref beyond Notes** · deps: DF-1, DF-2 · lane spine · pulled into Wave C (ratified): mention/ref plugins in task description (Lexical-ize it), email compose, event notes.
+- [ ] **DF-24 — Workspace membership loop** · deps: — · lane platform · close the invite loop (critique §8.1): a `/join/:token`-style accept surface reachable by a brand-new user (today the only `joinWorkspace` consumer hides at ≤1 workspace — invitees have nowhere to redeem); member names from the already-fetched `profiles` join (today: UUIDs); leave-workspace UI + remove-member op; toast invite/role errors; honest share-a-code delivery.
+
 ## Housekeeping & pre-alpha (between waves — designer-requested 2026-07-03)
 
 > Small, wave-independent blocks that keep the codebase honest on the way to the alpha. CLEAN-1 can run any time; MCP-1 is deliberately **pre-alpha** (the per-module manifests keep shipping with each wave's DoD at near-zero cost — the dedicated pass is the hardening round, not the build).
