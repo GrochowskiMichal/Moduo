@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import {
   Building2,
+  CreditCard,
   Info,
   LogOut,
   Palette,
@@ -24,13 +25,16 @@ import { AboutSection } from "./sections/about-section";
 import { AccountSection } from "./sections/account-section";
 import { AdvancedSection } from "./sections/advanced-section";
 import { AppearanceSection } from "./sections/appearance-section";
+import { BillingSection } from "./sections/billing-section";
 import { FocusSection } from "./sections/focus-section";
 import { IntegrationsSection } from "./sections/integrations-section";
 import { PreferencesSection } from "./sections/preferences-section";
 import { WorkspaceSection } from "./sections/workspace-section";
 import {
   SETTINGS_OPEN_EVENT,
+  clearPendingOpenSettings,
   isSettingsSectionId,
+  pendingOpenSettings,
   type SettingsOpenDetail,
   type SettingsSectionId,
 } from "./settings-events";
@@ -45,6 +49,7 @@ type SectionEntry = {
 const SECTIONS: SectionEntry[] = [
   { id: "appearance", label: "Appearance", icon: Palette, Component: AppearanceSection },
   { id: "account", label: "Account", icon: User, Component: AccountSection },
+  { id: "billing", label: "Billing", icon: CreditCard, Component: BillingSection },
   { id: "workspace", label: "Workspace", icon: Building2, Component: WorkspaceSection },
   { id: "integrations", label: "Integrations", icon: Plug, Component: IntegrationsSection },
   {
@@ -71,18 +76,30 @@ export function SettingsModal() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<SettingsOpenDetail>).detail ?? {};
+    const applyDetail = (detail: SettingsOpenDetail) => {
       if (detail.section && isSettingsSectionId(detail.section)) {
         setSection(detail.section);
       }
       setOpen(true);
     };
+    const handler = (event: Event) => {
+      applyDetail((event as CustomEvent<SettingsOpenDetail>).detail ?? {});
+    };
     window.addEventListener(SETTINGS_OPEN_EVENT, handler);
+    // A cold-load `/settings?section=…` dispatch fires while this modal is
+    // unmounted (boot remount churn) — re-apply the sticky dispatch on every
+    // mount so the deep link still opens the right section.
+    const pending = pendingOpenSettings();
+    if (pending) applyDetail(pending);
     return () => window.removeEventListener(SETTINGS_OPEN_EVENT, handler);
   }, []);
 
-  useShortcut("settings", () => setOpen((prev) => !prev));
+  useShortcut("settings", () =>
+    setOpen((prev) => {
+      if (prev) clearPendingOpenSettings();
+      return !prev;
+    }),
+  );
 
   // Appearance still leans on the visible app behind for the live preview, so
   // its backdrop drops the blur — content stays legible while the modal sits
@@ -100,8 +117,15 @@ export function SettingsModal() {
     }
   };
 
+  const handleOpenChange = (next: boolean) => {
+    // A user dismissal must also disarm the deep-link sticky buffer, or a
+    // modal remount inside the TTL would re-open what was explicitly closed.
+    if (!next) clearPendingOpenSettings();
+    setOpen(next);
+  };
+
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+    <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
           className={cn(
@@ -129,7 +153,7 @@ export function SettingsModal() {
         >
           <DialogPrimitive.Title className="sr-only">Settings</DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">
-            Customize appearance, account, workspace, integrations, and preferences.
+            Customize appearance, account, billing, workspace, integrations, and preferences.
           </DialogPrimitive.Description>
 
           <Tabs

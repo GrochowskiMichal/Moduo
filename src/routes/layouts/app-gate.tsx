@@ -42,10 +42,15 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const fetchStatus = async (): Promise<string> => {
-      const { data: row } = await supabaseClient
+      const { data: row, error } = await supabaseClient
         .from("user_entitlements")
         .select("subscription_status")
+        .limit(1)
         .maybeSingle<{ subscription_status: string }>();
+      // supabase-js reports PostgREST/REST failures via `error`, not by
+      // throwing — coercing them to "none" would fail CLOSED (paywall a
+      // paying user on a transient 500/401). Throw into the fail-open catch.
+      if (error) throw new Error(error.message);
       return row?.subscription_status ?? "none";
     };
 
@@ -65,7 +70,10 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
         }
 
         if (!cancelled) setSubscriptionStatus(status);
-      } catch {
+      } catch (err) {
+        // Fail open: an entitlements read error must never lock a paying user
+        // out, so "unknown" passes the gate below — but it must be visible.
+        console.warn("[app-gate] subscription check failed — failing open (no paywall redirect):", err);
         if (!cancelled) setSubscriptionStatus("unknown");
       } finally {
         if (!cancelled) setCheckDone(true);
