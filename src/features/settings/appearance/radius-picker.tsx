@@ -36,8 +36,8 @@ export function RadiusPicker({ value, onChange }: Props) {
               data-radius={optionValue}
               className={
                 checked
-                  ? "flex cursor-pointer flex-col items-center gap-3 rounded-md border border-primary bg-accent px-3 py-3 transition-colors"
-                  : "flex cursor-pointer flex-col items-center gap-3 rounded-md border border-border bg-card px-3 py-3 transition-colors hover:bg-accent"
+                  ? "flex cursor-pointer flex-col items-center gap-3 rounded-md border border-foreground/30 bg-accent px-3 py-3 transition-colors duration-(--motion-fade) ease-(--ease-out)"
+                  : "flex cursor-pointer flex-col items-center gap-3 rounded-md border border-border bg-card px-3 py-3 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-accent/60"
               }
             >
               <span

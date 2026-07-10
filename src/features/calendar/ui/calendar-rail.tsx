@@ -93,7 +93,7 @@ export function CalendarRail({
     return (
       <div
         key={account.id}
-        className="group flex items-center gap-2 rounded-md px-1 hover:bg-accent"
+        className="group flex items-center gap-2 rounded-md px-1 hover:bg-accent/60"
         style={{ minHeight: "var(--row-h-sm)" }}
       >
         <span

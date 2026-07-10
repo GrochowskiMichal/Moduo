@@ -272,10 +272,14 @@ export function NoteTreeSidebar(props: Props) {
                     type="button"
                     onClick={() => props.onSelect(r.id)}
                     className={cn(
-                      "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      r.id === props.selectedId && "bg-accent",
+                      "relative flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      r.id === props.selectedId ? "bg-(--selected-bg)" : "hover:bg-accent/60",
                     )}
                   >
+                    {/* selected marker — the app-wide R5 recipe: quiet accent bar + tint */}
+                    {r.id === props.selectedId ? (
+                      <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
+                    ) : null}
                     <span className="flex w-full items-center gap-1.5">
                       <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                       <span className="min-w-0 flex-1 truncate text-sm text-foreground">
@@ -328,7 +332,7 @@ export function NoteTreeSidebar(props: Props) {
                 key={`pub-${n.id}`}
                 type="button"
                 onClick={() => props.onSelect(n.id)}
-                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Globe className="size-3.5 shrink-0" />
                 <span className="truncate">{displayTitle(n.title)}</span>
@@ -522,11 +526,21 @@ function NoteRow({
       data-note-row={droppable ? note.id : undefined}
       className={cn(
         "group relative flex items-center gap-1 rounded-md px-1.5 py-1 text-sm",
-        selected ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+        // Drop-target indicators win over selection while a drag is live
+        // (mirrors task-row's dropActive precedence) — otherwise the 2px
+        // primary selection bar reads as a third drop mark.
+        selected && !hover
+          ? "bg-(--selected-bg) text-foreground"
+          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+        selected && hover && "text-foreground",
         hover?.zone === "into" && "ring-2 ring-primary/60",
       )}
       style={{ paddingLeft: `${8 + (flat ? 0 : depth) * 14}px` }}
     >
+      {/* selected marker — the app-wide R5 recipe: quiet accent bar + tint */}
+      {selected && !hover ? (
+        <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
+      ) : null}
       {hover?.zone === "before" ? (
         <div className="pointer-events-none absolute inset-x-1 top-0 h-0.5 rounded-full bg-primary" />
       ) : null}
