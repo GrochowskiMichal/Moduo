@@ -102,8 +102,10 @@ export function OnboardingPage() {
                 <View className="flex flex-row items-start gap-3">
                   <Clock size={16} color="#f59e0b" className="mt-0.5 shrink-0" />
                   <Text as="p" className="text-[13px] leading-5 text-amber-200/70">
-                    Add a card in <Text className="font-medium text-amber-200">Settings → Billing</Text> any time during the trial to extend it to{" "}
-                    <Text className="font-medium text-amber-200">30 days total</Text>.
+                    Add a card any time during the trial to extend it to{" "}
+                    <Text className="font-medium text-amber-200">30 days total</Text> — open{" "}
+                    <Text className="font-medium text-amber-200">Settings → Billing</Text> and choose{" "}
+                    <Text className="font-medium text-amber-200">Manage billing</Text>.
                   </Text>
                 </View>
               </View>
