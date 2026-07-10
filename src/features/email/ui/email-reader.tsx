@@ -2,16 +2,19 @@
 // selected thread's message stack (oldest→newest from getThread), NEWEST expanded,
 // older collapsed to a sender+snippet row that expands on click. Each expanded
 // message: sender chip, recipients line, detail time, and the HTML body in a
-// sandboxed iframe via buildEmailSrcDoc (bodies lazy-fetched with getBody; remote
-// images load by default — that is buildEmailSrcDoc's behavior). No thread → a
-// quiet "Select a conversation" empty state. The iframe is the ONE sanctioned
-// non-token surface (foreign HTML), sandboxed.
+// sandboxed iframe via buildEmailSrcDoc. Remote images are BLOCKED by default
+// (DF-6 ratified) — a slim bar offers per-message "Load images" + per-sender
+// always-allow; the iframe auto-sizes to its content via the nonce-pinned
+// height reporter (sandbox="allow-scripts", NEVER allow-same-origin). No thread
+// → a quiet "Select a conversation" empty state. The iframe is the ONE
+// sanctioned non-token surface (foreign HTML), sandboxed.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   Download,
   Forward,
+  ImageOff,
   ListChecks,
   Mail,
   Paperclip,
@@ -24,9 +27,16 @@ import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
 import type { EmailAttachmentMeta, EmailInlineImage } from "../../../lib/runtime.types";
 import type { ComposeMode } from "../compose";
+import { senderKey } from "../classify";
 import { formatEmailDetailDate } from "../utils/email-format";
-import { buildEmailSrcDoc } from "../utils/email-html";
+import { buildEmailReaderDoc, EMAIL_IFRAME_HEIGHT_MESSAGE } from "../utils/email-html";
 import type { EmailEnvelope, EmailThread } from "../model/email-types";
+
+/** Hard cap so a degenerate measurement can't blow up the panel layout. */
+const IFRAME_MAX_PX = 20000;
+/** Pre-measurement / reporter-dead height — the old fixed height, so a failure
+ * degrades to the previous behavior instead of clipping at a small fallback. */
+const IFRAME_FALLBACK_HEIGHT = "60vh";
 
 type BodyState = {
   status: "idle" | "loading" | "ready" | "error";
@@ -67,6 +77,10 @@ type Props = {
     folder: string,
     uid: number,
   ) => Promise<EmailInlineImage[]>;
+  /** Lowercased sender addresses whose remote images always load (DF-6). */
+  imageAllowedSenders?: ReadonlySet<string>;
+  /** Persist "always load images from this sender" (DF-6). */
+  onAllowSenderImages?: (senderEmail: string) => void;
 };
 
 function humanSize(bytes: number): string {
@@ -102,6 +116,8 @@ function MessageCard({
   listAttachments,
   saveAttachment,
   getInlineImages,
+  allowSenderImages,
+  onAlwaysAllowSender,
 }: {
   message: EmailEnvelope;
   defaultExpanded: boolean;
@@ -109,12 +125,19 @@ function MessageCard({
   listAttachments?: Props["listAttachments"];
   saveAttachment?: Props["saveAttachment"];
   getInlineImages?: Props["getInlineImages"];
+  /** This message's sender is on the always-allow list (DF-6). */
+  allowSenderImages: boolean;
+  onAlwaysAllowSender?: (senderEmail: string) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [body, setBody] = useState<BodyState>({ status: "idle" });
   const [attachments, setAttachments] = useState<EmailAttachmentMeta[]>([]);
   const [inlineImages, setInlineImages] = useState<EmailInlineImage[]>([]);
   const [savingId, setSavingId] = useState<string | null>(null);
+  // Per-message "Load images" (DF-6) — session-scoped, resets with the card.
+  const [loadRemoteOnce, setLoadRemoteOnce] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [frameHeight, setFrameHeight] = useState<number | null>(null);
 
   // Fetch attachment metadata once the message is expanded (bytes stay on the
   // server until a save). Inline cid parts are excluded from the chip row.
@@ -187,15 +210,37 @@ function MessageCard({
     };
   }, [getInlineImages, body.status, body.bodyHtml, message.accountId, message.folder, message.uid]);
 
-  const srcDoc = useMemo(() => {
+  // DF-6: one parse yields the sanitized srcdoc + the remote-ref count (which
+  // drives the "Load images" bar); blocked unless this sender is allowed or
+  // the user loaded once.
+  const showRemote = allowSenderImages || loadRemoteOnce;
+  const reader = useMemo(() => {
     if (body.status !== "ready" || !body.bodyHtml || body.bodyHtml.trim().length === 0) {
       return null;
     }
     const html = inlineImages.length
       ? substituteCidImages(body.bodyHtml, inlineImages)
       : body.bodyHtml;
-    return buildEmailSrcDoc(html);
-  }, [body, inlineImages]);
+    return buildEmailReaderDoc(html, { blockRemote: !showRemote, autoHeight: true });
+  }, [body.status, body.bodyHtml, inlineImages, showRemote]);
+  const hasDoc = reader !== null;
+
+  // DF-6: size the iframe to the reported content height (short mails stop
+  // wasting the panel; long ones stop scroll-trapping in a nested scrollbar).
+  // Listener exists only while an iframe is actually rendered.
+  useEffect(() => {
+    if (!hasDoc) return;
+    const onMessage = (event: MessageEvent) => {
+      if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
+      const data = event.data as { type?: unknown; height?: unknown } | null;
+      if (!data || data.type !== EMAIL_IFRAME_HEIGHT_MESSAGE) return;
+      const h = data.height;
+      if (typeof h !== "number" || !Number.isFinite(h) || h <= 0) return;
+      setFrameHeight(Math.min(Math.ceil(h) + 2, IFRAME_MAX_PX));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [hasDoc]);
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -283,16 +328,49 @@ function MessageCard({
             <p className="text-xs text-destructive" role="alert">
               Couldn&rsquo;t load this message. {body.error}
             </p>
-          ) : srcDoc ? (
-            // The one sanctioned non-token surface: foreign HTML, sandboxed.
-            <div className="overflow-hidden rounded-md border border-border">
-              <iframe
-                title={`Message from ${message.sender || message.senderEmail}`}
-                sandbox=""
-                srcDoc={srcDoc}
-                className="h-[60vh] w-full"
-              />
-            </div>
+          ) : reader ? (
+            <>
+              {reader.remoteCount > 0 && !showRemote ? (
+                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <ImageOff className="size-icon-xs shrink-0" aria-hidden />
+                    Remote images blocked
+                  </span>
+                  <span className="ml-auto flex shrink-0 items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setLoadRemoteOnce(true)}
+                      className="rounded-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      Load images
+                    </button>
+                    {onAlwaysAllowSender && message.senderEmail ? (
+                      <button
+                        type="button"
+                        onClick={() => onAlwaysAllowSender(message.senderEmail)}
+                        className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Always allow from this sender
+                      </button>
+                    ) : null}
+                  </span>
+                </div>
+              ) : null}
+              {/* The one sanctioned non-token surface: foreign HTML, sandboxed.
+                  allow-scripts runs ONLY our nonce-pinned height reporter (email
+                  scripts are stripped + CSP-blocked); never add allow-same-origin.
+                  Height is runtime-computed geometry — inline style is fine. */}
+              <div className="overflow-hidden rounded-md border border-border">
+                <iframe
+                  ref={iframeRef}
+                  title={`Message from ${message.sender || message.senderEmail}`}
+                  sandbox="allow-scripts"
+                  srcDoc={reader.srcDoc}
+                  className="block w-full"
+                  style={{ height: frameHeight ?? IFRAME_FALLBACK_HEIGHT }}
+                />
+              </div>
+            </>
           ) : (
             <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
               {body.body?.trim() ? body.body : "No message content."}
@@ -313,6 +391,8 @@ export function EmailReader({
   listAttachments,
   saveAttachment,
   getInlineImages,
+  imageAllowedSenders,
+  onAllowSenderImages,
 }: Props) {
   const [messages, setMessages] = useState<EmailEnvelope[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -404,6 +484,10 @@ export function EmailReader({
               listAttachments={listAttachments}
               saveAttachment={saveAttachment}
               getInlineImages={getInlineImages}
+              allowSenderImages={
+                imageAllowedSenders?.has(senderKey(message.senderEmail)) ?? false
+              }
+              onAlwaysAllowSender={onAllowSenderImages}
             />
           ))}
         </div>
