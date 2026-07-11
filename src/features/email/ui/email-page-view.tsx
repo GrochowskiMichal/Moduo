@@ -3,7 +3,7 @@
 // (left rail · center list · right reader/detail switcher), and wires keyboard-
 // first triage with sonner undo toasts (the triage() undo-window pattern). On web
 // (no desktop engine) it degrades to a calm read-only note + any linked-email
-// cards from the cloud tissue — no fake compose/triage. Replaces EmailWorkspace.
+// cards from the cloud tissue — no fake compose/triage.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";

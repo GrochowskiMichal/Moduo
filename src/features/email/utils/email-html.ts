@@ -227,7 +227,7 @@ export function buildEmailReaderDoc(
   return { srcDoc, remoteCount };
 }
 
-/** String-only convenience wrapper (legacy callers, e.g. EmailMessageDetail). */
+/** String-only convenience wrapper for legacy callers. */
 export function buildEmailSrcDoc(rawHtml: string, options: EmailSrcDocOptions = {}): string {
   return buildEmailReaderDoc(rawHtml, options).srcDoc;
 }
