@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
-  PointerSensor,
+  closestCenter,
+  closestCorners,
   pointerWithin,
-  useSensor,
-  useSensors,
+  type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ import { taskMatchesTagFilter, type GroupBy } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
 import { resolveTasksDeepLink } from "../search";
+import { pointerFirstCollision, useTaskDndSensors } from "./dnd/task-dnd";
 import { BucketRail, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
 import { DriftTriageDialog } from "./drift-triage-dialog";
@@ -555,6 +556,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     ) : view === "board" ? (
       <TaskBoardView
         {...sharedViewProps}
+        dndMode="external"
         boardGroupBy={boardGroupBy}
         onBoardGroupByChange={setBoardGroupBy}
       />
@@ -567,6 +569,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     ) : (
       <TaskListView
         {...sharedViewProps}
+        dndMode="external"
         groupBy={effectiveGroupBy}
         onGroupByChange={setGroupBy}
         reorderable={selection === "today"}
@@ -601,12 +604,54 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     </div>
   );
 
-  // ── DF-8: the detail hub as a drag-to-link drop target ──────────────────────
-  // A right-pane-scoped DndContext, deliberately kept clear of the center's
-  // reorder/nest contexts (which stay untouched — the app-level context
-  // unification that lets center-pane task rows reach the hub is DF-22's job).
+  // ── DF-22: one app-level DndContext across the whole shell ──────────────────
+  // Unifies the center views' reorder/nest with the right-pane hub (DF-8 shipped
+  // the hub as a ready-but-sourceless drop target) so a task dragged from the
+  // List or Board can be dropped on the selected task's hub to link it. The List
+  // & Board render as `useDndMonitor` consumers (dndMode="external", the NO-7b
+  // pattern); the Timeline keeps its OWN nested context — its tray→axis drag
+  // needs autoScroll off and a keyboard-disabled, pointer-derived drop that
+  // genuinely conflict with a shared context, and it has no cross-pane drop
+  // target (bars are custom pointer engines, not dnd-kit). Nested = the inner
+  // timeline context claims tray drags, so the hub handler never sees them.
+  const pageSensors = useTaskDndSensors();
+  // Refs so the collision fn (stable, empty-deps) always reads the live surface;
+  // neither can change mid-drag (switching view/scope remounts the body).
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+  // One collision for every surface: the hub (a `link:*` droppable) wins whenever
+  // the pointer is actually over it; otherwise each center view keeps its OWN
+  // native strategy over its OWN droppables (link targets filtered out, so a card
+  // dragged toward the right pane never mis-resolves to the hub by corner
+  // distance). The three center strategies must match the internal-mode contexts
+  // byte-for-byte: Board = closestCorners; Queue reorder = closestCenter (NOT
+  // pointer-first — the whole row is the drag activator, so an off-center grab
+  // makes the dragged-rect-centre and the pointer diverge, changing the drop
+  // index); drag-onto-task nest = pointer-first (an expanded parent's `onto-task`
+  // rect is taller than its row, so pointerWithin is required for precision).
+  const appCollision = useCallback<CollisionDetection>((args) => {
+    const linkContainers = args.droppableContainers.filter((c) =>
+      String(c.id).startsWith("link:"),
+    );
+    if (linkContainers.length > 0) {
+      const hubHits = pointerWithin({ ...args, droppableContainers: linkContainers });
+      if (hubHits.length > 0) return hubHits;
+    }
+    const centerContainers = args.droppableContainers.filter(
+      (c) => !String(c.id).startsWith("link:"),
+    );
+    const strategy =
+      viewRef.current === "board"
+        ? closestCorners
+        : selectionRef.current === "today"
+          ? closestCenter // the Queue's reorder — mirrors the internal-mode context
+          : pointerFirstCollision; // nest (and inert grouped list)
+    return strategy({ ...args, droppableContainers: centerContainers });
+  }, []);
+
   // Opening a linked task selects it in place; other entity types deep-link out.
-  const hubSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const handleOpenEntity = useCallback(
     (ref: EntityRef) => {
       if (ref.type === "task") {
@@ -681,19 +726,21 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onOpenEntity={handleOpenEntity}
     />
   );
+  // The hub is a drop target within the ONE page-level DndContext (below); no
+  // own context — that's exactly what let center rows reach it (DF-22).
   const right = selectedTask ? (
-    <DndContext sensors={hubSensors} collisionDetection={pointerWithin} onDragEnd={onHubDragEnd}>
-      <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!canEdit}>
-        {detailPanel}
-      </HubDropZone>
-    </DndContext>
+    <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!canEdit}>
+      {detailPanel}
+    </HubDropZone>
   ) : (
     detailPanel
   );
 
   return (
     <>
-      <FeaturePanelsShell feature="tasks" left={left} center={center} right={right} />
+      <DndContext sensors={pageSensors} collisionDetection={appCollision} onDragEnd={onHubDragEnd}>
+        <FeaturePanelsShell feature="tasks" left={left} center={center} right={right} />
+      </DndContext>
       <CaptureModal
         open={captureOpen}
         onOpenChange={setCaptureOpen}
