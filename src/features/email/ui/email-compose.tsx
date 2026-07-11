@@ -32,6 +32,7 @@ import {
   type ComposeDraft,
   type ComposeMode,
 } from "../compose";
+import { stripEntityRefAttrs } from "../../spine/editor/entity-rich-html";
 import type { SavedAccount } from "../model/email-types";
 import { EmailComposeEditor, type ComposeEditorHandle } from "./email-compose-editor";
 
@@ -53,11 +54,12 @@ type Props = {
   draft: ComposeDraft;
   accounts: SavedAccount[];
   runtime: ModuoRuntime | null;
+  workspaceId: string | null;
   onSend: (input: EmailSendInput, draftForUndo: ComposeDraft) => void;
   onClose: () => void;
 };
 
-export function EmailCompose({ draft, accounts, runtime, onSend, onClose }: Props) {
+export function EmailCompose({ draft, accounts, runtime, workspaceId, onSend, onClose }: Props) {
   const [accountId, setAccountId] = useState(draft.accountId || accounts[0]?.id || "");
   const [to, setTo] = useState(draft.to);
   const [cc, setCc] = useState(draft.cc);
@@ -98,7 +100,9 @@ export function EmailCompose({ draft, accounts, runtime, onSend, onClose }: Prop
       return;
     }
     const content = editorRef.current?.getContent();
-    const bodyHtml = content?.html ?? draft.bodyHtml;
+    // Flatten entity-ref chips to plain `<span>Label</span>` before sending — the
+    // recipient reads the label; Moduo's internal entity ids never leave (DF-23).
+    const bodyHtml = stripEntityRefAttrs(content?.html ?? draft.bodyHtml);
     const textBody = content?.text ?? htmlToPlainText(bodyHtml);
     const input: EmailSendInput = {
       accountId,
@@ -216,7 +220,12 @@ export function EmailCompose({ draft, accounts, runtime, onSend, onClose }: Prop
 
           {/* Body — Lexical rich text (spec assumption 13): bounded toolbar → HTML
               + derived plain text, seeded from the draft (signature + quoted). */}
-          <EmailComposeEditor initialHtml={draft.bodyHtml} handleRef={editorRef} />
+          <EmailComposeEditor
+            initialHtml={draft.bodyHtml}
+            handleRef={editorRef}
+            runtime={runtime}
+            workspaceId={workspaceId}
+          />
 
           {/* Attachments */}
           {attachments.length > 0 ? (

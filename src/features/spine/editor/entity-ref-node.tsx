@@ -8,9 +8,24 @@
 // notes `EmbedNode` pattern, but inline. Clicking dispatches a
 // `moduo:entity:open` event so the host (any module) can route to the hub.
 
-import { DecoratorNode, type NodeKey, type SerializedLexicalNode, type Spread } from "lexical";
+import {
+  DecoratorNode,
+  type DOMConversionMap,
+  type DOMConversionOutput,
+  type DOMExportOutput,
+  type NodeKey,
+  type SerializedLexicalNode,
+  type Spread,
+} from "lexical";
 import type { ReactNode } from "react";
 import { EntityRefChip } from "../ui/entity-ref-chip";
+
+/** Marker attribute stamped on the exported `<span>` so `importDOM` (and any
+ * HTML-round-trip surface: email compose, task/event descriptions) can recover
+ * the ref. The entity address rides denormalized data-attributes; the visible
+ * label is the span's text so non-Moduo readers (an email recipient) still see
+ * a readable word rather than an empty chip. */
+const ENTITY_REF_ATTR = "data-lexical-entity-ref";
 
 export type SerializedEntityRefNode = Spread<
   {
@@ -72,6 +87,13 @@ export class EntityRefNode extends DecoratorNode<ReactNode> {
     return true;
   }
 
+  // The chip contributes its label to the editor's plain-text projection —
+  // so a derived `text` body (email alt-part, machine/MCP reads) reads the
+  // entity's name rather than a blank where the decorator sits.
+  getTextContent(): string {
+    return this.__label;
+  }
+
   static importJSON(serialized: SerializedEntityRefNode): EntityRefNode {
     return $createEntityRefNode({
       entityType: serialized.entityType,
@@ -79,6 +101,30 @@ export class EntityRefNode extends DecoratorNode<ReactNode> {
       label: serialized.label,
       icon: serialized.icon ?? null,
     });
+  }
+
+  // HTML round-trip (DF-23): the chip persists as an inert `<span>` so it
+  // survives `$generateHtmlFromNodes` (email compose + the HTML-stored task /
+  // event descriptions) and re-hydrates via `$generateNodesFromDOM`.
+  static importDOM(): DOMConversionMap | null {
+    return {
+      span: (node: HTMLElement) => {
+        if (!node.hasAttribute(ENTITY_REF_ATTR)) return null;
+        return { conversion: convertEntityRefElement, priority: 2 };
+      },
+    };
+  }
+
+  exportDOM(): DOMExportOutput {
+    const span = document.createElement("span");
+    span.setAttribute(ENTITY_REF_ATTR, "true");
+    span.setAttribute("data-entity-type", this.__entityType);
+    span.setAttribute("data-entity-id", this.__entityId);
+    if (this.__icon) span.setAttribute("data-entity-icon", this.__icon);
+    // Label as text → readable if the span is ever flattened / read by a
+    // non-Moduo client (a sent email); the chrome is re-applied on import.
+    span.textContent = this.__label;
+    return { element: span };
   }
 
   exportJSON(): SerializedEntityRefNode {
@@ -108,6 +154,22 @@ export class EntityRefNode extends DecoratorNode<ReactNode> {
       />
     );
   }
+}
+
+function convertEntityRefElement(node: HTMLElement): DOMConversionOutput {
+  const entityType = node.getAttribute("data-entity-type") ?? "";
+  const entityId = node.getAttribute("data-entity-id") ?? "";
+  // A malformed marker (missing address) can't resolve — drop back to plain
+  // text rather than minting a dead chip.
+  if (!entityType || !entityId) return { node: null };
+  return {
+    node: $createEntityRefNode({
+      entityType,
+      entityId,
+      label: node.textContent ?? entityType,
+      icon: node.getAttribute("data-entity-icon"),
+    }),
+  };
 }
 
 export function $createEntityRefNode(input: {

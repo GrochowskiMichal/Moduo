@@ -1445,6 +1445,7 @@ export function EmailPageView({
           draft={compose.draft}
           accounts={email.accounts}
           runtime={runtime}
+          workspaceId={workspaceId}
           onSend={compose.send}
           onClose={compose.close}
         />

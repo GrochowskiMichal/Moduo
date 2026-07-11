@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { TagChipList } from "../../../components/tag-chip";
+import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { cn } from "../../../lib/utils";
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { useFocusPrefs, type FocusPrefs } from "../../../lib/focus-prefs";
@@ -276,9 +277,10 @@ function NowCard({
       <h2 className="mt-0.5 font-display text-2xl text-foreground">{task.title || "Untitled"}</h2>
       {subLine ? <p className="mt-1 font-sans text-xs text-muted-foreground">{subLine}</p> : null}
       {task.description ? (
-        <p className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
-          {task.description}
-        </p>
+        <EntityRichText
+          html={task.description}
+          className="mt-3 font-sans text-sm leading-relaxed text-muted-foreground"
+        />
       ) : null}
 
       {subtasks.length > 0 ? <SubtaskChecklist subtasks={subtasks} onToggle={onToggleSubtask} /> : null}
