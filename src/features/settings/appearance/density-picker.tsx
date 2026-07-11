@@ -18,6 +18,7 @@ export function DensityPicker({ value, onChange }: Props) {
   return (
     <AppearancePickerRow
       title="Density"
+      tag="This device"
       description="Row heights and control sizes. Changes apply across the whole app."
     >
       <RadioGroup

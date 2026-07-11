@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Eye, EyeOff, LogOut } from "lucide-react";
 
 import { useAuth } from "../../../providers/auth-provider";
+import { supabaseClient } from "../../../lib/runtime.web";
 import {
   notifyProfileUpdated,
   readStoredAvatar,
@@ -12,6 +14,7 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import defaultProfilePic from "../../../../assets/icon.png";
 
+import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
 import { SettingsSectionShell } from "./section-shell";
 
 function maskedPhrase(phrase: string | null) {
@@ -26,7 +29,8 @@ function maskedPhrase(phrase: string | null) {
 }
 
 export function AccountSection() {
-  const { runtime, userEmail } = useAuth();
+  const { runtime, userEmail, signOut } = useAuth();
+  const navigate = useNavigate();
   // The recovery-key section only applies to local-vault runtimes (future lite).
   const hasLocalKey = !!runtime?.capabilities.hasLocalMnemonic;
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
@@ -36,6 +40,14 @@ export function AccountSection() {
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+
+  const [provider, setProvider] = useState<string | null>(null);
+  const [providerLoaded, setProviderLoaded] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwMessage, setPwMessage] = useState<string | null>(null);
+  const [pwError, setPwError] = useState<string | null>(null);
 
   const [isPhraseVisible, setIsPhraseVisible] = useState(false);
   const [mnemonicPhrase, setMnemonicPhrase] = useState<string | null>(null);
@@ -59,6 +71,31 @@ export function AccountSection() {
       active = false;
     };
   }, [runtime]);
+
+  // Cloud accounts: learn the sign-in provider so we know whether a password is
+  // even applicable (OAuth-only accounts have none). Future-lite (local vault)
+  // accounts skip this — they authenticate with the login key below.
+  useEffect(() => {
+    if (hasLocalKey) return;
+    let active = true;
+    // Read the provider from the CACHED session (no network round-trip) so an
+    // OAuth-only account never flashes the wrong provider + a password form it
+    // can't use before the value resolves. Nothing provider-dependent renders
+    // until `providerLoaded`.
+    void supabaseClient.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!active) return;
+        setProvider(data.session?.user?.app_metadata?.provider ?? null);
+        setProviderLoaded(true);
+      })
+      .catch(() => {
+        if (active) setProviderLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [hasLocalKey]);
 
   const avatarInitial = useMemo(
     () =>
@@ -138,6 +175,37 @@ export function AccountSection() {
       setMnemonicPhrase(result.data.phrase);
     }
     setIsPhraseVisible(true);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } finally {
+      void navigate({ to: "/auth" });
+    }
+  };
+
+  const canChangePassword = isPasswordProvider(provider);
+
+  const handleChangePassword = async () => {
+    const validationError = validateNewPassword(newPassword, confirmPassword);
+    if (validationError) {
+      setPwError(validationError);
+      setPwMessage(null);
+      return;
+    }
+    setPwBusy(true);
+    setPwError(null);
+    setPwMessage(null);
+    const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+    setPwBusy(false);
+    if (error) {
+      setPwError(error.message);
+      return;
+    }
+    setNewPassword("");
+    setConfirmPassword("");
+    setPwMessage("Password updated.");
   };
 
   return (
@@ -227,6 +295,88 @@ export function AccountSection() {
         </div>
       </section>
 
+      {!hasLocalKey ? (
+        <section className="rounded-lg border border-border bg-card p-6">
+          <h3 className="font-display text-lg text-foreground">Sign-in</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {providerLoaded
+              ? `You're signed in with ${providerLabel(provider)}.`
+              : "You're signed in."}
+          </p>
+
+          <div className="mt-5 flex flex-col gap-1">
+            <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+              Email
+            </span>
+            <span className="text-sm text-foreground">{userEmail ?? "—"}</span>
+          </div>
+
+          {!providerLoaded ? null : canChangePassword ? (
+            <div className="mt-6 border-t border-border pt-6">
+              <h4 className="text-sm font-medium text-foreground">Password</h4>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Set or change the password you use to sign in.
+              </p>
+              <div className="mt-4 flex max-w-sm flex-col gap-3">
+                <div>
+                  <Label htmlFor="account-new-password">New password</Label>
+                  <Input
+                    id="account-new-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(event) => {
+                      setNewPassword(event.target.value);
+                      setPwError(null);
+                      setPwMessage(null);
+                    }}
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="account-confirm-password">Confirm password</Label>
+                  <Input
+                    id="account-confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(event) => {
+                      setConfirmPassword(event.target.value);
+                      setPwError(null);
+                      setPwMessage(null);
+                    }}
+                    className="mt-2"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={() => void handleChangePassword()}
+                    disabled={pwBusy || newPassword.length === 0}
+                  >
+                    {pwBusy ? "Saving…" : "Update password"}
+                  </Button>
+                  {pwMessage ? (
+                    <p className="text-xs text-success" role="status">
+                      {pwMessage}
+                    </p>
+                  ) : null}
+                  {pwError ? (
+                    <p className="text-xs text-destructive" role="alert">
+                      {pwError}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 text-xs text-muted-foreground">
+              You sign in with {providerLabel(provider)}, so there&apos;s no password to manage
+              here.
+            </p>
+          )}
+        </section>
+      ) : null}
+
       {hasLocalKey ? (
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-lg text-foreground">Login key</h3>
@@ -266,6 +416,23 @@ export function AccountSection() {
         ) : null}
       </section>
       ) : null}
+
+      <section className="rounded-lg border border-border bg-card p-6">
+        <h3 className="font-display text-lg text-foreground">Session</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Sign out of Moduo on this device.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-4"
+          onClick={() => void handleLogout()}
+        >
+          <LogOut className="size-4" aria-hidden />
+          Log out
+        </Button>
+      </section>
     </SettingsSectionShell>
   );
 }

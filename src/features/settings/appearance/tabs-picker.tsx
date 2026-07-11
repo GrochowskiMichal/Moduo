@@ -25,6 +25,7 @@ export function TabsPicker({ value, onChange }: Props) {
   return (
     <AppearancePickerRow
       title="Module navigation"
+      tag="This device"
       description="Compact the top-bar module list down to icons for less horizontal scrolling."
     >
       <RadioGroup
