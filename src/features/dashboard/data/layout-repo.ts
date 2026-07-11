@@ -124,17 +124,12 @@ export function createLayoutRepo(
     // Reflect the resolved truth back into the cache so a cloud adoption or a
     // fresh seed survives the next offline paint.
     await writeCache(workspaceId, { layout: resolved.layout, updatedAt: resolved.updatedAt });
-    // A cache-wins load means a local edit never reached the cloud (a cut-off
-    // `pagehide` flush) — reconcile it UP so a second device eventually sees it
-    // (AC6). Fire-and-forget so load stays fast; a failure just retries on the
-    // next cache-wins load. Seeds aren't pushed (a fresh default needs no row).
-    if (resolved.origin === "cache") {
-      void runtime.dashboard
-        .save({ workspaceId, layout: resolved.layout, updatedAt: resolved.updatedAt })
-        .catch(() => {
-          /* offline — retried on the next cache-wins load */
-        });
-    }
+    // NOTE (DF-12): `load` is a READ and must never issue a cloud write — the old
+    // "reconcile a cache-wins load UP to the cloud" here made every boot that
+    // resolved to the local cache POST a `dashboard_layouts` upsert (the write-on-
+    // read the fetch-storm audit flagged). A cut-off local edit stays the truth in
+    // the local cache and rides up on the next real edit's `save` instead, so
+    // cross-device propagation is delayed at most one edit, never lost.
     return resolved;
   }
 

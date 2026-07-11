@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { getRuntime, initRuntime } from "./runtime";
+import { createRequestCache } from "./request-cache";
 import type { UserPreferences } from "./runtime.types";
 
 export type SyncDomain = "appearance" | "focus" | "calendar" | "email";
@@ -77,25 +78,36 @@ export function setSyncMeta(domain: SyncDomain, meta: SyncMeta): void {
   }
 }
 
-// Dedupe concurrent reads: the appearance and focus hooks both reconcile on
-// mount and would otherwise issue two GETs for the same single row.
-let inFlightGet: Promise<UserPreferences | null> | null = null;
+// Dedupe the boot reads: the appearance / focus / calendar / email domains each
+// reconcile on mount and would otherwise issue a `preferences.get()` apiece for the
+// one shared row. They mount at slightly different ticks, so a pure in-flight memo
+// only caught the truly-concurrent ones — a short TTL lets them share a single read
+// across the launch window. A `pushDomain` write invalidates it so a seed one domain
+// just wrote is visible to the next domain's reconcile. Only a successful read is
+// retained (an error throws through, so a transient failure isn't cached).
+//
+// The key is scoped by userId: on a shared browser a fast A→B account switch within
+// the TTL must NOT let B adopt A's cached prefs (a cross-user leak). Each user reads
+// their own key; the stale key simply expires. DF-12.
+const PREFS_CACHE_TTL_MS = 3_000;
+const prefsReads = createRequestCache();
 
-export function getCloudPrefs(): Promise<UserPreferences | null> {
-  if (inFlightGet) return inFlightGet;
-  inFlightGet = (async () => {
-    try {
-      const rt = await initRuntime();
-      return await rt.preferences.get();
-    } catch {
-      return null;
-    } finally {
-      // Release synchronously once settled: in-flight callers already hold this
-      // promise; the next reconcile gets a fresh read.
-      inFlightGet = null;
-    }
-  })();
-  return inFlightGet;
+export function getCloudPrefs(userId: string): Promise<UserPreferences | null> {
+  return prefsReads
+    .read(
+      `prefs:${userId}`,
+      async () => {
+        const rt = await initRuntime();
+        return await rt.preferences.get(); // throws on a real read error → not cached
+      },
+      PREFS_CACHE_TTL_MS,
+    )
+    .catch(() => null);
+}
+
+/** Drop every cached prefs read so the next reconcile re-fetches (after a write). */
+export function invalidateCloudPrefs(): void {
+  prefsReads.clear();
 }
 
 function domainValue(prefs: UserPreferences | null, domain: SyncDomain): { value: Json | null; updatedAt: string | null } {
@@ -126,6 +138,9 @@ export async function pushDomain(domain: SyncDomain, value: Json, updatedAt: str
             ? { calendar: value, calendarUpdatedAt: updatedAt }
             : { email: value, emailUpdatedAt: updatedAt };
     const res = await rt.preferences.set(patch);
+    // A write changed the shared row — drop the cached read so a later domain's
+    // reconcile (or the same domain's next read) sees this domain's fresh value.
+    if (res !== null) invalidateCloudPrefs();
     return res !== null; // null = signed out
   } catch {
     return false;
@@ -151,7 +166,7 @@ export async function reconcileDomain(opts: {
 }): Promise<void> {
   const { domain, userId, localValue, defaults, sanitizeCloud, apply } = opts;
 
-  const cloud = await getCloudPrefs();
+  const cloud = await getCloudPrefs(userId);
   const { value: cloudRaw, updatedAt: cloudUpdatedAt } = domainValue(cloud, domain);
   // An empty {} domain means "never synced" (e.g. the row was seeded by the
   // other domain) — treat it as absent so local seeds it.

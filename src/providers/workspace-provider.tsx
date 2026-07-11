@@ -1,4 +1,4 @@
-import { PropsWithChildren, useCallback, useEffect, useMemo, useState } from "react";
+import { PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./auth-provider";
 import type { NotificationItem } from "../features/spine/notifications";
 import type {
@@ -48,6 +48,15 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const [unreadCountWorkspace, setUnreadCountWorkspace] = useState(0);
   const [unreadCountGlobal, setUnreadCountGlobal] = useState(0);
 
+  // Mirror the selected id into a ref so `refreshWorkspaces` can read the current
+  // selection without listing `selectedWorkspaceId` in its deps. Without this the
+  // callback re-created on every selection change — and since it *sets* the
+  // selection, its own boot effect re-fired and re-issued `workspace.list()` (the
+  // measured workspaces ×3, plus the `loading` toggles that remounted AppChrome
+  // and multiplied every downstream boot read). DF-12.
+  const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
+  selectedWorkspaceIdRef.current = selectedWorkspaceId;
+
   const selectedWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null,
     [selectedWorkspaceId, workspaces]
@@ -87,11 +96,12 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     const next = rows.map(mapWorkspace).filter((workspace) => !workspace.isDeleted);
     setWorkspaces(next);
 
+    const currentSelected = selectedWorkspaceIdRef.current;
     const persisted = typeof window !== "undefined" ? window.localStorage.getItem(storageKey(userId)) : null;
     const resolvedSelected =
       (persisted && next.some((workspace) => workspace.id === persisted) ? persisted : null) ??
-      (selectedWorkspaceId && next.some((workspace) => workspace.id === selectedWorkspaceId)
-        ? selectedWorkspaceId
+      (currentSelected && next.some((workspace) => workspace.id === currentSelected)
+        ? currentSelected
         : null) ??
       next[0]?.id ??
       null;
@@ -100,7 +110,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     if (resolvedSelected && typeof window !== "undefined") {
       window.localStorage.setItem(storageKey(userId), resolvedSelected);
     }
-  }, [runtime, selectedWorkspaceId, userId]);
+  }, [runtime, userId]);
 
   const refreshAccessData = useCallback(async () => {
     if (!runtime || !selectedWorkspaceId) {
@@ -317,8 +327,14 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   }, [refreshAccessData]);
 
   useEffect(() => {
+    // Wait for the initial workspace resolution before the first notifications
+    // read. Otherwise it fires once at `selectedWorkspaceId === null` (legacy feed
+    // only) and again when the workspace resolves — the measured notifications
+    // duplication. A zero-workspace invitee still reaches this (loading flips false
+    // with a null workspace) so their invite feed loads. DF-12.
+    if (loading) return;
     void refreshNotifications();
-  }, [notificationsScope, refreshNotifications, selectedWorkspaceId]);
+  }, [loading, notificationsScope, refreshNotifications, selectedWorkspaceId]);
 
 
 

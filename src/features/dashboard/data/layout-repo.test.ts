@@ -152,11 +152,13 @@ describe("createLayoutRepo", () => {
     expect(loaded.layout.pages[0].widgets[0].id).toBe("z");
   });
 
-  it("re-pushes a cache-wins load up to the cloud (AC6 second-device reconcile)", async () => {
+  it("a load NEVER writes to the cloud, even when the local cache leads (DF-12)", async () => {
     const { runtime, cloud } = fakeRuntime();
     const repo = createLayoutRepo(runtime, { now, debounceMs: 0 });
     // A local cache newer than an older cloud row = an offline edit whose flush
-    // was cut off. Loading it should reconcile it UP so a second device sees it.
+    // was cut off. The load must serve it locally but issue NO upsert — the read
+    // path is not allowed to write (the boot fetch-storm write-on-read). The edit
+    // rides up on the next `save`, not on read.
     await runtime.localStore.set(
       "dashboard",
       "w1",
@@ -166,8 +168,9 @@ describe("createLayoutRepo", () => {
     const before = cloud.saveCount;
     const loaded = await repo.load("w1");
     expect(loaded.origin).toBe("cache");
-    expect(cloud.saveCount).toBe(before + 1); // pushed up
-    expect(cloud.row?.layout.pages[0].widgets[0].id).toBe("x");
+    expect(loaded.layout.pages[0].widgets[0].id).toBe("x"); // local truth served
+    expect(cloud.saveCount).toBe(before); // …but no write during the read
+    expect(cloud.row?.layout.pages[0].widgets[0].id).toBe("y"); // cloud untouched
   });
 
   it("a cloud read error degrades to the local cache (offline)", async () => {

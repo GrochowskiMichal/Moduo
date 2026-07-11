@@ -33,6 +33,7 @@ import { shapeRecentLinks, type RecentLinkItem } from "../features/spine/recent"
 import { selectNeedsAttention, type OverdueFollowup } from "../features/contacts/needs-attention";
 import { selectReconnect } from "../features/contacts/reconnect";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
+import { createRequestCache } from "./request-cache";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import type {
   AuthChangeEvent,
@@ -64,6 +65,57 @@ export const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABAS
     autoRefreshToken: true,
     detectSessionInUrl: true,
   },
+});
+
+// ── Boot-time read coalescer (DF-12) ─────────────────────────────────────────────
+// One cold launch used to fire `/auth/v1/user` ×8 (every user-scoped runtime method
+// called `getUser()` on its own) and the profile read ×4 (the auth provider fetched
+// it on both bootstrap and INITIAL_SESSION). This shares those reads: one auth/user
+// + one profile per boot, deduped across every caller.
+const bootReads = createRequestCache();
+const AUTH_USER_KEY = "auth:user";
+/** The profile's plan_tier can change (upgrade), but only via a user action long
+ *  after boot; a short window collapses the launch double-read without pinning
+ *  stale data (`refreshPlanTier` and friends run well past this). */
+const PROFILE_TTL_MS = 5_000;
+
+/**
+ * The current authenticated user, deduped across the boot storm. Cached until an
+ * identity transition invalidates it (below), so repeated boot reads share one
+ * `/auth/v1/user` round-trip instead of ~16. Returns null when signed out.
+ */
+async function getAuthedUser() {
+  try {
+    // Cache ONLY a real authenticated user. A signed-out state and a transient
+    // failure (offline / a mid-refresh 401 / a 5xx) both surface as `getUser()`
+    // returning an error + null user — we throw on either so the request-cache
+    // does NOT retain it. Otherwise one boot blip would pin `null` forever (Infinity
+    // TTL, cleared only on a real sign-in/out) and brick every user-scoped read +
+    // write for the whole session. `getAuthedUser` still resolves to `null` for the
+    // caller (the old `getUser()` graceful-null contract), it just isn't cached, so
+    // the next call retries — exactly the per-call self-heal the old code had.
+    return await bootReads.read(
+      AUTH_USER_KEY,
+      async () => {
+        const { data, error } = await supabaseClient.auth.getUser();
+        if (error) throw error;
+        if (!data.user) throw new Error("no authenticated user");
+        return data.user;
+      },
+      Number.POSITIVE_INFINITY,
+    );
+  } catch {
+    return null;
+  }
+}
+
+// Drop the whole boot cache (user + profiles) on any identity transition. We keep
+// it through INITIAL_SESSION and TOKEN_REFRESHED (same user), so those never
+// re-trigger the storm — only a real sign-in/out / user-update clears it.
+supabaseClient.auth.onAuthStateChange((event) => {
+  if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
+    bootReads.clear();
+  }
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -245,6 +297,7 @@ export const webRuntime: ModuoRuntime = {
         const uid = user?.id;
         if (uid) {
           await supabaseClient.from("profiles").update({ display_name: displayName }).eq("id", uid);
+          bootReads.invalidate(`profile:${uid}`); // the cached row now has a stale name
         }
         return { data: { displayName }, error: null };
       } catch (error) {
@@ -361,12 +414,27 @@ export const webRuntime: ModuoRuntime = {
 
   workspace: {
     async getProfile(userId: string) {
-      const { data, error } = await supabaseClient
-        .from("profiles")
-        .select("plan_tier, display_name, avatar_url")
-        .eq("id", userId)
-        .single();
-      return { data: data ?? null, error };
+      // Deduped across the boot double-read (bootstrap + INITIAL_SESSION) via a
+      // short TTL. Only a successful row is cached — an error throws through so
+      // it's retried, and the caller still gets the `{ data, error }` shape.
+      try {
+        const row = await bootReads.read(
+          `profile:${userId}`,
+          async () => {
+            const { data, error } = await supabaseClient
+              .from("profiles")
+              .select("plan_tier, display_name, avatar_url")
+              .eq("id", userId)
+              .single();
+            if (error) throw error;
+            return data ?? null;
+          },
+          PROFILE_TTL_MS,
+        );
+        return { data: row, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
     },
     async list() {
       const { data, error } = await supabaseClient.from("workspaces").select("*, workspace_members(*)").is("deleted_at", null);
@@ -374,7 +442,7 @@ export const webRuntime: ModuoRuntime = {
       return data ?? [];
     },
     async create(name) {
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) throw new Error("Not authenticated");
       const { data, error } = await supabaseClient.from("workspaces").insert({ name, owner_id: user.id }).select().single();
       if (error) throw new Error(error.message);
@@ -386,7 +454,7 @@ export const webRuntime: ModuoRuntime = {
       return data;
     },
     async leave(workspaceId) {
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) throw new Error("Not authenticated");
       const { error } = await supabaseClient.from("workspace_members").delete().eq("workspace_id", workspaceId).eq("user_id", user.id);
       if (error) throw new Error(error.message);
@@ -396,7 +464,7 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
     },
     async issueInvite(workspaceId, email, role, modulePermissions) {
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       const { data, error } = await supabaseClient.from("workspace_invites").insert({
         workspace_id: workspaceId,
         created_by: user?.id,
@@ -411,7 +479,7 @@ export const webRuntime: ModuoRuntime = {
     async joinInvite(token) {
       const { data: invite, error: inviteError } = await supabaseClient.from("workspace_invites").select("*").eq("token", token).eq("status", "pending").single();
       if (inviteError || !invite) throw new Error("Invalid or expired invite");
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) throw new Error("Not authenticated");
       const { error: memberError } = await supabaseClient.from("workspace_members").insert({
         workspace_id: invite.workspace_id,
@@ -455,7 +523,7 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
     },
     async listNotifications() {
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) return [];
       const { data } = await supabaseClient.from("workspace_notifications").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
       return data ?? [];
@@ -464,7 +532,7 @@ export const webRuntime: ModuoRuntime = {
       await supabaseClient.from("workspace_notifications").update({ read_at: new Date().toISOString() }).eq("id", notificationId);
     },
     async markAllNotificationsRead() {
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) return;
       await supabaseClient.from("workspace_notifications").update({ read_at: new Date().toISOString() }).eq("user_id", user.id).is("read_at", null);
     },
@@ -919,7 +987,7 @@ export const webRuntime: ModuoRuntime = {
 
   preferences: {
     async get() {
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) return null;
       // `.select()` needs a literal for the typed client's parser; the runtime
       // column set is dynamic (deploy gap), so cast to the full literal shape —
@@ -943,7 +1011,7 @@ export const webRuntime: ModuoRuntime = {
       return prefsRowToModel(res.data);
     },
     async set(patch) {
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) return null;
       // Upsert only the domains present in the patch; columns omitted here keep
       // their existing value on conflict (and their table default on insert).
@@ -985,7 +1053,7 @@ export const webRuntime: ModuoRuntime = {
 
   dashboard: {
     async get(workspaceId) {
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) return null;
       const { data, error } = await supabaseClient
         .from("dashboard_layouts")
@@ -1000,7 +1068,7 @@ export const webRuntime: ModuoRuntime = {
       return { layout: row.layout_data, updatedAt: row.updated_at };
     },
     async save({ workspaceId, layout, updatedAt }) {
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) return;
       const { error } = await supabaseClient.from("dashboard_layouts").upsert(
         {
@@ -1018,9 +1086,7 @@ export const webRuntime: ModuoRuntime = {
 
   habits: {
     async list(workspaceId) {
-      const {
-        data: { user },
-      } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) return [];
       const { data, error } = await supabaseClient
         .from("habits")
@@ -1037,9 +1103,7 @@ export const webRuntime: ModuoRuntime = {
       return (Array.isArray(data) ? data : []).map(mapHabitRow);
     },
     async upsert({ id, workspaceId, name, emoji, position }) {
-      const {
-        data: { user },
-      } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       if (!user) throw new Error("Not signed in");
       const row = {
         ...(id ? { id } : {}),
@@ -1433,7 +1497,7 @@ export const webRuntime: ModuoRuntime = {
 
     async upsertBucket(bucket) {
       const id = bucket.id?.trim() || crypto.randomUUID();
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       const now = new Date().toISOString();
       const { data: prev } = await supabaseClient.from("buckets").select("is_system, created_at").eq("id", id).maybeSingle();
       // is_system is owned by the seeding path only — never settable via upsert.
@@ -1468,7 +1532,7 @@ export const webRuntime: ModuoRuntime = {
 
     async upsertTask(task) {
       const id = task.id?.trim() || crypto.randomUUID();
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       const now = new Date().toISOString();
       // Every task lives in exactly one bucket; an empty/unknown/deleted/cross-
       // workspace bucket falls back to Inbox (spec §6/§7).
@@ -1504,7 +1568,7 @@ export const webRuntime: ModuoRuntime = {
 
     async upsertTag(tag) {
       const id = tag.id?.trim() || crypto.randomUUID();
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const user = await getAuthedUser();
       const now = new Date().toISOString();
       const { data: prev } = await supabaseClient.from("tags").select("created_at").eq("id", id).maybeSingle();
       const row = {
@@ -2315,7 +2379,7 @@ async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
       .limit(1).maybeSingle();
   const { data: existing } = await find();
   if (existing) return bucketRowToModel(existing);
-  const { data: { user } } = await supabaseClient.auth.getUser();
+  const user = await getAuthedUser();
   const now = new Date().toISOString();
   const { data, error } = await supabaseClient.from("buckets").insert({
     workspace_id: workspaceId,
