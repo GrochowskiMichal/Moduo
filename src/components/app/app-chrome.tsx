@@ -43,7 +43,6 @@ import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { WorkspaceSettingsModal } from "../workspace-settings-modal";
-import { IntegrationsModal } from "../integrations-modal";
 import { UserMenu } from "../user-menu";
 import { NotificationCenter } from "../notification-center";
 import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constants";
@@ -133,7 +132,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const isHomeRoute = pathname === "/";
 
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
-  const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [featurePanels, setFeaturePanels] = useState(() => readPanelsMap());
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
@@ -588,10 +586,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       <WorkspaceSettingsModal
         visible={workspaceSettingsOpen}
         onClose={() => setWorkspaceSettingsOpen(false)}
-      />
-      <IntegrationsModal
-        visible={integrationsOpen}
-        onClose={() => setIntegrationsOpen(false)}
       />
     </div>
   );

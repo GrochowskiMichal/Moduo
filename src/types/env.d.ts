@@ -8,6 +8,9 @@ interface ImportMetaEnv {
   readonly PUBLIC_SUPABASE_ANON_KEY?: string;
   /** "desktop" | "web" — set at build time by rsbuild.config.ts */
   readonly MODUO_TARGET?: string;
+  /** App version (package.json) + build id (short git SHA) — set by rsbuild.config.ts */
+  readonly MODUO_VERSION?: string;
+  readonly MODUO_BUILD?: string;
   /** Stripe — set in .env.local */
   readonly PUBLIC_STRIPE_PUBLISHABLE_KEY?: string;
   readonly PUBLIC_STRIPE_PRICE_PRO_MONTHLY?: string;

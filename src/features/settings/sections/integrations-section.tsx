@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Calendar, Globe, Mail, Video } from "lucide-react";
+import { Bot, Calendar, Globe, Mail } from "lucide-react";
 
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
@@ -14,10 +14,10 @@ import {
 import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
 import type { SavedAccount } from "../../email/model/email-types";
 import { Button } from "../../../components/ui/button";
+import { dispatchOpenSettings } from "../settings-events";
+import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
 
 import { SettingsSectionShell } from "./section-shell";
-
-type IntegrationStatus = { provider: string; connected: boolean };
 
 /** Desktop-only OAuth: on web the connect buttons explain where to go. */
 const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -51,10 +51,10 @@ export function IntegrationsSection() {
   const [emailConnectOpen, setEmailConnectOpen] = useState(false);
   const [emailReconnectTarget, setEmailReconnectTarget] = useState<SavedAccount | null>(null);
 
-  const [videoStatuses, setVideoStatuses] = useState<IntegrationStatus[]>([]);
-  const [videoLoading, setVideoLoading] = useState(false);
-  const [videoBusy, setVideoBusy] = useState<string | null>(null);
-  const [videoError, setVideoError] = useState<string | null>(null);
+  // AI/MCP connector status: count of active (non-revoked) API keys for this
+  // workspace. `null` = not yet loaded or unreadable (e.g. a non-admin) — the
+  // card then avoids asserting a connection state either way.
+  const [mcpKeyCount, setMcpKeyCount] = useState<number | null>(null);
 
   const loadAccounts = useCallback(async () => {
     if (!runtime || !workspaceId) return;
@@ -76,23 +76,23 @@ export function IntegrationsSection() {
     }
   }, [runtime]);
 
+  const loadMcpKeys = useCallback(async () => {
+    if (!runtime || !workspaceId) return;
+    try {
+      const keys = await runtime.workspace.listApiKeys(workspaceId);
+      setMcpKeyCount(keys.length);
+    } catch {
+      // Non-admins can't list keys (RLS) and reads can transiently fail — keep
+      // the status neutral rather than falsely reporting "not connected".
+      setMcpKeyCount(null);
+    }
+  }, [runtime, workspaceId]);
+
   useEffect(() => {
     void loadAccounts();
     void loadEmailAccounts();
-    const loadVideo = async () => {
-      if (!IS_DESKTOP) return;
-      setVideoLoading(true);
-      setVideoError(null);
-      try {
-        setVideoStatuses(await invoke<IntegrationStatus[]>("integration_get_status"));
-      } catch (e) {
-        setVideoError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setVideoLoading(false);
-      }
-    };
-    void loadVideo();
-  }, [loadAccounts, loadEmailAccounts]);
+    void loadMcpKeys();
+  }, [loadAccounts, loadEmailAccounts, loadMcpKeys]);
 
   const handleConnect = async (provider: "google" | "microsoft", command: string) => {
     if (!IS_DESKTOP || !runtime || !workspaceId) return;
@@ -154,33 +154,7 @@ export function IntegrationsSection() {
     }
   };
 
-  const handleVideoConnect = async (provider: "zoom" | "google_meet") => {
-    setVideoBusy(provider);
-    setVideoError(null);
-    try {
-      await invoke(
-        provider === "zoom" ? "integration_connect_zoom" : "integration_connect_google_meet",
-      );
-      setVideoStatuses(await invoke<IntegrationStatus[]>("integration_get_status"));
-    } catch (e) {
-      setVideoError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setVideoBusy(null);
-    }
-  };
-
-  const handleVideoDisconnect = async (provider: string) => {
-    setVideoBusy(provider);
-    setVideoError(null);
-    try {
-      await invoke("integration_disconnect", { provider });
-      setVideoStatuses(await invoke<IntegrationStatus[]>("integration_get_status"));
-    } catch (e) {
-      setVideoError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setVideoBusy(null);
-    }
-  };
+  const mcpStatus = mcpConnectorStatus(mcpKeyCount);
 
   const caldavIcsGroups = groupRailAccounts(
     calAccounts.filter((a) => a.provider === "caldav" || a.provider === "ics"),
@@ -189,7 +163,7 @@ export function IntegrationsSection() {
   return (
     <SettingsSectionShell
       title="Integrations"
-      description="Connect your calendars and video meeting tools."
+      description="Connect your calendars, email, and AI assistants."
     >
       {runtime && workspaceId ? (
         <>
@@ -513,71 +487,32 @@ export function IntegrationsSection() {
       </section>
 
       <section className="rounded-lg border border-border bg-card p-6">
-        <h3 className="font-display text-base text-foreground">Video meetings</h3>
-        {videoError ? (
-          <p className="mt-2 text-xs text-destructive" role="alert">
-            {videoError}
-          </p>
-        ) : null}
+        <h3 className="font-display text-base text-foreground">AI &amp; MCP</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Connect Claude and other AI assistants to this workspace over MCP. They reach your
+          tasks and notes through a scoped API key you create and can revoke anytime.
+        </p>
+
         <div className="mt-4 flex flex-col gap-2">
-          {(["zoom", "google_meet"] as const).map((provider) => {
-            const status = videoStatuses.find((s) => s.provider === provider);
-            const connected = status?.connected ?? false;
-            const busy = videoBusy === provider;
-            const label = provider === "zoom" ? "Zoom" : "Google Meet";
-            return (
-              <div
-                key={provider}
-                className="flex items-center justify-between gap-4 rounded-md border border-border bg-muted/40 px-4 py-3"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
-                    <Video className="size-4" />
-                  </span>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-foreground">{label}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {!IS_DESKTOP
-                        ? "Desktop only"
-                        : videoLoading
-                          ? "Loading…"
-                          : connected
-                            ? "Connected"
-                            : "Not connected"}
-                    </span>
-                  </div>
-                </div>
-                {IS_DESKTOP ? (
-                  connected ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void handleVideoDisconnect(provider)}
-                      disabled={busy}
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    >
-                      {busy ? "Disconnecting…" : "Disconnect"}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleVideoConnect(provider)}
-                      disabled={busy || videoLoading}
-                    >
-                      {busy ? "Connecting…" : "Connect"}
-                    </Button>
-                  )
-                ) : (
-                  <Button type="button" variant="outline" size="sm" disabled>
-                    Desktop only
-                  </Button>
-                )}
+          <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
+                <Bot className="size-4" />
+              </span>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-foreground">AI assistants (MCP)</span>
+                <span className="text-xs text-muted-foreground">{mcpStatus.label}</span>
               </div>
-            );
-          })}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => dispatchOpenSettings({ section: MCP_KEYS_SECTION })}
+            >
+              {mcpStatus.connected ? "Manage keys" : "Set up"}
+            </Button>
+          </div>
         </div>
       </section>
     </SettingsSectionShell>
