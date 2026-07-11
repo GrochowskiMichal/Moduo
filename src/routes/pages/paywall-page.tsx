@@ -155,10 +155,10 @@ export function PaywallPage() {
           <View className="flex-1 rounded-2xl border border-white/8 bg-[#0d0d0d] p-8">
             <Text as="p" className="text-[12px] font-semibold uppercase tracking-widest text-white/30">Free</Text>
             <Text as="p" className="mt-3 text-[36px] font-semibold text-[#f4f4f4]">$0</Text>
-            <Text as="p" className="mt-1 text-[14px] text-white/38">Desktop app only</Text>
+            <Text as="p" className="mt-1 text-[14px] text-white/38">Web &amp; desktop</Text>
 
             <View className="mt-6 gap-3">
-              {["Local-only notes & tasks", "Unlimited local workspaces", "BIP-39 recovery key", "No cloud features"].map((f) => (
+              {["Notes, tasks, calendar & contacts", "Access on web & desktop", "Cloud sync across devices", "7-day Pro trial, no card required"].map((f) => (
                 <View key={f} className="flex flex-row items-start gap-3">
                   <View className="mt-0.5 h-5 w-5 items-center justify-center rounded-full bg-white/8">
                     <Check size={11} color="rgba(255,255,255,0.4)" />

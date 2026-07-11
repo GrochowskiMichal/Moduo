@@ -28,6 +28,7 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 
 import { Button } from "../../../components/ui/button";
+import { onCreateNew } from "../../../components/app/create-events";
 import { cn } from "@/lib/utils";
 import {
   chipSpanInDay,
@@ -538,6 +539,34 @@ export function CalendarGrid({
   }, []);
 
   useEffect(() => () => endGesture(), [endGesture]);
+
+  // ⌘N / global "+" → open quick-create at now on today's column (or 9:00 on
+  // the first visible day when today isn't in range), mirroring draw-to-create's
+  // 30-minute ghost. The pending popover autofocuses its title input. Held in a
+  // ref so the listener subscribes once yet always sees the latest days/geoms.
+  // The grid is the only /calendar surface (day + week), so this is the module's
+  // create handler; it no-ops for view-only members.
+  const openQuickCreateNowRef = useRef<() => void>(() => {});
+  openQuickCreateNowRef.current = () => {
+    if (!canEdit) return;
+    const todayIdx = days.findIndex((d) => localDayKey(d) === todayKey);
+    const dayIdx = todayIdx >= 0 ? todayIdx : 0;
+    const geom = geoms[dayIdx];
+    if (!geom) return;
+    const rawStart = todayIdx >= 0 ? (minutesIntoDay(Date.now(), geom) ?? 9 * 60) : 9 * 60;
+    const startMin = Math.max(snapMin(rawStart, false), 0);
+    const endMin = Math.min(startMin + 30, geom.totalMinutes);
+    const start = Math.min(startMin, endMin - 15);
+    setPending({ dayIdx, startMin: start, endMin });
+    // Center the ghost so the popover isn't stranded off-screen (mirrors the
+    // scroll-to-now effect's math).
+    const scroller = scrollRef.current;
+    if (scroller) {
+      const pxPerMinute = scroller.scrollHeight / maxMinutes;
+      scroller.scrollTop = Math.max(0, start * pxPerMinute - scroller.clientHeight / 2);
+    }
+  };
+  useEffect(() => onCreateNew(() => openQuickCreateNowRef.current()), []);
 
   // On open: center around now (or 9:00 when today isn't visible), in REAL
   // minutes so DST days center correctly. Not re-run on prev/next navigation —

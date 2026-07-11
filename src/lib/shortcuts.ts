@@ -17,6 +17,7 @@ export type ShortcutId =
   | "settings"
   | "workspace-switcher"
   | "notifications"
+  | "help"
   | "module-1"
   | "module-2"
   | "module-3"
@@ -101,6 +102,23 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
       !event.shiftKey &&
       !event.altKey &&
       event.key === "/",
+  },
+  {
+    // App-wide keyboard-shortcuts help sheet. On most layouts Shift+/ resolves to
+    // `event.key === "?"`, but some layouts / synthetic key events deliver
+    // `key === "/"` with shiftKey set — accept both. No modifier gate beyond
+    // ruling out ⌘/Ctrl/Alt (nothing else claims a bare Shift+/). A page that
+    // wants its own `?` (email's triage legend) claims it in the CAPTURE phase so
+    // it beats this bubble-phase global handler — see gotchas.
+    id: "help",
+    label: "Keyboard shortcuts",
+    mac: "?",
+    other: "?",
+    match: (event) =>
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      (event.key === "?" || (event.shiftKey && event.key === "/")),
   },
   // Module shortcuts ⌘1..⌘6 navigate to the Nth visible module tab in the
   // top bar. The count matches the max number of visible tabs (6 after Mindmap

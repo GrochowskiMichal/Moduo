@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { AlertTriangle, Mail, PenSquare, RefreshCw } from "lucide-react";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
+import { onCreateNew } from "../../../components/app/create-events";
 import {
   RightPanelSwitcher,
   type RightPanelVariant,
@@ -415,6 +416,9 @@ export function EmailPageView() {
     if (!account) return;
     compose.openDraft(blankDraft(account.id, signatureFor(account.email)));
   }, [email.accounts, selectedAccountId, compose, signatureFor]);
+
+  // ⌘N / global "+" → new message (this listener is only mounted on /email).
+  useEffect(() => onCreateNew(startNew), [startNew]);
 
   const listAttachments = useCallback(
     (accountId: string, folder: string, uid: number) =>
@@ -877,8 +881,13 @@ export function EmailPageView() {
       }
       e.preventDefault();
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    // Capture phase so email's own keys — notably `?` for the triage legend —
+    // run BEFORE the bubble-phase global shortcut handler (app-chrome's
+    // useGlobalShortcuts). It preventDefaults what it handles; the global `?`
+    // sheet then sees defaultPrevented and stays closed on /email. All keys here
+    // are already guarded on modifiers + typing targets, so capture is safe.
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [
     moveSelection,
     openThread,

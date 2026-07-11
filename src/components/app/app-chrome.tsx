@@ -50,6 +50,7 @@ import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constan
 import type { ModuleNavItem } from "./app-chrome-types";
 import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
+import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { SettingsModal } from "../../features/settings/settings-modal";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { dispatchCreateNew } from "./create-events";
@@ -579,6 +580,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         </div>
       </div>
       <GlobalCommandPalette />
+      <GlobalShortcutsDialog />
       <SettingsModal />
       <WorkspaceSettingsModal
         visible={workspaceSettingsOpen}

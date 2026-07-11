@@ -18,6 +18,7 @@ import { undoToast } from "../../lib/undo-toast";
 import { asDragPayload, asDropLinkTarget, isSelfDrop, payloadRef, targetAccepts } from "../../lib/drag-payload";
 import type { ContactsSearch } from "../../features/contacts/search";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
+import { onCreateNew } from "../../components/app/create-events";
 import { Button } from "../../components/ui/button";
 import {
   Dialog,
@@ -166,6 +167,19 @@ export function ContactsPage() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search.action]);
+
+  // ⌘N / global "+" → new contact dialog (this listener is only mounted on
+  // /contacts). We're already here, so open the dialog directly rather than the
+  // palette's ?action=new round-trip. No-ops for view-only members.
+  useEffect(
+    () =>
+      onCreateNew(() => {
+        if (!canEdit) return;
+        setFormCompanyPreset(null);
+        setFormOpen(true);
+      }),
+    [canEdit],
+  );
 
   // A URL id that never resolves (deleted contact, stale share link) clears
   // after a short grace window — delayed so a just-created contact's directory

@@ -67,7 +67,7 @@ export function dispatchOpenPalette() {
 export function GlobalCommandPalette() {
   const navigate = useNavigate();
   const { runtime } = useAuth();
-  const { selectedWorkspaceId } = useWorkspace();
+  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<EntityRecord[]>([]);
@@ -154,6 +154,19 @@ export function GlobalCommandPalette() {
   const newNoteShortcut = SHORTCUTS.find((s) => s.id === "new-note");
   const newNoteLabel = newNoteShortcut ? formatShortcut(newNoteShortcut) : "";
 
+  // Only surface modules the user can actually reach — mirror app-chrome's
+  // `modulesNavItems` permission filter exactly so the palette and the top-bar
+  // nav can never disagree (notes/tasks gated on their own lane; calendar rides
+  // the tasks lane per specs/calendar.md; home/email/contacts are ungated at
+  // alpha, matching the nav). Without this the palette would deep-link into a
+  // module the workspace has no access to.
+  const canReachModule = (id: string): boolean => {
+    if (id === "notes") return modulePermissions.notes !== "none";
+    if (id === "tasks") return modulePermissions.tasks !== "none";
+    if (id === "calendar") return modulePermissions.tasks !== "none";
+    return true;
+  };
+
   const navActions: Action[] = [
     { id: "home", label: "Open Home", icon: House, run: go("/") },
     { id: "notes", label: "Open Notes", icon: FileText, run: go("/notes") },
@@ -163,7 +176,7 @@ export function GlobalCommandPalette() {
     // nav/palette stay in sync. The /mindmap route stays reachable directly.
     { id: "email", label: "Open Email", icon: Inbox, run: go("/email") },
     { id: "contacts", label: "Open Contacts", icon: ContactIcon, run: go("/contacts") },
-  ];
+  ].filter((action) => canReachModule(action.id));
 
   // Notes capture works from any page (Wave-3 AC1): same `action` pattern.
   const notesActions: Action[] = [
