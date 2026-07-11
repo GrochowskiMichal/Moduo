@@ -54,7 +54,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { Separator } from "../../../components/ui/separator";
-import { Textarea } from "../../../components/ui/textarea";
+import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
 import {
   Tooltip,
   TooltipContent,
@@ -171,7 +171,6 @@ function DetailBody({
   onOpenEntity?: (ref: EntityRef) => void;
 }) {
   const [title, setTitle] = useState(task.title);
-  const [description, setDescription] = useState(task.description);
   const [duration, setDuration] = useState(task.durationMinutes != null ? String(task.durationMinutes) : "");
   // Manual time-spent (minutes) — adjust the persisted total directly. The live
   // tracker lives only in Focus (locked decision 2026-06-16); here you just
@@ -239,8 +238,8 @@ function DetailBody({
     if (next && next !== task.title) api.patchTask(task.id, { title: next });
     else if (!next) setTitle(task.title); // refuse empty — restore
   };
-  const commitDescription = () => {
-    if (description !== task.description) api.patchTask(task.id, { description });
+  const commitDescription = (html: string) => {
+    if (html !== task.description) api.patchTask(task.id, { description: html });
   };
   const commitDuration = () => {
     const n = Number.parseInt(duration, 10);
@@ -327,16 +326,19 @@ function DetailBody({
           </div>
         ) : null}
 
-        {/* description — label-less under the title (Linear-style) */}
-        <Textarea
-          value={description}
-          disabled={!canEdit}
-          variant="ghost"
-          aria-label="Description"
-          placeholder={canEdit ? "Add a description…" : undefined}
-          onChange={(e) => setDescription(e.target.value)}
-          onBlur={commitDescription}
-          className="min-h-16"
+        {/* description — label-less under the title (Linear-style). Lexical so
+            `@mention` / `/ref` link entities inline (DF-23); stored as HTML. */}
+        <EntityTextEditor
+          value={task.description}
+          editable={canEdit}
+          runtime={runtime}
+          workspaceId={workspaceId}
+          source={{ type: "task", id: task.id }}
+          sourceLabel={task.title}
+          sourceIcon="task"
+          ariaLabel="Description"
+          placeholder={canEdit ? "Add a description…  @ or / to link" : undefined}
+          onCommit={commitDescription}
         />
 
         <Separator />

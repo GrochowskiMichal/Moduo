@@ -31,7 +31,7 @@ import { User } from "lucide-react";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { resolveEntityIcon } from "../icon-map";
-import { resolveMention, type MentionCandidate } from "../mention";
+import { resolveMention, type MentionCandidate, type MentionTrigger } from "../mention";
 import { executeMention, type MentionContext } from "../mention-actions";
 import { useMentionSearch } from "../hooks/use-mention-search";
 import { $createEntityRefNode } from "./entity-ref-node";
@@ -48,8 +48,11 @@ type MentionMenuState = {
 export type MentionMenuPluginProps = {
   workspaceId: string | null;
   runtime: ModuoRuntime | null;
-  /** The text surface's own entity (the link's source end). */
-  source: EntityRef;
+  /** The text surface's own entity (the link's source end). `null` = an
+   * insert-only surface with no persistable source (e.g. an unsent email
+   * compose draft): the chip is inserted and deep-links, but no `entity_link`
+   * is written (there is nothing to link *from* yet). */
+  source: EntityRef | null;
   /** The source's registry label/icon (seeds the registry on link). */
   sourceLabel?: string;
   sourceIcon?: string | null;
@@ -59,12 +62,29 @@ export type MentionMenuPluginProps = {
   /** `@` = workspace people ONLY (the Notes grammar, Wave-3 AC5) — entities
    * leave the picker; they ride the `/` nouns instead. */
   peopleOnly?: boolean;
+  /** The character that opens the menu (default `@`). DF-23 mounts a second
+   * instance with `/` so the same machinery serves `@mention` and `/ref`. */
+  triggerChar?: "@" | "/";
+  /** Relation semantics: `mention` (→ `mentions`) or `ref` (→ `references`).
+   * Defaults to `mention` so existing (Notes) call sites are unchanged. */
+  trigger?: MentionTrigger;
 };
 
 const MENU_MIN_WIDTH = 240;
 const MENU_MAX_HEIGHT = 320;
 
-function resolveMentionMenuState(editor: LexicalEditor): MentionMenuState | null {
+// Caret token grammar per trigger char: the trigger must sit at line start or
+// after whitespace (so it never fires mid-word — e.g. an email address's `@`,
+// or a `7/11` date's `/`), and the query runs until the next whitespace/trigger.
+function mentionTokenRegex(triggerChar: string): RegExp {
+  // Both `@` and `/` are regex-literal here (incl. inside the char class).
+  return new RegExp(`(?:^|\\s)${triggerChar}([^\\s${triggerChar}]*)$`);
+}
+
+function resolveMentionMenuState(
+  editor: LexicalEditor,
+  triggerChar: string,
+): MentionMenuState | null {
   return editor.getEditorState().read(() => {
     const selection = $getSelection();
     if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
@@ -76,11 +96,11 @@ function resolveMentionMenuState(editor: LexicalEditor): MentionMenuState | null
     if (!$isTextNode(node) || !node.isSimpleText()) return null;
 
     const textBefore = node.getTextContent().slice(0, anchor.offset);
-    const match = textBefore.match(/(?:^|\s)@([^\s@]*)$/);
+    const match = textBefore.match(mentionTokenRegex(triggerChar));
     if (!match) return null;
 
     const query = match[1] ?? "";
-    const token = `@${query}`;
+    const token = `${triggerChar}${query}`;
     const startOffset = textBefore.lastIndexOf(token);
     if (startOffset < 0) return null;
 
@@ -126,6 +146,8 @@ export function MentionMenuPlugin({
   currentUserId,
   onMentionPerson,
   peopleOnly = false,
+  triggerChar = "@",
+  trigger = "mention",
 }: MentionMenuPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [menu, setMenu] = useState<MentionMenuState | null>(null);
@@ -134,11 +156,11 @@ export function MentionMenuPlugin({
   const { query, setQuery, candidates, loading } = useMentionSearch({
     runtime,
     workspaceId,
-    trigger: "mention",
+    trigger,
     currentUserId,
-    // Until the person-notification op is wired (CT-5), don't surface people as
-    // silently-failing `@` candidates — entity mentions still work.
-    includePeople: Boolean(onMentionPerson),
+    // People ride the `@`/mention trigger only, and only once a host wires the
+    // person-notification seam (CT-5); a `/ref` menu is entities-only.
+    includePeople: trigger === "mention" && Boolean(onMentionPerson),
     includeEntities: !peopleOnly,
     enabled: menu !== null,
   });
@@ -160,18 +182,10 @@ export function MentionMenuPlugin({
     setSelectedIndex((current) => Math.min(current, Math.max(0, candidates.length - 1)));
   }, [candidates.length]);
 
-  const ctx: MentionContext = {
-    workspaceId: workspaceId ?? "",
-    source,
-    sourceLabel,
-    sourceIcon: sourceIcon ?? null,
-    onMentionPerson,
-  };
-
   const commit = (candidate: MentionCandidate) => {
     const activeMenu = menuRef.current;
     if (!activeMenu || !runtime || !workspaceId) return;
-    const resolution = resolveMention({ trigger: "mention", candidate });
+    const resolution = resolveMention({ trigger, candidate });
 
     // For an existing entity, insert the chip optimistically (we hold its
     // label/icon already); for a person, insert their name. Then reconcile.
@@ -191,15 +205,31 @@ export function MentionMenuPlugin({
           $createTextNode(" "),
         ]);
       } else if (resolution.action === "notify-person") {
-        selection.insertNodes([$createTextNode(`@${resolution.label} `)]);
+        selection.insertNodes([$createTextNode(`${triggerChar}${resolution.label} `)]);
       }
     });
     setMenu(null);
 
-    // The `@` trigger only yields `link` (chip inserted optimistically above) or
-    // `notify-person` (text inserted above) — never `create-and-link` (that's a
-    // `/ref`-only candidate). So the write just reconciles; on failure the chip
-    // stays and Retry recovers the link (never silently lost).
+    // The write just RECONCILES the optimistic insert above (never a
+    // `create-and-link` — that's a picker-only candidate). Skip it when there's
+    // nothing to write against: a `link` with no `source` (insert-only surface),
+    // or a `notify-person` with no host seam. On failure the chip/text stays and
+    // Retry recovers the link — never silently lost.
+    const needsWrite =
+      resolution.action === "notify-person"
+        ? Boolean(onMentionPerson)
+        : Boolean(source);
+    if (!needsWrite) return;
+
+    const ctx: MentionContext = {
+      // `source` is non-null on the `link` path here (needsWrite gated it); the
+      // fallback only ever backs a `notify-person`, which reads onMentionPerson.
+      workspaceId,
+      source: source ?? { type: "", id: "" },
+      sourceLabel,
+      sourceIcon: sourceIcon ?? null,
+      onMentionPerson,
+    };
     const failCopy =
       resolution.action === "notify-person"
         ? "Couldn't send that mention."
@@ -228,9 +258,9 @@ export function MentionMenuPlugin({
     }
     return editor.registerUpdateListener(() => {
       if (typeof window === "undefined") return;
-      setMenu(resolveMentionMenuState(editor));
+      setMenu(resolveMentionMenuState(editor, triggerChar));
     });
-  }, [editor, canOffer]);
+  }, [editor, canOffer, triggerChar]);
 
   // Fresh query → fresh highlight (never a stale mid-list selection).
   useEffect(() => {
@@ -302,7 +332,7 @@ export function MentionMenuPlugin({
       className="fixed z-50 max-h-80 min-w-60 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
       style={{ top: menu.top, left: menu.left }}
       role="listbox"
-      aria-label="Mention"
+      aria-label={trigger === "ref" ? "Insert reference" : "Mention"}
     >
       {loading && candidates.length === 0 ? (
         <p className="px-2 py-3 text-sm text-muted-foreground">Searching…</p>

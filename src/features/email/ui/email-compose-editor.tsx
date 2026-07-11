@@ -29,6 +29,9 @@ import {
 } from "lexical";
 
 import { IconButton } from "../../../components/ui/icon-button";
+import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { EntityRefNode } from "../../spine/editor/entity-ref-node";
+import { MentionMenuPlugin } from "../../spine/editor/mention-menu-plugin";
 
 /** Read handle the compose dialog uses to pull the body on Send. */
 export type ComposeEditorHandle = {
@@ -134,16 +137,18 @@ function ExportPlugin({ handleRef }: { handleRef: React.MutableRefObject<Compose
 type Props = {
   initialHtml: string;
   handleRef: React.MutableRefObject<ComposeEditorHandle | null>;
+  runtime: ModuoRuntime | null;
+  workspaceId: string | null;
 };
 
-export function EmailComposeEditor({ initialHtml, handleRef }: Props) {
+export function EmailComposeEditor({ initialHtml, handleRef, runtime, workspaceId }: Props) {
   const initialConfig = useMemo(
     () => ({
       namespace: "email-compose",
       onError: (error: Error) => {
         console.error("Compose editor error:", error);
       },
-      nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, AutoLinkNode],
+      nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, AutoLinkNode, EntityRefNode],
       theme: THEME,
     }),
     [],
@@ -174,6 +179,24 @@ export function EmailComposeEditor({ initialHtml, handleRef }: Props) {
       <AutoFocusPlugin />
       <SeedHtmlPlugin html={initialHtml} />
       <ExportPlugin handleRef={handleRef} />
+      {/* DF-23: `@mention` / `/ref` an internal entity in the body. A compose
+          draft has no persistable source entity, so `source={null}` → the chip
+          is inserted and deep-links, but no `entity_link` is written; on Send
+          the chip flattens to its label (email-compose.tsx `stripEntityRefAttrs`). */}
+      <MentionMenuPlugin
+        triggerChar="@"
+        trigger="mention"
+        runtime={runtime}
+        workspaceId={workspaceId}
+        source={null}
+      />
+      <MentionMenuPlugin
+        triggerChar="/"
+        trigger="ref"
+        runtime={runtime}
+        workspaceId={workspaceId}
+        source={null}
+      />
     </LexicalComposer>
   );
 }

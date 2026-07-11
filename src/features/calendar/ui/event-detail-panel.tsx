@@ -13,7 +13,8 @@ import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Separator } from "../../../components/ui/separator";
 import { Switch } from "../../../components/ui/switch";
-import { Textarea } from "../../../components/ui/textarea";
+import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
+import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { EntityHub } from "../../spine/ui/entity-hub";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { spineActivityLine, spineActorName } from "../../spine/activity";
@@ -59,7 +60,8 @@ export function EventDetailPanel({
   );
 
   const [title, setTitle] = useState(event.title);
-  const [notes, setNotes] = useState(event.description);
+  // Notes are a Lexical editor (DF-23 — `@mention` / `/ref` inline, stored as
+  // HTML); it seeds itself and commits on blur, so no local draft state here.
   // Times are draft state committed on blur/Enter — datetime-local fires
   // change per keyboard segment edit; committing per keystroke would write
   // garbage intermediates ("year 0002") to the whole series.
@@ -67,10 +69,9 @@ export function EventDetailPanel({
   const [endDraft, setEndDraft] = useState(() => toLocalInputValue(event.endsAt));
   useEffect(() => {
     setTitle(event.title);
-    setNotes(event.description);
     setStartDraft(toLocalInputValue(event.startsAt));
     setEndDraft(toLocalInputValue(event.endsAt));
-  }, [event.id, event.title, event.description, event.startsAt, event.endsAt]);
+  }, [event.id, event.title, event.startsAt, event.endsAt]);
 
   const focus = useMemo(
     () => ({ type: "event", id: event.id }) as const,
@@ -228,19 +229,26 @@ export function EventDetailPanel({
 
       <Field label="Notes">
         {editable ? (
-          <Textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            onBlur={() => {
-              if (notes !== event.description) onPatch(event.id, { description: notes });
+          <EntityTextEditor
+            key={event.id}
+            value={event.description}
+            editable
+            runtime={runtime}
+            workspaceId={workspaceId}
+            source={{ type: "event", id: event.id }}
+            sourceLabel={event.title}
+            sourceIcon="event"
+            currentUserId={currentUserId}
+            ariaLabel="Notes"
+            placeholder="Notes…  @ or / to link"
+            onCommit={(html) => {
+              if (html !== event.description) onPatch(event.id, { description: html });
             }}
-            placeholder="Notes"
-            rows={3}
           />
+        ) : event.description ? (
+          <EntityRichText html={event.description} className="text-sm text-foreground" />
         ) : (
-          <span className="whitespace-pre-wrap text-sm text-foreground">
-            {event.description || "—"}
-          </span>
+          <span className="text-sm text-foreground">—</span>
         )}
       </Field>
 
