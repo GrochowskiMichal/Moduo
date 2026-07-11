@@ -27,6 +27,7 @@ const ENTITY_TYPE_ICONS: Record<string, LucideIcon> = {
   project: FolderKanban,
   note: FileText,
   email: Mail,
+  email_thread: Mail,
   comment: MessageSquare,
   contact: User,
   company: Building2,
