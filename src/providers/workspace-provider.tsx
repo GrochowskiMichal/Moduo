@@ -293,6 +293,18 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     [refreshAccessData, runtime]
   );
 
+  const transferOwnership = useCallback(
+    async (memberId: string) => {
+      if (!runtime) return;
+      // The caller's own role changes (owner → admin), so refresh the workspace
+      // summary too, not just the roster.
+      await runtime.workspace.transferOwnership(memberId);
+      await refreshWorkspaces();
+      await refreshAccessData();
+    },
+    [refreshAccessData, refreshWorkspaces, runtime]
+  );
+
   const revokeInvite = useCallback(
     async (inviteId: string) => {
       if (!runtime) return;
@@ -403,6 +415,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       joinWorkspace,
       updateMemberPermissions,
       removeMember,
+      transferOwnership,
       updateInvite,
       revokeInvite,
       refreshNotifications,
@@ -433,6 +446,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       sendInvite,
       joinWorkspace,
       removeMember,
+      transferOwnership,
       softDeleteWorkspace,
       unreadCountGlobal,
       unreadCountWorkspace,
