@@ -78,6 +78,7 @@ export function TasksPage() {
     <TasksPlanView
       api={api}
       workspaceId={selectedWorkspaceId as string}
+      runtime={runtime}
       urlTaskId={urlTaskId}
       onUrlTaskIdChange={onUrlTaskIdChange}
     />

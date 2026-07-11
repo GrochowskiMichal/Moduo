@@ -53,7 +53,7 @@ import {
   type NotesEditorBridge,
 } from "../../features/notes/editor/notes-editor-bridge";
 import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
-import { TaskDetailPanel } from "../../features/tasks/ui/task-detail-panel";
+import { TaskDetailPanel, TASK_DETAIL_REFRESH_EVENT } from "../../features/tasks/ui/task-detail-panel";
 import { betweenPositions, endPosition } from "../../features/tasks/helpers";
 import { shapeNoteSearchResults, type NotesSearch } from "../../features/notes/search";
 import { NoteImportDialog } from "../../features/notes/ui/note-import-dialog";
@@ -406,7 +406,13 @@ export function NotesPage() {
           source: payload,
           target,
           origin: "drag",
-          onChanged: () => window.dispatchEvent(new CustomEvent(NOTE_DETAIL_REFRESH_EVENT)),
+          onChanged: () => {
+            window.dispatchEvent(new CustomEvent(NOTE_DETAIL_REFRESH_EVENT));
+            // A note→task drop must also refresh the embedded task hub (DF-8).
+            if (target.entityType === "task") {
+              window.dispatchEvent(new CustomEvent(TASK_DETAIL_REFRESH_EVENT));
+            }
+          },
         });
       })();
     },
@@ -729,17 +735,24 @@ export function NotesPage() {
         id: "task",
         label: "Task",
         render: () => (
-          <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
-            <TaskDetailPanel
-              task={detailTask}
-              buckets={tasksApi.buckets}
-              inbox={tasksApi.inbox}
-              canEdit={tasksApi.canEdit}
-              onRequestCapture={() => {}}
-              onSelectTask={setTaskDetailId}
-              api={tasksApi}
-            />
-          </div>
+          // The embedded task hub is a drop target too (DF-8): dragging a note
+          // onto it links the note to the task, using the page's DndContext.
+          <HubDropZone target={{ type: "task", id: detailTask.id }} disabled={!canEdit || degraded}>
+            <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
+              <TaskDetailPanel
+                task={detailTask}
+                buckets={tasksApi.buckets}
+                inbox={tasksApi.inbox}
+                canEdit={tasksApi.canEdit}
+                onRequestCapture={() => {}}
+                onSelectTask={setTaskDetailId}
+                api={tasksApi}
+                runtime={runtime}
+                workspaceId={selectedWorkspaceId}
+                onOpenEntity={handleOpenEntity}
+              />
+            </div>
+          </HubDropZone>
         ),
       }
     : null;
