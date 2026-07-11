@@ -47,7 +47,7 @@
 - [ ] **Do:** publish a note that has child pages; open the public link on a desktop-width window → **Expect:** subtree nav rail on the left, as before _(web)_
 - [ ] **Do:** open the same link in a phone-width window (<768px) → **Expect:** a "Pages" disclosure button above the content; tap → the page tree; tap a page → navigates and the disclosure closes _(web)_
 - [ ] **Do:** publish a note containing a task line → **Expect:** the public body shows the plain checkbox text, **no** `<!-- moduo:task:… -->` comment _(web)_
-- [ ] **Do:** *(after the edge-fn deploy — see Known gaps)* reorder child pages by dragging in the sidebar, reload the public page → **Expect:** nav order matches the sidebar (authored), not alphabetical _(web)_
+- [ ] **Do:** reorder child pages by dragging in the sidebar, reload the public page → **Expect:** nav order matches the sidebar (authored), not alphabetical _(web — edge fn deployed 2026-07-11; live endpoint confirmed returning `position`)_
 
 ## Edge cases
 
@@ -57,10 +57,9 @@
 
 ## Migrations / data
 
-- No DB migrations. The `notes-public` **edge function** changed (adds `position` to the payload) — needs `bunx supabase functions deploy notes-public --project-ref wtoonrvuqumihpkbvwvs`. Until deployed, the public page silently falls back to alphabetical order (verified live).
+- No DB migrations. The `notes-public` **edge function** changed (adds `position`+`createdAt`, scrubs task-id comments) and was **DEPLOYED to prod 2026-07-11** (v3, `verify_jwt:false` preserved). Live endpoint verified returning the new fields with comments stripped. No pending deploy.
 
 ## Known gaps / not-yet-testable
 
-- **Edge fn not deployed from this session** — the auto-mode permission gate blocked the prod deploy (correctly). Deploy, then run the "authored order" check above. Everything else was live-verified.
-- Authored-order check needs a real drag-reorder of child pages — do it by hand (drag wasn't scripted in this session; order was verified via the comparator's unit tests + the pre-deploy alphabetical fallback live).
+- **Edge fn deployed 2026-07-11** (v3) — the JSON payload is confirmed live (position+createdAt present, task-id comments scrubbed). The one thing not exercised end-to-end is a real **drag-reorder of child pages → public nav order** (drag wasn't scripted; the comparator is unit-tested and the payload is verified) — worth a 30-second manual pass.
 - Demo data left on the hosted test account: note "DF-13 verify note" (published, token `bf35089d…`) with 3 child pages and one minted task "done and round". Unpublish/delete freely.

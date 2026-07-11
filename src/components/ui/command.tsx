@@ -32,12 +32,16 @@ function CommandDialog({
   description = "Search for a command to run.",
   children,
   className,
+  commandProps,
   showCloseButton = false,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string;
   description?: string;
   className?: string;
+  /** Forwarded to the inner cmdk `Command` — e.g. `shouldFilter: false` for a
+   * palette that filters its own items (server-side entity search, DF-10). */
+  commandProps?: React.ComponentProps<typeof CommandPrimitive>;
   showCloseButton?: boolean;
 }) {
   return (
@@ -51,6 +55,7 @@ function CommandDialog({
         showCloseButton={showCloseButton}
       >
         <Command
+          {...commandProps}
           className={cn(
             "[&_[cmdk-input-wrapper]_svg]:size-4",
             "[&_[cmdk-input]]:bg-transparent [&_[cmdk-input]]:outline-none",
@@ -58,6 +63,7 @@ function CommandDialog({
             "[&_[cmdk-group]]:px-1",
             "[&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2",
             "[&_[cmdk-item]_svg]:size-4",
+            commandProps?.className,
           )}
         >
           {children}

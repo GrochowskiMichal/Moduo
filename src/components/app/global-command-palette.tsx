@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   FilePlus2,
@@ -24,6 +24,12 @@ import {
 } from "../ui/command";
 import { onShortcut, SHORTCUTS, formatShortcut } from "../../lib/shortcuts";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
+import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
+import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "../../lib/palette-search";
+import { resolveEntityIcon } from "../../features/spine/icon-map";
+import { useAuth } from "../../providers/auth-provider";
+import { useWorkspace } from "../../providers/workspace-provider";
+import type { EntityRecord } from "../../lib/entity-links";
 
 type Action = {
   id: string;
@@ -36,6 +42,23 @@ type Action = {
 
 const PALETTE_OPEN_EVENT = "moduo:palette:open";
 
+// Debounce matches the @mention/`/ref` pickers (useMentionSearch) — one search
+// cadence across the app.
+const SEARCH_DEBOUNCE_MS = 150;
+
+// Humanized per-result type badge (distinguishes contact vs company inside the
+// Contacts group, task vs project inside Tasks, …).
+const TYPE_LABEL: Record<string, string> = {
+  task: "Task",
+  project: "Project",
+  note: "Note",
+  contact: "Contact",
+  company: "Company",
+  email: "Email",
+  email_thread: "Email",
+  event: "Event",
+};
+
 export function dispatchOpenPalette() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(PALETTE_OPEN_EVENT));
@@ -43,7 +66,14 @@ export function dispatchOpenPalette() {
 
 export function GlobalCommandPalette() {
   const navigate = useNavigate();
+  const { runtime } = useAuth();
+  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<EntityRecord[]>([]);
+  const [searching, setSearching] = useState(false);
+  const reqRef = useRef(0);
+  const trimmed = query.trim();
 
   useEffect(() => onShortcut("palette", () => setOpen((prev) => !prev)), []);
 
@@ -54,6 +84,51 @@ export function GlobalCommandPalette() {
     return () => window.removeEventListener(PALETTE_OPEN_EVENT, onOpen);
   }, []);
 
+  // Reset the query + results each time the palette closes so it reopens fresh.
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setResults([]);
+      setSearching(false);
+    }
+  }, [open]);
+
+  // Debounced registry search — last-write-wins via a request counter so a slow
+  // response can't overwrite a newer query's results. Only navigable kinds are
+  // fetched (PALETTE_ENTITY_TYPES); results deep-link through the entity-open
+  // event, riding DF-1's route map (tasks/notes/contacts select; email/calendar
+  // degrade to their module page until DF-2 wires URL selection there).
+  useEffect(() => {
+    if (!open) return;
+    if (!trimmed || !runtime || !selectedWorkspaceId) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    const reqId = ++reqRef.current;
+    setSearching(true);
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const records = await runtime.spine.searchEntities({
+            workspaceId: selectedWorkspaceId,
+            query: trimmed,
+            types: PALETTE_ENTITY_TYPES,
+            limit: 20,
+          });
+          if (reqId === reqRef.current) setResults(records);
+        } catch {
+          if (reqId === reqRef.current) setResults([]);
+        } finally {
+          if (reqId === reqRef.current) setSearching(false);
+        }
+      })();
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [open, trimmed, runtime, selectedWorkspaceId]);
+
+  const resultGroups = useMemo(() => groupPaletteResults(results), [results]);
+
   const go = useCallback(
     (to: string) => () => {
       setOpen(false);
@@ -62,10 +137,35 @@ export function GlobalCommandPalette() {
     [navigate],
   );
 
+  // Deep-link a result the same way widget rows / note chips / notifications do:
+  // dispatch the spine's entity-open event; the app-chrome host listener resolves
+  // the route, marks the external-open intent, and toasts if a type has no page
+  // yet. Keeps one deep-link grammar app-wide.
+  const openEntityResult = useCallback((record: EntityRecord) => {
+    setOpen(false);
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: record.type, id: record.id } }),
+    );
+  }, []);
+
   const settingsShortcut = SHORTCUTS.find((s) => s.id === "settings");
   const settingsLabel = settingsShortcut ? formatShortcut(settingsShortcut) : "";
   const newNoteShortcut = SHORTCUTS.find((s) => s.id === "new-note");
   const newNoteLabel = newNoteShortcut ? formatShortcut(newNoteShortcut) : "";
+
+  // Only surface modules the user can actually reach — mirror app-chrome's
+  // `modulesNavItems` permission filter exactly so the palette and the top-bar
+  // nav can never disagree (notes/tasks gated on their own lane; calendar rides
+  // the tasks lane per specs/calendar.md; home/email/contacts are ungated at
+  // alpha, matching the nav). Without this the palette would deep-link into a
+  // module the workspace has no access to.
+  const canReachModule = (id: string): boolean => {
+    if (id === "notes") return modulePermissions.notes !== "none";
+    if (id === "tasks") return modulePermissions.tasks !== "none";
+    if (id === "calendar") return modulePermissions.tasks !== "none";
+    return true;
+  };
 
   const navActions: Action[] = [
     { id: "home", label: "Open Home", icon: House, run: go("/") },
@@ -76,7 +176,7 @@ export function GlobalCommandPalette() {
     // nav/palette stay in sync. The /mindmap route stays reachable directly.
     { id: "email", label: "Open Email", icon: Inbox, run: go("/email") },
     { id: "contacts", label: "Open Contacts", icon: ContactIcon, run: go("/contacts") },
-  ];
+  ].filter((action) => canReachModule(action.id));
 
   // Notes capture works from any page (Wave-3 AC1): same `action` pattern.
   const notesActions: Action[] = [
@@ -130,45 +230,91 @@ export function GlobalCommandPalette() {
     },
   ];
 
+  // Static actions filter locally by label substring (cmdk's own filter is off —
+  // entity results are server-filtered and would otherwise be dropped). Empty
+  // query shows every action.
+  const q = trimmed.toLowerCase();
+  const filterActions = (actions: Action[]) =>
+    q ? actions.filter((a) => a.label.toLowerCase().includes(q)) : actions;
+  const visibleNav = filterActions(navActions);
+  const visibleNotes = filterActions(notesActions);
+  const visibleContacts = filterActions(contactsActions);
+  const visibleSettings = filterActions(settingsActions);
+  const actionCount =
+    visibleNav.length + visibleNotes.length + visibleContacts.length + visibleSettings.length;
+
+  const showNoResults =
+    trimmed.length > 0 && !searching && resultGroups.length === 0 && actionCount === 0;
+
+  const renderAction = ({ id, label, icon: Icon, shortcut, run }: Action) => (
+    <CommandItem key={id} value={`action:${id}`} onSelect={run}>
+      <Icon />
+      <span>{label}</span>
+      {shortcut ? <CommandShortcut>{shortcut}</CommandShortcut> : null}
+    </CommandItem>
+  );
+
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} className="max-w-xl">
-      <CommandInput placeholder="Search workspaces, pages, or actions…" />
+    <CommandDialog
+      open={open}
+      onOpenChange={setOpen}
+      className="max-w-xl"
+      commandProps={{ shouldFilter: false }}
+    >
+      <CommandInput
+        value={query}
+        onValueChange={setQuery}
+        placeholder="Search tasks, notes, contacts… or jump to a page"
+      />
       <CommandList>
-        <CommandEmpty>No results.</CommandEmpty>
-        <CommandGroup heading="Navigate">
-          {navActions.map(({ id, label, icon: Icon, run }) => (
-            <CommandItem key={id} onSelect={run}>
-              <Icon />
-              <span>{label}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-        <CommandGroup heading="Notes">
-          {notesActions.map(({ id, label, icon: Icon, shortcut, run }) => (
-            <CommandItem key={id} onSelect={run}>
-              <Icon />
-              <span>{label}</span>
-              {shortcut ? <CommandShortcut>{shortcut}</CommandShortcut> : null}
-            </CommandItem>
-          ))}
-        </CommandGroup>
-        <CommandGroup heading="Contacts">
-          {contactsActions.map(({ id, label, icon: Icon, run }) => (
-            <CommandItem key={id} onSelect={run}>
-              <Icon />
-              <span>{label}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-        <CommandGroup heading="Workspace">
-          {settingsActions.map(({ id, label, icon: Icon, shortcut, run }) => (
-            <CommandItem key={id} onSelect={run}>
-              <Icon />
-              <span>{label}</span>
-              {shortcut ? <CommandShortcut>{shortcut}</CommandShortcut> : null}
-            </CommandItem>
-          ))}
-        </CommandGroup>
+        {visibleNav.length > 0 ? (
+          <CommandGroup heading="Navigate">{visibleNav.map(renderAction)}</CommandGroup>
+        ) : null}
+        {visibleNotes.length > 0 ? (
+          <CommandGroup heading="Notes">{visibleNotes.map(renderAction)}</CommandGroup>
+        ) : null}
+        {visibleContacts.length > 0 ? (
+          <CommandGroup heading="Contacts">{visibleContacts.map(renderAction)}</CommandGroup>
+        ) : null}
+        {visibleSettings.length > 0 ? (
+          <CommandGroup heading="Workspace">{visibleSettings.map(renderAction)}</CommandGroup>
+        ) : null}
+
+        {/* Keep prior results on screen while a newer query debounces (like the
+            @mention picker) — only blank to "Searching…" when there's nothing
+            yet to show, so fast typing doesn't flicker the primary ⌘K surface. */}
+        {resultGroups.length > 0
+          ? resultGroups.map((group) => (
+              <CommandGroup key={group.key} heading={group.heading}>
+                {group.items.map((record) => {
+                  const Icon = resolveEntityIcon(record.type, record.icon);
+                  return (
+                    <CommandItem
+                      key={`${record.type}:${record.id}`}
+                      value={`entity:${record.type}:${record.id}`}
+                      onSelect={() => openEntityResult(record)}
+                    >
+                      <Icon />
+                      <span className="min-w-0 flex-1 truncate">
+                        {record.label || "Untitled"}
+                      </span>
+                      <span className="shrink-0 text-2xs uppercase tracking-wide text-muted-foreground/70">
+                        {TYPE_LABEL[record.type] ?? record.type}
+                      </span>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            ))
+          : trimmed && searching
+            ? (
+                <div className="py-6 text-center text-sm text-muted-foreground" role="status">
+                  Searching…
+                </div>
+              )
+            : null}
+
+        {showNoResults ? <CommandEmpty>No results.</CommandEmpty> : null}
       </CommandList>
     </CommandDialog>
   );
