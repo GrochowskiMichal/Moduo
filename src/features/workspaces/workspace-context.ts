@@ -57,7 +57,7 @@ export type WorkspaceContextValue = {
   unreadCountGlobal: number;
   setNotificationsScope: (scope: NotificationScope) => void;
   selectWorkspace: (workspaceId: string) => void;
-  refreshWorkspaces: () => Promise<void>;
+  refreshWorkspaces: () => Promise<WorkspaceSummary[]>;
   refreshAccessData: () => Promise<void>;
   createWorkspace: (name?: string) => Promise<string | null>;
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
@@ -66,6 +66,7 @@ export type WorkspaceContextValue = {
   sendInvite: (args: SendWorkspaceInviteArgs) => Promise<WorkspaceInvite | null>;
   joinWorkspace: (token: string) => Promise<WorkspaceSummary | null>;
   updateMemberPermissions: (args: UpdateWorkspaceMemberPermissionsArgs) => Promise<void>;
+  removeMember: (memberId: string) => Promise<void>;
   updateInvite: (args: UpdateWorkspaceInviteArgs) => Promise<void>;
   revokeInvite: (inviteId: string) => Promise<void>;
   refreshNotifications: () => Promise<void>;

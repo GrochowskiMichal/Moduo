@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import {
-  DndContext,
   DragOverlay,
   closestCenter,
   type DraggableSyntheticListeners,
@@ -28,6 +27,7 @@ import { canNestUnder, groupTasks, nestedSubtaskIds, type GroupBy } from "../hel
 import type { Bucket, Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import {
+  DndBoundary,
   NestableTask,
   SortableTask,
   asTaskDropTarget,
@@ -70,6 +70,11 @@ type Props = {
   /** One-shot deep-link reveal (DF-1): when the selection was set from outside
    * and sits in a collapsed group, expand that group exactly once. */
   revealRequest?: { id: string; seq: number } | null;
+  /** "external" = an ancestor owns the DndContext (DF-22: so a center-pane task
+   * row can be dragged onto the right-pane hub to link it); reorder/nest bind
+   * via a monitor. Default "internal" (own DndContext) keeps stories/standalone
+   * mounts working. */
+  dndMode?: "internal" | "external";
   api: TasksModuleApi;
 };
 
@@ -103,6 +108,7 @@ export function TaskListView({
   onReorder,
   nestable = false,
   revealRequest = null,
+  dndMode = "internal",
   api,
 }: Props) {
   // Selection is owned by the parent (shared with the detail rail); these aliases
@@ -483,11 +489,15 @@ export function TaskListView({
       if (target?.type !== "onto-task") return;
       const childId = String(active.id);
       if (target.taskId === childId) return;
+      // Now that this fires under the app-level context (DF-22), only act on a
+      // drag that actually originated from this list's nest rows — a foreign
+      // drag can't nest a stranger (belt to the `isNestTarget`/`canDrop` suspenders).
+      if (!nestTasks.some((t) => t.id === childId)) return;
       api.setTaskParent(childId, target.taskId);
       // Reveal the result — expand the new parent so the moved task shows nested.
       if (nest) setExpandedParents((prev) => new Set(prev).add(target.taskId));
     },
-    [endNestDrag, api, nest],
+    [endNestDrag, api, nest, nestTasks],
   );
 
   return (
@@ -531,7 +541,12 @@ export function TaskListView({
         {tasks.length === 0 ? (
           <EmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />
         ) : canReorder ? (
-          <DndContext
+          // Queue reorder. In external mode (DF-22) the tasks page owns the one
+          // DndContext (so a row can be dropped on the hub); we bind our reorder
+          // handlers through a monitor. The handlers stay spatially disjoint —
+          // onQueueDragEnd early-returns when `over` isn't a queue row.
+          <DndBoundary
+            dndMode={dndMode}
             sensors={dndSensors}
             collisionDetection={closestCenter}
             onDragStart={() => setReordering(true)}
@@ -554,9 +569,13 @@ export function TaskListView({
                 />
               ))}
             </SortableContext>
-          </DndContext>
+          </DndBoundary>
         ) : canNest ? (
-          <DndContext
+          // Drag-onto-task → subtask. Same external/internal split; onNestDragEnd
+          // early-returns unless `over` is an `onto-task` droppable, so a drop on
+          // the hub falls through to the page's link handler.
+          <DndBoundary
+            dndMode={dndMode}
             sensors={nestSensors}
             collisionDetection={pointerFirstCollision}
             onDragStart={onNestDragStart}
@@ -585,7 +604,7 @@ export function TaskListView({
               </DragOverlay>,
               document.body,
             )}
-          </DndContext>
+          </DndBoundary>
         ) : (
           groups.map((group) => {
             const isCollapsed = collapsed.has(group.key);

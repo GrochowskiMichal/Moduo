@@ -15,16 +15,23 @@
 
 import { useCallback, type CSSProperties, type ReactNode } from "react";
 import {
+  DndContext,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
   pointerWithin,
+  useDndMonitor,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   type CollisionDetection,
+  type DragCancelEvent,
   type DraggableSyntheticListeners,
+  type DragEndEvent,
+  type DragStartEvent,
+  type SensorDescriptor,
+  type SensorOptions,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -131,6 +138,81 @@ export const pointerFirstCollision: CollisionDetection = (args) => {
   const pointerHits = pointerWithin(args);
   return pointerHits.length > 0 ? pointerHits : closestCenter(args);
 };
+
+// ── external-context monitor (DF-22) ─────────────────────────────────────────
+
+/**
+ * Binds a view's drag handlers to a DndContext owned by an ANCESTOR (the tasks
+ * page's one app-level context) instead of the view providing its own — the
+ * NO-7b pattern (gotchas §Drag-to-link). Must render inside that context.
+ *
+ * DF-22 collapses the Tasks list/board/hub into one context so a center-pane
+ * task drag can reach the right-pane hub. Each view keeps its OWN reorder/nest
+ * handlers (spatially disjoint — each acts only when the drop is over its own
+ * surface) and subscribes through this monitor; the page provides the single
+ * context + collision + sensors. Renders nothing.
+ */
+export function TaskDndMonitor({
+  onDragStart,
+  onDragEnd,
+  onDragCancel,
+}: {
+  onDragStart?: (event: DragStartEvent) => void;
+  onDragEnd?: (event: DragEndEvent) => void;
+  onDragCancel?: (event: DragCancelEvent) => void;
+}) {
+  useDndMonitor({ onDragStart, onDragEnd, onDragCancel });
+  return null;
+}
+
+/**
+ * A drag boundary that is EITHER a self-owned `<DndContext>` ("internal", the
+ * default — stories/standalone mounts) OR a {@link TaskDndMonitor} that
+ * subscribes to an ancestor context ("external" — DF-22, the tasks page's one
+ * app-level context). The same reorder/nest children render inside either; only
+ * the ownership of the context (and thus the sensors/collision) moves.
+ *
+ * External mode ignores `sensors`/`collisionDetection` — the ancestor supplies
+ * them. Keep the passed values as the internal-mode fallback so a view stays
+ * fully functional on its own.
+ */
+export function DndBoundary({
+  dndMode,
+  sensors,
+  collisionDetection,
+  onDragStart,
+  onDragEnd,
+  onDragCancel,
+  children,
+}: {
+  dndMode: "internal" | "external";
+  sensors: SensorDescriptor<SensorOptions>[];
+  collisionDetection: CollisionDetection;
+  onDragStart?: (event: DragStartEvent) => void;
+  onDragEnd?: (event: DragEndEvent) => void;
+  onDragCancel?: (event: DragCancelEvent) => void;
+  children: ReactNode;
+}) {
+  if (dndMode === "external") {
+    return (
+      <>
+        <TaskDndMonitor onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={onDragCancel} />
+        {children}
+      </>
+    );
+  }
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={collisionDetection}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragCancel={onDragCancel}
+    >
+      {children}
+    </DndContext>
+  );
+}
 
 // ── sortable wrapper ─────────────────────────────────────────────────────────
 

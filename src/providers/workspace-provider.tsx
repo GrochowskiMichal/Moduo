@@ -57,6 +57,13 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
   selectedWorkspaceIdRef.current = selectedWorkspaceId;
 
+  // Mirror the list so leave/delete can enforce the last-one guard without
+  // listing `workspaces` in their deps (which would churn their identity on
+  // every refresh). The invariant: never strand the user at zero reachable
+  // workspaces (the runtime ops have no such guard). DF-24 (DF-16 deferred this).
+  const workspacesRef = useRef(workspaces);
+  workspacesRef.current = workspaces;
+
   const selectedWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null,
     [selectedWorkspaceId, workspaces]
@@ -85,15 +92,20 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     [userId]
   );
 
-  const refreshWorkspaces = useCallback(async () => {
+  // Returns the freshly-loaded list so callers (e.g. `joinWorkspace`) can resolve a
+  // just-added workspace immediately — `setWorkspaces` is async, so the closure's
+  // `workspaces` won't reflect the new rows right after this awaits.
+  const refreshWorkspaces = useCallback(async (): Promise<WorkspaceSummary[]> => {
     if (!runtime || !userId) {
       setWorkspaces([]);
       setSelectedWorkspaceId(null);
-      return;
+      return [];
     }
 
     const rows = await runtime.workspace.list();
-    const next = rows.map(mapWorkspace).filter((workspace) => !workspace.isDeleted);
+    const next = rows
+      .map((row) => mapWorkspace(row, userId))
+      .filter((workspace) => !workspace.isDeleted);
     setWorkspaces(next);
 
     const currentSelected = selectedWorkspaceIdRef.current;
@@ -110,6 +122,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     if (resolvedSelected && typeof window !== "undefined") {
       window.localStorage.setItem(storageKey(userId), resolvedSelected);
     }
+    return next;
   }, [runtime, userId]);
 
   const refreshAccessData = useCallback(async () => {
@@ -119,13 +132,15 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    const [memberRows, inviteRows] = await Promise.all([
+    // Settle independently: a viewer/editor can read the member roster but may
+    // not be allowed to read invites — don't let that drop the roster too. DF-24.
+    const [memberResult, inviteResult] = await Promise.allSettled([
       runtime.workspace.listMembers(selectedWorkspaceId),
       runtime.workspace.listInvites(selectedWorkspaceId),
     ]);
 
-    setMembers(memberRows.map(mapMember));
-    setInvites(inviteRows.map(mapInvite));
+    setMembers(memberResult.status === "fulfilled" ? memberResult.value.map(mapMember) : []);
+    setInvites(inviteResult.status === "fulfilled" ? inviteResult.value.map(mapInvite) : []);
   }, [runtime, selectedWorkspaceId]);
 
   const refreshNotifications = useCallback(async () => {
@@ -193,6 +208,9 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const leaveWorkspace = useCallback(
     async (workspaceId: string) => {
       if (!runtime) return;
+      if (workspacesRef.current.length <= 1) {
+        throw new Error("You can't leave your only workspace.");
+      }
       await runtime.workspace.leave(workspaceId);
       await refreshWorkspaces();
     },
@@ -202,6 +220,9 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const softDeleteWorkspace = useCallback(
     async (workspaceId: string) => {
       if (!runtime) return;
+      if (workspacesRef.current.length <= 1) {
+        throw new Error("You can't delete your only workspace.");
+      }
       await runtime.workspace.softDelete(workspaceId);
       await refreshWorkspaces();
     },
@@ -223,10 +244,16 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     async (token: string): Promise<WorkspaceSummary | null> => {
       if (!runtime) return null;
       try {
-        const raw = await runtime.workspace.joinInvite(token.trim());
-        await refreshWorkspaces();
-        if (raw?.id) selectWorkspace(raw.id);
-        return raw ? mapWorkspace(raw) : null;
+        // `joinInvite` returns the accepted *invite* row, not a workspace — its
+        // `workspace_id` points at the joined workspace. Resolve the real summary
+        // from the refreshed list rather than mapping the invite shape (which would
+        // yield a garbage id/name). DF-24 validator finding.
+        const invite = await runtime.workspace.joinInvite(token.trim());
+        const refreshed = await refreshWorkspaces();
+        const joinedId = invite?.workspace_id ?? invite?.workspaceId ?? null;
+        const joined = joinedId ? refreshed.find((workspace) => workspace.id === joinedId) ?? null : null;
+        if (joined) selectWorkspace(joined.id);
+        return joined;
       } catch (err) {
         console.error("[workspace] joinWorkspace failed:", err);
         return null;
@@ -253,6 +280,17 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       await refreshNotifications();
     },
     [refreshAccessData, refreshNotifications, runtime]
+  );
+
+  const removeMember = useCallback(
+    async (memberId: string) => {
+      if (!runtime) return;
+      // Throws on failure (not-owner/admin, target-is-owner, unapplied-RPC) —
+      // callers toast it.
+      await runtime.workspace.removeMember(memberId);
+      await refreshAccessData();
+    },
+    [refreshAccessData, runtime]
   );
 
   const revokeInvite = useCallback(
@@ -364,6 +402,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       sendInvite,
       joinWorkspace,
       updateMemberPermissions,
+      removeMember,
       updateInvite,
       revokeInvite,
       refreshNotifications,
@@ -393,6 +432,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       selectWorkspace,
       sendInvite,
       joinWorkspace,
+      removeMember,
       softDeleteWorkspace,
       unreadCountGlobal,
       unreadCountWorkspace,

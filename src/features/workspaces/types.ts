@@ -35,6 +35,9 @@ export type WorkspaceMember = {
   role: WorkspaceRole;
   isActive: boolean;
   removedAt: string | null;
+  /** From the `profiles(*)` join in `listMembers` — null until the profile resolves. */
+  displayName: string | null;
+  avatarUrl: string | null;
 };
 
 export type WorkspaceInvite = {

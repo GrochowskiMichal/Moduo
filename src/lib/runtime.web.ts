@@ -32,6 +32,7 @@ import type { RawLinkSuggestion } from "../features/spine/suggest";
 import { shapeRecentLinks, type RecentLinkItem } from "../features/spine/recent";
 import { selectNeedsAttention, type OverdueFollowup } from "../features/contacts/needs-attention";
 import { selectReconnect } from "../features/contacts/reconnect";
+import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
 import { createRequestCache } from "./request-cache";
 import type { EntityLink, EntityRecord } from "./entity-links";
@@ -481,14 +482,25 @@ export const webRuntime: ModuoRuntime = {
       if (inviteError || !invite) throw new Error("Invalid or expired invite");
       const user = await getAuthedUser();
       if (!user) throw new Error("Not authenticated");
+      // The invite stores the rich app vocabulary (role `editor`; perms
+      // view/edit/admin), but `workspace_members` CHECK constraints only accept
+      // the legacy vocabularies — role ∈ {owner,admin,member,viewer}, perms ∈
+      // {read,write,none}. Copying the invite verbatim made EVERY real redemption
+      // fail a CHECK. Normalize at the member-insert boundary. DF-24.
       const { error: memberError } = await supabaseClient.from("workspace_members").insert({
         workspace_id: invite.workspace_id,
         user_id: user.id,
-        role: invite.role,
-        permissions_notes: invite.permissions_notes,
-        permissions_tasks: invite.permissions_tasks,
+        role: toMemberRole(invite.role),
+        permissions_notes: toMemberPerm(invite.permissions_notes),
+        permissions_tasks: toMemberPerm(invite.permissions_tasks),
       });
-      if (memberError) throw new Error(memberError.message);
+      if (memberError) {
+        // Duplicate membership → a friendlier message than the raw PG unique error.
+        if (memberError.code === "23505" || /duplicate key|already exists/i.test(memberError.message)) {
+          throw new Error("You're already a member of this workspace.");
+        }
+        throw new Error(memberError.message);
+      }
       await supabaseClient.from("workspace_invites").update({ status: "accepted" }).eq("id", invite.id);
       return invite;
     },
@@ -515,12 +527,30 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
     },
     async updateMemberPermissions(memberId, role, modulePermissions) {
+      // Same vocabulary bridge as joinInvite — the modal sends app roles/perms
+      // (editor, view/edit/admin) that the members CHECK would reject. DF-24.
       const { error } = await supabaseClient.from("workspace_members").update({
-        role,
-        permissions_notes: modulePermissions?.notes ?? "write",
-        permissions_tasks: modulePermissions?.tasks ?? "write",
+        role: toMemberRole(role),
+        permissions_notes: toMemberPerm(modulePermissions?.notes),
+        permissions_tasks: toMemberPerm(modulePermissions?.tasks),
       }).eq("id", memberId);
       if (error) throw new Error(error.message);
+    },
+    async removeMember(memberId) {
+      // The base workspace_members write-RLS is own-row (only `leave` self-deletes),
+      // so ejecting another member needs a SECURITY DEFINER op that checks the
+      // caller is owner/admin and refuses to remove an owner or yourself. DF-24.
+      const { error } = await supabaseClient.rpc("workspace_op_remove_member", { p_member_id: memberId });
+      if (error) throw new Error(error.message);
+    },
+    inviteUrl(token) {
+      // Mirror notesV2.publishedUrl: web origin is correct wherever served;
+      // desktop (tauri://) needs PUBLIC_WEB_ORIGIN. encodeURIComponent is
+      // load-bearing — invite tokens are base64 (`+` `/` `=`), which are
+      // path/query-hostile raw. DF-24.
+      const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(/\/+$/, "");
+      const origin = configured || (typeof window !== "undefined" ? window.location.origin : "");
+      return `${origin}/join?invite=${encodeURIComponent(token)}`;
     },
     async listNotifications() {
       const user = await getAuthedUser();
