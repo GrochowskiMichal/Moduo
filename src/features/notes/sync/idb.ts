@@ -62,6 +62,30 @@ function req<T>(r: IDBRequest<T>): Promise<T> {
 
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 
+/**
+ * Total queued (unsynced) entries across BOTH notes outboxes, all workspaces —
+ * the Advanced → "reset local cache" data-loss guard reads this before wiping
+ * the notes DBs (DF-19g). Fails soft to 0 when IndexedDB is unavailable.
+ */
+export async function countPendingOutbox(): Promise<number> {
+  const docs = await withStore("docOutbox", "readonly", (s) => req(s.count()), 0);
+  const metas = await withStore("metaOutbox", "readonly", (s) => req(s.count()), 0);
+  return docs + metas;
+}
+
+/**
+ * Close the cached notes DB connection and drop the singleton so a subsequent
+ * `indexedDB.deleteDatabase("moduo-notes-v2")` isn't blocked by an open handle
+ * (the reset-cache flow calls this right before deleting). The next
+ * `openNotesDb()` transparently re-opens.
+ */
+export async function closeNotesDb(): Promise<void> {
+  if (!dbPromise) return;
+  const db = await dbPromise.catch(() => null);
+  db?.close();
+  dbPromise = null;
+}
+
 export function openNotesDb(): Promise<IDBDatabase | null> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve) => {
