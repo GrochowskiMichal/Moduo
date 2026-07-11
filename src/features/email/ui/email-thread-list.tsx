@@ -108,6 +108,7 @@ const ThreadRow = forwardRef<
     <button
       ref={ref}
       type="button"
+      data-thread-id={thread.threadId}
       aria-current={selected ? "true" : undefined}
       onClick={onSelect}
       className={
