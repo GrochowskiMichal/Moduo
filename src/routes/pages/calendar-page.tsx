@@ -1,7 +1,9 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { CalendarPageView } from "../../features/calendar/ui/calendar-page-view";
+import type { CalendarSearch } from "../../features/calendar/search";
 import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
@@ -12,6 +14,25 @@ import { useWorkspace } from "../../providers/workspace-provider";
 export function CalendarPage() {
   const { runtime, userId, configError } = useAuth();
   const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+
+  // `?event=` deep link (DF-2). Consume-once command: the page navigates to the
+  // event's day + selects + opens detail, then clears the param (the anchor day
+  // persists per-device, so nothing is lost). Cleared with `replace` — the deep
+  // link is a jump, not a history step to walk back through.
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as CalendarSearch;
+  const urlEventId = search.event ?? null;
+  const clearEventParam = useCallback(() => {
+    void navigate({
+      to: "/calendar",
+      replace: true,
+      search: (prev: Record<string, unknown>) => {
+        const next = { ...prev };
+        delete next.event;
+        return next;
+      },
+    });
+  }, [navigate]);
 
   const api = useTasksModule(runtime, {
     userId,
@@ -57,6 +78,8 @@ export function CalendarPage() {
       runtime={runtime}
       userId={userId as string}
       workspaceId={selectedWorkspaceId as string}
+      urlEventId={urlEventId}
+      onConsumeEventDeepLink={clearEventParam}
     />
   );
 }

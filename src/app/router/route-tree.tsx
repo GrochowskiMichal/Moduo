@@ -13,6 +13,8 @@ import { ContactsPage } from "../../routes/pages/contacts-page";
 import { validateContactsSearch } from "../../features/contacts/search";
 import { validateNotesSearch } from "../../features/notes/search";
 import { validateTasksSearch } from "../../features/tasks/search";
+import { validateCalendarSearch } from "../../features/calendar/search";
+import { validateEmailSearch } from "../../features/email/url-search";
 import { SettingsPage } from "../../routes/pages/settings-page";
 import { PaywallPage } from "../../routes/pages/paywall-page";
 import { PublishedNotePage } from "../../routes/pages/published-note-page";
@@ -116,6 +118,8 @@ const calendarRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/calendar",
   component: CalendarPage,
+  // `?event=` deep link → navigate to the event's day + select + open detail (DF-2).
+  validateSearch: validateCalendarSearch,
 });
 
 const mindmapRoute = createRoute({
@@ -128,6 +132,8 @@ const emailRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/email",
   component: EmailPage,
+  // `?thread=` deep link → select + scroll the thread (desktop) / tissue card (web) (DF-2).
+  validateSearch: validateEmailSearch,
 });
 
 const contactsRoute = createRoute({

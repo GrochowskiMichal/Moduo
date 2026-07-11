@@ -204,7 +204,7 @@ Still genuinely open: a concrete **pricing/tier table** (needs the cost model fi
 
 ### B. Architecture & data (gate the spine — cheap now, expensive later; full detail in [data-layers.md](./data-layers.md))
 4. **`entity_links` shape** — one universal typed table vs. separate `links`/`attachments`. **✅ REC (confident):** one polymorphic table with a `relation_kind` enum; attachments are `kind='attachment'`.
-5. **Polymorphic integrity** — how to keep `(entity_type, entity_id)` referentially sane. **⚠ NEED YOU (lean):** I lean trigger-based validation + partial indexes over a central `entities` registry table (simpler, fewer writes). Worth a 30-min architecture decision before building.
+5. **Polymorphic integrity** — how to keep `(entity_type, entity_id)` referentially sane. **✅ RESOLVED (2026-06-24) → central `entities` registry** (see the "Resolved" block above + [data-layers.md](./data-layers.md)). Built and shipped in CT-1 (`20260625120000_spine_entity_links`). *(This line originally leaned trigger-based validation; the registry won the same-day decision — ignore the older lean.)*
 6. **Notes CRDT ↔ Postgres** for cloud-sync — store the Yjs doc as a blob + derived searchable fields, vs. shred to rows. **✅ REC (confident):** blob + derived fields (keeps the editor fast, search works, avoids a lossy shred).
 7. **Drag-payload contract** — the typed "any entity → any drop target" shape and where it lives. **✅ REC (confident):** a single typed contract in `src/lib/`; every module declares what it emits and what it accepts.
 

@@ -96,7 +96,9 @@ import { EventPopover } from "./event-popover";
 import { FocusReadout } from "./focus-readout";
 import { RightPanelSwitcher, type RightPanelVariant } from "../../../components/app/right-panel-switcher";
 import { LinkedNotesPanel } from "../../notes/ui/linked-notes-panel";
-import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
+import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
+import { resolveCalendarDeepLink } from "../search";
+import { expandEventOccurrences } from "../recurrence-expand";
 import { TaskPopover } from "./task-popover";
 import { formatTimeOfDay } from "./time-format";
 import type { QuickCreateDraft } from "./event-quick-create";
@@ -106,6 +108,11 @@ type Props = {
   runtime: ModuoRuntime | null;
   userId: string;
   workspaceId: string;
+  /** Inbound `?event=` deep link (DF-2) — navigate to its day + select + open. */
+  urlEventId?: string | null;
+  /** Called once the deep link has been applied (or found stale) so the page
+   * can clear the URL param. */
+  onConsumeEventDeepLink?: () => void;
 };
 
 type EventPopoverState = { chip: EventChip; rect: DOMRect };
@@ -118,7 +125,14 @@ const DROP_SNAP_MINUTES = 15;
 /** The desktop app is the external-sync writer (CAL-6b); web only renders. */
 const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
+export function CalendarPageView({
+  api,
+  runtime,
+  userId,
+  workspaceId,
+  urlEventId = null,
+  onConsumeEventDeepLink,
+}: Props) {
   const [viewState, setViewState] = useState<CalendarViewState>(() =>
     readViewState(userId, workspaceId),
   );
@@ -314,6 +328,48 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
   const [deleteEventId, setDeleteEventId] = useState<string | null>(null);
 
   const deleteEvent = deleteEventId ? (eventsById.get(deleteEventId) ?? null) : null;
+
+  // ── inbound `?event=` deep link (DF-2) ────────────────────────────────────
+  // A widget row / linked chip / notification opens a specific event: navigate
+  // to its series-anchor day, select + highlight the first occurrence there,
+  // and open its detail. Consume-once (keyed by id) so render churn can't fight
+  // the user who navigated away; wait for the events bundle before deciding an
+  // id is stale. On apply — or when stale/unknown — clear the URL param.
+  const processedEventIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!urlEventId) {
+      processedEventIdRef.current = null;
+      return;
+    }
+    if (processedEventIdRef.current === urlEventId) return;
+    if (calendar.loading) return; // wait for events before ruling stale
+    processedEventIdRef.current = urlEventId;
+    takeEntityOpenIntent(urlEventId); // spend the "take me there" mark
+    const target = resolveCalendarDeepLink(urlEventId, { events: calendar.events });
+    if (target.kind === "none") {
+      toast("Couldn't find that event", {
+        description: "It may have been deleted or isn't on this calendar.",
+      });
+      onConsumeEventDeepLink?.();
+      return;
+    }
+    // For a recurring event, land on the nearest UPCOMING occurrence (a weekly
+    // standup created months ago shouldn't teleport the user months back); a
+    // one-off / ended series falls back to the series start. Using the same
+    // expander the chips use means the occurrence key below matches a real chip.
+    const event = calendar.events.find((e) => e.id === target.eventId);
+    let occurrenceMs = new Date(target.startsAt).getTime();
+    if (event?.rrule) {
+      const todayMs = startOfLocalDay(new Date()).getTime();
+      const yearAheadMs = todayMs + 366 * 24 * 60 * 60 * 1000;
+      const next = expandEventOccurrences(event, todayMs, yearAheadMs)[0];
+      if (next) occurrenceMs = next.startMs;
+    }
+    goToDate(new Date(occurrenceMs));
+    setSelectedOccurrenceKey(`${target.eventId}:${occurrenceMs}`);
+    openDetail({ type: "event", id: target.eventId });
+    onConsumeEventDeepLink?.();
+  }, [urlEventId, calendar.loading, calendar.events, goToDate, openDetail, onConsumeEventDeepLink]);
 
   const onEventClick = useCallback((chip: EventChip, rect: DOMRect) => {
     setTaskPopover(null);
@@ -768,6 +824,8 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
               onRequestCapture={() => setCaptureOpen(true)}
               onSelectTask={(id) => setDetailTarget({ type: "task", id })}
               api={api}
+              runtime={runtime}
+              workspaceId={workspaceId}
             />
           ) : (
             <div className="grid h-full place-content-center px-3 text-center">
