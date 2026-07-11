@@ -20,6 +20,8 @@ export function useEmailPrefs(userId: string): {
   prefs: EmailPrefs;
   /** Force a sender into a section (or clear the override with `null`). */
   setSenderOverride: (senderEmail: string, section: EmailSection | null) => void;
+  /** Always load remote images from this sender (DF-6 per-sender allow). */
+  allowImagesFromSender: (senderEmail: string) => void;
 } {
   const [prefs, setPrefs] = useState<EmailPrefs>(() => readEmailPrefs(userId));
   const prefsRef = useRef(prefs);
@@ -61,5 +63,23 @@ export function useEmailPrefs(userId: string): {
     [pushLocalChange],
   );
 
-  return { prefs, setSenderOverride };
+  const allowImagesFromSender = useCallback(
+    (senderEmail: string) => {
+      const key = senderEmail.trim().toLowerCase();
+      if (!key) return;
+      const prev = prefsRef.current;
+      if (prev.imageAllowedSenders.includes(key)) return;
+      const next = sanitizeEmailPrefs({
+        ...prev,
+        imageAllowedSenders: [...prev.imageAllowedSenders, key],
+      });
+      prefsRef.current = next;
+      setPrefs(next);
+      writeEmailPrefs(userIdRef.current, next);
+      pushLocalChange(next as unknown as Record<string, unknown>);
+    },
+    [pushLocalChange],
+  );
+
+  return { prefs, setSenderOverride, allowImagesFromSender };
 }

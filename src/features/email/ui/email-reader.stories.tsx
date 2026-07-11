@@ -108,3 +108,40 @@ export const NoSelection: Story = {
     </div>
   ),
 };
+
+const remoteBodyHtml = `
+  <p style="font-family: sans-serif; color: #1f1f1f;">Weekly digest with a tracked banner:</p>
+  <img src="https://picsum.photos/480/120" alt="Banner" width="480" height="120" />
+  <p style="font-family: sans-serif; color: #1f1f1f;">…and a tracking pixel you'll never see.</p>
+  <img src="https://picsum.photos/1/1" alt="" width="1" height="1" />
+`;
+
+const stubGetRemoteBody = async () => ({ body: "Plain text fallback.", bodyHtml: remoteBodyHtml });
+
+/** DF-6 — remote images blocked by default, with the Load-images bar. */
+export const RemoteImagesBlocked: Story = {
+  render: () => (
+    <div className="h-[40rem] w-[32rem] rounded-xl border border-border bg-card p-4">
+      <EmailReader
+        thread={thread}
+        getThread={async () => [messages[2]]}
+        getBody={stubGetRemoteBody}
+        onAllowSenderImages={() => {}}
+      />
+    </div>
+  ),
+};
+
+/** DF-6 — the same message with the sender on the always-allow list. */
+export const RemoteImagesAllowed: Story = {
+  render: () => (
+    <div className="h-[40rem] w-[32rem] rounded-xl border border-border bg-card p-4">
+      <EmailReader
+        thread={thread}
+        getThread={async () => [messages[2]]}
+        getBody={stubGetRemoteBody}
+        imageAllowedSenders={new Set(["marco@example.com"])}
+      />
+    </div>
+  ),
+};

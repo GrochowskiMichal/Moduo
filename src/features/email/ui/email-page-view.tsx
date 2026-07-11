@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Mail, PenSquare } from "lucide-react";
+import { AlertTriangle, Mail, PenSquare, RefreshCw } from "lucide-react";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../../../components/app/right-panel-switcher";
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
+import { IconButton } from "../../../components/ui/icon-button";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import {
@@ -47,7 +48,7 @@ import {
   resolveContactIdByAddress,
   spawnedFromLinkArgs,
 } from "../convert";
-import { formatEmailDate } from "../utils/email-format";
+import { formatEmailDate, formatEmailDetailDate } from "../utils/email-format";
 import type { EmailThreadRef } from "../../../lib/runtime.types";
 import type { EntityRef } from "../../../lib/entity-links";
 import type { Contact } from "../../contacts/model";
@@ -62,6 +63,7 @@ import { EmailReader } from "./email-reader";
 import { EmailMovePopover } from "./email-move-popover";
 import { EmailSnoozePicker } from "./email-snooze-picker";
 import { EmailDestinationList } from "./email-destination-list";
+import { EmailShortcutsDialog } from "./email-shortcuts-dialog";
 
 /** Fires on the window so the nav can badge the Email tab (AC3). */
 export const EMAIL_UNREAD_EVENT = "moduo:email:unread";
@@ -165,6 +167,7 @@ export function EmailPageView() {
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpTarget, setFollowUpTarget] = useState<EmailThread | null>(null);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const accountHues = useMemo(
     () => resolveAccountHues(email.accounts),
@@ -237,6 +240,45 @@ export function EmailPageView() {
       emailPrefs.prefs.senderOverrides[senderKey(thread.fromEmail)] ?? null,
     [emailPrefs.prefs.senderOverrides],
   );
+
+  // DF-6: per-sender remote-image allow-list (cloud-synced pref) → the reader.
+  const imageAllowedSenders = useMemo(
+    () => new Set(emailPrefs.prefs.imageAllowedSenders),
+    [emailPrefs.prefs.imageAllowedSenders],
+  );
+  const { allowImagesFromSender } = emailPrefs;
+  const allowSenderImages = useCallback(
+    (senderEmail: string) => {
+      allowImagesFromSender(senderEmail);
+      toast(`Images from ${senderKey(senderEmail)} will always load`);
+    },
+    [allowImagesFromSender],
+  );
+
+  // The accounts in the current scope (Unified = all; else the one selected).
+  const scopedAccounts = useMemo(
+    () =>
+      selectedAccountId
+        ? email.accounts.filter((a) => a.id === selectedAccountId)
+        : email.accounts,
+    [email.accounts, selectedAccountId],
+  );
+
+  // DF-6: accounts in the current scope that have silently stopped syncing —
+  // surfaced as a banner (the rail glyphs alone were invisible on All inboxes).
+  const brokenAccounts = useMemo(
+    () => scopedAccounts.filter((a) => a.status !== "active"),
+    [scopedAccounts],
+  );
+
+  // Newest successful sync across the scope, for the refresh button's tooltip.
+  const lastSyncLabel = useMemo(() => {
+    const newest = scopedAccounts
+      .map((a) => (a.lastSyncAt ? Date.parse(a.lastSyncAt) : Number.NaN))
+      .filter((n) => Number.isFinite(n))
+      .sort((x, y) => y - x)[0];
+    return newest ? formatEmailDetailDate(new Date(newest).toISOString()) : null;
+  }, [scopedAccounts]);
 
   // The selected thread object — looked up across the ordered rows AND the inbox
   // scope so opening a search result (and keeping the reader while searching) work.
@@ -471,6 +513,44 @@ export function EmailPageView() {
     [],
   );
 
+  /**
+   * Best-effort reverse teardown of everything a convert created — shared by
+   * the undo toast AND the mid-sequence failure compensation (DF-6) so the two
+   * paths can't drift. Each step is individually best-effort (a failed task
+   * delete doesn't stop the link/ref cleanup). Only removes the ref/contact
+   * link when THIS convert created them.
+   */
+  const deleteConvertArtifacts = useCallback(
+    async (plan: {
+      taskId: string | null;
+      spawnLinkId: string | null;
+      contactLinkId: string | null;
+      refId: string | null;
+      refCreated: boolean;
+    }) => {
+      if (!runtime || !workspaceId) return;
+      if (plan.taskId) {
+        await runtime.tasks.deleteTask({ workspaceId, taskId: plan.taskId }).catch(() => {});
+      }
+      if (plan.spawnLinkId) {
+        await runtime.spine
+          .deleteLink({ workspaceId, linkId: plan.spawnLinkId })
+          .catch(() => {});
+      }
+      if (plan.contactLinkId) {
+        await runtime.spine
+          .deleteLink({ workspaceId, linkId: plan.contactLinkId })
+          .catch(() => {});
+      }
+      if (plan.refId && plan.refCreated) {
+        await runtime.email.removeRef({ workspaceId, refId: plan.refId }).catch(() => {
+          /* email_op_ref_remove not deployed yet — leave the (linkless) ref */
+        });
+      }
+    },
+    [runtime, workspaceId],
+  );
+
   const undoConvert = useCallback(
     async (plan: {
       taskId: string;
@@ -479,29 +559,13 @@ export function EmailPageView() {
       spawnLinkId: string | null;
       contactLinkId: string | null;
     }) => {
-      if (!runtime || !workspaceId) return;
-      try {
-        await runtime.tasks.deleteTask({ workspaceId, taskId: plan.taskId });
-        if (plan.spawnLinkId) await runtime.spine.deleteLink({ workspaceId, linkId: plan.spawnLinkId });
-        if (plan.contactLinkId)
-          await runtime.spine.deleteLink({ workspaceId, linkId: plan.contactLinkId });
-        // Only remove the ref if THIS convert created it (best-effort pre-deploy).
-        if (plan.refCreated) {
-          try {
-            await runtime.email.removeRef({ workspaceId, refId: plan.refId });
-          } catch {
-            /* email_op_ref_remove not deployed yet — leave the (linkless) ref */
-          }
-        }
-      } catch {
-        /* best-effort undo */
-      }
+      await deleteConvertArtifacts(plan);
       setDetailTaskId(null);
       setPanelVariant("reader");
       void tasksApi.reload();
       void email.refreshTissue();
     },
-    [runtime, workspaceId, tasksApi, email],
+    [deleteConvertArtifacts, tasksApi, email],
   );
 
   const runConvert = useCallback(
@@ -512,9 +576,17 @@ export function EmailPageView() {
         toast.error("Your Tasks inbox isn't ready yet.");
         return;
       }
+      // DF-6: the sequence is non-atomic (separate RPCs) — track what each step
+      // created so a mid-sequence failure can compensate instead of stranding
+      // an orphan task/ref in another module.
+      const refExisted = email.tissueRefs.some((r) => r.threadKey === thread.threadId);
+      let createdRefId: string | null = null;
+      let createdTaskId: string | null = null;
+      let createdSpawnLinkId: string | null = null;
+      let createdContactLinkId: string | null = null;
       try {
-        const refExisted = email.tissueRefs.some((r) => r.threadKey === thread.threadId);
         const ref = await runtime.email.upsertRef({ workspaceId, ...refArgsForThread(thread) });
+        createdRefId = ref.id;
 
         const title = cleanTaskTitle(thread.subject);
         const task = makeTask({
@@ -529,6 +601,7 @@ export function EmailPageView() {
           position: endPosition([]),
         });
         const saved = await runtime.tasks.upsertTask(task);
+        createdTaskId = saved.id;
 
         // task --spawned-from--> email_thread
         const spawn = await runtime.spine.createLink({
@@ -540,10 +613,10 @@ export function EmailPageView() {
             subject: thread.subject,
           }),
         });
+        createdSpawnLinkId = spawn?.id ?? null;
 
         // email_thread --references--> contact (when the sender is a known contact)
         const contactId = resolveContactIdByAddress(thread.fromEmail ?? null, contactIndex);
-        let contactLinkId: string | null = null;
         if (contactId) {
           // email_op_link is idempotent (returns a PRE-EXISTING row) — so only mark
           // the contact link for undo when THIS convert actually creates it, or
@@ -574,7 +647,7 @@ export function EmailPageView() {
             threadLabel: thread.subject,
             targetLabel: contacts.find((c) => c.id === contactId)?.name ?? null,
           })) as { id?: string } | null;
-          contactLinkId = alreadyLinked ? null : (link?.id ?? null);
+          createdContactLinkId = alreadyLinked ? null : (link?.id ?? null);
         }
 
         setDetailTaskId(saved.id);
@@ -587,7 +660,7 @@ export function EmailPageView() {
           refId: ref.id,
           refCreated: !refExisted,
           spawnLinkId: spawn?.id ?? null,
-          contactLinkId,
+          contactLinkId: createdContactLinkId,
         };
         toast("Task created", {
           duration: TRIAGE_UNDO_MS,
@@ -605,9 +678,17 @@ export function EmailPageView() {
           },
         });
       } catch (e) {
-        // Non-atomic (upsertRef → task → links are separate RPCs). A mid-sequence
-        // failure can leave an orphan task/ref with no undo offered — acceptable at
-        // alpha (all Supabase RPCs; a partial failure is rare and recoverable).
+        // DF-6: compensate — tear down whatever this convert managed to create
+        // so a partial failure leaves nothing behind in Tasks or the spine.
+        await deleteConvertArtifacts({
+          taskId: createdTaskId,
+          spawnLinkId: createdSpawnLinkId,
+          contactLinkId: createdContactLinkId,
+          refId: createdRefId,
+          refCreated: !refExisted,
+        });
+        void tasksApi.reload();
+        void email.refreshTissue();
         toast.error(e instanceof Error ? e.message : "Couldn't convert to a task.");
       }
     },
@@ -620,6 +701,7 @@ export function EmailPageView() {
       contacts,
       refArgsForThread,
       undoConvert,
+      deleteConvertArtifacts,
       selectedThreadId,
     ],
   );
@@ -667,6 +749,7 @@ export function EmailPageView() {
         toast.error("Your Tasks inbox isn't ready yet.");
         return;
       }
+      let createdTaskId: string | null = null;
       try {
         const title = cleanTaskTitle(ref.subject);
         const task = makeTask({
@@ -681,6 +764,7 @@ export function EmailPageView() {
           position: endPosition([]),
         });
         const saved = await runtime.tasks.upsertTask(task);
+        createdTaskId = saved.id;
         await runtime.spine.createLink({
           workspaceId,
           ...spawnedFromLinkArgs({
@@ -695,10 +779,22 @@ export function EmailPageView() {
         void tasksApi.reload();
         toast("Task created");
       } catch (e) {
+        // DF-6: don't strand a linkless orphan task when the spawn link fails.
+        // The ref pre-existed here (it came from the tissue), so never remove it.
+        if (createdTaskId) {
+          await deleteConvertArtifacts({
+            taskId: createdTaskId,
+            spawnLinkId: null,
+            contactLinkId: null,
+            refId: null,
+            refCreated: false,
+          });
+          void tasksApi.reload();
+        }
         toast.error(e instanceof Error ? e.message : "Couldn't convert to a task.");
       }
     },
-    [runtime, workspaceId, tasksApi],
+    [runtime, workspaceId, tasksApi, deleteConvertArtifacts],
   );
 
   const togglePin = useCallback(
@@ -766,6 +862,12 @@ export function EmailPageView() {
         case "t":
           if (current) void runConvert(current);
           break;
+        case "r":
+          if (current) void startReply("reply");
+          break;
+        case "?":
+          setShortcutsOpen(true);
+          break;
         case "/":
           searchInputRef.current?.focus();
           searchInputRef.current?.select();
@@ -777,7 +879,16 @@ export function EmailPageView() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [moveSelection, openThread, runArchive, runDelete, openSnooze, runConvert, togglePin]);
+  }, [
+    moveSelection,
+    openThread,
+    runArchive,
+    runDelete,
+    openSnooze,
+    runConvert,
+    togglePin,
+    startReply,
+  ]);
 
   const onConnected = useCallback(() => {
     setConnectOpen(false);
@@ -800,6 +911,8 @@ export function EmailPageView() {
             listAttachments={listAttachments}
             saveAttachment={saveAttachment}
             getInlineImages={getInlineImages}
+            imageAllowedSenders={imageAllowedSenders}
+            onAllowSenderImages={allowSenderImages}
           />
         ),
       },
@@ -863,6 +976,8 @@ export function EmailPageView() {
       listAttachments,
       saveAttachment,
       getInlineImages,
+      imageAllowedSenders,
+      allowSenderImages,
       runtime,
       workspaceId,
       resolvedContact,
@@ -984,11 +1099,65 @@ export function EmailPageView() {
                 onQuery={search.setQuery}
                 onClear={search.clear}
               />
+              {/* DF-6: visible sync state + manual refresh (calendar-toolbar pattern). */}
+              {email.syncing ? (
+                <span className="shrink-0 text-2xs text-muted-foreground">Syncing…</span>
+              ) : null}
+              <IconButton
+                icon={RefreshCw}
+                label={email.syncing ? "Syncing…" : "Sync now"}
+                tooltip={
+                  email.syncing
+                    ? "Syncing…"
+                    : lastSyncLabel
+                      ? `Sync now — last synced ${lastSyncLabel}`
+                      : "Sync now"
+                }
+                disabled={email.syncing}
+                onClick={() => void email.syncNow()}
+                className={email.syncing ? "animate-spin motion-reduce:animate-none" : undefined}
+              />
               <Button size="sm" onClick={startNew}>
                 <PenSquare aria-hidden />
                 New message
               </Button>
             </div>
+            {/* DF-6: a broken account silently contributes nothing to this scope —
+                say so instead of letting mail quietly stop arriving. */}
+            {brokenAccounts.length > 0 ? (
+              <div
+                role="status"
+                className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-warning/10 px-3 py-1.5 text-xs text-foreground"
+              >
+                <AlertTriangle className="size-icon-xs shrink-0 text-warning" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  {brokenAccounts.length === 1
+                    ? `${brokenAccounts[0].email} isn't syncing — new mail may be missing.`
+                    : `${brokenAccounts.length} accounts aren't syncing — new mail may be missing.`}
+                </span>
+                {brokenAccounts
+                  .filter((a) => a.status === "reauth_required")
+                  .map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setReconnectTarget(a)}
+                      className="shrink-0 rounded-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      Reconnect{brokenAccounts.length > 1 ? ` ${a.email}` : ""}
+                    </button>
+                  ))}
+                {brokenAccounts.some((a) => a.status === "error") ? (
+                  <button
+                    type="button"
+                    onClick={() => void email.syncNow()}
+                    className="shrink-0 rounded-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    Retry sync
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {search.active ? (
               <EmailThreadList
                 threads={search.results}
@@ -1115,6 +1284,8 @@ export function EmailPageView() {
           onClose={compose.close}
         />
       ) : null}
+
+      <EmailShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </>
   );
 }

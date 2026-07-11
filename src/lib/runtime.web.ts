@@ -51,7 +51,7 @@ import type {
 
 // ── Supabase client ────────────────────────────────────────────────────────────
 
-const SUPABASE_URL: string =
+export const SUPABASE_URL: string =
   (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
   "https://wtoonrvuqumihpkbvwvs.supabase.co";
 const SUPABASE_ANON_KEY: string =

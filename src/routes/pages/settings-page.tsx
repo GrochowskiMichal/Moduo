@@ -22,8 +22,11 @@ export function SettingsPage() {
     if (typeof window !== "undefined") {
       section = new URLSearchParams(window.location.search).get("section");
     }
+    // sticky: the modal remounts during boot, so the dispatch must survive
+    // in the pending-open buffer until the final mount picks it up.
     dispatchOpenSettings(
       section && isSettingsSectionId(section) ? { section } : {},
+      { sticky: true },
     );
     void navigate({ to: "/", replace: true });
   }, [navigate]);

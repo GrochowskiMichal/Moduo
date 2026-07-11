@@ -32,7 +32,7 @@
   **Ratified: hide.** Remove from nav tabs + palette + `module-N` shortcuts (mind the five-wiring gotcha in reverse); keep the route reachable for the rethink; remove the leaked "Graph relations tree, feature coming soon" placeholder from its right panel. *(§4.7.)*
 - [ ] **DF-5 — Destructive-action safety pack (app-wide undo grammar)** · `Sev High` · effort M · deps: — · lane: *contacts/cross*
   One undo grammar everywhere (the §8.3 inventory): **task delete in the Tasks module gets an 8s Undo** (today: ⌘⌫ = silent permanent delete, while the same task deleted from a note undoes — the app's sharpest edge); contact-delete Undo (soft server-side already); calendar-event-delete toast+Undo; tag-delete feedback; habit-remove window 4s→8s; the trash toast's destructive "Delete task(s)" out of the `cancel` slot; API-key revoke confirm; company-delete guard ("N people work here") + clear-company affordance. Standardize 8s + one success-toast grammar. *(§4.5, §8.3.)*
-- [ ] **DF-6 — Email daily-use pack (desktop)** · `Sev High` · effort L · deps: — · lane: *email (desktop)*
+- [x] **DF-6 — Email daily-use pack (desktop)** · `Sev High` · effort L · deps: — · lane: *email (desktop)* · ✅ 2026-07-10 `t/maciej/df-6-email-pack`
   Remote-image blocking by default (+ per-sender allow), reader iframe auto-height (postMessage scrollHeight), visible sync state + manual refresh + an "account broken" banner on All-inboxes scope, convert-to-task compensating cleanup on mid-sequence failure. *(§4.6 — the four blockers; keyboard `?`/`r` can ride along if the session has room.)*
 
 ## Wave B — making the moat felt
