@@ -57,7 +57,7 @@ export type WorkspaceContextValue = {
   unreadCountGlobal: number;
   setNotificationsScope: (scope: NotificationScope) => void;
   selectWorkspace: (workspaceId: string) => void;
-  refreshWorkspaces: () => Promise<void>;
+  refreshWorkspaces: () => Promise<WorkspaceSummary[]>;
   refreshAccessData: () => Promise<void>;
   createWorkspace: (name?: string) => Promise<string | null>;
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
