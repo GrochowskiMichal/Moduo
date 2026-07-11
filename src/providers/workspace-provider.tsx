@@ -92,11 +92,14 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     [userId]
   );
 
-  const refreshWorkspaces = useCallback(async () => {
+  // Returns the freshly-loaded list so callers (e.g. `joinWorkspace`) can resolve a
+  // just-added workspace immediately — `setWorkspaces` is async, so the closure's
+  // `workspaces` won't reflect the new rows right after this awaits.
+  const refreshWorkspaces = useCallback(async (): Promise<WorkspaceSummary[]> => {
     if (!runtime || !userId) {
       setWorkspaces([]);
       setSelectedWorkspaceId(null);
-      return;
+      return [];
     }
 
     const rows = await runtime.workspace.list();
@@ -119,6 +122,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     if (resolvedSelected && typeof window !== "undefined") {
       window.localStorage.setItem(storageKey(userId), resolvedSelected);
     }
+    return next;
   }, [runtime, userId]);
 
   const refreshAccessData = useCallback(async () => {
@@ -240,10 +244,16 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     async (token: string): Promise<WorkspaceSummary | null> => {
       if (!runtime) return null;
       try {
-        const raw = await runtime.workspace.joinInvite(token.trim());
-        await refreshWorkspaces();
-        if (raw?.id) selectWorkspace(raw.id);
-        return raw ? mapWorkspace(raw) : null;
+        // `joinInvite` returns the accepted *invite* row, not a workspace — its
+        // `workspace_id` points at the joined workspace. Resolve the real summary
+        // from the refreshed list rather than mapping the invite shape (which would
+        // yield a garbage id/name). DF-24 validator finding.
+        const invite = await runtime.workspace.joinInvite(token.trim());
+        const refreshed = await refreshWorkspaces();
+        const joinedId = invite?.workspace_id ?? invite?.workspaceId ?? null;
+        const joined = joinedId ? refreshed.find((workspace) => workspace.id === joinedId) ?? null : null;
+        if (joined) selectWorkspace(joined.id);
+        return joined;
       } catch (err) {
         console.error("[workspace] joinWorkspace failed:", err);
         return null;
