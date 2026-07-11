@@ -24,7 +24,7 @@ import {
   $isHorizontalRuleNode,
   HorizontalRuleNode,
 } from "@lexical/react/LexicalHorizontalRuleNode";
-import { $isTextNode } from "lexical";
+import { $createParagraphNode, $isTextNode } from "lexical";
 import {
   $createEntityRefNode,
   EntityRefNode,
@@ -117,11 +117,26 @@ export const HR_TRANSFORMER: ElementTransformer = {
   dependencies: [HorizontalRuleNode],
   export: (node) => ($isHorizontalRuleNode(node) ? "---" : null),
   regExp: /^(?:---|\*\*\*|___)\s?$/,
-  replace: (parentNode, _children, _match, isImport) => {
-    // Only `false` means "not handled" — a void return on the typing path
-    // would eat a live-typed `---` if a markdown-shortcut plugin ever mounts.
-    if (!isImport) return false;
-    parentNode.replace($createHorizontalRuleNode());
+  replace: (parentNode, children, _match, isImport) => {
+    const line = $createHorizontalRuleNode();
+    if (isImport) {
+      parentNode.replace(line);
+      return;
+    }
+    // Live typing (MarkdownShortcutPlugin). `children` are the inline nodes
+    // that followed `---` on the same line — move them into a fresh paragraph
+    // so a chip/text after the divider is never destroyed (validator A3). Also
+    // keep a caret paragraph when the divider lands at the very end of the doc.
+    const rest = $createParagraphNode();
+    for (const child of children) rest.append(child);
+    const keepRest = rest.getChildrenSize() > 0 || parentNode.getNextSibling() == null;
+    parentNode.replace(line);
+    if (keepRest) {
+      line.insertAfter(rest);
+      rest.selectStart();
+    } else {
+      line.selectNext();
+    }
   },
   type: "element",
 };

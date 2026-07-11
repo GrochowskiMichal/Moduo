@@ -445,18 +445,26 @@ body,
   content: "";
 }
 
+/* Mirrors CompleteToggle (round, muted hairline, primary fill when done) so
+ * the /task conversion never morphs the checkbox — "the checkbox IS the task"
+ * has to hold visually. Geometry matches the task-line overlay (left 0.25rem). */
 .notes-list-item-unchecked::before,
 .notes-list-item-checked::before {
   content: "";
   position: absolute;
-  left: 0;
-  top: 0.25rem;
+  left: 0.25rem;
+  top: 0.375rem;
   width: 1rem;
   height: 1rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--card);
-  transition: background-color 120ms ease, border-color 120ms ease;
+  border-radius: var(--radius-full);
+  border: 1px solid color-mix(in oklab, var(--muted-foreground) 50%, transparent);
+  background: transparent;
+  transition: background-color var(--motion-fade) var(--ease-out),
+    border-color var(--motion-fade) var(--ease-out);
+}
+
+.notes-list-item-unchecked:hover::before {
+  border-color: var(--foreground);
 }
 
 .notes-list-item-checked::before {
@@ -489,6 +497,28 @@ body,
 
 .notes-task-line[data-pending="true"] {
   color: var(--muted-foreground);
+}
+
+/* Inline text formats (DF-13) — Lexical expresses only ONE format via the
+ * element tag; combinations and strikethrough/underline need theme classes. */
+.notes-text-bold {
+  font-weight: 700;
+}
+
+.notes-text-italic {
+  font-style: italic;
+}
+
+.notes-text-strikethrough {
+  text-decoration: line-through;
+}
+
+.notes-text-underline {
+  text-decoration: underline;
+}
+
+.notes-text-underline-strikethrough {
+  text-decoration: underline line-through;
 }
 
 .notes-inline-code,

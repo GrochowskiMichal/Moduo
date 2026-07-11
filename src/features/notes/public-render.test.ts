@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { publicUrlTransform, stripLeadingTitle } from "./public-render";
+import {
+  comparePublicNotes,
+  publicUrlTransform,
+  stripLeadingTitle,
+  stripTaskIdComments,
+} from "./public-render";
+
+describe("stripTaskIdComments (DF-13 — no internal ids on the public page)", () => {
+  it("strips the task-line stable-id comment, keeps the title", () => {
+    expect(stripTaskIdComments("- [x] Ship it <!-- moduo:task:abc-123 -->")).toBe("- [x] Ship it");
+  });
+
+  it("strips multiple comments across lines, leaves other html alone", () => {
+    const md = "- [ ] a <!-- moduo:task:t1 -->\n- [ ] b <!-- moduo:task:t2 -->\n<!-- keep -->";
+    expect(stripTaskIdComments(md)).toBe("- [ ] a\n- [ ] b\n<!-- keep -->");
+  });
+});
 
 describe("stripLeadingTitle (NO-9b — no double title on the public page)", () => {
   it("drops a leading `# Title` that matches the note title", () => {
@@ -57,5 +73,47 @@ describe("publicUrlTransform (NO-9b — public-page URL allow-list)", () => {
   it("handles empty/whitespace", () => {
     expect(publicUrlTransform("")).toBe("");
     expect(publicUrlTransform("   ")).toBe("");
+  });
+});
+
+describe("comparePublicNotes (DF-13 — authored page order)", () => {
+  const n = (
+    id: string,
+    title: string,
+    position?: string | null,
+    createdAt?: string | null,
+  ) => ({ id, title, position, createdAt });
+
+  it("orders by fractional position, not title", () => {
+    const list = [n("1", "Alpha", "m"), n("2", "Zulu", "a"), n("3", "Mike", "z")];
+    expect(list.sort(comparePublicNotes).map((x) => x.id)).toEqual(["2", "1", "3"]);
+  });
+
+  it("mirrors the in-app tree: legacy empty positions sort first", () => {
+    const list = [n("1", "B", "a"), n("2", "A", "")];
+    expect(list.sort(comparePublicNotes).map((x) => x.id)).toEqual(["2", "1"]);
+  });
+
+  it("mirrors tree.ts EXACTLY: equal positions tiebreak on createdAt, not title", () => {
+    // Both position "a"; createdAt decides (creation order), NOT alphabetical.
+    const list = [
+      n("1", "Zulu", "a", "2026-01-01T00:00:00Z"),
+      n("2", "Alpha", "a", "2026-02-01T00:00:00Z"),
+    ];
+    expect(list.sort(comparePublicNotes).map((x) => x.id)).toEqual(["1", "2"]);
+  });
+
+  it("degrades to alphabetical when the edge fn predates the fields", () => {
+    const list = [n("1", "Charlie"), n("2", "alpha", null), n("3", "Bravo")];
+    expect(list.sort(comparePublicNotes).map((x) => x.title)).toEqual([
+      "alpha",
+      "Bravo",
+      "Charlie",
+    ]);
+  });
+
+  it("ties (equal position + title, no createdAt) break on id, untitled sorts as 'Untitled'", () => {
+    const list = [n("b", "  ", "a"), n("a", "Untitled", "a")];
+    expect(list.sort(comparePublicNotes).map((x) => x.id)).toEqual(["a", "b"]);
   });
 });

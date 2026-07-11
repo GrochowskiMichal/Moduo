@@ -14,7 +14,13 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams, useSearch } from "@tanstack/react-router";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { publicUrlTransform, stripLeadingTitle } from "../../features/notes/public-render";
+import { ChevronDown } from "lucide-react";
+import {
+  comparePublicNotes,
+  publicUrlTransform,
+  stripLeadingTitle,
+  stripTaskIdComments,
+} from "../../features/notes/public-render";
 
 // Render a link only when its href survived the allow-list (react-markdown
 // passes an empty href for dropped schemes); otherwise show the label as plain
@@ -40,6 +46,12 @@ type PublicNote = {
   title: string;
   icon: string | null;
   bodyMd: string;
+  /** Authored sibling order (fractional). Optional: absent until the deployed
+   * edge fn ships the field — the sort then degrades to alphabetical. */
+  position?: string | null;
+  /** Creation timestamp — the tiebreak that mirrors the in-app tree. Optional
+   * for the same pre-deploy reason as `position`. */
+  createdAt?: string | null;
 };
 
 type PublicPayload = { rootId: string; notes: PublicNote[] };
@@ -77,6 +89,9 @@ export function PublishedNotePage() {
   const { token } = useParams({ from: "/p/$token" });
   const search = useSearch({ strict: false }) as { note?: string };
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  // Narrow-viewport child-nav disclosure (DF-13): phones are the public page's
+  // main audience — the subtree must never be desktop-only.
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -114,7 +129,7 @@ export function PublishedNotePage() {
       byParent.set(key, bucket);
     }
     for (const list of byParent.values()) {
-      list.sort((a, b) => displayTitle(a.title).localeCompare(displayTitle(b.title)) || (a.id < b.id ? -1 : 1));
+      list.sort(comparePublicNotes);
     }
     const requested = search.note && byId.has(search.note) ? search.note : rootId;
     const target = byId.get(requested) ?? byId.get(rootId) ?? notes[0];
@@ -154,7 +169,7 @@ export function PublishedNotePage() {
   }
 
   const { rootId, byParent, target } = view;
-  const body = stripLeadingTitle(target.bodyMd, target.title).trim();
+  const body = stripTaskIdComments(stripLeadingTitle(target.bodyMd, target.title)).trim();
 
   const renderNav = (id: string, depth: number): ReactNode => {
     if (depth > 100) return null;
@@ -168,6 +183,7 @@ export function PublishedNotePage() {
               to="/p/$token"
               params={{ token }}
               search={c.id === rootId ? {} : { note: c.id }}
+              onClick={() => setNavOpen(false)}
               className={
                 c.id === target.id
                   ? "block rounded-md px-2 py-1 text-sm font-medium text-foreground"
@@ -187,28 +203,61 @@ export function PublishedNotePage() {
   const rootNote = view.byId.get(rootId);
   const hasChildren = (byParent.get(rootId) ?? []).length > 0;
 
+  // One nav body, two homes: a sticky rail ≥md, a disclosure below it. Only
+  // ever rendered inside a `hasChildren` guard (both call sites), so it needn't
+  // re-check.
+  const navBody = (
+    <>
+      <Link
+        to="/p/$token"
+        params={{ token }}
+        search={{}}
+        onClick={() => setNavOpen(false)}
+        className={
+          target.id === rootId
+            ? "mb-3 block font-semibold text-foreground"
+            : "mb-3 block font-semibold text-muted-foreground hover:text-foreground"
+        }
+      >
+        {rootNote?.icon ? `${rootNote.icon} ` : ""}
+        {displayTitle(rootNote?.title ?? "")}
+      </Link>
+      {renderNav(rootId, 0)}
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto flex w-full max-w-5xl gap-10 px-6 pb-32 pt-12">
         {hasChildren ? (
           <nav className="sticky top-12 hidden w-56 shrink-0 self-start text-sm md:block">
-            <Link
-              to="/p/$token"
-              params={{ token }}
-              search={{}}
-              className={
-                target.id === rootId
-                  ? "mb-3 block font-semibold text-foreground"
-                  : "mb-3 block font-semibold text-muted-foreground hover:text-foreground"
-              }
-            >
-              {rootNote?.icon ? `${rootNote.icon} ` : ""}
-              {displayTitle(rootNote?.title ?? "")}
-            </Link>
-            {renderNav(rootId, 0)}
+            {navBody}
           </nav>
         ) : null}
         <main className="min-w-0 flex-1">
+          {hasChildren ? (
+            <div className="mb-6 md:hidden">
+              <button
+                type="button"
+                aria-expanded={navOpen}
+                onClick={() => setNavOpen((v) => !v)}
+                className="flex w-full items-center justify-between rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span>Pages</span>
+                <ChevronDown
+                  className={`size-4 text-muted-foreground transition-transform duration-(--motion-fast) ease-(--ease-out) motion-reduce:transition-none ${
+                    navOpen ? "rotate-180" : ""
+                  }`}
+                  aria-hidden
+                />
+              </button>
+              {navOpen ? (
+                <nav className="mt-2 rounded-md border border-border bg-card p-2 text-sm">
+                  {navBody}
+                </nav>
+              ) : null}
+            </div>
+          ) : null}
           <h1 className="mb-4 font-display text-3xl font-semibold text-foreground">
             {target.icon ? `${target.icon} ` : ""}
             {displayTitle(target.title)}

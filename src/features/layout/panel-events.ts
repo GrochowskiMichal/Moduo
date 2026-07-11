@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 export type FeatureLayoutKey =
   | "grid"
   | "notes"
@@ -88,4 +90,26 @@ export function dispatchLayoutPanelsApply(detail: LayoutPanelsApplyDetail) {
 export function dispatchLayoutPanelsSet(detail: LayoutPanelsApplyDetail) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_SET_EVENT, { detail }));
+}
+
+/**
+ * Live, render-side view of one feature's panel state: seeded from storage,
+ * kept in sync by the app-chrome's APPLY broadcasts. The ONE mirror of the
+ * panel event contract — the shell and any per-page summon affordance consume
+ * this instead of hand-rolling the listener. Mutate via dispatchLayoutPanelsSet.
+ */
+export function useFeaturePanelState(feature: FeatureLayoutKey): FeaturePanelState {
+  const [state, setState] = useState<FeaturePanelState>(() => readFeaturePanelState(feature));
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Re-seed on a feature switch — the initializer only ran for the first one.
+    setState(readFeaturePanelState(feature));
+    const onApply = (event: Event) => {
+      const detail = (event as CustomEvent<LayoutPanelsApplyDetail>).detail;
+      if (detail?.feature === feature) setState({ left: detail.left, right: detail.right });
+    };
+    window.addEventListener(LAYOUT_PANELS_APPLY_EVENT, onApply);
+    return () => window.removeEventListener(LAYOUT_PANELS_APPLY_EVENT, onApply);
+  }, [feature]);
+  return state;
 }
