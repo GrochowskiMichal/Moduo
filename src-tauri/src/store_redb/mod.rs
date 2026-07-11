@@ -11,10 +11,9 @@ use redb::{Database, ReadableTable, TableDefinition};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::domain::{
-    Bucket, CategoryRule, FocusSession, GraphEdge, GraphNode, ModulePermissions, NoteCrdtUpdate,
-    NoteDocState, NoteMeta, Tag, TagLink, Task, TasksModuleBundle, TimeCategory, TimeEntry,
-    TimeProject, TimetrackingBundle, WorkspaceInvite, WorkspaceMember, WorkspaceNotification,
-    WorkspaceSummary,
+    Bucket, CategoryRule, FocusSession, ModulePermissions, NoteCrdtUpdate, NoteDocState, NoteMeta,
+    Tag, TagLink, Task, TasksModuleBundle, TimeCategory, TimeEntry, TimeProject, TimetrackingBundle,
+    WorkspaceInvite, WorkspaceMember, WorkspaceNotification, WorkspaceSummary,
 };
 
 pub const NOTES_META: TableDefinition<&str, &str> = TableDefinition::new("notes_meta");
@@ -43,10 +42,6 @@ pub const DEVICE_IDENTITY: TableDefinition<&str, &str> = TableDefinition::new("d
 pub const MIGRATION_MARKERS: TableDefinition<&str, &str> =
     TableDefinition::new("migration_markers");
 
-pub const GRAPH_NODES: TableDefinition<&str, &str> = TableDefinition::new("graph_nodes");
-pub const GRAPH_EDGES: TableDefinition<&str, &str> = TableDefinition::new("graph_edges");
-pub const GRAPH_VECTORS: TableDefinition<&str, &str> = TableDefinition::new("graph_vectors");
-
 pub const OP_IDEMPOTENCY: TableDefinition<&str, &str> = TableDefinition::new("op_idempotency");
 pub const DEVICE_SEQ: TableDefinition<&str, &str> = TableDefinition::new("device_seq");
 pub const AUDIT_LOG: TableDefinition<&str, &str> = TableDefinition::new("audit_log");
@@ -66,8 +61,6 @@ pub const EMAIL_BODY_LRU: TableDefinition<&str, &str> = TableDefinition::new("em
 pub const EMAIL_BODY_TEXT: TableDefinition<&str, &str> = TableDefinition::new("email_body_text");
 pub const EMAIL_FLAG_OUTBOX: TableDefinition<&str, &str> =
     TableDefinition::new("email_flag_outbox");
-pub const EMAIL_GRAPH_OUTBOX: TableDefinition<&str, &str> =
-    TableDefinition::new("email_graph_outbox");
 /// Triage op outbox (archive/move/delete), mirrors the flag outbox (EM-5).
 pub const EMAIL_OP_OUTBOX: TableDefinition<&str, &str> = TableDefinition::new("email_op_outbox");
 pub const EMAIL_UI_STATE: TableDefinition<&str, &str> = TableDefinition::new("email_ui_state");
@@ -111,10 +104,6 @@ impl RedbStore {
         let _ = write_txn.open_table(DEVICE_IDENTITY)?;
         let _ = write_txn.open_table(MIGRATION_MARKERS)?;
 
-        let _ = write_txn.open_table(GRAPH_NODES)?;
-        let _ = write_txn.open_table(GRAPH_EDGES)?;
-        let _ = write_txn.open_table(GRAPH_VECTORS)?;
-
         let _ = write_txn.open_table(OP_IDEMPOTENCY)?;
         let _ = write_txn.open_table(DEVICE_SEQ)?;
         let _ = write_txn.open_table(AUDIT_LOG)?;
@@ -127,7 +116,6 @@ impl RedbStore {
         let _ = write_txn.open_table(EMAIL_BODY_LRU)?;
         let _ = write_txn.open_table(EMAIL_BODY_TEXT)?;
         let _ = write_txn.open_table(EMAIL_FLAG_OUTBOX)?;
-        let _ = write_txn.open_table(EMAIL_GRAPH_OUTBOX)?;
         let _ = write_txn.open_table(EMAIL_OP_OUTBOX)?;
         let _ = write_txn.open_table(EMAIL_UI_STATE)?;
 
@@ -231,9 +219,6 @@ impl RedbStore {
             WORKSPACE_NOTIFICATIONS,
             DEVICE_IDENTITY,
             MIGRATION_MARKERS,
-            GRAPH_NODES,
-            GRAPH_EDGES,
-            GRAPH_VECTORS,
             OP_IDEMPOTENCY,
             DEVICE_SEQ,
             AUDIT_LOG,
@@ -245,7 +230,6 @@ impl RedbStore {
             EMAIL_BODY_LRU,
             EMAIL_BODY_TEXT,
             EMAIL_FLAG_OUTBOX,
-            EMAIL_GRAPH_OUTBOX,
             EMAIL_OP_OUTBOX,
             EMAIL_UI_STATE,
             TT_ENTRIES,
@@ -577,30 +561,6 @@ impl RedbStore {
         Ok(table.get(key)?.map(|v| v.value().to_string()))
     }
 
-    pub fn put_graph_node(&self, node: &GraphNode) -> anyhow::Result<()> {
-        self.put_json(GRAPH_NODES, &node.id, node)
-    }
-
-    pub fn put_graph_edge(&self, edge: &GraphEdge) -> anyhow::Result<()> {
-        self.put_json(GRAPH_EDGES, &edge.id, edge)
-    }
-
-    pub fn list_graph_nodes(&self, workspace_id: &str) -> anyhow::Result<Vec<GraphNode>> {
-        Ok(self
-            .list_json::<GraphNode>(GRAPH_NODES)?
-            .into_iter()
-            .filter(|n| n.workspace_id == workspace_id)
-            .collect())
-    }
-
-    pub fn list_graph_edges(&self, workspace_id: &str) -> anyhow::Result<Vec<GraphEdge>> {
-        Ok(self
-            .list_json::<GraphEdge>(GRAPH_EDGES)?
-            .into_iter()
-            .filter(|n| n.workspace_id == workspace_id)
-            .collect())
-    }
-
     pub fn upsert_workspace_acl(
         &self,
         workspace_id: &str,
@@ -742,22 +702,6 @@ impl RedbStore {
 
     pub fn remove_email_flag_outbox(&self, key: &str) -> anyhow::Result<()> {
         self.remove_key(EMAIL_FLAG_OUTBOX, key)
-    }
-
-    pub fn put_email_graph_outbox(
-        &self,
-        key: &str,
-        value: &serde_json::Value,
-    ) -> anyhow::Result<()> {
-        self.put_json(EMAIL_GRAPH_OUTBOX, key, value)
-    }
-
-    pub fn list_email_graph_outbox(&self) -> anyhow::Result<Vec<serde_json::Value>> {
-        self.list_json(EMAIL_GRAPH_OUTBOX)
-    }
-
-    pub fn remove_email_graph_outbox(&self, key: &str) -> anyhow::Result<()> {
-        self.remove_key(EMAIL_GRAPH_OUTBOX, key)
     }
 
     pub fn put_email_op_outbox(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {

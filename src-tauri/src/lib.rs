@@ -7,12 +7,13 @@ pub mod commands;
 pub mod config;
 pub mod domain;
 pub mod email_sync;
-pub mod embeddings;
-pub mod graph_helix;
 pub mod identity_acl;
 pub mod keychain;
 pub mod migration_legacy;
 pub mod store_redb;
+/// Cloud-sync worker (redb ↔ Supabase). Superseded by the JS `notesV2` engine for
+/// the cloud build; kept behind the future offline/"lite" feature, not compiled by default.
+#[cfg(feature = "lite")]
 pub mod sync;
 
 pub struct AppState {
@@ -20,10 +21,9 @@ pub struct AppState {
     pub session: Mutex<Option<auth::AuthSession>>,
     pub store: std::sync::Arc<store_redb::RedbStore>,
     pub acl: identity_acl::AclManager,
-    pub graph: std::sync::Arc<graph_helix::GraphManager>,
-    pub embeddings: std::sync::Arc<embeddings::EmbeddingEngine>,
-    pub indexer: embeddings::BackgroundIndexer,
     /// Background cloud-sync worker. Present only when signed in with a Supabase JWT.
+    /// Feature-gated behind the future offline/"lite" build.
+    #[cfg(feature = "lite")]
     pub sync_worker: Mutex<Option<sync::SyncHandle>>,
 }
 
@@ -37,11 +37,6 @@ impl AppState {
         let acl = identity_acl::AclManager::new();
         let _ = acl.get_or_create_identity(&store)?;
 
-        let sidecar_path = std::env::var("HELIX_SIDECAR_PATH")
-            .ok()
-            .map(PathBuf::from)
-            .filter(|p| !p.as_os_str().is_empty());
-
         let session = store
             .kv_get("auth", "session-cache")
             .ok()
@@ -49,22 +44,13 @@ impl AppState {
             .and_then(|value| serde_json::from_value::<auth::AuthSession>(value).ok());
 
         let store = std::sync::Arc::new(store);
-        let graph = std::sync::Arc::new(graph_helix::GraphManager::new(
-            sidecar_path,
-            db_path.parent().map(|p| p.to_path_buf()),
-        ));
-        let embeddings = std::sync::Arc::new(embeddings::EmbeddingEngine::new(None)?);
-        let indexer =
-            embeddings::BackgroundIndexer::new(store.clone(), graph.clone(), embeddings.clone());
 
         Ok(Self {
             config,
             session: Mutex::new(session),
             store,
             acl,
-            graph,
-            embeddings,
-            indexer,
+            #[cfg(feature = "lite")]
             sync_worker: Mutex::new(None),
         })
     }
@@ -155,13 +141,6 @@ pub fn run() {
             commands::tasks_module::tasks_module_delete_tag,
             commands::tasks_module::tasks_module_attach_tag,
             commands::tasks_module::tasks_module_detach_tag,
-            commands::graph::graph_upsert_nodes_edges,
-            commands::graph::graph_query_related,
-            commands::graph::graph_query_hybrid,
-            commands::graph::graph_get_full,
-            commands::embeddings::embed_and_index_note,
-            commands::embeddings::embed_and_index_task,
-            commands::embeddings::embed_and_index_email,
             commands::migration::migration_import_legacy,
             commands::local_store::local_store_get,
             commands::local_store::local_store_set,

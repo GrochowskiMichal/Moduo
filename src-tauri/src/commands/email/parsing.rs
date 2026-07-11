@@ -320,34 +320,6 @@ pub(super) fn parse_address(
     (display_name, email)
 }
 
-pub(super) fn recipients_for_graph(raw_to: &str) -> Vec<String> {
-    raw_to
-        .split(',')
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty())
-        .map(|candidate| {
-            let trimmed = candidate.trim();
-            if let Some(start) = trimmed.find('<') {
-                if let Some(end) = trimmed[start + 1..].find('>') {
-                    return trimmed[start + 1..start + 1 + end].trim().to_lowercase();
-                }
-            }
-            trimmed.to_lowercase()
-        })
-        .filter(|email| email.contains('@'))
-        .collect()
-}
-
-pub(super) fn extract_domain(email: &str) -> Option<String> {
-    let (_, domain) = email.split_once('@')?;
-    let normalized = domain.trim().to_lowercase();
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

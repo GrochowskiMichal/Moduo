@@ -2,8 +2,6 @@ pub mod auth;
 pub mod caldav;
 pub mod calendar;
 pub mod email;
-pub mod embeddings;
-pub mod graph;
 pub mod integrations;
 pub mod local_store;
 pub mod migration;

@@ -9,7 +9,6 @@ use super::account_config::{ensure_account_config, select_mailbox_for_folder};
 use super::connection::{open_idle_imap_session, open_imap_session};
 use super::constants::*;
 use super::flags::flush_flag_outbox_for_account;
-use super::graph_outbox::{queue_graph_upsert_for_envelope, schedule_graph_outbox_flush};
 use super::model::StoredEmailAccount;
 use super::storage::{
     load_folder_cursor, parse_json_value, patch_account_sync_state, read_accounts,
@@ -397,7 +396,6 @@ fn run_idle_cycle_blocking(
                                     ) {
                                         for row in rows {
                                             let _ = upsert_envelope(&state, &row);
-                                            let _ = queue_graph_upsert_for_envelope(&state, &row);
                                         }
                                     }
                                 }
@@ -425,7 +423,6 @@ fn run_idle_cycle_blocking(
 
                 let _ = flush_flag_outbox_for_account(&state, &account);
                 let _ = patch_account_sync_state(&state, &account.id, "active", None);
-                schedule_graph_outbox_flush(&state, Some(account.id.clone()));
                 break Ok(IdleCycleOutcome::MailboxChanged);
             }
             Ok(imap::extensions::idle::WaitOutcome::TimedOut) => {
@@ -467,7 +464,6 @@ fn run_poll_sync_blocking(
     sync_account_folder_envelopes(&state, &account, folder, false)?;
     let _ = flush_flag_outbox_for_account(&state, &account);
     let _ = patch_account_sync_state(&state, &account.id, "active", None);
-    schedule_graph_outbox_flush(&state, Some(account.id.clone()));
     Ok(())
 }
 

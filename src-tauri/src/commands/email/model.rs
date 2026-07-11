@@ -245,20 +245,6 @@ pub(super) struct StoredMailOpEntry {
     pub(super) updated_at: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct StoredGraphOutboxEntry {
-    pub(super) id: String,
-    pub(super) account_id: String,
-    pub(super) workspace_id: String,
-    pub(super) payload: serde_json::Value,
-    pub(super) retry_count: u32,
-    pub(super) next_retry_at: String,
-    pub(super) last_error: Option<String>,
-    pub(super) created_at: String,
-    pub(super) updated_at: String,
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailListEnvelopesInput {

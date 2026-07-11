@@ -956,13 +956,6 @@ export const webRuntime: ModuoRuntime = {
     },
   },
 
-  graph: {
-    async upsertNodesEdges() { /* Graph search not available on web in v1 */ },
-    async queryRelated() { return []; },
-    async queryHybrid() { return []; },
-    async getFullGraph() { return { nodes: [], edges: [] }; },
-  },
-
   migration: {
     async importLegacy() { throw new Error(desktopOnly().message); },
   },
