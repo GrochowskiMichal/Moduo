@@ -20,6 +20,12 @@ import {
   X,
 } from "lucide-react";
 
+import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
+import { EntityHub } from "@/features/spine/ui/entity-hub";
+import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
+import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
+import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { Button } from "../../../components/ui/button";
 import {
   Command,
@@ -90,7 +96,23 @@ type Props = {
   /** Move the app-level task selection (subtask ↔ parent navigation). */
   onSelectTask: (id: string) => void;
   api: TasksModuleApi;
+  /** Spine runtime — when present (with a workspace), the linked-entity hub
+   * (DF-8) renders. Optional so callers that don't wire the spine degrade to
+   * the plain inspector. */
+  runtime?: ModuoRuntime | null;
+  workspaceId?: string | null;
+  /** Open a linked entity from the hub. Defaults to the app-wide deep-link
+   * event; callers that can select in place (Tasks, Calendar, Email, Notes)
+   * pass their own. */
+  onOpenEntity?: (ref: EntityRef) => void;
 };
+
+/**
+ * A drag-to-link drop onto the task hub (DF-8) is persisted by the enclosing
+ * page's DndContext; it dispatches this so the open task's hub re-pulls without
+ * a re-select. Mirrors NO-7b's `NOTE_DETAIL_REFRESH_EVENT`.
+ */
+export const TASK_DETAIL_REFRESH_EVENT = "moduo:task:detail:refresh";
 
 // Lifecycle order for the status picker (distinct from helpers' STATUS_ORDER,
 // which is the open-work-first grouping order).
@@ -104,6 +126,9 @@ export function TaskDetailPanel({
   onRequestCapture,
   onSelectTask,
   api,
+  runtime = null,
+  workspaceId = null,
+  onOpenEntity,
 }: Props) {
   if (!task) return <DetailEmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />;
   // Key on id so every local draft (title / description / duration) resets when
@@ -117,6 +142,9 @@ export function TaskDetailPanel({
       canEdit={canEdit}
       onSelectTask={onSelectTask}
       api={api}
+      runtime={runtime}
+      workspaceId={workspaceId}
+      onOpenEntity={onOpenEntity}
     />
   );
 }
@@ -128,6 +156,9 @@ function DetailBody({
   canEdit,
   onSelectTask,
   api,
+  runtime,
+  workspaceId,
+  onOpenEntity,
 }: {
   task: Task;
   buckets: Bucket[];
@@ -135,6 +166,9 @@ function DetailBody({
   canEdit: boolean;
   onSelectTask: (id: string) => void;
   api: TasksModuleApi;
+  runtime: ModuoRuntime | null;
+  workspaceId: string | null;
+  onOpenEntity?: (ref: EntityRef) => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
@@ -163,6 +197,42 @@ function DetailBody({
   const dependents = api.dependentsByTask.get(task.id) ?? [];
   const blocked = api.blockedTaskIds.has(task.id);
   const openBlockers = blockers.filter((b) => b.status !== "done" && b.status !== "archived");
+
+  // ── linked-entity hub (DF-8: Tasks joins the spine) ──────────────────────────
+  // The same reusable spine roll-up Notes/Contacts render, focused on this task.
+  // Present only when the caller wired the spine (runtime + workspace).
+  const hubFocus: EntityRef = { type: "task", id: task.id };
+  const hub = useEntityHub(runtime, workspaceId, hubFocus);
+  const hubReload = hub.reload;
+  const showHub = !!runtime && !!workspaceId;
+  // Quiet by default: render the "Linked" section ONLY when it has content (or a
+  // genuine load error worth surfacing) — never an empty teaching card on every
+  // unlinked task. A drop still lands anywhere on the panel (the page's
+  // HubDropZone wraps the whole thing) and the refresh event pops the section in
+  // once the first edge exists.
+  const showHubSection = showHub && (hub.status === "error" || hub.sections.length > 0);
+  // A drag-onto-hub link is persisted by the enclosing page's DndContext; re-pull
+  // so the new edge shows without a re-select (NO-7b parity).
+  useEffect(() => {
+    if (!showHub) return;
+    const onRefresh = () => hubReload();
+    window.addEventListener(TASK_DETAIL_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(TASK_DETAIL_REFRESH_EVENT, onRefresh);
+  }, [showHub, hubReload]);
+  const openLinkedEntity =
+    onOpenEntity ??
+    ((ref: EntityRef) =>
+      window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } })));
+  const onChangeLinkKind =
+    canEdit && runtime && workspaceId
+      ? (link: EntityLink, kind: RelationKind) =>
+          void runtime.spine.setLinkKind({ workspaceId, linkId: link.id, relationKind: kind }).then(hubReload)
+      : undefined;
+  const onUnlink =
+    canEdit && runtime && workspaceId
+      ? (link: EntityLink) =>
+          void runtime.spine.deleteLink({ workspaceId, linkId: link.id }).then(hubReload)
+      : undefined;
 
   const commitTitle = () => {
     const next = title.trim();
@@ -526,6 +596,32 @@ function DetailBody({
             </Button>
           ) : null}
         </div>
+
+        {/* linked-entity hub (DF-8) — the spine roll-up: notes / emails /
+            contacts / events linked to this task, grouped with counts. Reuses
+            the shared spine components exactly as Notes/Contacts do; the
+            enclosing page makes it a drag-to-link drop target. Quiet: shown only
+            when it has links (or a load error), never an empty card. */}
+        {showHubSection ? (
+          <>
+            <Separator />
+            <div className="space-y-1">
+              <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                Linked
+              </span>
+              <EntityHub
+                variant="rail"
+                status={hub.status}
+                sections={hub.sections}
+                canEdit={canEdit}
+                onOpen={openLinkedEntity}
+                onChangeKind={onChangeLinkKind}
+                onUnlink={onUnlink}
+                onRetry={hubReload}
+              />
+            </div>
+          </>
+        ) : null}
 
         {/* ambient mirrors — quiet, factual, never alarming (principles 4 & 5) */}
         {drifted || blocked || task.rescheduleCount > 0 ? (

@@ -768,6 +768,8 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
               onRequestCapture={() => setCaptureOpen(true)}
               onSelectTask={(id) => setDetailTarget({ type: "task", id })}
               api={api}
+              runtime={runtime}
+              workspaceId={workspaceId}
             />
           ) : (
             <div className="grid h-full place-content-center px-3 text-center">

@@ -1,7 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { toast } from "sonner";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { onCreateNew } from "../../../components/app/create-events";
+import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
+import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
+import {
+  asDragPayload,
+  asDropLinkTarget,
+  isSelfDrop,
+  targetAccepts,
+} from "../../../lib/drag-payload";
+import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
+import type { EntityRef } from "../../../lib/entity-links";
+import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { Button } from "../../../components/ui/button";
 import {
   resolveDefaultSelection,
@@ -20,7 +40,7 @@ import { FrontierOfferDialog } from "./frontier-offer-dialog";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import type { PlanView } from "./plan-view-header";
 import { TaskBoardView, type BoardGroupBy } from "./task-board-view";
-import { TaskDetailPanel } from "./task-detail-panel";
+import { TaskDetailPanel, TASK_DETAIL_REFRESH_EVENT } from "./task-detail-panel";
 import { TaskListView } from "./task-list-view";
 import { TaskTimelineView } from "./task-timeline-view";
 import { ActiveTagFilters, TagFilterButton } from "./task-tag-filter";
@@ -28,6 +48,8 @@ import { ActiveTagFilters, TagFilterButton } from "./task-tag-filter";
 type Props = {
   api: TasksModuleApi;
   workspaceId: string;
+  /** Spine runtime — powers the task detail panel's linked-entity hub (DF-8). */
+  runtime: ModuoRuntime | null;
   /** URL-held task selection (?id=, DF-1) — the page owns the router coupling. */
   urlTaskId: string | null;
   onUrlTaskIdChange: (id: string | null) => void;
@@ -58,7 +80,7 @@ function writeLS(workspaceId: string, part: string, value: string): void {
   }
 }
 
-export function TasksPlanView({ api, workspaceId, urlTaskId, onUrlTaskIdChange }: Props) {
+export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskIdChange }: Props) {
   const { canEdit, buckets, inbox, tasks } = api;
 
   const [mode, setMode] = useState<TasksMode>(
@@ -579,7 +601,73 @@ export function TasksPlanView({ api, workspaceId, urlTaskId, onUrlTaskIdChange }
     </div>
   );
 
-  const right = (
+  // ── DF-8: the detail hub as a drag-to-link drop target ──────────────────────
+  // A right-pane-scoped DndContext, deliberately kept clear of the center's
+  // reorder/nest contexts (which stay untouched — the app-level context
+  // unification that lets center-pane task rows reach the hub is DF-22's job).
+  // Opening a linked task selects it in place; other entity types deep-link out.
+  const hubSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const handleOpenEntity = useCallback(
+    (ref: EntityRef) => {
+      if (ref.type === "task") {
+        // Route through the DF-1 deep-link path (URL ?id=), not a raw
+        // setSelectedTaskId: a linked task may live outside the current bucket
+        // scope (spine links cross buckets), and the scope-validity backstop
+        // would bounce a raw selection back to the first in-scope task. The
+        // inbound-apply effect snaps scope to the target's bucket first.
+        onUrlTaskIdChange(ref.id);
+        return;
+      }
+      window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } }));
+    },
+    [onUrlTaskIdChange],
+  );
+  const onHubDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const payload = asDragPayload(event.active.data.current);
+      const target = asDropLinkTarget(event.over?.data.current);
+      if (!payload || !target) return;
+      if (!runtime || !canEdit) return;
+      if (isSelfDrop(payload, target)) {
+        toast("You can’t link a task to itself");
+        return;
+      }
+      if (!targetAccepts(target, payload)) return;
+      void (async () => {
+        // Guard a pre-existing edge: a fresh Undo toast on an already-linked pair
+        // would delete a link the user didn't make in THIS gesture (FX-9 parity).
+        try {
+          const links = await runtime.spine.listLinks({
+            workspaceId,
+            entityType: target.entityType,
+            entityId: target.entityId,
+          });
+          const already = links.some(
+            (l) =>
+              (l.sourceType === payload.entityType && l.sourceId === payload.entityId) ||
+              (l.targetType === payload.entityType && l.targetId === payload.entityId),
+          );
+          if (already) {
+            toast("Already linked");
+            return;
+          }
+        } catch {
+          // a failed pre-check must not block a legitimate link
+        }
+        await createLinkWithToast({
+          runtime,
+          workspaceId,
+          source: payload,
+          target,
+          origin: "drag",
+          onChanged: () => window.dispatchEvent(new CustomEvent(TASK_DETAIL_REFRESH_EVENT)),
+        });
+      })();
+    },
+    [runtime, workspaceId, canEdit],
+  );
+
+  const detailPanel = (
     <TaskDetailPanel
       task={selectedTask}
       buckets={buckets}
@@ -588,7 +676,19 @@ export function TasksPlanView({ api, workspaceId, urlTaskId, onUrlTaskIdChange }
       onRequestCapture={openCapture}
       onSelectTask={setSelectedTaskId}
       api={viewApi}
+      runtime={runtime}
+      workspaceId={workspaceId}
+      onOpenEntity={handleOpenEntity}
     />
+  );
+  const right = selectedTask ? (
+    <DndContext sensors={hubSensors} collisionDetection={pointerWithin} onDragEnd={onHubDragEnd}>
+      <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!canEdit}>
+        {detailPanel}
+      </HubDropZone>
+    </DndContext>
+  ) : (
+    detailPanel
   );
 
   return (

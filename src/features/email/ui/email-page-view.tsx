@@ -967,6 +967,9 @@ export function EmailPageView() {
               onRequestCapture={() => {}}
               onSelectTask={setDetailTaskId}
               api={tasksApi}
+              runtime={runtime}
+              workspaceId={workspaceId}
+              onOpenEntity={openEntity}
             />
           ) : (
             <EmptyState
