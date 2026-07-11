@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { pickTagColor } from "../../../components/tag-colors";
 import { setBucketTimeBlock } from "../default-view";
 import {
@@ -374,7 +375,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           patch = { ...patch, recurrence: advanced };
           if (patch.status === "done" && advanced.nextOccurrence) {
             // Quiet, factual mirror — when this comes back (never a wall).
-            toast.success(`Done — next ${formatScheduled(advanced.nextOccurrence)}`);
+            toast(`Done — next ${formatScheduled(advanced.nextOccurrence)}`);
           }
         }
       }
@@ -606,7 +607,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           releaseCommit: "committedFor" in patch,
         }),
       );
-      toast.success(`Skipped — next ${formatScheduled(scheduledAt)}`);
+      toast(`Skipped — next ${formatScheduled(scheduledAt)}`);
     },
     [bundle.tasks, applyOp, runtime, workspaceId],
   );
@@ -632,6 +633,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     (id: string) => {
       const existing = bundle.tasks.find((t) => t.id === id);
       if (!existing) return;
+      // Snapshot the children BEFORE the optimistic promotion — Undo re-attaches
+      // them (their snapshot rows still carry parentId = id).
+      const children = bundle.tasks.filter((t) => t.parentId === id && !t.deletedAt);
       // Deleting a parent promotes its subtasks to top-level (mirrored in the
       // runtime) so they stay visible — work is never silently lost.
       setBundle((prev) => ({
@@ -642,9 +646,20 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       }));
       guard(async () => {
         await runtime!.tasks.deleteTask({ workspaceId: workspaceId!, taskId: id });
+        // Same guarantee as deleting the task from a note (DF-5): soft delete =
+        // a stamp; Undo clears it via the upsert and restores the subtree.
+        undoToast("Task deleted", {
+          onUndo: () => {
+            void (async () => {
+              await runtime!.tasks.upsertTask({ ...existing, deletedAt: null });
+              await Promise.all(children.map((c) => runtime!.tasks.upsertTask(c)));
+              await load();
+            })().catch(() => toast.error("Couldn't restore the task."));
+          },
+        });
       });
     },
-    [bundle.tasks, guard, runtime, workspaceId],
+    [bundle.tasks, guard, runtime, workspaceId, load],
   );
 
   // ── subtask mutations (one level — spec §11) ─────────────────────────────────
@@ -1070,16 +1085,34 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       }
       const existing = bundle.tags.find((t) => t.id === tagId);
       if (!existing) return;
+      // Snapshot before the optimistic removal so Undo restores locally with
+      // zero network (the server was never touched — see below).
+      const prevTags = bundle.tags;
+      const prevTagLinks = bundle.tagLinks;
       setBundle((prev) => ({
         ...prev,
         tags: prev.tags.filter((t) => t.id !== tagId),
         tagLinks: prev.tagLinks.filter((l) => l.tagId !== tagId),
       }));
-      guard(async () => {
-        await runtime!.tasks.deleteTag({ workspaceId: workspaceId!, tagId });
+      // Deferred commit (the email-triage pattern, DF-5): the server delete
+      // hard-drops every attachment, so it only fires once the undo window
+      // closes — Undo just cancels it and puts the local snapshot back.
+      let undone = false;
+      window.setTimeout(() => {
+        if (undone) return;
+        guard(async () => {
+          await runtime!.tasks.deleteTag({ workspaceId: workspaceId!, tagId });
+        });
+      }, UNDO_TOAST_MS);
+      undoToast("Tag deleted", {
+        description: `“${existing.name}” comes off everything it was tagged on.`,
+        onUndo: () => {
+          undone = true;
+          setBundle((prev) => ({ ...prev, tags: prevTags, tagLinks: prevTagLinks }));
+        },
       });
     },
-    [bundle.tags, guard, runtime, workspaceId],
+    [bundle.tags, bundle.tagLinks, guard, runtime, workspaceId],
   );
 
   return {

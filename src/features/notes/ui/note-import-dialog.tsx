@@ -91,7 +91,7 @@ export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onI
       // Materialize each imported note's editor doc on first open (this session).
       for (const n of plan.nodes) registerNoteSeed(idMap.get(n.tempId)!, n.md);
       const skipped = res.skipped + plan.skipped.length;
-      toast.success(`Imported ${res.imported} note${res.imported === 1 ? "" : "s"}`, {
+      toast(`Imported ${res.imported} note${res.imported === 1 ? "" : "s"}`, {
         description: skipped ? `${skipped} skipped` : undefined,
       });
       setPlan(null);

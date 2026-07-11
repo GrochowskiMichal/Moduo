@@ -49,7 +49,7 @@ export function NotePublishControl({
     setBusy(true);
     const token = await onPublish();
     setBusy(false);
-    if (token) toast.success("Published to the web.");
+    if (token) toast("Published to the web.");
   };
 
   const doUnpublish = async () => {

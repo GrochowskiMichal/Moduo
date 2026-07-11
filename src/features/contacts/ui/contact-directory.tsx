@@ -92,12 +92,16 @@ function DirectoryRow({
       className={cn(
         // scroll-mt keeps a keyboard-highlighted row clear of the sticky
         // letter header when scrolled into view.
-        "group flex w-full scroll-mt-6 items-center gap-2.5 rounded-md px-2 py-1.5",
-        selected ? "bg-accent" : highlighted ? "bg-accent/50" : "hover:bg-accent/60",
+        "group relative flex w-full scroll-mt-6 items-center gap-2.5 rounded-md px-2 py-1.5",
+        selected ? "bg-(--selected-bg)" : highlighted ? "bg-accent/50" : "hover:bg-accent/60",
         dragHandleProps && "cursor-grab active:cursor-grabbing",
         dragging && "opacity-50",
       )}
     >
+      {/* selected marker — the app-wide R5 recipe: quiet accent bar + tint */}
+      {selected ? (
+        <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
+      ) : null}
       <button
         type="button"
         onClick={onSelect}

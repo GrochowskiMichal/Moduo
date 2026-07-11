@@ -261,7 +261,7 @@ function PanelTaskRow({
         }
       }}
       className={cn(
-        "group flex cursor-grab items-center gap-2 rounded-md px-1.5 hover:bg-accent",
+        "group flex cursor-grab items-center gap-2 rounded-md px-1.5 hover:bg-accent/60",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         isDragging && "opacity-40",
       )}

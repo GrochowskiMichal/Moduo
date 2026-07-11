@@ -1,31 +1,29 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { Clock, X } from "lucide-react";
 
+import type { EntitlementsRow } from "../features/settings/billing";
+import { dispatchOpenSettings } from "../features/settings/settings-events";
+import { supabaseClient } from "../lib/runtime.web";
 import { useAuth } from "../providers/auth-provider";
 import { Button } from "./ui/button";
 
 /**
  * TrialBanner — shown inside AppChrome for users on a trialing subscription.
- * Reads the user_entitlements view to surface remaining trial days plus a
- * CTA to add a card and extend to the full 30-day trial.
+ * Reads the user_entitlements view (via the shared supabaseClient, which
+ * carries the session + real anon key) to surface remaining trial days plus
+ * a CTA into Settings → Billing, where a card extends the trial to 30 days.
  *
  * Surface uses status tokens (bg-warning for normal trial, bg-destructive for
  * the urgent <= 2 day window) instead of hardcoded amber/red. Dismissible per
  * browser session via sessionStorage.
  */
 
-type Entitlements = {
-  subscription_status: string | null;
-  trial_days_remaining: number | null;
-};
+type Entitlements = Pick<EntitlementsRow, "subscription_status" | "trial_days_remaining">;
 
 const DISMISSED_KEY = "moduo:trial_banner_dismissed";
 
 export function TrialBanner() {
-  const { accessToken, isSignedIn, runtime } = useAuth();
-  const navigate = useNavigate();
-  const isWeb = !!runtime?.capabilities.isWeb;
+  const { accessToken, isSignedIn } = useAuth();
 
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [dismissed, setDismissed] = useState(() => {
@@ -36,27 +34,29 @@ export function TrialBanner() {
   useEffect(() => {
     if (!isSignedIn || !accessToken) return;
 
-    const supabaseUrl =
-      (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-      "https://wtoonrvuqumihpkbvwvs.supabase.co";
-    const anonKey = (import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string | undefined) || "";
+    let cancelled = false;
 
-    fetch(
-      `${supabaseUrl}/rest/v1/user_entitlements?select=subscription_status,trial_days_remaining`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          apikey: anonKey,
-        },
-      },
-    )
-      .then((r) => r.json())
-      .then((rows: Entitlements[]) => {
-        if (Array.isArray(rows) && rows.length > 0) {
-          setEntitlements(rows[0]);
+    const run = async () => {
+      try {
+        const { data, error } = await supabaseClient
+          .from("user_entitlements")
+          .select("subscription_status,trial_days_remaining")
+          .limit(1)
+          .maybeSingle<Entitlements>();
+        if (error) {
+          console.warn("[trial-banner] entitlements read failed:", error.message);
+          return;
         }
-      })
-      .catch(() => {});
+        if (!cancelled && data) setEntitlements(data);
+      } catch (err) {
+        console.warn("[trial-banner] entitlements read failed:", err);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [isSignedIn, accessToken]);
 
   const handleDismiss = () => {
@@ -67,7 +67,7 @@ export function TrialBanner() {
   };
 
   const handleCta = () => {
-    void navigate({ to: "/settings", search: { section: "billing" } });
+    dispatchOpenSettings({ section: "billing" });
   };
 
   if (
@@ -92,19 +92,14 @@ export function TrialBanner() {
       <p className="min-w-0 flex-1 truncate">
         {days <= 0
           ? "Your trial has expired."
-          : `${days} day${days === 1 ? "" : "s"} left in your trial.`}
-        {isWeb ? (
-          <>
-            {" "}
-            <button
-              type="button"
-              onClick={handleCta}
-              className="font-medium underline underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-            >
-              Add a card to extend to 30 days →
-            </button>
-          </>
-        ) : null}
+          : `${days} day${days === 1 ? "" : "s"} left in your trial.`}{" "}
+        <button
+          type="button"
+          onClick={handleCta}
+          className="font-medium underline underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+        >
+          Add a card to extend to 30 days →
+        </button>
       </p>
       <Button
         type="button"

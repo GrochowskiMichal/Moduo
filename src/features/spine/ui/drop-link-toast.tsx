@@ -10,6 +10,8 @@
 import { useState } from "react";
 import { Undo2 } from "lucide-react";
 import { toast } from "sonner";
+
+import { UNDO_TOAST_MS } from "@/lib/undo-toast";
 import {
   RELATION_KIND_LABELS,
   RELATION_KINDS,
@@ -117,7 +119,7 @@ function DropLinkToastCard({
 
 /** Raise the drop-to-link confirmation toast (Undo + relation-kind override). */
 export function showDropLinkToast(args: ToastArgs) {
-  toast.custom((id) => <DropLinkToastCard {...args} toastId={id} />, { duration: 8000 });
+  toast.custom((id) => <DropLinkToastCard {...args} toastId={id} />, { duration: UNDO_TOAST_MS });
 }
 
 /**

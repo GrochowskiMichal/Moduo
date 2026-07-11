@@ -67,6 +67,9 @@ type Props = {
    * flat (`groupBy === "none"`) single-bucket list, never the cross-bucket "All"
    * or the Queue (which owns drag-to-reorder instead). */
   nestable?: boolean;
+  /** One-shot deep-link reveal (DF-1): when the selection was set from outside
+   * and sits in a collapsed group, expand that group exactly once. */
+  revealRequest?: { id: string; seq: number } | null;
   api: TasksModuleApi;
 };
 
@@ -99,6 +102,7 @@ export function TaskListView({
   reorderable = false,
   onReorder,
   nestable = false,
+  revealRequest = null,
   api,
 }: Props) {
   // Selection is owned by the parent (shared with the detail rail); these aliases
@@ -194,7 +198,20 @@ export function TaskListView({
   // Keep the selection valid as tasks change. A selected subtask under a
   // visible-but-collapsed parent isn't stolen — its parent expands into view
   // instead (the detail panel's subtask list navigates selection this way).
+  // A deep link may additionally target a task inside a collapsed group
+  // (DF-1): the one-shot `revealRequest` expands that group exactly once.
+  // Ordinary fallbacks (complete/archive into a collapsed group, scope
+  // switches) never touch collapse state — a group the user closes stays
+  // closed, and the one-open-by-default rule on entering "All" holds.
+  const consumedRevealSeqRef = useRef(0);
   useEffect(() => {
+    const reveal =
+      revealRequest &&
+      revealRequest.id === selectedId &&
+      consumedRevealSeqRef.current !== revealRequest.seq
+        ? revealRequest
+        : null;
+    if (reveal) consumedRevealSeqRef.current = reveal.seq;
     if (selectedId && visibleTasks.some((t) => t.id === selectedId)) return;
     if (selectedId) {
       const parentId = taskById.get(selectedId)?.parentId;
@@ -206,9 +223,24 @@ export function TaskListView({
         }
         return;
       }
+      if (reveal) {
+        const collapsedGroup = groups.find(
+          (g) =>
+            collapsed.has(g.key) &&
+            g.tasks.some((t) => t.id === selectedId || (parentId && t.id === parentId)),
+        );
+        if (collapsedGroup) {
+          setCollapsed((prev) => {
+            const next = new Set(prev);
+            next.delete(collapsedGroup.key);
+            return next;
+          });
+          return;
+        }
+      }
     }
     setSelectedId(visibleTasks[0]?.id ?? null);
-  }, [visibleTasks, selectedId, setSelectedId, taskById, nest]);
+  }, [visibleTasks, selectedId, setSelectedId, taskById, nest, groups, collapsed, revealRequest]);
 
   // Keyboard-first: focus the list once on mount so j/k work immediately —
   // unless focus is already somewhere intentional (an input, an open dialog).

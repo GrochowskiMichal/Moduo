@@ -76,6 +76,7 @@ const RECORD_EDIT_OPS = new Set([
   "contacts.set_status",
   "contacts.set_details",
   "contacts.set_favorite",
+  "contacts.restore",
 ]);
 
 const DAY_MS = 86_400_000;

@@ -650,6 +650,8 @@ export type ModuoRuntime = {
       patch: CalendarEventPatch;
     }): Promise<CalendarEventModel>;
     removeEvent(input: { workspaceId: string; eventId: string }): Promise<void>;
+    /** Un-delete a soft-deleted native event (the delete toast's Undo, DF-5). */
+    restoreEvent(input: { workspaceId: string; eventId: string }): Promise<CalendarEventModel>;
     upsertAccount(input: {
       workspaceId: string;
       provider: string;
@@ -996,6 +998,12 @@ export type ModuoRuntime = {
     unlink(input: { workspaceId: string; linkId: string }): Promise<EntityLink | null>;
     /** Soft-delete a contact: drops its links + tombstones the registry entry. */
     deleteContact(input: { workspaceId: string; contactId: string }): Promise<Contact>;
+    /**
+     * Un-delete a soft-deleted contact (the delete toast's Undo, DF-5):
+     * revives exactly the links the delete dropped + un-tombstones the
+     * registry entry.
+     */
+    restoreContact(input: { workspaceId: string; contactId: string }): Promise<Contact>;
     /**
      * Soft-delete a company (FX-7): clears members' denormalized company_id,
      * drops every link touching it (works-at included), tombstones the registry

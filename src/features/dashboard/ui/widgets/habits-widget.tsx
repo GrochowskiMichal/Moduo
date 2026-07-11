@@ -10,6 +10,7 @@ import { Check, Plus, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { getRuntime } from "@/lib/runtime";
+import { undoToast } from "@/lib/undo-toast";
 import { todayStr } from "@/features/tasks/helpers";
 import type { HabitRow } from "@/lib/runtime.types";
 
@@ -246,32 +247,29 @@ export function HabitsWidget({ size }: WidgetComponentProps) {
         .remove(habit.id)
         .then(() => {
           source.reload();
-          toast(`Removed “${habit.name}”`, {
-            action: {
-              label: "Undo",
-              onClick: () => {
-                void runtime.habits
-                  .upsert({
-                    workspaceId,
-                    name: habit.name,
-                    emoji: habit.emoji,
-                    position: habit.position,
-                  })
-                  .then((created) =>
-                    habit.checks.length > 0
-                      ? runtime.habits.setChecks({ id: created.id, checks: habit.checks })
-                      : undefined,
-                  )
-                  .then(() => {
-                    setRemovedIds((prev) => {
-                      const nextSet = new Set(prev);
-                      nextSet.delete(habit.id);
-                      return nextSet;
-                    });
-                    source.reload();
-                  })
-                  .catch(() => toast.error("Couldn't restore that habit."));
-              },
+          undoToast(`Removed “${habit.name}”`, {
+            onUndo: () => {
+              void runtime.habits
+                .upsert({
+                  workspaceId,
+                  name: habit.name,
+                  emoji: habit.emoji,
+                  position: habit.position,
+                })
+                .then((created) =>
+                  habit.checks.length > 0
+                    ? runtime.habits.setChecks({ id: created.id, checks: habit.checks })
+                    : undefined,
+                )
+                .then(() => {
+                  setRemovedIds((prev) => {
+                    const nextSet = new Set(prev);
+                    nextSet.delete(habit.id);
+                    return nextSet;
+                  });
+                  source.reload();
+                })
+                .catch(() => toast.error("Couldn't restore that habit."));
             },
           });
         })

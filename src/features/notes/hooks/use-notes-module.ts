@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { undoToast } from "../../../lib/undo-toast";
 import type { Note } from "../model";
 import { descendantIds, siblingsOf, wouldCreateCycle } from "../tree";
 import { endPosition } from "../../tasks/helpers";
@@ -137,7 +138,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
 
     void runRedbImportOnce(runtime, workspaceId!).then((r) => {
       if (r && r.imported > 0) {
-        toast.success(
+        toast(
           `Imported ${r.imported} note${r.imported === 1 ? "" : "s"} from this device.`,
         );
         void load();
@@ -365,20 +366,19 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       const label = `Moved to Trash${extra > 0 ? ` (+${extra} nested)` : ""}${
         n > 0 ? ` · ${n} task${n === 1 ? "" : "s"} detached` : ""
       }`;
-      toast(label, {
-        duration: 8000,
+      // One toast, one grammar (DF-5): Undo in the action slot; the destructive
+      // "delete the tasks too" escalation rides the body — never sonner's
+      // `cancel` slot, where a destructive verb reads as the dismiss button.
+      undoToast(label, {
         description: n > 0 ? "The tasks still live in Tasks." : undefined,
-        action: {
-          label: "Undo",
-          onClick: () => {
-            restoreNote(noteId);
-            opts?.onUndo?.();
-          },
+        onUndo: () => {
+          restoreNote(noteId);
+          opts?.onUndo?.();
         },
-        cancel:
+        danger:
           n > 0 && opts?.onDeleteTasks
             ? {
-                label: n === 1 ? "Delete task" : "Delete tasks",
+                label: n === 1 ? "Delete the task too" : "Delete the tasks too",
                 onClick: () => opts.onDeleteTasks?.(taskIds),
               }
             : undefined,

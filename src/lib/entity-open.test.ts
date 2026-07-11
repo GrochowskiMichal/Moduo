@@ -3,7 +3,7 @@
 // the listener can no-op with a quiet toast instead of crashing.
 
 import { describe, expect, it } from "vitest";
-import { entityOpenTarget } from "./entity-open";
+import { entityOpenTarget, markEntityOpenIntent, takeEntityOpenIntent } from "./entity-open";
 
 describe("entityOpenTarget", () => {
   it("routes a contact to /contacts with type+id selection params", () => {
@@ -20,9 +20,9 @@ describe("entityOpenTarget", () => {
     });
   });
 
-  it("routes tasks and projects to the tasks page (page-level only)", () => {
-    expect(entityOpenTarget("task", "t1")).toEqual({ to: "/tasks" });
-    expect(entityOpenTarget("project", "p1")).toEqual({ to: "/tasks" });
+  it("routes tasks and projects to /tasks with URL selection (DF-1)", () => {
+    expect(entityOpenTarget("task", "t1")).toEqual({ to: "/tasks", search: { id: "t1" } });
+    expect(entityOpenTarget("project", "p1")).toEqual({ to: "/tasks", search: { id: "p1" } });
   });
 
   it("routes a note to /notes with URL selection (NO-3)", () => {
@@ -52,5 +52,25 @@ describe("entityOpenTarget", () => {
 
   it("returns null when the id is missing", () => {
     expect(entityOpenTarget("contact", "")).toBeNull();
+  });
+});
+
+describe("entity-open intent (DF-1)", () => {
+  it("is one-shot: a marked id matches once, then the mark is spent", () => {
+    markEntityOpenIntent("t1");
+    expect(takeEntityOpenIntent("t1")).toBe(true);
+    expect(takeEntityOpenIntent("t1")).toBe(false);
+  });
+
+  it("clears a stale mark even on a mismatched take", () => {
+    markEntityOpenIntent("t1");
+    expect(takeEntityOpenIntent("other")).toBe(false);
+    expect(takeEntityOpenIntent("t1")).toBe(false);
+  });
+
+  it("never matches with no mark, and an empty mark is a no-op", () => {
+    expect(takeEntityOpenIntent("t1")).toBe(false);
+    markEntityOpenIntent("");
+    expect(takeEntityOpenIntent("")).toBe(false);
   });
 });

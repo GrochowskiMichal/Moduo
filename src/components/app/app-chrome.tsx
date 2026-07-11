@@ -12,7 +12,7 @@ import {
   dispatchDashboardToggleEdit,
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
-import { ENTITY_OPEN_EVENT, entityOpenTarget } from "../../lib/entity-open";
+import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
 
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
@@ -46,7 +46,7 @@ import { WorkspaceSettingsModal } from "../workspace-settings-modal";
 import { IntegrationsModal } from "../integrations-modal";
 import { UserMenu } from "../user-menu";
 import { NotificationCenter } from "../notification-center";
-import { baseModulesNavItems } from "./app-chrome-constants";
+import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constants";
 import type { ModuleNavItem } from "./app-chrome-types";
 import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
@@ -238,6 +238,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         return;
       }
       if (target.search) {
+        // Mark the navigation as an external "take me there" so the target
+        // page can distinguish it from its own mirrored id (refresh/back).
+        markEntityOpenIntent(target.search.id);
         void navigate({ to: target.to, search: target.search as any });
       } else {
         void navigate({ to: target.to });
@@ -260,14 +263,25 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   );
 
   useEffect(() => {
-    if (!isSettingsRoute && !modulesNavItems.some((tab) => tab.href === pathname)) {
+    // Bounce genuinely-unknown/removed routes to the first nav tab — but exempt
+    // /settings and any hidden-but-reachable route (e.g. /mindmap, hidden from
+    // the nav in DF-4 yet kept reachable for its rethink). Without this exemption
+    // a direct visit to a hidden route gets silently redirected to Home.
+    if (
+      !isSettingsRoute &&
+      !hiddenReachableRoutes.includes(pathname) &&
+      !modulesNavItems.some((tab) => tab.href === pathname)
+    ) {
       void navigate({ to: modulesNavItems[0]?.href ?? "/", replace: true });
     }
   }, [isSettingsRoute, navigate, pathname, modulesNavItems]);
 
-  // ⌘1..⌘7 navigate to the Nth visible module tab. Fixed useShortcut calls
+  // ⌘1..⌘6 navigate to the Nth visible module tab. Fixed useShortcut calls
   // keep hook order stable across renders; handlers no-op when the index
-  // exceeds the current visible list.
+  // exceeds the current visible list. The count matches the max number of
+  // visible tabs (6 after Mindmap was hidden in DF-4) — keep it in sync with
+  // baseModulesNavItems + SHORTCUTS so no tab loses its ⌘N and no shortcut
+  // points past the list.
   const navigateToIndex = useCallback(
     (index: number) => {
       const item = modulesNavItems[index];
@@ -282,7 +296,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useShortcut("module-4", useCallback(() => navigateToIndex(3), [navigateToIndex]));
   useShortcut("module-5", useCallback(() => navigateToIndex(4), [navigateToIndex]));
   useShortcut("module-6", useCallback(() => navigateToIndex(5), [navigateToIndex]));
-  useShortcut("module-7", useCallback(() => navigateToIndex(6), [navigateToIndex]));
 
   useEffect(() => {
     writePanelsMap(featurePanels);
