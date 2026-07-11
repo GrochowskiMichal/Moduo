@@ -12,6 +12,7 @@ import { EmailPage } from "../../routes/pages/email-page";
 import { ContactsPage } from "../../routes/pages/contacts-page";
 import { validateContactsSearch } from "../../features/contacts/search";
 import { validateNotesSearch } from "../../features/notes/search";
+import { validateTasksSearch } from "../../features/tasks/search";
 import { SettingsPage } from "../../routes/pages/settings-page";
 import { PaywallPage } from "../../routes/pages/paywall-page";
 import { PublishedNotePage } from "../../routes/pages/published-note-page";
@@ -89,6 +90,8 @@ const tasksRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/tasks",
   component: TasksPage,
+  // URL-held task selection (?id=) — deep links + refresh keep it (DF-1).
+  validateSearch: validateTasksSearch,
 });
 
 // The Wave 2 calendar (specs/calendar.md AC1) — the rebuild of the legacy

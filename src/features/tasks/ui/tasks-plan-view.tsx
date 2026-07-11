@@ -7,9 +7,11 @@ import {
   resolveDefaultSelection,
   timeBlockByBucket as invertTimeBlocks,
 } from "../default-view";
+import { takeEntityOpenIntent } from "../../../lib/entity-open";
 import { taskMatchesTagFilter, type GroupBy } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
+import { resolveTasksDeepLink } from "../search";
 import { BucketRail, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
 import { DriftTriageDialog } from "./drift-triage-dialog";
@@ -26,7 +28,13 @@ import { ActiveTagFilters, TagFilterButton } from "./task-tag-filter";
 type Props = {
   api: TasksModuleApi;
   workspaceId: string;
+  /** URL-held task selection (?id=, DF-1) — the page owns the router coupling. */
+  urlTaskId: string | null;
+  onUrlTaskIdChange: (id: string | null) => void;
 };
+
+// The selection→URL mirror writes only at rest (see the mirror effect).
+const URL_MIRROR_DEBOUNCE_MS = 250;
 
 // Per-workspace UI state (selection / mode / view / grouping) persisted locally —
 // these are view preferences, not synced data.
@@ -50,7 +58,7 @@ function writeLS(workspaceId: string, part: string, value: string): void {
   }
 }
 
-export function TasksPlanView({ api, workspaceId }: Props) {
+export function TasksPlanView({ api, workspaceId, urlTaskId, onUrlTaskIdChange }: Props) {
   const { canEdit, buckets, inbox, tasks } = api;
 
   const [mode, setMode] = useState<TasksMode>(
@@ -81,6 +89,33 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   // Task-level selection (distinct from `selection`, which is the bucket scope).
   // Lifted here so the right-rail detail panel can bind to it across List/Board.
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // DF-1 — URL sync bookkeeping. Selection is STATE mirrored into the URL —
+  // not URL-derived like notes NO-3 — because this selection is a j/k
+  // key-repeat cursor: it must not ride the router on every press, and WebKit
+  // hard-throttles history.replaceState (~100/30s), so the mirror below is
+  // debounced. Two refs discriminate who an id in the URL came from:
+  // `processedUrlIdRef` marks ids this component already honored,
+  // `selfWroteUrlIdRef` marks ids the mirror wrote itself. A `urlTaskId`
+  // matching neither is an INBOUND deep link (widget row, contact rollup, note
+  // chip, notification, refresh, back/forward). Two refs, not one: the
+  // mirror's write commits to the router async, so a single marker would get
+  // clobbered while the URL still holds the previous id — and background
+  // bundle churn in that window would re-apply the OLD id as a fake deep
+  // link. While an inbound id awaits its post-load apply, the selection
+  // backstops must not steal it and the mirror must not overwrite it — all
+  // gate on `inboundPending` (computed at render, so every effect in the
+  // arrival flush sees the same verdict).
+  const processedUrlIdRef = useRef<string | null>(null);
+  const selfWroteUrlIdRef = useRef<string | null>(null);
+  const scrollTargetRef = useRef<string | null>(null);
+  const inboundPending =
+    urlTaskId !== null &&
+    processedUrlIdRef.current !== urlTaskId &&
+    selfWroteUrlIdRef.current !== urlTaskId;
+  // One-shot reveal request for the List view: expand a collapsed group ONCE
+  // for a deep-link target — ordinary selection fallbacks never touch
+  // collapse state (a group the user closes stays closed).
+  const [revealRequest, setRevealRequest] = useState<{ id: string; seq: number } | null>(null);
   // Tag filter — narrows the center list/board (rail counts stay whole). Held in
   // memory (a transient view state, not a persisted preference); reset per
   // workspace so a filter never bleeds across workspaces.
@@ -129,6 +164,14 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   useEffect(() => {
     if (api.loading) return;
     if (resolvedForRef.current === workspaceId) return;
+    // DF-1: an inbound deep link owns the entry scope — skip the time-block/
+    // last-bucket default rather than race the apply effect below for it
+    // (both would queue setSelection in the same flush; the default must not
+    // win over the deep link's bucket).
+    if (inboundPending) {
+      resolvedForRef.current = workspaceId;
+      return;
+    }
     resolvedForRef.current = workspaceId;
     const bucketIds = [inboxId, ...buckets.map((b) => b.id)].filter(Boolean) as string[];
     setSelection(
@@ -139,7 +182,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         inboxId,
       }),
     );
-  }, [api.loading, workspaceId, inboxId, buckets, timeBlocks]);
+  }, [api.loading, workspaceId, inboxId, buckets, timeBlocks, inboundPending]);
 
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
   useEffect(() => {
@@ -320,11 +363,113 @@ export function TasksPlanView({ api, workspaceId }: Props) {
   // counts as in-scope — it can be selected from under the parent (expanded
   // list rows, the detail panel's subtask list) even from another bucket.
   useEffect(() => {
-    if (api.loading) return;
+    if (api.loading || inboundPending) return;
     if (selectedTaskId && scopeTasks.some((t) => t.id === selectedTaskId)) return;
     if (selectedTask?.parentId && scopeTasks.some((t) => t.id === selectedTask.parentId)) return;
     setSelectedTaskId(scopeTasks[0]?.id ?? null);
-  }, [api.loading, selectedTaskId, selectedTask, scopeTasks]);
+  }, [api.loading, inboundPending, selectedTaskId, selectedTask, scopeTasks]);
+
+  // ── DF-1: URL-held selection ─────────────────────────────────────────────────
+  // Inbound apply — honor a deep-link target once the bundle is CLEANLY loaded
+  // (a failed fetch leaves an empty bundle with api.error set; resolving
+  // against that would wrongly strip a valid id — hold until Retry succeeds).
+  // A fresh external open (marked by the app-chrome listener) gets the full
+  // "take me there" treatment: plan mode + tag filter cleared if it hides the
+  // target. A mirrored id arriving back on refresh/back-forward restores the
+  // selection quietly and keeps the user's mode/filter. Scope snaps to the
+  // task's bucket unless the current scope already shows it. A bucket id (a
+  // `project` link) scopes the rail; a stale or archived id clears quietly and
+  // the backstop above picks the default (AC: no crash).
+  useEffect(() => {
+    if (api.loading || api.error) return;
+    if (!urlTaskId) {
+      processedUrlIdRef.current = null;
+      return;
+    }
+    if (processedUrlIdRef.current === urlTaskId) return;
+    if (selfWroteUrlIdRef.current === urlTaskId) {
+      processedUrlIdRef.current = urlTaskId;
+      return;
+    }
+    processedUrlIdRef.current = urlTaskId;
+    const external = takeEntityOpenIntent(urlTaskId);
+    // Archived tasks are invisible in every scope — selecting one would just
+    // feed the backstop a random replacement; treat like a stale id instead.
+    const target = resolveTasksDeepLink(urlTaskId, {
+      tasks: tasks.filter((t) => t.status !== "archived"),
+      buckets,
+      inboxId,
+    });
+    if (target.kind === "none") {
+      onUrlTaskIdChange(null);
+      return;
+    }
+    if (external) setMode("plan");
+    if (target.kind === "bucket") {
+      setSelection(target.scope);
+      // Hand the URL to the backstop's fresh pick — the mirror must not
+      // re-publish the previous scope's selection over the project link.
+      setSelectedTaskId(null);
+      return;
+    }
+    if (external) {
+      const targetTagIds = (api.tagsByTask.get(target.taskId) ?? []).map((t) => t.id);
+      if (liveFilterTagIds.length > 0 && !taskMatchesTagFilter(targetTagIds, liveFilterTagIds)) {
+        setFilterTagIds([]);
+      }
+    }
+    if (!scopeTasksAll.some((t) => t.id === target.taskId)) setSelection(target.scope);
+    setSelectedTaskId(target.taskId);
+    setRevealRequest((prev) => ({ id: target.taskId, seq: (prev?.seq ?? 0) + 1 }));
+    scrollTargetRef.current = target.taskId;
+  }, [
+    api.loading,
+    api.error,
+    api.tagsByTask,
+    urlTaskId,
+    tasks,
+    buckets,
+    inboxId,
+    liveFilterTagIds,
+    scopeTasksAll,
+    onUrlTaskIdChange,
+  ]);
+
+  // Mirror selection → URL (replace) so refresh keeps it. Trailing-debounced:
+  // the URL only needs to be right at rest, and WebKit throttles
+  // history.replaceState (~100 calls/30s) — an undebounced j/k key-repeat
+  // cursor would trip a SecurityError in the desktop webview. Suspended while
+  // an inbound id awaits apply — never overwrite a target before honoring it.
+  useEffect(() => {
+    if (api.loading || inboundPending) return;
+    if ((selectedTaskId ?? null) === (urlTaskId ?? null)) return;
+    const handle = window.setTimeout(() => {
+      selfWroteUrlIdRef.current = selectedTaskId;
+      onUrlTaskIdChange(selectedTaskId);
+    }, URL_MIRROR_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [api.loading, inboundPending, selectedTaskId, urlTaskId, onUrlTaskIdChange]);
+
+  // Reveal the deep-linked row/card/bar once it exists in the DOM — the scope
+  // snap, a collapsed group's reveal, and a nested subtask's parent
+  // auto-expand settle over a few frames, so poll briefly instead of assuming
+  // one. Instant scroll: a programmatic reveal, not an animation. `inline`
+  // reveals horizontally too (the Timeline canvas scrolls sideways).
+  useEffect(() => {
+    const id = scrollTargetRef.current;
+    if (!id || api.loading) return;
+    scrollTargetRef.current = null;
+    let tries = 0;
+    const reveal = () => {
+      const el = document.querySelector(`[data-task-id="${CSS.escape(id)}"]`);
+      if (el) {
+        el.scrollIntoView({ block: "center", inline: "center" });
+        return;
+      }
+      if (++tries < 24) requestAnimationFrame(reveal);
+    };
+    requestAnimationFrame(reveal);
+  }, [api.loading, urlTaskId]);
 
   // Tag-filter header control + active-chip row, passed to both views as nodes so
   // List/Board stay unaware of the filter machinery.
@@ -405,6 +550,7 @@ export function TasksPlanView({ api, workspaceId }: Props) {
         reorderable={selection === "today"}
         onReorder={api.reorderQueue}
         nestable={selection !== "today" && selection !== "all"}
+        revealRequest={revealRequest}
       />
     );
 
