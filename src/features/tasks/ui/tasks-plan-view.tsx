@@ -28,6 +28,12 @@ import {
   timeBlockByBucket as invertTimeBlocks,
 } from "../default-view";
 import { takeEntityOpenIntent } from "../../../lib/entity-open";
+import {
+  consumeFocusViewRequest,
+  flushFocusSession,
+  FOCUS_VIEW_REQUEST_EVENT,
+  registerFocusFlushSink,
+} from "../focus-session-store";
 import { taskMatchesTagFilter, type GroupBy } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
@@ -161,6 +167,42 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     const live = new Set(api.tags.map((t) => t.id));
     return filterTagIds.filter((id) => live.has(id));
   }, [filterTagIds, api.tags]);
+
+  // DF-11 — the app-level Focus session flushes tracked time through the Tasks
+  // module's write path, so register `addTimeSpent` as its sink while /tasks is
+  // mounted. A ref keeps the callback current without re-registering (which would
+  // re-drain each render); registering once drains any backlog accrued while the
+  // module was unmounted, and the cleanup banks accrued-so-far on navigation away.
+  const apiRef = useRef(api);
+  apiRef.current = api;
+  useEffect(
+    () => registerFocusFlushSink((taskId, seconds) => apiRef.current.addTimeSpent(taskId, seconds)),
+    [],
+  );
+  // Once the bundle is loaded, drain any seconds the register-time flush had to
+  // retain because it fired against the still-empty bundle on remount — so time
+  // accrued while /tasks was unmounted actually lands (DF-11).
+  useEffect(() => {
+    if (!api.loading) flushFocusSession();
+  }, [api.loading]);
+
+  // The chrome chip's "open Focus" request → enter Execute mode. The one-shot
+  // flag covers the fresh-mount case (chip clicked from another route, event
+  // fired before this listener existed); the event covers the already-mounted
+  // case (chip clicked while /tasks is open in Plan mode).
+  useEffect(() => {
+    if (consumeFocusViewRequest()) setMode("execute");
+    // Consume the flag here too: the event fires synchronously inside
+    // requestFocusView (before navigation), so an already-mounted /tasks clears
+    // it now — otherwise a stale flag would force Execute on the next unrelated
+    // /tasks visit that reaches the mount branch above.
+    const onRequest = () => {
+      consumeFocusViewRequest();
+      setMode("execute");
+    };
+    window.addEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
+    return () => window.removeEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
+  }, []);
 
   // Persist preferences.
   useEffect(() => writeLS(workspaceId, "mode", mode), [workspaceId, mode]);
@@ -552,6 +594,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         subtasksFor={(id) => api.subtasksByParent.get(id) ?? []}
         onToggleSubtask={api.toggleDone}
         onExit={exitExecute}
+        loading={api.loading}
+        canEdit={canEdit}
+        onCaptureToQueue={api.commitNewTaskToday}
       />
     ) : view === "board" ? (
       <TaskBoardView
