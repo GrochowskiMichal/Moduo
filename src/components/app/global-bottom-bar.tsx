@@ -1,9 +1,10 @@
-import { Plus, Search, SlidersHorizontal } from "lucide-react";
+import { Keyboard, Plus, Search } from "lucide-react";
 
 import { formatShortcut, SHORTCUTS } from "../../lib/shortcuts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 import { dispatchOpenPalette } from "./global-command-palette";
+import { dispatchOpenShortcuts } from "./global-shortcuts-dialog";
 import { dispatchCreateNew } from "./create-events";
 
 function BarButton({
@@ -36,10 +37,12 @@ function BarButton({
 
 const newItemShortcut = SHORTCUTS.find((s) => s.id === "new-item");
 const paletteShortcut = SHORTCUTS.find((s) => s.id === "palette");
+const helpShortcut = SHORTCUTS.find((s) => s.id === "help");
 
 export function GlobalBottomBar() {
   const createHint = newItemShortcut ? formatShortcut(newItemShortcut) : undefined;
   const searchHint = paletteShortcut ? formatShortcut(paletteShortcut) : undefined;
+  const helpHint = helpShortcut ? formatShortcut(helpShortcut) : undefined;
   return (
     <div
       data-slot="global-bottom-bar"
@@ -49,12 +52,11 @@ export function GlobalBottomBar() {
       aria-label="Global actions"
     >
       <BarButton
-        onClick={() => {
-          /* placeholder for per-feature settings; wired by per-feature polish */
-        }}
-        label="Feature settings"
+        onClick={() => dispatchOpenShortcuts()}
+        label="Keyboard shortcuts"
+        hint={helpHint}
       >
-        <SlidersHorizontal className="size-4" aria-hidden />
+        <Keyboard className="size-4" aria-hidden />
       </BarButton>
       <BarButton onClick={() => dispatchOpenPalette()} label="Search" hint={searchHint}>
         <Search className="size-4" aria-hidden />

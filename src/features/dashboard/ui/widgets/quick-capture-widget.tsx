@@ -3,12 +3,13 @@
 // (a "view" member sees a disabled box). Refreshes the shared data so a Tasks
 // widget on the same board updates immediately.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ArrowUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { getRuntime } from "@/lib/runtime";
+import { onCreateNew } from "@/components/app/create-events";
 import { endPosition, makeTask } from "@/features/tasks/helpers";
 
 import {
@@ -24,6 +25,12 @@ export function QuickCaptureWidget({ canWrite }: WidgetComponentProps) {
   // A synchronous guard — `busy` state can't block a rapid double-Enter (both
   // reads see `false` before the first setBusy commits), which would double-create.
   const busyRef = useRef(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // ⌘N / global "+" on Home focuses the capture box (Home's create surface).
+  // Only mounted when this widget is on the active board, so a global "+"
+  // elsewhere never reaches it. A disabled (view-only) box simply won't focus.
+  useEffect(() => onCreateNew(() => inputRef.current?.focus()), []);
 
   const submit = async () => {
     const title = text.trim();
@@ -59,6 +66,7 @@ export function QuickCaptureWidget({ canWrite }: WidgetComponentProps) {
     <div className="flex h-full flex-col justify-center gap-2 p-3">
       <div className="relative">
         <textarea
+          ref={inputRef}
           value={text}
           disabled={!canWrite}
           onChange={(e) => setText(e.target.value)}

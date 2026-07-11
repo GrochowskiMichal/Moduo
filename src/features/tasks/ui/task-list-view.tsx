@@ -35,7 +35,7 @@ import {
   useTaskDndSensors,
 } from "./dnd/task-dnd";
 import { PlanViewHeader, type PlanView } from "./plan-view-header";
-import { Kbd } from "./task-detail-panel";
+import { Kbd } from "../../../components/ui/kbd";
 import { TaskRow, type RowCommand } from "./task-row";
 
 type Props = {

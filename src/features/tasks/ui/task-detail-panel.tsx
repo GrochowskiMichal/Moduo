@@ -79,6 +79,7 @@ import {
 } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { Kbd } from "../../../components/ui/kbd";
 
 type Props = {
   task: Task | null;
@@ -975,10 +976,3 @@ function Meta({
   );
 }
 
-export function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-2xs text-muted-foreground">
-      {children}
-    </kbd>
-  );
-}

@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
-import { Kbd } from "../../tasks/ui/task-detail-panel";
+import { Kbd } from "../../../components/ui/kbd";
 
 const SHORTCUTS: Array<[keys: string, label: string]> = [
   ["j / k", "Next / previous conversation"],
