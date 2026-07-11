@@ -82,6 +82,7 @@ export function TaskCard({
       {...(canEdit ? listeners : {})}
       role="button"
       aria-pressed={selected}
+      data-task-id={task.id}
       onClick={onSelect}
       className={cn(
         // Linear-quiet: card = bg-card + hairline on the (transparent) column,

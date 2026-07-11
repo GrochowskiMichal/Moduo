@@ -12,7 +12,7 @@ import {
   dispatchDashboardToggleEdit,
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
-import { ENTITY_OPEN_EVENT, entityOpenTarget } from "../../lib/entity-open";
+import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
 
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
@@ -238,6 +238,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         return;
       }
       if (target.search) {
+        // Mark the navigation as an external "take me there" so the target
+        // page can distinguish it from its own mirrored id (refresh/back).
+        markEntityOpenIntent(target.search.id);
         void navigate({ to: target.to, search: target.search as any });
       } else {
         void navigate({ to: target.to });

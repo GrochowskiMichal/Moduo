@@ -1129,6 +1129,7 @@ function TimelineBarRow({
         onLostPointerCapture={() => endDrag(false)}
         data-timeline-bar={task.id}
         data-timeline-drop={task.id}
+        data-task-id={task.id}
         className={cn(
           "group/bar absolute z-[2] flex select-none items-center gap-1.5 border px-1.5",
           displayBar.solidLeft ? "rounded-l-md" : "rounded-l-none border-l-0",

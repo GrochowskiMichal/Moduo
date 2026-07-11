@@ -139,6 +139,7 @@ export function TaskRow({
     <div
       role="row"
       aria-selected={selected}
+      data-task-id={task.id}
       onClick={onSelect}
       {...(editing ? {} : dragListeners)}
       className={cn(

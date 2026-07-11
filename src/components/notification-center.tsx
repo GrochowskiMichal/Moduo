@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 
 import { useAuth } from "../providers/auth-provider";
+import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
 import { useWorkspace } from "../providers/workspace-provider";
 import { useShortcut } from "../lib/shortcuts";
 import {
@@ -50,7 +50,6 @@ export function NotificationCenter() {
     markNotificationRead,
     markAllNotificationsRead,
   } = useWorkspace();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   const activeUnread = useMemo(
@@ -81,14 +80,19 @@ export function NotificationCenter() {
       // Mark every unread row in the card read on open (AC10: mark-on-open).
       const unread = group.items.filter((item) => !item.readAt);
       await Promise.all(unread.map((item) => markNotificationRead(item)));
-      // Best-effort deep-link to the target's module surface.
+      // Deep-link through the spine's entity-open event so the entity id rides
+      // along and the page selects it (DF-1) — same path as a widget row.
       const link = notificationDeepLink(group);
       if (link) {
         setOpen(false);
-        void navigate({ to: link.route });
+        window.dispatchEvent(
+          new CustomEvent(ENTITY_OPEN_EVENT, {
+            detail: { type: link.entityType, id: link.entityId },
+          }),
+        );
       }
     },
-    [markNotificationRead, navigate],
+    [markNotificationRead],
   );
 
   return (
