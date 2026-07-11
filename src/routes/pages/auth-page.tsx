@@ -29,6 +29,14 @@ export function AuthPage() {
       return;
     }
 
+    // Resume a workspace invite the user opened while signed out (DF-24).
+    const pendingJoin = window.localStorage.getItem("moduo:pending_join");
+    if (pendingJoin) {
+      window.localStorage.removeItem("moduo:pending_join");
+      void navigate({ to: "/join", search: { invite: pendingJoin }, replace: true });
+      return;
+    }
+
     void navigate({ to: "/", replace: true });
   }, [isSignedIn, loading, navigate, priceId]);
 

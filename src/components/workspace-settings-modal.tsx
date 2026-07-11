@@ -4,12 +4,14 @@ import {
   Copy,
   Crown,
   KeyRound,
+  Link2,
+  LogOut,
   Mail,
   MoreHorizontal,
   Plus,
-  Send,
   Shield,
   User,
+  UserMinus,
   UserPlus,
   Users,
   X,
@@ -392,28 +394,56 @@ function MemberAvatar({ name, email }: { name?: string; email?: string }) {
 export function WorkspaceSettingsModal({ visible, onClose }: Props) {
   const {
     selectedWorkspace,
+    selectedWorkspaceId,
     canManageWorkspace,
+    workspaces,
     members,
     invites,
     sendInvite,
     revokeInvite,
     updateMemberPermissions,
+    removeMember,
+    leaveWorkspace,
     refreshAccessData,
   } = useWorkspace();
+  const { userId, runtime } = useAuth();
   const { allowed: canInvite } = useEntitlement("team_members");
 
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>("editor");
   const [sending, setSending] = useState(false);
-  const [sentFlash, setSentFlash] = useState(false);
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   const [lastIssuedToken, setLastIssuedToken] = useState<string | null>(null);
+  const [copiedNew, setCopiedNew] = useState<"link" | "code" | null>(null);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
     void refreshAccessData();
   }, [refreshAccessData, visible]);
+
+  // Reset transient invite/leave UI whenever the modal closes or the workspace
+  // changes, so a stale invite link/leave-confirm never bleeds across contexts.
+  useEffect(() => {
+    if (!visible) {
+      setLastIssuedToken(null);
+      setLeaveConfirm(false);
+    }
+  }, [visible]);
+  useEffect(() => {
+    setLastIssuedToken(null);
+    setLeaveConfirm(false);
+  }, [selectedWorkspaceId]);
+
+  const lastInviteUrl = useMemo(
+    () => (lastIssuedToken && runtime ? runtime.workspace.inviteUrl(lastIssuedToken) : null),
+    [lastIssuedToken, runtime],
+  );
+
+  const inviteLinkFor = (token: string) => runtime?.workspace.inviteUrl(token) ?? token;
 
   const handleSendInvite = async () => {
     if (!canInvite) {
@@ -435,25 +465,68 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
       });
       if (invite?.token) {
         setLastIssuedToken(invite.token);
-        await navigator.clipboard.writeText(invite.token).catch(() => {});
+        setCopiedNew(null);
+        await navigator.clipboard.writeText(inviteLinkFor(invite.token)).catch(() => {});
+        toast.success("Invite link copied — send it to your teammate.");
+      } else {
+        toast.error("Couldn't create the invite. Try again.");
       }
       setInviteEmail("");
-      setSentFlash(true);
-      setTimeout(() => setSentFlash(false), 2000);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create the invite.");
     } finally {
       setSending(false);
     }
   };
 
   const handleRoleChange = async (memberId: string, role: WorkspaceRole) => {
-    await updateMemberPermissions({
-      memberId,
-      role,
-      modulePermissions: {
-        notes: modulePermissionFor(role),
-        tasks: modulePermissionFor(role),
-      },
-    });
+    try {
+      await updateMemberPermissions({
+        memberId,
+        role,
+        modulePermissions: {
+          notes: modulePermissionFor(role),
+          tasks: modulePermissionFor(role),
+        },
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't update the role.");
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string) => {
+    setRemovingMemberId(memberId);
+    try {
+      await removeMember(memberId);
+      toast.success("Member removed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't remove the member.");
+    } finally {
+      setRemovingMemberId(null);
+    }
+  };
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    try {
+      await revokeInvite(inviteId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't revoke the invite.");
+    }
+  };
+
+  const handleLeave = async () => {
+    if (!selectedWorkspaceId || leaving) return;
+    setLeaving(true);
+    try {
+      await leaveWorkspace(selectedWorkspaceId);
+      toast.success("You left the workspace.");
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't leave the workspace.");
+    } finally {
+      setLeaving(false);
+      setLeaveConfirm(false);
+    }
   };
 
   const pendingInvites = useMemo(
@@ -462,6 +535,12 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
   );
 
   const inviteDisabled = sending || !inviteEmail.trim();
+  const shortId = (id: string) =>
+    id.length > 20 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
+  // Owners transfer/delete rather than leave; and leaving your only workspace
+  // would strand you at zero (the provider has no last-one guard), so gate on
+  // both — mirrors the switcher's delete gate. DF-24 / gotchas §Routes.
+  const canLeave = selectedWorkspace?.role !== "owner" && workspaces.length > 1;
 
   return (
     <>
@@ -491,13 +570,11 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
           <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
             {!selectedWorkspace ? (
               <p className="text-sm text-muted-foreground">Select a workspace first.</p>
-            ) : !canManageWorkspace ? (
-              <p className="text-sm text-muted-foreground">
-                Only owners and admins can manage members.
-              </p>
             ) : (
               <div className="flex flex-col gap-7">
-                {/* Invite section */}
+                {/* Invite — owners/admins only; everyone else gets the read-only
+                    roster + Leave below instead of a dead-end wall. DF-24. */}
+                {canManageWorkspace ? (
                 <section className="flex flex-col gap-3">
                   <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     <UserPlus className="size-3" aria-hidden />
@@ -553,8 +630,8 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                           onClick={() => void handleSendInvite()}
                           disabled={inviteDisabled}
                         >
-                          <Send className="size-3.5" aria-hidden />
-                          {sending ? "Sending…" : sentFlash ? "Sent" : "Invite"}
+                          <UserPlus className="size-3.5" aria-hidden />
+                          {sending ? "Creating…" : "Create invite"}
                         </Button>
                       </div>
 
@@ -563,36 +640,71 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                         <RolePicker value={inviteRole} onChange={setInviteRole} />
                       </div>
 
-                      {sentFlash && lastIssuedToken ? (
-                        <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2">
-                          <Check className="size-3.5 text-success" aria-hidden />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs text-success">
-                              Invite code copied — share it with your teammate:
+                      {lastIssuedToken ? (
+                        <div className="flex flex-col gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2.5">
+                          <div className="flex items-start gap-2">
+                            <Check className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden />
+                            <p className="min-w-0 flex-1 text-xs text-success">
+                              Invite created. Moduo doesn't email invites — send this
+                              link to your teammate yourself:
                             </p>
-                            <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-                              {lastIssuedToken}
-                            </p>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setLastIssuedToken(null)}
+                              aria-label="Dismiss"
+                              className="-mr-1 -mt-1 h-6 w-6 shrink-0"
+                            >
+                              <X className="size-3.5" aria-hidden />
+                            </Button>
                           </div>
-                          <Button
+                          <div className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5">
+                            <Link2 className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                            <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+                              {lastInviteUrl}
+                            </p>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={async () => {
+                                await navigator.clipboard
+                                  .writeText(lastInviteUrl ?? "")
+                                  .catch(() => {});
+                                setCopiedNew("link");
+                                setTimeout(() => setCopiedNew(null), 2000);
+                              }}
+                              aria-label="Copy invite link"
+                              title="Copy invite link"
+                              className="h-6 w-6 shrink-0"
+                            >
+                              {copiedNew === "link" ? (
+                                <Check className="size-3 text-success" aria-hidden />
+                              ) : (
+                                <Copy className="size-3" aria-hidden />
+                              )}
+                            </Button>
+                          </div>
+                          <button
                             type="button"
-                            variant="ghost"
-                            size="icon"
                             onClick={async () => {
                               await navigator.clipboard
                                 .writeText(lastIssuedToken)
                                 .catch(() => {});
+                              setCopiedNew("code");
+                              setTimeout(() => setCopiedNew(null), 2000);
                             }}
-                            aria-label="Copy invite code again"
-                            className="h-6 w-6"
+                            className="self-start text-2xs text-muted-foreground transition-colors hover:text-foreground focus-visible:underline focus-visible:outline-none"
                           >
-                            <Copy className="size-3" aria-hidden />
-                          </Button>
+                            {copiedNew === "code" ? "Code copied" : "Or copy the raw code"}
+                          </button>
                         </div>
                       ) : null}
                     </div>
                   )}
                 </section>
+                ) : null}
 
                 {/* Members */}
                 <section className="flex flex-col gap-3">
@@ -604,29 +716,42 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                   <ul className="flex flex-col gap-1.5">
                     {members.map((member) => {
                       const isOwner = member.role === "owner";
+                      const isSelf = member.userId === userId;
+                      const label = member.displayName?.trim() || shortId(member.userId);
+                      // You manage OTHERS here (role + remove); you manage
+                      // yourself via Leave, so the row menu is others-only.
+                      const showMenu = canManageWorkspace && !isOwner && !isSelf;
                       return (
                         <li
                           key={member.id}
                           className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2 transition-colors hover:bg-muted/60"
                         >
                           <div className="flex min-w-0 items-center gap-3">
-                            <MemberAvatar email={member.userId} />
-                            <p className="truncate text-sm text-foreground">
-                              {member.userId.length > 20
-                                ? `${member.userId.slice(0, 8)}…${member.userId.slice(-4)}`
-                                : member.userId}
-                            </p>
+                            <MemberAvatar name={member.displayName ?? undefined} email={member.userId} />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm text-foreground">
+                                {label}
+                                {isSelf ? (
+                                  <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                                    · You
+                                  </span>
+                                ) : null}
+                              </p>
+                              {member.displayName ? null : (
+                                <p className="text-2xs text-muted-foreground">Profile name not set</p>
+                              )}
+                            </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
                             <RoleBadge role={member.role} />
-                            {!isOwner ? (
+                            {showMenu ? (
                               <Popover>
                                 <PopoverTrigger asChild>
                                   <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    aria-label="Change role"
+                                    aria-label={`Manage ${label}`}
                                     className="h-6 w-6"
                                   >
                                     <MoreHorizontal className="size-3.5" aria-hidden />
@@ -635,7 +760,7 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                                 <PopoverContent
                                   align="end"
                                   sideOffset={4}
-                                  className="w-40 p-1"
+                                  className="w-48 p-1"
                                 >
                                   {ASSIGNABLE_ROLES.map((role) => {
                                     const active = member.role === role;
@@ -656,6 +781,20 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                                       </button>
                                     );
                                   })}
+                                  <div className="my-1 h-px bg-border" />
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleRemoveMember(member.id)}
+                                    disabled={removingMemberId === member.id}
+                                    className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                                  >
+                                    <UserMinus className="size-3.5" aria-hidden />
+                                    <span>
+                                      {removingMemberId === member.id
+                                        ? "Removing…"
+                                        : "Remove from workspace"}
+                                    </span>
+                                  </button>
                                 </PopoverContent>
                               </Popover>
                             ) : null}
@@ -666,8 +805,8 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                   </ul>
                 </section>
 
-                {/* Pending invites */}
-                {pendingInvites.length > 0 ? (
+                {/* Pending invites — managers only */}
+                {canManageWorkspace && pendingInvites.length > 0 ? (
                   <section className="flex flex-col gap-3">
                     <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       <Mail className="size-3" aria-hidden />
@@ -696,12 +835,12 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                aria-label="Copy invite code"
-                                title="Copy invite code"
+                                aria-label="Copy invite link"
+                                title="Copy invite link"
                                 className="h-6 w-6"
                                 onClick={async () => {
                                   await navigator.clipboard
-                                    .writeText(invite.token!)
+                                    .writeText(inviteLinkFor(invite.token!))
                                     .catch(() => {});
                                   setCopiedInviteId(invite.id);
                                   setTimeout(() => setCopiedInviteId(null), 2000);
@@ -710,7 +849,7 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                                 {copiedInviteId === invite.id ? (
                                   <Check className="size-3 text-success" aria-hidden />
                                 ) : (
-                                  <Copy className="size-3" aria-hidden />
+                                  <Link2 className="size-3" aria-hidden />
                                 )}
                               </Button>
                             ) : null}
@@ -719,7 +858,7 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                               variant="ghost"
                               size="icon"
                               aria-label="Revoke invite"
-                              onClick={() => void revokeInvite(invite.id)}
+                              onClick={() => void handleRevokeInvite(invite.id)}
                               className="h-6 w-6 text-destructive hover:bg-destructive/10 hover:text-destructive"
                             >
                               <X className="size-3.5" aria-hidden />
@@ -731,8 +870,54 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                   </section>
                 ) : null}
 
-                {/* MCP connector keys */}
-                <ApiKeysSection workspaceId={selectedWorkspace.id} />
+                {/* MCP connector keys — managers only */}
+                {canManageWorkspace ? (
+                  <ApiKeysSection workspaceId={selectedWorkspace.id} />
+                ) : null}
+
+                {/* Leave workspace — non-owners with somewhere to land. Owners
+                    transfer/delete instead; leaving your only workspace would
+                    strand you at zero. DF-24. */}
+                {canLeave ? (
+                  <section className="flex flex-col gap-3 border-t border-border pt-5">
+                    {!leaveConfirm ? (
+                      <button
+                        type="button"
+                        onClick={() => setLeaveConfirm(true)}
+                        className="flex items-center gap-2 self-start rounded-md px-2 py-1.5 text-sm text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <LogOut className="size-3.5" aria-hidden />
+                        <span>Leave workspace</span>
+                      </button>
+                    ) : (
+                      <div className="flex flex-col gap-2.5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5">
+                        <p className="text-xs text-foreground">
+                          Leave{" "}
+                          <span className="font-semibold">{selectedWorkspace.name}</span>? You'll
+                          lose access until someone invites you again.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setLeaveConfirm(false)}
+                            disabled={leaving}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => void handleLeave()}
+                            disabled={leaving}
+                          >
+                            {leaving ? "Leaving…" : "Leave workspace"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                ) : null}
               </div>
             )}
           </div>
