@@ -67,6 +67,8 @@ export function spineActivityLine(entry: { op: string; payload?: Record<string, 
       return "updated this contact";
     case "contacts.delete":
       return "deleted this contact";
+    case "contacts.restore":
+      return "restored this contact";
     case "contacts.set_status": {
       const to = str(p.to);
       return to ? `set status to ${to}` : "changed the status";

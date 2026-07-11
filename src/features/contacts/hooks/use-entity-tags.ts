@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { pickTagColor, type LabelColor } from "../../../components/tag-colors";
 import type { EntityRef } from "../../../lib/entity-links";
+import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Tag, TagLink } from "../../tasks/model";
 import { attachedTags, dispatchContactTagsChanged, findTagByName } from "../tags";
@@ -168,15 +169,31 @@ export function useEntityTags(
       if (!runtime || !workspaceId) return;
       const prevTags = tags;
       const prevLinks = links;
+      const tag = tags.find((t) => t.id === tagId);
       setTags((p) => p.filter((t) => t.id !== tagId));
       setLinks((p) => p.filter((l) => l.tagId !== tagId));
-      runtime.tasks
-        .deleteTag({ workspaceId, tagId })
-        .then(() => dispatchContactTagsChanged())
-        .catch((err) => {
-        setTags(prevTags);
-        setLinks(prevLinks);
-        toast.error("Couldn’t delete the tag", { description: err instanceof Error ? err.message : undefined });
+      // Deferred commit (the email-triage pattern, DF-5): the server delete
+      // hard-drops every attachment workspace-wide, so it only fires once the
+      // undo window closes — Undo cancels it and puts the local state back.
+      let undone = false;
+      window.setTimeout(() => {
+        if (undone) return;
+        runtime.tasks
+          .deleteTag({ workspaceId, tagId })
+          .then(() => dispatchContactTagsChanged())
+          .catch((err) => {
+            setTags(prevTags);
+            setLinks(prevLinks);
+            toast.error("Couldn’t delete the tag", { description: err instanceof Error ? err.message : undefined });
+          });
+      }, UNDO_TOAST_MS);
+      undoToast("Tag deleted", {
+        description: tag ? `“${tag.name}” comes off everything it was tagged on.` : undefined,
+        onUndo: () => {
+          undone = true;
+          setTags(prevTags);
+          setLinks(prevLinks);
+        },
       });
     },
     [runtime, workspaceId, tags, links],

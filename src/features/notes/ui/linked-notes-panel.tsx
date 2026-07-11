@@ -74,7 +74,7 @@ export function LinkedNotesPanel({
       // from the rail (or /notes) when ready.
       reload();
       onLinked?.();
-      toast.success("Note created and linked", { description: "Find it in this rail or in Notes." });
+      toast("Note created and linked", { description: "Find it in this rail or in Notes." });
     } catch (err) {
       toast.error("Couldn't create the note", {
         description: err instanceof Error ? err.message : undefined,

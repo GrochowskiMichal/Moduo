@@ -1344,6 +1344,14 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
     },
+    async restoreEvent({ workspaceId, eventId }) {
+      const { data, error } = await supabaseClient.rpc("calendar_op_event_restore", {
+        p_workspace_id: workspaceId,
+        p_event_id: eventId,
+      });
+      if (error) throw new Error(error.message);
+      return calendarEventRowToModel(firstRow(data, "calendar_op_event_restore"));
+    },
     async upsertAccount({ workspaceId, provider, externalId, displayLabel, color, status, lastSyncAt, syncToken }) {
       const args: Record<string, unknown> = {
         p_workspace_id: workspaceId,
@@ -2106,6 +2114,15 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
       return contactRowToModel(firstRow(data, "contacts_op_delete"));
+    },
+
+    async restoreContact({ workspaceId, contactId }) {
+      const { data, error } = await supabaseClient.rpc("contacts_op_restore", {
+        p_workspace_id: workspaceId,
+        p_contact_id: contactId,
+      });
+      if (error) throw new Error(error.message);
+      return contactRowToModel(firstRow(data, "contacts_op_restore"));
     },
 
     async deleteCompany({ workspaceId, companyId }) {

@@ -14,9 +14,19 @@ import { Contact as ContactIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
+import { undoToast } from "../../lib/undo-toast";
 import { asDragPayload, asDropLinkTarget, isSelfDrop, payloadRef, targetAccepts } from "../../lib/drag-payload";
 import type { ContactsSearch } from "../../features/contacts/search";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
+import { Button } from "../../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { EmptyState } from "../../components/ui/empty-state";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
@@ -78,6 +88,8 @@ export function ContactsPage() {
   const [companyFormOpen, setCompanyFormOpen] = useState(false);
   // A preset company for the "+ Add person" flow from a company page (FX-7).
   const [formCompanyPreset, setFormCompanyPreset] = useState<{ id: string; name: string } | null>(null);
+  // Company delete confirms first ("N people work here") — no restore op yet (DF-5).
+  const [companyDeleteId, setCompanyDeleteId] = useState<string | null>(null);
 
   // Selection lives in the URL (FX-1 AC1): refresh keeps your place, back/
   // forward walk selection history, and deep links are shareable. strict:false
@@ -341,7 +353,7 @@ export function ContactsPage() {
         targetLabel: task.title,
       });
       reloadFocus(focus);
-      toast.success("Follow-up added", { description: task.title });
+      toast("Follow-up added", { description: task.title });
     } catch (err) {
       toast.error("Couldn’t add follow-up", { description: err instanceof Error ? err.message : undefined });
     }
@@ -426,12 +438,14 @@ export function ContactsPage() {
     setFormOpen(true);
   }
 
-  async function deleteCompany(companyId: string) {
+  // Company delete is guarded by a confirm ("N people work here") because it
+  // has no restore op yet — the confirm is the safety, not an Undo (DF-5).
+  async function performCompanyDelete(companyId: string) {
     try {
       await runtime!.contacts.deleteCompany({ workspaceId: ws, companyId });
       setSelected(null, { replace: true });
       directory.reload();
-      toast.success("Company deleted");
+      toast("Company deleted");
     } catch (err) {
       toast.error("Couldn’t delete the company", { description: err instanceof Error ? err.message : undefined });
     }
@@ -462,9 +476,52 @@ export function ContactsPage() {
       });
       await runtime!.contacts.updateContact({ workspaceId: ws, contactId, setCompany: { companyId: companyRef.id } });
       reload();
-      toast.success("Company set", { description: label });
+      toast("Company set", { description: label });
     } catch (err) {
       toast.error("Couldn’t set company", { description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function clearCompany(contact: Contact) {
+    const companyId = contact.companyId;
+    if (!companyId) return;
+    const label = companyNameFor(companyId);
+    try {
+      // The dual-write in reverse (gotchas §Drag-to-link): drop the canonical
+      // works-at edge(s) AND the denormalized FK, or the chip resurrects.
+      const links = await runtime!.spine.listLinks({ workspaceId: ws, entityType: "contact", entityId: contact.id });
+      const workAt = links.filter(
+        (l) =>
+          l.relationKind === "works-at" &&
+          ((l.sourceType === "company" && l.sourceId === companyId) ||
+            (l.targetType === "company" && l.targetId === companyId)),
+      );
+      await Promise.all(workAt.map((l) => runtime!.spine.deleteLink({ workspaceId: ws, linkId: l.id })));
+      await runtime!.contacts.updateContact({ workspaceId: ws, contactId: contact.id, setCompany: { companyId: null } });
+      reload();
+      undoToast("Company removed", {
+        description: label ?? undefined,
+        onUndo: () => {
+          void (async () => {
+            // Same dual-write as Set company; the link create is idempotent.
+            await runtime!.contacts.link({
+              workspaceId: ws,
+              contact: { type: "contact", id: contact.id },
+              target: { type: "company", id: companyId },
+              relationKind: "works-at",
+              origin: "manual",
+              targetLabel: label ?? undefined,
+              targetIcon: "building-2",
+            });
+            await runtime!.contacts.updateContact({ workspaceId: ws, contactId: contact.id, setCompany: { companyId } });
+            reload();
+          })().catch((err) =>
+            toast.error("Couldn’t restore the company", { description: err instanceof Error ? err.message : undefined }),
+          );
+        },
+      });
+    } catch (err) {
+      toast.error("Couldn’t remove the company", { description: err instanceof Error ? err.message : undefined });
     }
   }
 
@@ -488,12 +545,28 @@ export function ContactsPage() {
   }
 
   async function deleteContact(contactId: string) {
+    const name = directory.bundle.contacts.find((c) => c.id === contactId)?.name;
     try {
       await runtime!.contacts.deleteContact({ workspaceId: ws, contactId });
       // replace — otherwise Back lands on the deleted contact's dead URL.
       setSelected(null, { replace: true });
       directory.reload();
-      toast.success("Contact deleted");
+      // The server delete is soft (links + registry revive with it) — Undo is
+      // a real restore, not a client illusion (DF-5).
+      undoToast("Contact deleted", {
+        description: name,
+        onUndo: () => {
+          void (async () => {
+            await runtime!.contacts.restoreContact({ workspaceId: ws, contactId });
+            directory.reload();
+            setSelected({ type: "contact", id: contactId });
+          })().catch((err) =>
+            toast.error("Couldn’t restore the contact", {
+              description: err instanceof Error ? err.message : undefined,
+            }),
+          );
+        },
+      });
     } catch (err) {
       toast.error("Couldn’t delete the contact", { description: err instanceof Error ? err.message : undefined });
     }
@@ -542,6 +615,7 @@ export function ContactsPage() {
         onAddFollowup={() => void addFollowup({ type: "contact", id: selectedContact.id }, selectedContact.name)}
         onLink={(candidate) => void linkExisting({ type: "contact", id: selectedContact.id }, candidate)}
         onSetCompany={(candidate) => void setCompany(selectedContact.id, candidate)}
+        onClearCompany={selectedContact.companyId ? () => void clearCompany(selectedContact) : undefined}
         onAddField={(label, type, options) => void addFieldDef(label, type, options)}
         onDeleteField={(fieldId) => void deleteFieldDef(fieldId)}
         onOpenEntity={openEntity}
@@ -574,7 +648,7 @@ export function ContactsPage() {
         onAddTask={() => void addFollowup({ type: "company", id: selectedCompany.id }, selectedCompany.name)}
         onLink={(candidate) => void linkExisting({ type: "company", id: selectedCompany.id }, candidate)}
         onAddPerson={() => addPersonToCompany({ id: selectedCompany.id, name: selectedCompany.name })}
-        onDelete={() => void deleteCompany(selectedCompany.id)}
+        onDelete={() => setCompanyDeleteId(selectedCompany.id)}
         onRetry={companyHub.reload}
       />
       </HubDropZone>
@@ -643,7 +717,7 @@ export function ContactsPage() {
               result.created ? `${result.created} added` : null,
               result.merged ? `${result.merged} merged` : null,
             ].filter(Boolean);
-            toast.success("Contacts imported", { description: parts.length ? parts.join(" · ") : "Nothing to import." });
+            toast("Contacts imported", { description: parts.length ? parts.join(" · ") : "Nothing to import." });
           }}
         />
       ) : null}
@@ -666,6 +740,46 @@ export function ContactsPage() {
       {canEdit ? (
         <CompanyFormDialog open={companyFormOpen} onOpenChange={setCompanyFormOpen} onSubmit={submitNewCompany} />
       ) : null}
+      {(() => {
+        // Company delete confirm — the guard names the people affected (DF-5).
+        const target = companyDeleteId
+          ? directory.bundle.companies.find((c) => c.id === companyDeleteId) ?? null
+          : null;
+        const memberCount = companyDeleteId
+          ? directory.bundle.contacts.filter((c) => c.companyId === companyDeleteId).length
+          : 0;
+        return (
+          <Dialog open={target !== null} onOpenChange={(open) => !open && setCompanyDeleteId(null)}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Delete {target?.name || "this company"}?</DialogTitle>
+                <DialogDescription>
+                  {memberCount > 0
+                    ? `${memberCount} ${memberCount === 1 ? "person works" : "people work"} here — they'll stay, but their company field clears. `
+                    : ""}
+                  Links to this company are removed. This can't be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" size="sm" onClick={() => setCompanyDeleteId(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    const id = companyDeleteId;
+                    setCompanyDeleteId(null);
+                    if (id) void performCompanyDelete(id);
+                  }}
+                >
+                  Delete company
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </>
   );
 }

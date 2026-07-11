@@ -142,7 +142,7 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
       energyLevel: energy,
       durationMinutes: duration,
     });
-    toast.success(title, { description: summarize(effScheduled, effDue, effRecurrence, bucketName(bucketId)) });
+    toast(title, { description: summarize(effScheduled, effDue, effRecurrence, bucketName(bucketId)) });
     if (createMore) {
       resetFields(true);
       inputRef.current?.focus();

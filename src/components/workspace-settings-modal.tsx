@@ -30,6 +30,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
@@ -135,6 +136,9 @@ function ApiKeysSection({ workspaceId }: { workspaceId: string }) {
   const [creating, setCreating] = useState(false);
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState<"secret" | "endpoint" | null>(null);
+  // Revoke is instant + irreversible (the secret can't be re-shown), so it
+  // confirms first — the confirm-not-undo half of the DF-5 grammar.
+  const [revokeTarget, setRevokeTarget] = useState<WorkspaceApiKey | null>(null);
 
   const refresh = useCallback(async () => {
     if (!runtime) return;
@@ -333,7 +337,7 @@ function ApiKeysSection({ workspaceId }: { workspaceId: string }) {
                   size="icon"
                   aria-label={`Revoke ${key.name}`}
                   title="Revoke key"
-                  onClick={() => void handleRevoke(key)}
+                  onClick={() => setRevokeTarget(key)}
                   className="h-6 w-6 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 >
                   <X className="size-3.5" aria-hidden />
@@ -345,6 +349,33 @@ function ApiKeysSection({ workspaceId }: { workspaceId: string }) {
       ) : (
         <p className="text-xs text-muted-foreground">No keys yet.</p>
       )}
+
+      <Dialog open={revokeTarget !== null} onOpenChange={(open) => !open && setRevokeTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Revoke {revokeTarget?.name || "this key"}?</DialogTitle>
+            <DialogDescription>
+              Anything connected with this key loses access immediately. This can't be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setRevokeTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                const key = revokeTarget;
+                setRevokeTarget(null);
+                if (key) void handleRevoke(key);
+              }}
+            >
+              Revoke key
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
