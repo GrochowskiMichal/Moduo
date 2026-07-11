@@ -14,10 +14,18 @@ export const baseModulesNavItems: ModuleNavItem[] = [
   { label: "Notes", iconName: "file-text", href: "/notes", module: "notes" },
   { label: "Tasks", iconName: "check-square", href: "/tasks", module: "tasks" },
   { label: "Calendar", iconName: "calendar", href: "/calendar", module: "calendar" },
-  { label: "Mindmap", iconName: "git-branch", href: "/mindmap", module: "mindmap" },
+  // Mindmap is hidden from the alpha nav (DF-4) — the module rethink is scheduled
+  // after Email + Dashboard. The /mindmap route + its layout entry stay wired
+  // (route-tree.tsx, routeToFeatureLayout) so it's still reachable directly.
   { label: "Email", iconName: "mail", href: "/email", module: "email" },
   { label: "Contacts", iconName: "contact", href: "/contacts" },
 ];
+
+// Routes that are intentionally reachable but NOT shown in the nav — kept wired
+// for later work but hidden from the alpha. The app-chrome "bounce unknown
+// routes home" guard must exempt these, or a direct visit gets redirected to the
+// first nav tab. Mindmap is hidden pending its post-Email/Dashboard rethink (DF-4).
+export const hiddenReachableRoutes: readonly string[] = ["/mindmap"];
 
 export const rowStyle = { display: "flex", flexDirection: "row" as const, alignItems: "center" };
 export const itemRowStyle = {
