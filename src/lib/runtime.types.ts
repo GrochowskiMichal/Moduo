@@ -250,6 +250,12 @@ export type ModuoRuntime = {
      * `workspace_members` write-RLS is own-row. DF-24.
      */
     removeMember(memberId: string): Promise<void>;
+    /**
+     * Hand workspace ownership to another member (owner-only): promotes them to
+     * owner, demotes the caller to admin. SECURITY DEFINER RPC. Needed by the
+     * account-deletion flow — an owner must hand off before deleting.
+     */
+    transferOwnership(memberId: string): Promise<void>;
     /** Shareable `/join?invite=<token>` accept link (web origin, tauri-safe). */
     inviteUrl(token: string): string;
     listNotifications(): Promise<any[]>;

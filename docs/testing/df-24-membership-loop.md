@@ -19,6 +19,15 @@
 - [ ] **Do:** As a **non-owner** member who belongs to **≥2** workspaces, open Workspace members → **Expect:** a red "Leave workspace" at the bottom; clicking it asks to confirm; confirming toasts "You left the workspace." and the workspace disappears from your switcher. _(both)_
 - [ ] **Do:** As an owner, open Workspace members → a non-owner member's ⋯ menu → **Remove from workspace** → **Expect:** toast "Member removed.", the row disappears; the removed member loses access on their next refresh. _(both)_ — the RPC itself is ✅ prod-verified (success + guards); this checks the modal wiring.
 
+## Role hierarchy + transfer ownership (follow-up, `t/maciej/workspace-roles-transfer`)
+> The server authz (all 12 paths) is ✅ prod-verified in a rolled-back probe; these checks confirm the UI wiring. Needs a Team plan (to invite) + a 2nd identity.
+- [ ] **Do:** As an **owner**, open a member's ⋯ menu → **Expect:** role options include **Admin**, plus a **Make owner** item and **Remove**. Promote someone to Admin → their badge flips to Admin. _(both)_
+- [ ] **Do:** As an **admin** (not owner), open the ⋯ menu of an **editor/viewer** → **Expect:** role options are **Viewer/Editor only** (no Admin), plus Remove; the change sticks. _(both)_
+- [ ] **Do:** As an **admin**, look at **another admin's** row → **Expect:** **no ⋯ menu at all** (admins can't manage peers). Same for the owner's row. _(both)_
+- [ ] **Do:** As an **owner**, ⋯ → **Make owner** → confirm dialog → **Expect:** toast "… is now the owner. You're an admin.", the other member's badge → Owner, yours → Admin, and you lose owner-only controls (Make owner / granting Admin). _(both)_
+- [ ] **Do:** As an **admin**, confirm there is **no** Make-owner affordance anywhere. _(both)_
+- [ ] **Do:** As an **admin** (not owner), open Workspace members → **Expect:** **no** Invite section, no pending-invites section, and **no** API-keys section (those are owner-only) — you still see the member roster + your manage controls on editors/viewers. _(both)_
+
 ## Edge cases
 - [ ] **Do:** Accept an invite you've **already** accepted (or your own workspace's invite) → **Expect:** inline + toast "You're already a member of this workspace." (not a raw Postgres error). _(web)_ — ✅ live-verified.
 - [ ] **Do:** Open `/join` with a **missing/garbage** `?invite` → **Expect:** "Invite link incomplete" with a "Go to Moduo" button; a revoked/expired token → "This invite is invalid or has expired." _(web)_

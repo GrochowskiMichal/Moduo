@@ -67,6 +67,7 @@ export type WorkspaceContextValue = {
   joinWorkspace: (token: string) => Promise<WorkspaceSummary | null>;
   updateMemberPermissions: (args: UpdateWorkspaceMemberPermissionsArgs) => Promise<void>;
   removeMember: (memberId: string) => Promise<void>;
+  transferOwnership: (memberId: string) => Promise<void>;
   updateInvite: (args: UpdateWorkspaceInviteArgs) => Promise<void>;
   revokeInvite: (inviteId: string) => Promise<void>;
   refreshNotifications: () => Promise<void>;
