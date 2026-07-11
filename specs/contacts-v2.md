@@ -1,6 +1,6 @@
 # Spec: Contacts v2 — the iOS/Folk-grade contact page
 
-> Status: **In progress** (Batch 1 shipped) · Owner: maciej · Supersedes the UI/data shape of [`specs/contacts.md`](./contacts.md) (CO-1…CO-5 base stays; this evolves it) · Briefs: [`.design/contacts/DESIGN_BRIEF.md`](../.design/contacts/DESIGN_BRIEF.md), [`.design/contacts/REDESIGN.md`](../.design/contacts/REDESIGN.md)
+> Status: **Done** (Batches 1–4 shipped; superseded by [`specs/contacts-v3-fixpack.md`](./contacts-v3-fixpack.md)) · Owner: maciej · Supersedes the UI/data shape of [`specs/contacts.md`](./contacts.md) (CO-1…CO-5 base stays; this evolves it) · Briefs: [`.design/contacts/DESIGN_BRIEF.md`](../.design/contacts/DESIGN_BRIEF.md), [`.design/contacts/REDESIGN.md`](../.design/contacts/REDESIGN.md)
 >
 > Written 2026-06-28 from a research round (iOS Contacts/Cardhop · Folk/Attio/Notion/HubSpot/Google · Monica/Dex/Clay) + designer testing feedback. The research lives in [`.design/contacts/REDESIGN.md`](../.design/contacts/REDESIGN.md).
 
