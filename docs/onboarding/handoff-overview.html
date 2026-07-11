@@ -1,0 +1,411 @@
+<title>Moduo — Handoff for Mike</title>
+<style>
+  /* ── Monochrome, quiet. Dark-first (Moduo's native ground). ───────────── */
+  :root{
+    --ground:#0e0e12; --surface:#141419; --surface-2:#191920; --raise:#1f1f27;
+    --border:#26262e; --border-soft:#1c1c22; --line:#222229;
+    --fg:#eeeef1; --strong:#ffffff; --muted:#93939c; --faint:#5f5f69; --ghost:#3b3b43;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --ground:#fbfbfc; --surface:#ffffff; --surface-2:#f5f5f7; --raise:#eeeef1;
+      --border:#e6e6ea; --border-soft:#eeeef1; --line:#ececef;
+      --fg:#18181c; --strong:#000000; --muted:#5b5b63; --faint:#8a8a93; --ghost:#c4c4cc;
+    }
+  }
+  :root[data-theme="light"]{
+    --ground:#fbfbfc; --surface:#ffffff; --surface-2:#f5f5f7; --raise:#eeeef1;
+    --border:#e6e6ea; --border-soft:#eeeef1; --line:#ececef;
+    --fg:#18181c; --strong:#000000; --muted:#5b5b63; --faint:#8a8a93; --ghost:#c4c4cc;
+  }
+  :root[data-theme="dark"]{
+    --ground:#0e0e12; --surface:#141419; --surface-2:#191920; --raise:#1f1f27;
+    --border:#26262e; --border-soft:#1c1c22; --line:#222229;
+    --fg:#eeeef1; --strong:#ffffff; --muted:#93939c; --faint:#5f5f69; --ghost:#3b3b43;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0}
+  .page{
+    background:var(--ground); color:var(--fg);
+    font-family:var(--sans); line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    padding:clamp(24px,5vw,72px) clamp(18px,5vw,44px);
+  }
+  .wrap{max-width:1040px; margin:0 auto}
+
+  .eyebrow{
+    font-family:var(--mono); font-size:.71rem; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--faint); margin:0 0 14px;
+  }
+  h1{
+    font-size:clamp(2rem,4.4vw,2.85rem); line-height:1.06; font-weight:640;
+    letter-spacing:-.028em; margin:0 0 16px; text-wrap:balance; color:var(--strong);
+  }
+  .lede{font-size:clamp(1.02rem,1.5vw,1.14rem); color:var(--muted); max-width:62ch; margin:0}
+  .lede b{color:var(--fg); font-weight:560}
+
+  section{margin-top:clamp(48px,7vw,84px)}
+  .sec-head{margin-bottom:26px}
+  h2{
+    font-size:1.32rem; font-weight:600; letter-spacing:-.02em; margin:0; color:var(--fg);
+    text-wrap:balance;
+  }
+  .sec-note{color:var(--muted); font-size:.9rem; margin:8px 0 0; max-width:68ch}
+  .sec-note b{color:var(--fg); font-weight:560}
+
+  /* ── Hero metrics: airy, hairline-divided, flat ──────────────────────── */
+  .metrics{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    border-top:1px solid var(--border); margin-top:36px;
+  }
+  .metric{padding:20px 22px 20px 0; border-bottom:1px solid var(--border-soft)}
+  .metric .n{font-size:1.75rem; font-weight:600; letter-spacing:-.03em; color:var(--strong); font-variant-numeric:tabular-nums}
+  .metric .n small{font-size:.85rem; color:var(--faint); font-weight:400; letter-spacing:0}
+  .metric .l{font-family:var(--mono); font-size:.67rem; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); margin-top:6px}
+
+  /* ── Cards & grids ───────────────────────────────────────────────────── */
+  .grid{display:grid; gap:1px; background:var(--border-soft)}
+  .grid.cols-3{grid-template-columns:repeat(auto-fill,minmax(232px,1fr))}
+  .grid.cols-2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .grid.bare{background:none; gap:14px}
+  .card{background:var(--ground); padding:20px}
+  .grid.bare .card{border:1px solid var(--border); border-radius:12px}
+  .card h3{font-size:.98rem; font-weight:580; margin:0; letter-spacing:-.012em; color:var(--fg)}
+
+  .mod{display:flex; flex-direction:column; gap:13px; min-height:118px}
+  .mod-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
+  .mod p{margin:0; font-size:.83rem; color:var(--muted); line-height:1.5}
+  .pillars{display:flex; gap:6px; align-items:center; margin-top:auto; padding-top:4px}
+  .dot{width:8px; height:8px; border-radius:50%; box-shadow:inset 0 0 0 1.5px var(--ghost)}
+  .dot.on{background:var(--fg); box-shadow:none}
+  .pillars .lbl{font-family:var(--mono); font-size:.6rem; letter-spacing:.09em; color:var(--faint); text-transform:uppercase; margin-left:3px}
+
+  /* ── Status pills: tonal ramp, no hue (ink→faint = done→planned) ─────── */
+  .pill{
+    display:inline-flex; align-items:center; gap:7px; white-space:nowrap;
+    font-family:var(--mono); font-size:.64rem; letter-spacing:.07em; text-transform:uppercase;
+    padding:4px 9px; border-radius:999px; font-weight:500; border:1px solid var(--border-soft);
+  }
+  .pill::before{content:""; width:6px; height:6px; border-radius:50%}
+  .pill.ok{color:var(--fg)}          .pill.ok::before{background:var(--fg)}
+  .pill.warn{color:var(--muted)}     .pill.warn::before{background:var(--muted)}
+  .pill.idle{color:var(--faint)}     .pill.idle::before{box-shadow:inset 0 0 0 1.5px var(--faint)}
+  .pill.info{color:var(--faint)}     .pill.info::before{box-shadow:inset 0 0 0 1.5px var(--ghost)}
+
+  .legend{display:flex; gap:18px; flex-wrap:wrap; margin-top:18px; font-size:.77rem; color:var(--muted)}
+  .legend span{display:inline-flex; align-items:center; gap:8px}
+  .legend .sw{width:7px; height:7px; border-radius:50%}
+  .legend .d1{background:var(--fg)} .legend .d2{background:var(--muted)}
+  .legend .d3{box-shadow:inset 0 0 0 1.5px var(--faint)} .legend .d4{box-shadow:inset 0 0 0 1.5px var(--ghost)}
+
+  /* ── Timeline (a real reverse-chronological sequence) ────────────────── */
+  .tl{border-left:1px solid var(--border); margin-left:5px}
+  .tl-row{position:relative; padding:16px 0 16px 28px}
+  .tl-row::before{
+    content:""; position:absolute; left:-4.5px; top:22px; width:8px; height:8px; border-radius:50%;
+    background:var(--fg);
+  }
+  .tl-row.mut::before{background:var(--ground); box-shadow:inset 0 0 0 1.5px var(--faint)}
+  .tl-row + .tl-row{border-top:1px solid var(--border-soft)}
+  .tl-h{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
+  .tl-h .w{font-weight:580; font-size:.97rem; color:var(--fg)}
+  .tl-h .code{font-family:var(--mono); font-size:.68rem; color:var(--faint); letter-spacing:.05em}
+  .tl-row p{margin:6px 0 0; font-size:.85rem; color:var(--muted); max-width:72ch}
+
+  /* ── Two-runtime diagram: tonal weight = importance ──────────────────── */
+  .rt{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  .rt-box{border:1px solid var(--border); border-radius:12px; padding:18px; background:var(--surface)}
+  .rt-box.truth{border-color:var(--fg)}
+  .rt-box .rt-t{font-family:var(--mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:var(--faint)}
+  .rt-box .rt-n{font-weight:600; margin:7px 0 10px; font-size:1.01rem; color:var(--fg); letter-spacing:-.01em}
+  .rt-box ul{margin:0; padding-left:16px; font-size:.83rem; color:var(--muted); line-height:1.55}
+  .rt-box.truth .rt-n{color:var(--strong)}
+
+  /* ── Backend decision A/B/C/D ────────────────────────────────────────── */
+  .abcd{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(238px,1fr))}
+  .opt{border:1px solid var(--border); border-radius:12px; padding:17px; background:var(--surface); opacity:.86}
+  .opt.do{opacity:1; border-color:var(--fg)}
+  .opt .k{display:flex; align-items:center; gap:11px; margin-bottom:9px}
+  .opt .kk{font-family:var(--mono); font-weight:600; font-size:.82rem; width:25px; height:25px; display:grid; place-items:center; border-radius:7px; background:var(--surface-2); border:1px solid var(--border); color:var(--muted)}
+  .opt.do .kk{background:var(--fg); border-color:var(--fg); color:var(--ground)}
+  .opt .kt{font-weight:580; font-size:.92rem; color:var(--fg)}
+  .opt p{margin:0; font-size:.83rem; color:var(--muted); line-height:1.5}
+  .opt .tag{font-family:var(--mono); font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); margin-left:auto}
+  .opt.do .tag{color:var(--fg)}
+  .rec{margin-top:18px; border-left:2px solid var(--fg); background:var(--surface-2); padding:16px 18px; border-radius:0 10px 10px 0}
+  .rec p{margin:0; font-size:.89rem; color:var(--muted)} .rec b{color:var(--fg); font-weight:580}
+
+  /* ── Graph views (Graphify) ──────────────────────────────────────────── */
+  .gstat{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:1px; background:var(--border-soft); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:16px}
+  .gstat > div{background:var(--ground); padding:15px 16px}
+  .gstat .n{font-size:1.35rem; font-weight:600; color:var(--fg); font-variant-numeric:tabular-nums; letter-spacing:-.02em}
+  .gstat .l{font-family:var(--mono); font-size:.63rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-top:4px}
+  .subsys{display:flex; flex-direction:column}
+  .subsys .row{display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--border-soft)}
+  .subsys .row:last-child{border-bottom:none}
+  .subsys .nm{font-weight:560; font-size:.9rem; color:var(--fg)}
+  .subsys .nm span{display:block; font-size:.79rem; color:var(--muted); font-weight:400; margin-top:2px}
+  .bar{display:flex; align-items:center; gap:10px; min-width:150px}
+  .bar .track{flex:1; height:5px; background:var(--surface-2); border-radius:3px; overflow:hidden; min-width:80px}
+  .bar .fill{height:100%; background:var(--muted); border-radius:3px}
+  .bar .fill.hi{background:var(--fg)}
+  .bar .v{font-family:var(--mono); font-size:.7rem; color:var(--faint); width:34px; text-align:right}
+  .deg{font-family:var(--mono); font-size:.72rem; color:var(--faint); font-variant-numeric:tabular-nums; align-self:center}
+  .confirm{font-size:.85rem; color:var(--muted); line-height:1.55; margin:0}
+  .confirm li{margin:0 0 9px} .confirm li:last-child{margin:0} .confirm b{color:var(--fg); font-weight:560}
+  .confirm ul{margin:0; padding-left:16px}
+
+  /* ── Backlog buckets ─────────────────────────────────────────────────── */
+  .bucket h3{display:flex; align-items:center; gap:10px; font-size:.93rem; margin:0 0 6px; font-weight:580}
+  .bucket .cnt{font-family:var(--mono); font-size:.64rem; color:var(--faint); margin-left:auto}
+  .bucket > p{margin:0 0 12px; font-size:.81rem; color:var(--muted)}
+  .chips{display:flex; flex-wrap:wrap; gap:7px}
+  .chip{font-family:var(--mono); font-size:.67rem; letter-spacing:.02em; padding:4px 9px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border-soft); color:var(--muted)}
+
+  /* ── Start here ──────────────────────────────────────────────────────── */
+  .steps{display:grid; gap:11px; counter-reset:s}
+  .step{display:flex; gap:16px; align-items:flex-start; padding:14px 16px; background:var(--surface); border:1px solid var(--border); border-radius:11px}
+  .step::before{counter-increment:s; content:counter(s); font-family:var(--mono); font-size:.8rem; color:var(--faint); padding-top:1px; min-width:14px}
+  .step b{font-weight:580; color:var(--fg)}
+  .step .m{font-family:var(--mono); font-size:.78rem; color:var(--fg)}
+  .step p{margin:3px 0 0; font-size:.83rem; color:var(--muted)}
+  code{font-family:var(--mono); font-size:.85em; background:var(--surface-2); padding:1px 6px; border-radius:5px; border:1px solid var(--border-soft); color:var(--fg)}
+  pre{font-family:var(--mono); font-size:.81rem; background:var(--surface); border:1px solid var(--border); border-radius:11px; padding:18px; overflow-x:auto; margin:0; line-height:1.75; color:var(--fg)}
+  pre .c{color:var(--faint)}
+
+  a{color:var(--fg); text-decoration:underline; text-decoration-color:var(--ghost); text-underline-offset:3px}
+  a:hover{text-decoration-color:var(--fg)}
+  a:focus-visible{outline:1.5px solid var(--fg); outline-offset:2px; border-radius:2px}
+
+  .foot{margin-top:64px; padding-top:24px; border-top:1px solid var(--border); font-size:.79rem; color:var(--faint)}
+  .foot p{margin:0 0 5px} .foot .mono{font-family:var(--mono); font-size:.72rem}
+
+  @media (max-width:560px){ .rt{grid-template-columns:1fr} }
+  @media (prefers-reduced-motion:no-preference){
+    .reveal{opacity:0; transform:translateY(8px); animation:rise .55s cubic-bezier(.2,.7,.2,1) forwards}
+    @keyframes rise{to{opacity:1; transform:none}}
+  }
+</style>
+
+<div class="page">
+<div class="wrap">
+
+  <header class="reveal">
+    <p class="eyebrow">Project handoff · 2026-07-11</p>
+    <h1>Moduo, where it stands — for Mike</h1>
+    <p class="lede">You left a <b>Tasks-only app</b>. You're coming back to a <b>full-suite private alpha</b>: seven shipped modules stitched together by a connective-tissue <b>spine</b> — the moat — all <b>cloud-first on Supabase</b>. This is the map: what exists, how it's built, the one open backend question, and what's left before alpha.</p>
+
+    <div class="metrics">
+      <div class="metric"><div class="n">7</div><div class="l">Modules shipped</div></div>
+      <div class="metric"><div class="n">8</div><div class="l">Feature waves landed</div></div>
+      <div class="metric"><div class="n">35</div><div class="l">Migrations in prod</div></div>
+      <div class="metric"><div class="n">~60</div><div class="l">MCP tools · 6 modules</div></div>
+      <div class="metric"><div class="n">0 <small>/ 599</small></div><div class="l">Circular deps</div></div>
+    </div>
+  </header>
+
+  <!-- ── Modules ──────────────────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>Modules</h2>
+      <p class="sec-note">The alpha set — Tasks, Contacts, Calendar, Notes, Email, Dashboard, Spine — is all shipped. Dots show the 4-pillar module contract: <b>intent ops · spine · MCP tools · dashboard widget</b>.</p></div>
+    <div class="grid cols-3">
+
+      <div class="card mod"><div class="mod-top"><h3>Tasks</h3><span class="pill ok">Shipped</span></div>
+        <p>The reference module. Plan / Board / List / Timeline + Focus mode + the schedule loop.</p>
+        <div class="pillars"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="lbl">4/4</span></div></div>
+
+      <div class="card mod"><div class="mod-top"><h3>Spine</h3><span class="pill ok">Shipped</span></div>
+        <p>The moat. Entity registry + typed links + EntityHub + drag + @mention + comments + notifications.</p>
+        <div class="pillars"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="lbl">substrate</span></div></div>
+
+      <div class="card mod"><div class="mod-top"><h3>Contacts</h3><span class="pill ok">Shipped</span></div>
+        <p>Folk-lite CRM. People/companies as hubs, auto roll-up, CSV import, custom fields.</p>
+        <div class="pillars"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="lbl">4/4</span></div></div>
+
+      <div class="card mod"><div class="mod-top"><h3>Calendar</h3><span class="pill ok">Shipped</span></div>
+        <p>Task-lens time-blocking (a block <i>is</i> the task row). The loop, focus timer, external mirror + CalDAV/ICS.</p>
+        <div class="pillars"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="lbl">4/4</span></div></div>
+
+      <div class="card mod"><div class="mod-top"><h3>Notes</h3><span class="pill ok">Shipped</span></div>
+        <p>Cloud-synced Lexical + Yjs. Task-lines, live multiplayer, comments, publish-to-web.</p>
+        <div class="pillars"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="lbl">4/4</span></div></div>
+
+      <div class="card mod"><div class="mod-top"><h3>Email</h3><span class="pill ok">Shipped</span></div>
+        <p>Desktop-first Spark replacement. Rust IMAP/SMTP; only lightweight <code>email_refs</code> tissue in the cloud.</p>
+        <div class="pillars"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="lbl">4/4</span></div></div>
+
+      <div class="card mod"><div class="mod-top"><h3>Dashboard / Home</h3><span class="pill ok">Shipped</span></div>
+        <p>The <code>/</code> surface — iPadOS-style live widget grid + registry (16 widgets). The widget host.</p>
+        <div class="pillars"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="lbl">host</span></div></div>
+
+      <div class="card mod"><div class="mod-top"><h3>Settings</h3><span class="pill warn">Overhaul pending</span></div>
+        <p>Account, billing, workspace, appearance. Full feature pass scheduled (DF-19, needs an <code>/s1</code>).</p>
+        <div class="pillars"><span class="dot on"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="lbl">CRUD</span></div></div>
+
+      <div class="card mod"><div class="mod-top"><h3>Mindmap</h3><span class="pill idle">Hidden · rethink</span></div>
+        <p>XYFlow mind-mapping. Built but off-nav (redb-local, not spine-wired). Awaits an <code>/s1</code> rethink.</p>
+        <div class="pillars"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="lbl">off-spine</span></div></div>
+
+      <div class="card mod"><div class="mod-top"><h3>Time-tracking</h3><span class="pill idle">Paused</span></div>
+        <p>Native active-window → redb. Stub. Revives minimally with Finance (time → invoice).</p>
+        <div class="pillars"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="lbl">stub</span></div></div>
+
+      <div class="card mod"><div class="mod-top"><h3>Finance</h3><span class="pill info">Post-alpha</span></div>
+        <p>CSV-first money-flow + invoicing. Design brief only. Out of v1 — kept, not deleted.</p>
+        <div class="pillars"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="lbl">planned</span></div></div>
+
+    </div>
+    <div class="legend">
+      <span><span class="sw d1"></span>Shipped</span>
+      <span><span class="sw d2"></span>Pending pass</span>
+      <span><span class="sw d3"></span>Paused / hidden</span>
+      <span><span class="sw d4"></span>Post-alpha</span>
+      <span><span class="dot on"></span>pillar done · <span class="dot"></span>not built</span>
+    </div>
+  </section>
+
+  <!-- ── Since you left (real reverse-chronological sequence) ─────────── -->
+  <section>
+    <div class="sec-head"><h2>What landed since you left</h2>
+      <p class="sec-note">Eight feature waves, newest first. Everything numbered is shipped; the DF wave is the current pre-alpha polish pass.</p></div>
+    <div class="tl">
+      <div class="tl-row"><div class="tl-h"><span class="w">Dogfood fixes</span><span class="code">DF · in progress</span></div>
+        <p>Whole-app cohesion pass from a 2026-07 critique: deep-links, one undo grammar, trial/billing fix, email daily-use pack, Notes editor baseline, Mindmap hidden. 8 done, 16 open.</p></div>
+      <div class="tl-row"><div class="tl-h"><span class="w">Dashboard / Home</span><span class="code">DB-1…8</span></div>
+        <p>Rebuilt <code>/</code> as a bounded 8×4 widget grid with drag, multi-page, persistence + a 16-widget registry and gallery.</p></div>
+      <div class="tl-row"><div class="tl-h"><span class="w">Email</span><span class="code">EM-1…11</span></div>
+        <p>Desktop IMAP/SMTP engine, Gmail OAuth, threading, triage, snooze, compose, convert-to-task, hybrid search. Inbox never leaves the machine.</p></div>
+      <div class="tl-row"><div class="tl-h"><span class="w">Notes</span><span class="code">NO-1…10</span></div>
+        <p>Full rebuild: cloud-synced Lexical+Yjs, task-lines, first Realtime multiplayer, publish-to-web at <code>/p/$token</code>. Retired the redb notes engine.</p></div>
+      <div class="tl-row"><div class="tl-h"><span class="w">Tasks — Timeline</span><span class="code">TL-1…3</span></div>
+        <p>Lightweight Gantt/timeline view — no heavy library, day-anchored drag, dependency dots.</p></div>
+      <div class="tl-row"><div class="tl-h"><span class="w">Calendar</span><span class="code">CAL-1…8b</span></div>
+        <p>Task-lens time-blocking, the schedule→completion loop, focus timer, external read-only mirror (Google/Outlook + CalDAV/ICS).</p></div>
+      <div class="tl-row"><div class="tl-h"><span class="w">Contacts</span><span class="code">CO-1…5 · FX-1…9</span></div>
+        <p>Folk-lite CRM: hubs with auto roll-up, CSV import, multi-value + custom fields. First live consumer of spine drag-to-link.</p></div>
+      <div class="tl-row mut"><div class="tl-h"><span class="w">Spine</span><span class="code">CT-1…7 · the moat</span></div>
+        <p>Central <code>entities</code> registry + typed <code>entity_links</code> + roll-up + drag payload + @mention + comments + derived notifications. Built once, alongside the second module.</p></div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ─────────────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>Architecture at a glance</h2>
+      <p class="sec-note">Two runtimes, one seam. All data flows through <code>getRuntime()</code>; <code>runtime.web.ts</code> is the only file that talks to Supabase.</p></div>
+    <div class="rt">
+      <div class="rt-box truth"><div class="rt-t">Source of truth</div><div class="rt-n">Supabase (cloud)</div>
+        <ul><li>Auth, workspaces, tasks, spine, contacts, notes, calendar, prefs, dashboard</li><li>Writes = <code>SECURITY DEFINER</code> intent-op RPCs (permission + invariant + activity in one txn)</li><li>Reads = RLS-filtered selects</li></ul></div>
+      <div class="rt-box"><div class="rt-t">Paused — lite-version only</div><div class="rt-n">redb (desktop)</div>
+        <ul><li>Genuinely native: the email IMAP/SMTP engine, OAuth calendar sync, time-tracking</li><li>Dead/dormant: graph + embeddings, the local-auth vault, the sync worker</li><li>Never load-bearing for a new feature</li></ul></div>
+    </div>
+    <div class="grid bare cols-2" style="margin-top:14px">
+      <div class="card"><h3>The module contract</h3><p style="margin:9px 0 0; font-size:.85rem; color:var(--muted)">A module isn't “done” until it ships all four pillars — that's how new modules get AI access, activity and notifications nearly for free.</p></div>
+      <div class="card"><h3>Guardrails that constrain change</h3><p style="margin:9px 0 0; font-size:.85rem; color:var(--muted)">Async multiplayer (not live collab), AI is MCP-only, email is desktop-first hybrid, and <b style="color:var(--fg)">no abstract graph-view UI</b> — the moat is felt through one-gesture links, never shown.</p></div>
+    </div>
+  </section>
+
+  <!-- ── Backend, from the code graph ─────────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>The backend, as the code graph sees it</h2>
+      <p class="sec-note">A local AST graph of the whole repo — built with <b>Graphify</b> (no LLM, nothing left the machine): <b>762 files → 5,282 symbols, 14,136 edges, 271 communities</b>. Shown as findings, not a node hairball — Moduo's own guardrail forbids graph-view UI, and it corroborates the <code>backend-refactor-memo.md</code>: the deletable debt is small and isolated; the core is coherent.</p></div>
+
+    <div class="gstat">
+      <div><div class="n">762</div><div class="l">Code files</div></div>
+      <div><div class="n">5,282</div><div class="l">Symbols · nodes</div></div>
+      <div><div class="n">14,136</div><div class="l">Edges</div></div>
+      <div><div class="n">271</div><div class="l">Communities</div></div>
+    </div>
+
+    <div class="grid bare cols-2" style="margin-top:16px">
+      <div class="card">
+        <h3 style="margin-bottom:12px">Backend surface, by size <span style="font-family:var(--mono);font-size:.62rem;color:var(--faint);letter-spacing:.08em"> · SYMBOLS PER AREA</span></h3>
+        <div class="subsys">
+          <div class="row"><div class="nm">Rust command layer <span>src-tauri/src/commands — email engine, calendar/CalDAV, integrations</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:100%"></div></div><div class="v">567</div></div></div>
+          <div class="row"><div class="nm">Data-layer seam <span>src/lib — <code>runtime.web.ts</code> is the only file that talks to Supabase</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:36%"></div></div><div class="v">202</div></div></div>
+          <div class="row"><div class="nm">redb store <span>src-tauri/src/store_redb — paused, lite-version only</span></div><div class="bar"><div class="track"><div class="fill" style="width:21%"></div></div><div class="v">117</div></div></div>
+          <div class="row"><div class="nm">MCP connector <span>supabase/functions/moduo-mcp — the ~60 agent tools</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:18%"></div></div><div class="v">103</div></div></div>
+          <div class="row"><div class="nm">Rust domain <span>src-tauri/src/domain</span></div><div class="bar"><div class="track"><div class="fill" style="width:7%"></div></div><div class="v">38</div></div></div>
+          <div class="row"><div class="nm">Sync worker <span>src-tauri/src/sync — near-vestigial</span></div><div class="bar"><div class="track"><div class="fill" style="width:3%"></div></div><div class="v">15</div></div></div>
+          <div class="row"><div class="nm">Graph + embeddings <span>graph_helix + embeddings — dead, no caller</span></div><div class="bar"><div class="track"><div class="fill" style="width:4%"></div></div><div class="v">21</div></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:12px">Most-connected files <span style="font-family:var(--mono);font-size:.62rem;color:var(--faint);letter-spacing:.08em"> · BY DEGREE</span></h3>
+        <div class="subsys">
+          <div class="row"><div class="nm">AppState <span>src-tauri/src/lib.rs — the one true god-object; wires the dead engines at boot</span></div><div class="deg">215</div></div>
+          <div class="row"><div class="nm">ModuoRuntime <span>src/lib/runtime.types.ts — the seam interface</span></div><div class="deg">140</div></div>
+          <div class="row"><div class="nm">RedbStore <span>src-tauri/src/store_redb — paused, still heavily wired</span></div><div class="deg">139</div></div>
+          <div class="row"><div class="nm">runtime.web.ts <span>src/lib — the single Supabase boundary</span></div><div class="deg">100</div></div>
+          <div class="row"><div class="nm">entity-links.ts <span>src/lib — the spine keystone (TS side)</span></div><div class="deg">78</div></div>
+          <div class="row"><div class="nm">email model / caldav / auth <span>src-tauri/src/commands — the native email + calendar core</span></div><div class="deg">45–42</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rec" style="margin-top:16px">
+      <ul class="confirm">
+        <li><b>Proposal C is safe.</b> The dead subsystems — <code>graph_helix</code> (12) + <code>embeddings</code> (9) + vestigial <code>sync</code> (15) ≈ 36 nodes — are tiny and appear in <b>none</b> of the coupling hotspots. Pruning them is isolated, low-risk work.</li>
+        <li><b>The core is coherent, not tangled.</b> <code>runtime.web.ts</code> really is the single Supabase boundary; the spine, the MCP connector, and the command layer are densely but sensibly connected — and <code>madge</code> finds <b>0 circular dependencies</b> in <code>src/</code>.</li>
+        <li><b>Start the prune at <code>AppState</code>.</b> At 215 connections it's the natural first cut — it's the constructor that instantiates the dead graph + embeddings engines on every desktop boot.</li>
+      </ul>
+    </div>
+    <p class="sec-note" style="margin-top:14px">Regenerate anytime (local, no API): <code>graphify extract . --code-only</code> then <code>graphify explain "AppState"</code> or <code>graphify query "how does email sync reach Supabase"</code>. Raw <code>graph.json</code> + report are in the session scratch dir.</p>
+  </section>
+
+
+  <!-- ── Backend question ─────────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>The one open backend question</h2>
+      <p class="sec-note">“Refactor the backend” is four different proposals with an order-of-magnitude cost spread. Pin down <i>which</i> before anything else. Full reasoning in <code>backend-refactor-memo.md</code>.</p></div>
+    <div class="abcd">
+      <div class="opt"><div class="k"><span class="kk">A</span><span class="kt">Replace Supabase</span><span class="tag">very high</span></div><p>Re-express 35 migrations, re-verify every invariant on live data, rebuild the MCP layer. Hard to justify pre-alpha.</p></div>
+      <div class="opt"><div class="k"><span class="kk">B</span><span class="kt">Move logic out of plpgsql</span><span class="tag">the debate</span></div><p>Doable incrementally behind the seam — but it touches the “agents write safely for free” pillar. Do it per-op, not as a sweep.</p></div>
+      <div class="opt do"><div class="k"><span class="kk">C</span><span class="kt">Prune the dead Rust</span><span class="tag">do this</span></div><p>The genuine win. Delete graph/embeddings + gate the paused vault. ~1–2 days, zero feature-code impact.</p></div>
+      <div class="opt"><div class="k"><span class="kk">D</span><span class="kt">Reshape the data model</span><span class="tag">case by case</span></div><p>Some are one-migration tweaks; ripping the <code>entities</code> registry would hit the moat.</p></div>
+    </div>
+    <div class="rec"><p><b>Recommendation:</b> the cloud backend is coherent and done — the real deletable debt is dead <b>Rust</b>, not Supabase. Do <b>C</b> now, keep Supabase + intent-ops through alpha, evolve <b>B</b> incrementally only where an op hurts, and refactor the whole backend only against a concrete trigger (scaling wall, security hole, a feature the model can't express, or blocked velocity).</p></div>
+  </section>
+
+  <!-- ── What's left ──────────────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>What's left before alpha</h2>
+      <p class="sec-note">Tracked in <code>specs/BUILD_ORDER.md</code>, not in code comments (a full TODO sweep returns one benign marker). Grouped by readiness.</p></div>
+    <div class="grid bare cols-2">
+      <div class="card bucket"><h3>Ready now <span class="cnt">14 blocks</span></h3><p>DF wave — all dependencies met.</p>
+        <div class="chips"><span class="chip">DF-2 deep-links</span><span class="chip">DF-7 rollups</span><span class="chip">DF-8 tasks↔spine</span><span class="chip">DF-9 notifications</span><span class="chip">DF-10 palette</span><span class="chip">DF-11 focus-nav</span><span class="chip">DF-12 boot-fetch</span><span class="chip">DF-15 home</span><span class="chip">DF-16 chrome</span><span class="chip">DF-17 legacy</span><span class="chip">DF-18 toolbar</span><span class="chip">DF-19 settings</span><span class="chip">DF-20 capture</span><span class="chip">DF-24 membership</span></div></div>
+      <div class="card bucket"><h3>Blocked on a sibling <span class="cnt">3 blocks</span></h3><p>Wait on their dependency first.</p>
+        <div class="chips"><span class="chip">DF-21 inbox → DF-9</span><span class="chip">DF-22 drag-to-link → DF-8</span><span class="chip">DF-23 @mention → DF-2</span></div></div>
+      <div class="card bucket"><h3>Pre-alpha gates</h3><p>After the DF waves.</p>
+        <div class="chips"><span class="chip">Mindmap rethink (/s1)</span><span class="chip">MCP-1 connector hardening</span><span class="chip">DESKTOP-1 macOS updater</span></div></div>
+      <div class="card bucket"><h3>Post-alpha / open</h3><p>Out of v1, or need-you decisions.</p>
+        <div class="chips"><span class="chip">Finance (Wave 4)</span><span class="chip">Email post-v1</span><span class="chip">Booking links</span><span class="chip">⚠ Pricing / cost model</span><span class="chip">⚠ Assistive scheduling</span></div></div>
+    </div>
+  </section>
+
+  <!-- ── Start here (a real do-1-then-2 sequence) ─────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>Start here</h2></div>
+    <div class="steps">
+      <div class="step"><div><b>Read the handoff docs.</b><p><span class="m">docs/onboarding/HANDOFF.md</span> — the full written version of this page. Then <span class="m">backend-refactor-memo.md</span> before touching the backend.</p></div></div>
+      <div class="step"><div><b>Read for the “why”, in order.</b><p><span class="m">PRODUCT_BRIEF → ROADMAP → BUILD_ORDER → architecture + module-contract → data-layers → gotchas</span>. Note: data-layers' <i>status</i> is ~4 waves stale (fixed banner at top); read it for philosophy.</p></div></div>
+      <div class="step"><div><b>Run it.</b></div></div>
+    </div>
+    <pre style="margin-top:14px"><span class="c"># web dev server → http://127.0.0.1:8081</span>
+bun run dev:web
+<span class="c"># desktop (Rust + web)</span>
+bun run dev:desktop
+<span class="c"># typecheck + lint + tests — does NOT touch Postgres</span>
+bun run verify</pre>
+  </section>
+
+  <div class="foot">
+    <p class="mono">Moduo · Supabase project wtoonrvuqumihpkbvwvs · branch claude/project-progress-summary</p>
+    <p>Companion to the in-repo <b>docs/onboarding/HANDOFF.md</b> and <b>backend-refactor-memo.md</b>. Status current as of 2026-07-11.</p>
+  </div>
+
+</div>
+</div>
