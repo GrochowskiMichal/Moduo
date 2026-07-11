@@ -48,6 +48,7 @@ import { UserMenu } from "../user-menu";
 import { NotificationCenter } from "../notification-center";
 import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constants";
 import type { ModuleNavItem } from "./app-chrome-types";
+import { FocusSessionChip } from "./focus-session-chip";
 import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
@@ -512,7 +513,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         className="relative flex flex-row items-center bg-background px-5"
         style={{ height: "var(--bar-h)" }}
       >
-        <div className="flex flex-1 flex-row items-center justify-start">
+        <div className="flex flex-1 flex-row items-center justify-start gap-2">
+          {/* Ambient running-Focus indicator (DF-11) — renders nothing when idle. */}
+          <FocusSessionChip />
           {isHomeRoute ? (
             // Home has no left panel — this slot holds the dashboard page dots.
             <PageDots

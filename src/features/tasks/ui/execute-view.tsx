@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Clock, MoreHorizontal, Pause, Play, Square } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Clock, MoreHorizontal, Pause, Play, Plus, Square } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
 import { IconButton } from "../../../components/ui/icon-button";
@@ -11,11 +12,17 @@ import { TagChipList } from "../../../components/tag-chip";
 import { cn } from "../../../lib/utils";
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { useFocusPrefs, type FocusPrefs } from "../../../lib/focus-prefs";
+import {
+  bindFocusTask,
+  previewFocusInterval,
+  startFocus,
+  stopFocus,
+  toggleFocusPomodoro,
+  toggleFocusRunning,
+  useFocusSession,
+} from "../focus-session-store";
 import { formatDue, formatScheduled } from "../helpers";
 import type { Task, Tag } from "../model";
-
-// Persist accrued time periodically so a crash/reload loses at most this much.
-const FLUSH_INTERVAL_SECONDS = 60;
 
 type Props = {
   committedTasks: Task[];
@@ -34,6 +41,12 @@ type Props = {
   subtasksFor: (taskId: string) => Task[];
   onToggleSubtask: (subtask: Task) => void;
   onExit: () => void;
+  /** Whether the Tasks bundle is still loading — gates the session bind so a
+   *  transient empty queue on remount can't clear a live focus session (DF-11). */
+  loading: boolean;
+  canEdit: boolean;
+  /** Capture a new task straight into today's queue (empty-queue affordance). */
+  onCaptureToQueue: (title: string) => void;
 };
 
 export function ExecuteView({
@@ -49,6 +62,9 @@ export function ExecuteView({
   subtasksFor,
   onToggleSubtask,
   onExit,
+  loading,
+  canEdit,
+  onCaptureToQueue,
 }: Props) {
   const current = committedTasks.find((t) => t.status !== "done") ?? null;
   const upcoming = committedTasks.filter((t) => t.status !== "done").slice(1);
@@ -56,6 +72,23 @@ export function ExecuteView({
   const doneCount = committedTasks.filter((t) => t.status === "done").length;
   // Pomodoro prefs (persisted) — the timer reads these; the ⋯ popover edits them.
   const { prefs: focusPrefs, setPrefs: setFocusPrefs } = useFocusPrefs();
+
+  // Keep the app-level focus session bound to the current task (DF-11). Gated on
+  // `!loading` so the transient empty bundle during a /tasks remount doesn't
+  // clear a running session; when the last task is marked done `current` goes
+  // null and the session ends (its time already flushed).
+  useEffect(() => {
+    if (loading) return;
+    // Never bind to an optimistic `tmp-` id (a just-captured task): flushing its
+    // accrued time later would hit a row swapped to its real id and lose it.
+    // The real id arrives in a beat and re-runs this effect.
+    if (current && current.id.startsWith("tmp-")) return;
+    bindFocusTask(
+      current?.id ?? null,
+      current?.title || "Untitled",
+      current ? bucketNameById(current.bucketId) : null,
+    );
+  }, [loading, current?.id, current?.title, current?.bucketId, bucketNameById]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -65,7 +98,13 @@ export function ExecuteView({
 
       <div className="min-h-0 flex-1 overflow-auto">
         {!current ? (
-          <EndSummary doneCount={doneCount} total={total} onExit={onExit} />
+          <EndSummary
+            doneCount={doneCount}
+            total={total}
+            onExit={onExit}
+            canEdit={canEdit}
+            onCaptureToQueue={onCaptureToQueue}
+          />
         ) : (
           <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
             <NowCard
@@ -97,7 +136,26 @@ export function ExecuteView({
   );
 }
 
-function EndSummary({ doneCount, total, onExit }: { doneCount: number; total: number; onExit: () => void }) {
+function EndSummary({
+  doneCount,
+  total,
+  onExit,
+  canEdit,
+  onCaptureToQueue,
+}: {
+  doneCount: number;
+  total: number;
+  onExit: () => void;
+  canEdit: boolean;
+  onCaptureToQueue: (title: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const submit = () => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onCaptureToQueue(trimmed);
+    setValue("");
+  };
   return (
     <div className="grid h-full place-content-center gap-4 text-center">
       <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted text-foreground">
@@ -109,6 +167,27 @@ function EndSummary({ doneCount, total, onExit }: { doneCount: number; total: nu
       <p className="font-sans text-sm text-muted-foreground">
         {total > 0 && doneCount === total ? "Queue cleared." : "That’s the queue."}
       </p>
+      {/* Empty queue isn't a dead end — capture one more straight into today (DF-11). */}
+      {canEdit ? (
+        <div className="mx-auto flex w-full max-w-sm items-center gap-2">
+          <Input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            placeholder="Add one more…"
+            aria-label="Add a task to today’s focus queue"
+          />
+          <Button size="sm" onClick={submit} disabled={!value.trim()}>
+            <Plus className="size-icon-sm" aria-hidden />
+            Add
+          </Button>
+        </div>
+      ) : null}
       <Button variant="secondary" size="sm" onClick={onExit} className="mx-auto">
         Back to Plan
       </Button>
@@ -147,7 +226,24 @@ function NowCard({
   focusPrefs: FocusPrefs;
   onFocusPrefsChange: (patch: Partial<FocusPrefs>) => void;
 }) {
-  const timer = useFocusTimer(task.id, onAddTime, focusPrefs);
+  const session = useFocusSession();
+  // The session is app-level; only read its clock when it's bound to THIS task
+  // (defensive — the bind effect keeps them in step while Execute is mounted).
+  const isThisTask = session.taskId === task.id;
+  const tracking = isThisTask && session.tracking;
+  const running = isThisTask && session.running;
+  const accrued = isThisTask ? session.accrued : 0;
+
+  // Live-preview the pomodoro interval while paused/idle when the prefs change.
+  useEffect(() => {
+    previewFocusInterval(focusPrefs);
+  }, [
+    focusPrefs.workMinutes,
+    focusPrefs.breakMinutes,
+    focusPrefs.longBreakMinutes,
+    session.phase,
+    session.longBreak,
+  ]);
 
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
@@ -161,7 +257,7 @@ function NowCard({
       .filter(Boolean)
       .join("  ·  ");
 
-  const trackedTotal = task.timeSpentSeconds + timer.accrued;
+  const trackedTotal = task.timeSpentSeconds + accrued;
   const estimateSeconds = task.durationMinutes ? task.durationMinutes * 60 : null;
 
   return (
@@ -190,20 +286,26 @@ function NowCard({
       <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
         {/* bottom-left — opt-in time tracking */}
         <div className="min-w-0">
-          {timer.tracking ? (
+          {tracking ? (
             <div className="flex items-center gap-1.5">
-              {timer.running ? <span className="track-pulse size-2 rounded-full bg-muted-foreground" aria-hidden /> : null}
-              <span className="mr-1 font-sans text-lg tabular-nums text-foreground">{formatClock(timer.bigClock)}</span>
+              {running ? <span className="track-pulse size-2 rounded-full bg-muted-foreground" aria-hidden /> : null}
+              <span className="mr-1 font-sans text-lg tabular-nums text-foreground">
+                {formatClock(isThisTask ? session.bigClock : 0)}
+              </span>
               <IconButton
-                icon={timer.running ? Pause : Play}
-                label={timer.running ? "Pause" : "Resume"}
-                onClick={timer.toggle}
+                icon={running ? Pause : Play}
+                label={running ? "Pause" : "Resume"}
+                onClick={toggleFocusRunning}
               />
-              <IconButton icon={Square} label="Stop" onClick={timer.stop} />
+              <IconButton icon={Square} label="Stop" onClick={stopFocus} />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="ml-0.5 cursor-default font-sans text-xs tabular-nums text-muted-foreground">
-                    {timer.pomodoro ? <span className="uppercase tracking-wide text-muted-foreground/70">{timer.phaseLabel} · </span> : null}
+                    {session.pomodoro ? (
+                      <span className="uppercase tracking-wide text-muted-foreground/70">
+                        {session.phaseLabel} ·{" "}
+                      </span>
+                    ) : null}
                     {formatDuration(trackedTotal)}
                     {estimateSeconds ? <span className="text-muted-foreground/60"> / ~{formatDuration(estimateSeconds)}</span> : null}
                   </span>
@@ -214,7 +316,8 @@ function NowCard({
                 task={task}
                 onAddTime={onAddTime}
                 onSetTime={onSetTime}
-                timer={timer}
+                pomodoro={session.pomodoro}
+                onTogglePomodoro={toggleFocusPomodoro}
                 prefs={focusPrefs}
                 onPrefsChange={onFocusPrefsChange}
               />
@@ -222,7 +325,18 @@ function NowCard({
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" onClick={timer.start}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (task.id.startsWith("tmp-")) {
+                      toast.error("Still saving that task — try again in a moment.");
+                      return;
+                    }
+                    bindFocusTask(task.id, task.title || "Untitled", bucketName);
+                    startFocus();
+                  }}
+                >
                   <Clock className="size-icon-sm" aria-hidden />
                   {trackedTotal > 0 ? formatDuration(trackedTotal) : "Track time"}
                 </Button>
@@ -286,14 +400,16 @@ function TimerMenu({
   task,
   onAddTime,
   onSetTime,
-  timer,
+  pomodoro,
+  onTogglePomodoro,
   prefs,
   onPrefsChange,
 }: {
   task: Task;
   onAddTime: (taskId: string, deltaSeconds: number) => void;
   onSetTime: (taskId: string, seconds: number) => void;
-  timer: ReturnType<typeof useFocusTimer>;
+  pomodoro: boolean;
+  onTogglePomodoro: () => void;
   prefs: FocusPrefs;
   onPrefsChange: (patch: Partial<FocusPrefs>) => void;
 }) {
@@ -372,7 +488,7 @@ function TimerMenu({
               />
             </div>
             <label className="mt-2 flex cursor-pointer items-center gap-2 font-sans text-sm text-muted-foreground">
-              <input type="checkbox" checked={timer.pomodoro} onChange={timer.togglePomodoro} />
+              <input type="checkbox" checked={pomodoro} onChange={onTogglePomodoro} />
               Pomodoro rhythm
             </label>
             <button
@@ -431,200 +547,7 @@ function Queue({
   );
 }
 
-// ── timer ─────────────────────────────────────────────────────────────────────
-
-/**
- * Opt-in stopwatch (never auto-starts) + optional Pomodoro overlay. `tracking`
- * is whether the timer is open; `running` whether the clock ticks. Real *work*
- * seconds accrue into the task's persisted total via onAddTime — flushed on
- * pause / Stop / task change / unmount / every minute / each completed work
- * block (attribution by ref). With Pomodoro on, the big clock shows the
- * work/break countdown; intervals, the long-break rhythm, auto-start, and the
- * end-of-interval chime all come from the persisted Focus prefs. Breaks don't
- * accrue; without Pomodoro it just counts the sitting up.
- */
-function useFocusTimer(
-  taskKey: string,
-  onAddTime: (taskId: string, deltaSeconds: number) => void,
-  prefs: FocusPrefs,
-) {
-  const [tracking, setTracking] = useState(false);
-  const [running, setRunning] = useState(false);
-  const [pomodoro, setPomodoro] = useState(false);
-  const [phase, setPhase] = useState<"work" | "break">("work");
-  const [longBreak, setLongBreak] = useState(false);
-  const [completedWork, setCompletedWork] = useState(0);
-  const [pomoLeft, setPomoLeft] = useState(prefs.workMinutes * 60);
-  const [sitElapsed, setSitElapsed] = useState(0);
-  const [accrued, setAccrued] = useState(0);
-
-  const unflushedRef = useRef(0);
-  const taskRef = useRef(taskKey);
-  const addRef = useRef(onAddTime);
-  addRef.current = onAddTime;
-  // Latest prefs for the rollover effect / controls without re-subscribing the tick.
-  const prefsRef = useRef(prefs);
-  prefsRef.current = prefs;
-  // Read `running` inside the resync effect without re-running it on pause/resume.
-  const runningRef = useRef(running);
-  runningRef.current = running;
-
-  const flush = useCallback(() => {
-    if (unflushedRef.current >= 1) {
-      addRef.current(taskRef.current, unflushedRef.current);
-      unflushedRef.current = 0;
-      setAccrued(0);
-    }
-  }, []);
-
-  // new task: flush the prior task on cleanup, then reset to the resting state
-  // (never auto-starts — tracking + running both false)
-  useEffect(() => {
-    taskRef.current = taskKey;
-    setTracking(false);
-    setRunning(false);
-    setPhase("work");
-    setLongBreak(false);
-    setCompletedWork(0);
-    setPomoLeft(prefsRef.current.workMinutes * 60);
-    setSitElapsed(0);
-    setAccrued(0);
-    unflushedRef.current = 0;
-    return () => flush();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskKey, flush]);
-
-  // tick
-  useEffect(() => {
-    if (!running) return;
-    const id = window.setInterval(() => {
-      setSitElapsed((s) => s + 1);
-      const isWork = !pomodoro || phase === "work";
-      if (isWork) {
-        unflushedRef.current += 1;
-        setAccrued((a) => a + 1);
-      }
-      if (pomodoro) setPomoLeft((s) => Math.max(0, s - 1));
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [running, pomodoro, phase]);
-
-  // Pomodoro rollover: work → (long?) break → work on the persisted intervals.
-  // A finished work block banks its seconds and bumps the long-break counter;
-  // chime + auto-start (or pause-to-resume-by-hand) follow the prefs.
-  useEffect(() => {
-    if (!pomodoro || pomoLeft !== 0) return;
-    const p = prefsRef.current;
-    if (phase === "work") {
-      flush(); // bank the finished work block before the break
-      const nextCount = completedWork + 1;
-      const isLong = nextCount % p.sessionsBeforeLongBreak === 0;
-      setCompletedWork(nextCount);
-      setLongBreak(isLong);
-      setPhase("break");
-      setPomoLeft((isLong ? p.longBreakMinutes : p.breakMinutes) * 60);
-    } else {
-      setLongBreak(false);
-      setPhase("work");
-      setPomoLeft(p.workMinutes * 60);
-    }
-    if (p.soundEnabled) playChime();
-    if (!p.autoStartNext) setRunning(false);
-  }, [pomoLeft, pomodoro, phase, completedWork, flush]);
-
-  // Keep the idle/paused countdown in step with the configured interval. While
-  // the timer isn't running, pomoLeft just previews the current phase's full
-  // interval — so editing Work/break (Settings → Focus or the ⋯ popover) updates
-  // the big clock live instead of only on the next start. Gated on a ref, not a
-  // dep, so a running countdown is never disturbed and pausing never resets it.
-  useEffect(() => {
-    if (runningRef.current) return;
-    setPomoLeft(
-      phase === "work"
-        ? prefs.workMinutes * 60
-        : (longBreak ? prefs.longBreakMinutes : prefs.breakMinutes) * 60,
-    );
-  }, [prefs.workMinutes, prefs.breakMinutes, prefs.longBreakMinutes, phase, longBreak]);
-
-  // periodic flush so a crash loses at most FLUSH_INTERVAL_SECONDS
-  useEffect(() => {
-    if (!running) return;
-    const id = window.setInterval(flush, FLUSH_INTERVAL_SECONDS * 1000);
-    return () => window.clearInterval(id);
-  }, [running, flush]);
-
-  return {
-    tracking,
-    running,
-    pomodoro,
-    phase,
-    longBreak,
-    phaseLabel: phase === "work" ? "work" : longBreak ? "long break" : "break",
-    sitElapsed,
-    accrued,
-    bigClock: pomodoro ? pomoLeft : sitElapsed,
-    start: () => {
-      setTracking(true);
-      setRunning(true);
-      setSitElapsed(0);
-      setPhase("work");
-      setLongBreak(false);
-      setCompletedWork(0);
-      setPomoLeft(prefsRef.current.workMinutes * 60);
-    },
-    toggle: () =>
-      setRunning((r) => {
-        if (r) flush();
-        return !r;
-      }),
-    stop: () => {
-      flush();
-      setRunning(false);
-      setTracking(false);
-      setSitElapsed(0);
-      setPhase("work");
-      setLongBreak(false);
-      setCompletedWork(0);
-      setPomoLeft(prefsRef.current.workMinutes * 60);
-    },
-    togglePomodoro: () =>
-      setPomodoro((on) => {
-        setPhase("work");
-        setLongBreak(false);
-        setCompletedWork(0);
-        setPomoLeft(prefsRef.current.workMinutes * 60);
-        return !on;
-      }),
-  };
-}
-
-/** A short end-of-interval chime via Web Audio — no asset, gated by the sound
- *  pref. Silent where Web Audio is unavailable. */
-function playChime(): void {
-  if (typeof window === "undefined") return;
-  const Ctx =
-    window.AudioContext ??
-    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Ctx) return;
-  try {
-    const ctx = new Ctx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = "sine";
-    osc.frequency.value = 880;
-    const t = ctx.currentTime;
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
-    osc.start(t);
-    osc.stop(t + 0.42);
-    osc.onended = () => void ctx.close();
-  } catch {
-    /* audio unavailable — silent */
-  }
-}
+// ── formatting ────────────────────────────────────────────────────────────────
 
 function formatClock(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60);
