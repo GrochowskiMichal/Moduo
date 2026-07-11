@@ -1,7 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
-  DndContext,
   DragOverlay,
   closestCorners,
   useDroppable,
@@ -26,7 +25,7 @@ import { nestedSubtaskIds, STATUS_LABELS } from "../helpers";
 import { positionForReorder } from "../reorder";
 import type { Bucket, Task, TaskStatus } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { useTaskDndSensors } from "./dnd/task-dnd";
+import { DndBoundary, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
 import { CardBody, TaskCard } from "./task-card";
@@ -51,6 +50,10 @@ type Props = {
   tagFilterControl?: ReactNode;
   activeTagFilters?: ReactNode;
   onTagFilter?: (tagId: string) => void;
+  /** "external" = an ancestor owns the DndContext (DF-22: so a card can be
+   * dragged onto the right-pane hub to link it); board move/reorder binds via a
+   * monitor. Default "internal" (own DndContext) keeps standalone mounts working. */
+  dndMode?: "internal" | "external";
   api: TasksModuleApi;
 };
 
@@ -78,6 +81,7 @@ export function TaskBoardView({
   tagFilterControl,
   activeTagFilters,
   onTagFilter,
+  dndMode = "internal",
   api,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -201,7 +205,13 @@ export function TaskBoardView({
         onRequestCapture={onRequestCapture}
       />
 
-      <DndContext
+      {/* One boundary: a self-owned context ("internal") or a monitor bound to
+          the tasks page's app-level context ("external", DF-22 — so a card can
+          be dropped on the right-pane hub). onDragEnd early-returns unless the
+          drop resolves to a board column/card, so a hub drop falls through to
+          the page's link handler. */}
+      <DndBoundary
+        dndMode={dndMode}
         sensors={sensors}
         collisionDetection={closestCorners}
         onDragStart={onDragStart}
@@ -245,7 +255,7 @@ export function TaskBoardView({
               document.body,
             )
           : null}
-      </DndContext>
+      </DndBoundary>
     </div>
   );
 }
