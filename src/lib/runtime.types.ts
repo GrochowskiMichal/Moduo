@@ -393,13 +393,6 @@ export type ModuoRuntime = {
     }): Promise<{ id: string; title: string; bodyMd: string }[]>;
   };
 
-  graph: {
-    upsertNodesEdges(request: any): Promise<void>;
-    queryRelated(workspaceId: string, nodeId: string, limit?: number): Promise<any>;
-    queryHybrid(query: any): Promise<any[]>;
-    getFullGraph(workspaceId: string): Promise<any>;
-  };
-
   migration: {
     importLegacy(payload: any): Promise<any>;
   };

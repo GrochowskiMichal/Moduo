@@ -81,13 +81,6 @@ export const tauriRuntime: ModuoRuntime = {
   // the webview's IndexedDB (NO-2), not redb.
   notesV2: webRuntime.notesV2,
 
-  graph: {
-    upsertNodesEdges(request) { return invoke<void>("graph_upsert_nodes_edges", { request }); },
-    queryRelated(workspaceId, nodeId, limit) { return invoke<any>("graph_query_related", { workspaceId, nodeId, limit }); },
-    queryHybrid(query) { return invoke<any[]>("graph_query_hybrid", { query }); },
-    getFullGraph(workspaceId) { return invoke<any>("graph_get_full", { workspaceId }); },
-  },
-
   migration: {
     importLegacy(payload) { return invoke<any>("migration_import_legacy", { payload }); },
   },

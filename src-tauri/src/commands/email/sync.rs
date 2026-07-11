@@ -14,9 +14,9 @@ use super::storage::{
     workspace_id_or_default,
 };
 use super::{
-    ensure_account_config, now_iso, queue_graph_upsert_for_envelope, select_mailbox_for_folder,
-    StoredEmailAccount, StoredEnvelope, FLAG_RECONCILE_WINDOW, FLAG_RECONCILE_WINDOW_LIGHT,
-    SYNC_ENVELOPE_WINDOW_DAYS, SYNC_ENVELOPE_WINDOW_UIDS,
+    ensure_account_config, now_iso, select_mailbox_for_folder, StoredEmailAccount, StoredEnvelope,
+    FLAG_RECONCILE_WINDOW, FLAG_RECONCILE_WINDOW_LIGHT, SYNC_ENVELOPE_WINDOW_DAYS,
+    SYNC_ENVELOPE_WINDOW_UIDS,
 };
 
 pub(super) fn fetch_envelopes_for_uids(
@@ -294,7 +294,6 @@ pub(super) fn sync_account_folder_envelopes(
                 continue;
             }
             upsert_envelope(state, &row)?;
-            let _ = queue_graph_upsert_for_envelope(state, &row);
         }
     }
 
@@ -394,7 +393,6 @@ pub(super) fn sync_account_folder_envelopes(
                 fetch_envelopes_for_uids(&mut session, account, folder, uid_validity, chunk)?;
             for row in rows {
                 upsert_envelope(state, &row)?;
-                let _ = queue_graph_upsert_for_envelope(state, &row);
             }
         }
     }

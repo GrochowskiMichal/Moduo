@@ -11,9 +11,8 @@ use self::flags::{
 use self::parsing::decode_maybe_mime_header;
 use self::ops::{flush_op_outbox_for_account, list_folders_blocking, queue_op};
 use self::storage::{
-    envelope_key, get_body_cache, list_envelopes_filtered, parse_json_value,
-    patch_account_sync_state, remove_body_cache, remove_envelope, resolve_accounts_for_target,
-    touch_body_cache,
+    get_body_cache, list_envelopes_filtered, parse_json_value, patch_account_sync_state,
+    remove_body_cache, remove_envelope, resolve_accounts_for_target, touch_body_cache,
 };
 use self::sync::sync_account_folder_envelopes;
 use crate::email_sync::{
@@ -29,7 +28,6 @@ mod body_fetch;
 mod connection;
 mod constants;
 mod flags;
-mod graph_outbox;
 mod model;
 pub mod oauth;
 mod ops;
@@ -43,7 +41,6 @@ pub mod snooze;
 mod storage;
 mod sync;
 
-use self::graph_outbox::{queue_graph_upsert_for_envelope, schedule_graph_outbox_flush};
 pub(super) use self::model::*;
 pub use self::realtime::{bootstrap_idle_workers, stop_all_idle_workers};
 use self::realtime::{schedule_idle_worker_reconcile, try_acquire_sync_permit};
@@ -82,7 +79,6 @@ pub async fn email_sync_now(
 
     // IMAP I/O is blocking — must run on a blocking thread to avoid freezing the async executor.
     let app_inner = app.clone();
-    let account_id_filter = input.account_id.clone();
     let (synced_accounts, synced_at) = tauri::async_runtime::spawn_blocking(move || {
         let state_inner = app_inner.state::<AppState>();
         let mut synced = 0usize;
@@ -105,7 +101,6 @@ pub async fn email_sync_now(
                 }
             }
         }
-        schedule_graph_outbox_flush(&state_inner, account_id_filter);
         (synced, now_iso())
     })
     .await
@@ -160,7 +155,6 @@ pub async fn email_list_envelopes(
                 }
             }
         }
-        schedule_graph_outbox_flush(&state, target_account.map(|value| value.to_string()));
         local_rows = list_envelopes_filtered(&state, account_filter, &folder)?;
     }
 
@@ -289,25 +283,12 @@ pub async fn email_get_message_body(
 
     // Cache miss — fetch from IMAP. Must run on a blocking thread.
     let app_inner = app.clone();
-    let account_id = input.account_id.clone();
     let folder = input.folder.clone();
     let uid = input.uid;
     let fresh = tauri::async_runtime::spawn_blocking(move || {
         let state_inner = app_inner.state::<AppState>();
         match fetch_body_from_imap(&state_inner, &account, &folder, uid) {
-            Ok(body_cache) => {
-                if let Some(envelope) = state_inner
-                    .store
-                    .get_email_envelope(&envelope_key(&account_id, &folder, uid))
-                    .ok()
-                    .flatten()
-                    .and_then(parse_json_value::<StoredEnvelope>)
-                {
-                    let _ = queue_graph_upsert_for_envelope(&state_inner, &envelope);
-                }
-                schedule_graph_outbox_flush(&state_inner, Some(account_id));
-                Ok(body_cache)
-            }
+            Ok(body_cache) => Ok(body_cache),
             Err(e) => Err(e),
         }
     })
@@ -355,19 +336,9 @@ pub async fn email_prefetch_bodies(
                 continue;
             }
             if fetch_body_from_imap(&state_inner, &account, &folder, uid).is_ok() {
-                if let Some(envelope) = state_inner
-                    .store
-                    .get_email_envelope(&envelope_key(&account_id, &folder, uid))
-                    .ok()
-                    .flatten()
-                    .and_then(parse_json_value::<StoredEnvelope>)
-                {
-                    let _ = queue_graph_upsert_for_envelope(&state_inner, &envelope);
-                }
                 count = count.saturating_add(1);
             }
         }
-        schedule_graph_outbox_flush(&state_inner, Some(account_id));
         count
     })
     .await

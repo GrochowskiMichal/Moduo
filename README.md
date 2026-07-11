@@ -20,10 +20,7 @@ Rust-first desktop app using React + Rspack (Rsbuild) + TanStack Router + Tauri 
 ### Backend (Tauri/Rust)
 - **Tauri 2.0** - Desktop runtime
 - **Rust 1.88** - Backend language
-- **Redb 2** - Embedded database
-- **Helix-rs** - Graph database
-- **Tokenizers** - Text tokenization
-- **ORT (ONNX Runtime)** - ML inference
+- **Redb 2** - Embedded database (paused; kept for the future offline/"lite" build)
 - **Argon2/Ed25519-dalek/BIP39** - Cryptography
 - **Keyring** - Secure credential storage
 - **Tokio** - Async runtime
@@ -73,4 +70,4 @@ Rust-first desktop app using React + Rspack (Rsbuild) + TanStack Router + Tauri 
 - Gateway contracts in `/src/core/contracts`
 - Desktop adapter in `/src/core/adapters/desktop`
 - Rust/Tauri command and persistence scaffold in `/src-tauri`
-- Local-first persistence is powered by Redb (with HelixDB integration evolving in `src-tauri/src/graph_helix`)
+- Local-first persistence is powered by Redb (paused post cloud-first pivot; kept for the future offline/"lite" build)

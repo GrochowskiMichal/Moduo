@@ -310,43 +310,6 @@ pub struct TasksModuleBundle {
     pub task_relations: Vec<TaskRelation>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraphNode {
-    pub id: String,
-    pub node_type: String,
-    pub workspace_id: String,
-    pub payload: serde_json::Value,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraphEdge {
-    pub id: String,
-    pub edge_type: String,
-    pub workspace_id: String,
-    pub from_id: String,
-    pub to_id: String,
-    pub payload: serde_json::Value,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraphHybridQuery {
-    pub workspace_id: String,
-    pub query: String,
-    pub node_types: Vec<String>,
-    pub limit: usize,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraphHybridResult {
-    pub node_id: String,
-    pub score: f32,
-    pub payload: serde_json::Value,
-}
-
 // ─── Timetracking Domain Types ────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

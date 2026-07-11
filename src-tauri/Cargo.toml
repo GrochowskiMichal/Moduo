@@ -9,6 +9,12 @@ default-run = "moduo"
 name = "moduo_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = []
+# Offline/"lite" build seed: compiles the redb↔Supabase cloud-sync worker
+# (superseded by the JS `notesV2` engine on the default cloud build). Off by default.
+lite = []
+
 [build-dependencies]
 tauri-build = { version = "2.0", features = [] }
 
@@ -22,12 +28,10 @@ bip39 = { version = "2", features = ["rand"] }
 ed25519-dalek = "2"
 chrono = { version = "0.4", features = ["serde"] }
 fastrand = "2"
-helix-rs = "0.1.10"
 imap = "2.4.1"
 lettre = "0.11.19"
 mailparse = "0.16.1"
 native-tls = "0.2.18"
-ort = "2.0.0-rc.11"
 rand = "0.8"
 redb = "2"
 roxmltree = "0.20"
@@ -37,7 +41,6 @@ sha2 = "0.10"
 socket2 = "0.6"
 tauri = { version = "2.0", features = [] }
 tauri-plugin-dialog = "2"
-tokenizers = "0.22.2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 url = "2"

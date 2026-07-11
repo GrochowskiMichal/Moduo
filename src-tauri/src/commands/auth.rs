@@ -208,6 +208,7 @@ fn persist_active_session(
         .map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "lite")]
 fn start_sync_worker_if_needed(state: &AppState, access_token: &str) {
     if !crate::sync::is_cloud_session(access_token) {
         return;
@@ -234,6 +235,11 @@ fn start_sync_worker_if_needed(state: &AppState, access_token: &str) {
         *guard = handle;
     }
 }
+
+/// No-op in the default cloud build — the redb↔cloud sync worker ships only in the
+/// future offline/"lite" build (`notesV2` owns notes sync on the cloud path).
+#[cfg(not(feature = "lite"))]
+fn start_sync_worker_if_needed(_state: &AppState, _access_token: &str) {}
 
 fn ensure_local_workspace_for_user(
     state: &AppState,
@@ -599,7 +605,8 @@ pub async fn auth_sign_out(state: State<'_, AppState>) -> Result<(), String> {
     let _ = state.store.kv_remove("auth", "current-profile");
     crate::commands::email::stop_all_idle_workers();
     *state.session.lock().map_err(|e| e.to_string())? = None;
-    // Stop the cloud sync worker on sign-out.
+    // Stop the cloud sync worker on sign-out (lite build only).
+    #[cfg(feature = "lite")]
     if let Ok(mut guard) = state.sync_worker.lock() {
         if let Some(worker) = guard.take() {
             worker.shutdown();
