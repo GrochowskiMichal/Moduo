@@ -34,11 +34,21 @@ type NoteRow = {
   title: string | null;
   icon: string | null;
   body_md: string | null;
+  position: string | null;
+  created_at: string | null;
   is_archived: boolean | null;
   deleted_at: string | null;
   published_at: string | null;
   publish_token: string | null;
 };
+
+/** Task lines export a `<!-- moduo:task:<id> -->` stable-id comment; those ids
+ * are internal pointers, meaningless (and leaky) to an anonymous visitor.
+ * Scrub them at the trust boundary so NO public consumer ever sees them (the
+ * client keeps its own strip only as a pre-deploy graceful-degrade guard). */
+function stripTaskIdComments(md: string): string {
+  return md.replace(/\s*<!--\s*moduo:task:[A-Za-z0-9-]+\s*-->/g, "");
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -77,7 +87,7 @@ Deno.serve(async (req: Request) => {
   // (publish_token cleared) or an archived/trashed root finds nothing.
   const rootRes = await db
     .from("notes")
-    .select("id, parent_id, title, icon, body_md, is_archived, deleted_at, published_at, publish_token, workspace_id")
+    .select("id, parent_id, title, icon, body_md, position, created_at, is_archived, deleted_at, published_at, publish_token, workspace_id")
     .eq("publish_token", token)
     .not("published_at", "is", null)
     .is("deleted_at", null)
@@ -90,7 +100,7 @@ Deno.serve(async (req: Request) => {
   // note, so only its subtree is exposed.
   const allRes = await db
     .from("notes")
-    .select("id, parent_id, title, icon, body_md, is_archived, deleted_at")
+    .select("id, parent_id, title, icon, body_md, position, created_at, is_archived, deleted_at")
     .eq("workspace_id", root.workspace_id)
     .is("deleted_at", null);
   const all = (allRes.error ? [] : ((allRes.data as NoteRow[]) ?? [])).filter((n) => !n.is_archived);
@@ -111,7 +121,11 @@ Deno.serve(async (req: Request) => {
       parentId: n.parent_id && inScope.has(n.parent_id) ? n.parent_id : null,
       title: n.title ?? "",
       icon: n.icon ?? null,
-      bodyMd: n.body_md ?? "",
+      bodyMd: stripTaskIdComments(n.body_md ?? ""),
+      // Authored sibling order (DF-13) — the client sorts nav by (position,
+      // createdAt) to mirror the in-app tree exactly.
+      position: n.position ?? "",
+      createdAt: n.created_at ?? "",
     }));
 
   return json({ rootId: root.id, notes });

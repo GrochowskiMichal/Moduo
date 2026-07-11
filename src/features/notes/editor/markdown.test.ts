@@ -14,13 +14,14 @@ import { ListItemNode, ListNode } from "@lexical/list";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
-import { $getRoot } from "lexical";
+import { $createParagraphNode, $createTextNode, $getRoot } from "lexical";
 import { EntityRefNode } from "../../spine/editor/entity-ref-node";
 import { EmbedNode } from "./nodes/EmbedNode";
 import { PageRowNode } from "./nodes/page-row-node";
 import { TaskLineNode } from "./nodes/task-line-node";
 import {
   blocksToMarkdown,
+  HR_TRANSFORMER,
   looksLikeMarkdown,
   NOTES_TRANSFORMERS,
   type MdJsonNode,
@@ -274,5 +275,80 @@ describe("blocksToMarkdown (the selection copy walker)", () => {
     expect(blocksToMarkdown(blocks)).toBe(
       ["- [x] Ship it <!-- moduo:task:task-1 -->", "", "- [ ] Still minting"].join("\n"),
     );
+  });
+});
+
+describe("HR transformer (DF-13 — live typing path for MarkdownShortcutPlugin)", () => {
+  it("import path: `---` round-trips as a divider", () => {
+    expect(roundTrip("Intro\n\n---\n\nOutro")).toBe("Intro\n\n---\n\nOutro");
+  });
+
+  it("typing at the END of the doc keeps a caret paragraph after the divider", () => {
+    const editor = makeEditor();
+    editor.update(
+      () => {
+        const root = $getRoot();
+        const p = $createParagraphNode();
+        p.append($createTextNode("---"));
+        root.append(p);
+        const match = /^(?:---|\*\*\*|___)\s?$/.exec("---")!;
+        HR_TRANSFORMER.replace(p, [], match, false);
+      },
+      { discrete: true },
+    );
+    editor.read(() => {
+      const children = $getRoot().getChildren();
+      expect(children.map((c) => c.getType())).toEqual(["horizontalrule", "paragraph"]);
+    });
+  });
+
+  it("typing MID-doc replaces the line and leaves the rest untouched", () => {
+    const editor = makeEditor();
+    editor.update(
+      () => {
+        const root = $getRoot();
+        const p1 = $createParagraphNode();
+        p1.append($createTextNode("---"));
+        const p2 = $createParagraphNode();
+        p2.append($createTextNode("after"));
+        root.append(p1, p2);
+        const match = /^(?:---|\*\*\*|___)\s?$/.exec("---")!;
+        HR_TRANSFORMER.replace(p1, [], match, false);
+      },
+      { discrete: true },
+    );
+    editor.read(() => {
+      const children = $getRoot().getChildren();
+      expect(children.map((c) => c.getType())).toEqual(["horizontalrule", "paragraph"]);
+      expect(children[1]!.getTextContent()).toBe("after");
+    });
+  });
+
+  it("typing preserves inline content that followed `---` on the same line", () => {
+    const editor = makeEditor();
+    editor.update(
+      () => {
+        const root = $getRoot();
+        const p1 = $createParagraphNode();
+        p1.append($createTextNode("--- "));
+        const p2 = $createParagraphNode();
+        p2.append($createTextNode("after"));
+        root.append(p1, p2);
+        const match = /^(?:---|\*\*\*|___)\s?$/.exec("--- ")!;
+        // The shortcut plugin hands `replace` the remainder inline nodes.
+        HR_TRANSFORMER.replace(p1, [$createTextNode("kept text")], match, false);
+      },
+      { discrete: true },
+    );
+    editor.read(() => {
+      const children = $getRoot().getChildren();
+      expect(children.map((c) => c.getType())).toEqual([
+        "horizontalrule",
+        "paragraph",
+        "paragraph",
+      ]);
+      expect(children[1]!.getTextContent()).toBe("kept text");
+      expect(children[2]!.getTextContent()).toBe("after");
+    });
   });
 });

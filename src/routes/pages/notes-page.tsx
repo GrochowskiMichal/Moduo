@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CloudOff } from "lucide-react";
+import { CloudOff, PanelRight } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -81,6 +81,11 @@ import {
 } from "../../features/notes/panel-prefs";
 import type { OutlineHeading } from "../../features/notes/outline";
 import type { EntityRef } from "../../lib/entity-links";
+import { IconButton } from "../../components/ui/icon-button";
+import {
+  dispatchLayoutPanelsSet,
+  useFeaturePanelState,
+} from "../../features/layout/panel-events";
 
 export function NotesPage() {
   const { runtime, userId, userEmail, configError } = useAuth();
@@ -105,6 +110,19 @@ export function NotesPage() {
   } = module;
 
   const sections = useMemo(() => buildNoteSections(notes), [notes]);
+  // The summon affordance (DF-13) mirrors + toggles the shell's right-panel
+  // state over the shared panel-event contract — the shell owns the state.
+  const notesPanels = useFeaturePanelState("notes");
+  const rightPanelOpen = notesPanels.right;
+  const toggleRightPanel = useCallback(
+    () =>
+      dispatchLayoutPanelsSet({
+        feature: "notes",
+        left: notesPanels.left,
+        right: !notesPanels.right,
+      }),
+    [notesPanels.left, notesPanels.right],
+  );
   const selectedId = search.id ?? null;
   const selectedNote = useMemo(
     () => (selectedId ? (notes.find((n) => n.id === selectedId) ?? null) : null),
@@ -574,19 +592,19 @@ export function NotesPage() {
           Couldn't refresh notes — showing what's saved on this device.
         </div>
       ) : null}
-      {selectedNote && !selectedNote.deletedAt && !degraded && runtime ? (
-        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
-          <NotePresenceAvatars viewers={viewers} />
-          {syncStatus === "offline" ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex items-center rounded-full bg-muted p-1.5 text-muted-foreground">
-                  <CloudOff className="size-3.5" aria-label="Saved locally" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="left">Saved locally — will sync</TooltipContent>
-            </Tooltip>
-          ) : null}
+      <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+        <NotePresenceAvatars viewers={viewers} />
+        {syncStatus === "offline" ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center rounded-full bg-muted p-1.5 text-muted-foreground">
+                <CloudOff className="size-3.5" aria-label="Saved locally" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="left">Saved locally — will sync</TooltipContent>
+          </Tooltip>
+        ) : null}
+        {selectedNote && !selectedNote.deletedAt && !degraded && runtime ? (
           <NotePublishControl
             note={selectedNote}
             notes={notes}
@@ -595,22 +613,19 @@ export function NotesPage() {
             onPublish={() => module.publishNote(selectedNote.id)}
             onUnpublish={() => module.unpublishNote(selectedNote.id)}
           />
-        </div>
-      ) : viewers.length > 0 || syncStatus === "offline" ? (
-        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
-          <NotePresenceAvatars viewers={viewers} />
-          {syncStatus === "offline" ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex items-center rounded-full bg-muted p-1.5 text-muted-foreground">
-                  <CloudOff className="size-3.5" aria-label="Saved locally" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="left">Saved locally — will sync</TooltipContent>
-            </Tooltip>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
+        {/* Persistent right-panel summon (DF-13): the spine payoff — Detail ·
+            Comments · Outline — must be reachable without knowing the bottom-
+            bar toggle exists. Always present, never conditional. */}
+        <IconButton
+          icon={PanelRight}
+          label={rightPanelOpen ? "Hide side panel" : "Show links, comments & outline"}
+          aria-pressed={rightPanelOpen}
+          className={rightPanelOpen ? "text-foreground" : "text-muted-foreground"}
+          tooltipSide="left"
+          onClick={toggleRightPanel}
+        />
+      </div>
       <div className="min-h-0 flex-1">
         {selectedNote && !selectedNote.deletedAt && engine && selectedWorkspaceId ? (
           <NoteEditor
@@ -737,10 +752,16 @@ export function NotesPage() {
     changePanelVariant(id as NotesPanelVariantId);
   };
 
+  // Always give the shell a right slot (DF-13): with no note open the panel
+  // shows a quiet empty state instead of vanishing — the surface stays real.
   const right =
     noteForPanel && panelVariants.length > 0 ? (
       <RightPanelSwitcher variants={panelVariants} activeId={activePanel} onChange={onPanelChange} />
-    ) : undefined;
+    ) : (
+      <div className="grid h-full place-content-center px-4 text-center text-sm text-muted-foreground">
+        Select a note to see its links, comments, and outline.
+      </div>
+    );
 
   const editorNoteId = noteForPanel?.id ?? null;
 
@@ -761,7 +782,6 @@ export function NotesPage() {
             </NotesEditorDropZone>
           }
           right={right}
-          hideRight={!right}
         />
       </DndContext>
       <NoteImportDialog

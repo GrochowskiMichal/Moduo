@@ -1,3 +1,5 @@
+import { displayTitle } from "./title";
+
 /**
  * URL hardening + title de-duplication for the public published-note page
  * (Wave-3 NO-9b).
@@ -28,6 +30,44 @@ export function publicUrlTransform(url: string): string {
   // it as relative; allow. Anything with an explicit non-safe scheme is dropped.
   if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) return u;
   return "";
+}
+
+/**
+ * Task lines export as `- [ ] Title <!-- moduo:task:<id> -->` (the stable-id
+ * convention); react-markdown shows HTML comments as literal text on the
+ * public page. The id is an internal pointer, meaningless (and leaky) to an
+ * anonymous visitor — strip the comments before rendering.
+ */
+export function stripTaskIdComments(md: string): string {
+  return (md ?? "").replace(/\s*<!--\s*moduo:task:[A-Za-z0-9-]+\s*-->/g, "");
+}
+
+/**
+ * Sibling order for the public page nav (DF-13): the AUTHORED order — the same
+ * lexicographic fractional-position sort the in-app tree uses ([`byPosition`]
+ * in tree.ts), tiebroken on `createdAt` then `id` to match it EXACTLY. Both
+ * `position` and `createdAt` are optional: while the deployed edge fn predates
+ * these fields the page degrades to alphabetical (by `displayTitle`) so a
+ * pre-deploy public page still reads sensibly instead of by raw id.
+ */
+export function comparePublicNotes(
+  a: { position?: string | null; createdAt?: string | null; title: string; id: string },
+  b: { position?: string | null; createdAt?: string | null; title: string; id: string },
+): number {
+  const pa = a.position ?? "";
+  const pb = b.position ?? "";
+  if (pa !== pb) return pa < pb ? -1 : 1;
+  const ca = a.createdAt ?? "";
+  const cb = b.createdAt ?? "";
+  if (ca && cb) {
+    if (ca !== cb) return ca < cb ? -1 : 1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  }
+  // Pre-deploy fallback (no createdAt in the payload yet): alphabetical.
+  return (
+    displayTitle(a.title).localeCompare(displayTitle(b.title)) ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
 }
 
 /**

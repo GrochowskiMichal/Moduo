@@ -46,8 +46,10 @@ import {
   KEY_TAB_COMMAND,
   OUTDENT_CONTENT_COMMAND,
 } from "lexical";
+import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
+import { FormatToolbarPlugin } from "../editor/plugins/format-toolbar-plugin";
 import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
 import { EmbedNode } from "../editor/nodes/EmbedNode";
 import { TaskLineNode } from "../editor/nodes/task-line-node";
@@ -414,7 +416,17 @@ export function NoteEditor({
           listitemChecked: "notes-list-item-checked",
           listitemUnchecked: "notes-list-item-unchecked",
         },
-        text: { code: "notes-inline-code" },
+        // Full text-format map (DF-13): tags alone can't express combinations
+        // (bold+italic renders ONE outer tag) and strikethrough/underline have
+        // no tag at all — without these classes those formats apply invisibly.
+        text: {
+          code: "notes-inline-code",
+          bold: "notes-text-bold",
+          italic: "notes-text-italic",
+          strikethrough: "notes-text-strikethrough",
+          underline: "notes-text-underline",
+          underlineStrikethrough: "notes-text-underline-strikethrough",
+        },
         code: "notes-code-block",
         link: "notes-link",
         table: "notes-table",
@@ -485,6 +497,12 @@ export function NoteEditor({
             }
           />
           <MarkdownClipboardPlugin />
+          {/* Live markdown-as-you-type (DF-13): the same transformer set the
+              paste/import path uses, so `**bold**`, `# heading`, `- [ ]` etc.
+              format while typing. ⌘B/⌘I ride Lexical's built-in rich-text
+              bindings; the floating toolbar makes them discoverable. */}
+          <MarkdownShortcutPlugin transformers={NOTES_TRANSFORMERS} />
+          <FormatToolbarPlugin editable={editable} />
           <TaskLinePlugin editable={editable} noteId={noteId} />
           <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
           <InsertEntityChipPlugin noteId={noteId} editable={editable} />
