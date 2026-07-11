@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
 import {
   buildRefUpsertArgs,
   isAwaitingFollowUp,
@@ -21,8 +22,10 @@ import type {
 } from "../model/email-types";
 import type { EmailAccountRef, EmailThreadRef } from "../../../lib/runtime.types";
 
-/** How long a triage/snooze action can be undone before the IMAP op commits. */
-export const TRIAGE_UNDO_MS = 8000;
+/** How long a triage/snooze action can be undone before the IMAP op commits.
+ * Rides the app-wide undo window (DF-5) so the toast and the deferred IMAP op
+ * can never drift apart. */
+export const TRIAGE_UNDO_MS = UNDO_TOAST_MS;
 
 export type TriageOp = "archive" | "move" | "delete";
 

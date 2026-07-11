@@ -16,6 +16,8 @@ import {
 } from "@dnd-kit/core";
 import { toast } from "sonner";
 
+import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
+
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import {
   Dialog,
@@ -592,7 +594,7 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
       }
       api.scheduleTaskAt(taskId, new Date(gap).toISOString());
       toast(`Moved to ${formatTimeOfDay(gap)}`, {
-        duration: 8000,
+        duration: UNDO_TOAST_MS,
         action: { label: "Undo", onClick: () => api.scheduleTaskAt(taskId, fromIso) },
       });
     },
@@ -607,7 +609,7 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
       api.addTimeSpent(taskId, delta);
       markWorked(taskId, true);
       toast(`+${Math.round(delta / 60)}m logged · kept open`, {
-        duration: 8000,
+        duration: UNDO_TOAST_MS,
         action: {
           // Subtract exactly what we added (reads the live total, floors at 0)
           // so an interleaved focus flush on this task isn't clobbered.
@@ -630,7 +632,7 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
       api.unscheduleTask(taskId);
       markWorked(taskId, false);
       toast("Removed from the calendar", {
-        duration: 8000,
+        duration: UNDO_TOAST_MS,
         // Re-schedule from cleared state uses patchTask (the op needs an
         // existing schedule to move) — an undo restore, not a fresh intent.
         action: { label: "Undo", onClick: () => api.patchTask(taskId, { scheduledAt: fromIso }) },
@@ -659,7 +661,7 @@ export function CalendarPageView({ api, runtime, userId, workspaceId }: Props) {
         return;
       }
       toast(message, {
-        duration: 8000,
+        duration: UNDO_TOAST_MS,
         action: {
           label: "Undo",
           onClick: () => {

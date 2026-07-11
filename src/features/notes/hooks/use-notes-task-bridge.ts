@@ -7,6 +7,8 @@
 
 import { useCallback, useMemo, useRef } from "react";
 import { toast } from "sonner";
+
+import { undoToast } from "../../../lib/undo-toast";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import type { EntityRef } from "@/lib/entity-links";
 import { endPosition, makeTask } from "../../tasks/helpers";
@@ -182,24 +184,31 @@ export function useNotesTaskBridge({
             plan.linkIds.map((linkId) => rt.spine.deleteLink({ workspaceId: ws, linkId })),
           );
           if (mode === "keep") return;
-          const toastId = toast(plan.toastLabel, {
-            description: "Still in Tasks — delete them too?",
-            duration: 8000,
-            action: {
-              label: "Undo",
-              onClick: () => {
-                for (const taskId of plan.taskIds) pendingDetachRef.current.delete(taskId);
-                restoreLineNodes();
-                void restoreLinks(plan.restoreLinks);
-              },
+          // One grammar (DF-5): Undo in the action slot; the destructive
+          // "delete the tasks too" escalation rides the body via undoToast's
+          // `danger`, never sonner's `cancel` slot (a destructive verb in the
+          // dismiss position).
+          const toastId = undoToast(plan.toastLabel, {
+            description: "Still in Tasks.",
+            onUndo: () => {
+              for (const taskId of plan.taskIds) pendingDetachRef.current.delete(taskId);
+              restoreLineNodes();
+              void restoreLinks(plan.restoreLinks);
             },
-            cancel: {
-              label: plan.taskIds.length === 1 ? "Delete task" : "Delete tasks",
+            danger: {
+              label: plan.taskIds.length === 1 ? "Delete the task too" : "Delete the tasks too",
+              // The escalation is a deliberate destructive choice made from
+              // inside this toast — delete via the runtime (silent) + reload,
+              // NOT api.deleteTask (which would stack one "Task deleted" undo
+              // toast per task on top of this one).
               onClick: () => {
-                for (const taskId of plan.taskIds) {
-                  pendingDetachRef.current.delete(taskId);
-                  api.deleteTask(taskId);
-                }
+                void (async () => {
+                  for (const taskId of plan.taskIds) pendingDetachRef.current.delete(taskId);
+                  await Promise.all(
+                    plan.taskIds.map((taskId) => rt.tasks.deleteTask({ workspaceId: ws, taskId })),
+                  );
+                  void api.reload();
+                })().catch(() => toast.error("Couldn't delete the tasks."));
               },
             },
           });
@@ -239,20 +248,16 @@ export function useNotesTaskBridge({
           // in the bundle yet and the hook's deleteTask no-ops on unknowns.
           await rt.tasks.deleteTask({ workspaceId: ws, taskId: line.taskId });
           void api.reload();
-          toast("Task deleted", {
-            duration: 8000,
-            action: {
-              label: "Undo",
-              onClick: () => {
-                void (async () => {
-                  // Un-delete (soft delete = a stamp; the upsert clears it),
-                  // re-link, and give the line its task back.
-                  if (snapshot) await rt.tasks.upsertTask({ ...snapshot, deletedAt: null });
-                  if (plan) await restoreLinks(plan.restoreLinks);
-                  restoreLine();
-                  void api.reload();
-                })().catch(() => toast.error("Couldn't restore the task."));
-              },
+          undoToast("Task deleted", {
+            onUndo: () => {
+              void (async () => {
+                // Un-delete (soft delete = a stamp; the upsert clears it),
+                // re-link, and give the line its task back.
+                if (snapshot) await rt.tasks.upsertTask({ ...snapshot, deletedAt: null });
+                if (plan) await restoreLinks(plan.restoreLinks);
+                restoreLine();
+                void api.reload();
+              })().catch(() => toast.error("Couldn't restore the task."));
             },
           });
         } catch (e) {

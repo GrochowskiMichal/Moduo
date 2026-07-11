@@ -71,7 +71,7 @@ const SECTION_HEADING = "font-sans text-2xs font-medium uppercase tracking-wide 
 function copyText(text: string): void {
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text).then(
-      () => toast.success("Copied", { description: text }),
+      () => toast("Copied", { description: text }),
       () => toast.error("Couldn’t copy"),
     );
     return;
@@ -85,7 +85,7 @@ function copyText(text: string): void {
     el.select();
     document.execCommand("copy");
     el.remove();
-    toast.success("Copied", { description: text });
+    toast("Copied", { description: text });
   } catch {
     toast.error("Couldn’t copy");
   }
@@ -143,6 +143,8 @@ export type ContactHubProps = {
   onAddFollowup: () => void;
   onLink: (candidate: MentionCandidate) => void;
   onSetCompany: (candidate: MentionCandidate) => void;
+  /** Clear the company (drops the works-at edge + the FK; undoable). DF-5. */
+  onClearCompany?: () => void;
   onAddField?: (label: string, type: ContactFieldType, options?: string[]) => void;
   onDeleteField?: (fieldId: string) => void;
   onOpenEntity?: (ref: EntityRef) => void;
@@ -322,6 +324,7 @@ export function ContactHub(props: ContactHubProps) {
     onAddFollowup,
     onLink,
     onSetCompany,
+    onClearCompany,
     onAddField,
     onDeleteField,
     onOpenEntity,
@@ -617,7 +620,7 @@ export function ContactHub(props: ContactHubProps) {
           </div>
           <div className="space-y-1.5">
             <Label>Company</Label>
-            <div>
+            <div className="flex items-center gap-1">
               <EntityLinkPicker
                 runtime={runtime}
                 workspaceId={workspaceId}
@@ -634,6 +637,15 @@ export function ContactHub(props: ContactHubProps) {
                 }
                 onPick={onSetCompany}
               />
+              {companyName && onClearCompany ? (
+                <IconButton
+                  icon={X}
+                  label="Remove company"
+                  size="sm"
+                  variant="ghost"
+                  onClick={onClearCompany}
+                />
+              ) : null}
             </div>
           </div>
           <ChannelEditor label="Email" placeholder="name@example.com" rows={draft.emails} onChange={(r) => setDraft({ ...draft, emails: r })} />

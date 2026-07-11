@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { undoToast } from "../../../lib/undo-toast";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
@@ -186,6 +187,24 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         await (runtime as ModuoRuntime).calendar.removeEvent({
           workspaceId: workspaceId as string,
           eventId,
+        });
+        // The delete is soft — Undo un-deletes server-side and re-inserts the
+        // returned row (same 8s grammar as unschedule/move/extend, DF-5).
+        undoToast("Event deleted", {
+          description: snapshot.title || undefined,
+          onUndo: () => {
+            void (async () => {
+              const restored = await (runtime as ModuoRuntime).calendar.restoreEvent({
+                workspaceId: workspaceId as string,
+                eventId,
+              });
+              setEvents((prev) =>
+                prev.some((e) => e.id === restored.id) ? prev : [...prev, restored],
+              );
+            })().catch((err) =>
+              toast.error(err instanceof Error ? err.message : "Couldn't restore the event."),
+            );
+          },
         });
       } catch (err) {
         setEvents((prev) =>
