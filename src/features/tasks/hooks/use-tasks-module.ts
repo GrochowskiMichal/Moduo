@@ -362,6 +362,48 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [runtime, workspaceId, canEdit, liveTasks],
   );
 
+  /**
+   * Capture a new task straight into today's commit queue (Focus empty-queue
+   * affordance, DF-11). Mirrors {@link createTask} but sets `committedFor`/
+   * `commitOrder` on the create payload, so the task lands in Execute's queue
+   * immediately — no temp-id round-trip before a separate commit (which would be
+   * rejected). Created in the Inbox. Like `createTask`, the raw upsert path logs
+   * no attributed create/commit activity (consistent with capture).
+   */
+  const commitNewTaskToday = useCallback(
+    (title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      if (!runtime || !workspaceId || !canEdit || !inbox) {
+        if (!canEdit) toast.error("You don't have edit access to Tasks in this workspace.");
+        return;
+      }
+      const bucketId = inbox.id;
+      const bucketTasks = liveTasks.filter((t) => t.bucketId === bucketId);
+      const position = endPosition(bucketTasks);
+      const maxOrder = committedTasks.reduce((m, t) => Math.max(m, t.commitOrder ?? 0), 0);
+      const optimistic = makeTask({ bucketId, title: trimmed, workspaceId, position });
+      optimistic.committedFor = today;
+      optimistic.commitOrder = maxOrder + 1;
+      const tempId = `tmp-${crypto.randomUUID()}`;
+      optimistic.id = tempId;
+      setBundle((prev) => ({ ...prev, tasks: [...prev.tasks, optimistic] }));
+      void runtime.tasks
+        .upsertTask({ ...optimistic, id: "" })
+        .then((saved) => {
+          setBundle((prev) => ({
+            ...prev,
+            tasks: prev.tasks.map((t) => (t.id === tempId ? saved : t)),
+          }));
+        })
+        .catch((e) => {
+          setBundle((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== tempId) }));
+          toast.error(e instanceof Error ? e.message : "Couldn't create task.");
+        });
+    },
+    [runtime, workspaceId, canEdit, inbox, liveTasks, committedTasks, today],
+  );
+
   const patchTask = useCallback(
     (id: string, patch: Partial<Task>) => {
       const existing = bundle.tasks.find((t) => t.id === id);
@@ -477,11 +519,16 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
    * time accrued in between (the result still floors at 0).
    */
   const addTimeSpent = useCallback(
-    (id: string, deltaSeconds: number) => {
-      if (!Number.isFinite(deltaSeconds) || Math.abs(deltaSeconds) < 1) return;
+    (id: string, deltaSeconds: number): boolean => {
+      if (!Number.isFinite(deltaSeconds) || Math.abs(deltaSeconds) < 1) return true; // nothing to persist
       const t = bundle.tasks.find((x) => x.id === id);
-      if (!t) return;
+      // Not in the local bundle (e.g. the app-level Focus sink drained on a
+      // /tasks remount before load() resolved). Report "not persisted" so the
+      // caller RETAINS the delta and retries once the bundle is loaded — else
+      // time accrued while /tasks was unmounted is silently lost (DF-11).
+      if (!t) return false;
       patchTask(id, { timeSpentSeconds: Math.max(0, (t.timeSpentSeconds ?? 0) + Math.round(deltaSeconds)) });
+      return true;
     },
     [bundle.tasks, patchTask],
   );
@@ -1134,6 +1181,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     committedTasks,
     reload: load,
     createTask,
+    commitNewTaskToday,
     patchTask,
     toggleDone,
     markDone,
