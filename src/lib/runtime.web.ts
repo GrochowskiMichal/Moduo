@@ -527,13 +527,23 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
     },
     async updateMemberPermissions(memberId, role, modulePermissions) {
-      // Same vocabulary bridge as joinInvite — the modal sends app roles/perms
-      // (editor, view/edit/admin) that the members CHECK would reject. DF-24.
-      const { error } = await supabaseClient.from("workspace_members").update({
-        role: toMemberRole(role),
-        permissions_notes: toMemberPerm(modulePermissions?.notes),
-        permissions_tasks: toMemberPerm(modulePermissions?.tasks),
-      }).eq("id", memberId);
+      // Managing ANOTHER member's row can't be a client-direct write (the base
+      // workspace_members RLS is own-row) — route through the hierarchy-enforcing
+      // op, which also blocks an admin from managing admins. Send the DB
+      // vocabulary (editor→member, view/edit/admin→read/write).
+      const { error } = await supabaseClient.rpc("workspace_op_set_member_role", {
+        p_member_id: memberId,
+        p_role: toMemberRole(role),
+        p_perm_notes: toMemberPerm(modulePermissions?.notes),
+        p_perm_tasks: toMemberPerm(modulePermissions?.tasks),
+      });
+      if (error) throw new Error(error.message);
+    },
+    async transferOwnership(memberId) {
+      // Owner-only; promotes the target to owner and demotes the caller to admin
+      // (SECURITY DEFINER, since it rewrites workspaces.owner_id). Needed by the
+      // account-deletion flow — an owner hands off before deleting.
+      const { error } = await supabaseClient.rpc("workspace_op_transfer_ownership", { p_member_id: memberId });
       if (error) throw new Error(error.message);
     },
     async removeMember(memberId) {

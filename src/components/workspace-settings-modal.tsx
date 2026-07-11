@@ -23,7 +23,12 @@ import { useWorkspace } from "../providers/workspace-provider";
 import type { WorkspaceApiKey } from "../lib/runtime";
 import { useEntitlement } from "../hooks/use-entitlement";
 import { UpgradeModal } from "./upgrade-modal";
-import type { ModulePermission, WorkspaceRole } from "../features/workspaces/types";
+import type { ModulePermission, WorkspaceMember, WorkspaceRole } from "../features/workspaces/types";
+import {
+  assignableRolesFor,
+  canManageMember,
+  canTransferOwnership,
+} from "../features/workspaces/member-permissions";
 
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Badge } from "./ui/badge";
@@ -85,10 +90,12 @@ function RolePicker({
   value,
   onChange,
   disabled,
+  roles = ASSIGNABLE_ROLES,
 }: {
   value: WorkspaceRole;
   onChange: (role: WorkspaceRole) => void;
   disabled?: boolean;
+  roles?: WorkspaceRole[];
 }) {
   return (
     <div
@@ -96,7 +103,7 @@ function RolePicker({
       aria-label="Invite role"
       className="inline-flex items-center gap-1"
     >
-      {ASSIGNABLE_ROLES.map((role) => {
+      {roles.map((role) => {
         const active = value === role;
         const meta = ROLE_META[role];
         return (
@@ -395,7 +402,6 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
   const {
     selectedWorkspace,
     selectedWorkspaceId,
-    canManageWorkspace,
     workspaces,
     members,
     invites,
@@ -403,10 +409,19 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
     revokeInvite,
     updateMemberPermissions,
     removeMember,
+    transferOwnership,
     leaveWorkspace,
     refreshAccessData,
   } = useWorkspace();
   const { userId, runtime } = useAuth();
+  const callerRole: WorkspaceRole = selectedWorkspace?.role ?? "viewer";
+  const invitableRoles = assignableRolesFor(callerRole);
+  // Inviting, revoking invites, and MCP keys are owner-only at the RLS level
+  // (`paid_plan_required_to_invite` / `workspace_api_keys_can_manage` both check
+  // `owner_id = auth.uid()`). Admins manage *existing members below them* (the
+  // per-row menu), but the workspace-level controls stay with the owner — so
+  // don't show admins a form the server would reject.
+  const isOwner = callerRole === "owner";
   const { allowed: canInvite } = useEntitlement("team_members");
 
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
@@ -419,6 +434,8 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [leaveConfirm, setLeaveConfirm] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [transferTarget, setTransferTarget] = useState<WorkspaceMember | null>(null);
+  const [transferring, setTransferring] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -506,6 +523,21 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
     }
   };
 
+  const handleTransferOwnership = async (member: WorkspaceMember) => {
+    if (transferring) return;
+    setTransferring(true);
+    try {
+      await transferOwnership(member.id);
+      const name = member.displayName?.trim() || "That member";
+      toast.success(`${name} is now the owner. You're an admin.`);
+      setTransferTarget(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't transfer ownership.");
+    } finally {
+      setTransferring(false);
+    }
+  };
+
   const handleRevokeInvite = async (inviteId: string) => {
     try {
       await revokeInvite(inviteId);
@@ -572,9 +604,9 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
               <p className="text-sm text-muted-foreground">Select a workspace first.</p>
             ) : (
               <div className="flex flex-col gap-7">
-                {/* Invite — owners/admins only; everyone else gets the read-only
-                    roster + Leave below instead of a dead-end wall. DF-24. */}
-                {canManageWorkspace ? (
+                {/* Invite — owner-only (RLS gates it to owner); admins + everyone
+                    else get the read-only roster + Leave below. DF-24. */}
+                {isOwner ? (
                 <section className="flex flex-col gap-3">
                   <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     <UserPlus className="size-3" aria-hidden />
@@ -637,7 +669,7 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
 
                       <div className="flex items-center gap-3">
                         <Label className="w-12 text-xs text-muted-foreground">Role</Label>
-                        <RolePicker value={inviteRole} onChange={setInviteRole} />
+                        <RolePicker value={inviteRole} onChange={setInviteRole} roles={invitableRoles} />
                       </div>
 
                       {lastIssuedToken ? (
@@ -715,12 +747,16 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
 
                   <ul className="flex flex-col gap-1.5">
                     {members.map((member) => {
-                      const isOwner = member.role === "owner";
                       const isSelf = member.userId === userId;
                       const label = member.displayName?.trim() || shortId(member.userId);
-                      // You manage OTHERS here (role + remove); you manage
-                      // yourself via Leave, so the row menu is others-only.
-                      const showMenu = canManageWorkspace && !isOwner && !isSelf;
+                      // Hierarchy: the owner manages everyone below (incl. admins)
+                      // + can hand off; an admin manages only editors/viewers and
+                      // can't grant admin; you manage yourself via Leave. The
+                      // server ops enforce the same rules.
+                      const canManage = canManageMember(callerRole, member.role, isSelf);
+                      const canTransfer = canTransferOwnership(callerRole, member.role, isSelf);
+                      const roleOptions = assignableRolesFor(callerRole);
+                      const showMenu = canManage || canTransfer;
                       return (
                         <li
                           key={member.id}
@@ -760,41 +796,60 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                                 <PopoverContent
                                   align="end"
                                   sideOffset={4}
-                                  className="w-48 p-1"
+                                  className="w-52 p-1"
                                 >
-                                  {ASSIGNABLE_ROLES.map((role) => {
-                                    const active = member.role === role;
-                                    return (
+                                  {canManage
+                                    ? roleOptions.map((role) => {
+                                        const active = member.role === role;
+                                        return (
+                                          <button
+                                            key={role}
+                                            type="button"
+                                            onClick={() => void handleRoleChange(member.id, role)}
+                                            className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-popover-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                          >
+                                            <span>{ROLE_META[role].label}</span>
+                                            {active ? (
+                                              <Check
+                                                className="size-3.5 text-muted-foreground"
+                                                aria-hidden
+                                              />
+                                            ) : null}
+                                          </button>
+                                        );
+                                      })
+                                    : null}
+                                  {canTransfer ? (
+                                    <>
+                                      {canManage ? <div className="my-1 h-px bg-border" /> : null}
                                       <button
-                                        key={role}
                                         type="button"
-                                        onClick={() => void handleRoleChange(member.id, role)}
-                                        className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-popover-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        onClick={() => setTransferTarget(member)}
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-popover-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                       >
-                                        <span>{ROLE_META[role].label}</span>
-                                        {active ? (
-                                          <Check
-                                            className="size-3.5 text-muted-foreground"
-                                            aria-hidden
-                                          />
-                                        ) : null}
+                                        <Crown className="size-3.5" aria-hidden />
+                                        <span>Make owner</span>
                                       </button>
-                                    );
-                                  })}
-                                  <div className="my-1 h-px bg-border" />
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleRemoveMember(member.id)}
-                                    disabled={removingMemberId === member.id}
-                                    className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                                  >
-                                    <UserMinus className="size-3.5" aria-hidden />
-                                    <span>
-                                      {removingMemberId === member.id
-                                        ? "Removing…"
-                                        : "Remove from workspace"}
-                                    </span>
-                                  </button>
+                                    </>
+                                  ) : null}
+                                  {canManage ? (
+                                    <>
+                                      <div className="my-1 h-px bg-border" />
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleRemoveMember(member.id)}
+                                        disabled={removingMemberId === member.id}
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                                      >
+                                        <UserMinus className="size-3.5" aria-hidden />
+                                        <span>
+                                          {removingMemberId === member.id
+                                            ? "Removing…"
+                                            : "Remove from workspace"}
+                                        </span>
+                                      </button>
+                                    </>
+                                  ) : null}
                                 </PopoverContent>
                               </Popover>
                             ) : null}
@@ -805,8 +860,8 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                   </ul>
                 </section>
 
-                {/* Pending invites — managers only */}
-                {canManageWorkspace && pendingInvites.length > 0 ? (
+                {/* Pending invites — owner-only (revoke is owner-gated too) */}
+                {isOwner && pendingInvites.length > 0 ? (
                   <section className="flex flex-col gap-3">
                     <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       <Mail className="size-3" aria-hidden />
@@ -870,8 +925,8 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
                   </section>
                 ) : null}
 
-                {/* MCP connector keys — managers only */}
-                {canManageWorkspace ? (
+                {/* MCP connector keys — owner-only (RLS: workspace_api_keys_can_manage) */}
+                {isOwner ? (
                   <ApiKeysSection workspaceId={selectedWorkspace.id} />
                 ) : null}
 
@@ -921,6 +976,44 @@ export function WorkspaceSettingsModal({ visible, onClose }: Props) {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={transferTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !transferring) setTransferTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Make {transferTarget?.displayName?.trim() || "this member"} the owner?
+            </DialogTitle>
+            <DialogDescription>
+              They get full control of this workspace and you become an admin. Only the
+              new owner can hand ownership back.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTransferTarget(null)}
+              disabled={transferring}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (transferTarget) void handleTransferOwnership(transferTarget);
+              }}
+              disabled={transferring}
+            >
+              {transferring ? "Transferring…" : "Transfer ownership"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
