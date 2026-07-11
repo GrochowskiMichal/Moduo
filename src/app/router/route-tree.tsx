@@ -16,6 +16,7 @@ import { validateTasksSearch } from "../../features/tasks/search";
 import { SettingsPage } from "../../routes/pages/settings-page";
 import { PaywallPage } from "../../routes/pages/paywall-page";
 import { PublishedNotePage } from "../../routes/pages/published-note-page";
+import { JoinPage } from "../../routes/pages/join-page";
 
 function RootLayout() {
   return (
@@ -57,6 +58,21 @@ const publishedNoteRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { note?: string } => {
     const note = typeof search.note === "string" && search.note ? search.note : undefined;
     return note ? { note } : {};
+  },
+});
+
+// Workspace invite accept surface (DF-24). Sibling of /auth, OUTSIDE the app
+// gate, so a brand-new invitee (0–1 workspaces) can redeem before the
+// WorkspaceGate would bounce them to /onboarding and before AppChrome's nav
+// redirect guard runs. Token rides in `?invite=` (base64 tokens break a path
+// param). Not in the nav, so it needs none of the five in-chrome route wirings.
+const joinRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/join",
+  component: JoinPage,
+  validateSearch: (search: Record<string, unknown>): { invite?: string } => {
+    const invite = typeof search.invite === "string" && search.invite ? search.invite : undefined;
+    return invite ? { invite } : {};
   },
 });
 
@@ -142,6 +158,7 @@ export const routeTree = rootRoute.addChildren([
   onboardingRoute,
   paywallRoute,
   publishedNoteRoute,
+  joinRoute,
   appGateRoute.addChildren([
     homeRoute,
     legacyGridRoute,

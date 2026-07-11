@@ -243,6 +243,15 @@ export type ModuoRuntime = {
       role: string,
       modulePermissions?: { notes?: string; tasks?: string }
     ): Promise<void>;
+    /**
+     * Remove another member from the workspace (owner/admin only, never an
+     * owner or yourself — use `leave` for self-exit). Routes through the
+     * `workspace_op_remove_member` SECURITY DEFINER RPC because the base
+     * `workspace_members` write-RLS is own-row. DF-24.
+     */
+    removeMember(memberId: string): Promise<void>;
+    /** Shareable `/join?invite=<token>` accept link (web origin, tauri-safe). */
+    inviteUrl(token: string): string;
     listNotifications(): Promise<any[]>;
     markNotificationRead(notificationId: string): Promise<void>;
     markAllNotificationsRead(): Promise<void>;
