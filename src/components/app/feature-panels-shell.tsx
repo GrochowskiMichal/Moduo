@@ -229,9 +229,7 @@ export function FeaturePanelsShell({
     <div className="text-sm text-muted-foreground">Feature tools panel</div>
   );
   const rightSlot = right ?? (
-    <div className="text-sm text-muted-foreground">
-      Graph relations tree, feature coming soon.
-    </div>
+    <div className="text-sm text-muted-foreground">Details panel</div>
   );
 
   const layoutKey = `${LAYOUT_STORAGE_PREFIX}:${feature}:${showLeftFull ? "l" : "-"}${showRightFull ? "r" : "-"}`;

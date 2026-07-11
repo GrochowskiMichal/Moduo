@@ -6,7 +6,6 @@ import {
   CheckSquare,
   Contact as ContactIcon,
   FileText,
-  GitBranch,
   House,
   Inbox,
   Settings as SettingsIcon,
@@ -73,7 +72,8 @@ export function GlobalCommandPalette() {
     { id: "notes", label: "Open Notes", icon: FileText, run: go("/notes") },
     { id: "tasks", label: "Open Tasks", icon: CheckSquare, run: go("/tasks") },
     { id: "calendar", label: "Open Calendar", icon: CalendarIcon, run: go("/calendar") },
-    { id: "mindmap", label: "Open Mindmap", icon: GitBranch, run: go("/mindmap") },
+    // Mindmap is hidden from the alpha (DF-4) — omitted from the palette too so
+    // nav/palette stay in sync. The /mindmap route stays reachable directly.
     { id: "email", label: "Open Email", icon: Inbox, run: go("/email") },
     { id: "contacts", label: "Open Contacts", icon: ContactIcon, run: go("/contacts") },
   ];
