@@ -241,7 +241,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       if (target.search) {
         // Mark the navigation as an external "take me there" so the target
         // page can distinguish it from its own mirrored id (refresh/back).
-        markEntityOpenIntent(target.search.id);
+        if (target.intentId) markEntityOpenIntent(target.intentId);
         void navigate({ to: target.to, search: target.search as any });
       } else {
         void navigate({ to: target.to });

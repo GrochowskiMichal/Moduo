@@ -10,6 +10,7 @@ describe("entityOpenTarget", () => {
     expect(entityOpenTarget("contact", "c1")).toEqual({
       to: "/contacts",
       search: { type: "contact", id: "c1" },
+      intentId: "c1",
     });
   });
 
@@ -17,31 +18,57 @@ describe("entityOpenTarget", () => {
     expect(entityOpenTarget("company", "co1")).toEqual({
       to: "/contacts",
       search: { type: "company", id: "co1" },
+      intentId: "co1",
     });
   });
 
   it("routes tasks and projects to /tasks with URL selection (DF-1)", () => {
-    expect(entityOpenTarget("task", "t1")).toEqual({ to: "/tasks", search: { id: "t1" } });
-    expect(entityOpenTarget("project", "p1")).toEqual({ to: "/tasks", search: { id: "p1" } });
+    expect(entityOpenTarget("task", "t1")).toEqual({
+      to: "/tasks",
+      search: { id: "t1" },
+      intentId: "t1",
+    });
+    expect(entityOpenTarget("project", "p1")).toEqual({
+      to: "/tasks",
+      search: { id: "p1" },
+      intentId: "p1",
+    });
   });
 
   it("routes a note to /notes with URL selection (NO-3)", () => {
-    expect(entityOpenTarget("note", "n1")).toEqual({ to: "/notes", search: { id: "n1" } });
+    expect(entityOpenTarget("note", "n1")).toEqual({
+      to: "/notes",
+      search: { id: "n1" },
+      intentId: "n1",
+    });
   });
 
-  it("routes emails to their module page", () => {
-    expect(entityOpenTarget("email", "e1")).toEqual({ to: "/email" });
-    expect(entityOpenTarget("email_thread", "r1")).toEqual({ to: "/email" });
+  it("routes an email thread to /email with a ?thread= deep link (DF-2)", () => {
+    expect(entityOpenTarget("email", "e1")).toEqual({
+      to: "/email",
+      search: { thread: "e1" },
+      intentId: "e1",
+    });
+    expect(entityOpenTarget("email_thread", "r1")).toEqual({
+      to: "/email",
+      search: { thread: "r1" },
+      intentId: "r1",
+    });
   });
 
   it("routes an id-less email open to the inbox (the widget's per-account rows, EM-11)", () => {
-    // Email has no URL thread-selection yet, so an id-less 'open my inbox' is
-    // valid — it must NOT be swallowed by the id guard.
+    // An id-less 'open my inbox' is valid — it must NOT be swallowed by the id
+    // guard, and carries no thread selection.
     expect(entityOpenTarget("email", "")).toEqual({ to: "/email" });
+    expect(entityOpenTarget("email_thread", "")).toEqual({ to: "/email" });
   });
 
-  it("routes an event to the calendar page (CAL-7)", () => {
-    expect(entityOpenTarget("event", "ev1")).toEqual({ to: "/calendar" });
+  it("routes an event to /calendar with a ?event= deep link (DF-2)", () => {
+    expect(entityOpenTarget("event", "ev1")).toEqual({
+      to: "/calendar",
+      search: { event: "ev1" },
+      intentId: "ev1",
+    });
   });
 
   it("returns null for types with no page yet (payment, unknown)", () => {
