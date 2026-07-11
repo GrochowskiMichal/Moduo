@@ -4,6 +4,7 @@ export const SETTINGS_SECTION_IDS = [
   "billing",
   "workspace",
   "integrations",
+  "apikeys",
   "preferences",
   "focus",
   "advanced",
@@ -11,6 +12,14 @@ export const SETTINGS_SECTION_IDS = [
 ] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
+
+// The grouped nav (DF-19a). Every section id lives in exactly one group; the
+// nav renders groups in this order, sections in each group's `ids` order.
+export const SETTINGS_GROUPS = [
+  { label: "Personal", ids: ["account", "billing", "appearance", "preferences", "focus"] },
+  { label: "Workspace", ids: ["workspace", "integrations", "apikeys"] },
+  { label: "App", ids: ["advanced", "about"] },
+] as const satisfies ReadonlyArray<{ label: string; ids: readonly SettingsSectionId[] }>;
 
 export const SETTINGS_OPEN_EVENT = "moduo:settings:open";
 
