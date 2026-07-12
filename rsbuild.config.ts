@@ -43,26 +43,39 @@ const publicWebOrigin = readLocalEnvValue("PUBLIC_WEB_ORIGIN");
 const target = (process.env.MODUO_TARGET as string | undefined) ?? "desktop";
 const isWeb = target === "web";
 
-// App version + build id for the Settings → Advanced diagnostics readout.
-// Version comes from package.json; the build id is the short git SHA (falls
-// back to "dev" outside a git checkout / CI shallow clone).
-function readAppVersion(): string {
+// App version + build id surfaced in Settings → About (DF-19i) and Diagnostics
+// (DF-19g). Version comes from package.json; the build id is the short git SHA
+// (CI may override with MODUO_BUILD) and degrades to "dev" when git isn't
+// available.
+function readPackageVersion(): string {
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8"));
-    return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8")) as {
+      version?: string;
+    };
+    return pkg.version ?? "0.0.0";
   } catch {
     return "0.0.0";
   }
 }
 function readBuildId(): string {
+  const injected = process.env.MODUO_BUILD?.trim();
+  if (injected) return injected;
   try {
-    return execSync("git rev-parse --short HEAD", { cwd: __dirname }).toString().trim() || "dev";
+    // Silence git's fatal-message on the no-repo path; the catch handles it.
+    return (
+      execSync("git rev-parse --short HEAD", {
+        cwd: __dirname,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .toString()
+        .trim() || "dev"
+    );
   } catch {
     return "dev";
   }
 }
-const appVersion = readAppVersion();
-const buildId = readBuildId();
+const appVersion = readPackageVersion();
+const appBuild = readBuildId();
 
 const tauriStub = path.resolve(__dirname, "src/lib/tauri-api-stub.ts");
 
@@ -80,7 +93,7 @@ export default defineConfig({
       "import.meta.env.PUBLIC_SUPABASE_ANON_KEY": JSON.stringify(supabaseAnonKey),
       "import.meta.env.MODUO_TARGET": JSON.stringify(target),
       "import.meta.env.MODUO_VERSION": JSON.stringify(appVersion),
-      "import.meta.env.MODUO_BUILD": JSON.stringify(buildId),
+      "import.meta.env.MODUO_BUILD": JSON.stringify(appBuild),
       "import.meta.env.PUBLIC_STRIPE_PUBLISHABLE_KEY": JSON.stringify(stripePublishableKey),
       "import.meta.env.PUBLIC_STRIPE_PRICE_PRO_MONTHLY": JSON.stringify(stripePriceProMonthly),
       "import.meta.env.PUBLIC_STRIPE_PRICE_PRO_YEARLY": JSON.stringify(stripePriceProYearly),
