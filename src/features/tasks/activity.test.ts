@@ -55,6 +55,15 @@ describe("activityLine", () => {
     expect(activityLine(entry("tasks.unschedule"))).toBe("cleared the scheduled time");
   });
 
+  it("renders DF-9 spine notifications in the trail with a neutral, third-person voice", () => {
+    // The trail is read by anyone, so it must NOT use the notification card's "…to you".
+    expect(activityLine(entry("tasks.assigned"))).toBe("assigned this");
+    expect(activityLine(entry("tasks.unblocked", { blocker_title: "Ship the API" }))).toBe(
+      "finished “Ship the API”, unblocking this",
+    );
+    expect(activityLine(entry("tasks.unblocked"))).toBe("unblocked this");
+  });
+
   it("never lies by omission — unknown ops fall back to the op name", () => {
     expect(activityLine(entry("tasks.future_op"))).toBe("tasks.future_op");
   });

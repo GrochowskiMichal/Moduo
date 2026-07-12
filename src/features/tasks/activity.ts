@@ -72,6 +72,16 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
       if (kind === "adopt") return to ? `scheduled its occurrence, ${to} (recurrence)` : "adopted its occurrence (recurrence)";
       return to ? `caught this up to ${to} (recurrence)` : "caught this up (recurrence)";
     }
+    // ── DF-9 spine-generated task notifications, seen in the trail too ─────────
+    // Logged by the tasks_notify_spine trigger (module='tasks'), so they surface
+    // in this entity trail — render a neutral, third-person sentence here (the
+    // notification-card voice "…to you" would be wrong in a trail anyone reads).
+    case "tasks.assigned":
+      return "assigned this";
+    case "tasks.unblocked": {
+      const blocker = str(p.blocker_title);
+      return blocker ? `finished “${blocker}”, unblocking this` : "unblocked this";
+    }
     default:
       return entry.op;
   }

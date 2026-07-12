@@ -128,7 +128,25 @@ const ROUTE_BY_TYPE: Record<string, string> = {
   company: "/contacts",
   note: "/notes",
   event: "/calendar",
+  // Email snooze-due / follow-up-due activity logs entity_type='email_thread'
+  // (DF-9). The entity-open host resolves 'email_thread' → /email?thread=<id>
+  // (DF-2), so passing this entityType through deep-links the thread, not a
+  // dead-end inbox.
+  email_thread: "/email",
 };
+
+/**
+ * A friendly noun for a deep-link target type, for the "· opens …" card hint.
+ * Most types read fine raw ("task", "contact"); this only rewrites the ugly
+ * ones (email_thread → "email"). Falls back to the raw type.
+ */
+const DEEP_LINK_NOUN: Record<string, string> = {
+  email_thread: "email",
+};
+
+export function notificationDeepLinkNoun(entityType: string): string {
+  return DEEP_LINK_NOUN[entityType] ?? entityType;
+}
 
 /** Resolve where clicking a card should navigate (best-effort by entity type). */
 export function notificationDeepLink(group: NotificationGroup): NotificationDeepLink | null {
