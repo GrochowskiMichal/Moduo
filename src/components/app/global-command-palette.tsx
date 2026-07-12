@@ -29,6 +29,7 @@ import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "../../lib/palette-sea
 import { resolveEntityIcon } from "../../features/spine/icon-map";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
+import { announceOverlayOpen, onOtherOverlayOpen } from "./global-overlay-events";
 import type { EntityRecord } from "../../lib/entity-links";
 
 type Action = {
@@ -83,6 +84,13 @@ export function GlobalCommandPalette() {
     window.addEventListener(PALETTE_OPEN_EVENT, onOpen);
     return () => window.removeEventListener(PALETTE_OPEN_EVENT, onOpen);
   }, []);
+
+  // Mutual exclusion with the capture bar (and any future global overlay) so two
+  // floating dialogs never stack — announce on open, close on another's open.
+  useEffect(() => {
+    if (open) announceOverlayOpen("palette");
+  }, [open]);
+  useEffect(() => onOtherOverlayOpen("palette", () => setOpen(false)), []);
 
   // Reset the query + results each time the palette closes so it reopens fresh.
   useEffect(() => {
