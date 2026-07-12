@@ -49,6 +49,7 @@ import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constan
 import type { ModuleNavItem } from "./app-chrome-types";
 import { FocusSessionChip } from "./focus-session-chip";
 import { GlobalBottomBar } from "./global-bottom-bar";
+import { GlobalCaptureBar } from "./global-capture-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { SettingsModal } from "../../features/settings/settings-modal";
@@ -581,6 +582,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         </div>
       </div>
       <GlobalCommandPalette />
+      <GlobalCaptureBar />
       <GlobalShortcutsDialog />
       <SettingsModal />
       <WorkspaceSettingsModal

@@ -12,6 +12,7 @@ import { useEffect } from "react";
 
 export type ShortcutId =
   | "palette"
+  | "capture"
   | "new-item"
   | "new-note"
   | "settings"
@@ -45,6 +46,21 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
     match: (event, isMac) =>
       (isMac ? event.metaKey : event.ctrlKey) &&
       !event.shiftKey &&
+      !event.altKey &&
+      event.key.toLowerCase() === "k",
+  },
+  {
+    // Global capture bar (DF-20): a capture-anywhere line that creates a task by
+    // default and routes to notes/events/contacts via `/`-prefixes. Sits next to
+    // the ⌘K palette as its write-instead-of-search sibling. Like the palette it
+    // fires even from inputs/editors (capture must reach you mid-typing).
+    id: "capture",
+    label: "Quick capture",
+    mac: "⌘⇧K",
+    other: "Ctrl Shift K",
+    match: (event, isMac) =>
+      (isMac ? event.metaKey : event.ctrlKey) &&
+      event.shiftKey &&
       !event.altKey &&
       event.key.toLowerCase() === "k",
   },
@@ -174,14 +190,16 @@ export function useGlobalShortcuts(): void {
 
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      // The palette shortcut should fire even from inputs so search works
-      // anywhere. New-note doesn't fire from editable targets — otherwise the
-      // user typing "n" in a Lexical editor would create a new note.
+      // The palette + capture shortcuts fire even from inputs so search and
+      // quick-capture work anywhere (both are explicit ⌘ combos, never a
+      // text-editing key). New-note doesn't fire from editable targets —
+      // otherwise the user typing "n" in a Lexical editor would create a note.
       const targetEditable = isEditableTarget(event.target);
+      const firesFromEditable = (id: ShortcutId) => id === "palette" || id === "capture";
 
       for (const entry of SHORTCUTS) {
         if (!entry.match(event, isMac)) continue;
-        if (targetEditable && entry.id !== "palette") continue;
+        if (targetEditable && !firesFromEditable(entry.id)) continue;
         event.preventDefault();
         window.dispatchEvent(new CustomEvent(shortcutEvent(entry.id)));
         return;

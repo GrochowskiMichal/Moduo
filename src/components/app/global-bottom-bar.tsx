@@ -1,9 +1,10 @@
-import { Keyboard, Plus, Search } from "lucide-react";
+import { Keyboard, Plus, Search, SquarePen } from "lucide-react";
 
 import { formatShortcut, SHORTCUTS } from "../../lib/shortcuts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 import { dispatchOpenPalette } from "./global-command-palette";
+import { dispatchOpenCapture } from "./global-capture-bar";
 import { dispatchOpenShortcuts } from "./global-shortcuts-dialog";
 import { dispatchCreateNew } from "./create-events";
 
@@ -37,11 +38,13 @@ function BarButton({
 
 const newItemShortcut = SHORTCUTS.find((s) => s.id === "new-item");
 const paletteShortcut = SHORTCUTS.find((s) => s.id === "palette");
+const captureShortcut = SHORTCUTS.find((s) => s.id === "capture");
 const helpShortcut = SHORTCUTS.find((s) => s.id === "help");
 
 export function GlobalBottomBar() {
   const createHint = newItemShortcut ? formatShortcut(newItemShortcut) : undefined;
   const searchHint = paletteShortcut ? formatShortcut(paletteShortcut) : undefined;
+  const captureHint = captureShortcut ? formatShortcut(captureShortcut) : undefined;
   const helpHint = helpShortcut ? formatShortcut(helpShortcut) : undefined;
   return (
     <div
@@ -60,6 +63,9 @@ export function GlobalBottomBar() {
       </BarButton>
       <BarButton onClick={() => dispatchOpenPalette()} label="Search" hint={searchHint}>
         <Search className="size-4" aria-hidden />
+      </BarButton>
+      <BarButton onClick={() => dispatchOpenCapture()} label="Quick capture" hint={captureHint}>
+        <SquarePen className="size-4" aria-hidden />
       </BarButton>
       <BarButton onClick={() => dispatchCreateNew()} label="Create new" hint={createHint}>
         <Plus className="size-4" aria-hidden />
