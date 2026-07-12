@@ -1,4 +1,4 @@
-import type { WorkspaceRole } from "./types";
+import type { ModulePermission, WorkspaceRole } from "./types";
 
 /**
  * Who can manage whom in a workspace (client-side gate for the UI; the
@@ -42,4 +42,15 @@ export function canTransferOwnership(
   isSelf: boolean,
 ): boolean {
   return callerRole === "owner" && !isSelf && targetRole !== "owner";
+}
+
+/**
+ * The per-module permission a role maps to when inviting or changing a member's
+ * role: viewer → view, editor → edit, admin/owner → admin. Used to seed the
+ * `modulePermissions` (notes/tasks) an invite or role change writes.
+ */
+export function modulePermissionFor(role: WorkspaceRole): ModulePermission {
+  if (role === "viewer") return "view";
+  if (role === "admin" || role === "owner") return "admin";
+  return "edit";
 }
