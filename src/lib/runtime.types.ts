@@ -145,6 +145,8 @@ export type UserPreferences = {
   calendarUpdatedAt: string | null;
   email: Record<string, unknown> | null;
   emailUpdatedAt: string | null;
+  preferences: Record<string, unknown> | null;
+  preferencesUpdatedAt: string | null;
 };
 
 /** A stored dashboard layout + its client-set LWW timestamp (DB-4). */

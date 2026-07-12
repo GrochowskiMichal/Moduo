@@ -20,7 +20,7 @@ import { getRuntime, initRuntime } from "./runtime";
 import { createRequestCache } from "./request-cache";
 import type { UserPreferences } from "./runtime.types";
 
-export type SyncDomain = "appearance" | "focus" | "calendar" | "email";
+export type SyncDomain = "appearance" | "focus" | "calendar" | "email" | "preferences";
 
 /** Opaque jsonb payload shape shared across the transport boundary. */
 type Json = Record<string, unknown>;
@@ -39,6 +39,7 @@ const META_KEY: Record<SyncDomain, string> = {
   focus: "moduo.focus.sync",
   calendar: "moduo.calendar.sync",
   email: "moduo.email.sync",
+  preferences: "moduo.preferences.sync",
 };
 
 const EMPTY_META: SyncMeta = { userId: null, updatedAt: null, dirty: false };
@@ -121,6 +122,8 @@ function domainValue(prefs: UserPreferences | null, domain: SyncDomain): { value
       return { value: prefs.calendar, updatedAt: prefs.calendarUpdatedAt };
     case "email":
       return { value: prefs.email, updatedAt: prefs.emailUpdatedAt };
+    case "preferences":
+      return { value: prefs.preferences, updatedAt: prefs.preferencesUpdatedAt };
   }
 }
 
@@ -136,7 +139,9 @@ export async function pushDomain(domain: SyncDomain, value: Json, updatedAt: str
           ? { focus: value, focusUpdatedAt: updatedAt }
           : domain === "calendar"
             ? { calendar: value, calendarUpdatedAt: updatedAt }
-            : { email: value, emailUpdatedAt: updatedAt };
+            : domain === "email"
+              ? { email: value, emailUpdatedAt: updatedAt }
+              : { preferences: value, preferencesUpdatedAt: updatedAt };
     const res = await rt.preferences.set(patch);
     // A write changed the shared row — drop the cached read so a later domain's
     // reconcile (or the same domain's next read) sees this domain's fresh value.

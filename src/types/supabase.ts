@@ -1884,6 +1884,8 @@ export type Database = {
           email_updated_at: string
           focus: Json
           focus_updated_at: string
+          preferences: Json
+          preferences_updated_at: string
           user_id: string
         }
         Insert: {
@@ -1896,6 +1898,8 @@ export type Database = {
           email_updated_at?: string
           focus?: Json
           focus_updated_at?: string
+          preferences?: Json
+          preferences_updated_at?: string
           user_id: string
         }
         Update: {
@@ -1908,6 +1912,8 @@ export type Database = {
           email_updated_at?: string
           focus?: Json
           focus_updated_at?: string
+          preferences?: Json
+          preferences_updated_at?: string
           user_id?: string
         }
         Relationships: [

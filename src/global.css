@@ -169,8 +169,14 @@ body,
   will-change: transform;
 }
 
+/* Honour the app motion override (DF-19f): "reduced" kills it on any OS, "full"
+   keeps it even under an OS reduce; "system"/unset follows the OS media query. */
+:root[data-motion="reduced"] .auth-hero-float {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .auth-hero-float {
+  :root:not([data-motion="full"]) .auth-hero-float {
     animation: none;
   }
 }
@@ -245,8 +251,12 @@ body,
   animation: check-pop var(--motion-base) var(--ease-spring);
 }
 
+:root[data-motion="reduced"] .check-pop {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .check-pop {
+  :root:not([data-motion="full"]) .check-pop {
     animation: none;
   }
 }
@@ -268,8 +278,13 @@ body,
   animation: track-pulse 1.8s var(--ease-out) infinite;
 }
 
+:root[data-motion="reduced"] .track-pulse {
+  animation: none;
+  opacity: 0.85;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .track-pulse {
+  :root:not([data-motion="full"]) .track-pulse {
     animation: none;
     opacity: 0.85;
   }
@@ -855,8 +870,12 @@ body,
   will-change: transform;
 }
 
+:root[data-motion="reduced"] .mail-flag-wave__cloth {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .mail-flag-wave__cloth {
+  :root:not([data-motion="full"]) .mail-flag-wave__cloth {
     animation: none;
   }
 }

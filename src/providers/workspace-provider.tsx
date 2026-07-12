@@ -16,6 +16,7 @@ import {
   type WorkspaceContextValue,
 } from "../features/workspaces/workspace-context";
 import { mapInvite, mapMember, mapNotification, mapWorkspace, storageKey } from "../features/workspaces/workspace-mappers";
+import { readLocalPreferences } from "../lib/preferences";
 
 /** Map a legacy workspace notification into the source-agnostic feed item. */
 function legacyNotificationToItem(n: WorkspaceNotification): NotificationItem {
@@ -109,7 +110,13 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     setWorkspaces(next);
 
     const currentSelected = selectedWorkspaceIdRef.current;
-    const persisted = typeof window !== "undefined" ? window.localStorage.getItem(storageKey(userId)) : null;
+    // "Reopen last workspace" OFF (Settings → Preferences, DF-19f) ignores the
+    // persisted selection at launch (currentSelected is null then → first
+    // workspace); mid-session refreshes still keep the active one via
+    // currentSelected, so this only changes the cold-launch default.
+    const reopenLast = readLocalPreferences().reopenLastWorkspace;
+    const persisted =
+      reopenLast && typeof window !== "undefined" ? window.localStorage.getItem(storageKey(userId)) : null;
     const resolvedSelected =
       (persisted && next.some((workspace) => workspace.id === persisted) ? persisted : null) ??
       (currentSelected && next.some((workspace) => workspace.id === currentSelected)

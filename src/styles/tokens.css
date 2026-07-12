@@ -617,9 +617,24 @@
 
 /* Reduced motion = kill movement, keep tiny fades. Transforms/springs collapse
    to 0ms (no travel); opacity/color fades stay ~80ms so feedback still reads;
-   the blur-in motif is disabled (veil → 0). */
+   the blur-in motif is disabled (veil → 0). The `data-motion` app override
+   (Settings → Preferences, DF-19f) layers on top of the OS setting:
+     • data-motion="reduced" forces reduced regardless of the OS.
+     • data-motion="full" opts out of the OS reduce (the media query below
+       excludes it), so a user who wants motion keeps it even under OS reduce.
+     • data-motion="system" / unset follows the OS (the media query applies). */
+:root[data-motion="reduced"] {
+  --motion-instant: 0ms;
+  --motion-fast:    0ms;
+  --motion-base:    0ms;
+  --motion-slow:    0ms;
+  --motion-slower:  0ms;
+  --motion-fade:    80ms;
+  --blur-veil:      0;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  :root {
+  :root:not([data-motion="full"]) {
     --motion-instant: 0ms;
     --motion-fast:    0ms;
     --motion-base:    0ms;
