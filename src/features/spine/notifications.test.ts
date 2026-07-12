@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   groupNotifications,
   notificationDeepLink,
+  notificationDeepLinkNoun,
   notificationSummary,
   unreadCount,
   type NotificationItem,
@@ -97,6 +98,32 @@ describe("notificationSummary", () => {
     ]);
     expect(notificationSummary(groups[0], "me")).toBe("Mike note shared");
   });
+
+  // DF-9: the two new quiet task notifications render a plain sentence, never the raw op.
+  it("phrases an assigned-to-you notification with the assigner as actor", () => {
+    const groups = groupNotifications([
+      item({ id: "a", createdAt: "2026-07-12T10:00:00Z", op: "tasks.assigned", actorId: "u2", actorLabel: "Mike" }),
+    ]);
+    expect(notificationSummary(groups[0], "me")).toBe("Mike assigned this to you");
+  });
+
+  it("phrases a blocked-task-unblocked notification, naming the finished blocker when present", () => {
+    const [withBlocker] = groupNotifications([
+      item({
+        id: "a",
+        createdAt: "2026-07-12T10:00:00Z",
+        op: "tasks.unblocked",
+        actorId: "me",
+        payload: { blocker_title: "Ship the API" },
+      }),
+    ]);
+    expect(notificationSummary(withBlocker, "me")).toBe("You finished “Ship the API”, unblocking this");
+
+    const [noBlocker] = groupNotifications([
+      item({ id: "b", createdAt: "2026-07-12T10:00:00Z", op: "tasks.unblocked", actorId: "u2", actorLabel: "Ola" }),
+    ]);
+    expect(notificationSummary(noBlocker, "me")).toBe("Ola unblocked this");
+  });
 });
 
 describe("notificationDeepLink", () => {
@@ -110,5 +137,23 @@ describe("notificationDeepLink", () => {
     expect(notificationDeepLink(g)).toBeNull();
     const [g2] = groupNotifications([item({ id: "b", createdAt: "x", targetType: null, targetId: null })]);
     expect(notificationDeepLink(g2)).toBeNull();
+  });
+
+  // DF-9: email snooze/follow-up notifications (entity_type='email_thread') must
+  // deep-link the thread, not dead-end. entityType flows to the entity-open host,
+  // which resolves email_thread → /email?thread=<id> (DF-2).
+  it("routes an email_thread notification to /email so it deep-links the thread", () => {
+    const [g] = groupNotifications([
+      item({ id: "a", createdAt: "x", op: "email.snooze_due", targetType: "email_thread", targetId: "th1" }),
+    ]);
+    expect(notificationDeepLink(g)).toEqual({ route: "/email", entityType: "email_thread", entityId: "th1" });
+  });
+});
+
+describe("notificationDeepLinkNoun", () => {
+  it("rewrites the ugly email_thread type to a friendly noun, passing others through", () => {
+    expect(notificationDeepLinkNoun("email_thread")).toBe("email");
+    expect(notificationDeepLinkNoun("task")).toBe("task");
+    expect(notificationDeepLinkNoun("contact")).toBe("contact");
   });
 });

@@ -7,6 +7,7 @@ import { useShortcut } from "../lib/shortcuts";
 import {
   groupNotifications,
   notificationDeepLink,
+  notificationDeepLinkNoun,
   notificationSummary,
   type NotificationGroup,
 } from "../features/spine/notifications";
@@ -199,7 +200,7 @@ export function NotificationCenter() {
                     </div>
                     <p className="flex items-center gap-1 pl-3.5 text-xs text-muted-foreground/70">
                       {relativeTime(group.latestAt)}
-                      {link ? <span aria-hidden>· opens {link.entityType}</span> : null}
+                      {link ? <span aria-hidden>· opens {notificationDeepLinkNoun(link.entityType)}</span> : null}
                     </p>
                   </Card>
                 );
