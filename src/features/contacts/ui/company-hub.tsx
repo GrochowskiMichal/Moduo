@@ -24,7 +24,7 @@ import type { CompanyDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { MentionCandidate } from "../../spine/mention";
 import type { ActivityEntry } from "../../tasks/model";
-import type { CompanyRollup } from "../company";
+import { companyLastTouchLine, type CompanyRollup } from "../company";
 import type { Company } from "../model";
 import { ActivityTrail } from "./activity-trail";
 import { initials } from "./contact-directory";
@@ -216,6 +216,9 @@ export function CompanyHub({
           ) : null}
         </div>
       ) : null}
+
+      {/* Last touch — the most recent interaction across the company + its people */}
+      <p className="text-sm text-muted-foreground">{companyLastTouchLine(rollup, now)}</p>
 
       {/* Details — edit form or the grouped read card */}
       {editing ? (

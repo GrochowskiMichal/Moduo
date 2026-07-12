@@ -14,8 +14,10 @@ import { entityRefKey, otherEndpoint } from "../../spine/rollup";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import { buildCompanyRollup, type CompanyRollup } from "../company";
 import type { Contact } from "../model";
+import { enrichHubRows } from "./enrich-hub-rows";
+import "../../spine/snippet-projectors.builtin";
 
-const EMPTY: CompanyRollup = { people: [], unionSections: [] };
+const EMPTY: CompanyRollup = { people: [], unionSections: [], lastTouchAt: null, lastTouchActivity: null };
 
 export type UseCompanyHubResult = {
   rollup: CompanyRollup;
@@ -89,7 +91,10 @@ export function useCompanyHub(
           });
         });
         const uniqueRefs = Array.from(new Map(refs.map((r) => [entityRefKey(r), r])).values());
-        const records = uniqueRefs.length ? await runtime.spine.getEntities({ workspaceId, refs: uniqueRefs }) : [];
+        const [records, enrichment] = await Promise.all([
+          uniqueRefs.length ? runtime.spine.getEntities({ workspaceId, refs: uniqueRefs }) : Promise.resolve([]),
+          uniqueRefs.length ? enrichHubRows(runtime, workspaceId, uniqueRefs) : Promise.resolve(null),
+        ]);
         const byKey = new Map(records.map((r) => [entityRefKey({ type: r.type, id: r.id }), r]));
 
         if (!active) return;
@@ -103,7 +108,16 @@ export function useCompanyHub(
           ),
         );
         setRollup(
-          buildCompanyRollup({ company: companyRef, companyLinks, members: denormalized, memberLinks, records: byKey }),
+          buildCompanyRollup({
+            company: companyRef,
+            companyLinks,
+            members: denormalized,
+            memberLinks,
+            records: byKey,
+            activity: activityRows,
+            snippetMeta: enrichment?.snippetMeta,
+            now: new Date(),
+          }),
         );
         setStatus("ready");
       } catch {

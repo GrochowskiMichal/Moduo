@@ -103,5 +103,5 @@ export const Populated: Story = {
 
 /** A fresh company with no people or linked work yet. */
 export const Empty: Story = {
-  args: { rollup: { people: [], unionSections: [] }, status: "ready" },
+  args: { rollup: { people: [], unionSections: [], lastTouchAt: null, lastTouchActivity: null }, status: "ready" },
 };

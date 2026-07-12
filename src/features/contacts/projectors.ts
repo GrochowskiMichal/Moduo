@@ -5,6 +5,10 @@
 // carries that data. Import this module for its registration side effect.
 
 import { registerSnippetProjector } from "../spine/snippet-projectors";
+// The spine's baseline task/note/event/email projectors (DF-7) — registered
+// alongside the contacts-owned contact/company ones so any hub that imports this
+// module gets rich snippets for every well-known type.
+import "../spine/snippet-projectors.builtin";
 
 registerSnippetProjector("contact", (record) => ({
   title: record?.label?.trim() || "Unnamed contact",
