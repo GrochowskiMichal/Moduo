@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { assignableRolesFor, canManageMember, canTransferOwnership } from "./member-permissions";
+import {
+  assignableRolesFor,
+  canManageMember,
+  canTransferOwnership,
+  modulePermissionFor,
+} from "./member-permissions";
 
 describe("canManageMember", () => {
   it("owner manages everyone below them, including admins", () => {
@@ -43,5 +48,14 @@ describe("canTransferOwnership", () => {
     expect(canTransferOwnership("owner", "owner", false)).toBe(false); // target is owner
     expect(canTransferOwnership("owner", "admin", true)).toBe(false); // self
     expect(canTransferOwnership("admin", "editor", false)).toBe(false); // caller not owner
+  });
+});
+
+describe("modulePermissionFor", () => {
+  it("maps each role to its per-module permission (invite / role change)", () => {
+    expect(modulePermissionFor("viewer")).toBe("view");
+    expect(modulePermissionFor("editor")).toBe("edit");
+    expect(modulePermissionFor("admin")).toBe("admin");
+    expect(modulePermissionFor("owner")).toBe("admin");
   });
 });

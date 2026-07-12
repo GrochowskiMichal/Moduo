@@ -42,7 +42,6 @@ import { IconButton } from "../ui/icon-button";
 import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { WorkspaceSwitcher } from "../workspace-switcher";
-import { WorkspaceSettingsModal } from "../workspace-settings-modal";
 import { UserMenu } from "../user-menu";
 import { NotificationCenter } from "../notification-center";
 import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constants";
@@ -132,7 +131,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   // to act on there, so hide them.
   const isHomeRoute = pathname === "/";
 
-  const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false);
   const [featurePanels, setFeaturePanels] = useState(() => readPanelsMap());
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
@@ -474,7 +472,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       >
         <div className="flex flex-row items-center justify-start gap-1">
           <ModuoMark className="h-8 w-8 shrink-0 text-foreground" />
-          <WorkspaceSwitcher onOpenSettings={() => setWorkspaceSettingsOpen(true)} />
+          <WorkspaceSwitcher onOpenSettings={() => dispatchOpenSettings({ section: "workspace" })} />
         </div>
 
         <div className="flex flex-row items-center justify-center gap-1">
@@ -585,10 +583,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       <GlobalCaptureBar />
       <GlobalShortcutsDialog />
       <SettingsModal />
-      <WorkspaceSettingsModal
-        visible={workspaceSettingsOpen}
-        onClose={() => setWorkspaceSettingsOpen(false)}
-      />
     </div>
   );
 }
