@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Eye, EyeOff, LogOut } from "lucide-react";
+import { Eye, EyeOff, LogOut, TriangleAlert } from "lucide-react";
 
 import { useAuth } from "../../../providers/auth-provider";
-import { supabaseClient } from "../../../lib/runtime.web";
+import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
+import { matchesDeleteConfirm } from "../delete-account";
 import {
   notifyProfileUpdated,
   readStoredAvatar,
@@ -29,7 +30,7 @@ function maskedPhrase(phrase: string | null) {
 }
 
 export function AccountSection() {
-  const { runtime, userEmail, signOut } = useAuth();
+  const { runtime, userEmail, signOut, accessToken } = useAuth();
   const navigate = useNavigate();
   // The recovery-key section only applies to local-vault runtimes (future lite).
   const hasLocalKey = !!runtime?.capabilities.hasLocalMnemonic;
@@ -53,6 +54,50 @@ export function AccountSection() {
   const [mnemonicPhrase, setMnemonicPhrase] = useState<string | null>(null);
   const [phraseLoading, setPhraseLoading] = useState(false);
   const [phraseError, setPhraseError] = useState<string | null>(null);
+
+  // Danger zone: delete account (DF-19h). The destructive work runs in the
+  // service-role `delete-account` edge function; a sole-owner-of-shared block
+  // comes back as 409 with the blocking workspaces.
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [blockedWorkspaces, setBlockedWorkspaces] = useState<{ id: string; name: string }[] | null>(
+    null,
+  );
+
+  const handleDeleteAccount = async () => {
+    if (!accessToken || deleteBusy || !matchesDeleteConfirm(deleteConfirm, userEmail)) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    setBlockedWorkspaces(null);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      const payload = (await res.json().catch(() => null)) as
+        | { ok?: boolean; blocked?: boolean; workspaces?: { id: string; name: string }[]; error?: string }
+        | null;
+      if (res.status === 409 && payload?.blocked) {
+        setBlockedWorkspaces(payload.workspaces ?? []);
+        return;
+      }
+      if (!res.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Couldn't delete your account. Try again.");
+      }
+      // Deleted — the session is now invalid. Sign out locally and land on /auth.
+      await signOut();
+      await navigate({ to: "/auth" });
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Couldn't delete your account.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -433,6 +478,102 @@ export function AccountSection() {
           Log out
         </Button>
       </section>
+
+      {/* Danger zone — delete account (cloud accounts only; local-vault future-lite
+          authenticates with the login key and has no server account to delete). */}
+      {!hasLocalKey ? (
+        <section className="rounded-lg border border-destructive/40 bg-card p-6">
+          <div className="flex items-center gap-2">
+            <TriangleAlert className="size-4 text-destructive" aria-hidden />
+            <h3 className="font-display text-lg text-foreground">Danger zone</h3>
+          </div>
+          <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+            Permanently delete your account and your personal data. This can&apos;t be undone.
+          </p>
+
+          {!deleteOpen ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="mt-4"
+              onClick={() => {
+                setDeleteOpen(true);
+                setDeleteConfirm("");
+                setDeleteError(null);
+                setBlockedWorkspaces(null);
+              }}
+            >
+              Delete account
+            </Button>
+          ) : (
+            <div className="mt-4 flex flex-col gap-3 rounded-md border border-destructive/30 bg-destructive/10 p-4">
+              {blockedWorkspaces && blockedWorkspaces.length > 0 ? (
+                <div className="flex flex-col gap-1.5 text-sm">
+                  <p className="text-foreground">
+                    You solely own {blockedWorkspaces.length === 1 ? "a workspace" : "workspaces"} with
+                    other members. Hand off ownership or delete{" "}
+                    {blockedWorkspaces.length === 1 ? "it" : "them"} first:
+                  </p>
+                  <ul className="ml-4 list-disc text-muted-foreground">
+                    {blockedWorkspaces.map((ws) => (
+                      <li key={ws.id}>{ws.name}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="delete-confirm" className="text-sm text-foreground">
+                      Type your email or <span className="font-mono">DELETE</span> to confirm
+                    </Label>
+                    <Input
+                      id="delete-confirm"
+                      value={deleteConfirm}
+                      onChange={(event) => setDeleteConfirm(event.target.value)}
+                      placeholder={userEmail ?? "DELETE"}
+                      autoCapitalize="none"
+                      autoComplete="off"
+                    />
+                  </div>
+                  {deleteError ? (
+                    <p className="text-xs text-destructive" role="alert">
+                      {deleteError}
+                    </p>
+                  ) : null}
+                </>
+              )}
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setDeleteOpen(false);
+                    setDeleteConfirm("");
+                    setDeleteError(null);
+                    setBlockedWorkspaces(null);
+                  }}
+                  disabled={deleteBusy}
+                >
+                  {blockedWorkspaces && blockedWorkspaces.length > 0 ? "Close" : "Cancel"}
+                </Button>
+                {blockedWorkspaces && blockedWorkspaces.length > 0 ? null : (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => void handleDeleteAccount()}
+                    disabled={deleteBusy || !matchesDeleteConfirm(deleteConfirm, userEmail)}
+                  >
+                    {deleteBusy ? "Deleting…" : "Delete account"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      ) : null}
     </SettingsSectionShell>
   );
 }
