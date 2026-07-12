@@ -43,9 +43,10 @@ const publicWebOrigin = readLocalEnvValue("PUBLIC_WEB_ORIGIN");
 const target = (process.env.MODUO_TARGET as string | undefined) ?? "desktop";
 const isWeb = target === "web";
 
-// App version + build id surfaced in Settings → About / Diagnostics. Version
-// comes from package.json; the build id is the short git SHA (CI may override
-// with MODUO_BUILD) and degrades to "dev" when git isn't available.
+// App version + build id surfaced in Settings → About (DF-19i) and Diagnostics
+// (DF-19g). Version comes from package.json; the build id is the short git SHA
+// (CI may override with MODUO_BUILD) and degrades to "dev" when git isn't
+// available.
 function readPackageVersion(): string {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8")) as {
