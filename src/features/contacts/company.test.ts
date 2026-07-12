@@ -3,9 +3,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildCompanyRollup, type CompanyRollupInput } from "./company";
+import { buildCompanyRollup, companyLastTouchLine, type CompanyRollupInput } from "./company";
 import { entityRefKey } from "../spine/rollup";
 import type { EntityLink, EntityRecord, EntityRef } from "../../lib/entity-links";
+import type { ActivityEntry } from "../tasks/model";
 import type { Contact } from "./model";
 
 const COMPANY: EntityRef = { type: "company", id: "co1" };
@@ -137,5 +138,46 @@ describe("buildCompanyRollup", () => {
     const { unionSections } = buildCompanyRollup(shared);
     const taskRows = unionSections.flatMap((s) => s.rows).filter((r) => entityRefKey(r.other) === entityRefKey(taskA));
     expect(taskRows).toHaveLength(1);
+  });
+});
+
+describe("company last-touch (DF-7)", () => {
+  const NOW = new Date("2026-07-15T12:00:00Z");
+  const activity = (op: string, at: string): ActivityEntry => ({
+    id: `a-${at}`,
+    workspaceId: "w",
+    module: "contacts",
+    entityType: "company",
+    entityId: "co1",
+    op,
+    actorType: "user",
+    actorId: "u1",
+    actorLabel: "Me",
+    payload: {},
+    createdAt: at,
+  });
+
+  it("takes the most recent stamp across the company + its people's links and activity", () => {
+    // memberLinks' createdAt is fixed at 2026-06-20; a fresher activity row wins.
+    const rollup = buildCompanyRollup(input({ activity: [activity("comments.add", "2026-07-14T10:00:00Z")] }));
+    expect(rollup.lastTouchAt).toBe("2026-07-14T10:00:00Z");
+    expect(rollup.lastTouchActivity?.op).toBe("comments.add");
+    expect(companyLastTouchLine(rollup, NOW)).toBe("Last touch: commented 1 day ago");
+  });
+
+  it("prefers a real interaction (a link) over a newer bare record edit", () => {
+    // A rename today is a record edit; the 2026-06-20 works-at links are interactions.
+    const rollup = buildCompanyRollup(input({ activity: [activity("companies.update", "2026-07-15T09:00:00Z")] }));
+    expect(rollup.lastTouchActivity).toBeNull(); // the link stamp, not the rename
+    expect(rollup.lastTouchAt).toBe("2026-06-20T09:00:00Z");
+    expect(companyLastTouchLine(rollup, NOW)).toMatch(/^Last touch: linked /);
+  });
+
+  it("reads 'No activity yet' for a company with no links or activity", () => {
+    const rollup = buildCompanyRollup(
+      input({ companyLinks: [], members: [], memberLinks: {}, records: new Map(), activity: [] }),
+    );
+    expect(rollup.lastTouchAt).toBeNull();
+    expect(companyLastTouchLine(rollup, NOW)).toBe("No activity yet");
   });
 });

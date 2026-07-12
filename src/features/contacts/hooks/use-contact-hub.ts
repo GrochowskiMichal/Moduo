@@ -13,6 +13,8 @@ import type { ActivityEntry } from "../../tasks/model";
 import { entityRefKey, otherEndpoint } from "../../spine/rollup";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import { buildContactRollup, type ContactRollup } from "../rollup";
+import { enrichHubRows } from "./enrich-hub-rows";
+import "../../spine/snippet-projectors.builtin";
 
 const EMPTY_ROLLUP: ContactRollup = {
   sections: [],
@@ -58,22 +60,33 @@ export function useContactHub(
         const others = links
           .map((l) => otherEndpoint(focusRef, l))
           .filter((r): r is EntityRef => r !== null);
-        const records = others.length ? await runtime.spine.getEntities({ workspaceId, refs: others }) : [];
+        // The registry projection + the live enrichment both depend only on
+        // `others` — fetch them in parallel (one round-trip, not two). Enrichment:
+        // linked task statuses (open-items) + row snippets (task due, note
+        // touched-at, event when); one batched read per linked module, degrading
+        // per-module (AC6, DF-7).
+        const [records, enrichment] = others.length
+          ? await Promise.all([
+              runtime.spine.getEntities({ workspaceId, refs: others }),
+              enrichHubRows(runtime, workspaceId, others),
+            ])
+          : [[], null];
         const byKey = new Map(records.map((r) => [entityRefKey({ type: r.type, id: r.id }), r]));
-
-        // Open-items: resolve linked task statuses (lazily — only if any task links).
-        let openTaskKeys = new Set<string>();
-        if (others.some((o) => o.type === "task")) {
-          const tasks = (await runtime.tasks.list(workspaceId)).tasks;
-          openTaskKeys = new Set(
-            tasks
-              .filter((t) => t.status !== "done" && t.status !== "archived")
-              .map((t) => entityRefKey({ type: "task", id: t.id })),
-          );
-        }
+        const snippetMeta = enrichment?.snippetMeta;
+        const openTaskKeys = enrichment?.openTaskKeys ?? new Set<string>();
         if (!active) return;
         setActivity(activityRows);
-        setRollup(buildContactRollup({ focus: focusRef, links, records: byKey, activity: activityRows, openTaskKeys }));
+        setRollup(
+          buildContactRollup({
+            focus: focusRef,
+            links,
+            records: byKey,
+            activity: activityRows,
+            openTaskKeys,
+            snippetMeta,
+            now: new Date(),
+          }),
+        );
         setHubStatus("ready");
       } catch {
         if (active) setHubStatus("error");

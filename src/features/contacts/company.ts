@@ -11,6 +11,9 @@
 
 import type { EntityLink, EntityRecord, EntityRef } from "../../lib/entity-links";
 import { entityRefKey, HUB_SECTIONS, otherEndpoint, rollupSections, type HubSection } from "../spine/rollup";
+import type { HubSnippetMeta } from "../spine/snippet-projectors";
+import type { ActivityEntry } from "../tasks/model";
+import { computeLastTouch, lastTouchPhrase } from "./rollup";
 import type { Contact } from "./model";
 
 /** A member shown in the company's People group. */
@@ -32,6 +35,12 @@ export type CompanyRollupInput = {
   memberLinks: Record<string, EntityLink[]>;
   /** Registry projection for every union endpoint, keyed by `type:id`. */
   records: Map<string, EntityRecord>;
+  /** The company's own activity trail (module_activity for this company). */
+  activity?: ActivityEntry[];
+  /** Live per-entity meta for row snippets (task status/due, note touched-at…). */
+  snippetMeta?: Map<string, HubSnippetMeta>;
+  /** Reference "now" for relative snippet phrasing (deterministic in tests). */
+  now?: Date;
 };
 
 export type CompanyRollup = {
@@ -39,6 +48,10 @@ export type CompanyRollup = {
   people: CompanyPerson[];
   /** The company's + its people's work, grouped into the fixed hub sections. */
   unionSections: HubSection[];
+  /** Most-recent touch across the company + its people's linked work (ISO), or null. */
+  lastTouchAt: string | null;
+  /** The activity row behind the last touch (for a verb), or null if a bare link. */
+  lastTouchActivity: ActivityEntry | null;
 };
 
 const SECTION_ORDER = HUB_SECTIONS.map((s) => s.key);
@@ -48,7 +61,8 @@ const SECTION_ORDER = HUB_SECTIONS.map((s) => s.key);
  * unioned work roll-up.
  */
 export function buildCompanyRollup(input: CompanyRollupInput): CompanyRollup {
-  const { company, companyLinks, members, memberLinks, records } = input;
+  const { company, companyLinks, members, memberLinks, records, snippetMeta, now } = input;
+  const activity = input.activity ?? [];
 
   // ── People: denormalized members ∪ works-at-linked contacts ─────────────────
   const peopleById = new Map<string, CompanyPerson>();
@@ -75,7 +89,7 @@ export function buildCompanyRollup(input: CompanyRollupInput): CompanyRollup {
   // Cooper"); null for the company's own rows. First writer wins via `seen`, so a
   // row reachable from both the company and a member keeps the company's null.
   const fold = (focus: EntityRef, links: EntityLink[], via: string | null) => {
-    for (const section of rollupSections(focus, links, records)) {
+    for (const section of rollupSections(focus, links, records, { snippetMeta, now })) {
       for (const row of section.rows) {
         if (row.other.type === "company" && row.other.id === company.id) continue;
         if (row.other.type === "contact" && memberIds.has(row.other.id)) continue;
@@ -97,5 +111,22 @@ export function buildCompanyRollup(input: CompanyRollupInput): CompanyRollup {
     .map((s) => ({ ...s, count: s.rows.length }))
     .sort((a, b) => SECTION_ORDER.indexOf(a.key) - SECTION_ORDER.indexOf(b.key));
 
-  return { people, unionSections };
+  // Last touch across the company + its people's linked work: the company's own
+  // activity, plus every link creation touching the company or a member (a link
+  // made from the other side never lands in the company's activity). Like the
+  // contact hub, this does NOT read edits on the linked entities themselves
+  // (the CO-2 cross-entity deferral) — it is a linking/interaction recency.
+  const linkStamps = [companyLinks, ...Object.values(memberLinks)].flatMap((ls) => ls.map((l) => l.createdAt));
+  const { lastTouchAt, lastTouchActivity } = computeLastTouch(activity, linkStamps);
+
+  return { people, unionSections, lastTouchAt, lastTouchActivity };
+}
+
+/**
+ * The quiet one-liner under the company header: "Last touch: linked 3 days ago",
+ * or "No activity yet" for a brand-new company. Mirrors the contact hub's
+ * last-touch (minus the open-items counts the company hub doesn't compute).
+ */
+export function companyLastTouchLine(rollup: CompanyRollup, now: Date): string {
+  return lastTouchPhrase(rollup.lastTouchAt, rollup.lastTouchActivity, now);
 }

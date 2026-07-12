@@ -13,6 +13,7 @@
 import type { EntityLink, EntityRecord, EntityRef } from "../../lib/entity-links";
 import type { ActivityEntry } from "../tasks/model";
 import { entityRefKey, otherEndpoint, rollupSections, type HubSection } from "../spine/rollup";
+import type { HubSnippetMeta } from "../spine/snippet-projectors";
 
 export type ContactRollupInput = {
   focus: EntityRef;
@@ -26,6 +27,10 @@ export type ContactRollupInput = {
   openTaskKeys: Set<string>;
   /** `entityRefKey`s of linked payments that are unpaid (none until Finance ships). */
   unpaidPaymentKeys?: Set<string>;
+  /** Live per-entity meta for row snippets (task status/due, note touched-at…). */
+  snippetMeta?: Map<string, HubSnippetMeta>;
+  /** Reference "now" for relative snippet phrasing (deterministic in tests). */
+  now?: Date;
 };
 
 export type ContactRollup = {
@@ -79,6 +84,48 @@ const RECORD_EDIT_OPS = new Set([
   "contacts.restore",
 ]);
 
+/** One instant that counts as a "touch": an activity op, or a bare link. */
+type TouchStamp = { at: string; activity: ActivityEntry | null };
+
+/**
+ * The most-recent touch across activity rows AND link creations (linking is a
+ * touch, and a link made from the *other* side never lands in this entity's own
+ * activity). Prefers the most-recent real *interaction* (a link, or any
+ * non-record-edit op) over a bare record edit — "updated" only surfaces when
+ * nothing else has happened (FX-4 AC7). Shared by the contact + company hubs.
+ */
+export function computeLastTouch(
+  activity: ActivityEntry[],
+  linkCreatedAts: string[],
+): { lastTouchAt: string | null; lastTouchActivity: ActivityEntry | null } {
+  const stamps: TouchStamp[] = [
+    ...activity.map((a) => ({ at: a.createdAt, activity: a })),
+    ...linkCreatedAts.map((at) => ({ at, activity: null as ActivityEntry | null })),
+  ];
+  // Lexical compare is correct here: every timestamp is the same Postgres
+  // timestamptz serialization (uniform ISO/UTC), so string order == time order.
+  stamps.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  const interaction = stamps.find((s) => s.activity === null || !RECORD_EDIT_OPS.has(s.activity.op)) ?? null;
+  const latest = interaction ?? stamps[0] ?? null;
+  return { lastTouchAt: latest?.at ?? null, lastTouchActivity: latest?.activity ?? null };
+}
+
+/**
+ * The bare last-touch phrase: "Last touch: linked 3 days ago" / "…updated 2 days
+ * ago" / "No activity yet". Shared by contact + company hubs (the contact line
+ * appends open-items counts on top).
+ */
+export function lastTouchPhrase(
+  lastTouchAt: string | null,
+  lastTouchActivity: ActivityEntry | null,
+  now: Date,
+): string {
+  if (!lastTouchAt) return "No activity yet";
+  // A bare link (no activity row behind it) reads "linked"; an op carries its verb.
+  const verb = lastTouchActivity ? shortVerb(lastTouchActivity.op) : "linked";
+  return `Last touch: ${verb} ${timeAgo(lastTouchAt, now)}`;
+}
+
 const DAY_MS = 86_400_000;
 
 /** A quiet relative-time phrase ("just now" · "3 days ago" · an ISO date for old). */
@@ -109,25 +156,15 @@ export function timeAgo(iso: string, now: Date): string {
  * activity); open-items count the linked tasks/payments the hook flagged open.
  */
 export function buildContactRollup(input: ContactRollupInput): ContactRollup {
-  const { focus, links, records, activity, openTaskKeys } = input;
+  const { focus, links, records, activity, openTaskKeys, snippetMeta, now } = input;
   const unpaidPaymentKeys = input.unpaidPaymentKeys ?? new Set<string>();
 
-  const sections = rollupSections(focus, links, records);
+  const sections = rollupSections(focus, links, records, { snippetMeta, now });
 
-  // Most-recent touch across activity + link creations (the activity carries a
-  // verb; a bare link does not).
-  const stamps: { at: string; activity: ActivityEntry | null }[] = [
-    ...activity.map((a) => ({ at: a.createdAt, activity: a })),
-    ...links.map((l) => ({ at: l.createdAt, activity: null })),
-  ];
-  // Lexical compare is correct here: every timestamp is the same Postgres
-  // timestamptz serialization (uniform ISO/UTC), so string order == time order.
-  stamps.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
-  // Prefer the most-recent real interaction (a link, or any non-record-edit op)
-  // over a bare record edit — "updated" only surfaces when nothing else has
-  // happened (AC7). A bare link stamp (activity=null) is always an interaction.
-  const interaction = stamps.find((s) => s.activity === null || !RECORD_EDIT_OPS.has(s.activity.op)) ?? null;
-  const latest = interaction ?? stamps[0] ?? null;
+  const { lastTouchAt, lastTouchActivity } = computeLastTouch(
+    activity,
+    links.map((l) => l.createdAt),
+  );
 
   let openTaskCount = 0;
   let unpaidPaymentCount = 0;
@@ -143,8 +180,8 @@ export function buildContactRollup(input: ContactRollupInput): ContactRollup {
 
   return {
     sections,
-    lastTouchAt: latest?.at ?? null,
-    lastTouchActivity: latest?.activity ?? null,
+    lastTouchAt,
+    lastTouchActivity,
     openTaskCount,
     unpaidPaymentCount,
   };
@@ -161,14 +198,7 @@ function plural(n: number, word: string): string {
  * paired in the UI — this is the text half (AC2, AC12: color never the only signal).
  */
 export function lastTouchLine(rollup: ContactRollup, now: Date): string {
-  const parts: string[] = [];
-  if (rollup.lastTouchAt) {
-    // A bare link (no activity row behind it) reads "linked"; an op carries its verb.
-    const verb = rollup.lastTouchActivity ? shortVerb(rollup.lastTouchActivity.op) : "linked";
-    parts.push(`Last touch: ${verb} ${timeAgo(rollup.lastTouchAt, now)}`);
-  } else {
-    parts.push("No activity yet");
-  }
+  const parts: string[] = [lastTouchPhrase(rollup.lastTouchAt, rollup.lastTouchActivity, now)];
   if (rollup.openTaskCount > 0) parts.push(`${plural(rollup.openTaskCount, "open task")}`);
   if (rollup.unpaidPaymentCount > 0) parts.push(`${rollup.unpaidPaymentCount} unpaid`);
   return parts.join(" · ");

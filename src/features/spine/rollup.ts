@@ -7,7 +7,7 @@
 // file is unit-tested in rollup.test.ts (AC6).
 
 import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "@/lib/entity-links";
-import { projectSnippet } from "./snippet-projectors";
+import { projectSnippet, type HubSnippetMeta } from "./snippet-projectors";
 
 /** The entity whose hub is being rendered. */
 export type HubFocus = EntityRef;
@@ -90,6 +90,16 @@ export function otherEndpoint(focus: HubFocus, link: EntityLink): EntityRef | nu
   return null;
 }
 
+/** Optional live enrichment for the roll-up's snippets (DF-7). */
+export type RollupOptions = {
+  /** Per-entity live meta (task status/due, note touched-at, event when…), keyed
+   * by {@link entityRefKey}. A projector without its entity's meta renders a bare
+   * title, so omitting this reproduces the pre-DF-7 flat-name behavior. */
+  snippetMeta?: Map<string, HubSnippetMeta>;
+  /** Reference "now" for relative snippet phrasing; defaults to the current time. */
+  now?: Date;
+};
+
 /**
  * Group a focus entity's links into the fixed, ordered hub sections.
  *
@@ -97,6 +107,8 @@ export function otherEndpoint(focus: HubFocus, link: EntityLink): EntityRef | nu
  * - `records` is the batched registry projection for the other endpoints,
  *   keyed by {@link entityRefKey}. A missing record → not-yet-resolved (rare;
  *   the FK guarantees registration, so this only happens mid-sync).
+ * - `opts.snippetMeta` (optional) enriches each row's snippet from a batched
+ *   live read; without it, rows show just their registry title.
  * - Tombstoned targets (`deletedAt` set) are flagged and titled "Deleted [type]".
  *
  * Empty sections are omitted. Within a section, input (recency) order is kept.
@@ -105,16 +117,19 @@ export function rollupSections(
   focus: HubFocus,
   links: EntityLink[],
   records: Map<string, EntityRecord>,
+  opts: RollupOptions = {},
 ): HubSection[] {
   const buckets = new Map<HubSectionKey, HubRow[]>();
+  const { snippetMeta, now } = opts;
 
   for (const link of links) {
     const other = otherEndpoint(focus, link);
     if (!other) continue; // defensive: link not touching the focus entity
 
-    const record = records.get(entityRefKey(other)) ?? null;
+    const key = entityRefKey(other);
+    const record = records.get(key) ?? null;
     const tombstoned = !!record?.deletedAt;
-    const projected = projectSnippet(record, other);
+    const projected = projectSnippet(record, other, { meta: snippetMeta?.get(key), now });
     const title = tombstoned ? `Deleted ${other.type}` : projected.title;
 
     const row: HubRow = {
@@ -127,10 +142,10 @@ export function rollupSections(
       tombstoned,
     };
 
-    const key = sectionForType(other.type);
-    const existing = buckets.get(key);
+    const sectionKey = sectionForType(other.type);
+    const existing = buckets.get(sectionKey);
     if (existing) existing.push(row);
-    else buckets.set(key, [row]);
+    else buckets.set(sectionKey, [row]);
   }
 
   return HUB_SECTIONS.filter((s) => buckets.has(s.key)).map((s) => {
