@@ -23,6 +23,7 @@
 import { useSyncExternalStore } from "react";
 
 import { readLocalFocusPrefs, type FocusPrefs } from "../../lib/focus-prefs";
+import { areSoundsEnabled } from "../../lib/preferences";
 
 // Persist accrued time periodically so a crash/reload loses at most this much.
 const FLUSH_INTERVAL_SECONDS = 60;
@@ -193,7 +194,9 @@ function rollover(): void {
       pomoLeft: p.workMinutes * 60,
     });
   }
-  if (p.soundEnabled) playChime();
+  // The Focus chime respects both its own toggle and the app-wide sound master
+  // switch (Settings → Preferences, DF-19f).
+  if (p.soundEnabled && areSoundsEnabled()) playChime();
   if (!p.autoStartNext) setRunning(false);
 }
 

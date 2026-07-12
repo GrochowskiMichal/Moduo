@@ -19,6 +19,7 @@ import { SettingsPage } from "../../routes/pages/settings-page";
 import { PaywallPage } from "../../routes/pages/paywall-page";
 import { PublishedNotePage } from "../../routes/pages/published-note-page";
 import { JoinPage } from "../../routes/pages/join-page";
+import { consumeLandingRedirect } from "../../lib/preferences";
 
 function RootLayout() {
   return (
@@ -87,6 +88,14 @@ const appGateRoute = createRoute({
 const homeRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/",
+  // Default landing view (DF-19f): on the first authenticated launch at "/", the
+  // landing preference may redirect to another module. One-shot — later in-app
+  // navigations to Home never redirect. Explicit deep-links (a query string, or
+  // any non-"/" path) still win; the guard lives in consumeLandingRedirect.
+  beforeLoad: ({ location }) => {
+    const target = consumeLandingRedirect(location.pathname, location.searchStr);
+    if (target) throw redirect({ to: target, replace: true });
+  },
   component: HomePage,
 });
 
