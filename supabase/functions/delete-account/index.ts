@@ -57,7 +57,9 @@ Deno.serve(async (req: Request) => {
     } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) return json({ error: "Unauthorized" }, { status: 401 });
 
-    // Workspaces this user owns (live only).
+    // Workspaces this user owns. `deleted_at is null` excludes a workspace the user
+    // already soft-deleted — it's invisible to its members, and the account delete
+    // hard-cascades it (+ its lingering member rows) anyway, so it can't orphan anyone.
     const { data: ownedRows, error: ownedErr } = await supabase
       .from("workspaces")
       .select("id, name")
@@ -66,25 +68,19 @@ Deno.serve(async (req: Request) => {
     if (ownedErr) throw new Error(ownedErr.message);
     const owned = (ownedRows ?? []) as { id: string; name: string }[];
 
-    // Count OTHER members across those owned workspaces in one read.
-    let ownedWithCounts: OwnedWorkspace[] = owned.map((w) => ({ ...w, otherMemberCount: 0 }));
-    if (owned.length > 0) {
-      const ownedIds = owned.map((w) => w.id);
-      const { data: memberRows, error: memberErr } = await supabase
+    // Count OTHER members per owned workspace with an EXACT head-count. A single
+    // `.in(...).select()` would rely on PostgREST's 1000-row default cap — a
+    // workspace whose member rows page out would compute 0 others and false-safe
+    // through the block, orphaning teammates. Per-workspace counts have no such cap.
+    const ownedWithCounts: OwnedWorkspace[] = [];
+    for (const w of owned) {
+      const { count, error: cErr } = await supabase
         .from("workspace_members")
-        .select("workspace_id, user_id")
-        .in("workspace_id", ownedIds);
-      if (memberErr) throw new Error(memberErr.message);
-      const otherByWorkspace = new Map<string, number>();
-      for (const m of (memberRows ?? []) as { workspace_id: string; user_id: string }[]) {
-        if (m.user_id !== user.id) {
-          otherByWorkspace.set(m.workspace_id, (otherByWorkspace.get(m.workspace_id) ?? 0) + 1);
-        }
-      }
-      ownedWithCounts = owned.map((w) => ({
-        ...w,
-        otherMemberCount: otherByWorkspace.get(w.id) ?? 0,
-      }));
+        .select("user_id", { count: "exact", head: true })
+        .eq("workspace_id", w.id)
+        .neq("user_id", user.id);
+      if (cErr) throw new Error(cErr.message);
+      ownedWithCounts.push({ ...w, otherMemberCount: count ?? 0 });
     }
 
     const blocking = blockingWorkspaces(ownedWithCounts);

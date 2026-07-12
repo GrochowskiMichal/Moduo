@@ -86,6 +86,9 @@ export function AccountSection() {
         setBlockedWorkspaces(payload.workspaces ?? []);
         return;
       }
+      if (res.status === 401) {
+        throw new Error("Your session expired. Sign out and back in, then try again.");
+      }
       if (!res.ok || !payload?.ok) {
         throw new Error(payload?.error || "Couldn't delete your account. Try again.");
       }
@@ -532,6 +535,7 @@ export function AccountSection() {
                       value={deleteConfirm}
                       onChange={(event) => setDeleteConfirm(event.target.value)}
                       placeholder={userEmail ?? "DELETE"}
+                      autoFocus
                       autoCapitalize="none"
                       autoComplete="off"
                     />
