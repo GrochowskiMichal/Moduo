@@ -20,9 +20,9 @@ pub async fn open_external_url(url: String) -> Result<(), String> {
 }
 
 /// Mirror the webview-only `confirmBeforeQuit` preference into Rust `AppState` so the
-/// app-level ⌘Q handler (`RunEvent::ExitRequested` in lib.rs) can read it synchronously.
-/// The webview pushes this on boot and on every toggle (see `useConfirmBeforeQuit`).
-/// DF-19f-quit.
+/// native quit handlers in lib.rs (the custom Quit menu item for ⌘Q and the window
+/// `CloseRequested` handler) can read it synchronously. The webview pushes this on boot
+/// and on every toggle (see `useConfirmBeforeQuit`). DF-19f-quit.
 #[tauri::command]
 pub fn set_confirm_before_quit(state: State<'_, AppState>, value: bool) -> Result<(), String> {
     *state
