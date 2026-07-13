@@ -1,6 +1,14 @@
-use std::{fs, path::PathBuf, sync::Mutex};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+};
 
 use tauri::Manager;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 pub mod auth;
 pub mod commands;
@@ -21,6 +29,15 @@ pub struct AppState {
     pub session: Mutex<Option<auth::AuthSession>>,
     pub store: std::sync::Arc<store_redb::RedbStore>,
     pub acl: identity_acl::AclManager,
+    /// Desktop confirm-before-quit opt-in, mirrored from the webview-only
+    /// `confirmBeforeQuit` preference (which lives only in the webview store) so the
+    /// app-level ⌘Q handler (`RunEvent::ExitRequested`) can read it synchronously.
+    /// Pushed by the webview on boot and on every toggle via `set_confirm_before_quit`.
+    pub confirm_before_quit: Mutex<bool>,
+    /// True while a ⌘Q confirm dialog is already open. The confirm dialog is
+    /// non-blocking, so it returns immediately and leaves the event loop live — a
+    /// repeated ⌘Q would otherwise re-enter the handler and stack another dialog.
+    pub quit_prompt_open: AtomicBool,
     /// Background cloud-sync worker. Present only when signed in with a Supabase JWT.
     /// Feature-gated behind the future offline/"lite" build.
     #[cfg(feature = "lite")]
@@ -50,6 +67,8 @@ impl AppState {
             session: Mutex::new(session),
             store,
             acl,
+            confirm_before_quit: Mutex::new(false),
+            quit_prompt_open: AtomicBool::new(false),
             #[cfg(feature = "lite")]
             sync_worker: Mutex::new(None),
         })
@@ -186,6 +205,7 @@ pub fn run() {
             commands::integrations::integration_get_status,
             commands::integrations::integration_disconnect,
             commands::system::open_external_url,
+            commands::system::set_confirm_before_quit,
             commands::window::window_toggle_fullscreen,
             commands::timetracking::tt_list,
             commands::timetracking::tt_upsert_entry,
@@ -204,12 +224,59 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building moduo desktop application")
-        .run(|_app, event| {
-            if matches!(
-                event,
-                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
-            ) {
+        .run(|app, event| match event {
+            // macOS ⌘Q (and any app-level quit) raises `ExitRequested` — it does NOT
+            // route through a window's `CloseRequested`, so the JS `onCloseRequested`
+            // guard (confirm-before-quit.ts) can't see it. When the user opted into
+            // confirm-before-quit (mirrored into AppState by the webview via
+            // `set_confirm_before_quit`), prevent the exit and ask natively first.
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                let state = app.state::<AppState>();
+                // Recover the value on a poisoned lock rather than fail-open: a
+                // `Mutex<bool>` only poisons if a thread panicked mid-write, and we still
+                // want to honour the user's opt-in (matches `stop_all_idle_workers`).
+                let confirm = match state.confirm_before_quit.lock() {
+                    Ok(guard) => *guard,
+                    Err(poisoned) => *poisoned.into_inner(),
+                };
+                if confirm {
+                    api.prevent_exit();
+                    // Only the FIRST ⌘Q opens a dialog; a repeat while one is already open
+                    // just re-prevents the exit (the non-blocking `.show()` leaves the loop
+                    // live, so a second ⌘Q re-enters this arm — without the guard it would
+                    // stack another native dialog).
+                    if !state.quit_prompt_open.swap(true, Ordering::SeqCst) {
+                        let app = app.clone();
+                        // Non-blocking `.show()`: `blocking_show()` on the event-loop (main)
+                        // thread can deadlock. The callback runs on a later loop turn, and
+                        // `app.exit()` cannot be called from inside a `RunEvent` handler in
+                        // Tauri v2 (it re-enters `ExitRequested` → loop) — so on confirm we
+                        // run our own cleanup and hard-exit via `std::process::exit`.
+                        app.dialog()
+                            .message("Are you sure you want to quit Moduo?")
+                            .title("Quit Moduo")
+                            .buttons(MessageDialogButtons::OkCancelCustom(
+                                "Quit".to_string(),
+                                "Cancel".to_string(),
+                            ))
+                            .show(move |confirmed| {
+                                if confirmed {
+                                    commands::email::stop_all_idle_workers();
+                                    std::process::exit(0);
+                                }
+                                // Cancel → keep running; clear the guard so a later ⌘Q
+                                // prompts again.
+                                app.state::<AppState>()
+                                    .quit_prompt_open
+                                    .store(false, Ordering::SeqCst);
+                            });
+                    }
+                }
+                // Not opted in → allow the exit; the `Exit` arm cleans up the workers.
+            }
+            tauri::RunEvent::Exit => {
                 commands::email::stop_all_idle_workers();
             }
+            _ => {}
         });
 }

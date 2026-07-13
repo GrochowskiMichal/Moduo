@@ -118,6 +118,8 @@ Every `comments.add` row that reaches the feed is already a mention-to-me (it on
 
 ## Confirm-before-quit — separate desktop-only block (decision)
 
+> **STATUS (2026-07-13):** Base DF-19f-quit shipped the JS window-close guard (PR #107). The **⌘Q follow-up is now built** — a Rust `RunEvent::ExitRequested` handler (`api.prevent_exit()` + a native `tauri-plugin-dialog` confirm) with the webview-only pref mirrored into `AppState` via a `set_confirm_before_quit` command, so confirm-before-quit now covers **both** the window-close gesture (JS) and macOS ⌘Q (Rust). `bun run verify` **1213 green** + `cargo check` clean; **desktop manual pass pending** (see `docs/testing/df-19f-quit-cmdq.md`). Full rationale + footguns in `docs/decisions.md` (2026-07-13 · DF-19f-quit ⌘Q) and `docs/gotchas.md` §Tauri.
+
 **Decision: it does NOT ride this block. It ships as its own desktop-only block, sequenced after this one.** Why:
 
 - **Different surface, real integration cost.** No scaffolding exists today: `@tauri-apps/api/window` is unused (only `/core`'s `invoke` is imported, and web builds alias it to a stub). Confirm-before-quit needs `getCurrentWindow().onCloseRequested()` from `@tauri-apps/api/window` (a new import surface needing the same web-stub/alias or a desktop-only dynamic import), a Tauri **capability permission** for the close-request listener in `src-tauri/capabilities/default.json`, a handler that reads `preferences.confirmBeforeQuit` and shows a confirm, a desktop-only mount point, and a **desktop verification pass** — the web preview cannot exercise an `isDesktop`-gated close handler (exactly why DF-19f held it: "unverifiable this web session").
@@ -128,7 +130,7 @@ Every `comments.add` row that reaches the feed is already a mention-to-me (it on
 ## Execution blocks (for BUILD_ORDER)
 
 - **DF-19f-notif — Notification type toggles** · deps: DF-9 (done) · lane platform · **This block.** Extend `preferences.ts` (`NotificationType`/`NotificationPrefs`/`DEFAULT_NOTIFICATION_PREFS`, add `notifications` + `confirmBeforeQuit` fields to `Preferences`/`DEFAULT_PREFERENCES`/`sanitizePreferences`, pure `notificationTypeForOp`/`isNotificationEnabled`); add the read-side filter at the two feed choke points (`workspace-provider.tsx`, `dashboard-data-context.tsx`); add the "Notifications" `PrefGroup` (4 switches) to the top of `preferences-section.tsx`. Unit tests in `preferences.test.ts` (+ extend `prefs-sync.test.ts`). **No migration.** Context-sized, self-contained, web-verifiable.
-- **DF-19f-quit — Desktop confirm-before-quit** · deps: **DF-19f-notif** (domain field + section file) · lane desktop · Tauri `onCloseRequested` handler reading `preferences.confirmBeforeQuit`; capability grant; one desktop-gated `PrefRow` in the Startup group. **Desktop verification required.** Do not run concurrently with DF-19f-notif on `preferences-section.tsx`.
+- **DF-19f-quit — Desktop confirm-before-quit** · deps: **DF-19f-notif** (domain field + section file) · lane desktop · **SHIPPED (JS window-close, PR #107) + ⌘Q follow-up (2026-07-13):** JS `onCloseRequested` guard reading `preferences.confirmBeforeQuit` **plus** a Rust `RunEvent::ExitRequested` handler for macOS ⌘Q (`api.prevent_exit()` + native dialog; pref mirrored into `AppState` via `set_confirm_before_quit`); capability grant; one desktop-gated `PrefRow` in the Startup group. **Desktop verification still required (manual).**
 
 ## Manual-test surfaces (for `docs/testing/<branch>.md`)
 
