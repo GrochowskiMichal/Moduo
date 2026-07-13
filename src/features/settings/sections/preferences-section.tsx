@@ -12,7 +12,9 @@ import {
   usePreferences,
   type LandingView,
   type MotionPref,
+  type NotificationType,
 } from "../../../lib/preferences";
+import { isTauriRuntime } from "../../../lib/runtime";
 
 import { SettingsSectionShell } from "./section-shell";
 
@@ -32,9 +34,34 @@ const MOTION_OPTIONS: ReadonlyArray<{ value: MotionPref; label: string }> = [
   { value: "full", label: "Full" },
 ];
 
-/** Day-to-day behaviour: what opens on launch, startup behaviour, and sounds &
- *  motion. Persisted to the synced `preferences` domain (usePreferences).
- *  Per-type notification toggles land here once DF-9 ships their suppression. */
+/** The quiet-set notification toggles, in bell-priority order. Each governs one
+ *  `NotificationType`; muting is a read-side filter over the feed (DF-19f-notif). */
+const NOTIFICATION_ROWS: ReadonlyArray<{
+  type: NotificationType;
+  title: string;
+  description: string;
+}> = [
+  { type: "mention", title: "Mentions", description: "When someone @mentions you in a comment." },
+  {
+    type: "assigned",
+    title: "Assigned to you",
+    description: "When a task's owner is set to you by someone else.",
+  },
+  {
+    type: "dueFollowUp",
+    title: "Due & follow-up",
+    description: "Snoozed and follow-up items that come due.",
+  },
+  {
+    type: "unblocked",
+    title: "Task unblocked",
+    description: "When the last thing blocking a task is finished.",
+  },
+];
+
+/** Day-to-day behaviour: per-type notification mutes, what opens on launch,
+ *  startup behaviour, and sounds & motion. All persisted to the synced
+ *  `preferences` domain (usePreferences). */
 export function PreferencesSection() {
   const { preferences, setPreferences } = usePreferences();
 
@@ -43,6 +70,23 @@ export function PreferencesSection() {
       title="Preferences"
       description="How Moduo opens and behaves day to day. These settings follow you across your devices."
     >
+      <PrefGroup
+        label="Notifications"
+        description="Which alerts reach your bell. Muting hides a type — nothing is deleted, and turning it back on brings it back."
+      >
+        {NOTIFICATION_ROWS.map((row) => (
+          <PrefRow key={row.type} title={row.title} description={row.description}>
+            <Switch
+              checked={preferences.notifications[row.type]}
+              onCheckedChange={(v) =>
+                setPreferences({ notifications: { ...preferences.notifications, [row.type]: v } })
+              }
+              aria-label={`${row.title} notifications`}
+            />
+          </PrefRow>
+        ))}
+      </PrefGroup>
+
       <PrefGroup label="Default landing view">
         <PrefRow
           title="Open on launch"
@@ -77,6 +121,18 @@ export function PreferencesSection() {
             aria-label="Reopen last workspace on launch"
           />
         </PrefRow>
+        {isTauriRuntime() ? (
+          <PrefRow
+            title="Confirm before quitting"
+            description="Ask for confirmation when you close the window. On macOS, ⌘Q still quits right away."
+          >
+            <Switch
+              checked={preferences.confirmBeforeQuit}
+              onCheckedChange={(v) => setPreferences({ confirmBeforeQuit: v })}
+              aria-label="Confirm before quitting"
+            />
+          </PrefRow>
+        ) : null}
       </PrefGroup>
 
       <PrefGroup label="Sounds & motion">
@@ -115,13 +171,28 @@ export function PreferencesSection() {
   );
 }
 
-/** A labelled cluster (eyebrow above a card), mirroring the Appearance section. */
-function PrefGroup({ label, children }: { label: string; children: ReactNode }) {
+/** A labelled cluster (eyebrow above a card), mirroring the Appearance section.
+ *  An optional description sits under the eyebrow for groups that need a one-line
+ *  explainer (e.g. Notifications). */
+function PrefGroup({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
+      <div className="flex flex-col gap-0.5 px-1">
+        <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        {description ? (
+          <span className="text-xs text-muted-foreground">{description}</span>
+        ) : null}
+      </div>
       <section className="flex flex-col rounded-lg border border-border bg-card px-6 py-2">
         {children}
       </section>

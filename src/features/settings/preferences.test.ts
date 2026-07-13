@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_NOTIFICATION_PREFS,
   DEFAULT_PREFERENCES,
   applyMotion,
   consumeLandingRedirect,
+  isNotificationEnabled,
+  notificationTypeForOp,
   readLastRoute,
   resetLandingRedirectForTest,
   resolveLandingRoute,
@@ -18,12 +21,14 @@ beforeEach(() => {
 });
 
 describe("DEFAULT_PREFERENCES", () => {
-  it("defaults to Home landing, reopen-last-workspace on, sound on, system motion", () => {
+  it("defaults to Home landing, reopen-last-workspace on, sound on, system motion, all notifications on, confirm-quit off", () => {
     expect(DEFAULT_PREFERENCES).toEqual({
       landingView: "home",
       reopenLastWorkspace: true,
       soundEnabled: true,
       motion: "system",
+      notifications: { mention: true, assigned: true, dueFollowUp: true, unblocked: true },
+      confirmBeforeQuit: false,
     });
   });
 });
@@ -42,12 +47,16 @@ describe("sanitizePreferences", () => {
         reopenLastWorkspace: false,
         soundEnabled: false,
         motion: "reduced",
+        notifications: { mention: false, assigned: true, dueFollowUp: false, unblocked: true },
+        confirmBeforeQuit: true,
       }),
     ).toEqual({
       landingView: "calendar",
       reopenLastWorkspace: false,
       soundEnabled: false,
       motion: "reduced",
+      notifications: { mention: false, assigned: true, dueFollowUp: false, unblocked: true },
+      confirmBeforeQuit: true,
     });
   });
 
@@ -59,6 +68,58 @@ describe("sanitizePreferences", () => {
       motion: "spinny", // not a motion pref
     });
     expect(out).toEqual(DEFAULT_PREFERENCES);
+  });
+
+  it("defaults notifications all-on when the object is absent", () => {
+    expect(sanitizePreferences({ landingView: "tasks" }).notifications).toEqual(
+      DEFAULT_NOTIFICATION_PREFS,
+    );
+  });
+
+  it("coerces notifications per-key: missing/non-boolean default on, valid kept", () => {
+    expect(
+      sanitizePreferences({
+        notifications: { mention: false, assigned: "nope", unblocked: false },
+      }).notifications,
+    ).toEqual({ mention: false, assigned: true, dueFollowUp: true, unblocked: false });
+  });
+
+  it("defaults confirmBeforeQuit false and coerces to boolean", () => {
+    expect(sanitizePreferences({}).confirmBeforeQuit).toBe(false);
+    expect(sanitizePreferences({ confirmBeforeQuit: true }).confirmBeforeQuit).toBe(true);
+    expect(sanitizePreferences({ confirmBeforeQuit: "yes" }).confirmBeforeQuit).toBe(false);
+  });
+});
+
+describe("notificationTypeForOp", () => {
+  it("maps each quiet-set op to its governing toggle", () => {
+    expect(notificationTypeForOp("comments.add")).toBe("mention");
+    expect(notificationTypeForOp("tasks.assigned")).toBe("assigned");
+    expect(notificationTypeForOp("email.snooze_due")).toBe("dueFollowUp");
+    expect(notificationTypeForOp("email.follow_up_due")).toBe("dueFollowUp");
+    expect(notificationTypeForOp("tasks.unblocked")).toBe("unblocked");
+  });
+
+  it("returns null for ops outside the quiet set (legacy / future)", () => {
+    expect(notificationTypeForOp("workspace.invite_accepted")).toBeNull();
+    expect(notificationTypeForOp("note_shared")).toBeNull();
+    expect(notificationTypeForOp("email.follow_up")).toBeNull(); // the SET op, not the DUE notification
+  });
+});
+
+describe("isNotificationEnabled", () => {
+  it("honours the toggle for a known op", () => {
+    const prefs = { mention: true, assigned: false, dueFollowUp: true, unblocked: false };
+    expect(isNotificationEnabled("comments.add", prefs)).toBe(true);
+    expect(isNotificationEnabled("tasks.assigned", prefs)).toBe(false);
+    expect(isNotificationEnabled("email.follow_up_due", prefs)).toBe(true);
+    expect(isNotificationEnabled("tasks.unblocked", prefs)).toBe(false);
+  });
+
+  it("fails open for an unmapped op regardless of prefs", () => {
+    const allOff = { mention: false, assigned: false, dueFollowUp: false, unblocked: false };
+    expect(isNotificationEnabled("workspace.invite_accepted", allOff)).toBe(true);
+    expect(isNotificationEnabled("note_shared", allOff)).toBe(true);
   });
 });
 

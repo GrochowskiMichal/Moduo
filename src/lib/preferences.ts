@@ -32,6 +32,66 @@ export type LandingView =
  *  `system` follows the OS, `reduced` forces movement off, `full` forces it on. */
 export type MotionPref = "system" | "reduced" | "full";
 
+// ── Per-type notification toggles (DF-19f-notif) ──────────────────────────────
+// The quiet set the bell can surface. Muting is a READ-SIDE filter over the
+// notification feed (workspace-provider + the dashboard Activity widget), keyed
+// on each row's module_activity `op` — no generation change, fully reversible
+// (rows persist; un-muting restores them). Default all-on = today's behaviour.
+
+export type NotificationType = "mention" | "assigned" | "dueFollowUp" | "unblocked";
+export type NotificationPrefs = Record<NotificationType, boolean>;
+
+const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
+  "mention",
+  "assigned",
+  "dueFollowUp",
+  "unblocked",
+];
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  mention: true,
+  assigned: true,
+  dueFollowUp: true,
+  unblocked: true,
+};
+
+/** module_activity `op` → the quiet-set toggle that governs it. An op absent from
+ *  this map (legacy workspace invite/membership, any future type) has no toggle
+ *  and is NEVER muted — mutes are opt-in per known type. `comments.add` only
+ *  reaches the feed as an @mention-to-me (the mention predicate branch), so it
+ *  maps to `mention`; the two `email.*_due` ops share the `dueFollowUp` toggle. */
+const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
+  "comments.add": "mention",
+  "tasks.assigned": "assigned",
+  "email.snooze_due": "dueFollowUp",
+  "email.follow_up_due": "dueFollowUp",
+  "tasks.unblocked": "unblocked",
+};
+
+export function notificationTypeForOp(op: string): NotificationType | null {
+  return OP_TO_NOTIFICATION_TYPE[op] ?? null;
+}
+
+/** Whether a feed row of this `op` is visible under these prefs. Unmapped ops
+ *  fail OPEN (always shown) so an unknown/legacy type is never silently hidden. */
+export function isNotificationEnabled(op: string, prefs: NotificationPrefs): boolean {
+  const type = notificationTypeForOp(op);
+  return type === null ? true : prefs[type];
+}
+
+/** Coerce arbitrary jsonb into a full NotificationPrefs. Each key defaults ON when
+ *  missing or non-boolean, so a type added to the set later is on for existing
+ *  users (and an older client that dropped the key re-defaults it on). */
+export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
+  const out: NotificationPrefs = { ...DEFAULT_NOTIFICATION_PREFS };
+  if (!raw || typeof raw !== "object") return out;
+  const c = raw as Record<string, unknown>;
+  for (const key of NOTIFICATION_TYPES) {
+    if (typeof c[key] === "boolean") out[key] = c[key] as boolean;
+  }
+  return out;
+}
+
 export interface Preferences {
   /** Which surface opens on launch. `last` = the last visited module route. */
   landingView: LandingView;
@@ -41,6 +101,12 @@ export interface Preferences {
   soundEnabled: boolean;
   /** Reduce-motion override, layered on the OS setting. */
   motion: MotionPref;
+  /** Per-type notification mutes (read-side filter over the bell feed). */
+  notifications: NotificationPrefs;
+  /** Desktop-only: confirm before quitting (Tauri onCloseRequested). The field
+   *  lands here now so the desktop wiring block (DF-19f-quit) is domain-edit-free;
+   *  it has no effect until that block reads it. */
+  confirmBeforeQuit: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -48,6 +114,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   reopenLastWorkspace: true,
   soundEnabled: true,
   motion: "system",
+  notifications: { ...DEFAULT_NOTIFICATION_PREFS },
+  confirmBeforeQuit: false,
 };
 
 const LOCAL_STORAGE_KEY = "moduo.preferences";
@@ -109,6 +177,11 @@ export function sanitizePreferences(raw: unknown): Preferences {
       typeof c.motion === "string" && (MOTION_PREFS as string[]).includes(c.motion)
         ? (c.motion as MotionPref)
         : DEFAULT_PREFERENCES.motion,
+    notifications: sanitizeNotificationPrefs(c.notifications),
+    confirmBeforeQuit:
+      typeof c.confirmBeforeQuit === "boolean"
+        ? c.confirmBeforeQuit
+        : DEFAULT_PREFERENCES.confirmBeforeQuit,
   };
 }
 
@@ -286,6 +359,15 @@ export interface UsePreferences {
   preferences: Preferences;
   setPreferences: (patch: Partial<Preferences>) => void;
   reset: () => void;
+}
+
+/** Read the shared preferences store reactively, WITHOUT wiring the cross-device
+ *  sync engine. For non-settings consumers (the notification-feed filter in
+ *  workspace-provider + the dashboard Activity widget) that must react to a local
+ *  toggle but must NOT spin a second reconcile loop — cross-device sync is owned
+ *  by the single <PreferencesSync/> in main.tsx. */
+export function usePreferencesValue(): Preferences {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 export function usePreferences(): UsePreferences {
