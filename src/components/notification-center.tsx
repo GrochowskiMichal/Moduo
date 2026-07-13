@@ -4,23 +4,20 @@ import { useAuth } from "../providers/auth-provider";
 import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
 import { useWorkspace } from "../providers/workspace-provider";
 import { useShortcut } from "../lib/shortcuts";
+import { useNotificationPrefs } from "../features/spine/hooks/use-notification-prefs";
 import {
+  filterNotificationsByPrefs,
   groupNotifications,
+  notificationBadgeCount,
   notificationDeepLink,
   notificationDeepLinkNoun,
   notificationSummary,
+  notificationsForWorkspace,
   type NotificationGroup,
 } from "../features/spine/notifications";
 import { Card } from "./ui/card";
 import { Icon } from "./ui/icon";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "./ui/sheet";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 /** "3 days ago" style relative time, falling back to a locale string. */
@@ -42,24 +39,25 @@ export function NotificationCenter() {
   const { userId } = useAuth();
   const {
     notifications,
-    notificationsScope,
     notificationsLoading,
-    unreadCountWorkspace,
-    unreadCountGlobal,
-    setNotificationsScope,
+    selectedWorkspaceId,
     refreshNotifications,
     markNotificationRead,
     markAllNotificationsRead,
   } = useWorkspace();
+  const prefs = useNotificationPrefs();
   const [open, setOpen] = useState(false);
 
-  const activeUnread = useMemo(
-    () => (notificationsScope === "workspace" ? unreadCountWorkspace : unreadCountGlobal),
-    [notificationsScope, unreadCountGlobal, unreadCountWorkspace],
+  // The bell feed: current-workspace events (AC3, no unrelated-workspace noise),
+  // minus muted categories (AC10, graceful — an unclassified/absent-pref row
+  // stays), collapsed into target→verb digest cards (AC1). DF-21b will exclude
+  // dismissed rows here; today every non-dismissed row is active.
+  const visible = useMemo(
+    () => filterNotificationsByPrefs(notificationsForWorkspace(notifications, selectedWorkspaceId), prefs, userId),
+    [notifications, selectedWorkspaceId, prefs, userId],
   );
-
-  // Collapse the feed into target→verb cards (digest-default, AC10).
-  const groups = useMemo(() => groupNotifications(notifications), [notifications]);
+  const groups = useMemo(() => groupNotifications(visible), [visible]);
+  const badge = useMemo(() => notificationBadgeCount(visible), [visible]);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -78,7 +76,7 @@ export function NotificationCenter() {
 
   const activateGroup = useCallback(
     async (group: NotificationGroup) => {
-      // Mark every unread row in the card read on open (AC10: mark-on-open).
+      // Mark every unread row in the card read on open (AC6: mark-on-activate).
       const unread = group.items.filter((item) => !item.readAt);
       await Promise.all(unread.map((item) => markNotificationRead(item)));
       // Deep-link through the spine's entity-open event so the entity id rides
@@ -97,30 +95,31 @@ export function NotificationCenter() {
   );
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <SheetTrigger
+          <PopoverTrigger
             className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             aria-label="Notifications"
           >
             <Icon name="bell" size={14} />
-            {activeUnread > 0 ? (
+            {badge > 0 ? (
               <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-warning px-1 text-xs font-semibold text-warning-foreground">
-                {Math.min(activeUnread, 99)}
+                {badge}
               </span>
             ) : null}
-          </SheetTrigger>
+          </PopoverTrigger>
         </TooltipTrigger>
         <TooltipContent>Notifications</TooltipContent>
       </Tooltip>
 
-      <SheetContent side="right" className="w-[420px] max-w-[92vw] gap-3 p-0">
-        <SheetHeader className="flex-row items-center justify-between gap-2 border-b border-border">
-          <div className="flex flex-col gap-1">
-            <SheetTitle>Notifications</SheetTitle>
-            <SheetDescription>Stay on top of workspace and global activity.</SheetDescription>
-          </div>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="flex w-[380px] max-w-[92vw] flex-col gap-0 p-0"
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <div className="font-medium text-foreground">Notifications</div>
           <button
             type="button"
             className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -128,38 +127,16 @@ export function NotificationCenter() {
           >
             Mark all read
           </button>
-        </SheetHeader>
-
-        <div className="flex flex-row gap-2 px-4">
-          <button
-            type="button"
-            className={`rounded-md px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              notificationsScope === "workspace"
-                ? "bg-accent text-foreground"
-                : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-            }`}
-            onClick={() => setNotificationsScope("workspace")}
-          >
-            Workspace ({unreadCountWorkspace})
-          </button>
-          <button
-            type="button"
-            className={`rounded-md px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              notificationsScope === "global"
-                ? "bg-accent text-foreground"
-                : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-            }`}
-            onClick={() => setNotificationsScope("global")}
-          >
-            Global ({unreadCountGlobal})
-          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
-          {notificationsLoading ? (
-            <p className="text-sm text-muted-foreground">Loading notifications...</p>
+        <div className="max-h-[26rem] overflow-y-auto p-2">
+          {notificationsLoading && groups.length === 0 ? (
+            <p className="px-2 py-6 text-center text-sm text-muted-foreground">Loading notifications…</p>
           ) : groups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No notifications yet.</p>
+            <div className="flex flex-col items-center gap-1 px-2 py-8 text-center">
+              <p className="text-sm text-foreground">You're all caught up.</p>
+              <p className="text-xs text-muted-foreground">New mentions and activity will show here.</p>
+            </div>
           ) : (
             <div className="flex flex-col gap-2">
               {groups.map((group) => {
@@ -208,7 +185,7 @@ export function NotificationCenter() {
             </div>
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </PopoverContent>
+    </Popover>
   );
 }

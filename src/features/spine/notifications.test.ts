@@ -5,10 +5,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  filterNotificationsByPrefs,
   groupNotifications,
+  notificationBadgeCount,
   notificationDeepLink,
   notificationDeepLinkNoun,
+  notificationPrefKey,
   notificationSummary,
+  notificationsForWorkspace,
   unreadCount,
   type NotificationItem,
 } from "./notifications";
@@ -155,5 +159,96 @@ describe("notificationDeepLinkNoun", () => {
     expect(notificationDeepLinkNoun("email_thread")).toBe("email");
     expect(notificationDeepLinkNoun("task")).toBe("task");
     expect(notificationDeepLinkNoun("contact")).toBe("contact");
+  });
+});
+
+// DF-21a: the shared pref taxonomy — the bell hides a muted category, but never
+// swallows a row it can't classify (graceful degrade with DF-19f's toggles).
+describe("notificationPrefKey", () => {
+  it("classifies each notification into its preference category", () => {
+    const me = "me";
+    expect(notificationPrefKey(item({ id: "a", createdAt: "x", source: "workspace", op: "workspace.invite" }), me)).toBe(
+      "invites",
+    );
+    expect(notificationPrefKey(item({ id: "b", createdAt: "x", op: "tasks.assigned" }), me)).toBe("assigned");
+    expect(notificationPrefKey(item({ id: "c", createdAt: "x", op: "tasks.unblocked" }), me)).toBe("unblocked");
+    expect(
+      notificationPrefKey(item({ id: "d", createdAt: "x", op: "email.snooze_due", targetType: "email_thread" }), me),
+    ).toBe("emailDue");
+    expect(
+      notificationPrefKey(item({ id: "e", createdAt: "x", op: "email.follow_up_due", targetType: "email_thread" }), me),
+    ).toBe("emailDue");
+    // comments.add is a MENTION when I'm mentioned, else a comment-on-my-entity.
+    expect(
+      notificationPrefKey(item({ id: "f", createdAt: "x", op: "comments.add", payload: { mentioned_user_ids: ["me"] } }), me),
+    ).toBe("mentions");
+    expect(
+      notificationPrefKey(item({ id: "g", createdAt: "x", op: "comments.add", payload: { notify_user_ids: ["me"] } }), me),
+    ).toBe("comments");
+  });
+
+  it("returns null for an unclassified row (always shown)", () => {
+    expect(notificationPrefKey(item({ id: "a", createdAt: "x", op: "links.create", payload: {} }), "me")).toBeNull();
+    // no current user → can't resolve mention/comment → unclassified.
+    expect(notificationPrefKey(item({ id: "b", createdAt: "x", op: "comments.add", payload: { mentioned_user_ids: ["me"] } }), null)).toBeNull();
+  });
+});
+
+describe("filterNotificationsByPrefs", () => {
+  it("drops a muted category and keeps the rest", () => {
+    const items = [
+      item({ id: "a", createdAt: "x", op: "comments.add", payload: { mentioned_user_ids: ["me"] } }), // mentions
+      item({ id: "b", createdAt: "x", op: "tasks.assigned" }), // assigned
+      item({ id: "c", createdAt: "x", op: "email.snooze_due", targetType: "email_thread" }), // emailDue
+    ];
+    const kept = filterNotificationsByPrefs(items, { mentions: false }, "me");
+    expect(kept.map((i) => i.id)).toEqual(["b", "c"]);
+  });
+
+  it("shows everything when a category's pref is absent (graceful degrade)", () => {
+    const items = [
+      item({ id: "a", createdAt: "x", op: "comments.add", payload: { mentioned_user_ids: ["me"] } }),
+      item({ id: "b", createdAt: "x", op: "tasks.assigned" }),
+    ];
+    expect(filterNotificationsByPrefs(items, {}, "me")).toHaveLength(2);
+    // an explicit true is also "shown".
+    expect(filterNotificationsByPrefs(items, { mentions: true, assigned: true }, "me")).toHaveLength(2);
+  });
+});
+
+// AC3 — the event feed is scoped to the current workspace (no unrelated-ws noise).
+describe("notificationsForWorkspace", () => {
+  it("keeps only the current workspace's rows", () => {
+    const items = [
+      item({ id: "a", createdAt: "x", workspaceId: "w1" }),
+      item({ id: "b", createdAt: "x", workspaceId: "w2" }),
+      item({ id: "c", createdAt: "x", workspaceId: "w1" }),
+    ];
+    expect(notificationsForWorkspace(items, "w1").map((i) => i.id)).toEqual(["a", "c"]);
+  });
+
+  it("returns the input untouched before a workspace resolves (null)", () => {
+    const items = [item({ id: "a", createdAt: "x", workspaceId: "w1" })];
+    expect(notificationsForWorkspace(items, null)).toHaveLength(1);
+  });
+});
+
+// AC11 — the badge counts unread events only and caps at 99.
+describe("notificationBadgeCount", () => {
+  it("caps a busy feed at 99", () => {
+    const many = Array.from({ length: 120 }, (_, n) =>
+      item({ id: String(n), createdAt: "x", targetId: String(n), readAt: null }),
+    );
+    expect(notificationBadgeCount(many)).toBe(99);
+  });
+
+  it("counts only unread rows", () => {
+    expect(
+      notificationBadgeCount([
+        item({ id: "a", createdAt: "x", readAt: null }),
+        item({ id: "b", createdAt: "x", readAt: "2026-01-01T00:00:00Z" }),
+        item({ id: "c", createdAt: "x", readAt: null }),
+      ]),
+    ).toBe(2);
   });
 });
