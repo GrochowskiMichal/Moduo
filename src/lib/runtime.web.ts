@@ -1977,6 +1977,22 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
     },
 
+    async dismissNotification({ workspaceId, activityId }) {
+      const { error } = await supabaseClient.rpc("notifications_op_dismiss", {
+        p_workspace_id: workspaceId,
+        p_activity_id: activityId,
+      });
+      if (error) throw new Error(error.message);
+    },
+
+    async undismissNotification({ workspaceId, activityId }) {
+      const { error } = await supabaseClient.rpc("notifications_op_undismiss", {
+        p_workspace_id: workspaceId,
+        p_activity_id: activityId,
+      });
+      if (error) throw new Error(error.message);
+    },
+
     // ── Deterministic auto-suggested links (block CT-6) ──────────────────────
     async suggestLinks({ workspaceId, entityType, entityId, limit }) {
       const { data, error } = await supabaseClient.rpc("links_suggest", {
@@ -2604,6 +2620,8 @@ function notificationRowToModel(r: any): NotificationItem {
     actorLabel: r.actor_label ?? null,
     createdAt: r.created_at,
     readAt: r.read_at ?? null,
+    // Absent pre-DF-21b migration → null → the row stays active (graceful).
+    dismissedAt: r.dismissed_at ?? null,
   };
 }
 
