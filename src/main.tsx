@@ -9,6 +9,7 @@ import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { applyAppearance, readLocalAppearance } from "./lib/appearance";
 import { applyMotion, readLocalPreferences, usePreferences } from "./lib/preferences";
+import { useConfirmBeforeQuit } from "./lib/confirm-before-quit";
 import "./global.css";
 
 // Pre-paint: synchronously apply the cached appearance + motion override to <html>
@@ -34,6 +35,13 @@ function PreferencesSync() {
   return null;
 }
 
+// Desktop-only: intercept window close to confirm-before-quit when opted in
+// (Settings → Preferences → Startup). No-op on web. DF-19f-quit.
+function ConfirmBeforeQuit() {
+  useConfirmBeforeQuit();
+  return null;
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <RootErrorBoundary>
     <TooltipProvider>
@@ -41,5 +49,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </TooltipProvider>
     <Toaster />
     <PreferencesSync />
+    <ConfirmBeforeQuit />
   </RootErrorBoundary>
 );

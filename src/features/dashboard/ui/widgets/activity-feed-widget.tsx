@@ -5,6 +5,7 @@
 import { useMemo } from "react";
 
 import { cn } from "@/lib/utils";
+import { isNotificationEnabled, usePreferencesValue } from "@/lib/preferences";
 import { timeAgo } from "@/features/notes/recent";
 import {
   groupNotifications,
@@ -31,11 +32,19 @@ export function ActivityFeedWidget({ size }: WidgetComponentProps) {
   const { notifications } = useDashboardData();
   const { userId } = useAuth();
   const density = useDensity();
+  // Honour the per-type notification mutes (Settings → Preferences) so Home's
+  // Activity widget hides the same types as the bell. DF-19f-notif.
+  const prefs = usePreferencesValue();
 
-  // Group + stamp only when the underlying items change (not every render).
+  // Group + stamp only when the underlying items (or the mute prefs) change.
   const { groups, now } = useMemo(
-    () => ({ groups: groupNotifications(notifications.data), now: new Date() }),
-    [notifications.data],
+    () => ({
+      groups: groupNotifications(
+        notifications.data.filter((item) => isNotificationEnabled(item.op, prefs.notifications)),
+      ),
+      now: new Date(),
+    }),
+    [notifications.data, prefs.notifications],
   );
 
   if (notifications.loading && groups.length === 0) return <WidgetLoading />;
