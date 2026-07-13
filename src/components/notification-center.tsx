@@ -4,21 +4,20 @@ import { useAuth } from "../providers/auth-provider";
 import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
 import { useWorkspace } from "../providers/workspace-provider";
 import { useShortcut } from "../lib/shortcuts";
-import { useNotificationPrefs } from "../features/spine/hooks/use-notification-prefs";
 import {
-  filterNotificationsByPrefs,
   groupNotifications,
-  notificationBadgeCount,
   notificationDeepLink,
   notificationDeepLinkNoun,
   notificationSummary,
-  notificationsForWorkspace,
   type NotificationGroup,
 } from "../features/spine/notifications";
 import { Card } from "./ui/card";
 import { Icon } from "./ui/icon";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+
+/** The unread badge is capped so a busy feed never renders a 3-digit count. */
+const BADGE_CAP = 99;
 
 /** "3 days ago" style relative time, falling back to a locale string. */
 function relativeTime(iso: string): string {
@@ -38,26 +37,26 @@ function relativeTime(iso: string): string {
 export function NotificationCenter() {
   const { userId } = useAuth();
   const {
+    // The provider already scopes this to the current workspace (default scope)
+    // and filters out muted categories (DF-19f `isNotificationEnabled`), so the
+    // bell consumes it as-is — AC3 + AC10 are handled upstream. DF-21c will add
+    // the cross-workspace Invitations area + the history modal.
     notifications,
     notificationsLoading,
-    selectedWorkspaceId,
+    unreadCountWorkspace,
     refreshNotifications,
     markNotificationRead,
     markAllNotificationsRead,
   } = useWorkspace();
-  const prefs = useNotificationPrefs();
   const [open, setOpen] = useState(false);
 
-  // The bell feed: current-workspace events (AC3, no unrelated-workspace noise),
-  // minus muted categories (AC10, graceful — an unclassified/absent-pref row
-  // stays), collapsed into target→verb digest cards (AC1). DF-21b will exclude
-  // dismissed rows here; today every non-dismissed row is active.
-  const visible = useMemo(
-    () => filterNotificationsByPrefs(notificationsForWorkspace(notifications, selectedWorkspaceId), prefs, userId),
-    [notifications, selectedWorkspaceId, prefs, userId],
-  );
-  const groups = useMemo(() => groupNotifications(visible), [visible]);
-  const badge = useMemo(() => notificationBadgeCount(visible), [visible]);
+  // Collapse the (already scoped + pref-filtered) feed into target→verb digest
+  // cards (AC1, AC7). Every non-dismissed row is active today; DF-21b adds the
+  // dismissed split.
+  const groups = useMemo(() => groupNotifications(notifications), [notifications]);
+  // Unread events for the current workspace, capped (AC11). The count is already
+  // pref-aware (the provider filtered muted types before counting).
+  const badge = Math.min(unreadCountWorkspace, BADGE_CAP);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -76,7 +75,7 @@ export function NotificationCenter() {
 
   const activateGroup = useCallback(
     async (group: NotificationGroup) => {
-      // Mark every unread row in the card read on open (AC6: mark-on-activate).
+      // Mark every unread row in the card read on activate (AC6).
       const unread = group.items.filter((item) => !item.readAt);
       await Promise.all(unread.map((item) => markNotificationRead(item)));
       // Deep-link through the spine's entity-open event so the entity id rides
@@ -119,7 +118,7 @@ export function NotificationCenter() {
         className="flex w-[380px] max-w-[92vw] flex-col gap-0 p-0"
       >
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <div className="font-medium text-foreground">Notifications</div>
+          <PopoverTitle>Notifications</PopoverTitle>
           <button
             type="button"
             className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
