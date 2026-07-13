@@ -5,10 +5,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activeNotifications,
+  deriveNotificationFeeds,
   groupNotifications,
   notificationDeepLink,
   notificationDeepLinkNoun,
   notificationSummary,
+  partitionBySource,
   unreadCount,
   type NotificationItem,
 } from "./notifications";
@@ -25,6 +28,7 @@ function item(over: Partial<NotificationItem> & Pick<NotificationItem, "id" | "c
     actorId: "u2",
     actorLabel: "Mike",
     readAt: null,
+    dismissedAt: null,
     ...over,
   };
 }
@@ -73,6 +77,111 @@ describe("unreadCount", () => {
         item({ id: "c", createdAt: "2026-06-26T12:00:00Z", readAt: null }),
       ]),
     ).toBe(2);
+  });
+});
+
+// DF-21b — dismissed rows leave the active bell feed (+ badge) but persist for
+// history; Undo (clearing dismissedAt) returns them in their prior read state.
+describe("activeNotifications", () => {
+  it("drops dismissed rows and keeps active ones", () => {
+    const active = activeNotifications([
+      item({ id: "a", createdAt: "x", dismissedAt: null }),
+      item({ id: "b", createdAt: "x", dismissedAt: "2026-07-13T10:00:00Z" }),
+      item({ id: "c", createdAt: "x", dismissedAt: null }),
+    ]);
+    expect(active.map((i) => i.id)).toEqual(["a", "c"]);
+  });
+
+  it("keeps a dismissed row's unread state intact for Undo (never counts it while dismissed)", () => {
+    const rows = [
+      item({ id: "a", createdAt: "x", readAt: null, dismissedAt: "2026-07-13T10:00:00Z" }), // unread + dismissed
+      item({ id: "b", createdAt: "x", readAt: null, dismissedAt: null }),
+    ];
+    // While dismissed, the unread row is out of the active feed → not badged.
+    expect(unreadCount(activeNotifications(rows))).toBe(1);
+    // Undo restores dismissedAt=null → it re-enters active as unread again.
+    const undone = rows.map((r) => (r.id === "a" ? { ...r, dismissedAt: null } : r));
+    expect(unreadCount(activeNotifications(undone))).toBe(2);
+  });
+});
+
+// DF-21c — the event feed (spine) and the legacy invite/membership feed
+// (workspace) are split so invites surface in their own area (AC4).
+describe("partitionBySource", () => {
+  it("separates spine events from legacy workspace notifications", () => {
+    const { spine, workspace } = partitionBySource([
+      item({ id: "a", createdAt: "x", source: "spine" }),
+      item({ id: "b", createdAt: "x", source: "workspace", op: "workspace.invite" }),
+      item({ id: "c", createdAt: "x", source: "spine" }),
+    ]);
+    expect(spine.map((i) => i.id)).toEqual(["a", "c"]);
+    expect(workspace.map((i) => i.id)).toEqual(["b"]);
+  });
+
+  it("returns empty buckets for an empty feed", () => {
+    expect(partitionBySource([])).toEqual({ spine: [], workspace: [] });
+  });
+});
+
+// DF-21c — the one place the bell's active / history / invitations / badge split
+// is defined; proves AC2 (history keeps dismissed), AC3 (ws scope), AC4 (invites
+// apart from the event feed), AC10 (mutes), AC11 (badge = unread events + invites).
+describe("deriveNotificationFeeds", () => {
+  const allOn = () => true;
+
+  it("history KEEPS a dismissed row that active DROPS (AC2)", () => {
+    const feeds = deriveNotificationFeeds(
+      [
+        item({ id: "live", createdAt: "2026-07-13T10:00:00Z", workspaceId: "w1", dismissedAt: null }),
+        item({ id: "gone", createdAt: "2026-07-13T09:00:00Z", workspaceId: "w1", dismissedAt: "2026-07-13T11:00:00Z" }),
+      ],
+      { workspaceId: "w1", isEnabled: allOn },
+    );
+    expect(feeds.active.map((i) => i.id)).toEqual(["live"]);
+    expect(feeds.history.map((i) => i.id).sort()).toEqual(["gone", "live"]);
+  });
+
+  it("scopes events to the current workspace and splits out invitations (AC3, AC4)", () => {
+    const feeds = deriveNotificationFeeds(
+      [
+        item({ id: "here", createdAt: "x", source: "spine", workspaceId: "w1" }),
+        item({ id: "elsewhere", createdAt: "x", source: "spine", workspaceId: "w2" }),
+        item({ id: "invite", createdAt: "x", source: "workspace", workspaceId: "w2", op: "workspace.invite" }),
+      ],
+      { workspaceId: "w1", isEnabled: allOn },
+    );
+    expect(feeds.active.map((i) => i.id)).toEqual(["here"]);
+    expect(feeds.history.map((i) => i.id)).toEqual(["here"]); // other-ws spine excluded
+    // The invite is separate, never in the event feed/history, regardless of its workspace.
+    expect(feeds.invitations.map((i) => i.id)).toEqual(["invite"]);
+  });
+
+  it("drops muted event types from active AND history (AC10)", () => {
+    const isEnabled = (op: string) => op !== "tasks.assigned";
+    const feeds = deriveNotificationFeeds(
+      [
+        item({ id: "keep", createdAt: "x", workspaceId: "w1", op: "comments.add" }),
+        item({ id: "muted", createdAt: "x", workspaceId: "w1", op: "tasks.assigned" }),
+      ],
+      { workspaceId: "w1", isEnabled },
+    );
+    expect(feeds.active.map((i) => i.id)).toEqual(["keep"]);
+    expect(feeds.history.map((i) => i.id)).toEqual(["keep"]);
+  });
+
+  it("badge counts unread events + unread invitations; excludes dismissed, muted, read (AC11)", () => {
+    const feeds = deriveNotificationFeeds(
+      [
+        item({ id: "unread", createdAt: "x", workspaceId: "w1", readAt: null }),
+        item({ id: "read", createdAt: "x", workspaceId: "w1", readAt: "2026-07-13T00:00:00Z" }),
+        item({ id: "dismissed", createdAt: "x", workspaceId: "w1", readAt: null, dismissedAt: "2026-07-13T00:00:00Z" }),
+        // An unread invite DOES nudge the badge (designer call) — even cross-workspace.
+        item({ id: "invite", createdAt: "x", source: "workspace", workspaceId: "w2", readAt: null, op: "workspace.invite" }),
+        item({ id: "invite-read", createdAt: "x", source: "workspace", workspaceId: "w2", readAt: "x", op: "workspace.invite" }),
+      ],
+      { workspaceId: "w1", isEnabled: allOn },
+    );
+    expect(feeds.unreadCount).toBe(2); // "unread" event + "invite"
   });
 });
 
