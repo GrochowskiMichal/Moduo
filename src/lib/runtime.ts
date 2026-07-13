@@ -20,7 +20,7 @@ export type {
   WorkspaceApiKey,
 } from "./runtime.types";
 
-function isTauriRuntime(): boolean {
+export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__;
 }
 

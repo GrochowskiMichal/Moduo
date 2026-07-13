@@ -35,6 +35,11 @@ import { selectReconnect } from "../features/contacts/reconnect";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
 import { createRequestCache } from "./request-cache";
+import {
+  missingOptionalPrefsDomain,
+  optionalPrefsAvailable,
+  prefsSelectCols,
+} from "./prefs-columns";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import type {
   AuthChangeEvent,
@@ -154,6 +159,8 @@ function prefsRowToModel(row: {
   calendar_updated_at?: string | null;
   email?: unknown;
   email_updated_at?: string | null;
+  preferences?: unknown;
+  preferences_updated_at?: string | null;
 }): UserPreferences {
   return {
     appearance: (row.appearance as Record<string, unknown> | null) ?? null,
@@ -164,22 +171,15 @@ function prefsRowToModel(row: {
     calendarUpdatedAt: row.calendar_updated_at ?? null,
     email: (row.email as Record<string, unknown> | null) ?? null,
     emailUpdatedAt: row.email_updated_at ?? null,
+    preferences: (row.preferences as Record<string, unknown> | null) ?? null,
+    preferencesUpdatedAt: row.preferences_updated_at ?? null,
   };
 }
 
-// Deploy-gap guard for the EM-10 `email` prefs domain: the column may not be
-// applied yet. The base columns are always present; email is appended only while
-// available, and the first missing-column error flips it off until reload (auto-
-// heals once the migration deploys). Keeps the hot appearance/focus/calendar read
-// from breaking pre-migration.
-const PREFS_COLS_BASE =
-  "appearance, appearance_updated_at, focus, focus_updated_at, calendar, calendar_updated_at";
-const PREFS_COLS_FULL = `${PREFS_COLS_BASE}, email, email_updated_at`;
-let emailPrefsColumnAvailable = true;
-function isMissingEmailColumn(err: { code?: string; message?: string } | null): boolean {
-  if (!err) return false;
-  return err.code === "42703" || /column\b.*\bemail\b.*does not exist/i.test(err.message ?? "");
-}
+// The optional-prefs deploy-gap machinery (column lists + missing-column
+// attribution + the retry-drop availability flags) lives in ./prefs-columns so it
+// can be unit-tested in isolation; prefsRowToModel tolerates any optional column
+// being absent at runtime.
 
 // LocalStore backed by localStorage for web
 const LS_PREFIX = "moduo:ls:";
@@ -1022,65 +1022,61 @@ export const webRuntime: ModuoRuntime = {
     async get() {
       const user = await getAuthedUser();
       if (!user) return null;
-      // `.select()` needs a literal for the typed client's parser; the runtime
-      // column set is dynamic (deploy gap), so cast to the full literal shape —
-      // prefsRowToModel tolerates a missing email column at runtime.
-      const cols = (emailPrefsColumnAvailable ? PREFS_COLS_FULL : PREFS_COLS_BASE) as typeof PREFS_COLS_FULL;
-      let res = await supabaseClient
-        .from("user_preferences")
-        .select(cols)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (res.error && emailPrefsColumnAvailable && isMissingEmailColumn(res.error)) {
-        emailPrefsColumnAvailable = false; // deploy gap — email column not applied yet
-        res = await supabaseClient
+      // Retry-drop optional columns one at a time as their missing-column errors
+      // surface (deploy gap). At most two optional domains → three attempts.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await supabaseClient
           .from("user_preferences")
-          .select(PREFS_COLS_BASE as typeof PREFS_COLS_FULL)
+          .select(prefsSelectCols())
           .eq("user_id", user.id)
           .maybeSingle();
+        if (!res.error) return res.data ? prefsRowToModel(res.data) : null;
+        const missing = missingOptionalPrefsDomain(res.error);
+        if (!missing) throw new Error(res.error.message);
+        optionalPrefsAvailable[missing] = false; // deploy gap — column not applied yet
       }
-      if (res.error) throw new Error(res.error.message);
-      if (!res.data) return null;
-      return prefsRowToModel(res.data);
+      return null;
     },
     async set(patch) {
       const user = await getAuthedUser();
       if (!user) return null;
       // Upsert only the domains present in the patch; columns omitted here keep
-      // their existing value on conflict (and their table default on insert).
-      const row: Record<string, unknown> = { user_id: user.id };
-      if (patch.appearance !== undefined) row.appearance = patch.appearance ?? {};
-      if (patch.appearanceUpdatedAt !== undefined) row.appearance_updated_at = patch.appearanceUpdatedAt;
-      if (patch.focus !== undefined) row.focus = patch.focus ?? {};
-      if (patch.focusUpdatedAt !== undefined) row.focus_updated_at = patch.focusUpdatedAt;
-      if (patch.calendar !== undefined) row.calendar = patch.calendar ?? {};
-      if (patch.calendarUpdatedAt !== undefined) row.calendar_updated_at = patch.calendarUpdatedAt;
-      if (emailPrefsColumnAvailable) {
-        if (patch.email !== undefined) row.email = patch.email ?? {};
-        if (patch.emailUpdatedAt !== undefined) row.email_updated_at = patch.emailUpdatedAt;
-      }
-      const cols = (emailPrefsColumnAvailable ? PREFS_COLS_FULL : PREFS_COLS_BASE) as typeof PREFS_COLS_FULL;
-      let res = await supabaseClient
-        .from("user_preferences")
-        .upsert(row, { onConflict: "user_id" })
-        .select(cols)
-        .single();
-      if (res.error && emailPrefsColumnAvailable && isMissingEmailColumn(res.error)) {
-        emailPrefsColumnAvailable = false; // deploy gap — retry without the email domain
-        // NB: an email-only push pre-migration then succeeds as a `{user_id}` no-op,
-        // so prefs-sync clears its dirty flag though nothing synced. Benign — the
-        // override stays in localStorage; it re-pushes on the next local edit once
-        // the column exists. (Other domains in the same row are never dropped.)
-        delete row.email;
-        delete row.email_updated_at;
-        res = await supabaseClient
+      // their existing value on conflict (and their table default on insert). The
+      // row is rebuilt each attempt so a dropped optional domain leaves it out.
+      const buildRow = (): Record<string, unknown> => {
+        const row: Record<string, unknown> = { user_id: user.id };
+        if (patch.appearance !== undefined) row.appearance = patch.appearance ?? {};
+        if (patch.appearanceUpdatedAt !== undefined) row.appearance_updated_at = patch.appearanceUpdatedAt;
+        if (patch.focus !== undefined) row.focus = patch.focus ?? {};
+        if (patch.focusUpdatedAt !== undefined) row.focus_updated_at = patch.focusUpdatedAt;
+        if (patch.calendar !== undefined) row.calendar = patch.calendar ?? {};
+        if (patch.calendarUpdatedAt !== undefined) row.calendar_updated_at = patch.calendarUpdatedAt;
+        if (optionalPrefsAvailable.email) {
+          if (patch.email !== undefined) row.email = patch.email ?? {};
+          if (patch.emailUpdatedAt !== undefined) row.email_updated_at = patch.emailUpdatedAt;
+        }
+        if (optionalPrefsAvailable.preferences) {
+          if (patch.preferences !== undefined) row.preferences = patch.preferences ?? {};
+          if (patch.preferencesUpdatedAt !== undefined) row.preferences_updated_at = patch.preferencesUpdatedAt;
+        }
+        return row;
+      };
+      // NB: an optional-only push pre-migration then succeeds as a `{user_id}`
+      // no-op, so prefs-sync clears its dirty flag though nothing synced. Benign —
+      // the override stays in localStorage; it re-pushes on the next local edit
+      // once the column exists. (Other domains in the same row are never dropped.)
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await supabaseClient
           .from("user_preferences")
-          .upsert(row, { onConflict: "user_id" })
-          .select(PREFS_COLS_BASE as typeof PREFS_COLS_FULL)
+          .upsert(buildRow(), { onConflict: "user_id" })
+          .select(prefsSelectCols())
           .single();
+        if (!res.error) return prefsRowToModel(res.data);
+        const missing = missingOptionalPrefsDomain(res.error);
+        if (!missing) throw new Error(res.error.message);
+        optionalPrefsAvailable[missing] = false; // deploy gap — retry without that domain
       }
-      if (res.error) throw new Error(res.error.message);
-      return prefsRowToModel(res.data);
+      return null;
     },
   },
 

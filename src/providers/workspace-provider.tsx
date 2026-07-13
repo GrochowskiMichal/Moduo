@@ -16,6 +16,7 @@ import {
   type WorkspaceContextValue,
 } from "../features/workspaces/workspace-context";
 import { mapInvite, mapMember, mapNotification, mapWorkspace, storageKey } from "../features/workspaces/workspace-mappers";
+import { isNotificationEnabled, readLocalPreferences, usePreferencesValue } from "../lib/preferences";
 
 /** Map a legacy workspace notification into the source-agnostic feed item. */
 function legacyNotificationToItem(n: WorkspaceNotification): NotificationItem {
@@ -44,9 +45,25 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
   const [notificationsScope, setNotificationsScope] = useState<NotificationScope>("workspace");
   const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCountWorkspace, setUnreadCountWorkspace] = useState(0);
-  const [unreadCountGlobal, setUnreadCountGlobal] = useState(0);
+  // The raw merged feed (spine + legacy), unfiltered. The visible feed + unread
+  // counts are DERIVED from it below so a per-type notification mute (Settings →
+  // Preferences) applies instantly, with no refetch. DF-19f-notif.
+  const [rawNotifications, setRawNotifications] = useState<NotificationItem[]>([]);
+
+  // React to per-type mutes without spinning a second sync loop (cross-device
+  // reconcile is owned by the single <PreferencesSync/> in main.tsx).
+  const { notifications: notificationPrefs } = usePreferencesValue();
+
+  const { notifications, unreadCountWorkspace, unreadCountGlobal } = useMemo(() => {
+    const visible = rawNotifications.filter((item) => isNotificationEnabled(item.op, notificationPrefs));
+    const workspaceFeed = visible.filter((item) => item.workspaceId === selectedWorkspaceId);
+    const globalFeed = visible;
+    return {
+      notifications: notificationsScope === "workspace" ? workspaceFeed : globalFeed,
+      unreadCountWorkspace: workspaceFeed.filter((item) => !item.readAt).length,
+      unreadCountGlobal: globalFeed.filter((item) => !item.readAt).length,
+    };
+  }, [rawNotifications, notificationPrefs, selectedWorkspaceId, notificationsScope]);
 
   // Mirror the selected id into a ref so `refreshWorkspaces` can read the current
   // selection without listing `selectedWorkspaceId` in its deps. Without this the
@@ -109,7 +126,13 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     setWorkspaces(next);
 
     const currentSelected = selectedWorkspaceIdRef.current;
-    const persisted = typeof window !== "undefined" ? window.localStorage.getItem(storageKey(userId)) : null;
+    // "Reopen last workspace" OFF (Settings → Preferences, DF-19f) ignores the
+    // persisted selection at launch (currentSelected is null then → first
+    // workspace); mid-session refreshes still keep the active one via
+    // currentSelected, so this only changes the cold-launch default.
+    const reopenLast = readLocalPreferences().reopenLastWorkspace;
+    const persisted =
+      reopenLast && typeof window !== "undefined" ? window.localStorage.getItem(storageKey(userId)) : null;
     const resolvedSelected =
       (persisted && next.some((workspace) => workspace.id === persisted) ? persisted : null) ??
       (currentSelected && next.some((workspace) => workspace.id === currentSelected)
@@ -145,9 +168,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
 
   const refreshNotifications = useCallback(async () => {
     if (!runtime || !userId) {
-      setNotifications([]);
-      setUnreadCountWorkspace(0);
-      setUnreadCountGlobal(0);
+      setRawNotifications([]);
       return;
     }
 
@@ -169,19 +190,18 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
           spine = [];
         }
       }
-      const all = [...spine, ...legacy].sort((a, b) =>
-        a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+      // Store the raw merged feed; the scope split, per-type mute filter, and both
+      // unread counts are derived from it (see the memo above), so a mute toggles
+      // instantly without a refetch.
+      setRawNotifications(
+        [...spine, ...legacy].sort((a, b) =>
+          a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+        ),
       );
-      const workspaceFeed = all.filter((item) => item.workspaceId === selectedWorkspaceId);
-      const globalFeed = all;
-      const activeFeed = notificationsScope === "workspace" ? workspaceFeed : globalFeed;
-      setUnreadCountWorkspace(workspaceFeed.filter((item) => !item.readAt).length);
-      setUnreadCountGlobal(globalFeed.filter((item) => !item.readAt).length);
-      setNotifications(activeFeed);
     } finally {
       setNotificationsLoading(false);
     }
-  }, [runtime, userId, selectedWorkspaceId, notificationsScope]);
+  }, [runtime, userId, selectedWorkspaceId]);
 
   const createWorkspace = useCallback(
     async (name = "New Workspace") => {
@@ -352,7 +372,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       setSelectedWorkspaceId(null);
       setMembers([]);
       setInvites([]);
-      setNotifications([]);
+      setRawNotifications([]);
       return;
     }
 
@@ -382,9 +402,11 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     // only) and again when the workspace resolves — the measured notifications
     // duplication. A zero-workspace invitee still reaches this (loading flips false
     // with a null workspace) so their invite feed loads. DF-12.
+    // Scope (Workspace/Global) is now a pure view derived from the raw feed, so it
+    // no longer triggers a refetch — only a real workspace change does. DF-19f-notif.
     if (loading) return;
     void refreshNotifications();
-  }, [loading, notificationsScope, refreshNotifications, selectedWorkspaceId]);
+  }, [loading, refreshNotifications, selectedWorkspaceId]);
 
 
 
