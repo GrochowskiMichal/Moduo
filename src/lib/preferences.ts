@@ -103,10 +103,10 @@ export interface Preferences {
   motion: MotionPref;
   /** Per-type notification mutes (read-side filter over the bell feed). */
   notifications: NotificationPrefs;
-  /** Desktop-only: confirm before quitting. Read by BOTH the JS window-close guard
-   *  (`onCloseRequested`) and the Rust ⌘Q handler (`RunEvent::ExitRequested`), the
-   *  latter via the `set_confirm_before_quit` command that mirrors this into `AppState`.
-   *  See src/lib/confirm-before-quit.ts + src-tauri/src/lib.rs. */
+  /** Desktop-only: confirm before quitting. Both quit gestures (⌘Q via a custom Quit
+   *  menu item, and window close via `CloseRequested`) are intercepted natively in Rust,
+   *  which reads this value from `AppState` — mirrored there by the `set_confirm_before_quit`
+   *  command. See src/lib/confirm-before-quit.ts + src-tauri/src/lib.rs. */
   confirmBeforeQuit: boolean;
 }
 
