@@ -134,7 +134,12 @@ export type NotificationFeeds = {
   history: NotificationItem[];
   /** Legacy invite/membership feed (cross-workspace) — the Invitations area (AC4). */
   invitations: NotificationItem[];
-  /** Unread events for the current workspace — the badge (AC11). */
+  /**
+   * The bell badge (AC11): unread current-workspace events PLUS unread
+   * invitations. Invitations DO nudge the badge (designer call 2026-07-13) —
+   * rare, but being added to a workspace should be noticeable. Dismissed / read /
+   * muted rows never count.
+   */
   unreadCount: number;
 };
 
@@ -157,7 +162,8 @@ export function deriveNotificationFeeds(
     active,
     history: wsEvents,
     invitations: workspace,
-    unreadCount: unreadCount(active),
+    // Events + invitations both nudge the badge; only invitations are cross-ws.
+    unreadCount: unreadCount(active) + unreadCount(workspace),
   };
 }
 

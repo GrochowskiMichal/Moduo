@@ -125,7 +125,7 @@ describe("partitionBySource", () => {
 
 // DF-21c — the one place the bell's active / history / invitations / badge split
 // is defined; proves AC2 (history keeps dismissed), AC3 (ws scope), AC4 (invites
-// apart + unbadged), AC10 (mutes), AC11 (badge = active unread only).
+// apart from the event feed), AC10 (mutes), AC11 (badge = unread events + invites).
 describe("deriveNotificationFeeds", () => {
   const allOn = () => true;
 
@@ -169,17 +169,19 @@ describe("deriveNotificationFeeds", () => {
     expect(feeds.history.map((i) => i.id)).toEqual(["keep"]);
   });
 
-  it("badge counts active unread events only — excludes dismissed, muted, and invitations (AC11)", () => {
+  it("badge counts unread events + unread invitations; excludes dismissed, muted, read (AC11)", () => {
     const feeds = deriveNotificationFeeds(
       [
         item({ id: "unread", createdAt: "x", workspaceId: "w1", readAt: null }),
         item({ id: "read", createdAt: "x", workspaceId: "w1", readAt: "2026-07-13T00:00:00Z" }),
         item({ id: "dismissed", createdAt: "x", workspaceId: "w1", readAt: null, dismissedAt: "2026-07-13T00:00:00Z" }),
-        item({ id: "invite", createdAt: "x", source: "workspace", workspaceId: "w1", readAt: null, op: "workspace.invite" }),
+        // An unread invite DOES nudge the badge (designer call) — even cross-workspace.
+        item({ id: "invite", createdAt: "x", source: "workspace", workspaceId: "w2", readAt: null, op: "workspace.invite" }),
+        item({ id: "invite-read", createdAt: "x", source: "workspace", workspaceId: "w2", readAt: "x", op: "workspace.invite" }),
       ],
       { workspaceId: "w1", isEnabled: allOn },
     );
-    expect(feeds.unreadCount).toBe(1); // only "unread"
+    expect(feeds.unreadCount).toBe(2); // "unread" event + "invite"
   });
 });
 

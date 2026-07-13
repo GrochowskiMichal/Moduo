@@ -21,7 +21,7 @@ The notification bell is now the calm cross-module "needs you" feed. DF-21a swap
 
 ## DF-21c — history modal + Invitations
 - [ ] **Do:** With both an event notification and a workspace invite present, open the bell. → **Expect:** two labelled sections — **Invitations** (invite/membership rows, no ×) above **Activity** (event rows, with ×) — clearly separated; invites are NOT mixed into Activity. _(web)_
-- [ ] **Do:** Note the unread badge with an unread invite + an unread event. → **Expect:** the badge counts the **event only** — invitations never inflate it. _(web)_
+- [ ] **Do:** Note the unread badge with an unread invite + an unread event. → **Expect:** the badge counts **both** — an unread workspace invite nudges the badge (rare but important). Dismissed / read rows never count. _(web)_
 - [ ] **Do:** Click **See all** (footer). → **Expect:** a centered **"All notifications"** modal opens listing the full event history, newest first; invitations are NOT in it (history = the event feed). _(web)_
 - [ ] **Do:** Dismiss an event (×), then open **See all**. → **Expect:** the dismissed event is **gone from the active list + badge** but **still present in the history modal** — dismiss ≠ delete. _(web / both)_
 - [ ] **Do:** Confirm the old Workspace/Global toggle is gone. → **Expect:** no scope tabs anywhere; the feed is current-workspace only. _(web)_
