@@ -1,6 +1,6 @@
 import { PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./auth-provider";
-import { activeNotifications, type NotificationItem } from "../features/spine/notifications";
+import { deriveNotificationFeeds, type NotificationItem } from "../features/spine/notifications";
 import type {
   WorkspaceInvite,
   WorkspaceMember,
@@ -9,7 +9,6 @@ import type {
 } from "../features/workspaces/types";
 import {
   WorkspaceContext,
-  type NotificationScope,
   type SendWorkspaceInviteArgs,
   type UpdateWorkspaceInviteArgs,
   type UpdateWorkspaceMemberPermissionsArgs,
@@ -46,32 +45,33 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
-  const [notificationsScope, setNotificationsScope] = useState<NotificationScope>("workspace");
   const [notificationsLoading, setNotificationsLoading] = useState(false);
-  // The raw merged feed (spine + legacy), unfiltered. The visible feed + unread
-  // counts are DERIVED from it below so a per-type notification mute (Settings →
-  // Preferences) applies instantly, with no refetch. DF-19f-notif.
+  // The raw merged feed (spine + legacy), unfiltered. The three derived feeds
+  // (active / history / invitations) + the unread count come from it below, so a
+  // per-type mute (Settings → Preferences) or a dismiss applies instantly with no
+  // refetch. DF-19f-notif / DF-21.
   const [rawNotifications, setRawNotifications] = useState<NotificationItem[]>([]);
 
   // React to per-type mutes without spinning a second sync loop (cross-device
   // reconcile is owned by the single <PreferencesSync/> in main.tsx).
   const { notifications: notificationPrefs } = usePreferencesValue();
 
-  const { notifications, unreadCountWorkspace, unreadCountGlobal } = useMemo(() => {
-    // Active feed: muted categories out (DF-19f), then dismissed rows out (DF-21b)
-    // — so a dismissed row leaves both the list and the unread badge. History
-    // (DF-21c) reads the full `rawNotifications` instead.
-    const visible = activeNotifications(
-      rawNotifications.filter((item) => isNotificationEnabled(item.op, notificationPrefs)),
-    );
-    const workspaceFeed = visible.filter((item) => item.workspaceId === selectedWorkspaceId);
-    const globalFeed = visible;
+  const { notifications, notificationHistory, workspaceInvitations, unreadCountWorkspace } = useMemo(() => {
+    // The whole active/history/invitations/badge split is the pure
+    // `deriveNotificationFeeds` (unit-tested); the provider just supplies the raw
+    // feed + the DF-19f mute predicate. Spine events are current-workspace +
+    // pref-gated; the legacy feed becomes the cross-workspace Invitations area.
+    const feeds = deriveNotificationFeeds(rawNotifications, {
+      workspaceId: selectedWorkspaceId,
+      isEnabled: (op) => isNotificationEnabled(op, notificationPrefs),
+    });
     return {
-      notifications: notificationsScope === "workspace" ? workspaceFeed : globalFeed,
-      unreadCountWorkspace: workspaceFeed.filter((item) => !item.readAt).length,
-      unreadCountGlobal: globalFeed.filter((item) => !item.readAt).length,
+      notifications: feeds.active,
+      notificationHistory: feeds.history,
+      workspaceInvitations: feeds.invitations,
+      unreadCountWorkspace: feeds.unreadCount,
     };
-  }, [rawNotifications, notificationPrefs, selectedWorkspaceId, notificationsScope]);
+  }, [rawNotifications, notificationPrefs, selectedWorkspaceId]);
 
   // Mirror the selected id into a ref so `refreshWorkspaces` can read the current
   // selection without listing `selectedWorkspaceId` in its deps. Without this the
@@ -193,7 +193,9 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       let spine: NotificationItem[] = [];
       if (selectedWorkspaceId) {
         try {
-          spine = await runtime.spine.listNotifications({ workspaceId: selectedWorkspaceId });
+          // 200 so the "See all" history modal (DF-21c) has depth; the active
+          // dropdown renders a small non-dismissed subset of this.
+          spine = await runtime.spine.listNotifications({ workspaceId: selectedWorkspaceId, limit: 200 });
         } catch {
           spine = [];
         }
@@ -468,12 +470,11 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       canManageWorkspace,
       members,
       invites,
-      notificationsScope,
       notificationsLoading,
       notifications,
+      notificationHistory,
+      workspaceInvitations,
       unreadCountWorkspace,
-      unreadCountGlobal,
-      setNotificationsScope,
       selectWorkspace,
       refreshWorkspaces,
       refreshAccessData,
@@ -507,8 +508,8 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       members,
       modulePermissions,
       notifications,
+      notificationHistory,
       notificationsLoading,
-      notificationsScope,
       refreshAccessData,
       refreshNotifications,
       refreshWorkspaces,
@@ -522,10 +523,10 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       removeMember,
       transferOwnership,
       softDeleteWorkspace,
-      unreadCountGlobal,
       unreadCountWorkspace,
       updateMemberPermissions,
       updateInvite,
+      workspaceInvitations,
       workspaces,
     ]
   );

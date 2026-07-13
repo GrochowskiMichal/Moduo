@@ -14,6 +14,7 @@ import {
   type NotificationGroup,
 } from "../features/spine/notifications";
 import { Card } from "./ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Icon } from "./ui/icon";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -39,11 +40,13 @@ function relativeTime(iso: string): string {
 export function NotificationCenter() {
   const { userId } = useAuth();
   const {
-    // The provider already scopes this to the current workspace (default scope)
-    // and filters out muted categories (DF-19f `isNotificationEnabled`), so the
-    // bell consumes it as-is — AC3 + AC10 are handled upstream. DF-21c will add
-    // the cross-workspace Invitations area + the history modal.
+    // The provider derives these three from one fetch: the active event feed
+    // (current workspace, non-dismissed), the full history (incl. read +
+    // dismissed) for the "See all" modal, and the legacy cross-workspace
+    // invite/membership feed for the Invitations area (DF-21c).
     notifications,
+    notificationHistory,
+    workspaceInvitations,
     notificationsLoading,
     unreadCountWorkspace,
     refreshNotifications,
@@ -53,13 +56,11 @@ export function NotificationCenter() {
     undismissNotifications,
   } = useWorkspace();
   const [open, setOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Collapse the (already scoped + pref-filtered) feed into target→verb digest
-  // cards (AC1, AC7). Every non-dismissed row is active today; DF-21b adds the
-  // dismissed split.
   const groups = useMemo(() => groupNotifications(notifications), [notifications]);
-  // Unread events for the current workspace, capped (AC11). The count is already
-  // pref-aware (the provider filtered muted types before counting).
+  const inviteGroups = useMemo(() => groupNotifications(workspaceInvitations), [workspaceInvitations]);
+  const historyGroups = useMemo(() => groupNotifications(notificationHistory), [notificationHistory]);
   const badge = Math.min(unreadCountWorkspace, BADGE_CAP);
 
   const handleOpenChange = useCallback(
@@ -87,6 +88,7 @@ export function NotificationCenter() {
       const link = notificationDeepLink(group);
       if (link) {
         setOpen(false);
+        setHistoryOpen(false);
         window.dispatchEvent(
           new CustomEvent(ENTITY_OPEN_EVENT, {
             detail: { type: link.entityType, id: link.entityId },
@@ -116,116 +118,171 @@ export function NotificationCenter() {
     [dismissNotifications, undismissNotifications],
   );
 
-  return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <PopoverTrigger
-            className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            aria-label="Notifications"
-          >
-            <Icon name="bell" size={14} />
-            {badge > 0 ? (
-              <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-warning px-1 text-xs font-semibold text-warning-foreground">
-                {badge}
-              </span>
-            ) : null}
-          </PopoverTrigger>
-        </TooltipTrigger>
-        <TooltipContent>Notifications</TooltipContent>
-      </Tooltip>
-
-      <PopoverContent
-        align="end"
-        sideOffset={8}
-        className="flex w-[380px] max-w-[92vw] flex-col gap-0 p-0"
-      >
-        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <PopoverTitle>Notifications</PopoverTitle>
-          <button
-            type="button"
-            className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => void markAllNotificationsRead()}
-          >
-            Mark all read
-          </button>
-        </div>
-
-        <div className="max-h-[26rem] overflow-y-auto p-2">
-          {notificationsLoading && groups.length === 0 ? (
-            <p className="px-2 py-6 text-center text-sm text-muted-foreground">Loading notifications…</p>
-          ) : groups.length === 0 ? (
-            <div className="flex flex-col items-center gap-1 px-2 py-8 text-center">
-              <p className="text-sm text-foreground">You're all caught up.</p>
-              <p className="text-xs text-muted-foreground">New mentions and activity will show here.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {groups.map((group) => {
-                const unread = group.unreadCount > 0;
-                const link = notificationDeepLink(group);
-                // Only spine rows carry a dismiss mark; legacy invites can't be
-                // dismissed (they relocate to Invitations in DF-21c).
-                const dismissable = group.items.some((item) => item.source === "spine");
-                return (
-                  <Card
-                    key={group.key}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => void activateGroup(group)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        void activateGroup(group);
-                      }
+  const renderGroupCard = useCallback(
+    (group: NotificationGroup, opts: { dismissable: boolean }) => {
+      const unread = group.unreadCount > 0;
+      const link = notificationDeepLink(group);
+      return (
+        <Card
+          key={group.key}
+          role="button"
+          tabIndex={0}
+          onClick={() => void activateGroup(group)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              void activateGroup(group);
+            }
+          }}
+          className={`cursor-pointer gap-1 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            unread ? "bg-secondary" : "bg-muted"
+          }`}
+        >
+          <div className="flex items-start gap-2">
+            {/* Unread is signalled by fill + a dot + weight — never color alone. */}
+            {unread ? (
+              <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground" aria-hidden />
+            ) : (
+              <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0" aria-hidden />
+            )}
+            <p className={`flex-1 text-sm ${unread ? "font-medium text-foreground" : "text-foreground"}`}>
+              {notificationSummary(group, userId)}
+              {group.count > 1 ? <span className="ml-1 text-xs text-muted-foreground">×{group.count}</span> : null}
+            </p>
+            {opts.dismissable ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Dismiss notification"
+                    className="-mr-1 -mt-0.5 shrink-0 rounded-md px-1 text-base leading-none text-muted-foreground/60 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleDismiss(group);
                     }}
-                    className={`cursor-pointer gap-1 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                      unread ? "bg-secondary" : "bg-muted"
-                    }`}
+                    // Stop Enter/Space from also triggering the card's activate.
+                    onKeyDown={(event) => event.stopPropagation()}
                   >
-                    <div className="flex items-start gap-2">
-                      {/* Unread is signalled by fill + a dot + weight — never color alone. */}
-                      {unread ? (
-                        <span
-                          className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground"
-                          aria-hidden
-                        />
-                      ) : (
-                        <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0" aria-hidden />
-                      )}
-                      <p className={`flex-1 text-sm ${unread ? "font-medium text-foreground" : "text-foreground"}`}>
-                        {notificationSummary(group, userId)}
-                        {group.count > 1 ? (
-                          <span className="ml-1 text-xs text-muted-foreground">×{group.count}</span>
-                        ) : null}
-                      </p>
-                      {dismissable ? (
-                        <button
-                          type="button"
-                          aria-label="Dismiss notification"
-                          className="-mr-1 -mt-0.5 shrink-0 rounded-md px-1 text-base leading-none text-muted-foreground/60 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleDismiss(group);
-                          }}
-                          // Stop Enter/Space from also triggering the card's activate.
-                          onKeyDown={(event) => event.stopPropagation()}
-                        >
-                          ×
-                        </button>
-                      ) : null}
+                    ×
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Dismiss</TooltipContent>
+              </Tooltip>
+            ) : null}
+          </div>
+          <p className="flex items-center gap-1 pl-3.5 text-xs text-muted-foreground/70">
+            {relativeTime(group.latestAt)}
+            {link ? <span aria-hidden>· opens {notificationDeepLinkNoun(link.entityType)}</span> : null}
+          </p>
+        </Card>
+      );
+    },
+    [activateGroup, handleDismiss, userId],
+  );
+
+  const nothingActive = groups.length === 0 && inviteGroups.length === 0;
+
+  return (
+    <>
+      <Popover open={open} onOpenChange={handleOpenChange}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger
+              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              aria-label="Notifications"
+            >
+              <Icon name="bell" size={14} />
+              {badge > 0 ? (
+                <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-warning px-1 text-xs font-semibold text-warning-foreground">
+                  {badge}
+                </span>
+              ) : null}
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Notifications</TooltipContent>
+        </Tooltip>
+
+        <PopoverContent align="end" sideOffset={8} className="flex w-[380px] max-w-[92vw] flex-col gap-0 p-0">
+          <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+            <PopoverTitle>Notifications</PopoverTitle>
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => void markAllNotificationsRead()}
+            >
+              Mark all read
+            </button>
+          </div>
+
+          <div className="max-h-[26rem] overflow-y-auto p-2">
+            {notificationsLoading && nothingActive ? (
+              <p className="px-2 py-6 text-center text-sm text-muted-foreground">Loading notifications…</p>
+            ) : nothingActive ? (
+              <div className="flex flex-col items-center gap-1 px-2 py-8 text-center">
+                <p className="text-sm text-foreground">You're all caught up.</p>
+                <p className="text-xs text-muted-foreground">New mentions and activity will show here.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {inviteGroups.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Invitations
                     </div>
-                    <p className="flex items-center gap-1 pl-3.5 text-xs text-muted-foreground/70">
-                      {relativeTime(group.latestAt)}
-                      {link ? <span aria-hidden>· opens {notificationDeepLinkNoun(link.entityType)}</span> : null}
-                    </p>
-                  </Card>
-                );
-              })}
+                    {inviteGroups.map((group) => renderGroupCard(group, { dismissable: false }))}
+                  </div>
+                ) : null}
+                {groups.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {inviteGroups.length > 0 ? (
+                      <div className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Activity
+                      </div>
+                    ) : null}
+                    {groups.map((group) => renderGroupCard(group, { dismissable: true }))}
+                  </div>
+                ) : (
+                  <p className="px-2 py-1 text-center text-xs text-muted-foreground">No new activity.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {historyGroups.length > 0 ? (
+            <div className="border-t border-border p-2">
+              <button
+                type="button"
+                className="w-full rounded-md px-2 py-1.5 text-center text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => {
+                  setOpen(false);
+                  setHistoryOpen(true);
+                }}
+              >
+                See all
+              </button>
             </div>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+          ) : null}
+        </PopoverContent>
+      </Popover>
+
+      {/* The "See all" history modal — the full current-workspace event history,
+          including already-read and dismissed rows (AC2). */}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="max-w-md gap-0 p-0">
+          <DialogHeader className="border-b border-border px-4 py-3">
+            <DialogTitle>All notifications</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-y-auto p-2">
+            {historyGroups.length === 0 ? (
+              <p className="px-2 py-8 text-center text-sm text-muted-foreground">No notifications yet.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {historyGroups.map((group) => renderGroupCard(group, { dismissable: false }))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

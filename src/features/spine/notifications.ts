@@ -109,6 +109,59 @@ export function activeNotifications(items: NotificationItem[]): NotificationItem
 }
 
 /**
+ * Split the merged feed by source (DF-21c): `spine` = the cross-module event feed
+ * (workspace-scoped, dismissable), `workspace` = the legacy invite/membership feed
+ * (inherently cross-workspace) that surfaces in its own Invitations area, never
+ * mixed into the event feed.
+ */
+export function partitionBySource(items: NotificationItem[]): {
+  spine: NotificationItem[];
+  workspace: NotificationItem[];
+} {
+  const spine: NotificationItem[] = [];
+  const workspace: NotificationItem[] = [];
+  for (const item of items) {
+    (item.source === "spine" ? spine : workspace).push(item);
+  }
+  return { spine, workspace };
+}
+
+/** The three feeds the bell derives from one raw fetch, plus the badge count. */
+export type NotificationFeeds = {
+  /** Current-workspace spine events, muted types out, dismissed out — the dropdown. */
+  active: NotificationItem[];
+  /** Same, but keeping read + dismissed — the "See all" history modal (AC2). */
+  history: NotificationItem[];
+  /** Legacy invite/membership feed (cross-workspace) — the Invitations area (AC4). */
+  invitations: NotificationItem[];
+  /** Unread events for the current workspace — the badge (AC11). */
+  unreadCount: number;
+};
+
+/**
+ * The single source of truth for how the raw merged feed splits into the bell's
+ * three surfaces (DF-21). Kept pure so the whole composition is unit-tested (the
+ * provider just wires `rawNotifications` + the DF-19f pref predicate in): spine
+ * events are scoped to the current workspace and pref-gated (`isEnabled`), then
+ * `history` keeps read + dismissed while `active` drops dismissed; the legacy
+ * feed becomes `invitations` (never mixed in, never badged).
+ */
+export function deriveNotificationFeeds(
+  items: NotificationItem[],
+  opts: { workspaceId: string | null; isEnabled: (op: string) => boolean },
+): NotificationFeeds {
+  const { spine, workspace } = partitionBySource(items);
+  const wsEvents = spine.filter((item) => item.workspaceId === opts.workspaceId && opts.isEnabled(item.op));
+  const active = activeNotifications(wsEvents);
+  return {
+    active,
+    history: wsEvents,
+    invitations: workspace,
+    unreadCount: unreadCount(active),
+  };
+}
+
+/**
  * Humanize a verb a spine op doesn't recognize (a legacy workspace event type
  * like "note_shared" or "workspace.invite_accepted") into plain English. Never
  * raw JSON, never a snake_case token.
