@@ -1,6 +1,6 @@
 import { PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./auth-provider";
-import type { NotificationItem } from "../features/spine/notifications";
+import { deriveNotificationFeeds, type NotificationItem } from "../features/spine/notifications";
 import type {
   WorkspaceInvite,
   WorkspaceMember,
@@ -9,7 +9,6 @@ import type {
 } from "../features/workspaces/types";
 import {
   WorkspaceContext,
-  type NotificationScope,
   type SendWorkspaceInviteArgs,
   type UpdateWorkspaceInviteArgs,
   type UpdateWorkspaceMemberPermissionsArgs,
@@ -33,6 +32,9 @@ function legacyNotificationToItem(n: WorkspaceNotification): NotificationItem {
     actorLabel: null,
     createdAt: n.createdAt,
     readAt: n.readAt,
+    // Legacy workspace notifications (invites/membership) have no dismiss path —
+    // they always read as active until DF-21c relocates them to Invitations.
+    dismissedAt: null,
   };
 }
 
@@ -43,27 +45,33 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
-  const [notificationsScope, setNotificationsScope] = useState<NotificationScope>("workspace");
   const [notificationsLoading, setNotificationsLoading] = useState(false);
-  // The raw merged feed (spine + legacy), unfiltered. The visible feed + unread
-  // counts are DERIVED from it below so a per-type notification mute (Settings →
-  // Preferences) applies instantly, with no refetch. DF-19f-notif.
+  // The raw merged feed (spine + legacy), unfiltered. The three derived feeds
+  // (active / history / invitations) + the unread count come from it below, so a
+  // per-type mute (Settings → Preferences) or a dismiss applies instantly with no
+  // refetch. DF-19f-notif / DF-21.
   const [rawNotifications, setRawNotifications] = useState<NotificationItem[]>([]);
 
   // React to per-type mutes without spinning a second sync loop (cross-device
   // reconcile is owned by the single <PreferencesSync/> in main.tsx).
   const { notifications: notificationPrefs } = usePreferencesValue();
 
-  const { notifications, unreadCountWorkspace, unreadCountGlobal } = useMemo(() => {
-    const visible = rawNotifications.filter((item) => isNotificationEnabled(item.op, notificationPrefs));
-    const workspaceFeed = visible.filter((item) => item.workspaceId === selectedWorkspaceId);
-    const globalFeed = visible;
+  const { notifications, notificationHistory, workspaceInvitations, unreadCountWorkspace } = useMemo(() => {
+    // The whole active/history/invitations/badge split is the pure
+    // `deriveNotificationFeeds` (unit-tested); the provider just supplies the raw
+    // feed + the DF-19f mute predicate. Spine events are current-workspace +
+    // pref-gated; the legacy feed becomes the cross-workspace Invitations area.
+    const feeds = deriveNotificationFeeds(rawNotifications, {
+      workspaceId: selectedWorkspaceId,
+      isEnabled: (op) => isNotificationEnabled(op, notificationPrefs),
+    });
     return {
-      notifications: notificationsScope === "workspace" ? workspaceFeed : globalFeed,
-      unreadCountWorkspace: workspaceFeed.filter((item) => !item.readAt).length,
-      unreadCountGlobal: globalFeed.filter((item) => !item.readAt).length,
+      notifications: feeds.active,
+      notificationHistory: feeds.history,
+      workspaceInvitations: feeds.invitations,
+      unreadCountWorkspace: feeds.unreadCount,
     };
-  }, [rawNotifications, notificationPrefs, selectedWorkspaceId, notificationsScope]);
+  }, [rawNotifications, notificationPrefs, selectedWorkspaceId]);
 
   // Mirror the selected id into a ref so `refreshWorkspaces` can read the current
   // selection without listing `selectedWorkspaceId` in its deps. Without this the
@@ -185,7 +193,9 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       let spine: NotificationItem[] = [];
       if (selectedWorkspaceId) {
         try {
-          spine = await runtime.spine.listNotifications({ workspaceId: selectedWorkspaceId });
+          // 200 so the "See all" history modal (DF-21c) has depth; the active
+          // dropdown renders a small non-dismissed subset of this.
+          spine = await runtime.spine.listNotifications({ workspaceId: selectedWorkspaceId, limit: 200 });
         } catch {
           spine = [];
         }
@@ -365,6 +375,46 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     await refreshNotifications();
   }, [refreshNotifications, runtime, selectedWorkspaceId]);
 
+  // Dismiss / undo (DF-21b). Only spine rows carry a dismiss mark — legacy
+  // invites are relocated, not dismissed (DF-21c). Dismiss every row in a digest
+  // card at once, then refresh once; the ops throw on failure so the caller can
+  // surface a toast (and skip the Undo) if the migration isn't deployed yet.
+  const dismissNotifications = useCallback(
+    async (items: NotificationItem[]) => {
+      if (!runtime) return;
+      const targets = items.filter((i) => i.source === "spine" && i.workspaceId);
+      try {
+        await Promise.all(
+          targets.map((i) =>
+            runtime.spine.dismissNotification({ workspaceId: i.workspaceId as string, activityId: i.id }),
+          ),
+        );
+      } finally {
+        // Always reconcile — a partial failure across a multi-row card still
+        // repaints the real server state instead of a stale list.
+        await refreshNotifications();
+      }
+    },
+    [refreshNotifications, runtime],
+  );
+
+  const undismissNotifications = useCallback(
+    async (items: NotificationItem[]) => {
+      if (!runtime) return;
+      const targets = items.filter((i) => i.source === "spine" && i.workspaceId);
+      try {
+        await Promise.all(
+          targets.map((i) =>
+            runtime.spine.undismissNotification({ workspaceId: i.workspaceId as string, activityId: i.id }),
+          ),
+        );
+      } finally {
+        await refreshNotifications();
+      }
+    },
+    [refreshNotifications, runtime],
+  );
+
   useEffect(() => {
     if (!runtime || !userId) {
       setLoading(false);
@@ -420,12 +470,11 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       canManageWorkspace,
       members,
       invites,
-      notificationsScope,
       notificationsLoading,
       notifications,
+      notificationHistory,
+      workspaceInvitations,
       unreadCountWorkspace,
-      unreadCountGlobal,
-      setNotificationsScope,
       selectWorkspace,
       refreshWorkspaces,
       refreshAccessData,
@@ -443,20 +492,24 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       refreshNotifications,
       markNotificationRead,
       markAllNotificationsRead,
+      dismissNotifications,
+      undismissNotifications,
     }),
     [
       canManageWorkspace,
       createWorkspace,
+      dismissNotifications,
       invites,
       leaveWorkspace,
       loading,
       markAllNotificationsRead,
       markNotificationRead,
+      undismissNotifications,
       members,
       modulePermissions,
       notifications,
+      notificationHistory,
       notificationsLoading,
-      notificationsScope,
       refreshAccessData,
       refreshNotifications,
       refreshWorkspaces,
@@ -470,10 +523,10 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       removeMember,
       transferOwnership,
       softDeleteWorkspace,
-      unreadCountGlobal,
       unreadCountWorkspace,
       updateMemberPermissions,
       updateInvite,
+      workspaceInvitations,
       workspaces,
     ]
   );

@@ -8,8 +8,6 @@ import type {
   WorkspaceSummary,
 } from "./types";
 
-export type NotificationScope = "workspace" | "global";
-
 type ModuleAccessInput = Partial<Record<"notes" | "tasks", ModulePermission>>;
 
 type ItemAclInput = Array<{
@@ -50,12 +48,14 @@ export type WorkspaceContextValue = {
   canManageWorkspace: boolean;
   members: WorkspaceMember[];
   invites: WorkspaceInvite[];
-  notificationsScope: NotificationScope;
   notificationsLoading: boolean;
+  /** The active event feed (current workspace, non-dismissed) — the bell dropdown. */
   notifications: NotificationItem[];
+  /** The full current-workspace event history incl. read + dismissed — the "See all" modal (DF-21c). */
+  notificationHistory: NotificationItem[];
+  /** Legacy invite/membership feed (cross-workspace) — the dedicated Invitations area (DF-21c). */
+  workspaceInvitations: NotificationItem[];
   unreadCountWorkspace: number;
-  unreadCountGlobal: number;
-  setNotificationsScope: (scope: NotificationScope) => void;
   selectWorkspace: (workspaceId: string) => void;
   refreshWorkspaces: () => Promise<WorkspaceSummary[]>;
   refreshAccessData: () => Promise<void>;
@@ -73,6 +73,10 @@ export type WorkspaceContextValue = {
   refreshNotifications: () => Promise<void>;
   markNotificationRead: (item: NotificationItem) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
+  /** Dismiss every row in a digest card (DF-21b) — spine rows only; refresh once. */
+  dismissNotifications: (items: NotificationItem[]) => Promise<void>;
+  /** Undo a dismiss (the 8s Undo) — restores the rows to the active feed. */
+  undismissNotifications: (items: NotificationItem[]) => Promise<void>;
 };
 
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
