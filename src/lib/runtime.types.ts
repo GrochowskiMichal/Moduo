@@ -906,6 +906,10 @@ export type ModuoRuntime = {
     markNotificationRead(input: { workspaceId: string; activityId: string }): Promise<void>;
     /** Mark every targeting-me notification in the workspace read. */
     markAllNotificationsRead(input: { workspaceId: string }): Promise<void>;
+    /** Dismiss one notification — it leaves the active bell feed, stays in history (DF-21b). Idempotent. */
+    dismissNotification(input: { workspaceId: string; activityId: string }): Promise<void>;
+    /** Undo a dismiss — restores the row to the active feed in its prior read state. Idempotent. */
+    undismissNotification(input: { workspaceId: string; activityId: string }): Promise<void>;
 
     // ── Deterministic auto-suggested links (block CT-6) ──────────────────────
     /**

@@ -73,6 +73,10 @@ export type WorkspaceContextValue = {
   refreshNotifications: () => Promise<void>;
   markNotificationRead: (item: NotificationItem) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
+  /** Dismiss every row in a digest card (DF-21b) — spine rows only; refresh once. */
+  dismissNotifications: (items: NotificationItem[]) => Promise<void>;
+  /** Undo a dismiss (the 8s Undo) — restores the rows to the active feed. */
+  undismissNotifications: (items: NotificationItem[]) => Promise<void>;
 };
 
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);

@@ -1,6 +1,6 @@
 import { PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./auth-provider";
-import type { NotificationItem } from "../features/spine/notifications";
+import { activeNotifications, type NotificationItem } from "../features/spine/notifications";
 import type {
   WorkspaceInvite,
   WorkspaceMember,
@@ -33,6 +33,9 @@ function legacyNotificationToItem(n: WorkspaceNotification): NotificationItem {
     actorLabel: null,
     createdAt: n.createdAt,
     readAt: n.readAt,
+    // Legacy workspace notifications (invites/membership) have no dismiss path —
+    // they always read as active until DF-21c relocates them to Invitations.
+    dismissedAt: null,
   };
 }
 
@@ -55,7 +58,12 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const { notifications: notificationPrefs } = usePreferencesValue();
 
   const { notifications, unreadCountWorkspace, unreadCountGlobal } = useMemo(() => {
-    const visible = rawNotifications.filter((item) => isNotificationEnabled(item.op, notificationPrefs));
+    // Active feed: muted categories out (DF-19f), then dismissed rows out (DF-21b)
+    // — so a dismissed row leaves both the list and the unread badge. History
+    // (DF-21c) reads the full `rawNotifications` instead.
+    const visible = activeNotifications(
+      rawNotifications.filter((item) => isNotificationEnabled(item.op, notificationPrefs)),
+    );
     const workspaceFeed = visible.filter((item) => item.workspaceId === selectedWorkspaceId);
     const globalFeed = visible;
     return {
@@ -365,6 +373,46 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     await refreshNotifications();
   }, [refreshNotifications, runtime, selectedWorkspaceId]);
 
+  // Dismiss / undo (DF-21b). Only spine rows carry a dismiss mark — legacy
+  // invites are relocated, not dismissed (DF-21c). Dismiss every row in a digest
+  // card at once, then refresh once; the ops throw on failure so the caller can
+  // surface a toast (and skip the Undo) if the migration isn't deployed yet.
+  const dismissNotifications = useCallback(
+    async (items: NotificationItem[]) => {
+      if (!runtime) return;
+      const targets = items.filter((i) => i.source === "spine" && i.workspaceId);
+      try {
+        await Promise.all(
+          targets.map((i) =>
+            runtime.spine.dismissNotification({ workspaceId: i.workspaceId as string, activityId: i.id }),
+          ),
+        );
+      } finally {
+        // Always reconcile — a partial failure across a multi-row card still
+        // repaints the real server state instead of a stale list.
+        await refreshNotifications();
+      }
+    },
+    [refreshNotifications, runtime],
+  );
+
+  const undismissNotifications = useCallback(
+    async (items: NotificationItem[]) => {
+      if (!runtime) return;
+      const targets = items.filter((i) => i.source === "spine" && i.workspaceId);
+      try {
+        await Promise.all(
+          targets.map((i) =>
+            runtime.spine.undismissNotification({ workspaceId: i.workspaceId as string, activityId: i.id }),
+          ),
+        );
+      } finally {
+        await refreshNotifications();
+      }
+    },
+    [refreshNotifications, runtime],
+  );
+
   useEffect(() => {
     if (!runtime || !userId) {
       setLoading(false);
@@ -443,15 +491,19 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       refreshNotifications,
       markNotificationRead,
       markAllNotificationsRead,
+      dismissNotifications,
+      undismissNotifications,
     }),
     [
       canManageWorkspace,
       createWorkspace,
+      dismissNotifications,
       invites,
       leaveWorkspace,
       loading,
       markAllNotificationsRead,
       markNotificationRead,
+      undismissNotifications,
       members,
       modulePermissions,
       notifications,

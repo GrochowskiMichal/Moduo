@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { useAuth } from "../providers/auth-provider";
 import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
 import { useWorkspace } from "../providers/workspace-provider";
 import { useShortcut } from "../lib/shortcuts";
+import { undoToast } from "../lib/undo-toast";
 import {
   groupNotifications,
   notificationDeepLink,
@@ -47,6 +49,8 @@ export function NotificationCenter() {
     refreshNotifications,
     markNotificationRead,
     markAllNotificationsRead,
+    dismissNotifications,
+    undismissNotifications,
   } = useWorkspace();
   const [open, setOpen] = useState(false);
 
@@ -91,6 +95,25 @@ export function NotificationCenter() {
       }
     },
     [markNotificationRead],
+  );
+
+  // Dismiss every row in a card at once, with the app's 8s Undo (DF-5). On
+  // failure (op not deployed) surface a toast and skip the Undo (AC5).
+  const handleDismiss = useCallback(
+    async (group: NotificationGroup) => {
+      try {
+        await dismissNotifications(group.items);
+        undoToast("Notification dismissed", {
+          // Restore + own error toast here (per undo-toast.tsx's contract).
+          onUndo: () => {
+            void undismissNotifications(group.items).catch(() => toast("Couldn't undo — try again."));
+          },
+        });
+      } catch {
+        toast("Couldn't dismiss — try again.");
+      }
+    },
+    [dismissNotifications, undismissNotifications],
   );
 
   return (
@@ -141,6 +164,9 @@ export function NotificationCenter() {
               {groups.map((group) => {
                 const unread = group.unreadCount > 0;
                 const link = notificationDeepLink(group);
+                // Only spine rows carry a dismiss mark; legacy invites can't be
+                // dismissed (they relocate to Invitations in DF-21c).
+                const dismissable = group.items.some((item) => item.source === "spine");
                 return (
                   <Card
                     key={group.key}
@@ -173,6 +199,21 @@ export function NotificationCenter() {
                           <span className="ml-1 text-xs text-muted-foreground">×{group.count}</span>
                         ) : null}
                       </p>
+                      {dismissable ? (
+                        <button
+                          type="button"
+                          aria-label="Dismiss notification"
+                          className="-mr-1 -mt-0.5 shrink-0 rounded-md px-1 text-base leading-none text-muted-foreground/60 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleDismiss(group);
+                          }}
+                          // Stop Enter/Space from also triggering the card's activate.
+                          onKeyDown={(event) => event.stopPropagation()}
+                        >
+                          ×
+                        </button>
+                      ) : null}
                     </div>
                     <p className="flex items-center gap-1 pl-3.5 text-xs text-muted-foreground/70">
                       {relativeTime(group.latestAt)}

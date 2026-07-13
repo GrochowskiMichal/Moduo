@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activeNotifications,
   groupNotifications,
   notificationDeepLink,
   notificationDeepLinkNoun,
@@ -25,6 +26,7 @@ function item(over: Partial<NotificationItem> & Pick<NotificationItem, "id" | "c
     actorId: "u2",
     actorLabel: "Mike",
     readAt: null,
+    dismissedAt: null,
     ...over,
   };
 }
@@ -73,6 +75,31 @@ describe("unreadCount", () => {
         item({ id: "c", createdAt: "2026-06-26T12:00:00Z", readAt: null }),
       ]),
     ).toBe(2);
+  });
+});
+
+// DF-21b — dismissed rows leave the active bell feed (+ badge) but persist for
+// history; Undo (clearing dismissedAt) returns them in their prior read state.
+describe("activeNotifications", () => {
+  it("drops dismissed rows and keeps active ones", () => {
+    const active = activeNotifications([
+      item({ id: "a", createdAt: "x", dismissedAt: null }),
+      item({ id: "b", createdAt: "x", dismissedAt: "2026-07-13T10:00:00Z" }),
+      item({ id: "c", createdAt: "x", dismissedAt: null }),
+    ]);
+    expect(active.map((i) => i.id)).toEqual(["a", "c"]);
+  });
+
+  it("keeps a dismissed row's unread state intact for Undo (never counts it while dismissed)", () => {
+    const rows = [
+      item({ id: "a", createdAt: "x", readAt: null, dismissedAt: "2026-07-13T10:00:00Z" }), // unread + dismissed
+      item({ id: "b", createdAt: "x", readAt: null, dismissedAt: null }),
+    ];
+    // While dismissed, the unread row is out of the active feed → not badged.
+    expect(unreadCount(activeNotifications(rows))).toBe(1);
+    // Undo restores dismissedAt=null → it re-enters active as unread again.
+    const undone = rows.map((r) => (r.id === "a" ? { ...r, dismissedAt: null } : r));
+    expect(unreadCount(activeNotifications(undone))).toBe(2);
   });
 });
 

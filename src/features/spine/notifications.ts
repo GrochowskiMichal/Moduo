@@ -31,6 +31,12 @@ export type NotificationItem = SpineActorFields & {
   createdAt: string;
   /** null ⇒ unread. */
   readAt: string | null;
+  /**
+   * null ⇒ active. A dismissed row leaves the active bell feed but stays in
+   * history (DF-21b). Orthogonal to readAt — dismiss never sets readAt, so Undo
+   * restores the prior read/unread state.
+   */
+  dismissedAt: string | null;
 };
 
 /**
@@ -91,6 +97,15 @@ export function groupNotifications(items: NotificationItem[]): NotificationGroup
 /** Total unread across a feed (the bell badge). */
 export function unreadCount(items: NotificationItem[]): number {
   return items.reduce((n, item) => (item.readAt ? n : n + 1), 0);
+}
+
+/**
+ * The active feed: rows the user hasn't dismissed (DF-21b). The bell renders +
+ * badges these; dismissed rows drop out here and live on only in history. Undo
+ * (clear dismissedAt) returns a row to this set in its prior read/unread state.
+ */
+export function activeNotifications(items: NotificationItem[]): NotificationItem[] {
+  return items.filter((item) => !item.dismissedAt);
 }
 
 /**
