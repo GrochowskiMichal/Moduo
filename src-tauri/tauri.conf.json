@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.moduo.desktop",
   "build": {
-    "beforeBuildCommand": "bun run build:web",
+    "beforeBuildCommand": "bun run build:desktop:web",
     "devUrl": "http://localhost:8081",
     "frontendDist": "../dist"
   },
