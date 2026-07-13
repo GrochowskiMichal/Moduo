@@ -103,9 +103,10 @@ export interface Preferences {
   motion: MotionPref;
   /** Per-type notification mutes (read-side filter over the bell feed). */
   notifications: NotificationPrefs;
-  /** Desktop-only: confirm before quitting (Tauri onCloseRequested). The field
-   *  lands here now so the desktop wiring block (DF-19f-quit) is domain-edit-free;
-   *  it has no effect until that block reads it. */
+  /** Desktop-only: confirm before quitting. Read by BOTH the JS window-close guard
+   *  (`onCloseRequested`) and the Rust ⌘Q handler (`RunEvent::ExitRequested`), the
+   *  latter via the `set_confirm_before_quit` command that mirrors this into `AppState`.
+   *  See src/lib/confirm-before-quit.ts + src-tauri/src/lib.rs. */
   confirmBeforeQuit: boolean;
 }
 

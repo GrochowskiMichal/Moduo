@@ -124,7 +124,7 @@ export function PreferencesSection() {
         {isTauriRuntime() ? (
           <PrefRow
             title="Confirm before quitting"
-            description="Ask for confirmation when you close the window. On macOS, ⌘Q still quits right away."
+            description="Ask for confirmation before quitting the app, whether you press ⌘Q or close the window."
           >
             <Switch
               checked={preferences.confirmBeforeQuit}
