@@ -35,8 +35,8 @@ function PreferencesSync() {
   return null;
 }
 
-// Desktop-only: intercept window close to confirm-before-quit when opted in
-// (Settings → Preferences → Startup). No-op on web. DF-19f-quit.
+// Desktop-only: mirror the confirm-before-quit pref into Rust so the native quit
+// handlers (⌘Q menu item + window CloseRequested) can read it. No-op on web. DF-19f-quit.
 function ConfirmBeforeQuit() {
   useConfirmBeforeQuit();
   return null;

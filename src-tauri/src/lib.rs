@@ -7,7 +7,12 @@ use std::{
     },
 };
 
-use tauri::Manager;
+use tauri::menu::Menu;
+#[cfg(target_os = "macos")]
+use tauri::menu::{
+    AboutMetadata, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
+};
+use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 pub mod auth;
@@ -31,12 +36,13 @@ pub struct AppState {
     pub acl: identity_acl::AclManager,
     /// Desktop confirm-before-quit opt-in, mirrored from the webview-only
     /// `confirmBeforeQuit` preference (which lives only in the webview store) so the
-    /// app-level ⌘Q handler (`RunEvent::ExitRequested`) can read it synchronously.
-    /// Pushed by the webview on boot and on every toggle via `set_confirm_before_quit`.
+    /// native quit handlers (the custom Quit menu item for ⌘Q and the window
+    /// `CloseRequested` handler) can read it synchronously. Pushed by the webview on
+    /// boot and on every toggle via `set_confirm_before_quit`.
     pub confirm_before_quit: Mutex<bool>,
-    /// True while a ⌘Q confirm dialog is already open. The confirm dialog is
-    /// non-blocking, so it returns immediately and leaves the event loop live — a
-    /// repeated ⌘Q would otherwise re-enter the handler and stack another dialog.
+    /// True while a quit-confirm dialog is already open. The dialog is non-blocking, so
+    /// it returns immediately and leaves the event loop live — a repeated ⌘Q (or another
+    /// close) would otherwise stack a second dialog. Cleared when the user cancels.
     pub quit_prompt_open: AtomicBool,
     /// Background cloud-sync worker. Present only when signed in with a Supabase JWT.
     /// Feature-gated behind the future offline/"lite" build.
@@ -102,9 +108,189 @@ fn perform_one_time_auth_v3_reset(
     Ok(db_path)
 }
 
+/// Menu id of our custom Quit item. macOS's predefined Quit (`PredefinedMenuItem::quit`)
+/// calls `NSApplication terminate:` directly, which bypasses every preventable event — so
+/// confirm-before-quit could never intercept ⌘Q (it went straight to `RunEvent::Exit`).
+/// Routing ⌘Q through a custom item lets `on_menu_event` honour the toggle. DF-19f-quit.
+const QUIT_MENU_ID: &str = "moduo-quit";
+
+/// Build the application menu. On macOS this mirrors `tauri::menu::Menu::default` (v2.11)
+/// EXACTLY — same App/File/Edit/View/Window/Help structure so Copy/Paste/Undo/Fullscreen/
+/// Minimize/etc. and their shortcuts keep working — EXCEPT the App menu's Quit is a custom
+/// `MenuItem` (id `QUIT_MENU_ID`, ⌘Q) instead of the predefined Quit, so ⌘Q fires
+/// `on_menu_event` and confirm-before-quit can prompt first. Non-macOS (not a shipping
+/// target) keeps the stock default menu. DF-19f-quit.
+#[cfg(target_os = "macos")]
+fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let pkg_info = app.package_info();
+    let config = app.config();
+    let about_metadata = AboutMetadata {
+        name: Some(pkg_info.name.clone()),
+        version: Some(pkg_info.version.to_string()),
+        copyright: config.bundle.copyright.clone(),
+        authors: config.bundle.publisher.clone().map(|p| vec![p]),
+        ..Default::default()
+    };
+
+    let quit = MenuItem::with_id(app, QUIT_MENU_ID, "Quit Moduo", true, Some("CmdOrCtrl+Q"))?;
+
+    let app_menu = Submenu::with_items(
+        app,
+        pkg_info.name.clone(),
+        true,
+        &[
+            &PredefinedMenuItem::about(app, None, Some(about_metadata))?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::services(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::hide(app, None)?,
+            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
+    )?;
+
+    let file_menu = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[&PredefinedMenuItem::close_window(app, None)?],
+    )?;
+
+    let edit_menu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )?;
+
+    let view_menu = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[&PredefinedMenuItem::fullscreen(app, None)?],
+    )?;
+
+    let window_menu = Submenu::with_id_and_items(
+        app,
+        WINDOW_SUBMENU_ID,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(app, None)?,
+        ],
+    )?;
+
+    let help_menu = Submenu::with_id_and_items(app, HELP_SUBMENU_ID, "Help", true, &[])?;
+
+    Menu::with_items(
+        app,
+        &[
+            &app_menu,
+            &file_menu,
+            &edit_menu,
+            &view_menu,
+            &window_menu,
+            &help_menu,
+        ],
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    Menu::default(app)
+}
+
+/// Read the mirrored confirm-before-quit opt-in. Recover on a poisoned lock rather than
+/// fail-open, so a mid-write panic still honours the user's choice.
+fn confirm_before_quit_enabled(app: &AppHandle) -> bool {
+    let state = app.state::<AppState>();
+    let enabled = match state.confirm_before_quit.lock() {
+        Ok(guard) => *guard,
+        Err(poisoned) => *poisoned.into_inner(),
+    };
+    enabled
+}
+
+/// Show the native "quit?" confirm; on Quit, exit the app. Only ONE dialog at a time —
+/// `quit_prompt_open` guards against a repeated gesture stacking a second dialog while one
+/// is open (the non-blocking `.show()` returns immediately). Cancel clears the guard so a
+/// later gesture prompts again. `app.exit(0)` runs the normal shutdown (→ `RunEvent::Exit`
+/// worker cleanup); it is safe here because this runs from a deferred event callback, not
+/// from inside a `RunEvent` handler (where re-entering the exit loop is forbidden).
+fn prompt_quit_confirm(app: &AppHandle) {
+    if app
+        .state::<AppState>()
+        .quit_prompt_open
+        .swap(true, Ordering::SeqCst)
+    {
+        return;
+    }
+    let app = app.clone();
+    app.dialog()
+        .message("Are you sure you want to quit Moduo?")
+        .title("Quit Moduo")
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Quit".to_string(),
+            "Cancel".to_string(),
+        ))
+        .show(move |confirmed| {
+            if confirmed {
+                app.exit(0);
+            } else {
+                app.state::<AppState>()
+                    .quit_prompt_open
+                    .store(false, Ordering::SeqCst);
+            }
+        });
+}
+
+/// Unified quit gate for the app-level ⌘Q gesture (custom Quit menu item). Prompts when
+/// the toggle is on, otherwise exits immediately.
+fn request_app_quit(app: &AppHandle) {
+    if confirm_before_quit_enabled(app) {
+        prompt_quit_confirm(app);
+    } else {
+        app.exit(0);
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .menu(build_app_menu)
+        // ⌘Q (and the Apple-menu Quit) fire our custom Quit item here, NOT the predefined
+        // Quit — so we can confirm before terminating. See `build_app_menu`.
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == QUIT_MENU_ID {
+                request_app_quit(app);
+            }
+        })
+        // Window close (red button / ⌘W / File → Close Window) raises `CloseRequested`,
+        // which ⌘Q does NOT — so the two gestures are disjoint on macOS (no double prompt).
+        // When opted in, prevent the native close and confirm first; the dialog exits on
+        // Quit and keeps the window on Cancel. Off → let it close natively (unchanged).
+        // Scoped to the "main" window: closing this single-window app IS quitting it, but a
+        // future secondary window (OAuth/preview popup) should close on its own, not prompt.
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" && confirm_before_quit_enabled(window.app_handle()) {
+                    api.prevent_close();
+                    prompt_quit_confirm(window.app_handle());
+                }
+            }
+        })
         .setup(|app| {
             let config = config::AppConfig::from_env();
             let db_path =
@@ -224,59 +410,13 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building moduo desktop application")
-        .run(|app, event| match event {
-            // macOS ⌘Q (and any app-level quit) raises `ExitRequested` — it does NOT
-            // route through a window's `CloseRequested`, so the JS `onCloseRequested`
-            // guard (confirm-before-quit.ts) can't see it. When the user opted into
-            // confirm-before-quit (mirrored into AppState by the webview via
-            // `set_confirm_before_quit`), prevent the exit and ask natively first.
-            tauri::RunEvent::ExitRequested { api, .. } => {
-                let state = app.state::<AppState>();
-                // Recover the value on a poisoned lock rather than fail-open: a
-                // `Mutex<bool>` only poisons if a thread panicked mid-write, and we still
-                // want to honour the user's opt-in (matches `stop_all_idle_workers`).
-                let confirm = match state.confirm_before_quit.lock() {
-                    Ok(guard) => *guard,
-                    Err(poisoned) => *poisoned.into_inner(),
-                };
-                if confirm {
-                    api.prevent_exit();
-                    // Only the FIRST ⌘Q opens a dialog; a repeat while one is already open
-                    // just re-prevents the exit (the non-blocking `.show()` leaves the loop
-                    // live, so a second ⌘Q re-enters this arm — without the guard it would
-                    // stack another native dialog).
-                    if !state.quit_prompt_open.swap(true, Ordering::SeqCst) {
-                        let app = app.clone();
-                        // Non-blocking `.show()`: `blocking_show()` on the event-loop (main)
-                        // thread can deadlock. The callback runs on a later loop turn, and
-                        // `app.exit()` cannot be called from inside a `RunEvent` handler in
-                        // Tauri v2 (it re-enters `ExitRequested` → loop) — so on confirm we
-                        // run our own cleanup and hard-exit via `std::process::exit`.
-                        app.dialog()
-                            .message("Are you sure you want to quit Moduo?")
-                            .title("Quit Moduo")
-                            .buttons(MessageDialogButtons::OkCancelCustom(
-                                "Quit".to_string(),
-                                "Cancel".to_string(),
-                            ))
-                            .show(move |confirmed| {
-                                if confirmed {
-                                    commands::email::stop_all_idle_workers();
-                                    std::process::exit(0);
-                                }
-                                // Cancel → keep running; clear the guard so a later ⌘Q
-                                // prompts again.
-                                app.state::<AppState>()
-                                    .quit_prompt_open
-                                    .store(false, Ordering::SeqCst);
-                            });
-                    }
-                }
-                // Not opted in → allow the exit; the `Exit` arm cleans up the workers.
-            }
-            tauri::RunEvent::Exit => {
+        .run(|_app, event| {
+            // The confirm-before-quit decision now lives in the menu + window-close
+            // handlers above (which run BEFORE the exit request), so this only cleans up
+            // once an exit is actually happening — including for exits we can't intercept
+            // (dock right-click → Quit, system logout), which go straight to `Exit`.
+            if let tauri::RunEvent::Exit = event {
                 commands::email::stop_all_idle_workers();
             }
-            _ => {}
         });
 }
