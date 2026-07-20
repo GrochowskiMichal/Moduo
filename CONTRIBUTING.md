@@ -177,19 +177,19 @@ These apply to every AI session in this repo regardless of tool:
    into `develop` if you've only run the task-tier checks; either run the
    personal-tier walkthrough or flag in the PR description that the human
    still owes the walkthrough.
-7. **Reference [CLAUDE.md](./CLAUDE.md) and [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)
+7. **Reference [AGENTS.md](./AGENTS.md) and [DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md)
    before touching UI.** They're the design contract.
 
 ### Session start checklist
 
 The first thing an LLM session should do, before any other action:
 
-1. Confirm whose session this is — Maciej or Mike. (CLAUDE.md says "the user
-   is Maciej" by default; Mike's CLAUDE.md fork or session prompt overrides.)
+1. Confirm whose session this is — Maciej or Mike. (AGENTS.md says "the user
+   is Maciej" by default; Mike's AGENTS.md fork or session prompt overrides.)
 2. `git fetch && git checkout <owner>` to land on the correct personal branch.
 3. `git pull` to refresh.
 4. `git checkout -b <owner>/<task>` for new work.
-5. Skim CLAUDE.md + this file's "Rules for LLM agents" + DESIGN_SYSTEM.md
+5. Skim AGENTS.md + this file's "Rules for LLM agents" + DESIGN_SYSTEM.md
    if the task is UI.
 
 If any of the above can't be done (no personal branch yet, untracked work

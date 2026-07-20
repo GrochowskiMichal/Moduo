@@ -1,7 +1,7 @@
 # Calendar — Design Brief (the build spec)
 
 > **Status:** Ready for spec — written 2026-07-02 from the `/plan` grilling round with Maciej. Every product decision below was explicitly ratified by him or follows from a decision he made; technical calls are recorded in `specs/calendar.md` §Assumptions.
-> **Pairs with:** [BRIEF.md](./BRIEF.md) (product intent — still authoritative on JTBD/ceiling/moat), [COMPETITIVE_RESEARCH.md](./COMPETITIVE_RESEARCH.md) (the Morgen bar + the execution-loop gap), [docs/moduo-module-contract.md](../../docs/moduo-module-contract.md), [DESIGN_RULES.md](../../DESIGN_RULES.md).
+> **Pairs with:** [BRIEF.md](./BRIEF.md) (product intent — still authoritative on JTBD/ceiling/moat), [COMPETITIVE_RESEARCH.md](./COMPETITIVE_RESEARCH.md) (the Morgen bar + the execution-loop gap), [docs/moduo-module-contract.md](../../docs/moduo-module-contract.md), [DESIGN_RULES.md](../../docs/DESIGN_RULES.md).
 > **The bar:** Maciej uses Morgen daily; Moduo Calendar must feel *at least* Morgen-level on the planning surface, and own the execution loop no incumbent ships (research §3).
 > **Supersedes:** the legacy localStorage/redb calendar (`use-calendar.ts`, `/calendar` exploratory page). Its **desktop OAuth + Google/Outlook sync engine is preserved and reused** as the v1 external-sync source; its localStorage event store is retired.
 

@@ -1,7 +1,7 @@
 # Tasks follow-ups — continuation 2 (Focus-card session, 2026-06-16)
 
 > Paste into a fresh Claude Code session. Read [CLAUDE.md](../../CLAUDE.md),
-> [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md), and the original
+> [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md), and the original
 > [CONTINUATION.md](./CONTINUATION.md) + [DECISIONS.md](./DECISIONS.md) first.
 
 ## Where things are

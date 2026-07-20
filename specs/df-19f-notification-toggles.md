@@ -82,7 +82,7 @@ Every `comments.add` row that reaches the feed is already a mention-to-me (it on
 5. **`confirmBeforeQuit: boolean` field is added in THIS block** (defaults `false`), even though its Tauri wiring ships in the separate desktop block — so the domain edits live in one place and the desktop block never re-touches `preferences.ts` (parallel-lane-safe). An inert *data field* in an opaque blob is not a "lying control" (no UI here); it's the reserved-capacity pattern the decision already blessed.
 6. **Rollout window (graceful):** during the merge-before-deploy gap, an older client (pre-this-block) that writes the `preferences` blob last would omit `notifications`; the new client's `sanitizePreferences` re-defaults it all-on. That's a fail-open degrade (mutes reset to all-on if an old client wins LWW), same class as the existing deploy-gap guard. Negligible at single-version alpha; noted, not mitigated.
 7. **Data model = Supabase-first**, no new tables/columns (opaque jsonb reuse). **Spine wiring / MCP tools / dashboard widget = N/A** — this is a settings control on a platform surface, the deliberate DoR exception recorded for all of DF-19 (settings-overhaul §"Module-feature spine wiring — N/A").
-8. **Design constraints:** tokens-only, shadcn `Switch`/`Select` already in the section; the new group reuses the existing `PrefGroup`/`PrefRow` helpers verbatim — no new primitive, no new story needed. `DESIGN_RULES.md` R1–R4 satisfied by reuse.
+8. **Design constraints:** tokens-only, shadcn `Switch`/`Select` already in the section; the new group reuses the existing `PrefGroup`/`PrefRow` helpers verbatim — no new primitive, no new story needed. `docs/DESIGN_RULES.md` R1–R4 satisfied by reuse.
 
 ## Edge cases
 

@@ -187,7 +187,7 @@ The reviews below state which path was used.
 Branch: `design/settings-polish-delta` (commits 5726f57…879a410).
 Method: Storybook captures of the primitives the Settings page composes
 (Tabs, RadioGroup, Switch, Select, Button, Badge, Card, Sheet), manual code
-inspection against [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md) and the hard
+inspection against [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md) and the hard
 rules in [CLAUDE.md](../../CLAUDE.md). The Tauri desktop launch sits behind
 a vault-creation step that is unavailable in this worktree; findings are
 sourced from primitive composition + token traces.
@@ -312,7 +312,7 @@ this task beyond the audit notes above.
 
 Branch: `design/settings-polish-delta` (commit a3e9dc0…). The
 formula `inner-radius = max(outer-radius − padding, 0)` is now
-codified in [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md). The rule
+codified in [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md). The rule
 kicks in when a nested element shares a corner with its parent —
 i.e. the child sits at the edge of the parent with no surrounding
 gap. Walked each of the targets named in the delta:

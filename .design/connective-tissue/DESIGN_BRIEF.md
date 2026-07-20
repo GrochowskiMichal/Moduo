@@ -1,7 +1,7 @@
 # Design Brief: Connective Tissue (the Spine)
 
 > **Status:** Foundational — the Wave 0 spec. Built **first**, once, alongside Contacts (module #2): the spine ships as the substrate and Contacts is its first full consumer (Tasks is the first existing module to gain link capability). This brief is the authoritative cross-cutting contract every other module's design consumes.
-> **Pairs with:** [PRODUCT_BRIEF.md](../../docs/PRODUCT_BRIEF.md) (§4 the moat) · [data-layers.md](../../docs/data-layers.md) (§4–5 the spine) · [ROADMAP.md](../../docs/ROADMAP.md) (Wave 0) · [.design/connective-tissue/BRIEF.md](./BRIEF.md) (product brief this deepens) · [moduo-module-contract.md](../../docs/moduo-module-contract.md) (intent ops / actors / activity / manifest) · [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md) · [.design/foundation/DESIGN_BRIEF.md](../foundation/DESIGN_BRIEF.md) · [.design/contacts/DESIGN_BRIEF.md](../contacts/DESIGN_BRIEF.md) (the first consumer)
+> **Pairs with:** [PRODUCT_BRIEF.md](../../docs/PRODUCT_BRIEF.md) (§4 the moat) · [data-layers.md](../../docs/data-layers.md) (§4–5 the spine) · [ROADMAP.md](../../docs/ROADMAP.md) (Wave 0) · [.design/connective-tissue/BRIEF.md](./BRIEF.md) (product brief this deepens) · [moduo-module-contract.md](../../docs/moduo-module-contract.md) (intent ops / actors / activity / manifest) · [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md) · [.design/foundation/DESIGN_BRIEF.md](../foundation/DESIGN_BRIEF.md) · [.design/contacts/DESIGN_BRIEF.md](../contacts/DESIGN_BRIEF.md) (the first consumer)
 
 ---
 

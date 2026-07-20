@@ -5,8 +5,8 @@
 
 I'm starting Phase 4 of the design-foundation rebuild. The plan lives at
 [.design/foundation/TASKS.md](.design/foundation/TASKS.md), Phase 4 section. The hard
-design rules are in [CLAUDE.md](./CLAUDE.md), the system reference is in
-[DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md), and the brief is in
+design rules are in [CLAUDE.md](../../AGENTS.md), the system reference is in
+[DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md), and the brief is in
 [.design/foundation/DESIGN_BRIEF.md](.design/foundation/DESIGN_BRIEF.md).
 
 **Read these first**, in order: CLAUDE.md → DESIGN_BRIEF.md → TASKS.md (Phase 4 section
