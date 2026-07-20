@@ -1,13 +1,13 @@
 ---
 name: moduo-design-quality
-description: Enforce Moduo's design system AND build/redesign UI with taste. Audits or fixes changed components against src/styles/tokens.css + DESIGN_RULES.md (R1–R10) — flags raw hex / arbitrary Tailwind / inline-style color / motion-token bypass / anti-slop, checks relational rules a regex can't, and returns a severity-bucketed Before/After report. Modes audit (default) · polish (audit+fix) · build-with-taste · motion-pass. Use after editing UI, before shipping, for a token/quality pass, or to craft a token-driven component. NOT for planning, IA, briefs, or running the design process from scratch — that is design-flow.
+description: Enforce Moduo's design system AND build/redesign UI with taste. Audits or fixes changed components against src/styles/tokens.css + docs/DESIGN_RULES.md (R1–R10) — flags raw hex / arbitrary Tailwind / inline-style color / motion-token bypass / anti-slop, checks relational rules a regex can't, and returns a severity-bucketed Before/After report. Modes audit (default) · polish (audit+fix) · build-with-taste · motion-pass. Use after editing UI, before shipping, for a token/quality pass, or to craft a token-driven component. NOT for planning, IA, briefs, or running the design process from scratch — that is design-flow.
 ---
 
 # moduo-design-quality
 
 The enforcement-plus-taste layer for Moduo's frontend (a product app — Tauri + shadcn/ui + React; **not** landing pages or brand work). It checks changed components against the live design system and, when building, ships token-driven UI with taste. It audits/fixes against an existing system — it does **not** invent visual direction or run the phase sequence (that's `design-flow`).
 
-**Always read first:** `src/styles/tokens.css` (the value source), `DESIGN_RULES.md` (relational rules R1–R10), and a neighbouring component (match its patterns). Use the shadcn primitive in `src/components/ui/` where one exists; never roll your own. If a needed value is missing, **add it to `tokens.css`** — never inline it.
+**Always read first:** `src/styles/tokens.css` (the value source), `docs/DESIGN_RULES.md` (relational rules R1–R10), and a neighbouring component (match its patterns). Use the shadcn primitive in `src/components/ui/` where one exists; never roll your own. If a needed value is missing, **add it to `tokens.css`** — never inline it.
 
 ## Modes
 
@@ -26,7 +26,7 @@ The enforcement-plus-taste layer for Moduo's frontend (a product app — Tauri +
 - For a flagged value, suggest the **nearest token** (`text-[12px]`→`text-xs`, a `#cfcfcf`→`text-muted-foreground`). Drift = a near-miss hardcode, not just any literal.
 
 **Tier 2 — judgment (what a regex can't see; this is the skill's real value):**
-- **Relational rules** R1–R10 from `DESIGN_RULES.md`: control-rung bundle (R1), radius-by-role + concentric inner radius (R2/R3), type roles + `tabular-nums` (R4), accent-usage policy — accent only on primary action / selection / focus ring / done-check (R5), motion signature (R6), density via vars not `h-9` (R7), sentence case (R8), single font (R9), tokens-only (R10).
+- **Relational rules** R1–R10 from `docs/DESIGN_RULES.md`: control-rung bundle (R1), radius-by-role + concentric inner radius (R2/R3), type roles + `tabular-nums` (R4), accent-usage policy — accent only on primary action / selection / focus ring / done-check (R5), motion signature (R6), density via vars not `h-9` (R7), sentence case (R8), single font (R9), tokens-only (R10).
 - **Contrast** (needs render — live-verify or Storybook): body ≥4.5:1, large ≥3:1, placeholders ≥4.5:1.
 - **Interaction states:** every interactive element ships default/hover/focus/active/disabled/loading/error; skeletons not spinners; empty states teach.
 - **Overflow/clipping** (popover/portal inside `overflow-hidden`), spacing rhythm, heading order.

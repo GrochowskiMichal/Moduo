@@ -4,8 +4,8 @@
  * that bypass the design-system tokens — raw hex / color-function colors across
  * every color utility, arbitrary font-size / radius / spacing / shadow, the
  * motion-token bypass (duration-200 / duration-[180ms]), and static hex in
- * inline `style={{}}` props. Enforces CLAUDE.md design-system rules 1–3 and
- * DESIGN_RULES.md (token surface). Allowed: the sanctioned `[var(--token)]`
+ * inline `style={{}}` props. Enforces AGENTS.md design-system rules 1–3 and
+ * docs/DESIGN_RULES.md (token surface). Allowed: the sanctioned `[var(--token)]`
  * escape hatch, and one-off *geometry* (top-/left-/h-/w-/translate-/inset-[…])
  * which is never a design-system property. Paths in IGNORED_PATHS are skipped
  * (the RN shim + the curated legacy backlog). Exits non-zero on hits.
@@ -56,7 +56,7 @@ const PATTERNS: Pattern[] = [
 ];
 
 const IGNORED_PATHS: string[] = [
-  // React Native compatibility shim — intentionally untouched per CLAUDE.md.
+  // React Native compatibility shim — intentionally untouched per AGENTS.md.
   "src/tw",
 
   // Subframe-generated code (synced from the Subframe project via the CLI).
@@ -123,7 +123,7 @@ const IGNORED_PATHS: string[] = [
 
   // Hardcoded color CONSTANTS / defaults (not Tailwind classes) surfaced when
   // the gate's color coverage was widened. Deferred to the curated label-color
-  // palette work (an open question in DESIGN_SYSTEM.md) + the per-feature briefs
+  // palette work (an open question in docs/DESIGN_SYSTEM.md) + the per-feature briefs
   // for mindmap (legacy) and calendar (not built yet).
   "src/features/mindmap/ui/components/mindmap-mini-map.tsx",
   "src/features/mindmap/ui/types.ts",
@@ -220,7 +220,7 @@ async function main() {
     }
   }
   console.error(
-    `\nlint:tw — design-system properties must use semantic tokens (see CLAUDE.md).`
+    `\nlint:tw — design-system properties must use semantic tokens (see AGENTS.md).`
   );
   process.exit(1);
 }

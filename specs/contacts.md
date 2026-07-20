@@ -109,7 +109,7 @@ Each block is sized to one `/execute` context budget, vertical-slice where possi
 
 ## Design constraints (R1–R10)
 
-Obeys `DESIGN_RULES.md` / `tokens.css`; `moduo-design-quality` enforces on the diff. The contacts DESIGN_BRIEF (§4, §12) is already a token-discipline model — the spec inherits it:
+Obeys `docs/DESIGN_RULES.md` / `tokens.css`; `moduo-design-quality` enforces on the diff. The contacts DESIGN_BRIEF (§4, §12) is already a token-discipline model — the spec inherits it:
 - **Tokens only (R10):** no raw hex / arbitrary Tailwind for color/spacing/radius/font. Status uses the fixed status tokens (`--success`/`--warning`/`--danger`/`--info`); tags use the 8 `[data-label]` hues; **entity-ref chips are monochrome** (no hue). No color-bearing data introduces new hex.
 - **Accent discipline (R5):** the pink `--primary` appears once per view at most (the primary action); selection uses `--selected-bg`/`--selected-border`; everything else neutral.
 - **Density + motion via tokens (R7, R6):** directory/hub rows consume `--row-h`/`--pad-*`/`size-icon-*` (Linear-level at the dense end); roll-up reveals + status changes go through `--motion-*` so reduced-motion holds.
@@ -129,7 +129,7 @@ Obeys `DESIGN_RULES.md` / `tokens.css`; `moduo-design-quality` enforces on the d
 - [x] **Data model is named and Supabase-first** — `contacts`, `companies` (owned) + the shared spine tables (consumed); migrations identified per block; RLS mirrors Tasks.
 - [x] **Module feature wiring enumerated** — links/attach/drag/@mention/`/ref`/notifications/activity/tags (DESIGN_BRIEF §spine wiring); MCP tools listed (`contacts.list`/`get`/`search` + the 6 write ops); dashboard widget defined ("Needs attention") — per `docs/moduo-module-contract.md`.
 - [x] **Execution blocks** decomposed (5), sequenced with dependencies (incl. cross-spec deps on the spine blocks), each context-sized and self-contained.
-- [x] **Design constraints acknowledged** — tokens-only, shadcn-wrapped, neutral chips, status color+label, the relevant `DESIGN_RULES.md` rules (R4/R5/R6/R7/R8/R10).
+- [x] **Design constraints acknowledged** — tokens-only, shadcn-wrapped, neutral chips, status color+label, the relevant `docs/DESIGN_RULES.md` rules (R4/R5/R6/R7/R8/R10).
 - [x] **Manual-test surfaces identified** for the `/wrap` checklist: open-contact-zero-logging, status optimistic+revert, add-follow-up, link both directions, CSV import + dedupe-preview + malformed, suggestion accept/decline, company union, `/crm`→`/contacts` redirect, needs-attention thresholds — across web + desktop.
 
 **Ready to execute.** Blocks in order: 1 → 2 → (3 ∥ 4) → 5, gated on the spine spec's blocks 1–7 as noted.

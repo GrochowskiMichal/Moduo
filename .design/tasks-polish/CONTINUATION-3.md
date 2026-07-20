@@ -1,7 +1,7 @@
 # Tasks follow-ups — continuation 3 (DnD + detail panel + Pomodoro, 2026-06-16)
 
 > Paste into a fresh Claude Code session. Read [CLAUDE.md](../../CLAUDE.md),
-> [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md), and the prior
+> [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md), and the prior
 > [CONTINUATION-2.md](./CONTINUATION-2.md) + [DECISIONS.md](./DECISIONS.md) first.
 
 ## Done this session (don't redo)

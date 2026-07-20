@@ -1,7 +1,7 @@
 # Session 11 continuation — Tasks UI/UX + design-system control
 
 > Paste this into a fresh Claude Code session. You have NO memory of the prior session;
-> this is the only context. Read [CLAUDE.md](../../CLAUDE.md) + [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md) first.
+> this is the only context. Read [CLAUDE.md](../../CLAUDE.md) + [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md) first.
 
 ## Where things are
 - Branch **`t/maciej/session11-tasks-ui`** → **PR #21** (base `maciej`). Already **merged into local

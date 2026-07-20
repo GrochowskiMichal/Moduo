@@ -2,7 +2,7 @@
 
 > Output of `/design-brief` for the moduo polish run on the **top bar + global bottom bar**. These are the two persistent chrome surfaces of the app shell. The foundation (tokens, primitives, shell, settings modal, top + bottom bars at structural level) is already shipped to `main`. This brief polishes the surfaces themselves, not the system underneath them.
 >
-> Reading order for downstream skills (`/brief-to-tasks`, `/frontend-design`, `/design-review`): this brief → [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md) → [src/styles/tokens.css](../../src/styles/tokens.css) → [.design/foundation/INFORMATION_ARCHITECTURE.md](../foundation/INFORMATION_ARCHITECTURE.md).
+> Reading order for downstream skills (`/brief-to-tasks`, `/frontend-design`, `/design-review`): this brief → [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md) → [src/styles/tokens.css](../../src/styles/tokens.css) → [.design/foundation/INFORMATION_ARCHITECTURE.md](../foundation/INFORMATION_ARCHITECTURE.md).
 >
 > **No new tokens.** Every value below resolves to an existing token in `src/styles/tokens.css`. If a downstream skill thinks it needs a new token, that's a flag to stop and consult — not a license to add one.
 

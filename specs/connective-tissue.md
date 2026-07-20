@@ -120,7 +120,7 @@ Each block is sized to complete within one `/execute` context budget, is a verti
 
 ## Design constraints (R1–R10)
 
-New UI obeys `DESIGN_RULES.md` and uses `src/styles/tokens.css` only — the `moduo-design-quality` skill enforces this on the diff:
+New UI obeys `docs/DESIGN_RULES.md` and uses `src/styles/tokens.css` only — the `moduo-design-quality` skill enforces this on the diff:
 - **Tokens only (R10):** no raw hex / arbitrary Tailwind for color, spacing, radius, or font. Any color-bearing *data* (none introduced by the spine) would route through `--label-*` / status tokens, never new hex.
 - **Accent discipline (R5):** `EntityRefChip` is **neutral monochrome** (type icon + label); the pink `--primary`/`--ring` accent appears only on the one primary action / selection / focus ring. No per-entity-type hue.
 - **Density + motion via tokens (R7, R6):** rows consume `--row-h`/`--pad-*`/`size-icon-*`; drop-ring, optimistic insertion, and toasts go through `--motion-*` so `prefers-reduced-motion` holds.
@@ -140,7 +140,7 @@ New UI obeys `DESIGN_RULES.md` and uses `src/styles/tokens.css` only — the `mo
 - [x] **Data model is named and Supabase-first** — `entities`, `entity_links`, `comments`, `notification_state`, `link_suggestion_declines` (+ `email_refs` as an external prerequisite); migrations identified per block; mirrors the Tasks RLS/op pattern.
 - [x] **Module feature wiring enumerated** — links/attach/drag/@mention/`/ref`/notifications/activity/tags are *this module's contract* (DESIGN_BRIEF §Spine wiring); MCP tools listed (`entities.search`, `links.list`, `links.suggest` + write ops); dashboard widget defined ("Recently linked / Needs triage") — per `docs/moduo-module-contract.md`.
 - [x] **Execution blocks** decomposed (7), sequenced with dependencies, each context-sized and self-contained.
-- [x] **Design constraints acknowledged** — tokens-only, shadcn-wrapped, neutral chips, the relevant `DESIGN_RULES.md` rules (R4/R5/R6/R7/R8/R10).
+- [x] **Design constraints acknowledged** — tokens-only, shadcn-wrapped, neutral chips, the relevant `docs/DESIGN_RULES.md` rules (R4/R5/R6/R7/R8/R10).
 - [x] **Manual-test surfaces identified** for the `/wrap` checklist: link create/dedupe/permission round-trips, tombstone-on-delete, drag-to-link (per-frame pointer), @/`/`-ref insertion, comment→notification, suggestion accept/decline, and the blocked-by-via-`entity_links` regression — across web + desktop runtimes.
 
 **Ready to execute.** Blocks in order: 1 → 2 → (3 ∥ 4 ∥ 5 ∥ 6) → 7.

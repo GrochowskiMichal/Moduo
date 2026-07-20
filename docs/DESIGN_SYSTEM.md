@@ -234,13 +234,46 @@ copy:
 - Counts read like "2 / 2 Done".
 - Acronyms and proper nouns as-is (CRM, Inbox).
 
+## Token quick-ref
+
+Use Tailwind utilities that map to semantic tokens. Common lookups:
+
+| Need | Use |
+| --- | --- |
+| App background | `bg-background` |
+| Card / raised surface | `bg-card` (or `bg-popover` for floating) |
+| Primary action | `bg-primary text-primary-foreground` |
+| Muted surface / subtle fill | `bg-muted` |
+| Body text | `text-foreground` |
+| Secondary text | `text-muted-foreground` |
+| Hairline border | `border-border` |
+| Destructive | `bg-destructive text-destructive-foreground` |
+| Control radius | `rounded-md` |
+| Card radius | `rounded-lg` |
+| App font | `font-sans` (body) · `font-display` (structure/labels) |
+
+## Accessibility
+
+- All interactive elements need visible focus states. The primitives already ship `focus-visible` rings — don't remove them.
+- Color is never the only signal: pair with icon or label (status dots get a text label on hover/legend).
+- Minimum contrast: body text 4.5:1, large/secondary text 3:1. The token palette is tuned for this — don't invent one-off colors.
+
+## Anti-patterns to avoid
+
+- **Gradient buttons / hero gradients** — the app is flat; depth comes from surface steps, not gradients.
+- **Colored borders on cards** — borders are `border-border`; accent via `bg-primary` or text, not border color.
+- **Emoji in UI** — use the icon set (Phosphor via `src/components/ui/icon`).
+- **New shadow values** — shadows are tokenized (`shadow-sm`, `shadow-md`); dark mode barely shows them, so prefer lightness steps + hairlines for separation.
+- **`font-bold` everywhere** — the type scale + `font-display` vs `font-sans` does the hierarchy work; reach for weight last.
+- **Bespoke tooltips/toasts** — use the primitives.
+
 ## Enforcement
 
 Three layers enforce the contract:
 
 1. **`bun run lint:css`** (Stylelint, `.stylelintrc.json`) — `color-no-hex` + `declaration-strict-value`: any `*color` / `fill` / `stroke` / `background-color` in CSS must be a `var(--…)` token (or transparent/currentColor/none/inherit). `tokens.css` is exempt; `global.css` is warn-level.
 2. **`bun run lint:tw`** (`scripts/check-arbitrary-tw.ts`) — scans `.ts/.tsx` for arbitrary Tailwind + inline-style hardcodes: raw hex / color-functions across every color utility, arbitrary font-size / radius / spacing / shadow, the motion-token bypass (`duration-200` / `duration-[180ms]`), and static `style={{ color: "#…" }}`. The sanctioned `[var(--token)]` escape hatch and one-off *geometry* (`top-` / `h-` / `w-` / `translate-[…]`) are allowed. A curated ignore list quarantines the pre-foundation legacy backlog; remove an entry when its feature brief lands.
-3. **The `moduo-design-quality` skill** — the review layer for what a regex can't see: the relational rules in `DESIGN_RULES.md` (R1–R10), contrast, interaction states, overflow/clipping. It runs in `/execute`'s validator pass and before shipping.
+3. **The `moduo-design-quality` skill** — the review layer for what a regex can't see: the relational rules in `DESIGN_RULES.md` (R1–R10), contrast, interaction states, overflow/clipping. It runs in `/s2`'s validator pass and before shipping.
 
 Both lint gates run in CI (`.github/workflows/checks.yml`). The concentric-radius rule (R3) and the other relational rules are skill/review-enforced, not lint-enforced.
 

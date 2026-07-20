@@ -87,7 +87,7 @@
 - [ ] **Data model is named and Supabase-first** (or a deliberate exception is recorded). New tables/columns/migrations are identified.
 - [ ] For a **module feature**: spine wiring is enumerated (links / attach / drag / @mention / notifications / activity / tags), MCP tools are listed, and the dashboard widget is defined — per `docs/moduo-module-contract.md`.
 - [ ] **Execution blocks** are decomposed, sequenced, and each is context-sized and self-contained.
-- [ ] **Design constraints acknowledged**: tokens-only (no hardcoded visual values), shadcn-wrapped primitives, and the relevant `DESIGN_RULES.md` rules for any UI.
+- [ ] **Design constraints acknowledged**: tokens-only (no hardcoded visual values), shadcn-wrapped primitives, and the relevant `docs/DESIGN_RULES.md` rules for any UI.
 - [ ] **Manual-test surfaces identified** for the session wrap-up checklist (`docs/testing/<branch>.md`).
 
 When all boxes are checked, state: **"Ready to execute."**
