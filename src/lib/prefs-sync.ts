@@ -228,7 +228,9 @@ export function useDomainSync(opts: {
   apply: (value: Json) => void;
 }): { pushLocalChange: (syncable: Json) => void } {
   const optsRef = useRef(opts);
-  optsRef.current = opts;
+  useEffect(() => {
+    optsRef.current = opts;
+  });
   const userIdRef = useRef<string | null>(null);
 
   const runReconcile = useCallback((userId: string) => {

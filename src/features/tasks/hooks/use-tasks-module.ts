@@ -59,6 +59,19 @@ const EMPTY_BUNDLE: TasksModuleBundle = {
   taskRelations: [],
 };
 
+function dropFailedTag<
+  P extends { tags: { id: string }[]; tagLinks: { id: string; tagId: string }[] },
+>(prev: P, ids: { tempTagId: string; tempLinkId: string; orphanId: string | null }): P {
+  const { tempTagId, tempLinkId, orphanId } = ids;
+  return {
+    ...prev,
+    tags: prev.tags.filter((t) => t.id !== tempTagId && t.id !== orphanId),
+    tagLinks: prev.tagLinks.filter(
+      (l) => l.id !== tempLinkId && l.tagId !== tempTagId && l.tagId !== orphanId,
+    ),
+  };
+}
+
 function byPosition<T extends { position: string }>(a: T, b: T): number {
   return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
 }
@@ -1085,17 +1098,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
             tagLinks: prev.tagLinks.map((l) => (l.id === tempLinkId ? savedLink : l)),
           }));
         } catch (e) {
-          const orphanId = savedTagId;
-          setBundle((prev) => ({
-            ...prev,
-            tags: prev.tags.filter((t) => t.id !== tempTagId && t.id !== orphanId),
-            tagLinks: prev.tagLinks.filter(
-              (l) => l.id !== tempLinkId && l.tagId !== tempTagId && l.tagId !== orphanId,
-            ),
-          }));
+          setBundle((prev) => dropFailedTag(prev, { tempTagId, tempLinkId, orphanId: savedTagId }));
           // The tag was created but attaching failed — delete the orphan server-side.
-          if (orphanId) {
-            void rt.tasks.deleteTag({ workspaceId: wsId, tagId: orphanId }).catch(() => {});
+          if (savedTagId) {
+            void rt.tasks.deleteTag({ workspaceId: wsId, tagId: savedTagId }).catch(() => {});
           }
           toast.error(e instanceof Error ? e.message : "Couldn't create tag.");
         }

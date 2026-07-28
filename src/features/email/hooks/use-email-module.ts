@@ -155,9 +155,11 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
 
   // Keep a live ref for use inside setTimeout callbacks (avoid stale closures).
   const refreshTissueRef = useRef(refreshTissue);
-  refreshTissueRef.current = refreshTissue;
   const workspaceIdRef = useRef(workspaceId);
-  workspaceIdRef.current = workspaceId;
+  useEffect(() => {
+    refreshTissueRef.current = refreshTissue;
+    workspaceIdRef.current = workspaceId;
+  });
 
   // Commit any still-pending triage/snooze immediately on unmount (don't lose ops).
   useEffect(() => {

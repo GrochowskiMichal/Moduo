@@ -507,7 +507,9 @@ export function CalendarPageView({
   );
 
   const keysRef = useRef({ setView, goToday, step, selectedOccurrenceKey, requestDelete });
-  keysRef.current = { setView, goToday, step, selectedOccurrenceKey, requestDelete };
+  useEffect(() => {
+    keysRef.current = { setView, goToday, step, selectedOccurrenceKey, requestDelete };
+  });
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

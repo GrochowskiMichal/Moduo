@@ -168,9 +168,11 @@ export function MentionMenuPlugin({
   const menuRef = useRef<MentionMenuState | null>(null);
   const candidatesRef = useRef<MentionCandidate[]>([]);
   const selectedIndexRef = useRef(0);
-  menuRef.current = menu;
-  candidatesRef.current = candidates;
-  selectedIndexRef.current = selectedIndex;
+  useEffect(() => {
+    menuRef.current = menu;
+    candidatesRef.current = candidates;
+    selectedIndexRef.current = selectedIndex;
+  });
 
   // Drive the search off the caret query.
   useEffect(() => {
@@ -245,7 +247,9 @@ export function MentionMenuPlugin({
   // calls the latest `commit` (fresh runtime / workspace / context), not a stale
   // first-render closure.
   const commitRef = useRef(commit);
-  commitRef.current = commit;
+  useEffect(() => {
+    commitRef.current = commit;
+  });
 
   // ── caret detection ─────────────────────────────────────────────────────────
   // A people-only surface with no person handler has NOTHING to offer — never

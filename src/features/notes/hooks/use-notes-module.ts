@@ -43,17 +43,20 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
    * bundle so a concurrent load() can't clobber a just-captured note. */
   const pendingCreatesRef = useRef(new Map<string, Note>());
   const notesRef = useRef<Note[]>([]);
-  notesRef.current = notes;
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
 
   const ready = Boolean(runtime && userId && workspaceId && canRead);
 
   // ── the sync engine (one per workspace) ────────────────────────────────────
   const refreshRef = useRef<() => void>(() => {});
+  const fireRefresh = useCallback(() => refreshRef.current(), []);
   const engine = useMemo(() => {
     if (!ready) return null;
-    return new NotesSyncEngineV2(runtime, workspaceId!, () => refreshRef.current());
+    return new NotesSyncEngineV2(runtime, workspaceId!, fireRefresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, runtime, workspaceId]);
+  }, [ready, runtime, workspaceId, fireRefresh]);
 
   useEffect(() => {
     if (!engine) return;

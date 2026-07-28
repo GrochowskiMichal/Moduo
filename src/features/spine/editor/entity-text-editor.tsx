@@ -131,7 +131,9 @@ function CommitOnBlurPlugin({
   // onCommit closes over the entity id but has a fresh identity each render;
   // route through a ref so the command registers once (not per render).
   const onCommitRef = useRef(onCommit);
-  onCommitRef.current = onCommit;
+  useEffect(() => {
+    onCommitRef.current = onCommit;
+  });
   useEffect(() => {
     last.current = serialize(editor).html;
     return editor.registerCommand(

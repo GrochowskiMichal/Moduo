@@ -23,13 +23,19 @@ export function useEmailCompose({ runtime, isDesktop, onSent }: Params) {
   const [draft, setDraft] = useState<ComposeDraft | null>(null);
 
   const runtimeRef = useRef(runtime);
-  runtimeRef.current = runtime;
   const onSentRef = useRef(onSent);
-  onSentRef.current = onSent;
+  useEffect(() => {
+    runtimeRef.current = runtime;
+    onSentRef.current = onSent;
+  });
 
   // One hold controller for the component's lifetime; its send reads live refs.
+  // Created in a mount effect — the compiler (refs rule) flags ref-capturing
+  // factories in useMemo/useState initializers; every consumer is a user gesture
+  // or unmount flush, so the hold always exists by then.
   const holdRef = useRef<SendHold<EmailSendInput, ComposeDraft> | null>(null);
-  if (!holdRef.current) {
+  useEffect(() => {
+    if (holdRef.current) return;
     holdRef.current = createSendHold<EmailSendInput, ComposeDraft>({
       delayMs: SEND_UNDO_MS,
       send: (input) => {
@@ -44,7 +50,7 @@ export function useEmailCompose({ runtime, isDesktop, onSent }: Params) {
           );
       },
     });
-  }
+  }, []);
 
   // Restore a draft stashed by a prior quit-inside-the-window (AC11).
   useEffect(() => {

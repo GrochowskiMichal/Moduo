@@ -80,7 +80,7 @@ const appBuild = readBuildId();
 const tauriStub = path.resolve(__dirname, "src/lib/tauri-api-stub.ts");
 
 export default defineConfig({
-  plugins: [pluginReact()],
+  plugins: [pluginReact({ reactCompiler: true })],
   source: {
     entry: {
       index: "./src/main.tsx",

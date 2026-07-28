@@ -5,7 +5,7 @@
  * contract; the editor plugin only ever hands over snapshots and callbacks.
  */
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 
 import { undoToast } from "../../../lib/undo-toast";
@@ -68,7 +68,9 @@ export function useNotesTaskBridge({
   }, [tasksApi.tasks]);
 
   const stable = useRef({ runtime, workspaceId, noteId, noteLabel, tasksApi, tasksById });
-  stable.current = { runtime, workspaceId, noteId, noteLabel, tasksApi, tasksById };
+  useEffect(() => {
+    stable.current = { runtime, workspaceId, noteId, noteLabel, tasksApi, tasksById };
+  });
 
   const noteRef = useCallback((): EntityRef | null => {
     const { noteId: id } = stable.current;

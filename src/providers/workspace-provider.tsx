@@ -80,14 +80,18 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   // measured workspaces ×3, plus the `loading` toggles that remounted AppChrome
   // and multiplied every downstream boot read). DF-12.
   const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
-  selectedWorkspaceIdRef.current = selectedWorkspaceId;
+  useEffect(() => {
+    selectedWorkspaceIdRef.current = selectedWorkspaceId;
+  });
 
   // Mirror the list so leave/delete can enforce the last-one guard without
   // listing `workspaces` in their deps (which would churn their identity on
   // every refresh). The invariant: never strand the user at zero reachable
   // workspaces (the runtime ops have no such guard). DF-24 (DF-16 deferred this).
   const workspacesRef = useRef(workspaces);
-  workspacesRef.current = workspaces;
+  useEffect(() => {
+    workspacesRef.current = workspaces;
+  });
 
   const selectedWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null,

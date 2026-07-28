@@ -238,10 +238,12 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
   const pickerRef = useRef<PickerState | null>(null);
   const commandsRef = useRef<SlashCommandDef[]>(commands);
   const selectedIndexRef = useRef(0);
-  menuRef.current = menu;
-  pickerRef.current = picker;
-  commandsRef.current = commands;
-  selectedIndexRef.current = selectedIndex;
+  useEffect(() => {
+    menuRef.current = menu;
+    pickerRef.current = picker;
+    commandsRef.current = commands;
+    selectedIndexRef.current = selectedIndex;
+  });
 
   // Entity search for the picker stage. Create-and-link only where a creator
   // exists (contact/company — DESIGN_BRIEF §3c: event no at v1; /page creates
@@ -551,7 +553,9 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
   };
 
   const runCommandRef = useRef(runCommand);
-  runCommandRef.current = runCommand;
+  useEffect(() => {
+    runCommandRef.current = runCommand;
+  });
 
   // ── caret detection ─────────────────────────────────────────────────────────
   useEffect(() => {

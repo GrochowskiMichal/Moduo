@@ -5,7 +5,7 @@
 // follow the user; density/textSize/tabs stay per-device. The reconcile/LWW
 // engine lives in prefs-sync.ts. The paused redb local store is not used.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDomainSync } from "./prefs-sync";
 
 export type Theme = "dark" | "light";
@@ -138,6 +138,10 @@ export function applyAppearance(appearance: Appearance): void {
   }
 }
 
+function syncsField(patch: Partial<Appearance>): boolean {
+  return Object.keys(patch).some((key) => SYNCED_KEY_SET.has(key));
+}
+
 function writeLocalMirror(appearance: Appearance): void {
   if (typeof localStorage === "undefined") return;
   try {
@@ -164,7 +168,9 @@ export interface UseAppearance {
 export function useAppearance(): UseAppearance {
   const [appearance, setAppearanceState] = useState<Appearance>(readLocalAppearance);
   const appearanceRef = useRef(appearance);
-  appearanceRef.current = appearance;
+  useEffect(() => {
+    appearanceRef.current = appearance;
+  }, [appearance]);
 
   // Merge a cloud-won synced subset over local state, preserving the per-device
   // fields (density/textSize/tabs), then apply to the DOM + localStorage mirror.
@@ -184,9 +190,6 @@ export function useAppearance(): UseAppearance {
     sanitizeCloud: (raw) => sanitizeSynced(raw) as Record<string, unknown>,
     apply: applyFromCloud,
   });
-
-  const syncsField = (patch: Partial<Appearance>) =>
-    Object.keys(patch).some((key) => SYNCED_KEY_SET.has(key));
 
   const update = useCallback(
     (patch: Partial<Appearance>) => {

@@ -174,7 +174,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // re-drain each render); registering once drains any backlog accrued while the
   // module was unmounted, and the cleanup banks accrued-so-far on navigation away.
   const apiRef = useRef(api);
-  apiRef.current = api;
+  useEffect(() => {
+    apiRef.current = api;
+  });
   useEffect(
     () => registerFocusFlushSink((taskId, seconds) => apiRef.current.addTimeSpent(taskId, seconds)),
     [],
@@ -663,9 +665,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Refs so the collision fn (stable, empty-deps) always reads the live surface;
   // neither can change mid-drag (switching view/scope remounts the body).
   const viewRef = useRef(view);
-  viewRef.current = view;
   const selectionRef = useRef(selection);
-  selectionRef.current = selection;
+  useEffect(() => {
+    viewRef.current = view;
+    selectionRef.current = selection;
+  });
   // One collision for every surface: the hub (a `link:*` droppable) wins whenever
   // the pointer is actually over it; otherwise each center view keeps its OWN
   // native strategy over its OWN droppables (link targets filtered out, so a card

@@ -959,9 +959,11 @@ export function EmailPageView({
   // order (sections-flattened or search results), tracked as a threadId so it
   // survives reordering. ────────────────────────────────────────────────────
   const scopedRef = useRef<EmailThread[]>(orderedThreads);
-  scopedRef.current = orderedThreads;
   const selectedIdRef = useRef<string | null>(selectedThreadId);
-  selectedIdRef.current = selectedThreadId;
+  useEffect(() => {
+    scopedRef.current = orderedThreads;
+    selectedIdRef.current = selectedThreadId;
+  });
 
   const moveSelection = useCallback((dir: 1 | -1) => {
     const list = scopedRef.current;

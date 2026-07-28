@@ -464,7 +464,9 @@ export function TaskLinePlugin({
   const bridge = useNotesEditorBridge();
   const tasks = bridge?.tasks ?? null;
   const noteIdRef = useRef(noteId);
-  noteIdRef.current = noteId;
+  useEffect(() => {
+    noteIdRef.current = noteId;
+  });
 
   // Mount sweep: a PENDING line in a freshly opened doc is an orphan (its
   // mint either reverted or died with a previous session) — degrade it to a
@@ -500,7 +502,9 @@ export function TaskLinePlugin({
 
   const [entries, setEntries] = useState<Map<NodeKey, LineEntry>>(new Map());
   const entriesRef = useRef(entries);
-  entriesRef.current = entries;
+  useEffect(() => {
+    entriesRef.current = entries;
+  });
 
   // The overlay lives OUTSIDE the contenteditable, inside the scroll
   // container, so Lexical's mutation observer never sees (and reclaims) it.
@@ -528,7 +532,9 @@ export function TaskLinePlugin({
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const tasksRef = useRef(tasks);
-  tasksRef.current = tasks;
+  useEffect(() => {
+    tasksRef.current = tasks;
+  });
 
   // Per-task rename debouncers; while one is pending, sync-IN skips the title.
   const renameTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -562,7 +568,9 @@ export function TaskLinePlugin({
     });
   }, [editor]);
   const flushDetachRef = useRef(flushDetach);
-  flushDetachRef.current = flushDetach;
+  useEffect(() => {
+    flushDetachRef.current = flushDetach;
+  });
 
   // Unmount with a batch still pending (fast note switch) → flush now so the
   // links still detach; the toast's undo becomes link-restore only.

@@ -153,7 +153,9 @@ function TitleDerivationPlugin({
   // page re-render (sync-status flips…), tearing down the pending debounce
   // timer before it can ever fire (caught in NO-3 live-verify).
   const callbackRef = useRef(onTitleDerived);
-  callbackRef.current = onTitleDerived;
+  useEffect(() => {
+    callbackRef.current = onTitleDerived;
+  });
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onUpdate = () => {

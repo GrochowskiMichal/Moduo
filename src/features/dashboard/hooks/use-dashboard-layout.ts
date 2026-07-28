@@ -84,11 +84,13 @@ export function useDashboardLayout(): DashboardLayoutApi {
   const [activePageId, setActivePageId] = useState<string>(() => layout.pages[0]?.id ?? "home");
 
   const layoutRef = useRef(layout);
-  layoutRef.current = layout;
   const activePageIdRef = useRef(activePageId);
-  activePageIdRef.current = activePageId;
   const workspaceRef = useRef<string | null>(selectedWorkspaceId);
-  workspaceRef.current = selectedWorkspaceId;
+  useEffect(() => {
+    layoutRef.current = layout;
+    activePageIdRef.current = activePageId;
+    workspaceRef.current = selectedWorkspaceId;
+  });
 
   // Load on workspace change — flush the previous workspace's pending save first.
   useEffect(() => {

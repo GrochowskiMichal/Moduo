@@ -105,13 +105,17 @@ function useSource<T>(
   const [error, setError] = useState(false);
   const seq = useRef(0);
   const fetcherRef = useRef(fetcher);
-  fetcherRef.current = fetcher;
+  const emptyRef = useRef(empty);
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+    emptyRef.current = empty;
+  });
 
   const load = useCallback((): Promise<void> => {
     // A retired source clears itself; the seq bump cancels any in-flight read.
     if (!enabled || !workspaceId) {
       seq.current += 1;
-      setData(empty);
+      setData(emptyRef.current);
       setLoading(false);
       setError(false);
       return Promise.resolve();
@@ -133,14 +137,14 @@ function useSource<T>(
       })
       .catch(() => {
         if (mine !== seq.current) return;
-        setData(empty);
+        setData(emptyRef.current);
         setError(true);
       })
       .finally(() => {
         if (mine === seq.current) setLoading(false);
       });
-    // `empty` is a stable module constant per source — safe to omit from deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `empty` arrives via emptyRef — array sources pass a fresh `[]` per render,
+    // so listing it as a dep would loop the fetch; the ref reads the latest.
   }, [enabled, workspaceId]);
 
   useEffect(() => {

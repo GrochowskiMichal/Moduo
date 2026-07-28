@@ -155,7 +155,9 @@ export function NotesPage() {
     [module, select],
   );
   const createRef = useRef(create);
-  createRef.current = create;
+  useEffect(() => {
+    createRef.current = create;
+  });
 
   useEffect(() => {
     if (search.action === "new" && canEdit && !loading) {
