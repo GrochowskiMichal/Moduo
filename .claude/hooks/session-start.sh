@@ -20,7 +20,7 @@ if [ -n "$base" ]; then
   ahead=$(git rev-list --count "$base..HEAD" 2>/dev/null || echo "")
   if [ -n "$behind" ] && [ "$behind" != "0" ]; then
     echo "⚠️ STALE BASE — this branch is $behind commit(s) behind $base (${ahead:-?} ahead)."
-    echo "   The auto-loaded CLAUDE.md / specs / tokens.css may be outdated. Reconcile with"
+    echo "   The auto-loaded AGENTS.md / specs / tokens.css may be outdated. Reconcile with"
     echo "   $base before editing. Cut task branches off the latest $base, never main/develop;"
     echo "   integrate into maciej with a merge commit, never a fast-forward."
   else
@@ -33,5 +33,5 @@ fi
 echo
 echo "Before building, read: docs/decisions.md · docs/gotchas.md · specs/BUILD_ORDER.md"
 echo "(the live execution ledger — what's next, dependencies, parallel-session lanes)."
-echo "Build work → /execute (auto-picks the next ready block) · plan → /plan · finish → /wrap."
+echo "Build work → /s2 (auto-picks the next ready block) · plan → /s1 · finish → /s3."
 exit 0

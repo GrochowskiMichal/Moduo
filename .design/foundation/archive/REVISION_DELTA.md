@@ -50,7 +50,7 @@ When a child element is nested inside a card with rounded corners, the child's r
 - Member / invite cards inside the Workspace Settings dialog
 - Any chip / row nested inside an outer card
 
-**Action:** add an explicit guideline section to [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md) and review every existing nested element against it. Token-side: no new tokens needed, just discipline in component code.
+**Action:** add an explicit guideline section to [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md) and review every existing nested element against it. Token-side: no new tokens needed, just discipline in component code.
 
 ### 6. Rail system: drop icon mode, add user-resizable handles
 

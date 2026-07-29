@@ -38,7 +38,7 @@ Also ratified: **Publish to web** (per-note revocable read-only public link, sub
 └──────────────┴──────────────────────────────────┴───────────────────┘
 ```
 
-- **Everything tokenized.** The current notes chrome predates the design system; the rebuild is tokens-only (`lint:tw` exemption for the notes editor should be *removed* once this lands). Rungs, radius-by-role, type roles per [DESIGN_RULES.md](../../DESIGN_RULES.md).
+- **Everything tokenized.** The current notes chrome predates the design system; the rebuild is tokens-only (`lint:tw` exemption for the notes editor should be *removed* once this lands). Rungs, radius-by-role, type roles per [DESIGN_RULES.md](../../docs/DESIGN_RULES.md).
 - **Editor typography:** body = `font-sans` at `text-base`; the title line renders as `font-display` H1 weight. Headings via the existing type roles. No new fonts.
 - **Min-width behavior** matches Calendar/Contacts panel rules; sidebar and right panel collapse via the standard top-bar toggles (`routeToFeatureLayout` already returns `"notes"` — verify it stays correct after the rebuild).
 

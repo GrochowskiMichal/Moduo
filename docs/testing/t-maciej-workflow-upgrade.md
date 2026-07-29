@@ -13,8 +13,8 @@
 - [ ] **Do:** confirm `.claude/skills/` is now committed (not gitignored) → **Expect:** `git ls-files .claude/skills` lists the skill files. _(verified here)_
 
 ## Design system source of truth (Batch C)
-- [ ] **Do:** open [DESIGN_RULES.md](../../DESIGN_RULES.md) → **Expect:** ratified R1–R10 + token-surface map; no DRAFT marker. _(read-confirm)_
-- [ ] **Do:** skim [.design/foundation/TOKENS.md](../foundation/TOKENS.md) + [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md) → **Expect:** single-font model (default Geist), no `data-text-size`, `--z-dropdown: 70`, no icon-rail-width rows. _(read-confirm)_
+- [ ] **Do:** open [DESIGN_RULES.md](../../docs/DESIGN_RULES.md) → **Expect:** ratified R1–R10 + token-surface map; no DRAFT marker. _(read-confirm)_
+- [ ] **Do:** skim [.design/foundation/TOKENS.md](../foundation/TOKENS.md) + [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md) → **Expect:** single-font model (default Geist), no `data-text-size`, `--z-dropdown: 70`, no icon-rail-width rows. _(read-confirm)_
 - [ ] **Do:** `grep -rn "var(--space-" src` → **Expect:** no results (orphan tokens removed). _(verified here)_
 
 ## Design enforcement (Batch D)

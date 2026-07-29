@@ -16,7 +16,7 @@
 4. [`docs/architecture.md`](../architecture.md) + [`docs/moduo-module-contract.md`](../moduo-module-contract.md) — code layout + how a module is built (the 4-pillar contract).
 5. [`docs/data-layers.md`](../data-layers.md) + [`docs/moduo-architecture-vocabulary.md`](../moduo-architecture-vocabulary.md) — the two-runtime data model, the spine, the vocabulary. **⚠ its status table is ~4 waves stale — read it for the *why*, not current status (see §9).**
 6. [`CONTRIBUTING.md`](../../CONTRIBUTING.md) + [`docs/gotchas.md`](../gotchas.md) — branching model + the footguns that will bite you.
-7. [`DESIGN_SYSTEM.md`](../../DESIGN_SYSTEM.md) / [`DESIGN_RULES.md`](../../DESIGN_RULES.md) — the token system and its hard rules.
+7. [`DESIGN_SYSTEM.md`](../../docs/DESIGN_SYSTEM.md) / [`DESIGN_RULES.md`](../../docs/DESIGN_RULES.md) — the token system and its hard rules.
 
 ---
 
@@ -92,11 +92,11 @@ Pillars: **Ops** (intent-op RPCs) · **Spine** (registry + links + activity) · 
 
 - **Shell:** `src/components/app/app-chrome.tsx` (left module nav, top panel, notification center, command palette) + `feature-panels-shell.tsx` (the shared 3-pane list/main/right-panel that Tasks/Calendar/Contacts/Notes compose). `src/routes/layouts/app-gate.tsx` resolves auth+workspace before any page mounts.
 - **Tokens are the single source of truth:** `src/styles/tokens.css` (OKLCH). Customization axes: `data-theme` (light/dark/system) · `data-shade` (6) · `data-accent` (8, AA-verified, default mono/white — hues are opt-in) · `data-density` (comfortable/compact/dense) · `data-font` (default Geist). **Density is the size axis** (the text-size picker was retired). Cross-device sync via `src/lib/prefs-sync.ts`.
-- **Hard rules** (enforced by `lint:css`/`lint:tw` + the `moduo-design-quality` skill): no raw hex, no arbitrary Tailwind values for color/spacing/radius/font, no inline-style color overrides, primitives wrap shadcn. Full rules: [`DESIGN_RULES.md`](../../DESIGN_RULES.md) (R1–R10).
+- **Hard rules** (enforced by `lint:css`/`lint:tw` + the `moduo-design-quality` skill): no raw hex, no arbitrary Tailwind values for color/spacing/radius/font, no inline-style color overrides, primitives wrap shadcn. Full rules: [`DESIGN_RULES.md`](../../docs/DESIGN_RULES.md) (R1–R10).
 - **Primitives:** ~34 shadcn components in `src/components/ui/` (near-complete). **68 Storybook stories** (33 cover the primitives).
 - **Route convergence:** the app converged from **23 exploratory routes to ~7 core features** — Home, Notes, Tasks, Calendar, Email, Contacts, Settings (Mindmap hidden). ~13 page files in `src/routes/pages/`. **Don't add top-level routes without an explicit ask** (a new route needs 5 separate wirings — see gotchas).
 - **Dependency health:** a `npx madge --circular` sweep (2026-07-11) found **zero circular dependencies** across 599 modules — the import graph is clean, not tangled. (The 82 warnings are unresolved `@/` path-aliases, not cycles; pass `--ts-config tsconfig.json` to silence them.)
-- **In-flight / half-migrated:** the `src/tw/` React-Native compat shim is nearly gone (only `onboarding-page.tsx` + `paywall-page.tsx` still use it); Subframe integration (`src/ui/`) is parked/dormant (theme deliberately not imported so it can't override the OKLCH tokens); fonts are **not installed yet** — `--font-*` fall back to system fonts (the one real code-level TODO, `tokens.css:21`).
+- **In-flight / half-migrated:** the `src/tw/` React-Native compat shim is **gone from the app's own pages** (DF-17 rebuilt onboarding + paywall onto shadcn/tokens; remaining users are the legacy plan/brainstorm/templates trees); Subframe integration (`src/ui/`) is parked/dormant (theme deliberately not imported so it can't override the OKLCH tokens); fonts are **not installed yet** — `--font-*` fall back to system fonts (the one real code-level TODO, `tokens.css:21`).
 
 ---
 
