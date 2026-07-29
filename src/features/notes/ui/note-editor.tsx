@@ -13,9 +13,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Y from "yjs";
-import { CodeHighlightNode, CodeNode, registerCodeHighlighting } from "@lexical/code";
-import { LinkNode } from "@lexical/link";
-import { $createListItemNode, $createListNode, $isListItemNode, ListItemNode, ListNode } from "@lexical/list";
+import { registerCodeHighlighting } from "@lexical/code";
+import { $createListItemNode, $createListNode, $isListItemNode } from "@lexical/list";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
@@ -27,10 +26,8 @@ import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { CollaborationPluginV2__EXPERIMENTAL } from "@lexical/react/LexicalCollaborationPlugin";
 import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
-import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
-import { $createHeadingNode, HeadingNode, QuoteNode } from "@lexical/rich-text";
+import { $createHeadingNode } from "@lexical/rich-text";
 import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
-import { TableNode, TableCellNode, TableRowNode } from "@lexical/table";
 import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $createParagraphNode,
@@ -51,9 +48,7 @@ import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
 import { FormatToolbarPlugin } from "../editor/plugins/format-toolbar-plugin";
 import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
-import { EmbedNode } from "../editor/nodes/EmbedNode";
-import { TaskLineNode } from "../editor/nodes/task-line-node";
-import { $createPageRowNode, PageRowNode } from "../editor/nodes/page-row-node";
+import { $createPageRowNode } from "../editor/nodes/page-row-node";
 import {
   INSERT_ENTITY_CHIP_EVENT,
   INSERT_PAGE_ROW_EVENT,
@@ -62,14 +57,13 @@ import {
   type InsertPageRowDetail,
   type NotesEditorBridge,
 } from "../editor/notes-editor-bridge";
-import { $createEntityRefNode, EntityRefNode } from "@/features/spine/editor/entity-ref-node";
+import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { useAuth } from "@/providers/auth-provider";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { deriveBody } from "../sync/doc-text";
-import { $convertFromMarkdownString } from "@lexical/markdown";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
-import { peekNoteSeed, takeNoteSeed } from "../import-seed";
+import { NOTE_EDITOR_NODES } from "../editor/note-nodes";
 import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
 
 type Props = {
@@ -319,34 +313,6 @@ function WelcomeSeedPlugin({ enabled }: { enabled: boolean }) {
   return null;
 }
 
-/** Materialize an imported note's body (NO-8): the batched import writes
- * body_md but not the CRDT doc; on first open this session, convert the pending
- * markdown into the empty doc via the same transformers the paste path uses. */
-function SeedFromMarkdownPlugin({ noteId, enabled }: { noteId: string; enabled: boolean }) {
-  const [editor] = useLexicalComposerContext();
-  useEffect(() => {
-    if (!enabled) return;
-    // Peek (don't consume) — a fast unmount before the deferred apply must not
-    // lose the seed; it re-applies on the next open (validator M2). Consume
-    // only once it's actually applied, or the doc is already materialized.
-    const md = peekNoteSeed(noteId);
-    if (!md) return;
-    const id = setTimeout(() => {
-      editor.update(() => {
-        const root = $getRoot();
-        if (root.getTextContent().trim() !== "") {
-          takeNoteSeed(noteId); // already materialized — drop the stale seed
-          return;
-        }
-        $convertFromMarkdownString(md, NOTES_TRANSFORMERS);
-        takeNoteSeed(noteId);
-      });
-    }, 140);
-    return () => clearTimeout(id);
-  }, [editor, noteId, enabled]);
-  return null;
-}
-
 export function NoteEditor({
   engine,
   workspaceId,
@@ -387,23 +353,9 @@ export function NoteEditor({
       onError: (error: Error) => {
         console.error("Lexical editor error:", error);
       },
-      nodes: [
-        HeadingNode,
-        QuoteNode,
-        ListNode,
-        ListItemNode,
-        CodeNode,
-        CodeHighlightNode,
-        LinkNode,
-        HorizontalRuleNode,
-        TableNode,
-        TableCellNode,
-        TableRowNode,
-        EmbedNode,
-        EntityRefNode,
-        PageRowNode,
-        TaskLineNode,
-      ],
+      // Shared with the headless materializer (NOTE-FIX-1) — an imported note's
+      // doc is built against this exact set, so the two must never drift.
+      nodes: [...NOTE_EDITOR_NODES],
       theme: {
         paragraph: "notes-p",
         heading: { h1: "notes-h1", h2: "notes-h2", h3: "notes-h3" },
@@ -515,7 +467,6 @@ export function NoteEditor({
           <SyncFromYjsPlugin doc={session.doc} />
           <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
           <WelcomeSeedPlugin enabled={seedWelcome && editable} />
-          <SeedFromMarkdownPlugin noteId={noteId} enabled={editable} />
         </LexicalComposer>
       </LexicalCollaboration>
       </NotesEditorBridgeContext.Provider>

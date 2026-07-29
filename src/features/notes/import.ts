@@ -8,6 +8,8 @@
  * `notesV2.importNotes` op.
  */
 
+import { positionsAfter } from "../tasks/helpers";
+
 export type ImportFileEntry = { path: string; content: string };
 
 export type ImportPlanNode = {
@@ -126,4 +128,93 @@ function topoSortNodes(nodes: ImportPlanNode[]): ImportPlanNode[] {
   };
   for (const n of nodes) visit(n, new Set());
   return out;
+}
+
+/**
+ * Sequential sibling positions for an import plan (NOTE-FIX-1).
+ *
+ * Every imported note used to land with `position: ""`, so a whole Notion
+ * export arrived in arbitrary sibling order — the tree's `byPosition` sort
+ * fell straight through to its `createdAt`/`id` tiebreak. The plan is already
+ * in authored order (topologically sorted, files in read order), so numbering
+ * each parent's children in plan order preserves what the user exported.
+ */
+export function importPositions(
+  nodes: ImportPlanNode[],
+  /** Positions of the notes that ALREADY exist at the import's root level.
+   * Without these the import restarts at the first key and interleaves with
+   * (or exactly collides with) the existing tree instead of appending. */
+  existingRootPositions: string[] = [],
+): Map<string, string> {
+  const byParent = new Map<string, ImportPlanNode[]>();
+  for (const n of nodes) {
+    const key = n.parentTempId ?? "";
+    const group = byParent.get(key);
+    if (group) group.push(n);
+    else byParent.set(key, [n]);
+  }
+  const out = new Map<string, string>();
+  for (const [parentKey, group] of byParent) {
+    // Imported children always start fresh (their parent is new too); only the
+    // root level shares a sibling list with notes that already exist.
+    const after = parentKey === "" ? existingRootPositions : [];
+    const positions = positionsAfter(group.length, after);
+    group.forEach((n, i) => out.set(n.tempId, positions[i]!));
+  }
+  return out;
+}
+
+export type ImportRow = {
+  id: string;
+  parentId: string | null;
+  title: string;
+  position: string;
+  docStateB64: string | null;
+  bodyText: string;
+  bodyMd: string;
+};
+
+/**
+ * Turn a plan into the rows `notes_op_import` stores (NOTE-FIX-1) — including
+ * each note's fully-built CRDT `doc_state`, so an imported note renders on
+ * every device and after every reload instead of only in the session that
+ * imported it.
+ *
+ * `buildDoc` is injected to keep this module pure/testable and to let the
+ * caller decide what a build failure means. A note whose markdown can't be
+ * built still imports with its body intact — it just stays blank in the editor
+ * until the repair sweep retries it, which is strictly better than dropping it.
+ */
+export function buildImportRows(
+  nodes: ImportPlanNode[],
+  idFor: (tempId: string) => string,
+  buildDoc: (
+    noteId: string,
+    md: string,
+  ) => { docStateB64: string; bodyText: string; bodyMd: string } | null,
+  existingRootPositions: string[] = [],
+): ImportRow[] {
+  const positions = importPositions(nodes, existingRootPositions);
+  return nodes.map((n) => {
+    const id = idFor(n.tempId);
+    let built: { docStateB64: string; bodyText: string; bodyMd: string } | null = null;
+    try {
+      built = buildDoc(id, n.md);
+    } catch {
+      built = null;
+    }
+    return {
+      id,
+      parentId: n.parentTempId ? (idFor(n.parentTempId) ?? null) : null,
+      title: n.title,
+      position: positions.get(n.tempId) ?? "",
+      docStateB64: built?.docStateB64 ?? null,
+      // ALWAYS the raw file, never the doc-derived body. `deriveBody` is lossy
+      // (link URLs, inline marks, intra-block line breaks, tables), and
+      // `body_md` is the copy that feeds search, export, the published page
+      // and the MCP connector. The doc carries the rich version.
+      bodyText: mdToPlainText(n.md),
+      bodyMd: n.md,
+    };
+  });
 }

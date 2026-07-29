@@ -171,6 +171,14 @@ export function NotesPage() {
     if (!notes.some((n) => n.id === selectedId)) select(null, true);
   }, [loading, selectedId, notes, select]);
 
+  // Opening a note jumps it to the front of the blank-note repair queue
+  // (NOTE-FIX-1) — the background sweep is sequential, and a note you open
+  // and type into before it is reached would lose its imported body.
+  useEffect(() => {
+    if (loading || !selectedId) return;
+    void module.repairNoteNow(selectedId);
+  }, [loading, selectedId, module.repairNoteNow]);
+
   // Task lines (NO-5): the Tasks module rides along so lines render live
   // rows, the `/task` picker searches real tasks, and the Task-detail rail
   // edits without leaving /notes.
@@ -803,6 +811,10 @@ export function NotesPage() {
         open={importOpen}
         onOpenChange={setImportOpen}
         onImported={module.refresh}
+        // So the import APPENDS to the tree instead of interleaving with it.
+        existingRootPositions={notes
+          .filter((n) => !n.parentId && !n.deletedAt)
+          .map((n) => n.position)}
       />
     </>
   );

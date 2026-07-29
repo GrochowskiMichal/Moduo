@@ -2,8 +2,13 @@
  * Markdown import wizard (NO-8, AC11): drop a `.zip` (e.g. a Notion export) or
  * `.md`/`.txt` files → preview the note tree (folders → parents) → one batched
  * attributed `notes_op_import`. Malformed / non-markdown files are isolated and
- * counted (never fatal). Imported bodies land in `body_md`/`body_text` and
- * materialize in the editor on first open (see import-seed.ts).
+ * counted (never fatal).
+ *
+ * Each row carries a fully-built `doc_state` (NOTE-FIX-1) — the CRDT doc is
+ * materialized here, at import time, so an imported note renders on every
+ * device and after every reload. It used to ship an empty doc plus an
+ * in-memory seed that only survived the importing session, which made a
+ * next-day open look like the app had eaten the import.
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -20,9 +25,14 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { mdToPlainText, planMdZipImport, type ImportFileEntry, type ImportPlan } from "../import";
+import {
+  buildImportRows,
+  planMdZipImport,
+  type ImportFileEntry,
+  type ImportPlan,
+} from "../import";
 import { readZipMarkdown } from "../export";
-import { registerNoteSeed } from "../import-seed";
+import { buildDocStateFromMarkdown } from "../editor/materialize";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -30,9 +40,25 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported: () => void;
+  /** Root-level positions already in the tree, so the import appends. */
+  existingRootPositions?: string[];
 };
 
-export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onImported }: Props) {
+/** Rows per `notes_op_import` call. Each row now carries a full CRDT snapshot
+ * (~5× its markdown), so a big Notion export in ONE request could exceed the
+ * gateway body limit and fail the whole import. The op is idempotent per row
+ * (an existing id is skipped), so chunking is safe and a failed chunk leaves
+ * the earlier ones landed. */
+const IMPORT_CHUNK = 50;
+
+export function NoteImportDialog({
+  runtime,
+  workspaceId,
+  open,
+  onOpenChange,
+  onImported,
+  existingRootPositions = [],
+}: Props) {
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -76,22 +102,32 @@ export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onI
     if (!plan || !runtime || !workspaceId) return;
     setBusy(true);
     try {
+      // Building every note's CRDT doc is synchronous and CPU-bound; yield once
+      // so the "Importing…" state actually paints before the UI blocks.
+      await new Promise((r) => setTimeout(r, 0));
       const idMap = new Map<string, string>();
       for (const n of plan.nodes) idMap.set(n.tempId, crypto.randomUUID());
-      const rows = plan.nodes.map((n) => ({
-        id: idMap.get(n.tempId)!,
-        parentId: n.parentTempId ? (idMap.get(n.parentTempId) ?? null) : null,
-        title: n.title,
-        position: "",
-        docStateB64: null,
-        bodyText: mdToPlainText(n.md),
-        bodyMd: n.md,
-      }));
-      const res = await runtime.notesV2.importNotes({ workspaceId, rows });
-      // Materialize each imported note's editor doc on first open (this session).
-      for (const n of plan.nodes) registerNoteSeed(idMap.get(n.tempId)!, n.md);
-      const skipped = res.skipped + plan.skipped.length;
-      toast(`Imported ${res.imported} note${res.imported === 1 ? "" : "s"}`, {
+      // Each row carries its fully-built CRDT doc (NOTE-FIX-1).
+      const rows = buildImportRows(
+        plan.nodes,
+        (tempId) => idMap.get(tempId)!,
+        buildDocStateFromMarkdown,
+        existingRootPositions,
+      );
+      let imported = 0;
+      let skippedRows = 0;
+      // Chunked: parents are topologically before their children in the plan,
+      // so chunking in order never orphans a child behind an unlanded parent.
+      for (let i = 0; i < rows.length; i += IMPORT_CHUNK) {
+        const res = await runtime.notesV2.importNotes({
+          workspaceId,
+          rows: rows.slice(i, i + IMPORT_CHUNK),
+        });
+        imported += res.imported;
+        skippedRows += res.skipped;
+      }
+      const skipped = skippedRows + plan.skipped.length;
+      toast(`Imported ${imported} note${imported === 1 ? "" : "s"}`, {
         description: skipped ? `${skipped} skipped` : undefined,
       });
       setPlan(null);
@@ -99,6 +135,8 @@ export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onI
       onImported();
     } catch (e) {
       toast.error("Import failed", { description: e instanceof Error ? e.message : undefined });
+      // A chunked import can land partially — refresh so what DID import shows.
+      onImported();
     } finally {
       setBusy(false);
     }
