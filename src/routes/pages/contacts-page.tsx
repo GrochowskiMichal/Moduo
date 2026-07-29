@@ -719,7 +719,7 @@ export function ContactsPage() {
       <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={onDragEnd}>
         <FeaturePanelsShell
           feature="contacts"
-          notice={truncationNotice(directory.bundle.truncated)}
+          notice={truncationNotice([...directory.bundle.truncated, ...directoryTags.truncated])}
           left={left}
           center={center}
           right={right}

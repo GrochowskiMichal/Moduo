@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  allTimeCalendarWindow,
   CALENDAR_WINDOW_FUTURE_MONTHS,
   CALENDAR_WINDOW_PAST_MONTHS,
   defaultCalendarWindow,
@@ -55,5 +56,23 @@ describe("widenCalendarWindow", () => {
     const small = widenCalendarWindow(base, new Date(NOW), need, 0)!;
     const large = widenCalendarWindow(base, new Date(NOW), need, 12)!;
     expect(Date.parse(large.toIso)).toBeGreaterThan(Date.parse(small.toIso));
+  });
+});
+
+describe("allTimeCalendarWindow", () => {
+  it("swallows any range — nothing can widen it further", () => {
+    const all = allTimeCalendarWindow();
+    expect(
+      widenCalendarWindow(all, new Date("1900-01-01T00:00:00Z"), new Date("2200-01-01T00:00:00Z")),
+    ).toBeNull();
+  });
+
+  it("parses as real dates on both ends (the runtime interpolates them into a filter)", () => {
+    const all = allTimeCalendarWindow();
+    expect(Number.isNaN(Date.parse(all.fromIso))).toBe(false);
+    expect(Number.isNaN(Date.parse(all.toIso))).toBe(false);
+    expect(Date.parse(all.fromIso)).toBeLessThan(Date.parse(all.toIso));
+    // No PostgREST logic-tree delimiter can appear in an interpolated value.
+    for (const v of [all.fromIso, all.toIso]) expect(/[,()]/.test(v)).toBe(false);
   });
 });

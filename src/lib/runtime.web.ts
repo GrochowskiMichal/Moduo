@@ -1782,9 +1782,17 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async listEntityTags({ workspaceId, entityType, entityId }) {
+      // The links half is one entity's rows (never near a page); the tags half
+      // is workspace-wide, so it pages like every other list read (SCALE-1).
       const [tagsRes, linksRes] = await Promise.all([
-        supabaseClient.from("tags").select("*")
-          .eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
+        selectCapped<any>({
+          scope: "tags",
+          cap: READ_CAPS.tags,
+          build: (opts) =>
+            supabaseClient.from("tags").select("*", opts)
+              .eq("workspace_id", workspaceId).is("deleted_at", null),
+          order: (q) => q.order("created_at").order("id"),
+        }),
         supabaseClient.from("tag_links").select("*")
           .eq("workspace_id", workspaceId)
           .eq("entity_type", entityType).eq("entity_id", entityId),
@@ -1792,7 +1800,7 @@ export const webRuntime: ModuoRuntime = {
       const firstError = tagsRes.error || linksRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
-        tags: (tagsRes.data ?? []).map(tagRowToModel),
+        tags: tagsRes.rows.map(tagRowToModel),
         links: (linksRes.data ?? []).map(tagLinkRowToModel),
       };
     },
@@ -1825,6 +1833,7 @@ export const webRuntime: ModuoRuntime = {
       return {
         tags: tagsRes.rows.map(tagRowToModel),
         links: linksRes.rows.map(tagLinkRowToModel),
+        truncated: collectTruncations(tagsRes.truncation, linksRes.truncation),
       };
     },
 

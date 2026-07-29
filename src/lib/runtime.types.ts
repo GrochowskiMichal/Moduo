@@ -773,7 +773,7 @@ export type ModuoRuntime = {
     listTagLinks(input: {
       workspaceId: string;
       entityTypes?: string[];
-    }): Promise<{ tags: Tag[]; links: TagLink[] }>;
+    }): Promise<{ tags: Tag[]; links: TagLink[]; truncated: Truncation[] }>;
     /** Blocked-by dependency edge (blocker → blocked, spec §5c). Idempotent. */
     createTaskRelation(input: {
       workspaceId: string;

@@ -17,7 +17,7 @@ select '24dc8419-5343-4c94-94e1-8cc89ae6aa9c', 'cb8a22cf-2cd0-45db-8d61-d3dad78c
 from generate_series(1, 1500) g;
 ```
 
-Bump `1500` → `5100` for scenario B, and add the calendar rows for D/E:
+For scenario B, **delete the A seed first** (see the cleanup block) and re-run with `5100` instead of `1500` — otherwise the totals in the table won't match. Add the calendar rows for D/E:
 
 ```sql
 insert into calendar_events (workspace_id, owner_id, calendar_id, title, start_time, end_time, all_day, recurring, recurrence_rule)
@@ -39,12 +39,13 @@ delete from calendar_events where title like 'SCALE1SEED%';
 | # | Step | Expected | Surface |
 |---|------|----------|---------|
 | A | Seed 1,500 tasks → open `/tasks` | Scroll to the bottom of Inbox: **`SCALE1SEED task 01500` is present**. Pre-fix the list stopped at ~1,000 with no warning. No "Showing…" strip (1,510 < the 5,000 cap). | Tasks |
-| B | Seed 5,100 tasks → reload `/tasks` | A strip above the panels: **"Showing 5,000 of 5,110 tasks. This workspace is bigger than one load — the rest isn't on screen yet."** The number after "of" must be the real total, not a guess. | Tasks |
+| B | Seed 5,100 tasks → reload `/tasks` | A strip above the panels: **"Showing 5,000 of N tasks…"** where N is `5100 + the account's existing live tasks` (10 at the time of writing, so "5,110"). The number after "of" must be the real total, not a guess. | Tasks |
 | C | Delete the seed → reload `/tasks` | Strip gone; layout identical to before the block (no leftover gap). | Tasks |
 | D | With the two 2019 events seeded, open `/calendar` on today | The **weekly series still shows occurrences this week** (its stored start is 2019 — a naive date window would have hidden it). The **2019 one-off is NOT loaded** (correct: outside the window). | Calendar |
 | E | Page the calendar back to March 2019 (or set `localStorage['moduo:calendar:view:<userId>:<workspaceId>'] = '{"view":"week","anchor":"2019-03-14"}'` and reload) | The window widens and **`SCALE1SEED ancient one-off` appears**. Paging forward again and back must NOT refetch (the window only grows). | Calendar |
 | F | Open `/calendar?event=<id of the 2019 one-off>` from today's anchor | Lands on **Mar 11–17 2019** with the event selected. **No "Couldn't find that event" toast** — the window is dropped and retried before an id is called stale. | Calendar |
-| G | Settings → Advanced → Export workspace, with the 2019 events seeded | The exported `calendar` module contains **both 2019 events**. An export must never inherit the page's date window. | Settings |
+| F2 | Open `/calendar?event=00000000-0000-4000-8000-000000000000` (an id that doesn't exist) | The toast **does** appear and `?event=` is cleared from the URL — the retry must not swallow a genuinely dead link. | Calendar |
+| G | Settings → Advanced → Export workspace, with the 2019 events seeded | The exported `calendar` module contains **both 2019 events**. An export must never inherit the page's date window. **Verified at the query layer, not through the UI** — the all-time filter the export now sends was run directly against the hosted project (HTTP 200, both 2019 rows returned); the modal click-through is left for this checklist. | Settings |
 | H | Open `/notes`, `/contacts`, `/email` with normal data | Unchanged — no strip, no layout shift. | All |
 
 ## Not covered / known gaps

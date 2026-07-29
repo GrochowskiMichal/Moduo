@@ -95,8 +95,15 @@ export async function readPaged<T, E>(args: ReadPagedArgs<T, E>): Promise<PagedR
   const rows: T[] = [];
   const seen = args.keyOf ? new Set<string>() : null;
   let offset = 0;
+  // Deduping means `rows.length` no longer grows with every page, so the
+  // `rows.length < ceiling` bound alone can't stop a server that keeps
+  // returning already-seen ids. A hard page budget can. (+4 covers the short
+  // final page and any partial pages a concurrent insert costs us.)
+  const maxPages = Math.ceil(ceiling / pageSize) + 4;
+  let pages = 0;
 
-  while (rows.length < ceiling) {
+  while (rows.length < ceiling && pages < maxPages) {
+    pages += 1;
     const want = Math.min(pageSize, ceiling - rows.length);
     const res = await args.page(offset, want);
     if (res.error) return { rows, error: res.error, truncation: null };
@@ -129,8 +136,10 @@ export async function readPaged<T, E>(args: ReadPagedArgs<T, E>): Promise<PagedR
     rows: rows.slice(0, cap),
     error: null,
     // The count is a second round-trip, so rows deleted in between could make
-    // it read "5,000 of 4,998". Never claim to show more than the total.
-    truncation: { scope: args.scope, shown: cap, total: total == null ? null : Math.max(total, cap) },
+    // it read "5,000 of 4,998" — or the equally silly "5,000 of 5,000, and
+    // there's more". A total that no longer exceeds what we hold is stale, so
+    // drop it and fall back to the honest "N (of more)".
+    truncation: { scope: args.scope, shown: cap, total: total != null && total > cap ? total : null },
   };
 }
 

@@ -122,7 +122,7 @@ describe("readPaged", () => {
     expect(res.rows).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it("clamps a stale total so it can never read 'N of fewer-than-N'", async () => {
+  it("drops a stale total rather than reading 'N of fewer-than-N'", async () => {
     const t = fakeTable(500);
     const res = await readPaged({
       scope: "tasks",
@@ -130,7 +130,23 @@ describe("readPaged", () => {
       page: t.page,
       countTotal: async () => 98, // rows deleted between the read and the count
     });
-    expect(res.truncation).toEqual({ scope: "tasks", shown: 100, total: 100 });
+    expect(res.truncation).toEqual({ scope: "tasks", shown: 100, total: null });
+  });
+
+  it("terminates on a server that keeps re-serving the same rows", async () => {
+    let calls = 0;
+    const res = await readPaged<number, string>({
+      scope: "tasks",
+      cap: 10,
+      pageSize: 5,
+      keyOf: (n) => String(n),
+      page: async () => {
+        calls += 1;
+        return { data: [1, 2, 3, 4, 5], error: null }; // always the same page
+      },
+    });
+    expect(calls).toBeLessThan(20);
+    expect(res.rows).toEqual([1, 2, 3, 4, 5]);
   });
 
   it("never asks for more than the PostgREST ceiling in one request", async () => {

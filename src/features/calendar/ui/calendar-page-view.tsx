@@ -361,7 +361,11 @@ export function CalendarPageView({
       // mean "deleted" — a link to a 2023 event simply hasn't been fetched.
       // Drop the window once and let the reload re-run this effect before
       // ruling the id stale; otherwise every pre-window deep link lies.
-      if (widenedForEventIdRef.current !== urlEventId) {
+      // Only wait for a reload if dropping the window will ACTUALLY cause one.
+      // `ensureAllTime` is a no-op once the window is already all-time (an
+      // earlier deep link in this session), and returning here on that path
+      // would strand the link: no toast, no consume, `?event=` stuck in the URL.
+      if (!calendar.isAllTimeWindow && widenedForEventIdRef.current !== urlEventId) {
         widenedForEventIdRef.current = urlEventId;
         calendar.ensureAllTime();
         return;
@@ -397,6 +401,7 @@ export function CalendarPageView({
     calendar.loading,
     calendar.events,
     calendar.ensureAllTime,
+    calendar.isAllTimeWindow,
     goToDate,
     openDetail,
     onConsumeEventDeepLink,
