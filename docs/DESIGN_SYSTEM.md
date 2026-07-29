@@ -72,7 +72,7 @@ User preferences map to `data-*` attributes on `<html>`. The cascade does the wo
 | --- | --- | --- |
 | `data-theme` | `dark`, `light` | `dark` |
 | `data-shade` | `black`, `warm`, `cool`, `slate`, `plum`, `forest` | `black` |
-| `data-accent` | `mono`, `violet`, `blue`, `green`, `amber`, `red`, `teal`, `mono` | `mono` |
+| `data-accent` | `mono`, `pink`, `violet`, `blue`, `green`, `amber`, `red`, `teal` | `mono` |
 | `data-density` | `comfortable`, `compact`, `dense` | `comfortable` |
 | `data-radius` | `sharp`, `soft`, `round` | `soft` |
 | `data-font` | `geist`, `inter`, `pilat`, `cal`, `fraunces`, `serif`, `mono` | `geist` |
