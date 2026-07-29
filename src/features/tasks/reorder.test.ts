@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { betweenPositions, endPosition } from "./helpers";
+import { betweenPositions, endPosition, positionsAfter } from "./helpers";
 import { commitOrderUpdates, moveItem, positionForReorder } from "./reorder";
 
 describe("commitOrderUpdates", () => {
@@ -168,5 +168,43 @@ describe("moveItem", () => {
     const input = ["a", "b", "c"];
     moveItem(input, 0, 2);
     expect(input).toEqual(["a", "b", "c"]);
+  });
+});
+
+// ── positionsAfter (NOTE-FIX-1: bulk insert that must APPEND) ────────────────
+
+describe("positionsAfter", () => {
+  it("returns ascending, unique, non-empty keys", () => {
+    const out = positionsAfter(4);
+    expect(out).toHaveLength(4);
+    expect(out.every((p) => p !== "")).toBe(true);
+    expect([...out].sort()).toEqual(out);
+    expect(new Set(out).size).toBe(out.length);
+  });
+
+  it("sorts every new key AFTER every existing sibling", () => {
+    // The bug this guards: starting from scratch mints exactly the same first
+    // key as `endPosition([])`, so an import collided with the welcome note
+    // and scattered itself through the existing tree instead of appending.
+    const existing = [endPosition([]), endPosition([{ position: endPosition([]) }])];
+    const out = positionsAfter(3, existing);
+    const maxExisting = existing.reduce((a, b) => (a > b ? a : b));
+    expect(out.every((p) => p > maxExisting)).toBe(true);
+    expect([...out].sort()).toEqual(out);
+  });
+
+  it("appends past a subdivided (variable-width) key without collapsing", () => {
+    // A long key decodes past float precision, where `+ STEP` is absorbed and
+    // would mint duplicates forever — the trap `endPosition` documents.
+    const existing = ["5000000000000000"];
+    const out = positionsAfter(3, existing);
+    expect(out.every((p) => p > existing[0]!)).toBe(true);
+    expect(new Set(out).size).toBe(3);
+    expect([...out].sort()).toEqual(out);
+  });
+
+  it("is empty for a zero/negative count", () => {
+    expect(positionsAfter(0)).toEqual([]);
+    expect(positionsAfter(-3)).toEqual([]);
   });
 });

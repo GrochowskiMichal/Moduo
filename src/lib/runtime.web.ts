@@ -921,6 +921,45 @@ export const webRuntime: ModuoRuntime = {
       };
     },
 
+    async seedDoc({ workspaceId, noteId, docStateB64, bodyText, bodyMd }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_seed_doc", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_doc_state_b64: docStateB64,
+        p_body_text: bodyText ?? null,
+        p_body_md: bodyMd ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        seeded: Boolean(data?.seeded),
+        reason: (data?.reason as string | undefined) ?? null,
+        docVersion: data?.doc_version == null ? null : Number(data.doc_version),
+      };
+    },
+
+    async listUnmaterialized({ workspaceId, limit }) {
+      const { data, error } = await supabaseClient.rpc("notes_list_unmaterialized", {
+        p_workspace_id: workspaceId,
+        p_limit: limit ?? 200,
+      });
+      // The repair sweep is opportunistic — it must never wall the module
+      // between merging this code and deploying the migration (the recorded
+      // new-RPC deploy-gap trap). But degrade LOUDLY for anything that is not
+      // that gap: a silent [] on, say, a renamed param would make the whole
+      // backfill a permanent no-op nobody ever notices.
+      if (error) {
+        const undeployed = error.code === "42883" || error.code === "PGRST202";
+        if (!undeployed) {
+          console.warn("[notes] listUnmaterialized failed", error.code, error.message);
+        }
+        return [];
+      }
+      return (data ?? []).map((r: any) => ({
+        id: String(r.o_id),
+        bodyMd: String(r.o_body_md ?? ""),
+      }));
+    },
+
     async importNotes({ workspaceId, rows }) {
       const payload = rows.map((r) => ({
         id: r.id ?? null,

@@ -374,6 +374,23 @@ export type ModuoRuntime = {
       bodyText?: string | null;
       bodyMd?: string | null;
     }): Promise<{ folded: number; docVersion: number }>;
+    /** ONCE-ONLY materialization of a never-materialized note's CRDT doc
+     * (NOTE-FIX-1). Safe to call optimistically: the server refuses (without
+     * erroring) the moment the doc exists in any form, so two devices opening
+     * the same blank imported note can't fork it into a duplicated doc. */
+    seedDoc(input: {
+      workspaceId: string;
+      noteId: string;
+      docStateB64: string;
+      bodyText?: string | null;
+      bodyMd?: string | null;
+    }): Promise<{ seeded: boolean; reason: string | null; docVersion: number | null }>;
+    /** Notes carrying a body but NO CRDT doc — the repair sweep's work list.
+     * Degrades to [] pre-migration (the sweep is opportunistic, never a wall). */
+    listUnmaterialized(input: {
+      workspaceId: string;
+      limit?: number;
+    }): Promise<{ id: string; bodyMd: string }[]>;
     importNotes(input: {
       workspaceId: string;
       rows: NotesImportRow[];

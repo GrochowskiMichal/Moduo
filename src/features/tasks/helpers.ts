@@ -93,6 +93,42 @@ export function endPosition(existing: Array<{ position: string }>): string {
 }
 
 /**
+ * `count` STEP-spaced keys in ascending order, all sorting AFTER every key in
+ * `existing` — for bulk inserts that already know their order (the notes
+ * importer's sibling groups). Equivalent to calling {@link endPosition}
+ * repeatedly with the growing list, without the quadratic re-scan.
+ *
+ * Passing the existing siblings matters: starting from scratch would collide
+ * with the first existing key (`endPosition([])` mints exactly `POS_STEP`) and
+ * interleave the new rows through the current order instead of appending.
+ */
+export function positionsAfter(count: number, existing: Array<string> = []): string[] {
+  const n = Math.max(0, Math.floor(count));
+  if (n === 0) return [];
+  let maxStr = "";
+  for (const p of existing) {
+    if (p > maxStr) maxStr = p;
+  }
+  // A non-clean key (legacy width, or a subdivided variable-width key) decodes
+  // past float precision, where `+ POS_STEP` is absorbed — the same trap
+  // `endPosition` documents. Fall back to extending precision, then stepping.
+  const base =
+    maxStr === "" ? 0 : maxStr.length === POS_WIDTH ? decodePos(maxStr) : null;
+  if (base === null) {
+    const out: string[] = [];
+    let prefix = maxStr;
+    for (let i = 0; i < n; i++) {
+      prefix += POS_MID_DIGIT;
+      out.push(prefix);
+    }
+    return out;
+  }
+  const out: string[] = [];
+  for (let i = 1; i <= n; i++) out.push(encodePos(base + POS_STEP * i));
+  return out;
+}
+
+/**
  * A position string strictly between `a` and `b` (either bound may be null).
  * Uses a fixed-width integer midpoint while neighbours still have room between
  * them (lexicographic order == integer order only at equal width, so this is
