@@ -11,7 +11,8 @@ type MindmapDocument = {
     updatedAt: string;
 };
 
-const DEFAULT_EDGE_COLOR = "#333333";
+// react-flow renders edges as SVG whose `stroke` resolves CSS vars from the DOM.
+const DEFAULT_EDGE_COLOR = "var(--border)";
 
 const nodeTypes = {
     mindmap: MindmapCustomNode,
@@ -70,25 +71,25 @@ export function EmbeddedMindmap({ mindmapId }: { mindmapId: string }) {
 
     if (loading) {
         return (
-            <div className="w-full max-w-[800px] h-[300px] bg-[#1a1a1a]/50 border border-[#2a2a2a] rounded-xl flex items-center justify-center animate-pulse">
-                <span className="text-[12px] text-[#555]">Loading embedded mindmap...</span>
+            <div className="w-full max-w-[800px] h-[300px] bg-muted/50 border border-border rounded-xl flex items-center justify-center animate-pulse">
+                <span className="text-xs text-muted-foreground">Loading embedded mindmap...</span>
             </div>
         );
     }
 
     if (!doc) {
         return (
-            <div className="w-full max-w-[800px] bg-[#1a1a1a]/50 border border-[#2a2a2a] rounded-xl p-4 text-[#888] text-[13px]">
-                Embedded Mindmap <span className="font-mono text-[10px] text-[#555]">{mindmapId}</span> could not be found or was deleted.
+            <div className="w-full max-w-[800px] bg-muted/50 border border-border rounded-xl p-4 text-muted-foreground text-sm">
+                Embedded Mindmap <span className="font-mono text-2xs text-muted-foreground">{mindmapId}</span> could not be found or was deleted.
             </div>
         );
     }
 
     return (
-        <div className="w-full max-w-[800px] h-[400px] flex flex-col rounded-2xl border border-[#2a2a2a] bg-[#111] overflow-hidden shadow-lg relative cursor-default select-none pointer-events-auto">
-            <div className="absolute top-0 left-0 w-full px-4 py-2 bg-gradient-to-b from-[#111] to-transparent z-10 flex items-center gap-2 pointer-events-none">
-                <span className="text-[14px] font-semibold text-[#f1f1f1] drop-shadow-md">{name}</span>
-                <span className="text-[10px] uppercase font-bold text-[#888] tracking-widest bg-[#222]/80 px-1.5 py-0.5 rounded backdrop-blur-sm border border-[#333]">Mindmap</span>
+        <div className="w-full max-w-[800px] h-[400px] flex flex-col rounded-2xl border border-border bg-card overflow-hidden shadow-lg relative cursor-default select-none pointer-events-auto">
+            <div className="absolute top-0 left-0 w-full px-4 py-2 bg-gradient-to-b from-card to-transparent z-10 flex items-center gap-2 pointer-events-none">
+                <span className="text-base font-semibold text-foreground drop-shadow-md">{name}</span>
+                <span className="text-2xs uppercase font-bold text-muted-foreground tracking-widest bg-accent/80 px-1.5 py-0.5 rounded backdrop-blur-sm border border-border">Mindmap</span>
             </div>
             <div className="flex-1 w-full h-full relative">
                 <ReactFlowProvider>
@@ -111,7 +112,7 @@ export function EmbeddedMindmap({ mindmapId }: { mindmapId: string }) {
                             animated: true,
                             style: { strokeWidth: 2, stroke: DEFAULT_EDGE_COLOR },
                         }}
-                        style={{ background: "#111" }}
+                        style={{ background: "var(--card)" }}
                         preventScrolling={false}
                     />
                 </ReactFlowProvider>

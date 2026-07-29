@@ -26,11 +26,14 @@
   --color-secondary: rgb(27 27 27);
   --color-secondary-foreground: rgb(250 250 250);
 
-  /* primary */
-  --color-primary: rgb(248 98 179);
-  --color-primary-active: rgb(230 82 163);
-  --color-primary-foreground: rgb(6 6 6);
-  --color-primary-hover: rgb(255 115 195);
+  /* primary — mirrors tokens.css `--primary` (the MONO default, not a hue).
+     The app is monochrome out of the box; a hue is a user choice. If this file
+     is regenerated from the Subframe project, update the hosted theme's primary
+     to match (white) so pink is not reintroduced. */
+  --color-primary: rgb(238 238 238);
+  --color-primary-active: rgb(215 215 215);
+  --color-primary-foreground: rgb(3 3 3);
+  --color-primary-hover: rgb(255 255 255);
 
   /* destructive */
   --color-destructive: rgb(252 68 71);

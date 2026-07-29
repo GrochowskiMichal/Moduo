@@ -44,6 +44,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { UserMenu } from "../user-menu";
 import { NotificationCenter } from "../notification-center";
+import { EmailDueWebSweep } from "../../features/email/hooks/use-email-due-web-sweep";
 import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constants";
 import type { ModuleNavItem } from "./app-chrome-types";
 import { FocusSessionChip } from "./focus-session-chip";
@@ -493,6 +494,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         </div>
 
         <div className="flex flex-row items-center justify-end gap-2">
+          {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
+          <EmailDueWebSweep />
           <NotificationCenter />
           <UserMenu
             avatarDataUrl={avatarDataUrl}

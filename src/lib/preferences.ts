@@ -32,13 +32,19 @@ export type LandingView =
  *  `system` follows the OS, `reduced` forces movement off, `full` forces it on. */
 export type MotionPref = "system" | "reduced" | "full";
 
-// ── Per-type notification toggles (DF-19f-notif) ──────────────────────────────
-// The quiet set the bell can surface. Muting is a READ-SIDE filter over the
-// notification feed (workspace-provider + the dashboard Activity widget), keyed
-// on each row's module_activity `op` — no generation change, fully reversible
-// (rows persist; un-muting restores them). Default all-on = today's behaviour.
+// ── Per-type notification toggles (DF-19f-notif · DF-21e) ─────────────────────
+// The quiet set the bell can surface. Two flavours share one prefs record:
+//   • the four MUTES (mention/assigned/dueFollowUp/unblocked) — default ON — are a
+//     READ-SIDE filter over the notification feed (workspace-provider + the
+//     dashboard Activity widget), keyed on each row's module_activity `op`; no
+//     generation change, fully reversible (rows persist; un-muting restores them).
+//   • `overdueTasks` (DF-21e) — default OFF, opt-in — is NOT an op-mute. No
+//     activity op maps to it; it gates a synthetic, client-computed "overdue"
+//     section in the bell (drifted tasks), which is never badged and clears when a
+//     task resolves. It lives here (not a fork) so the settings UI + synced domain
+//     stay single-source (spec Assumption 7).
 
-export type NotificationType = "mention" | "assigned" | "dueFollowUp" | "unblocked";
+export type NotificationType = "mention" | "assigned" | "dueFollowUp" | "unblocked" | "overdueTasks";
 export type NotificationPrefs = Record<NotificationType, boolean>;
 
 const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
@@ -46,6 +52,7 @@ const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "assigned",
   "dueFollowUp",
   "unblocked",
+  "overdueTasks",
 ];
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -53,13 +60,16 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   assigned: true,
   dueFollowUp: true,
   unblocked: true,
+  // Opt-in: overdue work otherwise lives in Tasks/Home, not the bell (AC9).
+  overdueTasks: false,
 };
 
 /** module_activity `op` → the quiet-set toggle that governs it. An op absent from
- *  this map (legacy workspace invite/membership, any future type) has no toggle
- *  and is NEVER muted — mutes are opt-in per known type. `comments.add` only
- *  reaches the feed as an @mention-to-me (the mention predicate branch), so it
- *  maps to `mention`; the two `email.*_due` ops share the `dueFollowUp` toggle. */
+ *  this map (legacy workspace invite/membership, `overdueTasks` which has no op at
+ *  all, any future type) has no toggle and is NEVER muted — mutes are opt-in per
+ *  known type. `comments.add` reaches the feed as an @mention-to-me OR a comment on
+ *  your entity (DF-21d), both governed by `mention`; the two `email.*_due` ops
+ *  share the `dueFollowUp` toggle. */
 const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "comments.add": "mention",
   "tasks.assigned": "assigned",
@@ -79,9 +89,10 @@ export function isNotificationEnabled(op: string, prefs: NotificationPrefs): boo
   return type === null ? true : prefs[type];
 }
 
-/** Coerce arbitrary jsonb into a full NotificationPrefs. Each key defaults ON when
- *  missing or non-boolean, so a type added to the set later is on for existing
- *  users (and an older client that dropped the key re-defaults it on). */
+/** Coerce arbitrary jsonb into a full NotificationPrefs. Each key falls back to its
+ *  DEFAULT_NOTIFICATION_PREFS value when missing or non-boolean — the mutes default
+ *  ON (a type added later is on for existing users), `overdueTasks` defaults OFF
+ *  (opt-in), and an older client that dropped a key re-defaults it correctly. */
 export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
   const out: NotificationPrefs = { ...DEFAULT_NOTIFICATION_PREFS };
   if (!raw || typeof raw !== "object") return out;

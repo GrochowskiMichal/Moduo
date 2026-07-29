@@ -31,7 +31,10 @@ export interface Appearance {
 export const DEFAULT_APPEARANCE: Appearance = {
   theme: "dark",
   shade: "black",
-  accent: "pink",
+  // Monochrome by default — the app is black+gray+white out of the box and a
+  // hue is an opt-in choice (Settings → Appearance → Accent). Mirrors the
+  // `:root` --primary default in tokens.css; change both together.
+  accent: "mono",
   density: "comfortable",
   radius: "soft",
   font: "geist",

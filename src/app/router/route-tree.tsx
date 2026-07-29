@@ -29,6 +29,27 @@ function RootLayout() {
   );
 }
 
+/**
+ * Wrap a route that renders OUTSIDE the app gate (auth, onboarding, paywall,
+ * join, the public note reader) so it stays monochrome.
+ *
+ * The accent is a personal, in-workspace choice: a returning user whose accent
+ * is a hue must not see that hue on sign-in / setup / a public page. Scoping the
+ * attribute here rather than on each page root means a page's individual return
+ * branches (loading vs loaded vs error) can't drift apart — which is exactly how
+ * these surfaces got inconsistent before. `display: contents` adds no box, so
+ * layout is untouched while custom properties still inherit through it.
+ */
+function preWorkspace(Component: () => React.ReactNode) {
+  return function PreWorkspaceRoute() {
+    return (
+      <div data-accent="mono" className="contents">
+        <Component />
+      </div>
+    );
+  };
+}
+
 const rootRoute = createRootRoute({
   component: RootLayout,
 });
@@ -36,19 +57,19 @@ const rootRoute = createRootRoute({
 const authRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth",
-  component: AuthPage,
+  component: preWorkspace(AuthPage),
 });
 
 const onboardingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/onboarding",
-  component: OnboardingPage,
+  component: preWorkspace(OnboardingPage),
 });
 
 const paywallRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/paywall",
-  component: PaywallPage,
+  component: preWorkspace(PaywallPage),
 });
 
 // Public, unauthenticated reader for a published note (NO-9b). Direct child of
@@ -57,7 +78,7 @@ const paywallRoute = createRoute({
 const publishedNoteRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/p/$token",
-  component: PublishedNotePage,
+  component: preWorkspace(PublishedNotePage),
   validateSearch: (search: Record<string, unknown>): { note?: string } => {
     const note = typeof search.note === "string" && search.note ? search.note : undefined;
     return note ? { note } : {};
@@ -72,7 +93,7 @@ const publishedNoteRoute = createRoute({
 const joinRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/join",
-  component: JoinPage,
+  component: preWorkspace(JoinPage),
   validateSearch: (search: Record<string, unknown>): { invite?: string } => {
     const invite = typeof search.invite === "string" && search.invite ? search.invite : undefined;
     return invite ? { invite } : {};
