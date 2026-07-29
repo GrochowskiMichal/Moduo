@@ -35,13 +35,17 @@ States: **choosing** (picker, default 12 months) → **initial sync** (recent ma
 
 ## Edge cases
 
-- **Notion ships a zip inside a zip.** The real export is `Export-<uuid>.zip` → containing `Export-<uuid>-Part-1.zip` → containing the files. Dropping the file as downloaded must work. Large workspaces produce `Part-2`, `Part-3`… — all parts must be accepted (together or one at a time).
-- **A top-level wrapper folder** (`Export-<uuid>/Private & Shared/…`) sits above every real page — it must not become a phantom parent note.
-- **Deep nesting** — the sample export reaches **9 levels**. Hierarchy must survive; a page whose parent is missing attaches to root rather than being lost.
-- **Every page name carries a 32-hex id suffix** — stripped from the title, but kept as the join key for parenting.
-- **CSVs and images in the export** — skipped, and *counted* in the summary so the user knows they weren't imported.
+> **Verified 2026-07-29 by driving the shipped `readZipMarkdown` + `planMdZipImport` over the designer's real export** (368 entries). Findings below are measured, not predicted; several risks I originally listed turned out to be unfounded and were removed.
+
+- **🔴 Notion ships a zip inside a zip, and this is fatal today.** The real export is `Export-<uuid>.zip` containing `Export-<uuid>-Part-1.zip` containing the files. `readZipMarkdown` filters entries to `.md|.markdown|.txt` *before* anything else, so the nested zip is discarded and it returns `[]`. **Measured: dropping the file as downloaded imports 0 of 350 notes, with no error.** Large workspaces add `Part-2`, `Part-3`… — all parts must be accepted.
+- **🔴 Non-page entries are dropped by the READER, so they can't be reported.** The same extension filter discards the export's 3 CSVs and 15 PNGs before the planner sees them, so `plan.skipped` is empty and the user is told nothing was skipped. **Measured: 18 entries silently vanished.** The reader must pass non-markdown entries through (or classify them) so the summary can count them.
+- **🟡 A few pages produce no title.** **Measured: 4 of 350 land as "Untitled"** — files whose name cleans to empty *and* whose body has no leading heading. Acceptable, but the count belongs in the import summary rather than appearing as mystery notes.
+- **🟢 UNFOUNDED — the wrapper folder does not create phantom parents.** `Export-<uuid>/Private & Shared/` has no matching `.md`, and the planner parents by *name match*, so those levels simply don't become notes. **Measured: filesystem depth 9 → note-tree depth 7, exactly the 2 wrapper levels, with 29 correct root-level notes.**
+- **🟢 UNFOUNDED — deep nesting survives.** **Measured: all 350 pages placed, depth 0–7, no orphans.**
+- **🟢 UNFOUNDED — the 32-hex suffix strips cleanly.** **Measured: 0 of 350 titles leak an id.**
+- **🟢 UNFOUNDED — non-ASCII filenames are fine.** 62 of the entries contain them (Polish diacritics). `fflate` decodes them correctly; only the macOS CLI `unzip` chokes, which is not a path the app uses.
+- **🟢 ALREADY FIXED — sibling ordering.** NOTE-FIX-1 landed `importPositions`; **measured: 350 positions assigned, 0 blank.**
 - **Re-running an import** — no duplicates (id-stable), and a partially-failed import resumes.
-- **Import larger than the row cap** — see SCALE-1 dependency; the importer must not silently truncate.
 - **Email: a folder with fewer messages than the requested window** — completes, doesn't error.
 - **Email: `uid_validity` changes mid-backfill** (server recreated the mailbox) — must not delete already-backfilled history.
 - **Email: quitting the app mid-backfill** — resumes from where it stopped, never restarts from zero.
@@ -53,10 +57,10 @@ States: **choosing** (picker, default 12 months) → **initial sync** (recent ma
 ## Acceptance criteria
 
 - **AC1** — A Notion export dropped in **exactly as downloaded** (a zip containing `…-Part-N.zip`) imports its pages; the user never has to unzip anything by hand.
-- **AC2** — Imported pages keep their **hierarchy** (to at least 9 levels) and a **stable sibling order**; the export's wrapper folder does not appear as a note.
+- **AC2** — Imported pages keep their **hierarchy** and a **stable sibling order** (both verified working today — this AC is a regression guard, not new work).
 - **AC3** — Non-page entries (CSV, images, unknown types) are **skipped and reported with counts**, never silently dropped and never imported as empty notes.
 - **AC4** — Re-running the same import **creates no duplicates**; a partially-failed import resumes cleanly.
-- **AC5** — An import of ≥350 pages shows **determinate progress** and completes without truncation.
+- **AC5** — An import of ≥350 pages shows **determinate progress** and completes without truncation; the summary reports untitled/skipped counts.
 - **AC6** — At connect time the user picks a history depth (**3 / 6 / 12 months / Everything**, default 12); the mailbox is usable before the backfill finishes.
 - **AC7** — Mail **older than the previous 90-day limit** is synced up to the chosen depth, and is searchable locally.
 - **AC8** — The depth is changeable **per account** afterwards; **increasing** it backfills only the gap, **decreasing** it never deletes already-synced mail.
@@ -107,12 +111,14 @@ Durable decisions get a line in [`docs/decisions.md`](../docs/decisions.md).
 
 | # | Block | Delivers | Covers ACs | Depends on |
 | --- | --- | --- | --- | --- |
-| 1 | **IM-1 — Notion export hardening** | Nested/multi-part zip unwrap, wrapper-folder stripping, deep nesting, deterministic sibling positions, skipped-entry reporting, idempotent re-run, determinate progress. Validated against the designer's real ~350-page export. | AC1–AC5 | NOTE-FIX-1, SCALE-1 |
+| 1 | **IM-1 — Notion export hardening** | **Nested/multi-part zip unwrap** (the fatal one) + **non-markdown entries surfaced in the skipped summary**, plus untitled-count reporting, idempotent re-run and determinate progress. Hierarchy, ordering, hex-stripping and non-ASCII names are **already proven working** and only need regression tests. | AC1–AC5 | NOTE-FIX-1 ✓ · SCALE-1 *(soft — see note)* |
 | 2 | **IM-2a — Email store read/write path** | Prefix-scan envelope reads (no full-table deserialize), batched per-chunk commits, stable order-index key for date-less messages. No user-visible change; unblocks depth. | AC10, AC11 | OPS-1 |
 | 3 | **IM-2b — Backward backfill engine** | Depth floor on the sync cursor, `UID SEARCH SINCE`-derived ranges, resumable backwards walk, depth-gated prune, per-account error isolation. | AC7–AC10, AC12 | IM-2a |
 | 4 | **IM-2c — Depth picker + progress UI** | Connect-time picker (3/6/12/Everything, default 12), per-account setting in Settings → Integrations, Tauri progress events, determinate progress + cancel. | AC6, AC8, AC9 | IM-2b |
 | 5 | **IM-3 — (deferred) Task importer** | CSV/markdown-checklist task import via a new `tasks_op_import` RPC (the current write path is ~4 round-trips per task and does not register tasks in the spine). For alpha friends, not the designer. | — | SCALE-1 |
 | 6 | **IM-4 — (deferred) "Leaving your old app" checklist** | A short pre-migration checklist surface: unsnooze Spark's `Later` folder, drain Send Later, copy signatures/templates, save Teams comments. Cheap, and the only thing that helps for genuinely unexportable data. | — | — |
+
+**Dependency note:** SCALE-1 is a *soft* dependency for the designer's own import — 350 notes is comfortably under the 1000-row cap, so IM-1 can ship first if he wants to migrate sooner. It stays a hard dependency for a shipped importer facing arbitrary workspace sizes.
 
 Sequence: **IM-1** (dogfood-critical, independent) ∥ **IM-2a → IM-2b → IM-2c**. IM-3/IM-4 are post-alpha.
 
