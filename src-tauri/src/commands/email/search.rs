@@ -24,7 +24,7 @@ use crate::AppState;
 
 use super::account_config::{ensure_account_config, select_mailbox_for_folder};
 use super::connection::{open_imap_session, ImapSession};
-use super::storage::{parse_json_value, read_accounts, upsert_envelope};
+use super::storage::{parse_json_value, read_accounts, upsert_envelopes};
 use super::sync::fetch_envelopes_for_uids;
 use super::{EmailEnvelopeDto, StoredBodyText, StoredEnvelope};
 
@@ -336,11 +336,11 @@ fn run_server_search(
     envelopes
         .sort_by(|a, b| b.timestamp_ms.cmp(&a.timestamp_ms).then_with(|| b.uid.cmp(&a.uid)));
     envelopes.truncate(limit);
-    let mut dtos = Vec::with_capacity(envelopes.len());
-    for env in envelopes {
-        let _ = upsert_envelope(state, &env);
-        dtos.push(super::envelope_to_dto(state, env));
-    }
+    let _ = upsert_envelopes(state, &envelopes);
+    let dtos = envelopes
+        .into_iter()
+        .map(|env| super::envelope_to_dto(state, env))
+        .collect::<Vec<_>>();
     EmailServerSearchResult::ok(dtos)
 }
 

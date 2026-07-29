@@ -10,7 +10,7 @@ use super::parsing::{
 };
 use super::storage::{
     envelope_key, list_envelopes_filtered, load_folder_cursor, message_key, parse_json_value,
-    remove_body_cache, remove_envelope, save_folder_cursor, upsert_account_v2, upsert_envelope,
+    remove_body_cache, remove_envelope, save_folder_cursor, upsert_account_v2, upsert_envelopes,
     workspace_id_or_default,
 };
 use super::{
@@ -288,13 +288,17 @@ pub(super) fn sync_account_folder_envelopes(
     let window_cutoff_now_ms = chrono::Utc::now().timestamp_millis();
     for chunk in uids_to_fetch.chunks(50) {
         let rows = fetch_envelopes_for_uids(&mut session, account, folder, uid_validity, chunk)?;
-        for row in rows {
-            if !within_sync_window(row.timestamp_ms, window_cutoff_now_ms, SYNC_ENVELOPE_WINDOW_DAYS)
-            {
-                continue;
-            }
-            upsert_envelope(state, &row)?;
-        }
+        let in_window = rows
+            .into_iter()
+            .filter(|row| {
+                within_sync_window(
+                    row.timestamp_ms,
+                    window_cutoff_now_ms,
+                    SYNC_ENVELOPE_WINDOW_DAYS,
+                )
+            })
+            .collect::<Vec<_>>();
+        upsert_envelopes(state, &in_window)?;
     }
 
     if should_full_reset {
@@ -322,6 +326,7 @@ pub(super) fn sync_account_folder_envelopes(
         let condstore_query = "(UID FLAGS) (CHANGEDSINCE 1)";
         if let Ok(fetches) = session.uid_fetch(uid_set, condstore_query) {
             let mut missing_uids = Vec::<u32>::new();
+            let mut reflagged = Vec::<StoredEnvelope>::new();
             for item in fetches.iter() {
                 let uid = item.uid.unwrap_or_default();
                 if uid == 0 {
@@ -346,17 +351,16 @@ pub(super) fn sync_account_folder_envelopes(
                     envelope.read = read;
                     envelope.starred = starred;
                     envelope.updated_at = now_iso();
-                    upsert_envelope(state, &envelope)?;
+                    reflagged.push(envelope);
                 } else {
                     missing_uids.push(uid);
                 }
             }
+            upsert_envelopes(state, &reflagged)?;
             for chunk in missing_uids.chunks(50) {
                 let rows =
                     fetch_envelopes_for_uids(&mut session, account, folder, uid_validity, chunk)?;
-                for row in rows {
-                    upsert_envelope(state, &row)?;
-                }
+                upsert_envelopes(state, &rows)?;
             }
             reconciled_with_condstore = true;
         }
@@ -365,9 +369,7 @@ pub(super) fn sync_account_folder_envelopes(
         for chunk in reconcile_uids.chunks(50) {
             let rows =
                 fetch_envelopes_for_uids(&mut session, account, folder, uid_validity, chunk)?;
-            for row in rows {
-                upsert_envelope(state, &row)?;
-            }
+            upsert_envelopes(state, &rows)?;
         }
     }
 
@@ -391,9 +393,7 @@ pub(super) fn sync_account_folder_envelopes(
         for chunk in recovery_uids.chunks(50) {
             let rows =
                 fetch_envelopes_for_uids(&mut session, account, folder, uid_validity, chunk)?;
-            for row in rows {
-                upsert_envelope(state, &row)?;
-            }
+            upsert_envelopes(state, &rows)?;
         }
     }
 
