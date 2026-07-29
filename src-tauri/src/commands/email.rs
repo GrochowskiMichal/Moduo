@@ -13,6 +13,7 @@ use self::ops::{flush_op_outbox_for_account, list_folders_blocking, queue_op};
 use self::storage::{
     get_body_cache, list_envelopes_filtered, parse_json_value, patch_account_sync_state,
     remove_body_cache, remove_envelope, resolve_accounts_for_target, touch_body_cache,
+    KEY_SEPARATOR,
 };
 use self::sync::sync_account_folder_envelopes;
 use crate::email_sync::{
@@ -221,9 +222,14 @@ pub async fn email_get_thread(
     state: State<'_, AppState>,
     input: EmailGetThreadInput,
 ) -> Result<EmailGetThreadResult, String> {
+    // A thread spans folders, so this can only narrow to the account — `thread_id`
+    // isn't in the key, and giving it an index is IM-2b's job. Worth doing anyway:
+    // the snooze/follow-up loop calls this once per awaiting ref every 60s
+    // (`use-email-snooze-restore.ts`), so it was re-reading every other account's
+    // mail on a timer. The account field filter below still decides inclusion.
     let mut rows = state
         .store
-        .list_email_envelopes()
+        .scan_email_envelopes_prefix(&format!("{}{}", input.account_id, KEY_SEPARATOR))
         .map_err(|e| e.to_string())?
         .into_iter()
         .filter_map(parse_json_value::<StoredEnvelope>)
