@@ -26,7 +26,7 @@
 - [ ] **Do:** Change landing view / motion / sound on device A, then launch device B (same account), then relaunch B → **Expect:** B reflects A's choices (the app-wide reconcile pulls the cloud value at boot; the redirect/motion apply on the launch after the pull). _(both)_
 
 ## Migrations / data
-- [ ] **Do:** Apply `supabase/migrations/20260712120000_user_preferences_preferences_domain.sql` to prod (adds `preferences jsonb` + `preferences_updated_at`) and regenerate `src/types/supabase.ts` if desired → **Expect:** `select preferences from user_preferences` works; a preference change now writes to the row (`preferences_updated_at` bumps) and the sync meta (`moduo.preferences.sync`) shows `dirty:false`. Before applying, the app still works fully single-device (localStorage mirror) and pushes degrade to a benign no-op with no console error.
+- [ ] **Do:** Apply `supabase/migrations/20260712115000_user_preferences_preferences_domain.sql` to prod (adds `preferences jsonb` + `preferences_updated_at`) and regenerate `src/types/supabase.ts` if desired → **Expect:** `select preferences from user_preferences` works; a preference change now writes to the row (`preferences_updated_at` bumps) and the sync meta (`moduo.preferences.sync`) shows `dirty:false`. Before applying, the app still works fully single-device (localStorage mirror) and pushes degrade to a benign no-op with no console error.
 
 ## Known gaps / not-yet-testable
 - **Migration unapplied to prod** (no Supabase MCP/CLI in the build session) — cross-device sync is deferred until it lands; everything else works single-device off the localStorage mirror.

@@ -11,14 +11,22 @@
  * Markdown, not CRDT (specs/notes.md assumption 10). The server never parses
  * the Yjs doc; the connector writes the derived `body_md` (the read/search/
  * publish source) and a plain-text `body_text` for FTS. A headless Deno Yjs
- * builder was deliberately NOT attempted (the Lexical `root-v2` XML shape is
- * experimental/fragile — see gotcha "Deno connector doc-builder"). Consequence:
- * a note created/appended here is immediately listable, gettable-as-markdown,
- * searchable, exportable, and publishable; the LIVE editor materializes its
- * CRDT from body_md on first open (clean for a never-opened note — the common
- * agent-authoring case; an already-materialized note reflects the change after
- * a re-materialization, the recorded cross-device gap). The real CRDT write
- * path is the MCP-1 follow-up.
+ * builder was deliberately NOT attempted here. Consequence: a note
+ * created/appended here is immediately listable, gettable-as-markdown,
+ * searchable, exportable, and publishable.
+ *
+ * UPDATED by NOTE-FIX-1 (2026-07-29) — read this before touching the writes.
+ * A headless builder IS now proven in the APP (`src/features/notes/editor/
+ * materialize.ts`, `@lexical/headless` + `createBindingV2__EXPERIMENTAL`), and
+ * the app repairs body-only notes via `notes_op_seed_doc`. So:
+ *   - a note CREATED here still lands correctly — it has a body and no doc, so
+ *     the app's blank-note sweep materializes it the next time /notes loads;
+ *   - a note APPENDED/UPDATED here that is ALREADY materialized no longer
+ *     reaches the editor at all. The doc wins on open, and the user's next
+ *     keystroke flushes `deriveBody(doc)` over this body write, discarding it.
+ * That second case used to self-heal (imported notes stayed un-materialized);
+ * it no longer does. Giving the connector a real CRDT write path — or routing
+ * its edits through the same materializer — is now REQUIRED for MCP-1.
  */
 
 import type { ConnectorModule, ToolContext } from "../registry.ts";
