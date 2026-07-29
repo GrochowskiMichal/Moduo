@@ -31,7 +31,7 @@ Adds per-type notification toggles (**Mentions · Assigned to you · Due & follo
 - [ ] **Do (desktop, macOS):** With the toggle **on**, press **⌘Q**. → **Expect (KNOWN GAP):** ⌘Q currently **bypasses** the confirm (it's `ExitRequested`, not a window close). If the confirm should also catch ⌘Q, that needs the deferred Rust-side exit handler. Note the actual behaviour. _(desktop / macOS)_
 
 ## Known gaps / not-yet-testable
-- **assigned-to-you / task-unblocked** live suppression can't be exercised until **DF-9's migration (`20260712120000_df9_task_notifications.sql`) is applied to prod** — no such rows generate yet. The filter is type-agnostic and the op→type map is unit-tested, so it will govern them automatically once the trigger deploys.
+- **assigned-to-you / task-unblocked** live suppression is exercisable: **DF-9's migration (`20260712120000_df9_task_notifications.sql`) was applied to prod 2026-07-13** (re-confirmed against the catalog by OPS-1 on 2026-07-29), so those rows generate. The filter is type-agnostic and the op→type map is unit-tested, so it governs them via the same path proven for mentions.
 - **Cross-device sync** of a mute wasn't re-verified this session (single session); it rides the same proven `preferences` LWW domain as landing view (DF-19f).
 - The live-verify seeded one `module_activity` mention row for the test account and **reverted it** (plus reset the `preferences` blob to `{}`); appearance/focus were left untouched.
 
