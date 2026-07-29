@@ -1,18 +1,25 @@
 -- OPS-2 — grants hardening, from the prod-schema ↔ migration-file reconciliation.
 --
 -- The reconciliation found 15 SECURITY DEFINER functions in `public` that the
--- `anon` role can EXECUTE. Root cause for most of them: the module migrations
--- revoke `FROM PUBLIC` and `FROM authenticated` but never `FROM anon`, and
--- Supabase's default privileges grant EXECUTE on public functions to `anon`
--- independently of PUBLIC. Revoking PUBLIC therefore does NOT revoke anon —
--- the CT-5 grant loop gets this right (`REVOKE ... FROM anon` explicitly), the
--- per-module ones in email/contacts/calendar do not.
+-- `anon` role can EXECUTE. Root cause: Supabase's default privileges grant EXECUTE
+-- on public functions to `anon` DIRECTLY, not via PUBLIC, so a revoke naming only
+-- PUBLIC (and even authenticated) leaves anon holding EXECUTE.
+--
+-- Note precisely WHERE this went wrong, because it is not where you would guess:
+-- each module's bulk op-grant LOOP already revokes anon correctly
+-- (contacts_module.sql:550, calendar_module.sql:532, email_module.sql:538), and
+-- contacts_module.sql even carries a comment explaining this exact Supabase
+-- behaviour. What omitted anon were the SIX HAND-WRITTEN per-guard REVOKE pairs
+-- sitting a few hundred lines ABOVE the correct loop in the same files
+-- (email_module.sql:186-187,210-211; calendar_module.sql:147-148,180-181;
+-- contacts_module.sql:150-151,174-175). The lesson is not "audit the loops" —
+-- it is "one-off hand revokes drift from the loop pattern already in the file".
 --
 -- This migration closes the two groups where revoking is provably safe. It
 -- deliberately leaves a third group alone — see the note at the bottom.
 --
--- Depends on: 20260628140000 (contacts_v2), 20260702130000 (calendar_module),
--- 20260704170000 (email_module).
+-- Depends on: 20260626120000 (contacts_module — creates contacts_op__guard*),
+-- 20260702130000 (calendar_module), 20260704170000 (email_module).
 
 -- ── group 1: internal op guards ──────────────────────────────────────────────
 -- The `*_op__guard*` helpers are internal: SECURITY DEFINER, invoked only from
@@ -67,9 +74,21 @@ $$;
 -- generated `src/types/supabase.ts`. So it is revoked from BOTH client roles here
 -- rather than repaired. Dropping it outright is the follow-up once a release has
 -- confirmed nothing regressed.
-REVOKE ALL ON FUNCTION public.accept_workspace_invite(uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.accept_workspace_invite(uuid) FROM anon;
-REVOKE ALL ON FUNCTION public.accept_workspace_invite(uuid) FROM authenticated;
+-- Guarded with to_regprocedure because REVOKE has no IF EXISTS for functions and
+-- NO MIGRATION FILE CREATES THIS FUNCTION (it predates them — see the inventory §2).
+-- Unguarded, this file hard-fails 42883 on any database that doesn't already have it:
+-- a `supabase db push` shadow-DB replay today, and — once the recommended baseline
+-- capture lands AFTER the recommended DROP of this function — a plain `db reset`.
+-- That would leave this block breaking the very bootstrap it diagnosed.
+DO $$
+BEGIN
+  IF to_regprocedure('public.accept_workspace_invite(uuid)') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON FUNCTION public.accept_workspace_invite(uuid) FROM PUBLIC';
+    EXECUTE 'REVOKE ALL ON FUNCTION public.accept_workspace_invite(uuid) FROM anon';
+    EXECUTE 'REVOKE ALL ON FUNCTION public.accept_workspace_invite(uuid) FROM authenticated';
+  END IF;
+END;
+$$;
 
 -- ── group 3: DELIBERATELY NOT REVOKED — RLS policy helpers ───────────────────
 -- `tasks_module_can_access_workspace(uuid)`, `profile_plan_tier_text(uuid)` and
