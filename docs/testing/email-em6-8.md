@@ -3,7 +3,7 @@
 > Generated 2026-07-04 · branch `claude/cranky-wiles-0bbf66` · **Live-verified:** no — the email engine (IMAP/SMTP, snooze move/restore, attachments, send) is desktop-only and headless-incompatible, and the two migrations are deploy-gated. `bun run verify` (788 unit tests) + `cargo check`/`cargo test` are green; everything below is the designer's desktop pass. Pure logic (snooze presets, follow-up reply-clear, compose prefill, undo-send hold, convert args) is unit-proven.
 
 ## Pre-req — deploy the two migrations
-- [ ] **Do:** Apply `supabase/migrations/20260704180000_email_snooze_followup.sql` then `20260704190000_email_ref_remove.sql` to prod; regenerate `src/types/supabase.ts` (optional — the email runtime uses the untyped client). → **Expect:** `email_op_snooze_due`, `email_op_follow_up_due`, `email_op_ref_remove` exist; `spine_activity_targets_me` has the `notify_user_ids` branch; `email_refs.follow_up_notified_at` column present. _(cloud)_
+- [x] ✅ **DONE 2026-07-29 (OPS-1).** Applied `supabase/migrations/20260704180000_email_snooze_followup.sql` then `20260704190000_email_ref_remove.sql` to prod; regenerate `src/types/supabase.ts` (optional — the email runtime uses the untyped client). → **Expect:** `email_op_snooze_due`, `email_op_follow_up_due`, `email_op_ref_remove` exist; `spine_activity_targets_me` has the `notify_user_ids` branch; `email_refs.follow_up_notified_at` column present. _(cloud)_
 - [ ] **Do:** Before deploy, open /email on desktop. → **Expect:** snooze/follow-up/convert still work locally; the cloud writes degrade quietly (an honest toast on the mutation), nothing crashes. _(desktop)_
 
 ## EM-6 — Snooze (AC6)
