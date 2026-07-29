@@ -7,6 +7,8 @@
 // This is the only Tasks model. The legacy Linear-style types (TaskProject /
 // TaskWorkflowState / Task-as-issue) and the features/plan UI were removed.
 
+import type { Truncation } from "../../lib/paged-select";
+
 /** Fixed task lifecycle status. */
 export type TaskStatus = "todo" | "in_progress" | "done" | "archived";
 
@@ -186,6 +188,12 @@ export type TasksModuleBundle = {
   tags: Tag[];
   tagLinks: TagLink[];
   taskRelations: TaskRelation[];
+  /**
+   * Collections the read had to cut at their ceiling (SCALE-1). Empty = you
+   * are holding everything. Non-empty MUST be shown — a silent cut is the bug
+   * this field exists to kill.
+   */
+  truncated: Truncation[];
 };
 
 /** Coarse time-of-day slots that a bucket can be mapped to (spec §9). */

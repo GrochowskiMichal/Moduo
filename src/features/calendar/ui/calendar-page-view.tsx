@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
+import { TruncationNotice } from "../../../components/app/truncation-notice";
 import {
   Dialog,
   DialogContent,
@@ -239,6 +240,14 @@ export function CalendarPageView({
     () => visibleRange(viewState.view, anchor, prefs),
     [viewState.view, anchor, prefs],
   );
+  // SCALE-1: the events read is windowed, so tell the hook what's on screen —
+  // navigating past the loaded window widens it and refetches instead of
+  // rendering a silently empty month.
+  const { ensureRange } = calendar;
+  useEffect(() => {
+    ensureRange(new Date(range.startMs), new Date(range.endMs));
+  }, [ensureRange, range.startMs, range.endMs]);
+
   const blocks = useMemo(() => taskBlocks(api.tasks, range), [api.tasks, range]);
   const grouped = useMemo(() => blocksByDay(blocks), [blocks]);
   const eventChips = useMemo(
@@ -890,6 +899,7 @@ export function CalendarPageView({
     >
       <FeaturePanelsShell
         feature="calendar"
+        notice={<TruncationNotice truncated={calendar.truncated} />}
         left={
           <CalendarRail
             anchor={anchor}

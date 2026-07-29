@@ -26,6 +26,7 @@ import type {
   CalendarAccountModel,
   CalendarEventModel,
 } from "../features/calendar/events";
+import { defaultCalendarWindow } from "../features/calendar/window";
 import { sanitizeTimeBlocks, type ActivityEntry, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
@@ -35,6 +36,12 @@ import { selectReconnect } from "../features/contacts/reconnect";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
 import { createRequestCache } from "./request-cache";
+import {
+  collectTruncations,
+  READ_CAPS,
+  readPaged,
+  type Truncation,
+} from "./paged-select";
 import {
   missingOptionalPrefsDomain,
   optionalPrefsAvailable,
@@ -125,6 +132,46 @@ supabaseClient.auth.onAuthStateChange((event) => {
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+// ── Bounded module reads (SCALE-1) ────────────────────────────────────────────
+// PostgREST caps EVERY select at `db-max-rows` (1000 here) and says nothing —
+// and `.limit(5000)` does not lift it, it's a hard per-request ceiling. So the
+// list reads page with `.range()` up to an explicit cap and report what they
+// had to cut. See [paged-select.ts](./paged-select.ts) for the full rule.
+
+type SelectOpts = { count: "exact"; head: true };
+/** Rebuilds the *same* filtered query each call — a supabase builder is single-use. */
+type QueryBuilderFn = (opts?: SelectOpts) => any;
+
+type CappedRead<T> = { rows: T[]; error: any; truncation: Truncation | null };
+
+/**
+ * Page a filtered query up to `cap` rows.
+ *
+ * `build` must apply the select + every filter; `order` adds the sort to the
+ * ROW query only (a head-count doesn't need one). Paging is only correct under
+ * a total order, so `order` must end in a unique tiebreaker — `id`.
+ */
+async function selectCapped<T>(args: {
+  scope: string;
+  cap: number;
+  build: QueryBuilderFn;
+  order: (q: any) => any;
+}): Promise<CappedRead<T>> {
+  const res = await readPaged<T, any>({
+    scope: args.scope,
+    cap: args.cap,
+    page: async (offset, limit) => {
+      const { data, error } = await args.order(args.build()).range(offset, offset + limit - 1);
+      return { data: (data ?? null) as T[] | null, error };
+    },
+    countTotal: async () => {
+      const { count, error } = await args.build({ count: "exact", head: true });
+      return error ? null : count ?? null;
+    },
+  });
+  return { rows: res.rows, error: res.error, truncation: res.truncation };
+}
 
 function toError(error: unknown): { message: string } {
   if (error instanceof Error) return { message: error.message };
@@ -659,22 +706,35 @@ export const webRuntime: ModuoRuntime = {
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
       const cutoff = trashWindowCutoffIso(new Date());
       const query = (cols: string) =>
-        supabaseClient
-          .from("notes")
-          .select(cols)
-          .eq("workspace_id", workspaceId)
-          .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`)
-          .order("position");
+        selectCapped<any>({
+          scope: "notes",
+          cap: READ_CAPS.notes,
+          build: (opts) =>
+            supabaseClient
+              .from("notes")
+              .select(cols, opts)
+              .eq("workspace_id", workspaceId)
+              .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`),
+          order: (q) => q.order("position").order("id"),
+        });
       const res = await query(V2_COLS);
       if (!res.error) {
-        return { notes: (res.data ?? []).map(noteRowToModel), degraded: false };
+        return {
+          notes: res.rows.map(noteRowToModel),
+          degraded: false,
+          truncated: collectTruncations(res.truncation),
+        };
       }
       // Degrade ONLY on the deploy gap (missing v2 columns = 42703). An
       // outage/auth error must surface as an error, not an empty module.
       if (res.error.code !== "42703") throw new Error(res.error.message);
       const legacy = await query(LEGACY_COLS);
       if (legacy.error) throw new Error(legacy.error.message);
-      return { notes: (legacy.data ?? []).map(noteRowToModel), degraded: true };
+      return {
+        notes: legacy.rows.map(noteRowToModel),
+        degraded: true,
+        truncated: collectTruncations(legacy.truncation),
+      };
     },
 
     async pullDoc({ workspaceId, noteId, sinceUpdateId }) {
@@ -1265,31 +1325,34 @@ export const webRuntime: ModuoRuntime = {
     // ── EM-3 cloud tissue surface (Supabase-first; works on web + desktop) ──
     async listModule(workspaceId) {
       try {
+        const live = (table: string) => (opts?: SelectOpts) =>
+          supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId).is("deleted_at", null);
         const [accountsRes, refsRes] = await Promise.all([
-          supabaseClient
-            .from("email_accounts")
-            .select("*")
-            .eq("workspace_id", workspaceId)
-            .is("deleted_at", null)
-            .order("created_at", { ascending: true }),
-          supabaseClient
-            .from("email_refs")
-            .select("*")
-            .eq("workspace_id", workspaceId)
-            .is("deleted_at", null)
-            .order("updated_at", { ascending: false }),
+          selectCapped<any>({
+            scope: "mailboxes",
+            cap: READ_CAPS.emailAccounts,
+            build: live("email_accounts"),
+            order: (q) => q.order("created_at", { ascending: true }).order("id"),
+          }),
+          selectCapped<any>({
+            scope: "threads",
+            cap: READ_CAPS.emailRefs,
+            build: live("email_refs"),
+            order: (q) => q.order("updated_at", { ascending: false }).order("id"),
+          }),
         ]);
         // Either table missing (pre-migration) → degrade to empty, never crash.
         if (accountsRes.error || refsRes.error) {
-          return { accounts: [], refs: [], degraded: true };
+          return { accounts: [], refs: [], degraded: true, truncated: [] };
         }
         return {
-          accounts: (accountsRes.data ?? []).map(emailAccountRowToModel),
-          refs: (refsRes.data ?? []).map(emailRefRowToModel),
+          accounts: accountsRes.rows.map(emailAccountRowToModel),
+          refs: refsRes.rows.map(emailRefRowToModel),
           degraded: false,
+          truncated: collectTruncations(accountsRes.truncation, refsRes.truncation),
         };
       } catch {
-        return { accounts: [], refs: [], degraded: true };
+        return { accounts: [], refs: [], degraded: true, truncated: [] };
       }
     },
     async upsertAccountRef({ workspaceId, provider, address, signatureHtml, color, status, unreadCount }) {
@@ -1416,35 +1479,56 @@ export const webRuntime: ModuoRuntime = {
     // entities upsert + attributed activity); reads = indexed SELECTs that
     // DEGRADE to empty pre-migration (the deploy-gap posture — the page still
     // works as a task-lens calendar with zero calendar tables).
-    async listModule(workspaceId) {
+    async listModule(workspaceId, window) {
       try {
+        // SCALE-1: the events read used to pull ALL history. It now rides a
+        // date window (the hook widens it as you navigate). Two rows always
+        // come through regardless of the window: none — but a RECURRING series
+        // must, because its stored start_time is the FIRST occurrence (often
+        // years back) while its occurrences run into the window. Hence the
+        // `recurrence_rule.not.is.null` arm; the other arm is the standard
+        // overlap test, so multi-day events spanning the edge survive too.
+        const { fromIso, toIso } = window ?? defaultCalendarWindow();
         const [eventsRes, accountsRes] = await Promise.all([
-          supabaseClient
-            .from("calendar_events")
-            .select("*")
-            .eq("workspace_id", workspaceId)
-            .is("deleted_at", null)
-            .order("start_time", { ascending: true }),
-          supabaseClient
-            .from("calendar_accounts")
-            .select("*")
-            .eq("workspace_id", workspaceId)
-            .is("deleted_at", null)
-            .order("created_at", { ascending: true }),
+          selectCapped<any>({
+            scope: "events",
+            cap: READ_CAPS.calendarEvents,
+            build: (opts) =>
+              supabaseClient
+                .from("calendar_events")
+                .select("*", opts)
+                .eq("workspace_id", workspaceId)
+                .is("deleted_at", null)
+                .or(`recurrence_rule.not.is.null,and(start_time.lte.${toIso},end_time.gte.${fromIso})`),
+            order: (q) => q.order("start_time", { ascending: true }).order("id"),
+          }),
+          selectCapped<any>({
+            scope: "calendars",
+            cap: READ_CAPS.calendarAccounts,
+            build: (opts) =>
+              supabaseClient
+                .from("calendar_accounts")
+                .select("*", opts)
+                .eq("workspace_id", workspaceId)
+                .is("deleted_at", null),
+            order: (q) => q.order("created_at", { ascending: true }).order("id"),
+          }),
         ]);
         // Accounts degrade independently: the events table pre-exists (legacy),
         // calendar_accounts only lands with the migration.
-        const accounts = accountsRes.error
-          ? []
-          : (accountsRes.data ?? []).map(calendarAccountRowToModel);
-        if (eventsRes.error) return { events: [], accounts, degraded: true };
+        const accounts = accountsRes.error ? [] : accountsRes.rows.map(calendarAccountRowToModel);
+        if (eventsRes.error) return { events: [], accounts, degraded: true, truncated: [] };
         return {
-          events: (eventsRes.data ?? []).map(calendarEventRowToModel),
+          events: eventsRes.rows.map(calendarEventRowToModel),
           accounts,
           degraded: Boolean(accountsRes.error),
+          truncated: collectTruncations(
+            eventsRes.truncation,
+            accountsRes.error ? null : accountsRes.truncation,
+          ),
         };
       } catch {
-        return { events: [], accounts: [], degraded: true };
+        return { events: [], accounts: [], degraded: true, truncated: [] };
       }
     },
     async createEvent({ workspaceId, title, startsAt, endsAt, allDay, rrule, description }) {
@@ -1540,22 +1624,33 @@ export const webRuntime: ModuoRuntime = {
   tasks: {
     async list(workspaceId) {
       await ensureWebInbox(workspaceId);
+      const live = (table: string) => (opts?: SelectOpts) =>
+        supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId).is("deleted_at", null);
+      const all = (table: string) => (opts?: SelectOpts) =>
+        supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId);
       const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes] = await Promise.all([
-        supabaseClient.from("buckets").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position"),
-        supabaseClient.from("tasks").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position"),
-        supabaseClient.from("tags").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
-        supabaseClient.from("tag_links").select("*").eq("workspace_id", workspaceId),
-        supabaseClient.from("task_relations").select("*").eq("workspace_id", workspaceId),
+        selectCapped<any>({ scope: "buckets", cap: READ_CAPS.buckets, build: live("buckets"), order: (q) => q.order("position").order("id") }),
+        selectCapped<any>({ scope: "tasks", cap: READ_CAPS.tasks, build: live("tasks"), order: (q) => q.order("position").order("id") }),
+        selectCapped<any>({ scope: "tags", cap: READ_CAPS.tags, build: live("tags"), order: (q) => q.order("created_at").order("id") }),
+        selectCapped<any>({ scope: "tag links", cap: READ_CAPS.tagLinks, build: all("tag_links"), order: (q) => q.order("id") }),
+        selectCapped<any>({ scope: "task links", cap: READ_CAPS.taskRelations, build: all("task_relations"), order: (q) => q.order("id") }),
       ]);
       const firstError =
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
-        buckets: (bucketsRes.data ?? []).map(bucketRowToModel),
-        tasks: (tasksRes.data ?? []).map(taskRowToModel),
-        tags: (tagsRes.data ?? []).map(tagRowToModel),
-        tagLinks: (linksRes.data ?? []).map(tagLinkRowToModel),
-        taskRelations: (relationsRes.data ?? []).map(taskRelationRowToModel),
+        buckets: bucketsRes.rows.map(bucketRowToModel),
+        tasks: tasksRes.rows.map(taskRowToModel),
+        tags: tagsRes.rows.map(tagRowToModel),
+        tagLinks: linksRes.rows.map(tagLinkRowToModel),
+        taskRelations: relationsRes.rows.map(taskRelationRowToModel),
+        truncated: collectTruncations(
+          bucketsRes.truncation,
+          tasksRes.truncation,
+          tagsRes.truncation,
+          linksRes.truncation,
+          relationsRes.truncation,
+        ),
       };
     },
 
@@ -1700,23 +1795,33 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async listTagLinks({ workspaceId, entityTypes }) {
-      // Explicit ceiling — PostgREST silently caps at 1000 otherwise; 5000
-      // covers alpha-scale workspaces (revisit with pagination if profiling
-      // ever shows a workspace near it).
-      let linksQuery = supabaseClient
-        .from("tag_links").select("*")
-        .eq("workspace_id", workspaceId).limit(5000);
-      if (entityTypes && entityTypes.length > 0) linksQuery = linksQuery.in("entity_type", entityTypes);
+      // This used to read `.limit(5000)` with a comment claiming it lifted
+      // PostgREST's cap. It did NOT — max-rows is a hard per-request ceiling,
+      // so the read silently stopped at 1000 anyway (SCALE-1). Page instead.
       const [tagsRes, linksRes] = await Promise.all([
-        supabaseClient.from("tags").select("*")
-          .eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
-        linksQuery,
+        selectCapped<any>({
+          scope: "tags",
+          cap: READ_CAPS.tags,
+          build: (opts) =>
+            supabaseClient.from("tags").select("*", opts)
+              .eq("workspace_id", workspaceId).is("deleted_at", null),
+          order: (q) => q.order("created_at").order("id"),
+        }),
+        selectCapped<any>({
+          scope: "tag links",
+          cap: READ_CAPS.tagLinks,
+          build: (opts) => {
+            const q = supabaseClient.from("tag_links").select("*", opts).eq("workspace_id", workspaceId);
+            return entityTypes && entityTypes.length > 0 ? q.in("entity_type", entityTypes) : q;
+          },
+          order: (q) => q.order("id"),
+        }),
       ]);
       const firstError = tagsRes.error || linksRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
-        tags: (tagsRes.data ?? []).map(tagRowToModel),
-        links: (linksRes.data ?? []).map(tagLinkRowToModel),
+        tags: tagsRes.rows.map(tagRowToModel),
+        links: linksRes.rows.map(tagLinkRowToModel),
       };
     },
 
@@ -2087,27 +2192,43 @@ export const webRuntime: ModuoRuntime = {
   contacts: {
     async list(workspaceId) {
       const [contactsRes, companiesRes, defsRes] = await Promise.all([
-        supabaseClient
-          .from("contacts").select("*")
-          .eq("workspace_id", workspaceId).is("deleted_at", null)
-          .order("name"),
-        supabaseClient
-          .from("companies").select("*")
-          .eq("workspace_id", workspaceId).is("deleted_at", null)
-          .order("name"),
-        supabaseClient
-          .from("contact_field_defs").select("*")
-          .eq("workspace_id", workspaceId)
-          .order("position"),
+        selectCapped<any>({
+          scope: "people",
+          cap: READ_CAPS.contacts,
+          build: (opts) =>
+            supabaseClient.from("contacts").select("*", opts)
+              .eq("workspace_id", workspaceId).is("deleted_at", null),
+          order: (q) => q.order("name").order("id"),
+        }),
+        selectCapped<any>({
+          scope: "companies",
+          cap: READ_CAPS.companies,
+          build: (opts) =>
+            supabaseClient.from("companies").select("*", opts)
+              .eq("workspace_id", workspaceId).is("deleted_at", null),
+          order: (q) => q.order("name").order("id"),
+        }),
+        selectCapped<any>({
+          scope: "fields",
+          cap: READ_CAPS.contactFieldDefs,
+          build: (opts) =>
+            supabaseClient.from("contact_field_defs").select("*", opts).eq("workspace_id", workspaceId),
+          order: (q) => q.order("position").order("id"),
+        }),
       ]);
       if (contactsRes.error) throw new Error(contactsRes.error.message);
       if (companiesRes.error) throw new Error(companiesRes.error.message);
       // Field defs are additive — degrade to none if the v2 migration isn't deployed yet.
-      const fieldDefs = defsRes.error ? [] : (defsRes.data ?? []).map(contactFieldDefRowToModel);
+      const fieldDefs = defsRes.error ? [] : defsRes.rows.map(contactFieldDefRowToModel);
       return {
-        contacts: (contactsRes.data ?? []).map(contactRowToModel),
-        companies: (companiesRes.data ?? []).map(companyRowToModel),
+        contacts: contactsRes.rows.map(contactRowToModel),
+        companies: companiesRes.rows.map(companyRowToModel),
         fieldDefs,
+        truncated: collectTruncations(
+          contactsRes.truncation,
+          companiesRes.truncation,
+          defsRes.error ? null : defsRes.truncation,
+        ),
       };
     },
 

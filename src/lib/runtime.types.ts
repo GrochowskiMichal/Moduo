@@ -34,6 +34,8 @@ import type {
   CalendarMirrorEventInput,
   CalendarModuleBundle,
 } from "../features/calendar/events";
+import type { CalendarWindow } from "../features/calendar/window";
+import type { Truncation } from "./paged-select";
 import type {
   Note as NoteV2,
   NoteDocPull,
@@ -660,8 +662,15 @@ export type ModuoRuntime = {
     // (Bundle/patch shapes live below the ModuoRuntime type.)
     // Writes go through calendar_op_* RPCs (guard + write + entities upsert
     // + attributed activity in one txn); reads are indexed SELECTs.
-    /** Events + accounts bundle. Reads DEGRADE to empty pre-migration. */
-    listModule(workspaceId: string): Promise<CalendarModuleBundle>;
+    /**
+     * Events + accounts bundle. Reads DEGRADE to empty pre-migration.
+     *
+     * `window` bounds the events read to a date range (SCALE-1 — it used to
+     * fetch all history); omitted = {@link defaultCalendarWindow}. Recurring
+     * series always come through regardless of the window, since their stored
+     * start is the first occurrence, not the one you're looking at.
+     */
+    listModule(workspaceId: string, window?: CalendarWindow): Promise<CalendarModuleBundle>;
     createEvent(input: {
       workspaceId: string;
       title: string;
@@ -1170,6 +1179,8 @@ export type EmailModuleBundle = {
   refs: EmailThreadRef[];
   /** True when the migration isn't applied yet (surfaces degrade, never crash). */
   degraded: boolean;
+  /** Collections cut at their read ceiling (SCALE-1) — empty = complete. */
+  truncated: Truncation[];
 };
 
 /** Partial patch for `setContactDetails` — camelCase keys mirror the SQL op. */

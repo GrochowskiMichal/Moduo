@@ -83,6 +83,7 @@ const SAMPLE_TASKS = {
   tags: [],
   tagLinks: [],
   taskRelations: [],
+  truncated: [],
   tasks: [
     { id: "t1", title: "Ship the dashboard", status: "todo", committedFor: null, commitOrder: 0, position: "a0", deletedAt: null },
     { id: "t2", title: "Review the widget PR", status: "todo", committedFor: null, commitOrder: 1, position: "a1", deletedAt: null },

@@ -7,12 +7,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import type { Truncation } from "../../../lib/paged-select";
 import { undoToast } from "../../../lib/undo-toast";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
   CalendarEventPatch,
 } from "../events";
+import {
+  defaultCalendarWindow,
+  widenCalendarWindow,
+  type CalendarWindow,
+} from "../window";
 
 type Params = {
   userId: string | null;
@@ -55,8 +61,13 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   const [events, setEvents] = useState<CalendarEventModel[]>([]);
   const [accounts, setAccounts] = useState<CalendarAccountModel[]>([]);
   const [degraded, setDegraded] = useState(false);
+  const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [loading, setLoading] = useState(true);
   const reqRef = useRef(0);
+  // SCALE-1: the events read is windowed instead of "all history". The window
+  // only ever grows (see ensureRange), so walking back and forth over months
+  // you've already visited never refetches.
+  const [fetchWindow, setFetchWindow] = useState<CalendarWindow>(() => defaultCalendarWindow());
 
   const load = useCallback(async () => {
     if (!runtime || !userId || !workspaceId || !canRead) {
@@ -67,17 +78,27 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     }
     const req = ++reqRef.current;
     setLoading(true);
-    const bundle = await runtime.calendar.listModule(workspaceId);
+    const bundle = await runtime.calendar.listModule(workspaceId, fetchWindow);
     if (reqRef.current !== req) return;
     setEvents(bundle.events);
     setAccounts(bundle.accounts);
     setDegraded(bundle.degraded);
+    setTruncated(bundle.truncated);
     setLoading(false);
-  }, [runtime, userId, workspaceId, canRead]);
+  }, [runtime, userId, workspaceId, canRead, fetchWindow]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * Tell the hook which days are actually on screen. Widens the fetch window
+   * (and reloads) when you navigate past its edge — without this, the date
+   * window would simply make old/far-future months look empty.
+   */
+  const ensureRange = useCallback((from: Date, to: Date) => {
+    setFetchWindow((current) => widenCalendarWindow(current, from, to) ?? current);
+  }, []);
 
   const liveEvents = useMemo(() => events.filter((e) => !e.deletedAt), [events]);
 
@@ -220,6 +241,8 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     events: liveEvents,
     accounts,
     degraded,
+    truncated,
+    ensureRange,
     loading,
     canEdit,
     reload: load,
