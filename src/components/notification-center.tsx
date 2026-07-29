@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { useAuth } from "../providers/auth-provider";
 import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
 import { useWorkspace } from "../providers/workspace-provider";
 import { useShortcut } from "../lib/shortcuts";
+import { usePreferencesValue } from "../lib/preferences";
 import { undoToast } from "../lib/undo-toast";
 import {
   groupNotifications,
@@ -13,6 +14,7 @@ import {
   notificationSummary,
   type NotificationGroup,
 } from "../features/spine/notifications";
+import { selectOverdueTasks, type OverdueItem } from "../features/spine/overdue-inbox";
 import { Card } from "./ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Icon } from "./ui/icon";
@@ -37,6 +39,40 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+/**
+ * DF-21e — the opt-in overdue section. Fetches the workspace's tasks and derives
+ * the passive drifted set, but ONLY when the user opted in AND the bell is open —
+ * so the default (off) user pays nothing, and an opt-in user re-derives on each
+ * open (so a task done/rescheduled elsewhere drops out). Never touches the badge.
+ */
+function useOverdueInbox(enabled: boolean, open: boolean): OverdueItem[] {
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspaceId } = useWorkspace();
+  const [items, setItems] = useState<OverdueItem[]>([]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setItems([]); // toggled off → clear immediately (vanishes, AC9)
+      return;
+    }
+    if (!open || !runtime || !selectedWorkspaceId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const bundle = await runtime.tasks.list(selectedWorkspaceId);
+        if (!cancelled) setItems(selectOverdueTasks(bundle.tasks, { enabled: true, userId }));
+      } catch {
+        if (!cancelled) setItems([]); // degrade quietly — the section just stays empty
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, open, runtime, selectedWorkspaceId, userId]);
+
+  return items;
+}
+
 export function NotificationCenter() {
   const { userId } = useAuth();
   const {
@@ -57,6 +93,12 @@ export function NotificationCenter() {
   } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // DF-21e: the opt-in overdue section. `usePreferencesValue` (not `usePreferences`)
+  // so the bell reacts to the toggle WITHOUT spinning a second prefs-sync loop
+  // (gotchas §Prefs sync). Passive — never counted in `unreadCountWorkspace`.
+  const { notifications: notificationPrefs } = usePreferencesValue();
+  const overdueItems = useOverdueInbox(notificationPrefs.overdueTasks, open);
 
   const groups = useMemo(() => groupNotifications(notifications), [notifications]);
   const inviteGroups = useMemo(() => groupNotifications(workspaceInvitations), [workspaceInvitations]);
@@ -116,6 +158,37 @@ export function NotificationCenter() {
       }
     },
     [dismissNotifications, undismissNotifications],
+  );
+
+  // Open a passive overdue task — deep-link to /tasks (no read state to mark; it's
+  // a synthetic item, not a notification row).
+  const openOverdue = useCallback((item: OverdueItem) => {
+    setOpen(false);
+    setHistoryOpen(false);
+    window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "task", id: item.id } }));
+  }, []);
+
+  const renderOverdueItem = useCallback(
+    (item: OverdueItem) => (
+      <Card
+        key={item.id}
+        role="button"
+        tabIndex={0}
+        onClick={() => openOverdue(item)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openOverdue(item);
+          }
+        }}
+        className="cursor-pointer gap-1 bg-muted px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <p className="line-clamp-1 text-sm text-foreground">{item.title}</p>
+        {/* Ambient, never red — "scheduled 3d ago" reads as context, not an alarm. */}
+        <p className="text-xs text-muted-foreground/70">scheduled {relativeTime(item.scheduledAt)}</p>
+      </Card>
+    ),
+    [openOverdue],
   );
 
   const renderGroupCard = useCallback(
@@ -180,7 +253,14 @@ export function NotificationCenter() {
     [activateGroup, handleDismiss, userId],
   );
 
-  const nothingActive = groups.length === 0 && inviteGroups.length === 0;
+  // Cap the passive overdue list so a big backlog never becomes a wall (quiet-core);
+  // the rest stays in Tasks. Overdue never gates "all caught up" being false alone —
+  // but if it's the only thing present, we still show it rather than the empty state.
+  const OVERDUE_CAP = 6;
+  const overdueShown = overdueItems.slice(0, OVERDUE_CAP);
+  const overdueOverflow = overdueItems.length - overdueShown.length;
+  const nothingActive =
+    groups.length === 0 && inviteGroups.length === 0 && overdueItems.length === 0;
 
   return (
     <>
@@ -241,9 +321,24 @@ export function NotificationCenter() {
                     ) : null}
                     {groups.map((group) => renderGroupCard(group, { dismissable: true }))}
                   </div>
-                ) : (
+                ) : inviteGroups.length > 0 ? (
                   <p className="px-2 py-1 text-center text-xs text-muted-foreground">No new activity.</p>
-                )}
+                ) : null}
+                {/* DF-21e — the opt-in overdue section: passive, never red, never
+                    badged. Only rendered when the user turned it on and has drift. */}
+                {overdueShown.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Overdue
+                    </div>
+                    {overdueShown.map((item) => renderOverdueItem(item))}
+                    {overdueOverflow > 0 ? (
+                      <p className="px-1 text-xs text-muted-foreground/70">
+                        +{overdueOverflow} more overdue in Tasks
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

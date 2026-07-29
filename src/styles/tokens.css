@@ -8,7 +8,7 @@
  * Variant attributes on <html>:
  *   data-theme=dark|light             (default: dark)
  *   data-shade=black|warm|cool|slate|plum|forest   (default: black, dark only)
- *   data-accent=pink|violet|blue|green|amber|red|teal|mono   (default: pink)
+ *   data-accent=mono|pink|violet|blue|green|amber|red|teal   (default: mono)
  *   data-density=comfortable|compact|dense   (default: comfortable)
  *   data-radius=sharp|soft|round      (default: soft)
  *   data-font=geist|inter|pilat|cal|fraunces|serif|mono   (default: geist)
@@ -133,17 +133,24 @@
   --border:               var(--neutral-800);   /* hairlines           */
   --input:                var(--neutral-850);   /* input bg            */
 
-  /* Primary = the user-selected accent. Default = pink.    */
-  --primary:              var(--pink-base);
-  --primary-hover:        var(--pink-hover);
-  --primary-active:       var(--pink-active);
-  --primary-foreground:   oklch(0.12 0 0);      /* dark text on accent */
-  --ring:                 var(--pink-base);
+  /* Primary = the user-selected accent. Default = MONO (white).
+     The app is monochrome black+gray+white out of the box; a hue is an opt-in
+     choice in Settings → Appearance → Accent. Never default to a hue here.
+     Kept value-identical to [data-accent="mono"] below so the pre-hydration
+     paint (before appearance.ts stamps data-accent) matches the resolved one. */
+  --primary:              var(--mono-base);
+  --primary-hover:        var(--mono-hover);
+  --primary-active:       var(--mono-active);
+  --primary-foreground:   oklch(0.10 0 0);      /* dark text on accent */
+  --ring:                 var(--mono-base);
 
   /* Selection recipe (shared: task rows, board cards, rail items). A faint
      accent tint + an accent border/bar — recolors with data-accent since it
-     mixes --primary. Hover stays the neutral --accent fill; selection is the
-     one that carries the hue. */
+     mixes --primary. Hover stays the neutral --accent fill; selection carries
+     the accent, which is a NEUTRAL white by default (mono) and only reads as a
+     hue once the user picks one. NOTE: --selected-bg is declared on :root, so
+     its color-mix() resolves there and inherits already-computed — a *scoped*
+     data-accent (see preWorkspace() in route-tree.tsx) does NOT re-resolve it. */
   --selected-bg:     color-mix(in oklab, var(--primary) 14%, var(--card));
   --selected-border: var(--primary);
 
@@ -362,6 +369,27 @@
   --primary-active: var(--mono-active);
   --ring: var(--mono-base);
   --primary-foreground: oklch(0.10 0 0);
+}
+
+/* Mono INVERTS on light: the accent is "maximum contrast against the surface",
+   which is near-white on a dark canvas and near-black on a light one. Without
+   this, light + mono paints a 0.95 button on a 1.0 card (~1.16:1) — a primary
+   action that reads as floating text with no button.
+   TWO selectors, both (0,2,0) so they beat the plain [data-accent="mono"] (0,1,0)
+   regardless of source order:
+     1. both attributes on <html> — the normal case;
+     2. a SCOPED mono wrapper inside a light document (preWorkspace() in
+        route-tree.tsx). The wrapper carries only data-accent, so without the
+        descendant form its own (0,1,0) rule would win — it sits closer to the
+        element than <html> — and re-break the button it was meant to fix.
+   Hue accents are unaffected — they stay legible on both themes. */
+[data-theme="light"][data-accent="mono"],
+[data-theme="light"] [data-accent="mono"] {
+  --primary: var(--neutral-950);
+  --primary-hover: var(--neutral-900);
+  --primary-active: var(--neutral-800);
+  --ring: var(--neutral-950);
+  --primary-foreground: oklch(0.97 0 0);
 }
 
 /* ============================================================================

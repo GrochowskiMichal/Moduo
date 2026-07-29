@@ -233,6 +233,33 @@ describe("notificationSummary", () => {
     ]);
     expect(notificationSummary(noBlocker, "me")).toBe("Ola unblocked this");
   });
+
+  // DF-21 AC7: every feed op maps to a quiet human sentence — never a raw op
+  // token or JSON. Covers the full taxonomy the bell renders: @mention (comments),
+  // assigned, unblocked, email snooze-due + follow-up-due (DF-21d card copy), and a
+  // legacy invite/membership event.
+  it("renders quiet copy for every type incl. comments and email-due, never a raw op", () => {
+    const cases: Array<{ op: string; actorId: string; payload?: Record<string, unknown>; expect: string }> = [
+      { op: "comments.add", actorId: "u2", payload: { excerpt: "looks good" }, expect: "Mike commented: “looks good”" },
+      { op: "comments.add", actorId: "u2", expect: "Mike left a comment" },
+      { op: "tasks.assigned", actorId: "u2", expect: "Mike assigned this to you" },
+      { op: "tasks.unblocked", actorId: "u2", expect: "Mike unblocked this" },
+      { op: "email.snooze_due", actorId: "me", payload: { subject: "Invoice #42" }, expect: "You have a snoozed email back: “Invoice #42”" },
+      { op: "email.snooze_due", actorId: "me", expect: "You have a snoozed email back" },
+      { op: "email.follow_up_due", actorId: "me", payload: { subject: "Re: proposal" }, expect: "You have a follow-up due: “Re: proposal”" },
+      { op: "email.follow_up_due", actorId: "me", expect: "You have a follow-up due" },
+      { op: "workspace.invite", actorId: "u2", expect: "Mike invite" },
+    ];
+    for (const c of cases) {
+      const [g] = groupNotifications([
+        item({ id: c.op + c.actorId, createdAt: "2026-07-14T10:00:00Z", op: c.op, actorId: c.actorId, actorLabel: "Mike", payload: c.payload ?? {} }),
+      ]);
+      const summary = notificationSummary(g, "me");
+      expect(summary).toBe(c.expect);
+      // Never leaks a raw op token (a dot- or snake-cased identifier).
+      expect(summary).not.toContain(c.op);
+    }
+  });
 });
 
 describe("notificationDeepLink", () => {

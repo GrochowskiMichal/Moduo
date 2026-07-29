@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowRight, CheckCircle2, Clock } from "lucide-react";
-import { Pressable, Text, TextInput, View } from "../../tw";
-import { useAuth } from "../../providers/auth-provider";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ModuoMark } from "@/components/ui/moduo-mark";
+import { useAuth } from "@/providers/auth-provider";
 
 function checkoutRedirectUrl(priceId: string, accessToken: string | null) {
   const supabaseUrl =
@@ -14,33 +17,49 @@ function checkoutRedirectUrl(priceId: string, accessToken: string | null) {
   return `${supabaseUrl}/functions/v1/create-checkout-session?${q}`;
 }
 
-type Step = "trial-active" | "workspace";
-
+/**
+ * First-run setup. Deliberately ONE screen: naming a workspace is the only
+ * required action, so the former "your trial is active" interstitial became a
+ * quiet footnote here rather than a step the user has to click past.
+ *
+ * Monochrome is applied by the `preWorkspace()` route wrapper (route-tree.tsx),
+ * not here — every out-of-gate surface gets it from one place so branches can't
+ * drift.
+ */
 export function OnboardingPage() {
-  const { isSignedIn, loading, runtime, planTier } = useAuth();
+  const { isSignedIn, loading, runtime } = useAuth();
   const navigate = useNavigate();
   const [workspaceName, setWorkspaceName] = useState("My workspace");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<Step>("trial-active");
+  const nameRef = useRef<HTMLInputElement | null>(null);
+  // Latch, not the `busy` closure: a double-fire would race workspace.list() and
+  // create two workspaces.
+  const submitting = useRef(false);
 
-  const isWeb = !!runtime?.capabilities.isWeb;
+  // Read once at mount — `finish` clears this key, so re-reading later would
+  // flip the note mid-flight.
+  const [hadPendingPrice] = useState(
+    () => typeof window !== "undefined" && !!window.localStorage.getItem("moduo:pending_price_id"),
+  );
+  // Web-only reassurance: desktop users and anyone arriving from a paid plan
+  // link are not on the free-trial path.
+  const showTrialNote = !!runtime?.capabilities.isWeb && !hadPendingPrice;
 
   useEffect(() => {
     if (!loading && !isSignedIn) void navigate({ to: "/auth", replace: true });
   }, [isSignedIn, loading, navigate]);
 
-  // Desktop users and users who came via a paid plan link skip the trial banner.
+  // Preselect the prefilled name so the user can type straight over it.
   useEffect(() => {
     if (loading) return;
-    const pendingPriceId = window.localStorage.getItem("moduo:pending_price_id");
-    if (!isWeb || pendingPriceId) {
-      setStep("workspace");
-    }
-  }, [isWeb, loading]);
+    nameRef.current?.select();
+  }, [loading]);
 
-  const finish = async () => {
-    if (!runtime || busy) return;
+  const finish = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!runtime || submitting.current) return;
+    submitting.current = true;
     const name = workspaceName.trim() || "My workspace";
     setBusy(true);
     setError(null);
@@ -63,106 +82,82 @@ export function OnboardingPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not finish onboarding.");
       setBusy(false);
+      submitting.current = false; // let the user retry
     }
   };
 
   if (loading) {
     return (
-      <View className="flex min-h-screen items-center justify-center bg-[#070707]">
-        <Text as="p" className="text-[14px] text-white/40">Loading…</Text>
-      </View>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="rounded-xl border border-border bg-card px-5 py-3 shadow-lg">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <View className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#070707] px-4 py-8">
-      <View className="pointer-events-none absolute left-1/2 top-[-220px] h-[520px] w-[720px] -translate-x-1/2 rounded-full bg-white/[0.055] blur-[120px]" />
-      <View className="relative w-full max-w-[500px] rounded-[34px] border border-white/10 bg-[#0d0d0d]/92 p-[1px] shadow-[0_26px_90px_rgba(0,0,0,0.52)] backdrop-blur-xl">
-        <View className="rounded-[33px] border border-white/[0.035] bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.014))] px-5 py-8 sm:px-8 sm:py-9">
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <div className="pointer-events-none absolute left-1/2 top-[-260px] h-[520px] w-[620px] -translate-x-1/2 rounded-full bg-foreground/5 blur-3xl" />
 
-          {/* ── Step 1: Trial confirmation ── */}
-          {step === "trial-active" ? (
-            <>
-              <View className="mb-6 flex items-center justify-center">
-                <View className="rounded-full bg-amber-500/15 p-4">
-                  <CheckCircle2 size={36} color="#f59e0b" />
-                </View>
-              </View>
-              <Text as="p" className="text-center text-[12px] font-semibold uppercase tracking-[0.22em] text-white/32">
-                Welcome to Moduo
-              </Text>
-              <Text as="p" className="mt-4 text-center text-[30px] font-semibold leading-tight tracking-[-0.04em] text-[#f4f4f4]">
-                Your 7-day trial is active
-              </Text>
-              <Text as="p" className="mx-auto mt-3 max-w-[360px] text-center text-[14px] leading-6 text-white/42">
-                You have full access to all Pro features for 7 days.
-              </Text>
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[480px] items-center justify-center px-5 py-8">
+        <div className="w-full rounded-xl border border-border bg-card px-6 py-7 shadow-xl sm:px-7 sm:py-8">
+          <div className="mb-7 flex w-full flex-col items-center">
+            <ModuoMark className="mb-6 size-8 opacity-95" aria-hidden="true" />
+            <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+              Welcome to Moduo
+            </p>
+            <h1 className="mt-2 w-full text-center font-display text-3xl font-semibold leading-tight tracking-tight text-foreground">
+              Set up your workspace
+            </h1>
+            <p className="mx-auto mt-2 max-w-[320px] text-center text-sm leading-5 text-muted-foreground">
+              A workspace holds your tasks, notes, calendar and contacts. You can rename it any
+              time.
+            </p>
+          </div>
 
-              <View className="mt-6 rounded-2xl border border-amber-500/20 bg-amber-500/8 px-5 py-4">
-                <View className="flex flex-row items-start gap-3">
-                  <Clock size={16} color="#f59e0b" className="mt-0.5 shrink-0" />
-                  <Text as="p" className="text-[13px] leading-5 text-amber-200/70">
-                    Add a card any time during the trial to extend it to{" "}
-                    <Text className="font-medium text-amber-200">30 days total</Text> — open{" "}
-                    <Text className="font-medium text-amber-200">Settings → Billing</Text> and choose{" "}
-                    <Text className="font-medium text-amber-200">Manage billing</Text>.
-                  </Text>
-                </View>
-              </View>
+          <form onSubmit={finish} className="flex w-full flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="workspace-name">Workspace name</Label>
+              <Input
+                id="workspace-name"
+                ref={nameRef}
+                autoFocus
+                autoComplete="off"
+                placeholder="My workspace"
+                value={workspaceName}
+                onChange={(e) => {
+                  setWorkspaceName(e.target.value);
+                  setError(null);
+                }}
+              />
+            </div>
 
-              <Pressable
-                onPress={() => setStep("workspace")}
-                className="mt-8 flex h-14 w-full flex-row items-center justify-center gap-2 rounded-[18px] bg-[#f2f2f2]"
+            <Button type="submit" size="lg" className="w-full" disabled={busy}>
+              {busy ? "Creating workspace…" : "Continue"}
+            </Button>
+
+            {/* A submission failure, not field validation — `role="alert"` is
+                announced on appear; the field itself isn't invalid, so no
+                aria-invalid. */}
+            {error ? (
+              <div
+                role="alert"
+                className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3"
               >
-                <Text as="p" className="text-[15px] font-semibold text-[#101010]">
-                  Set up workspace
-                </Text>
-                <ArrowRight size={16} color="#101010" />
-              </Pressable>
-            </>
-          ) : (
-            /* ── Step 2: Workspace creation ── */
-            <>
-              <Text as="p" className="text-center text-[12px] font-semibold uppercase tracking-[0.22em] text-white/32">
-                Welcome to Moduo
-              </Text>
-              <Text as="p" className="mt-4 text-center text-[30px] font-semibold leading-tight tracking-[-0.04em] text-[#f4f4f4]">
-                Set up your first workspace
-              </Text>
-              <Text as="p" className="mx-auto mt-2 max-w-[340px] text-center text-[14px] leading-6 text-white/42">
-                This helps us create the right place for your boards, notes, and modules.
-              </Text>
+                <p className="text-sm leading-5 text-destructive">{error}</p>
+              </div>
+            ) : null}
+          </form>
 
-              <View className="mt-8 gap-4">
-                <TextInput
-                  placeholder="Workspace name"
-                  placeholderTextColor="rgba(255,255,255,0.24)"
-                  value={workspaceName}
-                  onChangeText={setWorkspaceName}
-                  className="h-14 w-full appearance-none rounded-[18px] border border-white/10 bg-black/35 px-5 text-[15px] text-[#f4f4f4] outline-none focus:border-white/22"
-                />
-
-                <Pressable
-                  disabled={busy}
-                  onPress={finish}
-                  className={`flex h-14 w-full flex-row items-center justify-center gap-2 rounded-[18px] ${busy ? "bg-white/[0.08]" : "bg-[#f2f2f2]"}`}
-                >
-                  <Text as="p" className={`text-[15px] font-semibold ${busy ? "text-white/32" : "text-[#101010]"}`}>
-                    {busy ? "Creating workspace…" : "Continue to Moduo"}
-                  </Text>
-                  {!busy ? <ArrowRight size={16} color="#101010" /> : null}
-                </Pressable>
-              </View>
-            </>
-          )}
-
-          {error ? (
-            <View className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3">
-              <Text as="p" className="text-[13px] leading-5 text-red-100/85">{error}</Text>
-            </View>
+          {showTrialNote ? (
+            <p className="mt-6 border-t border-border pt-4 text-xs leading-5 text-muted-foreground">
+              Your <span className="font-medium text-foreground">7-day trial</span> is active. Add a
+              card under Settings → Billing any time to extend it to 30 days.
+            </p>
           ) : null}
-        </View>
-      </View>
-    </View>
+        </div>
+      </div>
+    </div>
   );
 }
