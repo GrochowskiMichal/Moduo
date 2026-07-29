@@ -12,11 +12,11 @@ Every object the migration files declare exists in prod, and no function body ha
 
 ## 1. Objects declared in migrations vs prod — **clean**
 
-193 declared objects across the 42 migration files, all present in prod:
+195 declared objects across the 43 migration files, all present in prod (re-run after merging NOTE-FIX-1, which landed mid-session and added the 43rd file):
 
 | Kind | Declared | Missing from prod |
 | --- | --- | --- |
-| functions | 110 | **0** |
+| functions | 112 | **0** |
 | tables | 22 | **0** |
 | columns (via `ADD COLUMN`) | 29 | **0** |
 | triggers | 4 | **0** |
@@ -39,11 +39,13 @@ Triggers *are* checked for existence on a public table and `tgenabled='O'` (a di
 
 This is the check that would have caught EM-6, where `spine_activity_targets_me` *existed* (so every existence check passed) while its body was the stale one-branch version for ~3 weeks.
 
-A first pass flagged **19 of 110** functions. All 19 turned out to be **formatting**, not drift: prod stores `('edit','admin')` and `SET x=now()` where the repo files say `('edit', 'admin')` and `SET x = now()` — several modules (email, contacts v2, workspace roles) were applied from a compacted copy of their migration. After normalizing spaces around `( ) , ; =`, **0 functions differ**. One caveat worth stating: that normalization also rewrites *inside* string literals, so `'needs edit, admin'` and `'needs edit,admin'` hash alike — "zero drift" means zero drift outside string-literal spacing.
+A first pass flagged **19 of 110** functions (the corpus was 110 before NOTE-FIX-1 merged). All 19 turned out to be **formatting**, not drift: prod stores `('edit','admin')` and `SET x=now()` where the repo files say `('edit', 'admin')` and `SET x = now()` — several modules (email, contacts v2, workspace roles) were applied from a compacted copy of their migration. After normalizing spaces around `( ) , ; =`, **0 functions differ**. One caveat worth stating: that normalization also rewrites *inside* string literals, so `'needs edit, admin'` and `'needs edit,admin'` hash alike — "zero drift" means zero drift outside string-literal spacing.
 
 Recorded because it is a trap for the next person: a naive text hash reports 19 false positives and buries the one that matters. `db-reconcile.ts` bakes the normalization in.
 
-**12 functions exist in prod that no migration file creates** — `accept_workspace_invite`, `handle_new_user`, `handle_new_workspace`, `note_share_workspace_matches_note`, `notes_list_unmaterialized`, `notes_op_seed_doc`, `notes_share_fields_owner_only`, `sync_profile_from_stripe_subscription`, `trigger_send_workspace_invite`, `user_can_manage_workspace_members`, `user_is_workspace_member`, `user_is_workspace_owner`. All predate the migration-file era (see §4).
+**10 functions exist in prod that no migration file creates** — `accept_workspace_invite`, `handle_new_user`, `handle_new_workspace`, `note_share_workspace_matches_note`, `notes_share_fields_owner_only`, `sync_profile_from_stripe_subscription`, `trigger_send_workspace_invite`, `user_can_manage_workspace_members`, `user_is_workspace_member`, `user_is_workspace_owner`. All predate the migration-file era (see §4).
+
+_Was 12 when first run. **NOTE-FIX-1 wrote files back for `notes_op_seed_doc` and `notes_list_unmaterialized` mid-session** — a worked example of the fix this list is asking for, and both were re-checked after merging: present in prod and matching their new file._
 
 ## 3. Grants audit
 
