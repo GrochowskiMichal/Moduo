@@ -15,6 +15,7 @@ import type {
   CalendarEventPatch,
 } from "../events";
 import {
+  allTimeCalendarWindow,
   defaultCalendarWindow,
   widenCalendarWindow,
   type CalendarWindow,
@@ -80,7 +81,14 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     setLoading(true);
     const bundle = await runtime.calendar.listModule(workspaceId, fetchWindow);
     if (reqRef.current !== req) return;
-    setEvents(bundle.events);
+    // Keep unsettled optimistic creates: a reload is now also triggered by
+    // navigation (window widening), so it can land between a create's
+    // optimistic row and its server row — which would otherwise drop the
+    // event until the next reload (the tmp-id reconcile finds nothing).
+    setEvents((prev) => {
+      const pending = prev.filter((e) => isTempId(e.id));
+      return pending.length > 0 ? [...bundle.events, ...pending] : bundle.events;
+    });
     setAccounts(bundle.accounts);
     setDegraded(bundle.degraded);
     setTruncated(bundle.truncated);
@@ -99,6 +107,26 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   const ensureRange = useCallback((from: Date, to: Date) => {
     setFetchWindow((current) => widenCalendarWindow(current, from, to) ?? current);
   }, []);
+
+  /**
+   * Drop the window entirely — for readers that must see all of history (the
+   * `?event=` deep link, which would otherwise call an old event "deleted"
+   * just because it wasn't in the window). Idempotent: re-calling it once the
+   * window is already all-time returns the same state object, so it can't
+   * drive a reload loop.
+   */
+  const ensureAllTime = useCallback(() => {
+    setFetchWindow((current) => {
+      const all = allTimeCalendarWindow();
+      return current.fromIso === all.fromIso && current.toIso === all.toIso ? current : all;
+    });
+  }, []);
+
+  // A different workspace starts from the default window again — otherwise the
+  // 2019 you paged back to in workspace A makes B's first read all-history.
+  useEffect(() => {
+    setFetchWindow(defaultCalendarWindow());
+  }, [workspaceId]);
 
   const liveEvents = useMemo(() => events.filter((e) => !e.deletedAt), [events]);
 
@@ -243,6 +271,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     degraded,
     truncated,
     ensureRange,
+    ensureAllTime,
     loading,
     canEdit,
     reload: load,

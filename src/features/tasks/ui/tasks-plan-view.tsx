@@ -10,7 +10,7 @@ import {
 import { toast } from "sonner";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
-import { TruncationNotice } from "../../../components/app/truncation-notice";
+import { truncationNotice } from "../../../components/app/truncation-notice";
 import { onCreateNew } from "../../../components/app/create-events";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
@@ -787,7 +787,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       <DndContext sensors={pageSensors} collisionDetection={appCollision} onDragEnd={onHubDragEnd}>
         <FeaturePanelsShell
           feature="tasks"
-          notice={<TruncationNotice truncated={api.truncated} />}
+          notice={truncationNotice(api.truncated)}
           left={left}
           center={center}
           right={right}

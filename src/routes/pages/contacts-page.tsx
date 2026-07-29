@@ -18,7 +18,7 @@ import { undoToast } from "../../lib/undo-toast";
 import { asDragPayload, asDropLinkTarget, isSelfDrop, payloadRef, targetAccepts } from "../../lib/drag-payload";
 import type { ContactsSearch } from "../../features/contacts/search";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
-import { TruncationNotice } from "../../components/app/truncation-notice";
+import { truncationNotice } from "../../components/app/truncation-notice";
 import { onCreateNew } from "../../components/app/create-events";
 import { Button } from "../../components/ui/button";
 import {
@@ -719,7 +719,7 @@ export function ContactsPage() {
       <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={onDragEnd}>
         <FeaturePanelsShell
           feature="contacts"
-          notice={<TruncationNotice truncated={directory.bundle.truncated} />}
+          notice={truncationNotice(directory.bundle.truncated)}
           left={left}
           center={center}
           right={right}

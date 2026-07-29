@@ -169,6 +169,9 @@ async function selectCapped<T>(args: {
       const { count, error } = await args.build({ count: "exact", head: true });
       return error ? null : count ?? null;
     },
+    // Every table here is keyed by `id` — dedupe guards the offset-paging
+    // window against concurrent inserts shifting rows across a page edge.
+    keyOf: (row: any) => String(row?.id),
   });
   return { rows: res.rows, error: res.error, truncation: res.truncation };
 }
@@ -1632,8 +1635,8 @@ export const webRuntime: ModuoRuntime = {
         selectCapped<any>({ scope: "buckets", cap: READ_CAPS.buckets, build: live("buckets"), order: (q) => q.order("position").order("id") }),
         selectCapped<any>({ scope: "tasks", cap: READ_CAPS.tasks, build: live("tasks"), order: (q) => q.order("position").order("id") }),
         selectCapped<any>({ scope: "tags", cap: READ_CAPS.tags, build: live("tags"), order: (q) => q.order("created_at").order("id") }),
-        selectCapped<any>({ scope: "tag links", cap: READ_CAPS.tagLinks, build: all("tag_links"), order: (q) => q.order("id") }),
-        selectCapped<any>({ scope: "task links", cap: READ_CAPS.taskRelations, build: all("task_relations"), order: (q) => q.order("id") }),
+        selectCapped<any>({ scope: "tag assignments", cap: READ_CAPS.tagLinks, build: all("tag_links"), order: (q) => q.order("id") }),
+        selectCapped<any>({ scope: "task dependencies", cap: READ_CAPS.taskRelations, build: all("task_relations"), order: (q) => q.order("id") }),
       ]);
       const firstError =
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
@@ -1808,7 +1811,7 @@ export const webRuntime: ModuoRuntime = {
           order: (q) => q.order("created_at").order("id"),
         }),
         selectCapped<any>({
-          scope: "tag links",
+          scope: "tag assignments",
           cap: READ_CAPS.tagLinks,
           build: (opts) => {
             const q = supabaseClient.from("tag_links").select("*", opts).eq("workspace_id", workspaceId);

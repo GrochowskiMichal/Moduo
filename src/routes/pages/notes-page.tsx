@@ -29,7 +29,7 @@ import {
 import { createLinkWithToast } from "../../features/spine/ui/drop-link-toast";
 import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
-import { TruncationNotice } from "../../components/app/truncation-notice";
+import { truncationNotice } from "../../components/app/truncation-notice";
 import { onCreateNew } from "../../components/app/create-events";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
 import { useNotesModule } from "../../features/notes/hooks/use-notes-module";
@@ -798,7 +798,7 @@ export function NotesPage() {
       >
         <FeaturePanelsShell
           feature="notes"
-          notice={<TruncationNotice truncated={truncated} />}
+          notice={truncationNotice(truncated)}
           left={sidebar}
           center={
             <NotesEditorDropZone noteId={editorNoteId} editable={canEdit && !degraded}>

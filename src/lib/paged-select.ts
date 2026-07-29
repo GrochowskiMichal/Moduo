@@ -11,7 +11,14 @@
 // the UI must SHOW ("showing N of M"). Silent loss is the one outcome that is
 // never acceptable.
 
-/** PostgREST's per-request row ceiling (`db-max-rows`). A hard cap, not a default. */
+/**
+ * PostgREST's per-request row ceiling (`db-max-rows`). A hard cap, not a default.
+ *
+ * This mirrors a SERVER setting we can't read from the client. If the project's
+ * `db-max-rows` is ever lowered below this, every page comes back short, the
+ * paging loop reads that as "end of collection", and silent truncation returns
+ * — so treat the Supabase API setting as coupled to this constant.
+ */
 export const PGRST_MAX_ROWS = 1000;
 
 /**
@@ -56,6 +63,12 @@ export type ReadPagedArgs<T, E> = {
   countTotal?: () => Promise<number | null>;
   /** Override the per-request page size (tests). Clamped to PGRST_MAX_ROWS. */
   pageSize?: number;
+  /**
+   * Stable row key. Offset paging is not a snapshot: a row inserted before the
+   * cursor between two pages shifts everything down, re-emitting a row already
+   * held (a duplicate React key downstream). Dedupe on the way in.
+   */
+  keyOf?: (row: T) => string;
 };
 
 export type PagedRead<T, E> = {
@@ -80,6 +93,7 @@ export async function readPaged<T, E>(args: ReadPagedArgs<T, E>): Promise<PagedR
   const cap = Math.max(1, args.cap);
   const ceiling = cap + 1;
   const rows: T[] = [];
+  const seen = args.keyOf ? new Set<string>() : null;
   let offset = 0;
 
   while (rows.length < ceiling) {
@@ -87,8 +101,16 @@ export async function readPaged<T, E>(args: ReadPagedArgs<T, E>): Promise<PagedR
     const res = await args.page(offset, want);
     if (res.error) return { rows, error: res.error, truncation: null };
     const batch = res.data ?? [];
-    rows.push(...batch);
-    // A short page is the end of the collection — nothing was cut.
+    for (const row of batch) {
+      if (seen && args.keyOf) {
+        const key = args.keyOf(row);
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
+      rows.push(row);
+    }
+    // A short page is the end of the collection — nothing was cut. (Advance by
+    // the RAW batch length, not the deduped one, or the cursor stalls.)
     if (batch.length < want) break;
     offset += batch.length;
   }
@@ -106,7 +128,9 @@ export async function readPaged<T, E>(args: ReadPagedArgs<T, E>): Promise<PagedR
   return {
     rows: rows.slice(0, cap),
     error: null,
-    truncation: { scope: args.scope, shown: cap, total },
+    // The count is a second round-trip, so rows deleted in between could make
+    // it read "5,000 of 4,998". Never claim to show more than the total.
+    truncation: { scope: args.scope, shown: cap, total: total == null ? null : Math.max(total, cap) },
   };
 }
 

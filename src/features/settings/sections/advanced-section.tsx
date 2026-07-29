@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import type { ModuoRuntime } from "../../../lib/runtime";
+import { allTimeCalendarWindow } from "../../calendar/window";
 import { downloadZip } from "../../notes/export";
 import { closeNotesDb, countPendingOutbox } from "../../notes/sync/idb";
 import { getSyncMeta, type SyncDomain } from "../../../lib/prefs-sync";
@@ -91,7 +92,9 @@ async function gatherExport(
       };
     }),
     read("contacts", () => runtime.contacts.list(workspaceId)),
-    read("calendar", () => runtime.calendar.listModule(workspaceId)),
+    // An export labelled "everything" must not inherit the calendar page's
+    // date window (SCALE-1) — read all of history explicitly.
+    read("calendar", () => runtime.calendar.listModule(workspaceId, allTimeCalendarWindow())),
     read("habits", () => runtime.habits.list(workspaceId)),
   ]);
 }

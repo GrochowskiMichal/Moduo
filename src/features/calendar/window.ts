@@ -24,6 +24,17 @@ function shiftMonths(from: Date, months: number): Date {
   return d;
 }
 
+/**
+ * Every event the workspace holds — for readers that genuinely need all of
+ * history and must NOT inherit the page's window: the workspace export (a
+ * partial archive labelled "everything" is the worst kind of silent loss) and
+ * the spine's linked-event snippets (a link to a 2019 meeting must still
+ * resolve). Still capped by `READ_CAPS.calendarEvents`, which reports.
+ */
+export function allTimeCalendarWindow(): CalendarWindow {
+  return { fromIso: "0001-01-01T00:00:00.000Z", toIso: "9999-12-31T23:59:59.999Z" };
+}
+
 export function defaultCalendarWindow(now: Date = new Date()): CalendarWindow {
   return {
     fromIso: shiftMonths(now, -CALENDAR_WINDOW_PAST_MONTHS).toISOString(),

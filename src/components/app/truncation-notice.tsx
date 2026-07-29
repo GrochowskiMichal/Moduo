@@ -1,7 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 
-import { describeTruncation, type Truncation } from "@/lib/paged-select";
-import { cn } from "@/lib/utils";
+import { describeTruncation, type Truncation } from "../../lib/paged-select";
+import { cn } from "../../lib/utils";
 
 type Props = {
   truncated: Truncation[] | undefined;
@@ -16,6 +16,11 @@ type Props = {
  * above the panels (see `FeaturePanelsShell`'s `notice` slot) so it is
  * unmissable without being modal — nothing is broken, the list is just partial.
  *
+ * The copy deliberately offers NO remedy: search and filters in these modules
+ * run over the loaded bundle, so "narrow it down" would not reach the missing
+ * rows. Pagination is the follow-up; until then the honest thing is to say
+ * what's loaded and stop.
+ *
  * Renders nothing when everything was loaded, which is every workspace today.
  */
 export function TruncationNotice({ truncated, className }: Props) {
@@ -28,11 +33,21 @@ export function TruncationNotice({ truncated, className }: Props) {
         className,
       )}
     >
-      <AlertTriangle className="size-icon-sm shrink-0 text-destructive" aria-hidden />
+      <AlertTriangle className="size-icon-sm shrink-0 opacity-70" aria-hidden />
       <span>
         <span className="text-foreground">Showing {truncated.map(describeTruncation).join(" · ")}.</span>{" "}
-        This workspace is larger than a single load — narrow it with search or filters to reach the rest.
+        This workspace is bigger than one load — the rest isn’t on screen yet.
       </span>
     </div>
   );
+}
+
+/**
+ * The `notice` prop for `FeaturePanelsShell` — `undefined` when there's nothing
+ * to say, so the shell keeps its original layout instead of always wrapping in
+ * the notice container.
+ */
+export function truncationNotice(truncated: Truncation[] | undefined) {
+  if (!truncated || truncated.length === 0) return undefined;
+  return <TruncationNotice truncated={truncated} />;
 }

@@ -95,6 +95,44 @@ describe("readPaged", () => {
     expect(res.truncation).toBeNull();
   });
 
+  it("handles an exact multiple of the page size (the extra empty request)", async () => {
+    const t = fakeTable(2000);
+    const res = await readPaged({ scope: "tasks", cap: 5000, page: t.page });
+    expect(res.rows).toHaveLength(2000);
+    expect(res.truncation).toBeNull();
+    // 1000 + 1000 (both full) + one short page that proves the end.
+    expect(t.calls).toHaveLength(3);
+  });
+
+  it("dedupes rows re-emitted by a shifting offset (concurrent insert)", async () => {
+    // Page 2 repeats page 1's last row — what an insert before the cursor does.
+    const pages = [
+      [1, 2, 3],
+      [3, 4, 5],
+      [] as number[],
+    ];
+    let i = 0;
+    const res = await readPaged<number, string>({
+      scope: "tasks",
+      cap: 100,
+      pageSize: 3,
+      keyOf: (n) => String(n),
+      page: async () => ({ data: pages[i++] ?? [], error: null }),
+    });
+    expect(res.rows).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("clamps a stale total so it can never read 'N of fewer-than-N'", async () => {
+    const t = fakeTable(500);
+    const res = await readPaged({
+      scope: "tasks",
+      cap: 100,
+      page: t.page,
+      countTotal: async () => 98, // rows deleted between the read and the count
+    });
+    expect(res.truncation).toEqual({ scope: "tasks", shown: 100, total: 100 });
+  });
+
   it("never asks for more than the PostgREST ceiling in one request", async () => {
     const t = fakeTable(3000);
     await readPaged({ scope: "tasks", cap: 5000, page: t.page });
