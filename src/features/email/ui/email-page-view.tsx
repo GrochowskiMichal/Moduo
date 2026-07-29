@@ -695,7 +695,10 @@ export function EmailPageView({
       }
       if (plan.refId && plan.refCreated) {
         await runtime.email.removeRef({ workspaceId, refId: plan.refId }).catch(() => {
-          /* email_op_ref_remove not deployed yet — leave the (linkless) ref */
+          /* best-effort: the ref is linkless by now, so a failure here only leaves a
+             stray tissue row — never block the undo. (`email_op_ref_remove` was
+             undeployed until OPS-1 applied it 2026-07-29; this catch is now purely
+             defensive.) */
         });
       }
     },

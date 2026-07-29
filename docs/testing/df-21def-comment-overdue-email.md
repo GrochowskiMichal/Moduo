@@ -6,7 +6,7 @@
 ## ✅ Migration status (read first)
 - [x] `20260714120000_comments_notify_owner_participants.sql` — **APPLIED to prod 2026-07-27** on your explicit go-ahead. Post-apply live probe against the deployed functions confirmed owner-notified / actor-excluded / predicate-targets-owner-not-actor (rolled back clean); grants verified `anon=false`, `authenticated=true`. This also **re-asserted the two-branch `spine_activity_targets_me`**, resurrecting `tasks.unblocked` + email-due, which had been silently dark in prod.
 - [ ] **Do:** Open the bell for the first time after the apply. → **Expect:** a possible **one-time burst** of previously-dark notifications. Intended; bounded to ~50; "Mark all read" clears it. _(both)_
-- [ ] ⚠️ **DF-21f is still dead until a SECOND migration lands.** The web sweep calls `email_op_follow_up_due`, which lives in `20260704180000_email_snooze_followup.sql` — **never applied to prod**. Apply it before testing the DF-21f section, or those checks will 404 (PGRST202). _(prod)_
+- [x] ✅ **DF-21f is LIVE as of 2026-07-29 (OPS-1).** The web sweep calls `email_op_follow_up_due`, from `20260704180000_email_snooze_followup.sql` — **applied to prod 2026-07-29** and proven by an authed rolled-back probe. The DF-21f checks below no longer 404 (PGRST202). _(prod)_
 
 ## DF-21d — Comment-on-your-entity notification (needs the migration applied)
 - [ ] **Do:** As user B, comment on a task **owned by user A** (no @mention). → **Expect:** A's bell gets "B commented: …"; B (the author) gets nothing. _(both)_
@@ -39,8 +39,8 @@
 
 ## Known gaps / not-yet-testable
 - **Live UI verification was not run this session** — the built-in preview binds to another worktree (gotchas §Storybook/live-verify); DF-21e is fully client-side and unit-tested but was not driven in a browser. DF-21d and DF-21f additionally cannot surface until the migration is applied (deploy-gated).
-- **`20260714120000` is applied** (see top). **`20260704180000_email_snooze_followup.sql` is NOT** — DF-21f cannot work until it is; `email_op_snooze_due`/`_follow_up_due` and `email_refs.follow_up_notified_at` are all absent from prod.
-- **Duplicate migration timestamps exist** — `20260712120000` and `20260702160000` are each used by two files. Apply-order is undefined on a fresh database; worth renaming before anyone bootstraps a new environment.
+- **`20260714120000` is applied** (see top). **`20260704180000_email_snooze_followup.sql` is applied too, as of 2026-07-29 (OPS-1)** — `email_op_snooze_due`/`_follow_up_due` and `email_refs.follow_up_notified_at` are all present in prod, grants verified (`anon` cannot execute).
+- ~~**Duplicate migration timestamps exist**~~ — fixed by OPS-1 on 2026-07-29: the two `user_preferences` domain files were re-stamped `20260702155000` / `20260712115000` (matching prod’s real apply order), and `src/lib/migration-order.test.ts` now fails `bun run verify` on any future collision.
 - **DF-21f is desktop→web hybrid only** — a pure-web user can't snooze/follow-up (email UI is desktop-gated), so the web sweep matters only for users who set follow-ups on desktop then check the web bell. Web can't run the desktop reply-clear (no IMAP), so a follow-up whose reply hasn't been desktop-swept may nudge once (self-clears on the next desktop run).
 
 ## DF-17 — Legacy deletions + onboarding/paywall rebuild (live-verified)
