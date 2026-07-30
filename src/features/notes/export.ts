@@ -5,7 +5,7 @@
  * is pure (testable); the download + (un)zip touch the DOM / fflate.
  */
 
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { strToU8, zipSync } from "fflate";
 
 /** Sanitize a note title into a safe filename stem (no extension). */
 export function safeFileStem(title: string): string {
@@ -58,17 +58,4 @@ export function downloadTextFile(filename: string, text: string): void {
 export function downloadZip(filename: string, entries: Record<string, Uint8Array>): void {
   const zipped = zipSync(entries, { level: 6 });
   triggerDownload(filename, new Blob([zipped as BlobPart], { type: "application/zip" }));
-}
-
-/** Read a `.zip` into markdown `{ path, content }` entries — directories and
- * non-markdown files are skipped (the planner counts skips by extension). */
-export function readZipMarkdown(bytes: Uint8Array): { path: string; content: string }[] {
-  const files = unzipSync(bytes);
-  const out: { path: string; content: string }[] = [];
-  for (const [path, data] of Object.entries(files)) {
-    if (path.endsWith("/")) continue; // directory entry
-    if (!/\.(md|markdown|txt)$/i.test(path)) continue; // decode only text-ish
-    out.push({ path, content: strFromU8(data) });
-  }
-  return out;
 }
