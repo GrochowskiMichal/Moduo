@@ -9,7 +9,7 @@ import type { ContactsModuleBundle } from "../model";
 
 export type DirectoryStatus = "loading" | "ready" | "error";
 
-const EMPTY: ContactsModuleBundle = { contacts: [], companies: [], fieldDefs: [] };
+const EMPTY: ContactsModuleBundle = { contacts: [], companies: [], fieldDefs: [], truncated: [] };
 
 export function useContactsDirectory(runtime: ModuoRuntime | null, workspaceId: string | null) {
   const [bundle, setBundle] = useState<ContactsModuleBundle>(EMPTY);

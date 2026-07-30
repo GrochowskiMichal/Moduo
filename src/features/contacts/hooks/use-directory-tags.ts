@@ -5,12 +5,15 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import type { Truncation } from "../../../lib/paged-select";
 import type { Tag, TagLink } from "../../tasks/model";
 import { CONTACT_TAGS_CHANGED_EVENT } from "../tags";
 
 export function useDirectoryTags(runtime: ModuoRuntime | null, workspaceId: string | null) {
   const [tags, setTags] = useState<Tag[]>([]);
   const [links, setLinks] = useState<TagLink[]>([]);
+  /** SCALE-1: a workspace with more tag links than the cap — surfaced, never silent. */
+  const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
 
@@ -26,6 +29,7 @@ export function useDirectoryTags(runtime: ModuoRuntime | null, workspaceId: stri
     if (!runtime || !workspaceId) {
       setTags([]);
       setLinks([]);
+      setTruncated([]);
       return;
     }
     let cancelled = false;
@@ -35,6 +39,7 @@ export function useDirectoryTags(runtime: ModuoRuntime | null, workspaceId: stri
         if (cancelled) return;
         setTags(res.tags);
         setLinks(res.links);
+        setTruncated(res.truncated);
       })
       .catch(() => {
         /* quiet — the tag filter just stays empty */
@@ -44,5 +49,5 @@ export function useDirectoryTags(runtime: ModuoRuntime | null, workspaceId: stri
     };
   }, [runtime, workspaceId, tick]);
 
-  return { tags, links, reload };
+  return { tags, links, truncated, reload };
 }
