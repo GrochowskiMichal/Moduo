@@ -20,16 +20,45 @@ export type ImportPlanNode = {
   path: string;
 };
 
-export type ImportSkip = { path: string; reason: string };
+/** Why a file didn't import, and what kind of file it was (AC3). */
+export type ImportSkipKind = "csv" | "image" | "empty" | "nested-archive" | "unknown";
+
+export type ImportSkip = { path: string; reason: string; kind: ImportSkipKind };
 
 export type ImportPlan = {
   nodes: ImportPlanNode[];
   skipped: ImportSkip[];
+  /** Skipped counts per kind, so the summary can say *what* was left out
+   * ("3 CSVs · 15 images") instead of a bare number the user can't act on. */
+  skippedByKind: Record<ImportSkipKind, number>;
 };
 
 const MD_EXT = /\.(md|markdown|txt)$/i;
 /** Notion exports suffix names with " <32-hex>". */
 const NOTION_HASH = /\s+[0-9a-f]{32}$/i;
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|tiff?|heic|avif)$/i;
+const CSV_EXT = /\.(csv|tsv)$/i;
+const ZIP_EXT = /\.zip$/i;
+
+/** Classify a non-importable entry so the summary can break skips down by kind. */
+function skipKind(path: string): ImportSkipKind {
+  if (CSV_EXT.test(path)) return "csv";
+  if (IMAGE_EXT.test(path)) return "image";
+  if (ZIP_EXT.test(path)) return "nested-archive";
+  return "unknown";
+}
+
+function countByKind(skipped: ImportSkip[]): Record<ImportSkipKind, number> {
+  const counts: Record<ImportSkipKind, number> = {
+    csv: 0,
+    image: 0,
+    empty: 0,
+    "nested-archive": 0,
+    unknown: 0,
+  };
+  for (const s of skipped) counts[s.kind] += 1;
+  return counts;
+}
 
 function cleanName(name: string): string {
   return name.replace(MD_EXT, "").replace(NOTION_HASH, "").trim();
@@ -66,11 +95,19 @@ export function planMdZipImport(entries: ImportFileEntry[]): ImportPlan {
   const skipped: ImportSkip[] = [];
   const files = entries.filter((e) => {
     if (!MD_EXT.test(e.path)) {
-      skipped.push({ path: e.path, reason: "not a markdown file" });
+      const kind = skipKind(e.path);
+      skipped.push({
+        path: e.path,
+        reason:
+          kind === "nested-archive"
+            ? "archive couldn't be read, or is nested deeper than we unwrap"
+            : "not a markdown file",
+        kind,
+      });
       return false;
     }
     if (!e.content.trim()) {
-      skipped.push({ path: e.path, reason: "empty file" });
+      skipped.push({ path: e.path, reason: "empty file", kind: "empty" });
       return false;
     }
     return true;
@@ -108,7 +145,7 @@ export function planMdZipImport(entries: ImportFileEntry[]): ImportPlan {
   // "skipped". A zip that stores a child before its parent would otherwise
   // silently drop the child (validator M1). Topological order is deterministic
   // and the parent chain is acyclic (a strict path prefix).
-  return { nodes: topoSortNodes(nodes), skipped };
+  return { nodes: topoSortNodes(nodes), skipped, skippedByKind: countByKind(skipped) };
 }
 
 function topoSortNodes(nodes: ImportPlanNode[]): ImportPlanNode[] {
@@ -160,6 +197,99 @@ export function importPositions(
     const after = parentKey === "" ? existingRootPositions : [];
     const positions = positionsAfter(group.length, after);
     group.forEach((n, i) => out.set(n.tempId, positions[i]!));
+  }
+  return out;
+}
+
+/** Notion suffixes every exported page file with its own 32-hex page id. */
+const NOTION_PAGE_ID = /\s+([0-9a-f]{32})(?:\.[a-z0-9]+)?$/i;
+
+/**
+ * Notion's own page id for an exported file, if the export carries one.
+ *
+ * The spec calls this "the join key" for a reason: it is the only part of an
+ * export that is genuinely stable and genuinely unique. Titles are not — Notion
+ * appends the hex *precisely because* two sibling pages can share a name — and
+ * paths are not stable across a re-export (a page moves, a teamspace appears).
+ */
+export function notionPageId(path: string): string | null {
+  const base = path.split("/").pop() ?? path;
+  return base.match(NOTION_PAGE_ID)?.[1]?.toLowerCase() ?? null;
+}
+
+/**
+ * A deterministic note id for an imported file (AC4).
+ *
+ * Re-running the same import must not duplicate anything, and `notes_op_import`
+ * is idempotent **per row id** (an existing id is skipped server-side). The
+ * wizard used to mint `crypto.randomUUID()` per node, so the second run of the
+ * same export inserted a second copy of all 350 pages — the op's idempotency was
+ * unreachable.
+ *
+ * Seeded on **Notion's page id** when the export carries one, falling back to the
+ * normalized path. Seeding on the path alone is unsafe in both directions: two
+ * sibling pages with the same title normalize to the same path (so one would be
+ * silently dropped by the id-exists skip), and a page that merely *moved* between
+ * exports would re-key and duplicate. Use [`assignImportIds`] rather than calling
+ * this directly — it guarantees the uniqueness this function alone cannot.
+ *
+ * A 128-bit FNV-1a-based digest formatted as a v4-shaped UUID (~115 effective
+ * bits — the four passes share a prime, so a handful of low bits are correlated;
+ * at export scale the collision probability is ~1e-30). `crypto.subtle` is async,
+ * which this synchronous planning path can't use.
+ */
+export function stableNoteId(workspaceId: string, seedPath: string): string {
+  const seed = `${workspaceId}\u0000${seedPath}`;
+  // Four independently-offset 32-bit FNV-1a passes → 128 bits.
+  const words = [0x811c9dc5, 0x01000193, 0x9e3779b9, 0x85ebca6b].map((offset) => {
+    let hash = offset >>> 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash ^= seed.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash >>> 0;
+  });
+  const hex = words.map((w) => w.toString(16).padStart(8, "0")).join("");
+  // Stamp the version (4) and variant (10xx) nibbles so the value is a
+  // well-formed UUID for the `uuid` columns it lands in.
+  const version = `4${hex.slice(13, 16)}`;
+  const variant = ((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16) + hex.slice(17, 20);
+  return [hex.slice(0, 8), hex.slice(8, 12), version, variant, hex.slice(20, 32)].join("-");
+}
+
+/**
+ * Stable ids for a whole plan, **guaranteed distinct**.
+ *
+ * The guarantee is the point. Two pages that share a seed would otherwise collide
+ * on the primary key, and `notes_op_import` resolves a duplicate id by *skipping
+ * the second row* — so a collision doesn't error, it silently deletes a page and
+ * reparents its children under the survivor. A page with no Notion id whose title
+ * cleans to empty (the sample export has four) collides with every other such
+ * page, so this is a real shape, not a hypothetical.
+ *
+ * Collisions are broken deterministically by plan order, so the discriminator is
+ * itself stable across re-runs.
+ */
+export function assignImportIds(
+  workspaceId: string,
+  nodes: ImportPlanNode[],
+): Map<string, string> {
+  const out = new Map<string, string>();
+  const used = new Set<string>();
+  const seenSeed = new Map<string, number>();
+  for (const node of nodes) {
+    const base =
+      notionPageId(node.path) ??
+      node.path.split("/").filter(Boolean).map(normSeg).join("/");
+    const nth = seenSeed.get(base) ?? 0;
+    seenSeed.set(base, nth + 1);
+    let id = stableNoteId(workspaceId, nth === 0 ? base : `${base}#${nth}`);
+    // Belt and braces: a genuine hash collision between two different seeds.
+    for (let bump = 1; used.has(id); bump++) {
+      id = stableNoteId(workspaceId, `${base}#${nth}~${bump}`);
+    }
+    used.add(id);
+    out.set(node.tempId, id);
   }
   return out;
 }
@@ -217,4 +347,23 @@ export function buildImportRows(
       bodyMd: n.md,
     };
   });
+}
+
+/**
+ * Human summary of what an import left out, by kind (AC3): "3 CSVs · 15 images".
+ * A bare "18 skipped" tells the user nothing they can act on — and silently
+ * dropping non-page files is exactly what made the old importer feel lossy.
+ */
+export function describeSkips(counts: Record<ImportSkipKind, number>): string {
+  const label: Record<ImportSkipKind, [string, string]> = {
+    csv: ["CSV", "CSVs"],
+    image: ["image", "images"],
+    empty: ["empty file", "empty files"],
+    "nested-archive": ["nested archive", "nested archives"],
+    unknown: ["other file", "other files"],
+  };
+  const parts = (Object.keys(label) as ImportSkipKind[])
+    .filter((kind) => counts[kind] > 0)
+    .map((kind) => `${counts[kind]} ${label[kind][counts[kind] === 1 ? 0 : 1]}`);
+  return parts.length ? parts.join(" · ") : "nothing";
 }

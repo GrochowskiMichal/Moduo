@@ -1,6 +1,6 @@
 # Spec: Import & migration — Notion notes + email history depth
 
-> Status: **In progress** — IM-2a shipped 2026-07-29, IM-2b shipped 2026-07-30 (**AC7 + AC9 partial**, see Open questions) · Owner: maciej · Block ids: **IM-1 … IM-5** (Wave D, dogfood lane)
+> Status: **In progress** — IM-1 + IM-2a + IM-2b shipped (IM-1 & IM-2a/2b on 2026-07-29/30). Email: **AC7 + AC9 partial**, see Open questions. Notes: AC1–AC5 done. · Owner: maciej · Block ids: **IM-1 … IM-5** (Wave D, dogfood lane)
 > Supersedes the placeholder `/s1 IMPORT` line in [`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) Wave D.
 
 ## Scope
