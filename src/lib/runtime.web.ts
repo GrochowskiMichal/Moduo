@@ -1309,6 +1309,7 @@ export const webRuntime: ModuoRuntime = {
     async setActivityState() { /* no-op on web */ },
     async applyFlag() { throw new Error(desktopOnly().message); },
     async getMailboxStatus() { return []; },
+    async setHistoryDepth() { throw new Error(desktopOnly().message); },
     async sendSaved() { throw new Error(desktopOnly().message); },
     async startGoogleOAuth() { throw new Error(desktopOnly().message); },
     async getThread() { throw new Error(desktopOnly().message); },

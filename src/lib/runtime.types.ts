@@ -518,6 +518,10 @@ export type ModuoRuntime = {
       value: boolean;
     }): Promise<any>;
     getMailboxStatus(input?: { accountId?: string | null }): Promise<any[]>;
+    /** Change how far back this device syncs an account (IM-2c, AC8). Raising
+     *  it backfills the gap in the background; lowering it stops fetching and
+     *  deletes nothing. Per-device — the mail store is local. */
+    setHistoryDepth(input: { accountId: string; depth: string }): Promise<any>;
     sendSaved(input: {
       accountId: string;
       to: string;
@@ -526,7 +530,10 @@ export type ModuoRuntime = {
     }): Promise<boolean>;
     /** Gmail "Sign in with Google" (EM-2, desktop-only): runs the PKCE flow,
      *  stores tokens in the OS keychain, registers the account. */
-    startGoogleOAuth(input: { workspaceId?: string | null }): Promise<any>;
+    startGoogleOAuth(input: {
+      workspaceId?: string | null;
+      historyDepth?: string;
+    }): Promise<any>;
     /** All messages of a thread (EM-4), oldest→newest, across folders. */
     getThread(input: { accountId: string; threadId: string }): Promise<any>;
     /** LIST the account's server folders, delimiter-aware (EM-5). */

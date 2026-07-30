@@ -117,6 +117,7 @@ export const tauriRuntime: ModuoRuntime = {
     listAccounts() { return invoke<any[]>("email_accounts_list"); },
     connectAndSave(input) { return invoke<any>("email_account_connect_and_save", { input }); },
     disconnect(accountId) { return invoke<void>("email_account_disconnect", { accountId }); },
+    setHistoryDepth(input) { return invoke<any>("email_account_set_history_depth", input); },
     listEnvelopes(input) { return invoke<any>("email_list_envelopes", { input }); },
     getMessageBody(input) { return invoke<any>("email_get_message_body", { input }); },
     prefetchBodies(input) { return invoke<any>("email_prefetch_bodies", { input }); },

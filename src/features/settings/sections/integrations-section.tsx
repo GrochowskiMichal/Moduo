@@ -13,6 +13,13 @@ import {
 } from "../../calendar/ui/calendar-connect-dialog";
 import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
 import type { SavedAccount } from "../../email/model/email-types";
+import { EmailHistoryDepthSelect } from "../../email/ui/email-history-depth-select";
+import {
+  asHistoryDepth,
+  describeDepthChange,
+  EMAIL_HISTORY_DEPTHS,
+  type EmailHistoryDepth,
+} from "../../email/history-depth";
 import { Button } from "../../../components/ui/button";
 import { dispatchOpenSettings } from "../settings-events";
 import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
@@ -50,6 +57,14 @@ export function IntegrationsSection() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailConnectOpen, setEmailConnectOpen] = useState(false);
   const [emailReconnectTarget, setEmailReconnectTarget] = useState<SavedAccount | null>(null);
+  /** Depth edits not yet committed, per account — so the consequence line can
+   *  compare the pick against what is actually stored. */
+  const [depthDraft, setDepthDraft] = useState<Record<string, EmailHistoryDepth>>({});
+  const [depthBusy, setDepthBusy] = useState<string | null>(null);
+  /** What the last committed depth change means, per account. Kept AFTER the
+   *  write lands — the reassurance that lowering deletes nothing is useless if it
+   *  disappears the moment the round-trip finishes. */
+  const [depthNote, setDepthNote] = useState<Record<string, string>>({});
 
   // AI/MCP connector status: count of active (non-revoked) API keys for this
   // workspace. `null` = not yet loaded or unreadable (e.g. a non-admin) — the
@@ -137,6 +152,47 @@ export function IntegrationsSection() {
       setCalError(e instanceof Error ? e.message : String(e));
     } finally {
       setCalBusy(null);
+    }
+  };
+
+  const handleDepthChange = async (account: SavedAccount, depth: EmailHistoryDepth) => {
+    if (!runtime) return;
+    const previous = asHistoryDepth(account.historyDepth);
+    if (depth === previous) return;
+    setDepthDraft((prev) => ({ ...prev, [account.id]: depth }));
+    setDepthBusy(account.id);
+    setEmailError(null);
+    const clearDraft = () =>
+      setDepthDraft((prev) => {
+        const next = { ...prev };
+        delete next[account.id];
+        return next;
+      });
+    try {
+      await runtime.email.setHistoryDepth({ accountId: account.id, depth });
+      // Say what happened, and keep saying it — this is the only place the user
+      // learns that lowering the depth is not destructive.
+      setDepthNote((prev) => ({
+        ...prev,
+        [account.id]: describeDepthChange(previous, depth) ?? "",
+      }));
+      // Raising the depth re-opens the backfill, but only when a sync round
+      // actually runs — and an IDLE account can sit parked for ~29 minutes. Kick
+      // one now so "starts fetching older mail" is true at the moment we say it.
+      if (EMAIL_HISTORY_DEPTHS.indexOf(depth) > EMAIL_HISTORY_DEPTHS.indexOf(previous)) {
+        void runtime.email.syncNow({ accountId: account.id }).catch(() => {
+          /* best-effort: the next round picks the new depth up regardless */
+        });
+      }
+      await loadEmailAccounts();
+      clearDraft();
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e));
+      // Roll the picker back to what is actually stored, or it would claim a
+      // depth the engine isn't using.
+      clearDraft();
+    } finally {
+      setDepthBusy(null);
     }
   };
 
@@ -451,6 +507,25 @@ export function IntegrationsSection() {
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
+                      {/* AC8: depth is changeable per account, after connecting.
+                          "This device" because the mail store is local — the
+                          other machine keeps its own depth. */}
+                      <div className="flex flex-col items-end gap-0.5">
+                        <label
+                          htmlFor={`email-depth-${acc.id}`}
+                          className="text-2xs uppercase tracking-wide text-muted-foreground"
+                        >
+                          Inbox history · this device
+                        </label>
+                        <EmailHistoryDepthSelect
+                          id={`email-depth-${acc.id}`}
+                          value={depthDraft[acc.id] ?? asHistoryDepth(acc.historyDepth)}
+                          committed={asHistoryDepth(acc.historyDepth)}
+                          onChange={(depth) => void handleDepthChange(acc, depth)}
+                          disabled={depthBusy === acc.id}
+                          note={depthNote[acc.id]}
+                        />
+                      </div>
                       {acc.status === "reauth_required" ? (
                         <Button
                           type="button"

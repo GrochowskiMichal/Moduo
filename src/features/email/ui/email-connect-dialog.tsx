@@ -18,6 +18,12 @@ import {
 } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { EmailHistoryDepthSelect } from "./email-history-depth-select";
+import {
+  asHistoryDepth,
+  DEFAULT_HISTORY_DEPTH,
+  type EmailHistoryDepth,
+} from "../history-depth";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import type { MailboxProvider, SavedAccount } from "../model/email-types";
@@ -58,6 +64,7 @@ export function EmailConnectDialog({
   const [smtpHost, setSmtpHost] = useState(isReconnect?.smtpHost ?? "");
   const [imapPort, setImapPort] = useState(String(isReconnect?.imapPort ?? 993));
   const [smtpPort, setSmtpPort] = useState(String(isReconnect?.smtpPort ?? 587));
+  const [historyDepth, setHistoryDepth] = useState<EmailHistoryDepth>(DEFAULT_HISTORY_DEPTH);
   const [busy, setBusy] = useState<null | "oauth" | "password">(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +78,9 @@ export function EmailConnectDialog({
     setSmtpHost(isReconnect?.smtpHost ?? "");
     setImapPort(String(isReconnect?.imapPort ?? 993));
     setSmtpPort(String(isReconnect?.smtpPort ?? 587));
+    // Re-seed the depth too, or connecting a second mailbox silently inherits the
+    // previous one's pick instead of AC6's 12-month default.
+    setHistoryDepth(asHistoryDepth(isReconnect?.historyDepth));
     setBusy(null);
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,6 +100,7 @@ export function EmailConnectDialog({
     try {
       const account = (await runtime.email.startGoogleOAuth({
         workspaceId,
+        historyDepth,
       })) as SavedAccount;
       succeed(account);
     } catch (e) {
@@ -114,6 +125,7 @@ export function EmailConnectDialog({
         provider === "custom"
           ? {
               provider,
+              historyDepth,
               email: email.trim(),
               password,
               workspaceId,
@@ -122,7 +134,7 @@ export function EmailConnectDialog({
               imapPort: Number(imapPort) || 993,
               smtpPort: Number(smtpPort) || 587,
             }
-          : { provider, email: email.trim(), password, workspaceId },
+          : { provider, email: email.trim(), password, workspaceId, historyDepth },
       )) as SavedAccount;
       succeed(account);
     } catch (e) {
@@ -217,6 +229,26 @@ export function EmailConnectDialog({
               autoComplete="username"
             />
           </div>
+
+          {/* AC6: choose the history depth at connect time. Hidden on reconnect —
+              that repairs a credential, it doesn't re-scope the mailbox, and the
+              account already has a depth the user set. */}
+          {!isReconnect ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="email-connect-depth">Inbox history to sync</Label>
+              <EmailHistoryDepthSelect
+                id="email-connect-depth"
+                value={historyDepth}
+                onChange={setHistoryDepth}
+                disabled={Boolean(busy)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Applies to your inbox — archived mail isn&rsquo;t synced yet. Recent mail
+                arrives first; older mail fills in as you use Mail. Changeable later per
+                account.
+              </p>
+            </div>
+          ) : null}
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email-connect-password">
