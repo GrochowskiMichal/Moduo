@@ -1,6 +1,6 @@
 # Spec: Import & migration — Notion notes + email history depth
 
-> Status: **Draft (DoR-ready)** · Owner: maciej · Block ids: **IM-1 … IM-5** (Wave D, dogfood lane)
+> Status: **In progress** — IM-2a shipped 2026-07-29, IM-2b shipped 2026-07-30 (**AC7 + AC9 partial**, see Open questions) · Owner: maciej · Block ids: **IM-1 … IM-5** (Wave D, dogfood lane)
 > Supersedes the placeholder `/s1 IMPORT` line in [`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) Wave D.
 
 ## Scope
@@ -150,4 +150,5 @@ Sequence: **IM-1** (dogfood-critical, independent) ∥ **IM-2a → IM-2b → IM-
 
 ## Open questions
 
-- [ ] (none)
+- [ ] **🔴 Does "history depth" mean INBOX only, or INBOX + archive?** Raised by IM-2b (2026-07-30), needs a product call before IM-2c prices the picker. The engine syncs **only** `inbox` — `folder` is hardcoded at every caller and `mailbox_candidates` maps `"inbox" => ["INBOX"]`. But the Scope above justifies the whole feature with a Spark user who **archives** and searches for "year-old invoices, order confirmations and game keys" — mail that lives in Archive / `[Gmail]/All Mail` and syncs at *no* depth. So a 12-month depth picker as specced would not cover the mail it was specced for. Options: (a) depth applies to INBOX + the provider's archive mailbox (roughly doubles sync cost, and for Gmail All Mail is a superset of INBOX); (b) depth is INBOX-only and the invoice case stays served by server-side search escalation (already shipped, `X-GM-RAW` over all folders — needs no local depth at all); (c) a per-folder depth. Until this is answered, **AC7 is unmet for the motivating data**.
+- [ ] **🔴 What surface makes deep history reachable?** Also from IM-2b: envelopes now land in the store, but nothing can see them. The list is capped at **500 rows** (out of scope per the note above), instant search filters only the rows already loaded, and the Rust search scans only *cached body text* — which exists solely for messages already opened. So a 12-month backfill currently changes nothing a user can list, thread or search. The out-of-scope note above asserts "deeper sync improves threading and local search"; as built it does not. Either a paginated/scrolling list or a store-backed search query has to land for AC7's "searchable locally" to be true — decide whether that is a new block before IM-2c or part of it.

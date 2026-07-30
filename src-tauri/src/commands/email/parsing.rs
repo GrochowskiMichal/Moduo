@@ -170,16 +170,6 @@ pub(super) fn parse_header_value(header_block: &[u8], name_lower: &str) -> Optio
     }
 }
 
-/// Whether a message is recent enough to store on the initial sync window (EM-4).
-/// An unknown/zero timestamp is kept (never dropped for a missing date).
-pub(super) fn within_sync_window(timestamp_ms: i64, now_ms: i64, days: i64) -> bool {
-    if timestamp_ms <= 0 {
-        return true;
-    }
-    let cutoff = now_ms.saturating_sub(days.saturating_mul(86_400_000));
-    timestamp_ms >= cutoff
-}
-
 pub(super) fn normalize_body_text(text: &str) -> String {
     text.replace("\r\n", "\n")
         .replace('\r', "\n")
@@ -397,16 +387,5 @@ mod tests {
     fn parse_references_absent_is_empty() {
         assert!(parse_references(b"Message-ID: <a@x.com>\r\n").is_empty());
         assert!(parse_references(b"").is_empty());
-    }
-
-    #[test]
-    fn sync_window_keeps_recent_and_unknown_drops_old() {
-        let now = 1_000 * 86_400_000; // day 1000 in ms
-        let day = 86_400_000_i64;
-        assert!(within_sync_window(now - 10 * day, now, 90));
-        assert!(within_sync_window(now - 89 * day, now, 90));
-        assert!(!within_sync_window(now - 120 * day, now, 90));
-        // Unknown date (0) is kept, never dropped for a missing header.
-        assert!(within_sync_window(0, now, 90));
     }
 }

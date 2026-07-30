@@ -11,7 +11,7 @@ use serde::Deserialize;
 use tauri::State;
 
 use super::account_config::account_id as build_account_id;
-use super::model::{EmailAccountPublic, StoredEmailAccount};
+use super::model::{EmailAccountPublic, EmailHistoryDepth, StoredEmailAccount};
 use super::realtime::schedule_idle_worker_reconcile;
 use super::secrets::{self, StoredMailSecret};
 use super::storage::{patch_account_sync_state, read_accounts, upsert_account_v2, write_accounts};
@@ -133,6 +133,8 @@ pub async fn email_gmail_oauth_start(
             last_sync_at: None,
             status: "active".to_string(),
             last_error: None,
+            // 12 months (AC6's default), same as the password connect path.
+            history_depth: EmailHistoryDepth::default(),
         });
     }
     write_accounts(&state, &accounts)?;

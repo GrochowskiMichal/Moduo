@@ -66,6 +66,36 @@ pub struct EmailAccountPublic {
     pub last_error: Option<String>,
 }
 
+/// How far back a mailbox syncs envelopes (IM-2b/2c).
+///
+/// **Per-device on purpose:** the redb store is per-machine, so two devices may
+/// legitimately hold different depths and neither truncates the other
+/// (specs/import.md assumption 4). That is also why this is not in the cloud
+/// `email_accounts` row.
+///
+/// Depth is a **floor** — a promise about what *is* synced — never a ceiling that
+/// evicts. Lowering it stops fetching and deletes nothing (AC8).
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum EmailHistoryDepth {
+    ThreeMonths,
+    SixMonths,
+    /// The connect-time default (AC6).
+    #[default]
+    TwelveMonths,
+    Everything,
+}
+
+/// Deserialize a depth, falling back to the default for any value this build does
+/// not know — see the field's note on why an error here is unacceptable.
+fn depth_or_default<'de, D>(deserializer: D) -> Result<EmailHistoryDepth, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(raw).unwrap_or_default())
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct StoredEmailAccount {
@@ -85,6 +115,15 @@ pub(super) struct StoredEmailAccount {
     pub(super) last_sync_at: Option<String>,
     pub(super) status: String,
     pub(super) last_error: Option<String>,
+    /// **Must stay defaulted AND tolerant of unknown values.** `read_accounts`
+    /// swallows a deserialize error into an EMPTY list, so anything unparseable here
+    /// silently disconnects every account (specs/import.md assumption 4). Missing is
+    /// covered by `default`; an *unknown* value matters too, because the desktop
+    /// binary is drop-in replaced — rolling back past a future depth variant must not
+    /// wipe the user's accounts. Guarded by
+    /// `storage::tests::accounts_v1_old_shape_still_loads`.
+    #[serde(default, deserialize_with = "depth_or_default")]
+    pub(super) history_depth: EmailHistoryDepth,
 }
 
 impl StoredEmailAccount {

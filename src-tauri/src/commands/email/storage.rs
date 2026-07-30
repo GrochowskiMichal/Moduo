@@ -271,6 +271,12 @@ pub(super) fn update_idle_runtime_state(
             idle_strategy: Some(strategy.to_string()),
             idle_failed_attempts: failed_attempts,
             last_idle_event_at: None,
+            // No backfill progress yet — this fallback only exists when there is no
+            // cursor at all, so the next sync round starts the walk from scratch.
+            oldest_synced_uid: None,
+            history_floor_ms: None,
+            backfill_complete: false,
+            backfill_last_error: None,
             updated_at: now_iso(),
         });
     cursor.idle_strategy = Some(strategy.to_string());
@@ -580,6 +586,7 @@ pub(super) fn persist_body_cache(state: &AppState, body: &StoredBodyCache) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::email::EmailHistoryDepth;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -721,6 +728,74 @@ mod tests {
                 ("gmail:a@x.com", 1),
             ],
             "every account's inbox, newest first, and nothing from other folders"
+        );
+    }
+
+    /// AC8 — an account blob written before IM-2b added `historyDepth` must still
+    /// deserialize.
+    ///
+    /// This is the one that can lose the user's whole setup: `read_accounts`
+    /// swallows a deserialize error into an **empty list**, so a non-defaulted new
+    /// field would silently disconnect every mailbox on upgrade — and the app would
+    /// look like a fresh install rather than broken (specs/import.md assumption 4).
+    #[test]
+    fn accounts_v1_old_shape_still_loads() {
+        // Verbatim pre-IM-2b shape: no `historyDepth` key at all.
+        let legacy = serde_json::json!([{
+            "id": "gmail:a@x.com",
+            "workspaceId": null,
+            "provider": "gmail",
+            "email": "a@x.com",
+            "imapHost": null,
+            "smtpHost": null,
+            "imapPort": null,
+            "smtpPort": null,
+            "lastSyncAt": "2026-07-01T10:00:00Z",
+            "status": "active",
+            "lastError": null,
+        }]);
+
+        let accounts = serde_json::from_value::<Vec<StoredEmailAccount>>(legacy)
+            .expect("a pre-IM-2b account blob must still deserialize");
+        assert_eq!(accounts.len(), 1, "the account survives the upgrade");
+        assert_eq!(accounts[0].id, "gmail:a@x.com");
+        assert_eq!(
+            accounts[0].history_depth,
+            EmailHistoryDepth::TwelveMonths,
+            "a missing depth defaults to 12 months (AC6)"
+        );
+
+        // And the field round-trips, so a written depth is read back — not reset to
+        // the default on every load.
+        let mut deeper = accounts;
+        deeper[0].history_depth = EmailHistoryDepth::Everything;
+        let round_tripped = serde_json::from_value::<Vec<StoredEmailAccount>>(
+            serde_json::to_value(&deeper).expect("serialize"),
+        )
+        .expect("deserialize");
+        assert_eq!(
+            round_tripped[0].history_depth,
+            EmailHistoryDepth::Everything
+        );
+
+        // A depth value this build doesn't know — what a rollback past a future
+        // variant looks like. It must degrade to the default, NOT fail: a failure
+        // here becomes an empty account list, i.e. every mailbox disconnected.
+        let unknown = serde_json::json!([{
+            "id": "gmail:b@x.com",
+            "provider": "gmail",
+            "email": "b@x.com",
+            "lastSyncAt": null,
+            "status": "active",
+            "lastError": null,
+            "historyDepth": "twentyFourMonths",
+        }]);
+        let rolled_back = serde_json::from_value::<Vec<StoredEmailAccount>>(unknown)
+            .expect("an unknown depth must not take the account list down with it");
+        assert_eq!(rolled_back.len(), 1);
+        assert_eq!(
+            rolled_back[0].history_depth,
+            EmailHistoryDepth::TwelveMonths
         );
     }
 
