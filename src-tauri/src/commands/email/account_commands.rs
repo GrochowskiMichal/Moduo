@@ -107,6 +107,17 @@ pub async fn email_account_connect_and_save(
         existing.smtp_port = smtp_port;
         existing.status = "active".to_string();
         existing.last_error = None;
+        // Re-connecting an address that already has a row still shows the picker
+        // (only a credential *repair* hides it), so an explicit pick has to land
+        // here as well — otherwise Settings shows the old depth and the choice
+        // is silently ignored.
+        if let Some(depth) = input
+            .history_depth
+            .as_deref()
+            .and_then(EmailHistoryDepth::from_wire)
+        {
+            existing.history_depth = depth;
+        }
     } else {
         accounts.push(StoredEmailAccount {
             id: id.clone(),
@@ -120,9 +131,13 @@ pub async fn email_account_connect_and_save(
             last_sync_at: None,
             status: "active".to_string(),
             last_error: None,
-            // 12 months (AC6's default). IM-2c adds the connect-time picker; until
-            // then every new account takes the default.
-            history_depth: EmailHistoryDepth::default(),
+            // The connect-time picker's choice (AC6); absent or unrecognised
+            // falls back to the 12-month default.
+            history_depth: input
+                .history_depth
+                .as_deref()
+                .and_then(EmailHistoryDepth::from_wire)
+                .unwrap_or_default(),
         });
     }
 
@@ -156,3 +171,28 @@ pub async fn email_account_disconnect(
     Ok(())
 }
 
+
+/// Change how far back an account syncs (AC8).
+///
+/// Per-device: the depth lives in the local redb store, so changing it here does
+/// not touch the other machine's setting. **Raising** it re-opens a completed
+/// backfill on the next sync round (the cursor's recorded floor is now shallower
+/// than the configured one, which `depth_gap_reopens` detects) — no cursor
+/// surgery needed here. **Lowering** it stops fetching and deletes nothing: the
+/// prune is gated on the depth already *reached*, not the one configured.
+#[tauri::command]
+pub async fn email_account_set_history_depth(
+    state: State<'_, AppState>,
+    account_id: String,
+    depth: String,
+) -> Result<EmailAccountPublic, String> {
+    let parsed = EmailHistoryDepth::from_wire(&depth).ok_or("unsupported_history_depth")?;
+    let mut accounts = read_accounts(&state)?;
+    let Some(account) = accounts.iter_mut().find(|item| item.id == account_id) else {
+        return Err("account_not_found".to_string());
+    };
+    account.history_depth = parsed;
+    let updated = account.to_public();
+    write_accounts(&state, &accounts)?;
+    Ok(updated)
+}
