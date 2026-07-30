@@ -11,6 +11,7 @@
 
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { allTimeCalendarWindow } from "@/features/calendar/window";
 import { entityRefKey } from "../../spine/rollup";
 import type { HubSnippetMeta } from "../../spine/snippet-projectors";
 
@@ -79,7 +80,9 @@ export async function enrichHubRows(
       : null,
     wantEvent.size
       ? Promise.resolve()
-          .then(() => runtime.calendar.listModule(workspaceId))
+          // All-time, NOT the calendar page's window (SCALE-1): a contact
+          // linked to a 2019 meeting must still get its snippet metadata.
+          .then(() => runtime.calendar.listModule(workspaceId, allTimeCalendarWindow()))
           .then((bundle) => {
             for (const e of bundle.events) {
               if (!wantEvent.has(e.id)) continue;

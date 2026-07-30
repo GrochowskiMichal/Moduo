@@ -57,6 +57,7 @@ const EMPTY_BUNDLE: TasksModuleBundle = {
   tags: [],
   tagLinks: [],
   taskRelations: [],
+  truncated: [],
 };
 
 function byPosition<T extends { position: string }>(a: T, b: T): number {
@@ -1205,6 +1206,8 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     setTaskParent,
     blockedTaskIds: blockedIds,
     taskRelations: bundle.taskRelations,
+    /** SCALE-1: collections the read had to cut — the page must show these. */
+    truncated: bundle.truncated,
     blockersByTask,
     dependentsByTask,
     frontierFor,

@@ -2,6 +2,7 @@
 // calendar_events table) and the pure occurrence selectors that put event
 // chips on the grid. Mirrors the lens: selectors in, chips out, no state.
 
+import type { Truncation } from "../../lib/paged-select";
 import { localDayKey, addDays, startOfLocalDay, type VisibleRange } from "./lens";
 import { expandEventOccurrences } from "./recurrence-expand";
 
@@ -52,6 +53,8 @@ export type CalendarModuleBundle = {
   events: CalendarEventModel[];
   accounts: CalendarAccountModel[];
   degraded: boolean;
+  /** Collections cut at their read ceiling (SCALE-1) — empty = complete. */
+  truncated: Truncation[];
 };
 
 /** Only-present keys apply (the contacts_op_set_details pattern). */

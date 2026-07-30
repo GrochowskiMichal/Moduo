@@ -7,12 +7,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import type { Truncation } from "../../../lib/paged-select";
 import { undoToast } from "../../../lib/undo-toast";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
   CalendarEventPatch,
 } from "../events";
+import {
+  allTimeCalendarWindow,
+  defaultCalendarWindow,
+  widenCalendarWindow,
+  type CalendarWindow,
+} from "../window";
 
 type Params = {
   userId: string | null;
@@ -55,8 +62,36 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   const [events, setEvents] = useState<CalendarEventModel[]>([]);
   const [accounts, setAccounts] = useState<CalendarAccountModel[]>([]);
   const [degraded, setDegraded] = useState(false);
+  const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [loading, setLoading] = useState(true);
   const reqRef = useRef(0);
+  // SCALE-1: the events read is windowed instead of "all history". The window
+  // only ever grows (see ensureRange), so walking back and forth over months
+  // you've already visited never refetches.
+  //
+  // The window is stored WITH the workspace it belongs to and reset during
+  // render, not in an effect: an effect would let one read fire against the
+  // previous workspace's (possibly all-time) window first, then immediately
+  // refetch — two round-trips on every mount and every switch.
+  const [windowState, setWindowState] = useState<{
+    workspaceId: string | null;
+    window: CalendarWindow;
+  }>(() => ({ workspaceId, window: defaultCalendarWindow() }));
+  if (windowState.workspaceId !== workspaceId) {
+    setWindowState({ workspaceId, window: defaultCalendarWindow() });
+  }
+  const fetchWindow = windowState.window;
+  const setFetchWindow = useCallback(
+    (next: (current: CalendarWindow) => CalendarWindow) =>
+      setWindowState((s) => {
+        const w = next(s.window);
+        return w === s.window ? s : { ...s, window: w };
+      }),
+    [],
+  );
+  const isAllTimeWindow =
+    fetchWindow.fromIso === allTimeCalendarWindow().fromIso &&
+    fetchWindow.toIso === allTimeCalendarWindow().toIso;
 
   const load = useCallback(async () => {
     if (!runtime || !userId || !workspaceId || !canRead) {
@@ -67,17 +102,52 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     }
     const req = ++reqRef.current;
     setLoading(true);
-    const bundle = await runtime.calendar.listModule(workspaceId);
+    const bundle = await runtime.calendar.listModule(workspaceId, fetchWindow);
     if (reqRef.current !== req) return;
-    setEvents(bundle.events);
+    // Keep unsettled optimistic creates: a reload is now also triggered by
+    // navigation (window widening), so it can land between a create's
+    // optimistic row and its server row — which would otherwise drop the
+    // event until the next reload (the tmp-id reconcile finds nothing).
+    setEvents((prev) => {
+      const pending = prev.filter((e) => isTempId(e.id));
+      return pending.length > 0 ? [...bundle.events, ...pending] : bundle.events;
+    });
     setAccounts(bundle.accounts);
     setDegraded(bundle.degraded);
+    setTruncated(bundle.truncated);
     setLoading(false);
-  }, [runtime, userId, workspaceId, canRead]);
+  }, [runtime, userId, workspaceId, canRead, fetchWindow]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * Tell the hook which days are actually on screen. Widens the fetch window
+   * (and reloads) when you navigate past its edge — without this, the date
+   * window would simply make old/far-future months look empty.
+   */
+  const ensureRange = useCallback(
+    (from: Date, to: Date) => {
+      setFetchWindow((current) => widenCalendarWindow(current, from, to) ?? current);
+    },
+    [setFetchWindow],
+  );
+
+  /**
+   * Drop the window entirely — for readers that must see all of history (the
+   * `?event=` deep link, which would otherwise call an old event "deleted"
+   * just because it wasn't in the window). Idempotent: once the window is
+   * already all-time this is a no-op, so it can't drive a reload loop — which
+   * is exactly why callers must check `isAllTimeWindow` before treating this
+   * as "try again", or they wait forever for a reload that never comes.
+   */
+  const ensureAllTime = useCallback(() => {
+    setFetchWindow((current) => {
+      const all = allTimeCalendarWindow();
+      return current.fromIso === all.fromIso && current.toIso === all.toIso ? current : all;
+    });
+  }, [setFetchWindow]);
 
   const liveEvents = useMemo(() => events.filter((e) => !e.deletedAt), [events]);
 
@@ -125,7 +195,10 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           rrule: draft.rrule,
           description: draft.description,
         });
-        setEvents((prev) => prev.map((e) => (e.id === tempId ? saved : e)));
+        // Filter-then-append, not map: a widen-triggered reload can land
+        // between the optimistic row and this reconcile, in which case the
+        // bundle ALREADY holds the server row and a map would leave two.
+        setEvents((prev) => [...prev.filter((e) => e.id !== tempId && e.id !== saved.id), saved]);
         return saved;
       } catch (err) {
         setEvents((prev) => prev.filter((e) => e.id !== tempId));
@@ -220,6 +293,10 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     events: liveEvents,
     accounts,
     degraded,
+    truncated,
+    ensureRange,
+    ensureAllTime,
+    isAllTimeWindow,
     loading,
     canEdit,
     reload: load,

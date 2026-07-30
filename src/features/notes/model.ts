@@ -7,6 +7,8 @@
  * ./types.ts stays until the old surfaces retire with NO-2/NO-3.
  */
 
+import type { Truncation } from "../../lib/paged-select";
+
 export type Note = {
   id: string;
   workspaceId: string;
@@ -28,6 +30,8 @@ export type Note = {
 
 export type NotesV2Bundle = {
   notes: Note[];
+  /** Collections cut at their read ceiling (SCALE-1) — empty = complete. */
+  truncated: Truncation[];
   /**
    * True when the NO-1 migration isn't applied yet (new columns/RPCs missing)
    * — reads fall back to the legacy column set and mutations will fail with

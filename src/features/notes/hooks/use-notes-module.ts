@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import type { Truncation } from "../../../lib/paged-select";
 import { undoToast } from "../../../lib/undo-toast";
 import type { Note } from "../model";
 import { descendantIds, siblingsOf, wouldCreateCycle } from "../tree";
@@ -35,6 +36,8 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [degraded, setDegraded] = useState(false);
+  /** SCALE-1: collections the read had to cut — the page must show these. */
+  const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<NotesSyncStatusV2>("synced");
   const [welcomeNoteId, setWelcomeNoteId] = useState<string | null>(null);
@@ -85,6 +88,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       }
       setNotes(merged);
       setDegraded(bundle.degraded);
+      setTruncated(bundle.truncated);
       setLoadError(null);
       setLoading(false);
       void writeMetaCache(workspaceId!, bundle.notes);
@@ -102,6 +106,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     setLoading(true);
     setNotes([]);
     setDegraded(false);
+    setTruncated([]);
     setLoadError(null);
     serverLoadedRef.current = false;
     pendingCreatesRef.current.clear();
@@ -500,6 +505,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     notes,
     loading,
     degraded,
+    truncated,
     loadError,
     syncStatus,
     engine,

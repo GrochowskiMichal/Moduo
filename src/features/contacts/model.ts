@@ -12,6 +12,8 @@
 // addressable by `(entity_type, entity_id)` and immediately linkable/mentionable
 // (specs/contacts.md AC1).
 
+import type { Truncation } from "../../lib/paged-select";
+
 /**
  * A contact's flat status. Stored as a lowercase id; the default set
  * (Lead / Active / Dormant / Archived) is renamable in settings but NEVER gains
@@ -110,4 +112,6 @@ export type ContactsModuleBundle = {
   companies: Company[];
   /** Workspace custom-field definitions (the "add field" picker source). */
   fieldDefs: ContactFieldDef[];
+  /** Collections cut at their read ceiling (SCALE-1) — empty = complete. */
+  truncated: Truncation[];
 };
