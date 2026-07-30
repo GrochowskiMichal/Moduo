@@ -81,6 +81,16 @@ pub struct RedbStore {
     write_guard: Mutex<()>,
 }
 
+/// One envelope row plus the order-index row that mirrors it, ready to be written
+/// in a single transaction. Keys and payloads are both minted by the caller —
+/// `commands::email` owns the key formats, the store writes what it is handed.
+pub struct EnvelopeWrite {
+    pub envelope_key: String,
+    pub envelope_json: String,
+    pub order_key: String,
+    pub order_json: String,
+}
+
 impl RedbStore {
     fn ensure_schema(db: &Database) -> anyhow::Result<()> {
         let write_txn = db.begin_write()?;
@@ -314,6 +324,27 @@ impl RedbStore {
             let (_, value) = result?;
             let parsed = serde_json::from_str::<T>(value.value())?;
             items.push(parsed);
+        }
+        Ok(items)
+    }
+
+    /// Rows whose key starts with `prefix`, in key order. Seeks straight to the
+    /// prefix and stops at the first key past it, so rows outside the prefix are
+    /// never read — let alone deserialized.
+    fn scan_json_prefix<T: DeserializeOwned>(
+        &self,
+        table_def: TableDefinition<&str, &str>,
+        prefix: &str,
+    ) -> anyhow::Result<Vec<T>> {
+        let read_txn = self.db.begin_read()?;
+        let table = read_txn.open_table(table_def)?;
+        let mut items = Vec::new();
+        for result in table.range(prefix..)? {
+            let (key, value) = result?;
+            if !key.value().starts_with(prefix) {
+                break;
+            }
+            items.push(serde_json::from_str::<T>(value.value())?);
         }
         Ok(items)
     }
@@ -616,10 +647,6 @@ impl RedbStore {
         self.remove_key(EMAIL_FOLDER_STATE, key)
     }
 
-    pub fn put_email_envelope(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
-        self.put_json(EMAIL_ENVELOPES, key, value)
-    }
-
     pub fn get_email_envelope(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
         self.get_json(EMAIL_ENVELOPES, key)
     }
@@ -628,24 +655,156 @@ impl RedbStore {
         self.list_json(EMAIL_ENVELOPES)
     }
 
-    pub fn remove_email_envelope(&self, key: &str) -> anyhow::Result<()> {
-        self.remove_key(EMAIL_ENVELOPES, key)
-    }
-
-    pub fn put_email_envelope_order(
+    /// Envelope rows under one `{account}::{folder}::` key prefix.
+    pub fn scan_email_envelopes_prefix(
         &self,
-        key: &str,
-        value: &serde_json::Value,
-    ) -> anyhow::Result<()> {
-        self.put_json(EMAIL_ENVELOPE_ORDER, key, value)
+        prefix: &str,
+    ) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.scan_json_prefix(EMAIL_ENVELOPES, prefix)
     }
 
+    /// Envelope rows for one folder across *every* account in the table.
+    ///
+    /// Keys are `{account}::{folder}::{uid}` and the account segment isn't known up
+    /// front, so this walks the key index rather than seeking a prefix — but it only
+    /// **deserializes** a row whose key carries the folder, which is where the cost
+    /// is. `needle` may over-match (an account id that itself contains
+    /// `::{folder}::`); callers field-filter, so a false positive can't change the
+    /// result set — though, like the old whole-table read, an unparseable value on a
+    /// matched key still fails the listing. Never *under*-matching is what keeps
+    /// this exactly equivalent to that read.
+    pub fn scan_email_envelopes_in_folder(
+        &self,
+        needle: &str,
+    ) -> anyhow::Result<Vec<serde_json::Value>> {
+        let read_txn = self.db.begin_read()?;
+        let table = read_txn.open_table(EMAIL_ENVELOPES)?;
+        let mut items = Vec::new();
+        for result in table.iter()? {
+            let (key, value) = result?;
+            if !key.value().contains(needle) {
+                continue;
+            }
+            items.push(serde_json::from_str(value.value())?);
+        }
+        Ok(items)
+    }
+
+    /// Test-only: write an envelope row's value verbatim, bypassing JSON encoding.
+    /// Lets a test plant an unparseable row *outside* a scan's prefix, so "the
+    /// prefix scan never touched it" is provable rather than assumed.
+    #[cfg(test)]
+    pub fn put_email_envelope_raw(&self, key: &str, value: &str) -> anyhow::Result<()> {
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(EMAIL_ENVELOPES)?;
+            table.insert(key, value)?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    /// Write a batch of envelopes and their order-index rows in ONE transaction.
+    ///
+    /// The old path took the write guard and ran a full `begin_write` + `commit`
+    /// twice per envelope (once for the row, once for its order row), so a 50-UID
+    /// sync chunk cost 100 commits; this costs one.
+    ///
+    /// `stale_order_key` maps the *raw stored JSON* of an envelope to the order key
+    /// it was written under. A message whose timestamp moves — most commonly one
+    /// with no `Date` header, which falls back to "now" on every refetch — would
+    /// otherwise leave its previous order row behind on each sync; here it is
+    /// removed in the same transaction, so an envelope written through this path
+    /// always has exactly one order row. (Rows orphaned by the *old* two-commit
+    /// write predate this and are not swept — see `remove_email_envelope_with_order`.)
+    pub fn write_email_envelopes<F>(
+        &self,
+        rows: &[EnvelopeWrite],
+        stale_order_key: F,
+    ) -> anyhow::Result<()>
+    where
+        F: Fn(&str) -> Option<String>,
+    {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut envelopes = write_txn.open_table(EMAIL_ENVELOPES)?;
+            let mut order = write_txn.open_table(EMAIL_ENVELOPE_ORDER)?;
+            for row in rows {
+                // Read the previous row into an owned String first: the access
+                // guard borrows the table, and the insert below needs it mutably.
+                let previous: Option<String> = envelopes
+                    .get(row.envelope_key.as_str())?
+                    .map(|value| value.value().to_string());
+                if let Some(stale) = previous.as_deref().and_then(&stale_order_key) {
+                    if stale != row.order_key {
+                        let _ = order.remove(stale.as_str())?;
+                    }
+                }
+                envelopes.insert(row.envelope_key.as_str(), row.envelope_json.as_str())?;
+                order.insert(row.order_key.as_str(), row.order_json.as_str())?;
+            }
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    /// Remove an envelope and its order-index row in one transaction.
+    ///
+    /// The order key is derived from the stored row *inside* the transaction, so a
+    /// concurrent upsert can't move the timestamp between the read and the delete.
+    /// This stays a point delete — the old path scanned the entire order table per
+    /// removal, which made a full-reset prune of n envelopes O(n²). The flip side:
+    /// only the row this envelope currently points at is removed, so index rows
+    /// orphaned before IM-2a survive. Nothing reads the index yet; IM-2b, its first
+    /// consumer, has to reconcile or rebuild it before trusting the invariant.
+    ///
+    /// The envelope row itself is removed unconditionally — a row whose JSON no
+    /// longer parses must still be deletable.
+    pub fn remove_email_envelope_with_order<F>(
+        &self,
+        envelope_key: &str,
+        order_key_for: F,
+    ) -> anyhow::Result<()>
+    where
+        F: Fn(&str) -> Option<String>,
+    {
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut envelopes = write_txn.open_table(EMAIL_ENVELOPES)?;
+            let stored: Option<String> = envelopes
+                .get(envelope_key)?
+                .map(|value| value.value().to_string());
+            let _ = envelopes.remove(envelope_key)?;
+            if let Some(order_key) = stored.as_deref().and_then(&order_key_for) {
+                let mut order = write_txn.open_table(EMAIL_ENVELOPE_ORDER)?;
+                let _ = order.remove(order_key.as_str())?;
+            }
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    /// The order index is written by [`Self::write_email_envelopes`] and not yet
+    /// read by any product path — IM-2b's backward backfill is its first consumer.
+    /// Kept (and covered by the storage tests) so that consumer inherits a write
+    /// path that keeps exactly one row per envelope going forward.
     pub fn list_email_envelope_order(&self) -> anyhow::Result<Vec<serde_json::Value>> {
         self.list_json(EMAIL_ENVELOPE_ORDER)
-    }
-
-    pub fn remove_email_envelope_order(&self, key: &str) -> anyhow::Result<()> {
-        self.remove_key(EMAIL_ENVELOPE_ORDER, key)
     }
 
     pub fn put_email_body(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {

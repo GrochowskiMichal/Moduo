@@ -40,6 +40,28 @@ pub struct EmailSyncCursorRecord {
     pub idle_failed_attempts: u32,
     #[serde(default)]
     pub last_idle_event_at: Option<String>,
+    /// **Depth floor (IM-2b).** The oldest UID this device has fetched for the
+    /// folder — the backwards walk's resume point, so a quit mid-backfill resumes
+    /// instead of restarting (AC9). Before IM-2b the cursor recorded only
+    /// `last_seen_uid`, which is why nothing could walk backwards or know how far
+    /// back the store reached.
+    #[serde(default)]
+    pub oldest_synced_uid: Option<u32>,
+    /// The oldest timestamp this store has actually reached, in ms. Pruning is
+    /// gated on this rather than the *currently configured* depth, so lowering the
+    /// depth can never evict history already promised (AC8).
+    #[serde(default)]
+    pub history_floor_ms: Option<i64>,
+    /// Set once the backwards walk has reached the configured depth, so later sync
+    /// rounds skip the backfill search entirely.
+    #[serde(default)]
+    pub backfill_complete: bool,
+    /// The last backfill failure, if the most recent attempt failed. A failing walk
+    /// is otherwise completely silent — the round deliberately continues so one bad
+    /// UID can't pin the account at `error`, which means nothing else records that
+    /// history has stopped filling in. IM-2c's progress surface reads this.
+    #[serde(default)]
+    pub backfill_last_error: Option<String>,
     pub updated_at: String,
 }
 

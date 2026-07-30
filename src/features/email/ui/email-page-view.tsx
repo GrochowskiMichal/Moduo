@@ -30,7 +30,7 @@ import { useEmailCompose } from "../hooks/use-email-compose";
 import { useTasksModule } from "../../tasks/hooks/use-tasks-module";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { endPosition, makeTask } from "../../tasks/helpers";
-import { resolveAccountHues } from "../accounts";
+import { accountSyncHealth, resolveAccountHues } from "../accounts";
 import { threadsForAccount, unreadCount } from "../threads";
 import {
   flattenSections,
@@ -323,10 +323,10 @@ export function EmailPageView({
 
   // DF-6: accounts in the current scope that have silently stopped syncing —
   // surfaced as a banner (the rail glyphs alone were invisible on All inboxes).
-  const brokenAccounts = useMemo(
-    () => scopedAccounts.filter((a) => a.status !== "active"),
-    [scopedAccounts],
-  );
+  // Partitioned per account (AC12): a broken mailbox names itself and never
+  // stands in for the healthy ones, which keep syncing and listing.
+  const syncHealth = useMemo(() => accountSyncHealth(scopedAccounts), [scopedAccounts]);
+  const brokenAccounts = syncHealth.broken;
 
   // Newest successful sync across the scope, for the refresh button's tooltip.
   const lastSyncLabel = useMemo(() => {
@@ -1306,8 +1306,7 @@ export function EmailPageView({
                     ? `${brokenAccounts[0].email} isn't syncing — new mail may be missing.`
                     : `${brokenAccounts.length} accounts aren't syncing — new mail may be missing.`}
                 </span>
-                {brokenAccounts
-                  .filter((a) => a.status === "reauth_required")
+                {syncHealth.reconnectable
                   .map((a) => (
                     <button
                       key={a.id}

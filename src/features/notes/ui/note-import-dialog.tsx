@@ -24,14 +24,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import {
+  assignImportIds,
   buildImportRows,
+  describeSkips,
   planMdZipImport,
-  type ImportFileEntry,
   type ImportPlan,
 } from "../import";
-import { readZipMarkdown } from "../export";
+import { readImportFiles } from "../import-zip";
 import { buildDocStateFromMarkdown } from "../editor/materialize";
 
 type Props = {
@@ -61,6 +63,9 @@ export function NoteImportDialog({
 }: Props) {
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
+  /** Notes committed so far, for the determinate bar (AC5). */
+  const [progress, setProgress] = useState(0);
 
   const depthById = useMemo(() => {
     const m = new Map<string, number>();
@@ -81,21 +86,25 @@ export function NoteImportDialog({
 
   const readFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const entries: ImportFileEntry[] = [];
-    for (const file of Array.from(files)) {
-      if (/\.zip$/i.test(file.name)) {
-        try {
-          entries.push(...readZipMarkdown(new Uint8Array(await file.arrayBuffer())));
-        } catch {
-          toast.error(`Couldn’t read ${file.name}`);
-        }
-      } else if (/\.(md|markdown|txt)$/i.test(file.name)) {
-        entries.push({ path: file.name, content: await file.text() });
-      } else {
-        entries.push({ path: file.name, content: "" }); // planner skips it, counted
-      }
+    setReading(true);
+    try {
+      // Read every dropped file first, then unwrap/merge in one pass so a
+      // multi-part export dropped together becomes ONE tree (AC1).
+      const read = await Promise.all(
+        Array.from(files).map(async (file) =>
+          /\.zip$/i.test(file.name)
+            ? { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }
+            : { name: file.name, text: await file.text().catch(() => "") },
+        ),
+      );
+      setPlan(planMdZipImport(readImportFiles(read)));
+    } catch (e) {
+      toast.error("Couldn’t read those files", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setReading(false);
     }
-    setPlan(planMdZipImport(entries));
   }, []);
 
   const confirm = async () => {
@@ -105,8 +114,12 @@ export function NoteImportDialog({
       // Building every note's CRDT doc is synchronous and CPU-bound; yield once
       // so the "Importing…" state actually paints before the UI blocks.
       await new Promise((r) => setTimeout(r, 0));
-      const idMap = new Map<string, string>();
-      for (const n of plan.nodes) idMap.set(n.tempId, crypto.randomUUID());
+      // Deterministic ids (AC4): `notes_op_import` skips a row whose id already
+      // exists, so a re-run of the same export is a no-op and a partially-failed
+      // import resumes instead of duplicating. Random ids made that unreachable.
+      // `assignImportIds` guarantees distinctness — a duplicate id would not
+      // error, it would silently drop the second page.
+      const idMap = assignImportIds(workspaceId, plan.nodes);
       // Each row carries its fully-built CRDT doc (NOTE-FIX-1).
       const rows = buildImportRows(
         plan.nodes,
@@ -116,6 +129,7 @@ export function NoteImportDialog({
       );
       let imported = 0;
       let skippedRows = 0;
+      setProgress(0);
       // Chunked: parents are topologically before their children in the plan,
       // so chunking in order never orphans a child behind an unlanded parent.
       for (let i = 0; i < rows.length; i += IMPORT_CHUNK) {
@@ -125,12 +139,25 @@ export function NoteImportDialog({
         });
         imported += res.imported;
         skippedRows += res.skipped;
+        setProgress(Math.min(i + IMPORT_CHUNK, rows.length));
+        // Yield between chunks so the bar actually repaints — building the CRDT
+        // docs above is synchronous and CPU-bound.
+        await new Promise((r) => setTimeout(r, 0));
       }
-      const skipped = skippedRows + plan.skipped.length;
+      // Keep the two kinds of "skipped" apart: files that were never pages, and
+      // rows already imported by a previous run. Merging them reads as a failure
+      // on a re-import, which is exactly when it is working correctly.
+      const alreadyImported = skippedRows;
+      const notPages = plan.skipped.length;
+      const detail = [
+        alreadyImported ? `${alreadyImported} already imported` : null,
+        notPages ? `${notPages} not a page` : null,
+      ].filter(Boolean);
       toast(`Imported ${imported} note${imported === 1 ? "" : "s"}`, {
-        description: skipped ? `${skipped} skipped` : undefined,
+        description: detail.length ? detail.join(" · ") : undefined,
       });
       setPlan(null);
+      setProgress(0);
       onOpenChange(false);
       onImported();
     } catch (e) {
@@ -169,7 +196,7 @@ export function NoteImportDialog({
             }}
           >
             <FileUp className="size-6" aria-hidden />
-            <span>Drop files here, or click to choose</span>
+            <span>{reading ? "Reading…" : "Drop files here, or click to choose"}</span>
             <input
               type="file"
               multiple
@@ -184,6 +211,18 @@ export function NoteImportDialog({
               {plan.nodes.length} note{plan.nodes.length === 1 ? "" : "s"} to import
               {plan.skipped.length ? ` · ${plan.skipped.length} skipped` : ""}.
             </p>
+            {busy ? (
+              <div className="space-y-1">
+                <Progress
+                  value={progress}
+                  max={plan.nodes.length}
+                  label={`Importing ${plan.nodes.length} notes`}
+                />
+                <p className="text-xs text-muted-foreground" role="status">
+                  Imported {Math.min(progress, plan.nodes.length)} of {plan.nodes.length}…
+                </p>
+              </div>
+            ) : null}
             <div className="max-h-64 overflow-y-auto rounded-md border border-border scrollbar-thin">
               <ul className="p-1">
                 {plan.nodes.map((n) => (
@@ -200,7 +239,8 @@ export function NoteImportDialog({
             </div>
             {plan.skipped.length ? (
               <p className="text-xs text-muted-foreground">
-                Skipped: {plan.skipped.map((s) => s.path).join(", ")}
+                Skipped {describeSkips(plan.skippedByKind)}. These stay in your export file —
+                only pages become notes.
               </p>
             ) : null}
           </div>
@@ -212,7 +252,10 @@ export function NoteImportDialog({
               Choose different files
             </Button>
           ) : null}
-          <Button onClick={() => void confirm()} disabled={!plan || busy || plan.nodes.length === 0}>
+          <Button
+            onClick={() => void confirm()}
+            disabled={!plan || busy || reading || plan.nodes.length === 0}
+          >
             {busy ? "Importing…" : "Import"}
           </Button>
         </DialogFooter>

@@ -5,7 +5,8 @@ use super::account_config::{
     normalize_provider, validate_connection,
 };
 use super::model::{
-    EmailAccountConnectInput, EmailAccountPublic, EmailConfig, StoredEmailAccount,
+    EmailAccountConnectInput, EmailAccountPublic, EmailConfig, EmailHistoryDepth,
+    StoredEmailAccount,
 };
 use super::secrets;
 use super::realtime::schedule_idle_worker_reconcile;
@@ -119,6 +120,9 @@ pub async fn email_account_connect_and_save(
             last_sync_at: None,
             status: "active".to_string(),
             last_error: None,
+            // 12 months (AC6's default). IM-2c adds the connect-time picker; until
+            // then every new account takes the default.
+            history_depth: EmailHistoryDepth::default(),
         });
     }
 
