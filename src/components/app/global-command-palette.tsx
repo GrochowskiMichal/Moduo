@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
-  FilePlus2,
   Calendar as CalendarIcon,
   CheckSquare,
   Contact as ContactIcon,
+  FilePlus2,
   FileText,
   House,
   Inbox,
@@ -12,7 +11,15 @@ import {
   Upload,
   UserPlus,
 } from "lucide-react";
-
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { dispatchOpenSettings } from "../../features/settings/settings-events";
+import { resolveEntityIcon } from "../../features/spine/icon-map";
+import type { EntityRecord } from "../../lib/entity-links";
+import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
+import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "../../lib/palette-search";
+import { formatShortcut, onShortcut, SHORTCUTS } from "../../lib/shortcuts";
+import { useAuth } from "../../providers/auth-provider";
+import { useWorkspace } from "../../providers/workspace-provider";
 import {
   CommandDialog,
   CommandEmpty,
@@ -22,15 +29,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "../ui/command";
-import { onShortcut, SHORTCUTS, formatShortcut } from "../../lib/shortcuts";
-import { dispatchOpenSettings } from "../../features/settings/settings-events";
-import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
-import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "../../lib/palette-search";
-import { resolveEntityIcon } from "../../features/spine/icon-map";
-import { useAuth } from "../../providers/auth-provider";
-import { useWorkspace } from "../../providers/workspace-provider";
 import { announceOverlayOpen, onOtherOverlayOpen } from "./global-overlay-events";
-import type { EntityRecord } from "../../lib/entity-links";
 
 type Action = {
   id: string;
@@ -220,7 +219,10 @@ export function GlobalCommandPalette() {
       icon: Upload,
       run: () => {
         setOpen(false);
-        void navigate({ to: "/contacts", search: (prev) => ({ ...prev, action: "import" as const }) });
+        void navigate({
+          to: "/contacts",
+          search: (prev) => ({ ...prev, action: "import" as const }),
+        });
       },
     },
   ];
@@ -291,36 +293,32 @@ export function GlobalCommandPalette() {
         {/* Keep prior results on screen while a newer query debounces (like the
             @mention picker) — only blank to "Searching…" when there's nothing
             yet to show, so fast typing doesn't flicker the primary ⌘K surface. */}
-        {resultGroups.length > 0
-          ? resultGroups.map((group) => (
-              <CommandGroup key={group.key} heading={group.heading}>
-                {group.items.map((record) => {
-                  const Icon = resolveEntityIcon(record.type, record.icon);
-                  return (
-                    <CommandItem
-                      key={`${record.type}:${record.id}`}
-                      value={`entity:${record.type}:${record.id}`}
-                      onSelect={() => openEntityResult(record)}
-                    >
-                      <Icon />
-                      <span className="min-w-0 flex-1 truncate">
-                        {record.label || "Untitled"}
-                      </span>
-                      <span className="shrink-0 text-2xs uppercase tracking-wide text-muted-foreground/70">
-                        {TYPE_LABEL[record.type] ?? record.type}
-                      </span>
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
-            ))
-          : trimmed && searching
-            ? (
-                <div className="py-6 text-center text-sm text-muted-foreground" role="status">
-                  Searching…
-                </div>
-              )
-            : null}
+        {resultGroups.length > 0 ? (
+          resultGroups.map((group) => (
+            <CommandGroup key={group.key} heading={group.heading}>
+              {group.items.map((record) => {
+                const Icon = resolveEntityIcon(record.type, record.icon);
+                return (
+                  <CommandItem
+                    key={`${record.type}:${record.id}`}
+                    value={`entity:${record.type}:${record.id}`}
+                    onSelect={() => openEntityResult(record)}
+                  >
+                    <Icon />
+                    <span className="min-w-0 flex-1 truncate">{record.label || "Untitled"}</span>
+                    <span className="shrink-0 text-2xs uppercase tracking-wide text-muted-foreground/70">
+                      {TYPE_LABEL[record.type] ?? record.type}
+                    </span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          ))
+        ) : trimmed && searching ? (
+          <div className="py-6 text-center text-sm text-muted-foreground" role="status">
+            Searching…
+          </div>
+        ) : null}
 
         {showNoResults ? <CommandEmpty>No results.</CommandEmpty> : null}
       </CommandList>

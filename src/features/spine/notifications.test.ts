@@ -8,15 +8,17 @@ import {
   activeNotifications,
   deriveNotificationFeeds,
   groupNotifications,
+  type NotificationItem,
   notificationDeepLink,
   notificationDeepLinkNoun,
   notificationSummary,
   partitionBySource,
   unreadCount,
-  type NotificationItem,
 } from "./notifications";
 
-function item(over: Partial<NotificationItem> & Pick<NotificationItem, "id" | "createdAt">): NotificationItem {
+function item(
+  over: Partial<NotificationItem> & Pick<NotificationItem, "id" | "createdAt">,
+): NotificationItem {
   return {
     source: "spine",
     workspaceId: "w1",
@@ -37,7 +39,13 @@ describe("groupNotifications", () => {
   it("collapses N rows on the same target+verb into one card with a count", () => {
     const groups = groupNotifications([
       item({ id: "a", createdAt: "2026-06-26T10:00:00Z", payload: { excerpt: "first" } }),
-      item({ id: "b", createdAt: "2026-06-26T11:00:00Z", actorId: "u3", actorLabel: "Ola", payload: { excerpt: "second" } }),
+      item({
+        id: "b",
+        createdAt: "2026-06-26T11:00:00Z",
+        actorId: "u3",
+        actorLabel: "Ola",
+        payload: { excerpt: "second" },
+      }),
       item({ id: "c", createdAt: "2026-06-26T12:00:00Z", payload: { excerpt: "third" } }),
     ]);
     expect(groups).toHaveLength(1);
@@ -132,8 +140,18 @@ describe("deriveNotificationFeeds", () => {
   it("history KEEPS a dismissed row that active DROPS (AC2)", () => {
     const feeds = deriveNotificationFeeds(
       [
-        item({ id: "live", createdAt: "2026-07-13T10:00:00Z", workspaceId: "w1", dismissedAt: null }),
-        item({ id: "gone", createdAt: "2026-07-13T09:00:00Z", workspaceId: "w1", dismissedAt: "2026-07-13T11:00:00Z" }),
+        item({
+          id: "live",
+          createdAt: "2026-07-13T10:00:00Z",
+          workspaceId: "w1",
+          dismissedAt: null,
+        }),
+        item({
+          id: "gone",
+          createdAt: "2026-07-13T09:00:00Z",
+          workspaceId: "w1",
+          dismissedAt: "2026-07-13T11:00:00Z",
+        }),
       ],
       { workspaceId: "w1", isEnabled: allOn },
     );
@@ -146,7 +164,13 @@ describe("deriveNotificationFeeds", () => {
       [
         item({ id: "here", createdAt: "x", source: "spine", workspaceId: "w1" }),
         item({ id: "elsewhere", createdAt: "x", source: "spine", workspaceId: "w2" }),
-        item({ id: "invite", createdAt: "x", source: "workspace", workspaceId: "w2", op: "workspace.invite" }),
+        item({
+          id: "invite",
+          createdAt: "x",
+          source: "workspace",
+          workspaceId: "w2",
+          op: "workspace.invite",
+        }),
       ],
       { workspaceId: "w1", isEnabled: allOn },
     );
@@ -174,10 +198,30 @@ describe("deriveNotificationFeeds", () => {
       [
         item({ id: "unread", createdAt: "x", workspaceId: "w1", readAt: null }),
         item({ id: "read", createdAt: "x", workspaceId: "w1", readAt: "2026-07-13T00:00:00Z" }),
-        item({ id: "dismissed", createdAt: "x", workspaceId: "w1", readAt: null, dismissedAt: "2026-07-13T00:00:00Z" }),
+        item({
+          id: "dismissed",
+          createdAt: "x",
+          workspaceId: "w1",
+          readAt: null,
+          dismissedAt: "2026-07-13T00:00:00Z",
+        }),
         // An unread invite DOES nudge the badge (designer call) — even cross-workspace.
-        item({ id: "invite", createdAt: "x", source: "workspace", workspaceId: "w2", readAt: null, op: "workspace.invite" }),
-        item({ id: "invite-read", createdAt: "x", source: "workspace", workspaceId: "w2", readAt: "x", op: "workspace.invite" }),
+        item({
+          id: "invite",
+          createdAt: "x",
+          source: "workspace",
+          workspaceId: "w2",
+          readAt: null,
+          op: "workspace.invite",
+        }),
+        item({
+          id: "invite-read",
+          createdAt: "x",
+          source: "workspace",
+          workspaceId: "w2",
+          readAt: "x",
+          op: "workspace.invite",
+        }),
       ],
       { workspaceId: "w1", isEnabled: allOn },
     );
@@ -188,22 +232,46 @@ describe("deriveNotificationFeeds", () => {
 describe("notificationSummary", () => {
   it("renders a human sentence, attributing the latest actor + others", () => {
     const groups = groupNotifications([
-      item({ id: "a", createdAt: "2026-06-26T10:00:00Z", actorId: "u2", actorLabel: "Mike", payload: { excerpt: "hi" } }),
-      item({ id: "b", createdAt: "2026-06-26T12:00:00Z", actorId: "u3", actorLabel: "Ola", payload: { excerpt: "yo" } }),
+      item({
+        id: "a",
+        createdAt: "2026-06-26T10:00:00Z",
+        actorId: "u2",
+        actorLabel: "Mike",
+        payload: { excerpt: "hi" },
+      }),
+      item({
+        id: "b",
+        createdAt: "2026-06-26T12:00:00Z",
+        actorId: "u3",
+        actorLabel: "Ola",
+        payload: { excerpt: "yo" },
+      }),
     ]);
     expect(notificationSummary(groups[0], "me")).toBe("Ola and 1 other commented: “yo”");
   });
 
   it("says You for the current user's own latest action", () => {
     const groups = groupNotifications([
-      item({ id: "a", createdAt: "2026-06-26T10:00:00Z", actorId: "me", op: "links.create", payload: { relation_kind: "follow-up" } }),
+      item({
+        id: "a",
+        createdAt: "2026-06-26T10:00:00Z",
+        actorId: "me",
+        op: "links.create",
+        payload: { relation_kind: "follow-up" },
+      }),
     ]);
     expect(notificationSummary(groups[0], "me")).toBe("You added a follow-up");
   });
 
   it("humanizes a legacy/unknown event type instead of showing it raw", () => {
     const groups = groupNotifications([
-      item({ id: "a", createdAt: "2026-06-26T10:00:00Z", op: "note_shared", actorLabel: "Mike", actorId: "u2" }),
+      item({
+        id: "a",
+        createdAt: "2026-06-26T10:00:00Z",
+        op: "note_shared",
+        actorLabel: "Mike",
+        actorId: "u2",
+      }),
     ]);
     expect(notificationSummary(groups[0], "me")).toBe("Mike note shared");
   });
@@ -211,7 +279,13 @@ describe("notificationSummary", () => {
   // DF-9: the two new quiet task notifications render a plain sentence, never the raw op.
   it("phrases an assigned-to-you notification with the assigner as actor", () => {
     const groups = groupNotifications([
-      item({ id: "a", createdAt: "2026-07-12T10:00:00Z", op: "tasks.assigned", actorId: "u2", actorLabel: "Mike" }),
+      item({
+        id: "a",
+        createdAt: "2026-07-12T10:00:00Z",
+        op: "tasks.assigned",
+        actorId: "u2",
+        actorLabel: "Mike",
+      }),
     ]);
     expect(notificationSummary(groups[0], "me")).toBe("Mike assigned this to you");
   });
@@ -226,10 +300,18 @@ describe("notificationSummary", () => {
         payload: { blocker_title: "Ship the API" },
       }),
     ]);
-    expect(notificationSummary(withBlocker, "me")).toBe("You finished “Ship the API”, unblocking this");
+    expect(notificationSummary(withBlocker, "me")).toBe(
+      "You finished “Ship the API”, unblocking this",
+    );
 
     const [noBlocker] = groupNotifications([
-      item({ id: "b", createdAt: "2026-07-12T10:00:00Z", op: "tasks.unblocked", actorId: "u2", actorLabel: "Ola" }),
+      item({
+        id: "b",
+        createdAt: "2026-07-12T10:00:00Z",
+        op: "tasks.unblocked",
+        actorId: "u2",
+        actorLabel: "Ola",
+      }),
     ]);
     expect(notificationSummary(noBlocker, "me")).toBe("Ola unblocked this");
   });
@@ -237,14 +319,24 @@ describe("notificationSummary", () => {
 
 describe("notificationDeepLink", () => {
   it("resolves a route for known entity types", () => {
-    const [g] = groupNotifications([item({ id: "a", createdAt: "x", targetType: "contact", targetId: "c1" })]);
-    expect(notificationDeepLink(g)).toEqual({ route: "/contacts", entityType: "contact", entityId: "c1" });
+    const [g] = groupNotifications([
+      item({ id: "a", createdAt: "x", targetType: "contact", targetId: "c1" }),
+    ]);
+    expect(notificationDeepLink(g)).toEqual({
+      route: "/contacts",
+      entityType: "contact",
+      entityId: "c1",
+    });
   });
 
   it("returns null for an unroutable / missing target", () => {
-    const [g] = groupNotifications([item({ id: "a", createdAt: "x", targetType: "payment", targetId: "p1" })]);
+    const [g] = groupNotifications([
+      item({ id: "a", createdAt: "x", targetType: "payment", targetId: "p1" }),
+    ]);
     expect(notificationDeepLink(g)).toBeNull();
-    const [g2] = groupNotifications([item({ id: "b", createdAt: "x", targetType: null, targetId: null })]);
+    const [g2] = groupNotifications([
+      item({ id: "b", createdAt: "x", targetType: null, targetId: null }),
+    ]);
     expect(notificationDeepLink(g2)).toBeNull();
   });
 
@@ -253,9 +345,19 @@ describe("notificationDeepLink", () => {
   // which resolves email_thread → /email?thread=<id> (DF-2).
   it("routes an email_thread notification to /email so it deep-links the thread", () => {
     const [g] = groupNotifications([
-      item({ id: "a", createdAt: "x", op: "email.snooze_due", targetType: "email_thread", targetId: "th1" }),
+      item({
+        id: "a",
+        createdAt: "x",
+        op: "email.snooze_due",
+        targetType: "email_thread",
+        targetId: "th1",
+      }),
     ]);
-    expect(notificationDeepLink(g)).toEqual({ route: "/email", entityType: "email_thread", entityId: "th1" });
+    expect(notificationDeepLink(g)).toEqual({
+      route: "/email",
+      entityType: "email_thread",
+      entityId: "th1",
+    });
   });
 });
 

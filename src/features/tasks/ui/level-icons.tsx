@@ -5,24 +5,14 @@
 //   Priority — 1-3 dots, a centered row (low 1 → high 3).
 //   Energy   — 1-3 bars, stacked bottom-up (low 1 → high 3).
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../components/ui/tooltip";
 import { ENERGY_LABELS, PRIORITY_LABELS } from "../helpers";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
 
 const LEVEL_COUNT: Record<string, number> = { low: 1, med: 2, high: 3 };
 
-export function PriorityIcon({
-  level,
-  className,
-}: {
-  level: PriorityLevel;
-  className?: string;
-}) {
+export function PriorityIcon({ level, className }: { level: PriorityLevel; className?: string }) {
   const n = LEVEL_COUNT[level] ?? 0;
   if (n === 0) return null;
   // Only the filled dots show — the count is the level. Centered horizontally so
@@ -37,13 +27,7 @@ export function PriorityIcon({
   );
 }
 
-export function EnergyIcon({
-  level,
-  className,
-}: {
-  level: EnergyLevel;
-  className?: string;
-}) {
+export function EnergyIcon({ level, className }: { level: EnergyLevel; className?: string }) {
   const n = LEVEL_COUNT[level] ?? 0;
   if (n === 0) return null;
   // Only the filled bars show, stacked from the bottom up (mirrors PriorityIcon).
@@ -65,7 +49,10 @@ export function LevelDots({ task }: { task: Task }) {
       {task.priority ? (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="flex items-center" aria-label={`Priority: ${PRIORITY_LABELS[task.priority]}`}>
+            <span
+              className="flex items-center"
+              aria-label={`Priority: ${PRIORITY_LABELS[task.priority]}`}
+            >
               <PriorityIcon level={task.priority} />
             </span>
           </TooltipTrigger>
@@ -75,7 +62,10 @@ export function LevelDots({ task }: { task: Task }) {
       {task.energyLevel ? (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="flex items-center" aria-label={`Energy: ${ENERGY_LABELS[task.energyLevel]}`}>
+            <span
+              className="flex items-center"
+              aria-label={`Energy: ${ENERGY_LABELS[task.energyLevel]}`}
+            >
               <EnergyIcon level={task.energyLevel} />
             </span>
           </TooltipTrigger>

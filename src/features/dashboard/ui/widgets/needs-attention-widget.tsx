@@ -2,8 +2,8 @@
 // Quiet contact nudges (overdue follow-up / no recent touch / stale lead). Never
 // red, never a guilt wall — a muted icon + reason detail; each row opens the contact.
 
-import { CalendarClock, Clock, UserMinus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { CalendarClock, Clock, UserMinus } from "lucide-react";
 
 import type { NeedsAttentionItem } from "@/features/contacts/needs-attention";
 

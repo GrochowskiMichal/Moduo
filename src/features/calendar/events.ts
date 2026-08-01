@@ -2,7 +2,7 @@
 // calendar_events table) and the pure occurrence selectors that put event
 // chips on the grid. Mirrors the lens: selectors in, chips out, no state.
 
-import { localDayKey, addDays, startOfLocalDay, type VisibleRange } from "./lens";
+import { addDays, localDayKey, startOfLocalDay, type VisibleRange } from "./lens";
 import { expandEventOccurrences } from "./recurrence-expand";
 
 export type CalendarEventModel = {
@@ -144,9 +144,7 @@ export function eventChipsInRange(
         // (a native 1-day event = [Jul 2 00:00, Jul 3 00:00) → Jul 2 only).
         // Provider all-day events arriving as UTC midnights still spill a day
         // east of UTC — CAL-6's mirror mapper normalizes them to local dates.
-        const lastCovered = startOfLocalDay(
-          new Date(Math.min(occ.endMs - 1, range.endMs - 1)),
-        );
+        const lastCovered = startOfLocalDay(new Date(Math.min(occ.endMs - 1, range.endMs - 1)));
         let day = startOfLocalDay(new Date(Math.max(occ.startMs, range.startMs)));
         while (day.getTime() <= lastCovered.getTime()) {
           push(allDay, localDayKey(day), { ...base, dayKey: localDayKey(day) });

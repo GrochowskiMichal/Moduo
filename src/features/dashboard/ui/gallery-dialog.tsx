@@ -3,9 +3,9 @@
 // size picker; tap-to-place adds at the first free slot. When the current page
 // can't fit it, the card says so and offers a new page.
 
-import { useState } from "react";
 import { Plus } from "lucide-react";
-
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
 import type { WidgetSize, WidgetType } from "../engine/types";
@@ -91,7 +90,9 @@ export function GalleryDialog({
                       size="sm"
                       value={size}
                       items={meta.sizes.map((s) => ({ value: s, label: s }))}
-                      onValueChange={(next) => setSizes((prev) => ({ ...prev, [type]: next as WidgetSize }))}
+                      onValueChange={(next) =>
+                        setSizes((prev) => ({ ...prev, [type]: next as WidgetSize }))
+                      }
                     />
                   ) : (
                     <span className="text-2xs uppercase tracking-wide text-muted-foreground/70">

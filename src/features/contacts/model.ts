@@ -41,7 +41,14 @@ export type ContactDateEntry = {
 /** Custom-field value: scalar, or an array for multi-select. */
 export type ContactCustomValue = string | string[];
 
-export type ContactFieldType = "text" | "number" | "date" | "select" | "multi_select" | "url" | "checkbox";
+export type ContactFieldType =
+  | "text"
+  | "number"
+  | "date"
+  | "select"
+  | "multi_select"
+  | "url"
+  | "checkbox";
 
 /** A user-defined custom-field definition (workspace-scoped; values live on the row). */
 export type ContactFieldDef = {

@@ -124,9 +124,9 @@ describe("resolveDefaultSelection", () => {
 
 describe("sanitizeTimeBlocks", () => {
   it("keeps valid slot entries and drops junk keys / values", () => {
-    expect(
-      sanitizeTimeBlocks({ morning: "b1", afternoon: "b2", lunch: "b3", evening: 7 }),
-    ).toEqual({ morning: "b1", afternoon: "b2" });
+    expect(sanitizeTimeBlocks({ morning: "b1", afternoon: "b2", lunch: "b3", evening: 7 })).toEqual(
+      { morning: "b1", afternoon: "b2" },
+    );
   });
 
   it("returns an empty map for non-object input", () => {

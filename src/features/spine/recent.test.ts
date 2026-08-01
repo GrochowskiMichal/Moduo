@@ -3,9 +3,8 @@
 // type, and tombstoned endpoints are flagged (never dropped).
 
 import { describe, expect, it } from "vitest";
-
-import { shapeRecentLinks } from "./recent";
 import type { EntityLink, EntityRecord } from "../../lib/entity-links";
+import { shapeRecentLinks } from "./recent";
 
 let seq = 0;
 function link(over: Partial<EntityLink> = {}): EntityLink {
@@ -26,7 +25,14 @@ function link(over: Partial<EntityLink> = {}): EntityLink {
   };
 }
 function rec(type: string, id: string, label: string, deleted = false): EntityRecord {
-  return { workspaceId: "w", type, id, label, icon: null, deletedAt: deleted ? "2026-06-27T01:00:00Z" : null };
+  return {
+    workspaceId: "w",
+    type,
+    id,
+    label,
+    icon: null,
+    deletedAt: deleted ? "2026-06-27T01:00:00Z" : null,
+  };
 }
 
 describe("shapeRecentLinks", () => {

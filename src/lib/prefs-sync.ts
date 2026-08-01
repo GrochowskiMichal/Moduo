@@ -16,8 +16,8 @@
 // durable queue; the dirty flag + the `online` listener are the seam for that.
 
 import { useCallback, useEffect, useRef } from "react";
-import { getRuntime, initRuntime } from "./runtime";
 import { createRequestCache } from "./request-cache";
+import { getRuntime, initRuntime } from "./runtime";
 import type { UserPreferences } from "./runtime.types";
 
 export type SyncDomain = "appearance" | "focus" | "calendar" | "email" | "preferences";
@@ -111,7 +111,10 @@ export function invalidateCloudPrefs(): void {
   prefsReads.clear();
 }
 
-function domainValue(prefs: UserPreferences | null, domain: SyncDomain): { value: Json | null; updatedAt: string | null } {
+function domainValue(
+  prefs: UserPreferences | null,
+  domain: SyncDomain,
+): { value: Json | null; updatedAt: string | null } {
   if (!prefs) return { value: null, updatedAt: null };
   switch (domain) {
     case "appearance":
@@ -128,7 +131,11 @@ function domainValue(prefs: UserPreferences | null, domain: SyncDomain): { value
 }
 
 /** Push one domain's syncable subset. Returns false when offline / errored / signed out. */
-export async function pushDomain(domain: SyncDomain, value: Json, updatedAt: string): Promise<boolean> {
+export async function pushDomain(
+  domain: SyncDomain,
+  value: Json,
+  updatedAt: string,
+): Promise<boolean> {
   const rt = getRuntime();
   if (!rt) return false;
   try {

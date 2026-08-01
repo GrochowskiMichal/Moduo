@@ -5,11 +5,7 @@
 // but at alpha we assign a spread hue deterministically so accounts stay
 // visually distinct and theme-safe; a user override wins.
 
-import {
-  LABEL_COLORS,
-  normalizeLabelColor,
-  type LabelColor,
-} from "../../components/tag-colors";
+import { LABEL_COLORS, type LabelColor, normalizeLabelColor } from "../../components/tag-colors";
 import type { CalendarAccountModel, CalendarEventModel } from "./events";
 import { parseSyncDescriptor } from "./sync";
 
@@ -95,9 +91,7 @@ export function visibleEvents(
 ): CalendarEventModel[] {
   const hidden = new Set(hiddenAccountIds);
   if (hidden.size === 0) return events;
-  return events.filter(
-    (e) => e.sourceAccountId === null || !hidden.has(e.sourceAccountId),
-  );
+  return events.filter((e) => e.sourceAccountId === null || !hidden.has(e.sourceAccountId));
 }
 
 // ── rail grouping (CAL-8) ─────────────────────────────────────────────────────

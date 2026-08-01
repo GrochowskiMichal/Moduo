@@ -13,28 +13,28 @@
 //
 // dnd-kit does the geometry; this module is the shared contract on top of it.
 
-import { useCallback, type CSSProperties, type ReactNode } from "react";
 import {
+  type CollisionDetection,
+  closestCenter,
   DndContext,
+  type DragCancelEvent,
+  type DragEndEvent,
+  type DraggableSyntheticListeners,
+  type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
-  closestCenter,
   pointerWithin,
+  type SensorDescriptor,
+  type SensorOptions,
   useDndMonitor,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
-  type CollisionDetection,
-  type DragCancelEvent,
-  type DraggableSyntheticListeners,
-  type DragEndEvent,
-  type DragStartEvent,
-  type SensorDescriptor,
-  type SensorOptions,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { type CSSProperties, type ReactNode, useCallback } from "react";
 
 import { cn } from "../../../../lib/utils";
 
@@ -196,7 +196,11 @@ export function DndBoundary({
   if (dndMode === "external") {
     return (
       <>
-        <TaskDndMonitor onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={onDragCancel} />
+        <TaskDndMonitor
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onDragCancel={onDragCancel}
+        />
         {children}
       </>
     );

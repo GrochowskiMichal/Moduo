@@ -23,10 +23,10 @@ import {
 } from "../edit-mode-events";
 import { removeWidget, resizeWidget } from "../engine/grid-engine";
 import type { WidgetSize, WidgetType } from "../engine/types";
-import { galleryTypes } from "../registry/catalog";
 import { useDashboardLayout } from "../hooks/use-dashboard-layout";
 import { useEditMode } from "../hooks/use-edit-mode";
 import { useGridDrag } from "../hooks/use-grid-drag";
+import { galleryTypes } from "../registry/catalog";
 import { DashboardPager } from "./dashboard-pager";
 import { GalleryDialog } from "./gallery-dialog";
 import { GridSkeleton } from "./grid-skeleton";
@@ -61,10 +61,7 @@ export function DashboardPage() {
   // The types offered in the Add gallery — permission + platform filtered (AC8/AC9).
   const galleryAvailable = useMemo<WidgetType[]>(() => {
     const caps = getRuntime()?.capabilities ?? WEB_FALLBACK_CAPS;
-    return galleryTypes(
-      { tasks: modulePermissions.tasks, notes: modulePermissions.notes },
-      caps,
-    );
+    return galleryTypes({ tasks: modulePermissions.tasks, notes: modulePermissions.notes }, caps);
   }, [modulePermissions.tasks, modulePermissions.notes]);
 
   const onAddWidget = (type: WidgetType, size: WidgetSize): boolean => {
@@ -91,7 +88,10 @@ export function DashboardPage() {
     dash.commitWidgets(activePage.id, removeWidget(activePage.widgets, id));
   // A resize that can't fit anywhere keeps the current size (spec edge case).
   const onResize = (id: string, size: WidgetSize) =>
-    dash.commitWidgets(activePage.id, resizeWidget(activePage.widgets, id, size) ?? activePage.widgets);
+    dash.commitWidgets(
+      activePage.id,
+      resizeWidget(activePage.widgets, id, size) ?? activePage.widgets,
+    );
 
   // Escape exits edit mode. An in-flight drag consumes Escape first (capture
   // phase in the drag hook) and stops it, so this only fires when idle-editing.

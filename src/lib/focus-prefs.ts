@@ -60,8 +60,18 @@ function sanitize(raw: unknown): FocusPrefs {
   return {
     workMinutes: clampInt(c.workMinutes, MIN_MIN, MAX_MIN, DEFAULT_FOCUS_PREFS.workMinutes),
     breakMinutes: clampInt(c.breakMinutes, MIN_MIN, MAX_MIN, DEFAULT_FOCUS_PREFS.breakMinutes),
-    longBreakMinutes: clampInt(c.longBreakMinutes, MIN_MIN, MAX_MIN, DEFAULT_FOCUS_PREFS.longBreakMinutes),
-    sessionsBeforeLongBreak: clampInt(c.sessionsBeforeLongBreak, 1, 12, DEFAULT_FOCUS_PREFS.sessionsBeforeLongBreak),
+    longBreakMinutes: clampInt(
+      c.longBreakMinutes,
+      MIN_MIN,
+      MAX_MIN,
+      DEFAULT_FOCUS_PREFS.longBreakMinutes,
+    ),
+    sessionsBeforeLongBreak: clampInt(
+      c.sessionsBeforeLongBreak,
+      1,
+      12,
+      DEFAULT_FOCUS_PREFS.sessionsBeforeLongBreak,
+    ),
     autoStartNext:
       typeof c.autoStartNext === "boolean" ? c.autoStartNext : DEFAULT_FOCUS_PREFS.autoStartNext,
     soundEnabled:
@@ -164,7 +174,7 @@ export function useFocusPrefs(): UseFocusPrefs {
       writeLocalMirror(next);
       pushLocalChange(next as unknown as Record<string, unknown>);
     },
-    [pushLocalChange]
+    [pushLocalChange],
   );
 
   return {

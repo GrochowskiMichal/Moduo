@@ -87,7 +87,8 @@ export function contactToVCard(c: Contact, opts?: { companyName?: string | null 
   // ADR is a 7-component value; we pack the freeform address into the street
   // slot and leave the rest empty: `;;<street>;;;;`.
   for (const a of c.addresses) {
-    if (a.value.trim()) lines.push(`ADR;TYPE="${escapeParam(a.label)}":;;${escapeText(a.value)};;;;`);
+    if (a.value.trim())
+      lines.push(`ADR;TYPE="${escapeParam(a.label)}":;;${escapeText(a.value)};;;;`);
   }
   for (const u of c.urls) if (u.value.trim()) lines.push(typedLine("URL", u.label, u.value));
 
@@ -107,6 +108,10 @@ export function contactToVCard(c: Contact, opts?: { companyName?: string | null 
  */
 export function contactsToVCard(cs: Contact[], companyNames?: Map<string, string>): string {
   return cs
-    .map((c) => contactToVCard(c, { companyName: c.companyId ? companyNames?.get(c.companyId) ?? null : null }))
+    .map((c) =>
+      contactToVCard(c, {
+        companyName: c.companyId ? (companyNames?.get(c.companyId) ?? null) : null,
+      }),
+    )
     .join(CRLF);
 }

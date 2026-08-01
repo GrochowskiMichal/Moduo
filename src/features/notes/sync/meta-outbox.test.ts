@@ -11,7 +11,9 @@ describe("meta outbox replay decisions (AC6)", () => {
     expect(isNetworkError(new TypeError("Failed to fetch"))).toBe(true);
     expect(isNetworkError(new Error("Load failed"))).toBe(true); // WebKit
     expect(isNetworkError(new Error("NetworkError when attempting to fetch resource."))).toBe(true);
-    expect(replayDecision(entry("rename", 1), new TypeError("Failed to fetch"))).toBe("retry-later");
+    expect(replayDecision(entry("rename", 1), new TypeError("Failed to fetch"))).toBe(
+      "retry-later",
+    );
   });
 
   it("treats a replayed create hitting the PK as already-applied", () => {

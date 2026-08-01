@@ -6,8 +6,7 @@
  * `[title](moduo://note/<id>)` on its own line in markdown.
  */
 
-import { useEffect, type ReactNode } from "react";
-import { ChevronRight, FileText } from "lucide-react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getNodeByKey,
   DecoratorNode,
@@ -16,9 +15,10 @@ import {
   type SerializedLexicalNode,
   type Spread,
 } from "lexical";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { useNotesEditorBridge } from "../notes-editor-bridge";
+import { ChevronRight, FileText } from "lucide-react";
+import { type ReactNode, useEffect } from "react";
 import { displayTitle } from "../../title";
+import { useNotesEditorBridge } from "../notes-editor-bridge";
 
 export type SerializedPageRowNode = Spread<
   {

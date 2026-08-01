@@ -8,17 +8,10 @@
 // the CAPTURE phase — it then beats the bubble-phase global handler and this
 // sheet stays closed on that route. Mirrors the tasks/email Kbd + dialog pattern.
 
-import { Fragment, useEffect, useState, type ReactNode } from "react";
-
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
-import { Kbd } from "../ui/kbd";
+import { Fragment, type ReactNode, useEffect, useState } from "react";
 import { formatShortcut, onShortcut, SHORTCUTS, type ShortcutId } from "../../lib/shortcuts";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Kbd } from "../ui/kbd";
 
 const OPEN_EVENT = "moduo:shortcuts:open";
 

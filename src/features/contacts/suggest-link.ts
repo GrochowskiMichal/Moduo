@@ -23,7 +23,10 @@ export type ContactSuggestLinkArgs = {
  * suggested kind is coerced to one sensible for the endpoint pair (FX-5) so an
  * errant suggestion can never persist a nonsense edge (e.g. attachment between
  * two people). */
-export function contactSuggestLinkArgs(contact: EntityRef, s: LinkSuggestion): ContactSuggestLinkArgs {
+export function contactSuggestLinkArgs(
+  contact: EntityRef,
+  s: LinkSuggestion,
+): ContactSuggestLinkArgs {
   return {
     contact,
     target: s.other,

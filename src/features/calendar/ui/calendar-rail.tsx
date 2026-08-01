@@ -3,13 +3,12 @@
 // with its hue swatch + a visibility toggle. Hiding an account drops its
 // mirrored events from the grid. "+ Connect calendar…" routes to Settings.
 
-import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, MoreHorizontal, Plus } from "lucide-react";
-
-import { Calendar } from "../../../components/ui/calendar";
+import { useEffect, useMemo, useState } from "react";
+import { LABEL_COLORS } from "../../../components/tag-colors";
 import { Button } from "../../../components/ui/button";
-import { IconButton } from "../../../components/ui/icon-button";
+import { Calendar } from "../../../components/ui/calendar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,11 +19,11 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
-import { LABEL_COLORS } from "../../../components/tag-colors";
+import { IconButton } from "../../../components/ui/icon-button";
+import { groupRailAccounts, providerLabel } from "../accounts";
+import type { CalendarAccountModel } from "../events";
 import { parseDayKey } from "../lens";
 import type { CalendarPrefs } from "../prefs";
-import type { CalendarAccountModel } from "../events";
-import { groupRailAccounts, providerLabel } from "../accounts";
 
 type Props = {
   /** The grid's anchor day (local day start). */
@@ -75,9 +74,7 @@ export function CalendarRail({
 
   const modifiers = useMemo(
     () => ({
-      busy: [...busyDayKeys]
-        .map((key) => parseDayKey(key))
-        .filter((d): d is Date => d !== null),
+      busy: [...busyDayKeys].map((key) => parseDayKey(key)).filter((d): d is Date => d !== null),
     }),
     [busyDayKeys],
   );
@@ -167,10 +164,7 @@ export function CalendarRail({
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              onSelect={() => onRemoveAccount(account.id)}
-            >
+            <DropdownMenuItem variant="destructive" onSelect={() => onRemoveAccount(account.id)}>
               Remove account
             </DropdownMenuItem>
           </DropdownMenuContent>

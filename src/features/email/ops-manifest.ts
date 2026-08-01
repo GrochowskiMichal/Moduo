@@ -98,7 +98,10 @@ export const emailModuleManifest: ModuleManifest = {
     },
   ],
   resources: [
-    { name: "email.list", summary: "The tissue threads — from/subject/snippet + snooze & follow-up state." },
+    {
+      name: "email.list",
+      summary: "The tissue threads — from/subject/snippet + snooze & follow-up state.",
+    },
     { name: "email.get", summary: "One tissue thread's metadata by ref id." },
     { name: "email.search", summary: "Search the tissue threads by sender / subject / snippet." },
   ],

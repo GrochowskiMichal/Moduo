@@ -2,8 +2,8 @@
 // Configured inline via a city search (no popover until DB-8); persisted via
 // updateConfig; refetched every 10 minutes. Degrades to a quiet retry on failure.
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { MapPin, Pencil } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -193,7 +193,9 @@ export function WeatherWidget({ widget, size, updateConfig }: WidgetComponentPro
             {Math.round(cur.tempC)}°
           </p>
           <p className="text-xs text-muted-foreground">{weatherLabel(cur.code)}</p>
-          {city ? <p className="max-w-full truncate text-2xs text-muted-foreground/70">{city}</p> : null}
+          {city ? (
+            <p className="max-w-full truncate text-2xs text-muted-foreground/70">{city}</p>
+          ) : null}
         </div>
       </div>
     </div>

@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Check,
   Copy,
@@ -16,19 +15,8 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import { UpgradeModal } from "../../../components/upgrade-modal";
-import { useAuth } from "../../../providers/auth-provider";
-import { useWorkspace } from "../../../providers/workspace-provider";
-import { useEntitlement } from "../../../hooks/use-entitlement";
-import type { WorkspaceMember, WorkspaceRole } from "../../../features/workspaces/types";
-import {
-  assignableRolesFor,
-  canManageMember,
-  canTransferOwnership,
-  modulePermissionFor,
-} from "../../../features/workspaces/member-permissions";
 import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -42,11 +30,18 @@ import {
 } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { UpgradeModal } from "../../../components/upgrade-modal";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../components/ui/popover";
+  assignableRolesFor,
+  canManageMember,
+  canTransferOwnership,
+  modulePermissionFor,
+} from "../../../features/workspaces/member-permissions";
+import type { WorkspaceMember, WorkspaceRole } from "../../../features/workspaces/types";
+import { useEntitlement } from "../../../hooks/use-entitlement";
+import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
 
 import { SettingsSectionShell } from "./section-shell";
 
@@ -428,10 +423,18 @@ export function WorkspaceSection() {
                 )}
                 <p className="text-sm text-muted-foreground">
                   {members.length} member{members.length === 1 ? "" : "s"}
-                  {isOwner ? ` · ${pendingInvites.length} pending invite${pendingInvites.length === 1 ? "" : "s"}` : ""}
+                  {isOwner
+                    ? ` · ${pendingInvites.length} pending invite${pendingInvites.length === 1 ? "" : "s"}`
+                    : ""}
                 </p>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={openAddDialog} className="shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openAddDialog}
+                className="shrink-0"
+              >
                 <Plus className="size-4" aria-hidden />
                 Add workspace
               </Button>
@@ -483,7 +486,11 @@ export function WorkspaceSection() {
                         className="pl-9"
                       />
                     </div>
-                    <Button type="button" onClick={() => void handleSendInvite()} disabled={inviteDisabled}>
+                    <Button
+                      type="button"
+                      onClick={() => void handleSendInvite()}
+                      disabled={inviteDisabled}
+                    >
                       <UserPlus className="size-3.5" aria-hidden />
                       {sending ? "Creating…" : "Create invite"}
                     </Button>
@@ -491,7 +498,11 @@ export function WorkspaceSection() {
 
                   <div className="flex items-center gap-3">
                     <Label className="w-12 text-xs text-muted-foreground">Role</Label>
-                    <RolePicker value={inviteRole} onChange={setInviteRole} roles={invitableRoles} />
+                    <RolePicker
+                      value={inviteRole}
+                      onChange={setInviteRole}
+                      roles={invitableRoles}
+                    />
                   </div>
 
                   {lastIssuedToken ? (
@@ -523,7 +534,9 @@ export function WorkspaceSection() {
                           variant="ghost"
                           size="icon"
                           onClick={async () => {
-                            await navigator.clipboard.writeText(lastInviteUrl ?? "").catch(() => {});
+                            await navigator.clipboard
+                              .writeText(lastInviteUrl ?? "")
+                              .catch(() => {});
                             setCopiedNew("link");
                             setTimeout(() => setCopiedNew(null), 2000);
                           }}
@@ -577,7 +590,9 @@ export function WorkspaceSection() {
                         <p className="truncate text-sm text-foreground">
                           {label}
                           {isSelf ? (
-                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">· You</span>
+                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                              · You
+                            </span>
                           ) : null}
                         </p>
                         {member.displayName ? null : (
@@ -613,7 +628,10 @@ export function WorkspaceSection() {
                                     >
                                       <span>{ROLE_META[role].label}</span>
                                       {active ? (
-                                        <Check className="size-3.5 text-muted-foreground" aria-hidden />
+                                        <Check
+                                          className="size-3.5 text-muted-foreground"
+                                          aria-hidden
+                                        />
                                       ) : null}
                                     </button>
                                   );
@@ -643,7 +661,9 @@ export function WorkspaceSection() {
                                 >
                                   <UserMinus className="size-3.5" aria-hidden />
                                   <span>
-                                    {removingMemberId === member.id ? "Removing…" : "Remove from workspace"}
+                                    {removingMemberId === member.id
+                                      ? "Removing…"
+                                      : "Remove from workspace"}
                                   </span>
                                 </button>
                               </>
@@ -687,7 +707,9 @@ export function WorkspaceSection() {
                           title="Copy invite link"
                           className="h-6 w-6"
                           onClick={async () => {
-                            await navigator.clipboard.writeText(inviteLinkFor(invite.token!)).catch(() => {});
+                            await navigator.clipboard
+                              .writeText(inviteLinkFor(invite.token!))
+                              .catch(() => {});
                             setCopiedInviteId(invite.id);
                             setTimeout(() => setCopiedInviteId(null), 2000);
                           }}
@@ -732,14 +754,24 @@ export function WorkspaceSection() {
                 ) : (
                   <div className="flex flex-col gap-2.5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5">
                     <p className="text-xs text-foreground">
-                      Leave <span className="font-semibold">{selectedWorkspace.name}</span>? You'll lose
-                      access until someone invites you again.
+                      Leave <span className="font-semibold">{selectedWorkspace.name}</span>? You'll
+                      lose access until someone invites you again.
                     </p>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setLeaveConfirm(false)} disabled={leaving}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setLeaveConfirm(false)}
+                        disabled={leaving}
+                      >
                         Cancel
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={() => void handleLeave()} disabled={leaving}>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => void handleLeave()}
+                        disabled={leaving}
+                      >
                         {leaving ? "Leaving…" : "Leave workspace"}
                       </Button>
                     </div>
@@ -760,8 +792,8 @@ export function WorkspaceSection() {
                 ) : (
                   <div className="flex flex-col gap-2.5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5">
                     <p className="text-xs text-foreground">
-                      Delete <span className="font-semibold">{selectedWorkspace.name}</span> for everyone?
-                      This can't be undone. Type the workspace name to confirm.
+                      Delete <span className="font-semibold">{selectedWorkspace.name}</span> for
+                      everyone? This can't be undone. Type the workspace name to confirm.
                     </p>
                     <Input
                       value={deleteConfirm}
@@ -812,12 +844,17 @@ export function WorkspaceSection() {
               Make {transferTarget?.displayName?.trim() || "this member"} the owner?
             </DialogTitle>
             <DialogDescription>
-              They get full control of this workspace and you become an admin. Only the new owner can
-              hand ownership back.
+              They get full control of this workspace and you become an admin. Only the new owner
+              can hand ownership back.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setTransferTarget(null)} disabled={transferring}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTransferTarget(null)}
+              disabled={transferring}
+            >
               Cancel
             </Button>
             <Button
@@ -845,8 +882,8 @@ export function WorkspaceSection() {
           <DialogHeader>
             <DialogTitle>Add workspace</DialogTitle>
             <DialogDescription>
-              Create a separate workspace to keep notes, projects, and integrations isolated from this
-              one.
+              Create a separate workspace to keep notes, projects, and integrations isolated from
+              this one.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -867,7 +904,13 @@ export function WorkspaceSection() {
               />
             </div>
             <DialogFooter>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setAddOpen(false)} disabled={addSubmitting}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setAddOpen(false)}
+                disabled={addSubmitting}
+              >
                 Cancel
               </Button>
               <Button type="submit" size="sm" disabled={addSubmitting}>
@@ -878,8 +921,16 @@ export function WorkspaceSection() {
         </DialogContent>
       </Dialog>
 
-      <UpgradeModal visible={upgradeInviteOpen} feature="team_members" onClose={() => setUpgradeInviteOpen(false)} />
-      <UpgradeModal visible={upgradeAddOpen} feature="unlimited_workspaces" onClose={() => setUpgradeAddOpen(false)} />
+      <UpgradeModal
+        visible={upgradeInviteOpen}
+        feature="team_members"
+        onClose={() => setUpgradeInviteOpen(false)}
+      />
+      <UpgradeModal
+        visible={upgradeAddOpen}
+        feature="unlimited_workspaces"
+        onClose={() => setUpgradeAddOpen(false)}
+      />
     </SettingsSectionShell>
   );
 }

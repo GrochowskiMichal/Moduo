@@ -9,10 +9,7 @@ type RootErrorBoundaryState = {
   errorMessage: string | null;
 };
 
-export class RootErrorBoundary extends Component<
-  RootErrorBoundaryProps,
-  RootErrorBoundaryState
-> {
+export class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBoundaryState> {
   state: RootErrorBoundaryState = {
     hasError: false,
     errorMessage: null,

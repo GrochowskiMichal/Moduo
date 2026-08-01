@@ -12,10 +12,7 @@ function panelVariantKey(userId: string, workspaceId: string): string {
   return `moduo:notes:panel-variant:${userId}:${workspaceId}`;
 }
 
-export function readNotesPanelVariant(
-  userId: string,
-  workspaceId: string,
-): NotesPanelVariantId {
+export function readNotesPanelVariant(userId: string, workspaceId: string): NotesPanelVariantId {
   try {
     const raw = localStorage.getItem(panelVariantKey(userId, workspaceId));
     return VALID.includes(raw as NotesPanelVariantId)

@@ -22,7 +22,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import { readLocalFocusPrefs, type FocusPrefs } from "../../lib/focus-prefs";
+import { type FocusPrefs, readLocalFocusPrefs } from "../../lib/focus-prefs";
 import { areSoundsEnabled } from "../../lib/preferences";
 
 // Persist accrued time periodically so a crash/reload loses at most this much.

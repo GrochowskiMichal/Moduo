@@ -5,8 +5,8 @@
 // autofill that keeps ALL parsed emails/phones (create, then patch the lists).
 // Tokens + shadcn only; sentence case.
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Plus, UserSearch, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -27,12 +26,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import type { MentionCandidate } from "../../spine/mention";
-import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";
 import { probeDuplicate } from "../dedupe";
-import { parseContactText } from "../parse-contact";
 import type { Company, Contact } from "../model";
+import { parseContactText } from "../parse-contact";
+import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";
 import { ContactStatusDot } from "./contact-status-badge";
 import { EntityLinkPicker } from "./entity-link-picker";
 
@@ -73,7 +73,10 @@ const EMPTY: Fields = { name: "", email: "", phone: "", title: "", status: "" };
 function domainOf(email: string): string | null {
   const at = email.trim().toLowerCase().lastIndexOf("@");
   if (at < 0) return null;
-  const domain = email.trim().toLowerCase().slice(at + 1);
+  const domain = email
+    .trim()
+    .toLowerCase()
+    .slice(at + 1);
   return domain.includes(".") ? domain : null;
 }
 
@@ -121,7 +124,8 @@ export function ContactFormDialog({
     { id: "", label: "No status" },
     ...DEFAULT_CONTACT_STATUSES,
   ];
-  if (statusMeta.id && !statusOptions.some((s) => s.id === statusMeta.id)) statusOptions.push(statusMeta);
+  if (statusMeta.id && !statusOptions.some((s) => s.id === statusMeta.id))
+    statusOptions.push(statusMeta);
 
   const companyLabel = company ? ("name" in company ? company.name : company.createName) : null;
 
@@ -166,7 +170,14 @@ export function ContactFormDialog({
     const phones = [values.phone.trim(), ...pastedPhones].filter(Boolean);
     try {
       await onSubmit(
-        { name: values.name.trim(), title: values.title.trim(), status: values.status, emails, phones, company },
+        {
+          name: values.name.trim(),
+          title: values.title.trim(),
+          status: values.status,
+          emails,
+          phones,
+          company,
+        },
         { addAnother },
       );
       if (addAnother) resetForNext();
@@ -311,7 +322,13 @@ export function ContactFormDialog({
                 onPick={onPickCompany}
               />
               {company ? (
-                <Button type="button" variant="ghost" size="sm" className="gap-1" onClick={() => setCompany(null)}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => setCompany(null)}
+                >
                   <X className="size-icon-sm" aria-hidden />
                   Clear
                 </Button>

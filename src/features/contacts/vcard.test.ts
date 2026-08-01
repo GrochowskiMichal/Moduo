@@ -117,7 +117,7 @@ describe("contactToVCard", () => {
         phones: [{ label: "mobile", value: "   " }],
       }),
     );
-    expect(card).not.toContain("EMAIL;TYPE=\"work\"");
+    expect(card).not.toContain('EMAIL;TYPE="work"');
     expect(card).toContain('EMAIL;TYPE="home":dana@home.example');
     expect(card).not.toContain("TEL");
   });
@@ -152,7 +152,9 @@ describe("contactToVCard", () => {
   });
 
   it("omits BDAY when there is no birthday entry", () => {
-    const card = contactToVCard(contact({ name: "Dana Lee", dates: [{ label: "anniversary", value: "2015-06-01" }] }));
+    const card = contactToVCard(
+      contact({ name: "Dana Lee", dates: [{ label: "anniversary", value: "2015-06-01" }] }),
+    );
     expect(card).not.toContain("BDAY:");
   });
 

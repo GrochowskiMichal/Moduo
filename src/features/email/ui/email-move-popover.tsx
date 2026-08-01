@@ -4,14 +4,10 @@
 // page (opened by the `m` shortcut or the reader's move action), anchored to a
 // child trigger. Non-selectable folders (containers) render disabled.
 
-import { useEffect, useState } from "react";
 import { Folder, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { EmailFolderInfo } from "../model/email-types";
 
@@ -91,9 +87,7 @@ export function EmailMovePopover({
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent disabled:cursor-default disabled:text-muted-foreground/60 disabled:hover:bg-transparent"
               >
                 <Folder className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
-                <span className="min-w-0 flex-1 truncate">
-                  {folder.displayName || folder.name}
-                </span>
+                <span className="min-w-0 flex-1 truncate">{folder.displayName || folder.name}</span>
               </button>
             ))}
           </div>

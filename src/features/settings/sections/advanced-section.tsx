@@ -1,14 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
 import { strToU8 } from "fflate";
+import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-
-import { useAuth } from "../../../providers/auth-provider";
-import { useWorkspace } from "../../../providers/workspace-provider";
-import type { ModuoRuntime } from "../../../lib/runtime";
-import { downloadZip } from "../../notes/export";
-import { closeNotesDb, countPendingOutbox } from "../../notes/sync/idb";
-import { getSyncMeta, type SyncDomain } from "../../../lib/prefs-sync";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -18,17 +11,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import { getSyncMeta, type SyncDomain } from "../../../lib/prefs-sync";
+import type { ModuoRuntime } from "../../../lib/runtime";
+import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
+import { downloadZip } from "../../notes/export";
+import { closeNotesDb, countPendingOutbox } from "../../notes/sync/idb";
 
 import {
   buildExportBundle,
+  type Diagnostics,
   describeSyncStatus,
+  type ExportMeta,
   exportZipName,
   formatDebugInfo,
   isModuoIdbName,
-  moduoCacheKeysToClear,
-  type Diagnostics,
-  type ExportMeta,
   type ModuleReadResult,
+  moduoCacheKeysToClear,
 } from "../advanced";
 import { SettingsSectionShell } from "./section-shell";
 
@@ -81,9 +80,7 @@ async function gatherExport(
     read("notes", async () => {
       const bundle = await runtime.notesV2.listMeta(workspaceId);
       const ids = bundle.notes.map((n) => n.id);
-      const docs = ids.length
-        ? await runtime.notesV2.fetchExportDocs({ workspaceId, ids })
-        : [];
+      const docs = ids.length ? await runtime.notesV2.fetchExportDocs({ workspaceId, ids }) : [];
       const bodyById = new Map(docs.map((d) => [d.id, d.bodyMd]));
       return {
         degraded: bundle.degraded,
@@ -256,8 +253,8 @@ export function AdvancedSection() {
           <h3 className="font-display text-base text-foreground">Export workspace data</h3>
           <p className="text-sm text-muted-foreground">
             Download this workspace&apos;s tasks, notes, contacts, calendar events, and habits as a
-            single <code className="font-mono text-xs">.zip</code> of JSON files. A read-only copy of
-            your own data — nothing is changed or removed.
+            single <code className="font-mono text-xs">.zip</code> of JSON files. A read-only copy
+            of your own data — nothing is changed or removed.
           </p>
         </div>
         <div>
@@ -281,8 +278,8 @@ export function AdvancedSection() {
         <div className="flex flex-col gap-1">
           <h3 className="font-display text-base text-foreground">Reset local cache</h3>
           <p className="text-sm text-muted-foreground">
-            Clears cached data stored on this device and reloads the app. Your cloud data is safe and
-            re-syncs automatically; you stay signed in. Use this if something looks out of date.
+            Clears cached data stored on this device and reloads the app. Your cloud data is safe
+            and re-syncs automatically; you stay signed in. Use this if something looks out of date.
           </p>
         </div>
         <div>
@@ -346,9 +343,9 @@ export function AdvancedSection() {
               <DialogHeader>
                 <DialogTitle>You have unsynced note changes</DialogTitle>
                 <DialogDescription>
-                  {pendingNotes} note{" "}
-                  {pendingNotes === 1 ? "change hasn't" : "changes haven't"} synced to the cloud yet.
-                  Resetting now would lose {pendingNotes === 1 ? "it" : "them"}.
+                  {pendingNotes} note {pendingNotes === 1 ? "change hasn't" : "changes haven't"}{" "}
+                  synced to the cloud yet. Resetting now would lose{" "}
+                  {pendingNotes === 1 ? "it" : "them"}.
                   {online
                     ? " Open Notes and wait for the sync indicator to finish, then re-check."
                     : " Reconnect to the internet so they can sync, then re-check."}
@@ -375,7 +372,8 @@ export function AdvancedSection() {
                 <DialogDescription>
                   This clears cached data on this device and reloads Moduo. Your cloud data is safe
                   and re-syncs automatically, and you&apos;ll stay signed in. Device-only display
-                  settings (density and tab style) reset to their defaults. This can&apos;t be undone.
+                  settings (density and tab style) reset to their defaults. This can&apos;t be
+                  undone.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>

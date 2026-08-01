@@ -1,10 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Plus, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-
-import { useAuth } from "../../../providers/auth-provider";
-import { useWorkspace } from "../../../providers/workspace-provider";
-import type { WorkspaceApiKey } from "../../../lib/runtime";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import {
@@ -17,8 +13,11 @@ import {
 } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import type { WorkspaceApiKey } from "../../../lib/runtime";
+import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
 
-import { keyScope, type KeyScope } from "../api-keys";
+import { type KeyScope, keyScope } from "../api-keys";
 import { SettingsSectionShell } from "./section-shell";
 
 /**
@@ -112,8 +111,8 @@ export function ApiKeysSection() {
       ) : (
         <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-6">
           <p className="text-sm text-muted-foreground">
-            Agents connect to this workspace over MCP. Keys are read-only by default, and
-            everything a key does is attributed in each task&apos;s activity trail.
+            Agents connect to this workspace over MCP. Keys are read-only by default, and everything
+            a key does is attributed in each task&apos;s activity trail.
           </p>
 
           <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
@@ -152,7 +151,11 @@ export function ApiKeysSection() {
                 }}
               />
             </div>
-            <div role="radiogroup" aria-label="Key scope" className="inline-flex items-center gap-1">
+            <div
+              role="radiogroup"
+              aria-label="Key scope"
+              className="inline-flex items-center gap-1"
+            >
               {(["view", "edit"] as const).map((level) => (
                 <Button
                   key={level}
@@ -167,7 +170,11 @@ export function ApiKeysSection() {
                 </Button>
               ))}
             </div>
-            <Button type="button" onClick={() => void handleCreate()} disabled={creating || !name.trim()}>
+            <Button
+              type="button"
+              onClick={() => void handleCreate()}
+              disabled={creating || !name.trim()}
+            >
               <Plus className="size-3.5" aria-hidden />
               {creating ? "Creating…" : "Create"}
             </Button>

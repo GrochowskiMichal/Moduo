@@ -22,9 +22,7 @@ function taskLineToString(taskId: unknown, done: unknown, title: string, mode: M
   if (mode === "text") return title.trim();
   const box = done ? "x" : " ";
   const id = typeof taskId === "string" && taskId !== "" ? taskId : null;
-  return id
-    ? `- [${box}] ${title.trim()} <!-- moduo:task:${id} -->`
-    : `- [${box}] ${title.trim()}`;
+  return id ? `- [${box}] ${title.trim()} <!-- moduo:task:${id} -->` : `- [${box}] ${title.trim()}`;
 }
 
 function walkXmlText(node: Y.XmlText, mode: Mode): string {

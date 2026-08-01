@@ -6,15 +6,14 @@
  */
 
 import { useEffect, useState } from "react";
-
-import { EntityTagRow } from "@/features/contacts/ui/entity-tag-row";
 import { ActivityTrail } from "@/features/contacts/ui/activity-trail";
+import { EntityTagRow } from "@/features/contacts/ui/entity-tag-row";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { EntityHub } from "@/features/spine/ui/entity-hub";
 import { EntityLinkSuggestions } from "@/features/spine/ui/link-suggestion-strip";
+import type { ActivityEntry } from "@/features/tasks/model";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import type { ActivityEntry } from "@/features/tasks/model";
 import { NOTE_DETAIL_REFRESH_EVENT } from "../editor/notes-editor-bridge";
 
 type Props = {
@@ -108,7 +107,12 @@ export function NoteDetailPanel({
         onUnlink={onUnlink}
         onRetry={reload}
       />
-      <ActivityTrail activity={activity} currentUserId={currentUserId} now={new Date()} entityId={noteId} />
+      <ActivityTrail
+        activity={activity}
+        currentUserId={currentUserId}
+        now={new Date()}
+        entityId={noteId}
+      />
     </div>
   );
 }

@@ -34,9 +34,7 @@ function ClockConfig({ widget, updateConfig }: ConfigFormProps) {
     ? (widget.config.timezones as unknown[]).filter((z): z is string => typeof z === "string")
     : [];
   const toggle = (zone: string) => {
-    const next = selected.includes(zone)
-      ? selected.filter((z) => z !== zone)
-      : [...selected, zone];
+    const next = selected.includes(zone) ? selected.filter((z) => z !== zone) : [...selected, zone];
     updateConfig({ timezones: next });
   };
   return (

@@ -9,8 +9,8 @@
  * `mentionedUserIds`. View-only members may comment (spec edge case).
  */
 
-import { useCallback, useEffect, useState } from "react";
 import { AtSign, Quote as QuoteIcon, Send, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -247,7 +247,9 @@ export function NoteCommentsPanel({
                     <span className="line-clamp-3">{parsed.quote}</span>
                   </button>
                 ) : null}
-                <p className="whitespace-pre-wrap break-words text-sm text-foreground">{parsed.text}</p>
+                <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+                  {parsed.text}
+                </p>
                 <p className="mt-1 text-2xs text-muted-foreground">
                   {mine ? "You" : "Teammate"} · {relativeTime(c.createdAt)}
                 </p>

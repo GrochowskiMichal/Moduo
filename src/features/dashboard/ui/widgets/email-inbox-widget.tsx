@@ -3,15 +3,14 @@
 // today, and follow-ups awaiting a reply. Platform-gated to desktop (the widget
 // body only mounts where `hasEmail`); `degraded` covers the pre-connect state.
 
-import { useMemo } from "react";
 import { Clock3, CornerUpLeft, Mail } from "lucide-react";
-
+import { useMemo } from "react";
+import { formatEmailDate } from "@/features/email/utils/email-format";
 import {
-  shapeEmailInbox,
   type EmailInboxThreadRow,
   type EmailInboxView,
+  shapeEmailInbox,
 } from "@/features/email/widget";
-import { formatEmailDate } from "@/features/email/utils/email-format";
 
 import { useDashboardData } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";

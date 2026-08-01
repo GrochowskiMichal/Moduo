@@ -1,61 +1,61 @@
 import {
+  DndContext,
+  type DragEndEvent,
+  DragOverlay,
+  type DragStartEvent,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+} from "@dnd-kit/core";
+import { differenceInCalendarDays, startOfDay } from "date-fns";
+import { ChevronDown, ChevronRight, GripVertical } from "lucide-react";
+import {
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  DndContext,
-  DragOverlay,
-  pointerWithin,
-  useDraggable,
-  useDroppable,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import { differenceInCalendarDays, startOfDay } from "date-fns";
-import { ChevronDown, ChevronRight, GripVertical } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
-import type { Bucket, Task } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { Bucket, Task } from "../model";
 import {
+  type BarDragMode,
   resolveBarDrag,
   resolveConnectorDrop,
   resolveTrayDrop,
-  type BarDragMode,
   type TimelineDatePatch,
 } from "../timeline-drag";
 import {
-  BAR_H,
-  FADE_PX,
-  HEADER_H,
-  LANE_HEADER_H,
-  TIMELINE_ZOOMS,
-  TITLE_INSIDE_MIN_PX,
+  type AxisWindow,
   arrowEndpoints,
   axisTicks,
   axisWindow,
+  BAR_H,
   barForTask,
   barRowTop,
   buildTimelineRollup,
   dayAtX,
+  FADE_PX,
+  HEADER_H,
+  LANE_HEADER_H,
   layoutRows,
   monthSegments,
-  todayLineX,
-  xForDay,
-  type AxisWindow,
+  TIMELINE_ZOOMS,
+  TITLE_INSIDE_MIN_PX,
   type TimelineBar,
   type TimelineZoom,
+  todayLineX,
+  xForDay,
 } from "../timeline-geometry";
 import { asTaskDrag, asTaskDropTarget, taskDrag, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanView } from "./plan-view-header";
@@ -149,7 +149,13 @@ export function TaskTimelineView({
 
   const rollup = useMemo(
     () =>
-      buildTimelineRollup({ tasks, laneDefs, collapsedIds: collapsedLanes, window: win, now: today }),
+      buildTimelineRollup({
+        tasks,
+        laneDefs,
+        collapsedIds: collapsedLanes,
+        window: win,
+        now: today,
+      }),
     [tasks, laneDefs, collapsedLanes, win, today],
   );
   const layout = useMemo(() => layoutRows(rollup.lanes), [rollup.lanes]);
@@ -692,7 +698,10 @@ export function TaskTimelineView({
               <DragOverlay>
                 {trayDragTask ? (
                   <div className="flex max-w-56 items-center gap-1 truncate rounded-md border border-border bg-background px-2 py-1 font-sans text-xs text-foreground shadow-lg">
-                    <GripVertical className="size-3 shrink-0 text-muted-foreground/60" aria-hidden />
+                    <GripVertical
+                      className="size-3 shrink-0 text-muted-foreground/60"
+                      aria-hidden
+                    />
                     <span className="truncate">{trayDragTask.title || "Untitled"}</span>
                   </div>
                 ) : null}
@@ -1038,9 +1047,7 @@ function TimelineBarRow({
   // the open side is the "faded edge" gesture (sets the missing date).
   const solidX = displayBar.x + (displayBar.solidLeft ? 0 : FADE_PX);
   const solidW =
-    displayBar.width -
-    (displayBar.solidLeft ? 0 : FADE_PX) -
-    (displayBar.solidRight ? 0 : FADE_PX);
+    displayBar.width - (displayBar.solidLeft ? 0 : FADE_PX) - (displayBar.solidRight ? 0 : FADE_PX);
   const edgeZonePx = Math.min(8, solidW / 3);
 
   // Content lives inside the bar only when both edges are solid and the bar

@@ -5,22 +5,16 @@
 // local restore — no fragile cross-expunge reversal).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-import type { ModuoRuntime } from "../../../lib/runtime.types";
+import type { EmailAccountRef, EmailThreadRef, ModuoRuntime } from "../../../lib/runtime.types";
 import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
+import type { EmailEnvelope, EmailThread, SavedAccount } from "../model/email-types";
 import {
   buildRefUpsertArgs,
+  type EmailRefUpsertArgs,
   isAwaitingFollowUp,
   isSnoozeDue,
-  type EmailRefUpsertArgs,
 } from "../refs";
 import { shapeInboxThreads } from "../threads";
-import type {
-  EmailEnvelope,
-  EmailThread,
-  SavedAccount,
-} from "../model/email-types";
-import type { EmailAccountRef, EmailThreadRef } from "../../../lib/runtime.types";
 
 /** How long a triage/snooze action can be undone before the IMAP op commits.
  * Rides the app-wide undo window (DF-5) so the toast and the deferred IMAP op
@@ -63,9 +57,7 @@ function refArgsFromThread(thread: EmailThread): EmailRefUpsertArgs {
     fromName: thread.fromName || null,
     subject: thread.subject || null,
     snippet: thread.snippet || null,
-    sentAt: Number.isFinite(thread.timestampMs)
-      ? new Date(thread.timestampMs).toISOString()
-      : null,
+    sentAt: Number.isFinite(thread.timestampMs) ? new Date(thread.timestampMs).toISOString() : null,
   });
 }
 
@@ -80,9 +72,7 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
 
   // Threads optimistically snoozed this session (hidden before the cloud confirms
   // is_snoozed), so the row disappears the instant you snooze it.
-  const [optimisticSnoozed, setOptimisticSnoozed] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [optimisticSnoozed, setOptimisticSnoozed] = useState<Set<string>>(() => new Set());
 
   const reqRef = useRef(0);
   const pendingRef = useRef<Map<string, PendingTriage>>(new Map());
@@ -279,7 +269,8 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
     async (thread: EmailThread, read: boolean) => {
       if (!runtime || !isDesktop) return;
       const targets = envelopes.filter(
-        (e) => e.accountId === thread.accountId && e.threadId === thread.threadId && e.read !== read,
+        (e) =>
+          e.accountId === thread.accountId && e.threadId === thread.threadId && e.read !== read,
       );
       if (targets.length === 0) return;
       setEnvelopes((prev) =>
@@ -314,9 +305,7 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
       );
       // Hide locally right away.
       setEnvelopes((prev) =>
-        prev.filter(
-          (e) => !(e.accountId === thread.accountId && e.threadId === thread.threadId),
-        ),
+        prev.filter((e) => !(e.accountId === thread.accountId && e.threadId === thread.threadId)),
       );
 
       const key = `${thread.accountId}::${thread.threadId}`;

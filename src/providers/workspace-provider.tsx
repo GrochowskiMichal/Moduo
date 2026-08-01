@@ -1,5 +1,4 @@
-import { PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAuth } from "./auth-provider";
+import { type PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deriveNotificationFeeds, type NotificationItem } from "../features/spine/notifications";
 import type {
   WorkspaceInvite,
@@ -8,14 +7,25 @@ import type {
   WorkspaceSummary,
 } from "../features/workspaces/types";
 import {
-  WorkspaceContext,
   type SendWorkspaceInviteArgs,
   type UpdateWorkspaceInviteArgs,
   type UpdateWorkspaceMemberPermissionsArgs,
+  WorkspaceContext,
   type WorkspaceContextValue,
 } from "../features/workspaces/workspace-context";
-import { mapInvite, mapMember, mapNotification, mapWorkspace, storageKey } from "../features/workspaces/workspace-mappers";
-import { isNotificationEnabled, readLocalPreferences, usePreferencesValue } from "../lib/preferences";
+import {
+  mapInvite,
+  mapMember,
+  mapNotification,
+  mapWorkspace,
+  storageKey,
+} from "../features/workspaces/workspace-mappers";
+import {
+  isNotificationEnabled,
+  readLocalPreferences,
+  usePreferencesValue,
+} from "../lib/preferences";
+import { useAuth } from "./auth-provider";
 
 /** Map a legacy workspace notification into the source-agnostic feed item. */
 function legacyNotificationToItem(n: WorkspaceNotification): NotificationItem {
@@ -56,22 +66,23 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   // reconcile is owned by the single <PreferencesSync/> in main.tsx).
   const { notifications: notificationPrefs } = usePreferencesValue();
 
-  const { notifications, notificationHistory, workspaceInvitations, unreadCountWorkspace } = useMemo(() => {
-    // The whole active/history/invitations/badge split is the pure
-    // `deriveNotificationFeeds` (unit-tested); the provider just supplies the raw
-    // feed + the DF-19f mute predicate. Spine events are current-workspace +
-    // pref-gated; the legacy feed becomes the cross-workspace Invitations area.
-    const feeds = deriveNotificationFeeds(rawNotifications, {
-      workspaceId: selectedWorkspaceId,
-      isEnabled: (op) => isNotificationEnabled(op, notificationPrefs),
-    });
-    return {
-      notifications: feeds.active,
-      notificationHistory: feeds.history,
-      workspaceInvitations: feeds.invitations,
-      unreadCountWorkspace: feeds.unreadCount,
-    };
-  }, [rawNotifications, notificationPrefs, selectedWorkspaceId]);
+  const { notifications, notificationHistory, workspaceInvitations, unreadCountWorkspace } =
+    useMemo(() => {
+      // The whole active/history/invitations/badge split is the pure
+      // `deriveNotificationFeeds` (unit-tested); the provider just supplies the raw
+      // feed + the DF-19f mute predicate. Spine events are current-workspace +
+      // pref-gated; the legacy feed becomes the cross-workspace Invitations area.
+      const feeds = deriveNotificationFeeds(rawNotifications, {
+        workspaceId: selectedWorkspaceId,
+        isEnabled: (op) => isNotificationEnabled(op, notificationPrefs),
+      });
+      return {
+        notifications: feeds.active,
+        notificationHistory: feeds.history,
+        workspaceInvitations: feeds.invitations,
+        unreadCountWorkspace: feeds.unreadCount,
+      };
+    }, [rawNotifications, notificationPrefs, selectedWorkspaceId]);
 
   // Mirror the selected id into a ref so `refreshWorkspaces` can read the current
   // selection without listing `selectedWorkspaceId` in its deps. Without this the
@@ -95,7 +106,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
 
   const selectedWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null,
-    [selectedWorkspaceId, workspaces]
+    [selectedWorkspaceId, workspaces],
   );
 
   const modulePermissions = useMemo(
@@ -103,7 +114,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       notes: selectedWorkspace?.permissions.notes ?? "none",
       tasks: selectedWorkspace?.permissions.tasks ?? "none",
     }),
-    [selectedWorkspace]
+    [selectedWorkspace],
   );
 
   const canManageWorkspace = useMemo(() => {
@@ -118,7 +129,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         window.localStorage.setItem(storageKey(userId), workspaceId);
       }
     },
-    [userId]
+    [userId],
   );
 
   // Returns the freshly-loaded list so callers (e.g. `joinWorkspace`) can resolve a
@@ -144,7 +155,9 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     // currentSelected, so this only changes the cold-launch default.
     const reopenLast = readLocalPreferences().reopenLastWorkspace;
     const persisted =
-      reopenLast && typeof window !== "undefined" ? window.localStorage.getItem(storageKey(userId)) : null;
+      reopenLast && typeof window !== "undefined"
+        ? window.localStorage.getItem(storageKey(userId))
+        : null;
     const resolvedSelected =
       (persisted && next.some((workspace) => workspace.id === persisted) ? persisted : null) ??
       (currentSelected && next.some((workspace) => workspace.id === currentSelected)
@@ -199,7 +212,10 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         try {
           // 200 so the "See all" history modal (DF-21c) has depth; the active
           // dropdown renders a small non-dismissed subset of this.
-          spine = await runtime.spine.listNotifications({ workspaceId: selectedWorkspaceId, limit: 200 });
+          spine = await runtime.spine.listNotifications({
+            workspaceId: selectedWorkspaceId,
+            limit: 200,
+          });
         } catch {
           spine = [];
         }
@@ -225,7 +241,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       selectWorkspace(created.id);
       return created.id;
     },
-    [refreshWorkspaces, runtime, selectWorkspace]
+    [refreshWorkspaces, runtime, selectWorkspace],
   );
 
   const renameWorkspace = useCallback(
@@ -236,7 +252,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       await runtime.workspace.rename(workspaceId, trimmed);
       await refreshWorkspaces();
     },
-    [refreshWorkspaces, runtime]
+    [refreshWorkspaces, runtime],
   );
 
   const leaveWorkspace = useCallback(
@@ -248,7 +264,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       await runtime.workspace.leave(workspaceId);
       await refreshWorkspaces();
     },
-    [refreshWorkspaces, runtime]
+    [refreshWorkspaces, runtime],
   );
 
   const softDeleteWorkspace = useCallback(
@@ -260,18 +276,23 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       await runtime.workspace.softDelete(workspaceId);
       await refreshWorkspaces();
     },
-    [refreshWorkspaces, runtime]
+    [refreshWorkspaces, runtime],
   );
 
   const sendInvite = useCallback(
     async (args: SendWorkspaceInviteArgs): Promise<WorkspaceInvite | null> => {
       if (!runtime || !selectedWorkspaceId) return null;
-      const raw = await runtime.workspace.issueInvite(selectedWorkspaceId, args.email, args.role, args.modulePermissions);
+      const raw = await runtime.workspace.issueInvite(
+        selectedWorkspaceId,
+        args.email,
+        args.role,
+        args.modulePermissions,
+      );
       await refreshAccessData();
       await refreshNotifications();
       return raw ? mapInvite(raw) : null;
     },
-    [refreshAccessData, refreshNotifications, runtime, selectedWorkspaceId]
+    [refreshAccessData, refreshNotifications, runtime, selectedWorkspaceId],
   );
 
   const joinWorkspace = useCallback(
@@ -285,7 +306,9 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         const invite = await runtime.workspace.joinInvite(token.trim());
         const refreshed = await refreshWorkspaces();
         const joinedId = invite?.workspace_id ?? invite?.workspaceId ?? null;
-        const joined = joinedId ? refreshed.find((workspace) => workspace.id === joinedId) ?? null : null;
+        const joined = joinedId
+          ? (refreshed.find((workspace) => workspace.id === joinedId) ?? null)
+          : null;
         if (joined) selectWorkspace(joined.id);
         return joined;
       } catch (err) {
@@ -293,7 +316,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         return null;
       }
     },
-    [refreshWorkspaces, runtime, selectWorkspace]
+    [refreshWorkspaces, runtime, selectWorkspace],
   );
 
   const updateInvite = useCallback(
@@ -303,17 +326,21 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       await refreshAccessData();
       await refreshNotifications();
     },
-    [refreshAccessData, refreshNotifications, runtime]
+    [refreshAccessData, refreshNotifications, runtime],
   );
 
   const updateMemberPermissions = useCallback(
     async (args: UpdateWorkspaceMemberPermissionsArgs) => {
       if (!runtime) return;
-      await runtime.workspace.updateMemberPermissions(args.memberId, args.role, args.modulePermissions);
+      await runtime.workspace.updateMemberPermissions(
+        args.memberId,
+        args.role,
+        args.modulePermissions,
+      );
       await refreshAccessData();
       await refreshNotifications();
     },
-    [refreshAccessData, refreshNotifications, runtime]
+    [refreshAccessData, refreshNotifications, runtime],
   );
 
   const removeMember = useCallback(
@@ -324,7 +351,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       await runtime.workspace.removeMember(memberId);
       await refreshAccessData();
     },
-    [refreshAccessData, runtime]
+    [refreshAccessData, runtime],
   );
 
   const transferOwnership = useCallback(
@@ -336,7 +363,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       await refreshWorkspaces();
       await refreshAccessData();
     },
-    [refreshAccessData, refreshWorkspaces, runtime]
+    [refreshAccessData, refreshWorkspaces, runtime],
   );
 
   const revokeInvite = useCallback(
@@ -346,7 +373,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       await refreshAccessData();
       await refreshNotifications();
     },
-    [refreshAccessData, refreshNotifications, runtime]
+    [refreshAccessData, refreshNotifications, runtime],
   );
 
   const markNotificationRead = useCallback(
@@ -356,14 +383,17 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       // legacy workspace-notification op.
       if (item.source === "spine") {
         if (item.workspaceId) {
-          await runtime.spine.markNotificationRead({ workspaceId: item.workspaceId, activityId: item.id });
+          await runtime.spine.markNotificationRead({
+            workspaceId: item.workspaceId,
+            activityId: item.id,
+          });
         }
       } else {
         await runtime.workspace.markNotificationRead(item.id);
       }
       await refreshNotifications();
     },
-    [refreshNotifications, runtime]
+    [refreshNotifications, runtime],
   );
 
   const markAllNotificationsRead = useCallback(async () => {
@@ -390,7 +420,10 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       try {
         await Promise.all(
           targets.map((i) =>
-            runtime.spine.dismissNotification({ workspaceId: i.workspaceId as string, activityId: i.id }),
+            runtime.spine.dismissNotification({
+              workspaceId: i.workspaceId as string,
+              activityId: i.id,
+            }),
           ),
         );
       } finally {
@@ -409,7 +442,10 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       try {
         await Promise.all(
           targets.map((i) =>
-            runtime.spine.undismissNotification({ workspaceId: i.workspaceId as string, activityId: i.id }),
+            runtime.spine.undismissNotification({
+              workspaceId: i.workspaceId as string,
+              activityId: i.id,
+            }),
           ),
         );
       } finally {
@@ -461,8 +497,6 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     if (loading) return;
     void refreshNotifications();
   }, [loading, refreshNotifications, selectedWorkspaceId]);
-
-
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({
@@ -532,7 +566,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       updateInvite,
       workspaceInvitations,
       workspaces,
-    ]
+    ],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

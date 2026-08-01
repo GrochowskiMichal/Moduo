@@ -1,16 +1,9 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  CalendarDays,
-  Clock,
-  CornerDownRight,
-  Inbox,
-  ListChecks,
-  Repeat,
-} from "lucide-react";
-
-import { Badge } from "../../../components/ui/badge";
+import { CalendarDays, Clock, CornerDownRight, Inbox, ListChecks, Repeat } from "lucide-react";
 import { TagChipList } from "../../../components/tag-chip";
+import { Badge } from "../../../components/ui/badge";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -23,17 +16,12 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { formatDue, formatScheduled, LEVEL_OPTIONS } from "../helpers";
-import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../model";
-import { recurrenceLabel } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { type EnergyLevel, isDrifted, type PriorityLevel, type Task } from "../model";
+import { recurrenceLabel } from "../parse/recurrence";
 import { taskDrag } from "./dnd/task-dnd";
 import { LevelDots } from "./level-icons";
 import { BlockedMarker } from "./task-row";
@@ -224,7 +212,7 @@ export function CardBody({
   // Quiet subtask mirrors: n/m progress on a parent; a parent caption on a
   // subtask card rendered flat (Today, or its parent is off this board).
   const progress = api.subtaskProgressByTask.get(task.id) ?? null;
-  const parent = task.parentId ? api.tasks.find((t) => t.id === task.parentId) ?? null : null;
+  const parent = task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null;
   const hasMeta =
     committed ||
     blocked ||
@@ -246,7 +234,11 @@ export function CardBody({
         <span
           className={cn(
             "min-w-0 flex-1 break-words font-display leading-snug",
-            done ? "text-muted-foreground line-through" : blocked ? "text-muted-foreground" : "text-foreground",
+            done
+              ? "text-muted-foreground line-through"
+              : blocked
+                ? "text-muted-foreground"
+                : "text-foreground",
           )}
         >
           {task.title || "Untitled"}
@@ -256,7 +248,10 @@ export function CardBody({
       {hasMeta ? (
         <div className="flex flex-wrap items-center gap-1.5 pl-6 text-xs text-muted-foreground">
           {progress && progress.total > 0 ? (
-            <span className="tabular-nums" aria-label={`${progress.done} of ${progress.total} subtasks done`}>
+            <span
+              className="tabular-nums"
+              aria-label={`${progress.done} of ${progress.total} subtasks done`}
+            >
               {progress.done}/{progress.total}
             </span>
           ) : null}

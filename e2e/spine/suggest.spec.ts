@@ -25,7 +25,7 @@
  *   E2E_SUGGEST_FOCUS_ID      — focus entity uuid
  */
 
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { type APIRequestContext, expect, test } from "@playwright/test";
 
 const URL = process.env.E2E_SUPABASE_URL;
 const ANON = process.env.E2E_SUPABASE_ANON_KEY;
@@ -66,7 +66,10 @@ test.describe("Spine auto-suggest (CT-6, AC11)", () => {
   test("suggest → accept stamps origin=suggest → decline is remembered", async ({ request }) => {
     const candidates = await suggest(request);
     expect(Array.isArray(candidates)).toBeTruthy();
-    test.skip(candidates.length < 2, "needs >= 2 seeded candidates to accept one and decline another");
+    test.skip(
+      candidates.length < 2,
+      "needs >= 2 seeded candidates to accept one and decline another",
+    );
 
     // 1. Accept the top candidate → a link with origin='suggest'.
     const accepted = candidates[0];

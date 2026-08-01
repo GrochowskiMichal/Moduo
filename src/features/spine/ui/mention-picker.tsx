@@ -8,8 +8,8 @@
 // pure `resolveMention` by the caller. `MentionCommand` is the inner list,
 // exported so caret-anchored surfaces can reuse it without a second Popover.
 
-import { type ReactNode } from "react";
 import { Plus, User } from "lucide-react";
+import type { ReactNode } from "react";
 import {
   Command,
   CommandEmpty,
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { resolveEntityIcon } from "../icon-map";
-import { type MentionCandidate } from "../mention";
+import type { MentionCandidate } from "../mention";
 
 /** A stable key for a candidate (entity ref / member id / create token). */
 export function mentionCandidateKey(candidate: MentionCandidate): string {

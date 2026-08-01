@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
+import { useState } from "react";
 
 import { DateField } from "./date-field";
 
@@ -21,9 +21,7 @@ export const DateOnly: Story = {
 export const WithTime: Story = {
   render: () => {
     const [value, setValue] = useState<Date | null>(null);
-    return (
-      <DateField value={value} onChange={setValue} withTime placeholder="Scheduled" />
-    );
+    return <DateField value={value} onChange={setValue} withTime placeholder="Scheduled" />;
   },
 };
 

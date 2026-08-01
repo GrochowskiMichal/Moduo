@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 
-import { type Accent } from "../../../lib/appearance";
+import type { Accent } from "../../../lib/appearance";
 
 import { AppearancePickerRow } from "./picker-row";
 

@@ -84,15 +84,11 @@ export const ScrollableBody: Story = {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Release notes — v0.4.0</DialogTitle>
-          <DialogDescription>
-            Highlights from the latest release.
-          </DialogDescription>
+          <DialogDescription>Highlights from the latest release.</DialogDescription>
         </DialogHeader>
         <div className="max-h-[40vh] space-y-3 overflow-y-auto text-sm text-foreground">
           {Array.from({ length: 20 }).map((_, i) => (
-            <p key={i}>
-              Item {i + 1}: small fix or improvement landing in this release.
-            </p>
+            <p key={i}>Item {i + 1}: small fix or improvement landing in this release.</p>
           ))}
         </div>
         <DialogFooter>

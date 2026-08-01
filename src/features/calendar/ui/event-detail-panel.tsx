@@ -4,29 +4,24 @@
 // Delete. External events render the same layout read-only with source
 // attribution. CAL-3's switcher will host this as the "Detail" variant.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { Trash2, X } from "lucide-react";
-
-import { Field } from "../../../components/ui/field";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
+import { Field } from "../../../components/ui/field";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Separator } from "../../../components/ui/separator";
 import { Switch } from "../../../components/ui/switch";
-import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
-import { EntityRichText } from "../../spine/ui/entity-rich-text";
-import { EntityHub } from "../../spine/ui/entity-hub";
-import { useEntityHub } from "../../spine/hooks/use-entity-hub";
-import { spineActivityLine, spineActorName } from "../../spine/activity";
+import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { timeAgo } from "../../contacts/rollup";
+import { spineActivityLine, spineActorName } from "../../spine/activity";
+import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
+import { useEntityHub } from "../../spine/hooks/use-entity-hub";
+import { EntityHub } from "../../spine/ui/entity-hub";
+import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { toLocalInputValue } from "../../tasks/helpers";
 import type { ActivityEntry } from "../../tasks/model";
-import type { ModuoRuntime } from "../../../lib/runtime.types";
-import type {
-  CalendarAccountModel,
-  CalendarEventModel,
-  CalendarEventPatch,
-} from "../events";
+import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
 import { RepeatPicker } from "./repeat-picker";
 
 type Props = {
@@ -73,10 +68,7 @@ export function EventDetailPanel({
     setEndDraft(toLocalInputValue(event.endsAt));
   }, [event.id, event.title, event.startsAt, event.endsAt]);
 
-  const focus = useMemo(
-    () => ({ type: "event", id: event.id }) as const,
-    [event.id],
-  );
+  const focus = useMemo(() => ({ type: "event", id: event.id }) as const, [event.id]);
   const hub = useEntityHub(runtime, workspaceId, focus);
 
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
@@ -150,20 +142,14 @@ export function EventDetailPanel({
           className="font-display text-base font-medium"
         />
       ) : (
-        <span className="font-display text-base font-medium text-foreground">
-          {event.title}
-        </span>
+        <span className="font-display text-base font-medium text-foreground">{event.title}</span>
       )}
 
       {external ? (
         <span className="text-xs text-muted-foreground">
-          {account
-            ? `${account.displayLabel} — ${account.provider}`
-            : "External calendar"}
-          {account?.lastSyncAt
-            ? ` · synced ${timeAgo(account.lastSyncAt, now)}`
-            : ""}{" "}
-          · managed in its source calendar
+          {account ? `${account.displayLabel} — ${account.provider}` : "External calendar"}
+          {account?.lastSyncAt ? ` · synced ${timeAgo(account.lastSyncAt, now)}` : ""} · managed in
+          its source calendar
         </span>
       ) : null}
 
@@ -198,9 +184,7 @@ export function EventDetailPanel({
             aria-label="Ends at"
           />
         ) : (
-          <span className="text-sm text-foreground">
-            {new Date(event.endsAt).toLocaleString()}
-          </span>
+          <span className="text-sm text-foreground">{new Date(event.endsAt).toLocaleString()}</span>
         )}
       </Field>
       <Field label="All day">
@@ -220,9 +204,7 @@ export function EventDetailPanel({
             onChange={(rrule) => onPatch(event.id, { rrule })}
           />
           {editable && event.rrule ? (
-            <span className="text-2xs text-muted-foreground">
-              Edits apply to the whole series.
-            </span>
+            <span className="text-2xs text-muted-foreground">Edits apply to the whole series.</span>
           ) : null}
         </div>
       </Field>
@@ -276,9 +258,7 @@ export function EventDetailPanel({
           activity.map((entry) => (
             <div key={entry.id} className="flex items-baseline justify-between gap-2">
               <span className="min-w-0 truncate text-xs text-muted-foreground">
-                <span className="text-foreground">
-                  {spineActorName(entry, currentUserId)}
-                </span>{" "}
+                <span className="text-foreground">{spineActorName(entry, currentUserId)}</span>{" "}
                 {spineActivityLine(entry)}
               </span>
               <span className="shrink-0 text-2xs text-muted-foreground/70">

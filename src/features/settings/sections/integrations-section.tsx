@@ -1,21 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Bot, Calendar, Globe, Mail } from "lucide-react";
-
+import { useCallback, useEffect, useState } from "react";
+import { Button } from "../../../components/ui/button";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-import type { CalendarAccountModel } from "../../calendar/events";
 import { groupRailAccounts, providerLabel } from "../../calendar/accounts";
 import { cleanupCredentialsForRemoval } from "../../calendar/caldav-connect";
-import {
-  CalendarConnectDialog,
-  IcsFeedDialog,
-} from "../../calendar/ui/calendar-connect-dialog";
-import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
+import type { CalendarAccountModel } from "../../calendar/events";
+import { CalendarConnectDialog, IcsFeedDialog } from "../../calendar/ui/calendar-connect-dialog";
 import type { SavedAccount } from "../../email/model/email-types";
-import { Button } from "../../../components/ui/button";
-import { dispatchOpenSettings } from "../settings-events";
+import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
 import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
+import { dispatchOpenSettings } from "../settings-events";
 
 import { SettingsSectionShell } from "./section-shell";
 
@@ -213,8 +209,8 @@ export function IntegrationsSection() {
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-base text-foreground">Calendar</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Connected calendars are read-only in Moduo — your events appear here and on the web,
-          but edits stay in the source calendar.
+          Connected calendars are read-only in Moduo — your events appear here and on the web, but
+          edits stay in the source calendar.
         </p>
 
         <div className="mt-4 flex flex-col gap-2">
@@ -489,8 +485,8 @@ export function IntegrationsSection() {
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-base text-foreground">AI &amp; MCP</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Connect Claude and other AI assistants to this workspace over MCP. They reach your
-          tasks and notes through a scoped API key you create and can revoke anytime.
+          Connect Claude and other AI assistants to this workspace over MCP. They reach your tasks
+          and notes through a scoped API key you create and can revoke anytime.
         </p>
 
         <div className="mt-4 flex flex-col gap-2">

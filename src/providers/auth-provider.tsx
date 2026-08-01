@@ -1,6 +1,11 @@
-import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
-import { initRuntime, runtimeConfigError, type ModuoRuntime, type RuntimeSession } from "../lib/runtime";
+import { createContext, type PropsWithChildren, useContext, useEffect, useState } from "react";
 import { Analytics, identify, resetIdentity } from "../lib/analytics";
+import {
+  initRuntime,
+  type ModuoRuntime,
+  type RuntimeSession,
+  runtimeConfigError,
+} from "../lib/runtime";
 
 export type PlanTier = "free" | "pro" | "team" | "founders";
 
@@ -73,7 +78,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
 
     void bootstrap();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Once runtime is available, subscribe to auth state changes.
@@ -97,7 +104,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       // Refresh plan tier on sign-in events.
       if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && nextSession?.user?.id) {
-        rt.workspace.getProfile(nextSession.user.id)
+        rt.workspace
+          .getProfile(nextSession.user.id)
           .then(({ data: profile }) => {
             if (active && profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
           })
@@ -129,13 +137,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     try {
       const { data: profile } = await rt.workspace.getProfile(uid);
       if (profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   const syncSubscription = async (): Promise<PlanTier> => {
     const token = session?.access_token;
     if (!token) return planTier;
-    const SUPABASE_URL = (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ??
+    const SUPABASE_URL =
+      (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ??
       "https://wtoonrvuqumihpkbvwvs.supabase.co";
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-subscription`, {

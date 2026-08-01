@@ -19,14 +19,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { useDomainSync } from "./prefs-sync";
 
-export type LandingView =
-  | "home"
-  | "tasks"
-  | "calendar"
-  | "notes"
-  | "contacts"
-  | "email"
-  | "last";
+export type LandingView = "home" | "tasks" | "calendar" | "notes" | "contacts" | "email" | "last";
 
 /** Motion policy layered over the OS `prefers-reduced-motion` (see tokens.css):
  *  `system` follows the OS, `reduced` forces movement off, `full` forces it on. */

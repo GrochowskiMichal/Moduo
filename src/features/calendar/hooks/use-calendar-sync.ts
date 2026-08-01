@@ -10,8 +10,8 @@ import { useCallback, useEffect, useRef } from "react";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { CalendarAccountModel, CalendarEventModel } from "../events";
 import { deletedExternalIds, mapProviderEvents } from "../mirror";
-import { isIcsProvider, isSyncableProvider, syncWindow } from "../sync";
 import type { SyncableProvider } from "../sync";
+import { isIcsProvider, isSyncableProvider, syncWindow } from "../sync";
 
 const SYNC_INTERVAL_MS = 15 * 60 * 1000;
 

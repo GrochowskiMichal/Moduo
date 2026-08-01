@@ -1,21 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
-import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import {
-  DragOverlay,
   closestCenter,
-  type DraggableSyntheticListeners,
   type DragEndEvent,
+  type DraggableSyntheticListeners,
+  DragOverlay,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "../../../components/ui/button";
 import { EmptyState as EmptyStateBase } from "../../../components/ui/empty-state";
+import { Kbd } from "../../../components/ui/kbd";
 import {
   Select,
   SelectContent,
@@ -23,20 +20,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { canNestUnder, groupTasks, nestedSubtaskIds, type GroupBy } from "../helpers";
-import type { Bucket, Task } from "../model";
+import { canNestUnder, type GroupBy, groupTasks, nestedSubtaskIds } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { Bucket, Task } from "../model";
 import {
+  asTaskDropTarget,
   DndBoundary,
   NestableTask,
-  SortableTask,
-  asTaskDropTarget,
   pointerFirstCollision,
+  SortableTask,
   useTaskDndSensors,
 } from "./dnd/task-dnd";
-import { PlanViewHeader, type PlanView } from "./plan-view-header";
-import { Kbd } from "../../../components/ui/kbd";
-import { TaskRow, type RowCommand } from "./task-row";
+import { type PlanView, PlanViewHeader } from "./plan-view-header";
+import { type RowCommand, TaskRow } from "./task-row";
 
 type Props = {
   tasks: Task[];
@@ -223,9 +219,7 @@ export function TaskListView({
       const parentId = taskById.get(selectedId)?.parentId;
       if (parentId && visibleTasks.some((t) => t.id === parentId)) {
         if (nest) {
-          setExpandedParents((prev) =>
-            prev.has(parentId) ? prev : new Set(prev).add(parentId),
-          );
+          setExpandedParents((prev) => (prev.has(parentId) ? prev : new Set(prev).add(parentId)));
         }
         return;
       }
@@ -400,7 +394,7 @@ export function TaskListView({
     task: Task,
     drag?: { dragListeners: DraggableSyntheticListeners; dropActive: boolean },
   ) => {
-    const children = nest ? api.subtasksByParent.get(task.id) ?? [] : [];
+    const children = nest ? (api.subtasksByParent.get(task.id) ?? []) : [];
     const expanded = expandedParents.has(task.id);
     return (
       <>
@@ -416,9 +410,7 @@ export function TaskListView({
           dropActive={drag?.dropActive ?? false}
         />
         {expanded
-          ? children.map((child) => (
-              <TaskRow key={child.id} {...buildRowProps(child)} nested />
-            ))
+          ? children.map((child) => <TaskRow key={child.id} {...buildRowProps(child)} nested />)
           : null}
       </>
     );
@@ -466,7 +458,7 @@ export function TaskListView({
   const canDragRow = useCallback((task: Task) => !hasChildren(task.id), [hasChildren]);
   // A row accepts the active drag per the one-level eligibility rule (childless
   // active, top-level target, not a no-op) — shared with `setTaskParent`/the DB.
-  const nestActiveTask = nestActiveId ? taskById.get(nestActiveId) ?? null : null;
+  const nestActiveTask = nestActiveId ? (taskById.get(nestActiveId) ?? null) : null;
   const isNestTarget = useCallback(
     (task: Task) => (nestActiveTask ? canNestUnder(nestActiveTask, task, hasChildren) : false),
     [nestActiveTask, hasChildren],
@@ -622,7 +614,9 @@ export function TaskListView({
                       <ChevronDown className="size-3.5" aria-hidden />
                     )}
                     <span className="uppercase tracking-wide">{group.label}</span>
-                    <span className="font-sans text-muted-foreground/70 tabular-nums">{group.tasks.length}</span>
+                    <span className="font-sans text-muted-foreground/70 tabular-nums">
+                      {group.tasks.length}
+                    </span>
                   </button>
                 ) : null}
 
@@ -656,7 +650,13 @@ function EmptyState({
           </Button>
         ) : undefined
       }
-      hint={canEdit ? <>or press <Kbd>c</Kbd> to capture</> : undefined}
+      hint={
+        canEdit ? (
+          <>
+            or press <Kbd>c</Kbd> to capture
+          </>
+        ) : undefined
+      }
     />
   );
 }

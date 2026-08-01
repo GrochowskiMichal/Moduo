@@ -2,8 +2,9 @@
 // focusing then leaving a migrated (legacy plain-text) description does NOT fire
 // a spurious write (updatedAt bump / phantom activity row). Regression guard for
 // the senior-review finding.
-import { afterEach, describe, expect, it, vi } from "vitest";
+
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EntityTextEditor } from "./entity-text-editor";
 
 afterEach(cleanup);

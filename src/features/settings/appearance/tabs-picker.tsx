@@ -1,5 +1,5 @@
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
-import { type Tabs } from "../../../lib/appearance";
+import type { Tabs } from "../../../lib/appearance";
 
 import { AppearancePickerRow } from "./picker-row";
 

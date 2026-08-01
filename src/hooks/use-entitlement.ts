@@ -11,9 +11,9 @@
  */
 
 import { useCallback } from "react";
-import { useAuth, type PlanTier } from "../providers/auth-provider";
 import { getRuntime } from "../lib/runtime";
 import { SUPABASE_URL } from "../lib/runtime.web";
+import { type PlanTier, useAuth } from "../providers/auth-provider";
 
 export type FeatureGate =
   | "cloud_sync"
@@ -80,10 +80,7 @@ export async function openStripeUrl(url: string) {
  * Opens Stripe Checkout via `create-checkout-session` using plan + interval
  * so the edge function resolves price IDs from Supabase secrets (not client env).
  */
-async function redirectToCheckout(
-  accessToken: string | null,
-  tier: "pro" | "team"
-) {
+async function redirectToCheckout(accessToken: string | null, tier: "pro" | "team") {
   if (!accessToken) {
     await openStripeUrl("https://moduo.app/#pricing");
     return;

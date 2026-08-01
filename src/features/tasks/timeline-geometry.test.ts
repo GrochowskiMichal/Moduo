@@ -6,16 +6,16 @@ import { describe, expect, it } from "vitest";
 import { makeTask } from "./helpers";
 import type { Task, TaskRelation } from "./model";
 import {
-  DAY_WIDTH,
-  FADE_PX,
-  LANE_HEADER_H,
-  ROW_H,
   arrowEndpoints,
   axisWindow,
   barForTask,
   buildTimelineRollup,
+  DAY_WIDTH,
   dayIndex,
+  FADE_PX,
+  LANE_HEADER_H,
   layoutRows,
+  ROW_H,
   sanitizeTimelineZoom,
   setBarEdge,
   shiftTaskDates,
@@ -87,9 +87,7 @@ describe("bar span per date shape (AC2)", () => {
     // lands on the previous UTC day. The bar must sit on the local day.
     const t = task({ dueDate: new Date(2026, 6, 10, 0, 0).toISOString() });
     const bar = barForTask(t, win, NOW)!;
-    expect(bar.x + bar.width).toBe(
-      (dayIndex(win, new Date(2026, 6, 10)) + 1) * win.dayWidth,
-    );
+    expect(bar.x + bar.width).toBe((dayIndex(win, new Date(2026, 6, 10)) + 1) * win.dayWidth);
   });
 
   it("bad data (due before scheduled) heals to a 1-day solid bar at scheduledAt", () => {
@@ -330,8 +328,20 @@ describe("arrow endpoints (AC7)", () => {
     });
     const undated = task({ id: "undated", bucketId: "b1" });
     const rels: TaskRelation[] = [
-      { id: "r1", workspaceId: "w1", blockerTaskId: "blocker", blockedTaskId: "blocked", createdAt: "" },
-      { id: "r2", workspaceId: "w1", blockerTaskId: "blocker", blockedTaskId: "undated", createdAt: "" },
+      {
+        id: "r1",
+        workspaceId: "w1",
+        blockerTaskId: "blocker",
+        blockedTaskId: "blocked",
+        createdAt: "",
+      },
+      {
+        id: "r2",
+        workspaceId: "w1",
+        blockerTaskId: "blocker",
+        blockedTaskId: "undated",
+        createdAt: "",
+      },
     ];
     // b2 collapsed → its bar is hidden; the undated task never has a bar.
     const bars = positioned([blocker, blockedInB2, undated], new Set(["b2"]));

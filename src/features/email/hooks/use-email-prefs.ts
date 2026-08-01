@@ -10,10 +10,10 @@ import { useDomainSync } from "../../../lib/prefs-sync";
 import type { EmailSection } from "../classify";
 import {
   DEFAULT_EMAIL_PREFS,
+  type EmailPrefs,
   readEmailPrefs,
   sanitizeEmailPrefs,
   writeEmailPrefs,
-  type EmailPrefs,
 } from "../prefs";
 
 export function useEmailPrefs(userId: string): {

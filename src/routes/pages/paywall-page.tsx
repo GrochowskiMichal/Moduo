@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { Check } from "lucide-react";
-import { Pressable, Text, View } from "../../tw";
-import { useAuth } from "../../providers/auth-provider";
+import { useState } from "react";
 import { supabaseClient } from "../../lib/runtime.web";
+import { useAuth } from "../../providers/auth-provider";
+import { Pressable, Text, View } from "../../tw";
 
 const SUPABASE_URL =
   (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
@@ -96,7 +96,9 @@ export function PaywallPage() {
       }
 
       if (!confirmed) {
-        console.warn("[paywall] trial created but subscription_status not yet reflected — redirecting anyway");
+        console.warn(
+          "[paywall] trial created but subscription_status not yet reflected — redirecting anyway",
+        );
       }
 
       window.location.href = "/";
@@ -118,7 +120,10 @@ export function PaywallPage() {
       <View className="relative mx-auto max-w-[1100px] px-6 py-16">
         {/* Header */}
         <View className="mb-14 text-center">
-          <Text as="p" className="text-[12px] font-semibold uppercase tracking-[0.22em] text-white/32 mb-4">
+          <Text
+            as="p"
+            className="text-[12px] font-semibold uppercase tracking-[0.22em] text-white/32 mb-4"
+          >
             Your trial has ended
           </Text>
           <h1 className="text-[40px] font-semibold leading-tight tracking-[-0.04em] text-[#f4f4f4]">
@@ -134,7 +139,9 @@ export function PaywallPage() {
               onPress={() => setBilling("monthly")}
               className={`rounded-full px-5 py-2 ${billing === "monthly" ? "bg-white/10" : "bg-transparent"}`}
             >
-              <Text className={`text-[14px] font-medium ${billing === "monthly" ? "text-[#f2f2f2]" : "text-white/40"}`}>
+              <Text
+                className={`text-[14px] font-medium ${billing === "monthly" ? "text-[#f2f2f2]" : "text-white/40"}`}
+              >
                 Monthly
               </Text>
             </Pressable>
@@ -142,7 +149,9 @@ export function PaywallPage() {
               onPress={() => setBilling("yearly")}
               className={`rounded-full px-5 py-2 ${billing === "yearly" ? "bg-white/10" : "bg-transparent"}`}
             >
-              <Text className={`text-[14px] font-medium ${billing === "yearly" ? "text-[#f2f2f2]" : "text-white/40"}`}>
+              <Text
+                className={`text-[14px] font-medium ${billing === "yearly" ? "text-[#f2f2f2]" : "text-white/40"}`}
+              >
                 Yearly <Text className="text-[12px] text-amber-400">–20%</Text>
               </Text>
             </Pressable>
@@ -153,12 +162,26 @@ export function PaywallPage() {
         <View className="flex flex-col gap-4 md:flex-row md:items-start">
           {/* Free / Trial */}
           <View className="flex-1 rounded-2xl border border-white/8 bg-[#0d0d0d] p-8">
-            <Text as="p" className="text-[12px] font-semibold uppercase tracking-widest text-white/30">Free</Text>
-            <Text as="p" className="mt-3 text-[36px] font-semibold text-[#f4f4f4]">$0</Text>
-            <Text as="p" className="mt-1 text-[14px] text-white/38">Web &amp; desktop</Text>
+            <Text
+              as="p"
+              className="text-[12px] font-semibold uppercase tracking-widest text-white/30"
+            >
+              Free
+            </Text>
+            <Text as="p" className="mt-3 text-[36px] font-semibold text-[#f4f4f4]">
+              $0
+            </Text>
+            <Text as="p" className="mt-1 text-[14px] text-white/38">
+              Web &amp; desktop
+            </Text>
 
             <View className="mt-6 gap-3">
-              {["Notes, tasks, calendar & contacts", "Access on web & desktop", "Cloud sync across devices", "7-day Pro trial, no card required"].map((f) => (
+              {[
+                "Notes, tasks, calendar & contacts",
+                "Access on web & desktop",
+                "Cloud sync across devices",
+                "7-day Pro trial, no card required",
+              ].map((f) => (
                 <View key={f} className="flex flex-row items-start gap-3">
                   <View className="mt-0.5 h-5 w-5 items-center justify-center rounded-full bg-white/8">
                     <Check size={11} color="rgba(255,255,255,0.4)" />
@@ -180,16 +203,27 @@ export function PaywallPage() {
           <View className="flex-1 rounded-2xl border border-amber-500/30 bg-[#0f0e09] p-8 relative overflow-hidden">
             <View className="pointer-events-none absolute inset-0 rounded-2xl bg-amber-500/[0.03]" />
             <View className="flex flex-row items-center justify-between">
-              <Text as="p" className="text-[12px] font-semibold uppercase tracking-widest text-amber-400">Pro</Text>
+              <Text
+                as="p"
+                className="text-[12px] font-semibold uppercase tracking-widest text-amber-400"
+              >
+                Pro
+              </Text>
               <View className="rounded-full bg-amber-500/15 px-3 py-1">
                 <Text className="text-[11px] font-medium text-amber-300">Most popular</Text>
               </View>
             </View>
-            <Text as="p" className="mt-3 text-[36px] font-semibold text-[#f4f4f4]">{proPrice}</Text>
+            <Text as="p" className="mt-3 text-[36px] font-semibold text-[#f4f4f4]">
+              {proPrice}
+            </Text>
             {billing === "yearly" && (
-              <Text as="p" className="mt-0.5 text-[13px] text-white/38">billed as $96/yr</Text>
+              <Text as="p" className="mt-0.5 text-[13px] text-white/38">
+                billed as $96/yr
+              </Text>
             )}
-            <Text as="p" className="mt-1 text-[14px] text-amber-300/70">7-day free trial</Text>
+            <Text as="p" className="mt-1 text-[14px] text-amber-300/70">
+              7-day free trial
+            </Text>
 
             <View className="mt-6 gap-3">
               {PRO_FEATURES.map((f) => (
@@ -215,9 +249,18 @@ export function PaywallPage() {
 
           {/* Team */}
           <View className="flex-1 rounded-2xl border border-white/10 bg-[#0d0d0d] p-8">
-            <Text as="p" className="text-[12px] font-semibold uppercase tracking-widest text-white/40">Team</Text>
-            <Text as="p" className="mt-3 text-[36px] font-semibold text-[#f4f4f4]">{teamPrice}</Text>
-            <Text as="p" className="mt-1 text-[14px] text-white/38">7-day free trial</Text>
+            <Text
+              as="p"
+              className="text-[12px] font-semibold uppercase tracking-widest text-white/40"
+            >
+              Team
+            </Text>
+            <Text as="p" className="mt-3 text-[36px] font-semibold text-[#f4f4f4]">
+              {teamPrice}
+            </Text>
+            <Text as="p" className="mt-1 text-[14px] text-white/38">
+              7-day free trial
+            </Text>
 
             <View className="mt-6 gap-3">
               {TEAM_FEATURES.map((f) => (
@@ -235,7 +278,9 @@ export function PaywallPage() {
               disabled={busy !== null}
               onPress={() => void redirectToCheckout("team", "Team")}
             >
-              <Text className={`text-[15px] font-semibold ${busy === "Team" ? "text-white/40" : "text-[#111]"}`}>
+              <Text
+                className={`text-[15px] font-semibold ${busy === "Team" ? "text-white/40" : "text-[#111]"}`}
+              >
                 {busy === "Team" ? "Redirecting…" : "Start free trial"}
               </Text>
             </Pressable>
@@ -257,7 +302,9 @@ export function PaywallPage() {
 
         {error && (
           <View className="mt-6 mx-auto max-w-[480px] rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3">
-            <Text as="p" className="text-center text-[13px] text-red-100/85">{error}</Text>
+            <Text as="p" className="text-center text-[13px] text-red-100/85">
+              {error}
+            </Text>
           </View>
         )}
       </View>

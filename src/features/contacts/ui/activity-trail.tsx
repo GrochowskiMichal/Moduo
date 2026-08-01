@@ -30,7 +30,9 @@ export function ActivityTrail({
 
   return (
     <section className="space-y-1">
-      <h3 className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">Activity</h3>
+      <h3 className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        Activity
+      </h3>
       <ul className="space-y-1">
         {rows.map((entry) => (
           <li key={entry.id} className="flex items-baseline gap-2 text-sm">
@@ -38,7 +40,9 @@ export function ActivityTrail({
               <span className="text-foreground">{spineActorName(entry, currentUserId)}</span>{" "}
               {spineActivityLine(entry)}
             </span>
-            <span className="shrink-0 text-2xs text-muted-foreground/70">{timeAgo(entry.createdAt, now)}</span>
+            <span className="shrink-0 text-2xs text-muted-foreground/70">
+              {timeAgo(entry.createdAt, now)}
+            </span>
           </li>
         ))}
       </ul>

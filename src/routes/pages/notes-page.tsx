@@ -4,59 +4,38 @@
  * arrives with NO-7 (hidden until then). Selection is URL-held (?id=).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CloudOff, PanelRight } from "lucide-react";
 import {
   DndContext,
+  type DragEndEvent,
   PointerSensor,
   pointerWithin,
   useDndMonitor,
   useDroppable,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from "@dnd-kit/core";
-import { useAuth } from "../../providers/auth-provider";
-import { useWorkspace } from "../../providers/workspace-provider";
-import { cn } from "../../lib/utils";
-import {
-  asDragPayload,
-  asDropLinkTarget,
-  isSelfDrop,
-  targetAccepts,
-} from "../../lib/drag-payload";
-import { createLinkWithToast } from "../../features/spine/ui/drop-link-toast";
-import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
-import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { CloudOff, PanelRight } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { onCreateNew } from "../../components/app/create-events";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
-import { useNotesModule } from "../../features/notes/hooks/use-notes-module";
-import { useNotesTaskBridge } from "../../features/notes/hooks/use-notes-task-bridge";
+import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import {
-  buildNoteSections,
-  descendantIds,
-  resolveDrop,
-  type DropZone,
-} from "../../features/notes/tree";
-import { displayTitle } from "../../features/notes/title";
-import { deriveBody, extractTaskLineIds } from "../../features/notes/sync/doc-text";
-import { taskLinksForNote } from "../../features/notes/tasks/detach";
-import type { EntityLink } from "../../lib/entity-links";
-import { NoteTreeSidebar } from "../../features/notes/ui/note-tree-sidebar";
-import { NoteEditor } from "../../features/notes/ui/note-editor";
+  RightPanelSwitcher,
+  type RightPanelVariant,
+} from "../../components/app/right-panel-switcher";
+import { IconButton } from "../../components/ui/icon-button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
+import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
+import { dispatchLayoutPanelsSet, useFeaturePanelState } from "../../features/layout/panel-events";
+import { findQuoteOffset } from "../../features/notes/comments/quote";
 import {
   INSERT_ENTITY_CHIP_EVENT,
   INSERT_PAGE_ROW_EVENT,
-  NOTE_DETAIL_REFRESH_EVENT,
   type InsertEntityChipDetail,
+  NOTE_DETAIL_REFRESH_EVENT,
   type NotesEditorBridge,
 } from "../../features/notes/editor/notes-editor-bridge";
-import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
-import { TaskDetailPanel, TASK_DETAIL_REFRESH_EVENT } from "../../features/tasks/ui/task-detail-panel";
-import { betweenPositions, endPosition } from "../../features/tasks/helpers";
-import { shapeNoteSearchResults, type NotesSearch } from "../../features/notes/search";
-import { NoteImportDialog } from "../../features/notes/ui/note-import-dialog";
 import {
   buildZipEntries,
   downloadTextFile,
@@ -65,27 +44,45 @@ import {
   safeFileStem,
 } from "../../features/notes/export";
 import { useNoteRealtime } from "../../features/notes/hooks/use-note-realtime";
-import { NotePresenceAvatars } from "../../features/notes/ui/note-presence-avatars";
-import { NotePublishControl } from "../../features/notes/ui/note-publish-control";
-import { nameFromEmail } from "../../features/notes/sync/notes-realtime";
-import { toast } from "sonner";
-import { RightPanelSwitcher, type RightPanelVariant } from "../../components/app/right-panel-switcher";
-import { NoteDetailPanel } from "../../features/notes/ui/note-detail-panel";
-import { NoteCommentsPanel } from "../../features/notes/ui/note-comments-panel";
-import { NoteOutlinePanel } from "../../features/notes/ui/note-outline-panel";
-import { findQuoteOffset } from "../../features/notes/comments/quote";
+import { useNotesModule } from "../../features/notes/hooks/use-notes-module";
+import { useNotesTaskBridge } from "../../features/notes/hooks/use-notes-task-bridge";
+import type { OutlineHeading } from "../../features/notes/outline";
 import {
+  type NotesPanelVariantId,
   readNotesPanelVariant,
   writeNotesPanelVariant,
-  type NotesPanelVariantId,
 } from "../../features/notes/panel-prefs";
-import type { OutlineHeading } from "../../features/notes/outline";
-import type { EntityRef } from "../../lib/entity-links";
-import { IconButton } from "../../components/ui/icon-button";
+import { type NotesSearch, shapeNoteSearchResults } from "../../features/notes/search";
+import { deriveBody, extractTaskLineIds } from "../../features/notes/sync/doc-text";
+import { nameFromEmail } from "../../features/notes/sync/notes-realtime";
+import { taskLinksForNote } from "../../features/notes/tasks/detach";
+import { displayTitle } from "../../features/notes/title";
 import {
-  dispatchLayoutPanelsSet,
-  useFeaturePanelState,
-} from "../../features/layout/panel-events";
+  buildNoteSections,
+  type DropZone,
+  descendantIds,
+  resolveDrop,
+} from "../../features/notes/tree";
+import { NoteCommentsPanel } from "../../features/notes/ui/note-comments-panel";
+import { NoteDetailPanel } from "../../features/notes/ui/note-detail-panel";
+import { NoteEditor } from "../../features/notes/ui/note-editor";
+import { NoteImportDialog } from "../../features/notes/ui/note-import-dialog";
+import { NoteOutlinePanel } from "../../features/notes/ui/note-outline-panel";
+import { NotePresenceAvatars } from "../../features/notes/ui/note-presence-avatars";
+import { NotePublishControl } from "../../features/notes/ui/note-publish-control";
+import { NoteTreeSidebar } from "../../features/notes/ui/note-tree-sidebar";
+import { createLinkWithToast } from "../../features/spine/ui/drop-link-toast";
+import { betweenPositions, endPosition } from "../../features/tasks/helpers";
+import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
+import {
+  TASK_DETAIL_REFRESH_EVENT,
+  TaskDetailPanel,
+} from "../../features/tasks/ui/task-detail-panel";
+import { asDragPayload, asDropLinkTarget, isSelfDrop, targetAccepts } from "../../lib/drag-payload";
+import type { EntityLink, EntityRef } from "../../lib/entity-links";
+import { cn } from "../../lib/utils";
+import { useAuth } from "../../providers/auth-provider";
+import { useWorkspace } from "../../providers/workspace-provider";
 
 export function NotesPage() {
   const { runtime, userId, userEmail, configError } = useAuth();
@@ -98,16 +95,8 @@ export function NotesPage() {
     workspaceId: selectedWorkspaceId,
     modulePermission: modulePermissions.notes,
   });
-  const {
-    notes,
-    loading,
-    degraded,
-    loadError,
-    syncStatus,
-    engine,
-    canEdit,
-    welcomeNoteId,
-  } = module;
+  const { notes, loading, degraded, loadError, syncStatus, engine, canEdit, welcomeNoteId } =
+    module;
 
   const sections = useMemo(() => buildNoteSections(notes), [notes]);
   // The summon affordance (DF-13) mirrors + toggles the shell's right-panel
@@ -308,7 +297,9 @@ export function NotesPage() {
         allTaskIds.length > 0
           ? {
               detachedTaskIds: allTaskIds,
-              onDeleteTasks: (ids) => ids.forEach((taskId) => tasksApi.deleteTask(taskId)),
+              onDeleteTasks: (ids) => {
+                ids.forEach((taskId) => void tasksApi.deleteTask(taskId));
+              },
               onUndo: () => {
                 if (!runtime || !selectedWorkspaceId) return;
                 for (const l of dropped) {
@@ -352,7 +343,8 @@ export function NotesPage() {
   // Right-panel variant (NO-7): remembered per user+workspace.
   const [panelVariant, setPanelVariant] = useState<NotesPanelVariantId>("detail");
   useEffect(() => {
-    if (userId && selectedWorkspaceId) setPanelVariant(readNotesPanelVariant(userId, selectedWorkspaceId));
+    if (userId && selectedWorkspaceId)
+      setPanelVariant(readNotesPanelVariant(userId, selectedWorkspaceId));
   }, [userId, selectedWorkspaceId]);
   const changePanelVariant = useCallback(
     (v: NotesPanelVariantId) => {
@@ -366,7 +358,9 @@ export function NotesPage() {
   // editor (→ reference chip, no link write) or ONTO the Detail hub (→ a link).
   // Reorder rides the same context via the sidebar's monitor; the three drops are
   // spatially disjoint (editor / hub / a note row) so only one ever fires.
-  const notesSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const notesSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
   const onNotesDragEnd = useCallback(
     (event: DragEndEvent) => {
       // Editor-chip + reorder are owned by their own consumers; here we only act
@@ -696,7 +690,10 @@ export function NotesPage() {
             render: () => (
               // The hub is a drop target (NO-7b): dropping a note here links it
               // to the open note (drag-onto-hub = link only).
-              <HubDropZone target={{ type: "note", id: noteForPanel.id }} disabled={!canEdit || degraded}>
+              <HubDropZone
+                target={{ type: "note", id: noteForPanel.id }}
+                disabled={!canEdit || degraded}
+              >
                 <NoteDetailPanel
                   runtime={runtime}
                   workspaceId={selectedWorkspaceId}
@@ -727,7 +724,9 @@ export function NotesPage() {
           {
             id: "outline",
             label: "Outline",
-            render: () => <NoteOutlinePanel doc={panelSession?.doc ?? null} onNavigate={outlineNavigate} />,
+            render: () => (
+              <NoteOutlinePanel doc={panelSession?.doc ?? null} onNavigate={outlineNavigate} />
+            ),
           },
         ]
       : [];
@@ -771,7 +770,11 @@ export function NotesPage() {
   // shows a quiet empty state instead of vanishing — the surface stays real.
   const right =
     noteForPanel && panelVariants.length > 0 ? (
-      <RightPanelSwitcher variants={panelVariants} activeId={activePanel} onChange={onPanelChange} />
+      <RightPanelSwitcher
+        variants={panelVariants}
+        activeId={activePanel}
+        onChange={onPanelChange}
+      />
     ) : (
       <div className="grid h-full place-content-center px-4 text-center text-sm text-muted-foreground">
         Select a note to see its links, comments, and outline.
@@ -829,7 +832,11 @@ function NotesEditorDropZone({
 }) {
   const pointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const active = editable && !!noteId;
-  const { setNodeRef, isOver, active: dragActive } = useDroppable({
+  const {
+    setNodeRef,
+    isOver,
+    active: dragActive,
+  } = useDroppable({
     id: NOTES_EDITOR_DROP_ID,
     data: { kind: "note-editor" },
     disabled: !active,

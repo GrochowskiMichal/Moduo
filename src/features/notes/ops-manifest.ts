@@ -102,8 +102,14 @@ export const notesModuleManifest: ModuleManifest = {
     },
   ],
   resources: [
-    { name: "notes.list", summary: "The note tree — id, title, parent, icon, published flag (the sidebar/tree source)." },
-    { name: "notes.get", summary: "One note as markdown (`body_md`) plus its meta — the read source." },
+    {
+      name: "notes.list",
+      summary: "The note tree — id, title, parent, icon, published flag (the sidebar/tree source).",
+    },
+    {
+      name: "notes.get",
+      summary: "One note as markdown (`body_md`) plus its meta — the read source.",
+    },
     { name: "notes.search", summary: "Full-text search over note titles + body (the FTS index)." },
   ],
 };

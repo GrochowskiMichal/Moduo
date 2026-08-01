@@ -39,19 +39,12 @@ type Props = {
   onConnected?: (account: SavedAccount) => void;
 };
 
-export function EmailConnectDialog({
-  open,
-  onOpenChange,
-  isReconnect,
-  onConnected,
-}: Props) {
+export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnected }: Props) {
   const { runtime } = useAuth();
   const { selectedWorkspaceId: workspaceId } = useWorkspace();
 
   const reconnectProvider = isReconnect?.provider as ConnectProvider | undefined;
-  const [provider, setProvider] = useState<ConnectProvider>(
-    reconnectProvider ?? "gmail",
-  );
+  const [provider, setProvider] = useState<ConnectProvider>(reconnectProvider ?? "gmail");
   const [email, setEmail] = useState(isReconnect?.email ?? "");
   const [password, setPassword] = useState("");
   const [imapHost, setImapHost] = useState(isReconnect?.imapHost ?? "");
@@ -102,8 +95,7 @@ export function EmailConnectDialog({
   const passwordValid =
     email.trim().length > 0 &&
     password.trim().length > 0 &&
-    (provider !== "custom" ||
-      (imapHost.trim().length > 0 && smtpHost.trim().length > 0));
+    (provider !== "custom" || (imapHost.trim().length > 0 && smtpHost.trim().length > 0));
 
   const handlePasswordConnect = async () => {
     if (!runtime || busy || !passwordValid) return;
@@ -191,8 +183,8 @@ export function EmailConnectDialog({
                 {busy === "oauth" ? "Opening browser…" : "Sign in with Google"}
               </Button>
               <p className="text-2xs text-muted-foreground">
-                Early-access app — Google may ask you to re-approve every 7 days
-                until it&rsquo;s verified.
+                Early-access app — Google may ask you to re-approve every 7 days until it&rsquo;s
+                verified.
               </p>
               <div className="flex items-center gap-3 py-1">
                 <span className="h-px flex-1 bg-border" />
@@ -326,11 +318,7 @@ export function EmailConnectDialog({
             onClick={() => void handlePasswordConnect()}
             disabled={!passwordValid || busy !== null}
           >
-            {busy === "password"
-              ? "Connecting…"
-              : isReconnect
-                ? "Reconnect"
-                : "Connect"}
+            {busy === "password" ? "Connecting…" : isReconnect ? "Reconnect" : "Connect"}
           </Button>
         </DialogFooter>
       </DialogContent>

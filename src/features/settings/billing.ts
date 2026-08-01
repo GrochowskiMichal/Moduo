@@ -58,9 +58,7 @@ export function subscriptionLine(row: EntitlementsRow | null): string {
   switch (status) {
     case "trialing": {
       const days =
-        row.trial_days_remaining === null
-          ? null
-          : Math.max(0, Math.ceil(row.trial_days_remaining));
+        row.trial_days_remaining === null ? null : Math.max(0, Math.ceil(row.trial_days_remaining));
       const ends = row.trial_ends_at ? formatDate(row.trial_ends_at) : null;
       if (days === null) return ends ? `Trial active (ends ${ends})` : "Trial active";
       const base =

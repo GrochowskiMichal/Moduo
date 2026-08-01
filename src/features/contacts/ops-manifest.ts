@@ -22,7 +22,8 @@ export const contactsModuleManifest: ModuleManifest = {
     {
       op: "contacts.create",
       rpc: "contacts_op_create",
-      summary: "Create a person; registers them in the entities registry so they're immediately linkable/@mentionable.",
+      summary:
+        "Create a person; registers them in the entities registry so they're immediately linkable/@mentionable.",
       args: {
         p_workspace_id: "workspace uuid",
         p_name: "person's display name",
@@ -30,14 +31,16 @@ export const contactsModuleManifest: ModuleManifest = {
         p_phone: "phone (optional)",
         p_title: "job title (optional)",
         p_company_id: "company uuid to associate (optional)",
-        p_status: "flat status label: lead (default) | active | dormant | archived | a custom label",
+        p_status:
+          "flat status label: lead (default) | active | dormant | archived | a custom label",
         p_notes_inline: "one-line scratch note (optional)",
       },
     },
     {
       op: "contacts.update",
       rpc: "contacts_op_update",
-      summary: "Edit a person's scalar fields (NULL args leave a field unchanged). A name change refreshes the registry label.",
+      summary:
+        "Edit a person's scalar fields (NULL args leave a field unchanged). A name change refreshes the registry label.",
       args: {
         p_workspace_id: "workspace uuid",
         p_contact_id: "contact uuid",
@@ -53,8 +56,13 @@ export const contactsModuleManifest: ModuleManifest = {
     {
       op: "contacts.set_status",
       rpc: "contacts_op_set_status",
-      summary: "Set a person's flat status (any non-empty label; no pipeline, no transition rules). No-op if unchanged.",
-      args: { p_workspace_id: "workspace uuid", p_contact_id: "contact uuid", p_status: "the status label" },
+      summary:
+        "Set a person's flat status (any non-empty label; no pipeline, no transition rules). No-op if unchanged.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_contact_id: "contact uuid",
+        p_status: "the status label",
+      },
     },
     {
       op: "contacts.link",
@@ -78,13 +86,15 @@ export const contactsModuleManifest: ModuleManifest = {
     {
       op: "contacts.unlink",
       rpc: "contacts_op_unlink",
-      summary: "Soft-delete a link a contact/company owns (Undo-friendly, idempotent). Refuses links with no contact endpoint.",
+      summary:
+        "Soft-delete a link a contact/company owns (Undo-friendly, idempotent). Refuses links with no contact endpoint.",
       args: { p_workspace_id: "workspace uuid", p_link_id: "link uuid" },
     },
     {
       op: "contacts.delete",
       rpc: "contacts_op_delete",
-      summary: "Soft-delete a contact: drops its links and tombstones its registry entry (so it leaves search / @mention / roll-ups).",
+      summary:
+        "Soft-delete a contact: drops its links and tombstones its registry entry (so it leaves search / @mention / roll-ups).",
       args: { p_workspace_id: "workspace uuid", p_contact_id: "contact uuid" },
     },
     {
@@ -100,7 +110,10 @@ export const contactsModuleManifest: ModuleManifest = {
     },
   ],
   resources: [
-    { name: "contacts.list", summary: "All people + companies in the workspace (the directory source)." },
+    {
+      name: "contacts.list",
+      summary: "All people + companies in the workspace (the directory source).",
+    },
     { name: "contacts.get", summary: "A contact/company with its links (the roll-up hub source)." },
     { name: "contacts.search", summary: "Search people + companies by name / email." },
   ],

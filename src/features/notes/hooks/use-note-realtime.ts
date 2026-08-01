@@ -19,16 +19,16 @@
 import { useEffect, useState } from "react";
 import * as Y from "yjs";
 import { supabaseClient } from "@/lib/runtime.web";
-import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import {
   coalesceUpdates,
   NOTE_UPDATE_EVENT,
-  noteChannelName,
-  presenceViewers,
   type NoteViewer,
+  noteChannelName,
   type PresenceState,
+  presenceViewers,
 } from "../sync/notes-realtime";
+import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
 
 /** Buffer local edits this long before one merged broadcast — keeps typing
  * under the per-client message rate while staying sub-perceptible. */
@@ -48,13 +48,9 @@ type Args = {
   selfName: string;
 };
 
-export function useNoteRealtime({
-  engine,
-  noteId,
-  enabled,
-  selfUserId,
-  selfName,
-}: Args): { viewers: NoteViewer[] } {
+export function useNoteRealtime({ engine, noteId, enabled, selfUserId, selfName }: Args): {
+  viewers: NoteViewer[];
+} {
   const [viewers, setViewers] = useState<NoteViewer[]>([]);
 
   useEffect(() => {

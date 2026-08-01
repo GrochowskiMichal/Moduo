@@ -7,10 +7,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { pickTagColor, type LabelColor } from "../../../components/tag-colors";
+import { type LabelColor, pickTagColor } from "../../../components/tag-colors";
 import type { EntityRef } from "../../../lib/entity-links";
-import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import type { Tag, TagLink } from "../../tasks/model";
 import { attachedTags, dispatchContactTagsChanged, findTagByName } from "../tags";
 
@@ -64,7 +64,9 @@ export function useEntityTags(
           .then(() => dispatchContactTagsChanged())
           .catch((err) => {
             setLinks((prev) => [...prev, existing]);
-            toast.error("Couldn’t remove the tag", { description: err instanceof Error ? err.message : undefined });
+            toast.error("Couldn’t remove the tag", {
+              description: err instanceof Error ? err.message : undefined,
+            });
           });
       } else {
         const temp: TagLink = {
@@ -84,7 +86,9 @@ export function useEntityTags(
           })
           .catch((err) => {
             setLinks((prev) => prev.filter((l) => l.id !== temp.id));
-            toast.error("Couldn’t add the tag", { description: err instanceof Error ? err.message : undefined });
+            toast.error("Couldn’t add the tag", {
+              description: err instanceof Error ? err.message : undefined,
+            });
           });
       }
     },
@@ -131,7 +135,9 @@ export function useEntityTags(
           setLinks((prev) => [...prev, link]);
           dispatchContactTagsChanged();
         } catch (err) {
-          toast.error("Couldn’t create the tag", { description: err instanceof Error ? err.message : undefined });
+          toast.error("Couldn’t create the tag", {
+            description: err instanceof Error ? err.message : undefined,
+          });
           if (savedTagId) {
             void runtime.tasks.deleteTag({ workspaceId, tagId: savedTagId }).catch(() => {});
           }
@@ -157,7 +163,9 @@ export function useEntityTags(
         .then((saved) => setTags((p) => p.map((t) => (t.id === tagId ? saved : t))))
         .catch((err) => {
           setTags((p) => p.map((t) => (t.id === tagId ? { ...t, color: prev } : t)));
-          toast.error("Couldn’t recolor the tag", { description: err instanceof Error ? err.message : undefined });
+          toast.error("Couldn’t recolor the tag", {
+            description: err instanceof Error ? err.message : undefined,
+          });
         });
     },
     [runtime, workspaceId, tags],
@@ -184,7 +192,9 @@ export function useEntityTags(
           .catch((err) => {
             setTags(prevTags);
             setLinks(prevLinks);
-            toast.error("Couldn’t delete the tag", { description: err instanceof Error ? err.message : undefined });
+            toast.error("Couldn’t delete the tag", {
+              description: err instanceof Error ? err.message : undefined,
+            });
           });
       }, UNDO_TOAST_MS);
       undoToast("Tag deleted", {

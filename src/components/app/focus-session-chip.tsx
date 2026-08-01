@@ -1,10 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Pause } from "lucide-react";
 
-import {
-  requestFocusView,
-  useFocusSession,
-} from "../../features/tasks/focus-session-store";
+import { requestFocusView, useFocusSession } from "../../features/tasks/focus-session-store";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 /**
@@ -35,7 +32,10 @@ export function FocusSessionChip() {
         className="flex h-8 max-w-[16rem] items-center gap-1.5 rounded-md bg-card px-2.5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         {session.running ? (
-          <span className="track-pulse size-1.5 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
+          <span
+            className="track-pulse size-1.5 shrink-0 rounded-full bg-muted-foreground"
+            aria-hidden
+          />
         ) : (
           <Pause className="size-3 shrink-0 text-muted-foreground" aria-hidden />
         )}
@@ -43,7 +43,9 @@ export function FocusSessionChip() {
           {phase}
           {formatClock(session.bigClock)}
         </span>
-        <span className="min-w-0 flex-1 truncate font-sans text-xs text-muted-foreground">{label}</span>
+        <span className="min-w-0 flex-1 truncate font-sans text-xs text-muted-foreground">
+          {label}
+        </span>
       </TooltipTrigger>
       <TooltipContent>{tip}</TooltipContent>
     </Tooltip>

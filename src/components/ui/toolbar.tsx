@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -11,11 +11,7 @@ import { cn } from "@/lib/utils";
  * action via `Toolbar.Primary` (right). Keep every child on ONE control rung
  * (e.g. all `size="sm"`).
  */
-function Toolbar({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<"div">) {
+function Toolbar({ className, children, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       role="toolbar"

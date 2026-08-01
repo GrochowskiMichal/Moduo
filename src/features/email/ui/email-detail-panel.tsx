@@ -6,11 +6,11 @@
 import { Link2 } from "lucide-react";
 
 import { EmptyState } from "../../../components/ui/empty-state";
-import { EntityTagRow } from "../../contacts/ui/entity-tag-row";
-import { EntityHub } from "../../../features/spine/ui/entity-hub";
 import { useEntityHub } from "../../../features/spine/hooks/use-entity-hub";
+import { EntityHub } from "../../../features/spine/ui/entity-hub";
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { EntityTagRow } from "../../contacts/ui/entity-tag-row";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -21,13 +21,7 @@ type Props = {
   onOpenEntity?: (ref: EntityRef) => void;
 };
 
-export function EmailDetailPanel({
-  runtime,
-  workspaceId,
-  refId,
-  canEdit,
-  onOpenEntity,
-}: Props) {
+export function EmailDetailPanel({ runtime, workspaceId, refId, canEdit, onOpenEntity }: Props) {
   const hub = useEntityHub(
     runtime,
     workspaceId,

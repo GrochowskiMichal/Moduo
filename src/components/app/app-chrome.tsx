@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsLeft, ChevronsRight, Pencil, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -12,49 +12,45 @@ import {
   dispatchDashboardToggleEdit,
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
-import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
-
-import { useAuth } from "../../providers/auth-provider";
-import { useWorkspace } from "../../providers/workspace-provider";
-import {
-  formatShortcut,
-  SHORTCUTS,
-  useGlobalShortcuts,
-  useShortcut,
-  type ShortcutId,
-} from "../../lib/shortcuts";
-import {
-  PROFILE_UPDATED_EVENT,
-  readStoredAvatar,
-} from "../../features/profile/profile-storage";
 import {
   dispatchLayoutPanelsApply,
+  type FeatureLayoutKey,
   LAYOUT_PANELS_SET_EVENT,
+  type LayoutPanelsApplyDetail,
   readPanelsMap,
   routeToFeatureLayout,
   writePanelsMap,
-  type FeatureLayoutKey,
-  type LayoutPanelsApplyDetail,
 } from "../../features/layout/panel-events";
+import { PROFILE_UPDATED_EVENT, readStoredAvatar } from "../../features/profile/profile-storage";
+import { dispatchOpenSettings } from "../../features/settings/settings-events";
+import { SettingsModal } from "../../features/settings/settings-modal";
+import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
+import {
+  formatShortcut,
+  SHORTCUTS,
+  type ShortcutId,
+  useGlobalShortcuts,
+  useShortcut,
+} from "../../lib/shortcuts";
+import { useAuth } from "../../providers/auth-provider";
+import { useWorkspace } from "../../providers/workspace-provider";
+import { NotificationCenter } from "../notification-center";
+import { TrialBanner } from "../trial-banner";
 import { Button } from "../ui/button";
 import { Icon } from "../ui/icon";
 import { IconButton } from "../ui/icon-button";
 import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { WorkspaceSwitcher } from "../workspace-switcher";
 import { UserMenu } from "../user-menu";
-import { NotificationCenter } from "../notification-center";
+import { WorkspaceSwitcher } from "../workspace-switcher";
 import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constants";
 import type { ModuleNavItem } from "./app-chrome-types";
+import { dispatchCreateNew } from "./create-events";
 import { FocusSessionChip } from "./focus-session-chip";
 import { GlobalBottomBar } from "./global-bottom-bar";
 import { GlobalCaptureBar } from "./global-capture-bar";
 import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
-import { SettingsModal } from "../../features/settings/settings-modal";
-import { dispatchOpenSettings } from "../../features/settings/settings-events";
-import { dispatchCreateNew } from "./create-events";
-import { TrialBanner } from "../trial-banner";
 
 type ModuleTabProps = {
   item: ModuleNavItem;
@@ -83,10 +79,7 @@ function ModuleTab({ item, active, index, onClick, badgeCount = 0 }: ModuleTabPr
         <span className="relative flex">
           <Icon name={item.iconName} size={14} />
           {badgeCount > 0 ? (
-            <span
-              className="absolute -right-1 -top-1 size-1.5 rounded-full bg-primary"
-              aria-hidden
-            >
+            <span className="absolute -right-1 -top-1 size-1.5 rounded-full bg-primary" aria-hidden>
               <span className="sr-only">{badgeCount} unread</span>
             </span>
           ) : null}
@@ -160,7 +153,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     return () => window.removeEventListener(DASHBOARD_EDIT_CHANGED_EVENT, onEditChanged);
   }, []);
   // The page dots (bottom-bar LEFT slot on Home) mirror the pager shape.
-  const [dashboardPager, setDashboardPager] = useState<DashboardPagerInfo>({ count: 1, activeIndex: 0 });
+  const [dashboardPager, setDashboardPager] = useState<DashboardPagerInfo>({
+    count: 1,
+    activeIndex: 0,
+  });
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onPager = (event: Event) => {
@@ -200,8 +196,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
 
       const key = event.key.toLowerCase();
       const shouldToggle =
-        (isMac && event.metaKey && event.ctrlKey && key === "f") ||
-        (!isMac && key === "f11");
+        (isMac && event.metaKey && event.ctrlKey && key === "f") || (!isMac && key === "f11");
 
       if (!shouldToggle) return;
       event.preventDefault();
@@ -289,12 +284,30 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     },
     [modulesNavItems, navigate],
   );
-  useShortcut("module-1", useCallback(() => navigateToIndex(0), [navigateToIndex]));
-  useShortcut("module-2", useCallback(() => navigateToIndex(1), [navigateToIndex]));
-  useShortcut("module-3", useCallback(() => navigateToIndex(2), [navigateToIndex]));
-  useShortcut("module-4", useCallback(() => navigateToIndex(3), [navigateToIndex]));
-  useShortcut("module-5", useCallback(() => navigateToIndex(4), [navigateToIndex]));
-  useShortcut("module-6", useCallback(() => navigateToIndex(5), [navigateToIndex]));
+  useShortcut(
+    "module-1",
+    useCallback(() => navigateToIndex(0), [navigateToIndex]),
+  );
+  useShortcut(
+    "module-2",
+    useCallback(() => navigateToIndex(1), [navigateToIndex]),
+  );
+  useShortcut(
+    "module-3",
+    useCallback(() => navigateToIndex(2), [navigateToIndex]),
+  );
+  useShortcut(
+    "module-4",
+    useCallback(() => navigateToIndex(3), [navigateToIndex]),
+  );
+  useShortcut(
+    "module-5",
+    useCallback(() => navigateToIndex(4), [navigateToIndex]),
+  );
+  useShortcut(
+    "module-6",
+    useCallback(() => navigateToIndex(5), [navigateToIndex]),
+  );
 
   useEffect(() => {
     writePanelsMap(featurePanels);
@@ -363,10 +376,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     // Desktop-only: `email.syncNow` is a Tauri command that rejects on web — don't
     // arm the interval there (it would throw an unhandled rejection every tick).
     if (!("__TAURI_INTERNALS__" in window)) return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "hidden") return;
-      void runtime.email.syncNow({ folder: "inbox" }).catch(() => {});
-    }, 5 * 60 * 1000);
+    const timer = window.setInterval(
+      () => {
+        if (document.visibilityState === "hidden") return;
+        void runtime.email.syncNow({ folder: "inbox" }).catch(() => {});
+      },
+      5 * 60 * 1000,
+    );
     return () => window.clearInterval(timer);
   }, [isEmailRoute, runtime]);
 
@@ -472,7 +488,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       >
         <div className="flex flex-row items-center justify-start gap-1">
           <ModuoMark className="h-8 w-8 shrink-0 text-foreground" />
-          <WorkspaceSwitcher onOpenSettings={() => dispatchOpenSettings({ section: "workspace" })} />
+          <WorkspaceSwitcher
+            onOpenSettings={() => dispatchOpenSettings({ section: "workspace" })}
+          />
         </div>
 
         <div className="flex flex-row items-center justify-center gap-1">

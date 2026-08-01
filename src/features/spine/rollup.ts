@@ -7,7 +7,7 @@
 // file is unit-tested in rollup.test.ts (AC6).
 
 import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "@/lib/entity-links";
-import { projectSnippet, type HubSnippetMeta } from "./snippet-projectors";
+import { type HubSnippetMeta, projectSnippet } from "./snippet-projectors";
 
 /** The entity whose hub is being rendered. */
 export type HubFocus = EntityRef;
@@ -155,7 +155,11 @@ export function rollupSections(
 }
 
 /** The rows to display for a section, capped unless expanded. */
-export function visibleRows(section: HubSection, expanded: boolean, cap = SECTION_ROW_CAP): HubRow[] {
+export function visibleRows(
+  section: HubSection,
+  expanded: boolean,
+  cap = SECTION_ROW_CAP,
+): HubRow[] {
   return expanded ? section.rows : section.rows.slice(0, cap);
 }
 

@@ -25,12 +25,7 @@ type Ctx = {
   isDesktop: boolean;
 };
 
-export function useEmailSnoozeRestore({
-  email,
-  runtime,
-  workspaceId,
-  isDesktop,
-}: Ctx): void {
+export function useEmailSnoozeRestore({ email, runtime, workspaceId, isDesktop }: Ctx): void {
   const inFlight = useRef(false);
   // Latest values without re-subscribing the interval each render.
   const ctxRef = useRef<Ctx>({ email, runtime, workspaceId, isDesktop });

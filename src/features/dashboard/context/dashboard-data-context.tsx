@@ -10,24 +10,23 @@
 
 import {
   createContext,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
-
-import { getRuntime } from "@/lib/runtime";
-import type { EmailModuleBundle, HabitRow, ModuoRuntime } from "@/lib/runtime.types";
 import type { CalendarModuleBundle } from "@/features/calendar/events";
-import type { TasksModuleBundle } from "@/features/tasks/model";
 import type { NeedsAttentionItem } from "@/features/contacts/needs-attention";
 import type { ReconnectItem } from "@/features/contacts/reconnect";
 import type { RecentNoteRow } from "@/features/notes/recent";
 import type { NotificationItem } from "@/features/spine/notifications";
 import type { RecentLinkItem } from "@/features/spine/recent";
+import type { TasksModuleBundle } from "@/features/tasks/model";
+import { getRuntime } from "@/lib/runtime";
+import type { EmailModuleBundle, HabitRow, ModuoRuntime } from "@/lib/runtime.types";
 
 import type { DashboardLayout, WidgetType } from "../engine/types";
 
@@ -165,10 +164,7 @@ function useSource<T>(
     };
   }, [enabled, load]);
 
-  return useMemo(
-    () => ({ data, loading, error, reload: load }),
-    [data, loading, error, load],
-  );
+  return useMemo(() => ({ data, loading, error, reload: load }), [data, loading, error, load]);
 }
 
 const DEFAULT_DATA: DashboardData = {
@@ -219,11 +215,8 @@ export function DashboardDataProvider({
   const email = useSource(has("email"), workspaceId, EMPTY_EMAIL, (rt, ws) =>
     rt.email.listModule(ws),
   );
-  const recentNotes = useSource<RecentNoteRow[]>(
-    has("notes"),
-    workspaceId,
-    [],
-    (rt, ws) => rt.notesV2.recent({ workspaceId: ws, limit: 12 }),
+  const recentNotes = useSource<RecentNoteRow[]>(has("notes"), workspaceId, [], (rt, ws) =>
+    rt.notesV2.recent({ workspaceId: ws, limit: 12 }),
   );
   const recentLinks = useSource<RecentLinkItem[]>(
     has("recently-linked"),
@@ -231,11 +224,8 @@ export function DashboardDataProvider({
     [],
     (rt, ws) => rt.spine.recentLinks({ workspaceId: ws, limit: 20 }),
   );
-  const notifications = useSource<NotificationItem[]>(
-    has("activity"),
-    workspaceId,
-    [],
-    (rt, ws) => rt.spine.listNotifications({ workspaceId: ws, limit: 40 }),
+  const notifications = useSource<NotificationItem[]>(has("activity"), workspaceId, [], (rt, ws) =>
+    rt.spine.listNotifications({ workspaceId: ws, limit: 40 }),
   );
   const needsAttention = useSource<NeedsAttentionItem[]>(
     has("needs-attention"),
@@ -243,11 +233,8 @@ export function DashboardDataProvider({
     [],
     (rt, ws) => rt.contacts.needsAttention({ workspaceId: ws }),
   );
-  const reconnect = useSource<ReconnectItem[]>(
-    has("reconnect"),
-    workspaceId,
-    [],
-    (rt, ws) => rt.contacts.reconnect({ workspaceId: ws }),
+  const reconnect = useSource<ReconnectItem[]>(has("reconnect"), workspaceId, [], (rt, ws) =>
+    rt.contacts.reconnect({ workspaceId: ws }),
   );
   const habits = useSource<HabitRow[]>(has("habits"), workspaceId, [], (rt, ws) =>
     rt.habits.list(ws),

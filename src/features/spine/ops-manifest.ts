@@ -18,7 +18,16 @@ export const linksModuleManifest: ModuleManifest = {
   // dedicated permissions_spine is a one-line future migration (CT-1).
   permissionKey: "tasks",
   // Link/comment activity is polymorphic — logged under the source entity's type.
-  activityEntityTypes: ["task", "contact", "company", "note", "email", "event", "payment", "project"],
+  activityEntityTypes: [
+    "task",
+    "contact",
+    "company",
+    "note",
+    "email",
+    "event",
+    "payment",
+    "project",
+  ],
   ops: [
     {
       op: "links.create",
@@ -43,7 +52,8 @@ export const linksModuleManifest: ModuleManifest = {
     {
       op: "links.set_kind",
       rpc: "links_op_set_kind",
-      summary: "Re-type an existing link's relation kind (re-groups it in the hub). No-op if unchanged.",
+      summary:
+        "Re-type an existing link's relation kind (re-groups it in the hub). No-op if unchanged.",
       args: {
         p_workspace_id: "workspace uuid",
         p_link_id: "link uuid",
@@ -97,11 +107,15 @@ export const linksModuleManifest: ModuleManifest = {
     },
   ],
   resources: [
-    { name: "entities.search", summary: "Search the central registry by label (the @mention / link picker source)." },
+    {
+      name: "entities.search",
+      summary: "Search the central registry by label (the @mention / link picker source).",
+    },
     { name: "links.list", summary: "Every live link touching an entity (the hub roll-up source)." },
     {
       name: "links.suggest",
-      summary: "Deterministic auto-suggested links for an entity (shared tags / email domain / time-window).",
+      summary:
+        "Deterministic auto-suggested links for an entity (shared tags / email domain / time-window).",
     },
   ],
 };

@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
 
 import { TagChip } from "./tag-chip";
-import { TagPicker, type PickableTag } from "./tag-picker";
 import { LABEL_COLORS, pickTagColor } from "./tag-colors";
+import { type PickableTag, TagPicker } from "./tag-picker";
 
 const meta: Meta<typeof TagPicker> = {
   title: "Components/tag-picker",

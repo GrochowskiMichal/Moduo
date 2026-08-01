@@ -12,14 +12,14 @@
  * WorkspaceProvider); on success we persist the selected workspace so the app
  * boots into it, then hand off to `/`.
  */
-import { useState } from "react";
+
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Check, LogIn, Users } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
-
-import { useAuth } from "../../providers/auth-provider";
-import { storageKey } from "../../features/workspaces/workspace-mappers";
 import { Button } from "../../components/ui/button";
+import { storageKey } from "../../features/workspaces/workspace-mappers";
+import { useAuth } from "../../providers/auth-provider";
 
 const PENDING_JOIN_KEY = "moduo:pending_join";
 
@@ -59,8 +59,7 @@ export function JoinPage() {
       toast.success("You've joined the workspace.");
       void navigate({ to: "/", replace: true });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "This invite is invalid or has expired.";
+      const message = err instanceof Error ? err.message : "This invite is invalid or has expired.";
       setError(message);
       toast.error(message);
       setJoining(false);

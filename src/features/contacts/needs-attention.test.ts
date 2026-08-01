@@ -3,9 +3,8 @@
 // overdue winning the priority.
 
 import { describe, expect, it } from "vitest";
-
-import { selectNeedsAttention, type OverdueFollowup } from "./needs-attention";
 import type { Contact } from "./model";
+import { type OverdueFollowup, selectNeedsAttention } from "./needs-attention";
 
 const NOW = new Date("2026-06-27T12:00:00Z");
 
@@ -60,7 +59,9 @@ describe("selectNeedsAttention", () => {
   it("does not flag dormant/archived contacts for idleness", () => {
     const dormant = contact({ id: "a", status: "dormant", updatedAt: daysAgo(90) });
     const archived = contact({ id: "b", status: "archived", updatedAt: daysAgo(90) });
-    expect(selectNeedsAttention({ contacts: [dormant, archived], overdue: [], now: NOW })).toEqual([]);
+    expect(selectNeedsAttention({ contacts: [dormant, archived], overdue: [], now: NOW })).toEqual(
+      [],
+    );
   });
 
   it("flags an overdue follow-up regardless of status, and it wins over idleness", () => {
@@ -68,7 +69,10 @@ describe("selectNeedsAttention", () => {
     const overdue: OverdueFollowup[] = [{ contactId: "a", dueDate: "2026-06-24" }];
     const items = selectNeedsAttention({ contacts: [c], overdue, now: NOW });
     expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ reason: "overdue-followup", detail: "Follow-up due 3 days ago" });
+    expect(items[0]).toMatchObject({
+      reason: "overdue-followup",
+      detail: "Follow-up due 3 days ago",
+    });
   });
 
   it("orders most-urgent first (overdue → no-touch → stale-lead), then by name", () => {

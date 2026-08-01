@@ -1,4 +1,4 @@
-import { useMemo, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { type ClipboardEvent, type KeyboardEvent, useMemo, useState } from "react";
 import { Badge } from "./badge";
 
 type Props = {
@@ -77,11 +77,7 @@ export function TagInput({
     >
       <div className="flex flex-wrap items-center gap-2">
         {safeTags.map((tag, index) => (
-          <Badge
-            key={`${tag}-${index}`}
-            variant="secondary"
-            className="gap-1 pl-2 pr-1 py-0.5"
-          >
+          <Badge key={`${tag}-${index}`} variant="secondary" className="gap-1 pl-2 pr-1 py-0.5">
             <span>#{tag}</span>
             {!disabled ? (
               <button

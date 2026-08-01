@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -58,5 +58,5 @@ function PropertyRow({
   );
 }
 
-export { PropertyRow };
 export type { PropertyRowProps };
+export { PropertyRow };

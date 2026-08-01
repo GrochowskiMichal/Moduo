@@ -5,20 +5,24 @@
 // blocks drag/resize their schedule/duration. Task reads/ops ride the shipped
 // Tasks lane; calendar reads degrade to empty pre-migration (AC13).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
+  type DragEndEvent,
   DragOverlay,
   PointerSensor,
+  pointerWithin,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from "@dnd-kit/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
-
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
+import {
+  RightPanelSwitcher,
+  type RightPanelVariant,
+} from "../../../components/app/right-panel-switcher";
+import { Button } from "../../../components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -27,65 +31,59 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
-import { Button } from "../../../components/ui/button";
-import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
 import { asDragPayload } from "../../../lib/drag-payload";
+import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
+import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
+import { LinkedNotesPanel } from "../../notes/ui/linked-notes-panel";
 import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
-import { pointerWithin } from "@dnd-kit/core";
-
 import { CaptureModal } from "../../tasks/ui/capture-modal";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
+import { accountSourceLabel, resolveAccountHues, syncAgeLabel, visibleEvents } from "../accounts";
+import { cleanupCredentialsForRemoval } from "../caldav-connect";
+import { isElapsedBlock } from "../elapsed";
+import type { CalendarAccountModel } from "../events";
+import { type EventChip, eventChipsInRange } from "../events";
+import { canFocusBlock, loggedMessage } from "../focus";
+import { type BusyInterval, findNextGap } from "../gap-finder";
 import { dayGeometry } from "../grid-layout";
+import { useBlockFocus } from "../hooks/use-block-focus";
+import { type CalendarModuleApi, useCalendarModule } from "../hooks/use-calendar-module";
+import { useCalendarPrefs } from "../hooks/use-calendar-prefs";
+import { useCalendarSync } from "../hooks/use-calendar-sync";
 import {
   blocksByDay,
+  type CalendarView,
+  DEFAULT_BLOCK_MINUTES,
   localDayKey,
   parseDayKey,
   rangeLabel,
   startOfLocalDay,
   stepAnchor,
+  type TaskBlock,
   taskBlocks,
   visibleRange,
-  DEFAULT_BLOCK_MINUTES,
-  type CalendarView,
-  type TaskBlock,
 } from "../lens";
-import { eventChipsInRange, type EventChip } from "../events";
-import type { CalendarAccountModel } from "../events";
-import { cleanupCredentialsForRemoval } from "../caldav-connect";
-import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import {
-  accountSourceLabel,
-  resolveAccountHues,
-  syncAgeLabel,
-  visibleEvents,
-} from "../accounts";
-import { isElapsedBlock } from "../elapsed";
-import { findNextGap, type BusyInterval } from "../gap-finder";
-import {
-  planRollForward,
-  rollForwardMessage,
-  undoRollForward,
-  type RollContext,
-} from "../roll-forward";
-import { stripItems, type StripItem } from "../strip";
-import { tookLongerDeltaSeconds } from "../triage";
-import { canFocusBlock, loggedMessage } from "../focus";
-import {
-  useCalendarModule,
-  type CalendarModuleApi,
-} from "../hooks/use-calendar-module";
-import { useBlockFocus } from "../hooks/use-block-focus";
-import {
+  type CalendarViewState,
+  type PanelVariantId,
   readPanelVariant,
   readViewState,
   writePanelVariant,
   writeViewState,
-  type CalendarViewState,
-  type PanelVariantId,
 } from "../prefs";
-import { useCalendarPrefs } from "../hooks/use-calendar-prefs";
-import { useCalendarSync } from "../hooks/use-calendar-sync";
+import { expandEventOccurrences } from "../recurrence-expand";
+import {
+  planRollForward,
+  type RollContext,
+  rollForwardMessage,
+  undoRollForward,
+} from "../roll-forward";
+import { resolveCalendarDeepLink } from "../search";
+import { type StripItem, stripItems } from "../strip";
+import { tookLongerDeltaSeconds } from "../triage";
+import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import { CalendarGrid, type MoveEventDeltas, type MoveTaskResult } from "./calendar-grid";
 import { CalendarRail } from "./calendar-rail";
 import { CalendarStrip } from "./calendar-strip";
@@ -93,15 +91,10 @@ import { CalendarTasksPanel } from "./calendar-tasks-panel";
 import { CalendarToolbar } from "./calendar-toolbar";
 import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
+import type { QuickCreateDraft } from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
-import { RightPanelSwitcher, type RightPanelVariant } from "../../../components/app/right-panel-switcher";
-import { LinkedNotesPanel } from "../../notes/ui/linked-notes-panel";
-import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
-import { resolveCalendarDeepLink } from "../search";
-import { expandEventOccurrences } from "../recurrence-expand";
 import { TaskPopover } from "./task-popover";
 import { formatTimeOfDay } from "./time-format";
-import type { QuickCreateDraft } from "./event-quick-create";
 
 type Props = {
   api: TasksModuleApi;
@@ -241,10 +234,7 @@ export function CalendarPageView({
   );
   const blocks = useMemo(() => taskBlocks(api.tasks, range), [api.tasks, range]);
   const grouped = useMemo(() => blocksByDay(blocks), [blocks]);
-  const eventChips = useMemo(
-    () => eventChipsInRange(shownEvents, range),
-    [shownEvents, range],
-  );
+  const eventChips = useMemo(() => eventChipsInRange(shownEvents, range), [shownEvents, range]);
   const eventsById = useMemo(
     () => new Map(calendar.events.map((e) => [e.id, e])),
     [calendar.events],
@@ -395,9 +385,7 @@ export function CalendarPageView({
       const startsAt = new Date(
         new Date(event.startsAt).getTime() + deltas.startDeltaMs,
       ).toISOString();
-      const endsAt = new Date(
-        new Date(event.endsAt).getTime() + deltas.endDeltaMs,
-      ).toISOString();
+      const endsAt = new Date(new Date(event.endsAt).getTime() + deltas.endDeltaMs).toISOString();
       void calendar.updateEvent(eventId, { startsAt, endsAt });
     },
     [calendar, eventsById],
@@ -419,17 +407,13 @@ export function CalendarPageView({
     if (!deleteEventId) return;
     setDeleteEventId(null);
     setEventPopover(null);
-    setDetailTarget((cur) =>
-      cur?.type === "event" && cur.id === deleteEventId ? null : cur,
-    );
+    setDetailTarget((cur) => (cur?.type === "event" && cur.id === deleteEventId ? null : cur));
     setSelectedOccurrenceKey(null);
     void calendar.deleteEvent(deleteEventId);
   }, [calendar, deleteEventId]);
 
   // ── drag-to-schedule (the universal drag contract, AC6) ───────────────────
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const dragTask = dragTaskId ? api.tasks.find((t) => t.id === dragTaskId) : null;
 
@@ -458,9 +442,7 @@ export function CalendarPageView({
       const dayKey = overId.slice("cal-day:".length);
       const day = parseDayKey(dayKey);
       if (!day) return;
-      const colEl = document.querySelector<HTMLElement>(
-        `[data-day-col][data-day-key="${dayKey}"]`,
-      );
+      const colEl = document.querySelector<HTMLElement>(`[data-day-col][data-day-key="${dayKey}"]`);
       if (!colEl) return;
       const task = api.tasks.find((t) => t.id === payload.entityId);
       if (!task || !api.canEdit) return;
@@ -469,16 +451,12 @@ export function CalendarPageView({
       const activator = e.activatorEvent as PointerEvent | MouseEvent;
       const pointerY =
         pointer?.y ??
-        (typeof activator?.clientY === "number" ? activator.clientY : rect.top) +
-          e.delta.y;
+        (typeof activator?.clientY === "number" ? activator.clientY : rect.top) + e.delta.y;
       const frac = Math.min(Math.max((pointerY - rect.top) / rect.height, 0), 1);
       const rawMin = frac * geom.totalMinutes;
       // Duration clamps to the day so a fat-fingered estimate can't push the
       // start negative or paint past the grid bottom.
-      const duration = Math.min(
-        task.durationMinutes || DEFAULT_DROP_MINUTES,
-        geom.totalMinutes,
-      );
+      const duration = Math.min(task.durationMinutes || DEFAULT_DROP_MINUTES, geom.totalMinutes);
       const startMin = Math.min(
         Math.max(Math.round(rawMin / DROP_SNAP_MINUTES) * DROP_SNAP_MINUTES, 0),
         geom.totalMinutes - duration,
@@ -589,9 +567,7 @@ export function CalendarPageView({
   // "Took longer" blocks acknowledged this session — suppressed from the strip
   // and the in-grid triage until reload (the lens model has no per-block store
   // to persist "worked"; the LOGGED TIME persists, this suppression doesn't).
-  const [workedTaskIds, setWorkedTaskIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const [workedTaskIds, setWorkedTaskIds] = useState<ReadonlySet<string>>(() => new Set());
   const markWorked = useCallback((taskId: string, worked: boolean) => {
     setWorkedTaskIds((prev) => {
       const next = new Set(prev);
@@ -620,8 +596,7 @@ export function CalendarPageView({
     const todayRange = visibleRange("day", todayStart, prefs);
     const todayKey = localDayKey(todayStart);
     const todayBlocks = taskBlocks(api.tasks, todayRange);
-    const todayEvents =
-      eventChipsInRange(calendar.events, todayRange).timed.get(todayKey) ?? [];
+    const todayEvents = eventChipsInRange(calendar.events, todayRange).timed.get(todayKey) ?? [];
     const busy: BusyInterval[] = [
       ...todayBlocks.map((b) => ({ startMs: b.startMs, endMs: b.endMs })),
       ...todayEvents.map((c) => ({ startMs: c.startMs, endMs: c.endMs })),
@@ -750,9 +725,7 @@ export function CalendarPageView({
     toast(loggedMessage(result.seconds, task?.title ?? ""));
   }, [focus, api.tasks]);
 
-  const popoverEvent = eventPopover
-    ? (eventsById.get(eventPopover.chip.eventId) ?? null)
-    : null;
+  const popoverEvent = eventPopover ? (eventsById.get(eventPopover.chip.eventId) ?? null) : null;
   const sourceLabelFor = useCallback(
     (sourceAccountId: string | null): string | null => {
       if (!sourceAccountId) return null;
@@ -767,9 +740,7 @@ export function CalendarPageView({
       ? (api.tasks.find((t) => t.id === detailTarget.id) ?? null)
       : null;
   const detailEvent =
-    detailTarget?.type === "event"
-      ? (eventsById.get(detailTarget.id) ?? null)
-      : null;
+    detailTarget?.type === "event" ? (eventsById.get(detailTarget.id) ?? null) : null;
 
   const panelVariants = useMemo<RightPanelVariant[]>(
     () => [
@@ -788,9 +759,7 @@ export function CalendarPageView({
                     onMove: (taskIds) => {
                       const byId = new Map(strip.map((i) => [i.taskId, i]));
                       rollForward(
-                        taskIds
-                          .map((id) => byId.get(id))
-                          .filter((i): i is StripItem => Boolean(i)),
+                        taskIds.map((id) => byId.get(id)).filter((i): i is StripItem => Boolean(i)),
                       );
                     },
                     onRemove: onTriageRemove,
@@ -848,10 +817,18 @@ export function CalendarPageView({
             workspaceId={workspaceId}
             focus={detailTarget ? { type: detailTarget.type, id: detailTarget.id } : null}
             focusLabel={detailEvent?.title ?? detailTask?.title ?? undefined}
-            focusIcon={detailTarget?.type === "event" ? "calendar" : detailTarget?.type === "task" ? "check-square" : null}
+            focusIcon={
+              detailTarget?.type === "event"
+                ? "calendar"
+                : detailTarget?.type === "task"
+                  ? "check-square"
+                  : null
+            }
             canEdit={calendar.canEdit}
             onOpenNote={(id) =>
-              window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "note", id } }))
+              window.dispatchEvent(
+                new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "note", id } }),
+              )
             }
           />
         ),
@@ -923,9 +900,7 @@ export function CalendarPageView({
               onNext={() => step(1)}
               onToday={goToday}
               onViewChange={setView}
-              syncLabel={
-                calendar.accounts.length > 0 ? syncAgeLabel(calendar.accounts) : null
-              }
+              syncLabel={calendar.accounts.length > 0 ? syncAgeLabel(calendar.accounts) : null}
               onRefresh={calendar.accounts.length > 0 ? refreshCalendars : undefined}
               refreshing={refreshing}
             />
@@ -1011,10 +986,7 @@ export function CalendarPageView({
           focusRunning={focus.running && focus.taskId === taskPopover.block.taskId}
           focusReadout={
             focus.taskId === taskPopover.block.taskId ? (
-              <FocusReadout
-                runningSinceMs={focus.runningSinceMs}
-                baseSeconds={focus.baseSeconds}
-              />
+              <FocusReadout runningSinceMs={focus.runningSinceMs} baseSeconds={focus.baseSeconds} />
             ) : null
           }
           onToggleDone={() => {

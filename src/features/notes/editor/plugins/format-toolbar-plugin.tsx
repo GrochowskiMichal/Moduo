@@ -15,8 +15,7 @@
  * core doesn't bind. The tooltips advertise all of them.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { $isCodeNode } from "@lexical/code";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getSelection,
@@ -25,12 +24,13 @@ import {
   COMMAND_PRIORITY_LOW,
   FORMAT_TEXT_COMMAND,
   KEY_MODIFIER_COMMAND,
-  SELECTION_CHANGE_COMMAND,
   type LexicalNode,
+  SELECTION_CHANGE_COMMAND,
   type TextFormatType,
 } from "lexical";
-import { $isCodeNode } from "@lexical/code";
 import { Bold, Code, Italic, Strikethrough } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { IconButton } from "@/components/ui/icon-button";
 
 type Formats = { bold: boolean; italic: boolean; strikethrough: boolean; code: boolean };

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-
-import { groupPanelTasks } from "./panel";
 import type { Task } from "../tasks/model";
+import { groupPanelTasks } from "./panel";
 
 const NOW = new Date(2026, 6, 2, 11, 0); // Thu Jul 2, local
 
@@ -143,9 +142,7 @@ describe("groupPanelTasks — the right panel's three groups (AC11)", () => {
   });
 
   it("the backlog caps and due-date compare normalizes to LOCAL days (timestamptz gotcha)", () => {
-    const many = Array.from({ length: 60 }, (_, i) =>
-      makePanelTask({ title: `backlog ${i}` }),
-    );
+    const many = Array.from({ length: 60 }, (_, i) => makePanelTask({ title: `backlog ${i}` }));
     const capped = groupPanelTasks({ tasks: many, committedTasks: [], now: NOW });
     expect(capped.backlog).toHaveLength(50);
     // Due "today" stored as a UTC instant from local midnight must count as

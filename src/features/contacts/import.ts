@@ -93,7 +93,10 @@ export function detectDelimiter(text: string): string {
  * and a leading BOM. Fully-blank lines are dropped. No external dependency — a
  * CSV import shouldn't pull a parser lib into the bundle.
  */
-export function parseCsv(input: string, delimiter?: string): { headers: string[]; rows: string[][] } {
+export function parseCsv(
+  input: string,
+  delimiter?: string,
+): { headers: string[]; rows: string[][] } {
   let text = input;
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); // strip BOM
   const delim = delimiter ?? detectDelimiter(text);
@@ -170,13 +173,52 @@ function normHeader(h: string): string {
 // "company name" → company (not name), "first name" → firstName (not name).
 const HEADER_RULES: { field: ImportField; match: (h: string) => boolean }[] = [
   { field: "email", match: (h) => h.includes("email") || h === "mail" },
-  { field: "firstName", match: (h) => h.includes("firstname") || h.includes("givenname") || h === "first" },
-  { field: "lastName", match: (h) => h.includes("lastname") || h.includes("surname") || h.includes("familyname") || h === "last" },
-  { field: "phone", match: (h) => h.includes("phone") || h.includes("mobile") || h.includes("cell") || h === "tel" || h.includes("telephone") },
-  { field: "company", match: (h) => h.includes("company") || h.includes("organization") || h.includes("organisation") || h.includes("employer") || h.includes("account") || h === "org" },
-  { field: "title", match: (h) => h.includes("jobtitle") || h.includes("title") || h.includes("role") || h.includes("position") || h === "job" },
+  {
+    field: "firstName",
+    match: (h) => h.includes("firstname") || h.includes("givenname") || h === "first",
+  },
+  {
+    field: "lastName",
+    match: (h) =>
+      h.includes("lastname") || h.includes("surname") || h.includes("familyname") || h === "last",
+  },
+  {
+    field: "phone",
+    match: (h) =>
+      h.includes("phone") ||
+      h.includes("mobile") ||
+      h.includes("cell") ||
+      h === "tel" ||
+      h.includes("telephone"),
+  },
+  {
+    field: "company",
+    match: (h) =>
+      h.includes("company") ||
+      h.includes("organization") ||
+      h.includes("organisation") ||
+      h.includes("employer") ||
+      h.includes("account") ||
+      h === "org",
+  },
+  {
+    field: "title",
+    match: (h) =>
+      h.includes("jobtitle") ||
+      h.includes("title") ||
+      h.includes("role") ||
+      h.includes("position") ||
+      h === "job",
+  },
   { field: "status", match: (h) => h.includes("status") || h.includes("stage") },
-  { field: "name", match: (h) => h.includes("fullname") || h.includes("displayname") || h.includes("name") || h.includes("contact") },
+  {
+    field: "name",
+    match: (h) =>
+      h.includes("fullname") ||
+      h.includes("displayname") ||
+      h.includes("name") ||
+      h.includes("contact"),
+  },
 ];
 
 /** Best-guess a target field for every header; unrecognized → "ignore". */
@@ -361,7 +403,12 @@ export function planImport(
     }
     if (byNameCompany.has(key)) {
       remember();
-      return { ...row, action: "merge", matchedContactId: byNameCompany.get(key), reason: "name+company" };
+      return {
+        ...row,
+        action: "merge",
+        matchedContactId: byNameCompany.get(key),
+        reason: "name+company",
+      };
     }
     // 3. A brand-new contact.
     remember();

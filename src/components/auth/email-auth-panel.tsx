@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, CircleHelp, CircleUserRound, Mail, UserPlus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ModuoMark } from "@/components/ui/moduo-mark";
-import { useAuth } from "@/providers/auth-provider";
-import type { AuthMnemonic } from "@/lib/runtime";
 import { notifyProfileUpdated, writeStoredAvatar } from "@/features/profile/profile-storage";
+import type { AuthMnemonic } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 import defaultProfilePic from "../../../assets/icon.png";
 
@@ -106,10 +106,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
     void writeStoredAvatar(runtime, avatarDataUrl).then(() => notifyProfileUpdated());
   }, [avatarDataUrl, runtime]);
 
-  const avatarInitial = useMemo(
-    () => profileName.trim().slice(0, 1).toUpperCase(),
-    [profileName],
-  );
+  const avatarInitial = useMemo(() => profileName.trim().slice(0, 1).toUpperCase(), [profileName]);
 
   const handleSendOtp = async () => {
     if (!runtime || busy) return;
@@ -402,10 +399,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
     <div className="relative z-10 w-full">
       <div className="mb-7 flex w-full flex-col items-center">
         <ModuoMark
-          className={cn(
-            "size-8 opacity-95",
-            cloudAuth && flow === "otp_sent" ? "mb-10" : "mb-6",
-          )}
+          className={cn("size-8 opacity-95", cloudAuth && flow === "otp_sent" ? "mb-10" : "mb-6")}
           aria-hidden="true"
         />
         {cloudAuth && flow === "otp_sent" ? (

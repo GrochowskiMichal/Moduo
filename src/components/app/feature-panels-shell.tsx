@@ -1,18 +1,11 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   dispatchLayoutPanelsSet,
-  LAYOUT_PANELS_APPLY_EVENT,
-  readFeaturePanelState,
   type FeatureLayoutKey,
+  LAYOUT_PANELS_APPLY_EVENT,
   type LayoutPanelsApplyDetail,
+  readFeaturePanelState,
 } from "../../features/layout/panel-events";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { Sheet, SheetContent } from "../ui/sheet";
@@ -225,12 +218,8 @@ export function FeaturePanelsShell({
   const showLeftFull = viewportMode === "full" && panelState.left;
   const showRightFull = viewportMode === "full" && showRight;
 
-  const leftSlot = left ?? (
-    <div className="text-sm text-muted-foreground">Feature tools panel</div>
-  );
-  const rightSlot = right ?? (
-    <div className="text-sm text-muted-foreground">Details panel</div>
-  );
+  const leftSlot = left ?? <div className="text-sm text-muted-foreground">Feature tools panel</div>;
+  const rightSlot = right ?? <div className="text-sm text-muted-foreground">Details panel</div>;
 
   const layoutKey = `${LAYOUT_STORAGE_PREFIX}:${feature}:${showLeftFull ? "l" : "-"}${showRightFull ? "r" : "-"}`;
   const defaultLayout = useMemo<Layout | undefined>(
@@ -271,7 +260,9 @@ export function FeaturePanelsShell({
       {showLeftFull ? <ResizableHandle /> : null}
 
       <ResizablePanel id={`${feature}-center`} defaultSize="60%" minSize="30%">
-        <main className={CENTER_WRAPPER} style={CENTER_PAD}>{center}</main>
+        <main className={CENTER_WRAPPER} style={CENTER_PAD}>
+          {center}
+        </main>
       </ResizablePanel>
 
       {showRightFull ? <ResizableHandle /> : null}

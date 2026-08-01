@@ -2,15 +2,9 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
 
 import { Button } from "../../../components/ui/button";
-import {
-  AuthContext,
-  type AuthContextValue,
-} from "../../../providers/auth-provider";
 import type { ModuoRuntime } from "../../../lib/runtime";
-import {
-  WorkspaceContext,
-  type WorkspaceContextValue,
-} from "../../workspaces/workspace-context";
+import { AuthContext, type AuthContextValue } from "../../../providers/auth-provider";
+import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
 import type { SavedAccount } from "../model/email-types";
 
 import { EmailConnectDialog } from "./email-connect-dialog";
@@ -64,9 +58,7 @@ const workspaceValue = {
 function StoryProviders({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={authValue}>
-      <WorkspaceContext.Provider value={workspaceValue}>
-        {children}
-      </WorkspaceContext.Provider>
+      <WorkspaceContext.Provider value={workspaceValue}>{children}</WorkspaceContext.Provider>
     </AuthContext.Provider>
   );
 }
@@ -135,11 +127,7 @@ export const Reconnect: Story = {
         <Button type="button" onClick={() => setOpen(true)}>
           Reconnect
         </Button>
-        <EmailConnectDialog
-          open={open}
-          onOpenChange={setOpen}
-          isReconnect={reconnectIcloud}
-        />
+        <EmailConnectDialog open={open} onOpenChange={setOpen} isReconnect={reconnectIcloud} />
       </>
     );
   },

@@ -2,8 +2,8 @@
 // type→group folding, empty-group dropping, and that un-navigable kinds vanish.
 
 import { describe, expect, it } from "vitest";
-import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "./palette-search";
 import type { EntityRecord } from "./entity-links";
+import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "./palette-search";
 
 function rec(type: string, id: string, label: string): EntityRecord {
   return { workspaceId: "w1", type, id, label, icon: null, deletedAt: null };

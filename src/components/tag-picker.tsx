@@ -8,19 +8,12 @@
 // "friction behind the dump" (principle 3): type a name, hit Create, refine the
 // color later. Color is token-routed via <TagChip> / data-label.
 
-import { Fragment, useState, type ReactNode } from "react";
 import { Check, Plus, Tag as TagIcon, Trash2 } from "lucide-react";
-
-import {
-  Command,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "./ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Fragment, type ReactNode, useState } from "react";
 import { cn } from "../lib/utils";
-import { LABEL_COLORS, normalizeLabelColor, type LabelColor } from "./tag-colors";
+import { LABEL_COLORS, type LabelColor, normalizeLabelColor } from "./tag-colors";
+import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 export type PickableTag = { id: string; name: string; color: string | null };
 

@@ -8,11 +8,7 @@ import { toast } from "sonner";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
-import type {
-  CalendarAccountModel,
-  CalendarEventModel,
-  CalendarEventPatch,
-} from "../events";
+import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
 
 type Params = {
   userId: string | null;
@@ -31,10 +27,7 @@ export type CreateEventDraft = {
 
 const isTempId = (id: string) => id.startsWith("tmp-");
 
-function applyPatch(
-  e: CalendarEventModel,
-  patch: CalendarEventPatch,
-): CalendarEventModel {
+function applyPatch(e: CalendarEventModel, patch: CalendarEventPatch): CalendarEventModel {
   return {
     ...e,
     title: patch.title !== undefined ? patch.title : e.title,
@@ -207,9 +200,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           },
         });
       } catch (err) {
-        setEvents((prev) =>
-          prev.some((e) => e.id === eventId) ? prev : [...prev, snapshot],
-        );
+        setEvents((prev) => (prev.some((e) => e.id === eventId) ? prev : [...prev, snapshot]));
         toast.error(err instanceof Error ? err.message : "Couldn't delete the event.");
       }
     },

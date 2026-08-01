@@ -7,11 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "../../../components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "../../../components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -53,13 +49,7 @@ function atWallClock(anchorMs: number, time: string): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h || 0, m || 0);
 }
 
-export function EventQuickCreate({
-  startMs,
-  endMs,
-  onCommit,
-  onCancel,
-  onTimesChange,
-}: Props) {
+export function EventQuickCreate({ startMs, endMs, onCommit, onCancel, onTimesChange }: Props) {
   const [title, setTitle] = useState("");
   const [startTime, setStartTime] = useState(() => toTimeInput(startMs));
   const [endTime, setEndTime] = useState(() => toTimeInput(endMs));
@@ -80,7 +70,7 @@ export function EventQuickCreate({
       const end = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
       return { start, end };
     }
-    let start = atWallClock(startMs, startTime);
+    const start = atWallClock(startMs, startTime);
     let end = atWallClock(startMs, endTime);
     if (end.getTime() <= start.getTime()) end = new Date(start.getTime() + 15 * 60_000);
     return { start, end };
@@ -180,7 +170,12 @@ export function EventQuickCreate({
           <div className="flex items-center gap-2">
             {allDay ? (
               <span className="flex-1 text-sm text-muted-foreground">
-                All day · {new Date(startMs).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                All day ·{" "}
+                {new Date(startMs).toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
               </span>
             ) : (
               <>

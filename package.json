@@ -21,11 +21,14 @@
     "build-storybook": "sb build",
     "storybook:gen": "bun ./scripts/generate-storybook-stories.ts",
     "typecheck": "tsc --noEmit",
+    "lint:js": "biome check .",
     "lint:css": "stylelint \"src/**/*.css\"",
     "lint:tw": "bun ./scripts/check-arbitrary-tw.ts",
+    "format": "biome format --write .",
+    "format:fix": "biome check --write .",
     "test": "vitest run --maxWorkers=1",
     "test:watch": "vitest --maxWorkers=1",
-    "verify": "bun run typecheck && bun run lint:tw && bun run lint:css && bun run test",
+    "verify": "bun run typecheck && bun run lint:js && bun run lint:tw && bun run lint:css && bun run test",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -85,6 +88,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.6",
     "@playwright/test": "^1.60.0",
     "@resvg/resvg-js": "^2.6.2",
     "@rsbuild/core": "2.1.8",

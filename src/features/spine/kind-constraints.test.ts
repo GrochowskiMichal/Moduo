@@ -3,13 +3,16 @@
 // party must include paid-by. Symmetric and canonically ordered.
 
 import { describe, expect, it } from "vitest";
-
-import { allowedKinds, coerceKindForPair, isKindAllowed } from "./kind-constraints";
 import { RELATION_KINDS } from "../../lib/entity-links";
+import { allowedKinds, coerceKindForPair, isKindAllowed } from "./kind-constraints";
 
 describe("allowedKinds", () => {
   it("always offers references + mentions for any pair", () => {
-    for (const kinds of [allowedKinds("contact", "contact"), allowedKinds("task", "note"), allowedKinds("email", "company")]) {
+    for (const kinds of [
+      allowedKinds("contact", "contact"),
+      allowedKinds("task", "note"),
+      allowedKinds("email", "company"),
+    ]) {
       expect(kinds).toContain("references");
       expect(kinds).toContain("mentions");
     }
@@ -69,7 +72,11 @@ describe("allowedKinds", () => {
   });
 
   it("is symmetric in its arguments", () => {
-    for (const [a, b] of [["contact", "company"], ["email", "task"], ["payment", "contact"]] as const) {
+    for (const [a, b] of [
+      ["contact", "company"],
+      ["email", "task"],
+      ["payment", "contact"],
+    ] as const) {
       expect(allowedKinds(a, b)).toEqual(allowedKinds(b, a));
     }
   });

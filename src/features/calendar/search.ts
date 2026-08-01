@@ -33,6 +33,7 @@ export function resolveCalendarDeepLink(
 ): CalendarDeepLinkTarget {
   if (!id) return { kind: "none" };
   const event = ctx.events.find((e) => e.id === id);
-  if (event && event.startsAt) return { kind: "event", eventId: event.id, startsAt: event.startsAt };
+  if (event && event.startsAt)
+    return { kind: "event", eventId: event.id, startsAt: event.startsAt };
   return { kind: "none" };
 }

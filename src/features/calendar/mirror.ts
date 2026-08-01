@@ -90,11 +90,11 @@ export function mapGoogleEvent(raw: RawProviderEvent): CalendarMirrorEventInput 
   const allDay = Boolean(startDate);
 
   const startsAt = allDay
-    ? (startDate ? localMidnightIso(startDate) : null)
+    ? startDate
+      ? localMidnightIso(startDate)
+      : null
     : instantIso(start.dateTime);
-  const endsAt = allDay
-    ? (endDate ? localMidnightIso(endDate) : null)
-    : instantIso(end.dateTime);
+  const endsAt = allDay ? (endDate ? localMidnightIso(endDate) : null) : instantIso(end.dateTime);
   if (!startsAt || !endsAt) return null;
 
   const recurrence = Array.isArray(raw.recurrence) ? (raw.recurrence as unknown[]) : [];
@@ -129,8 +129,13 @@ function graphRecurrenceToRrule(recurrence: unknown): string | null {
   const interval = typeof pattern.interval === "number" ? pattern.interval : 1;
   const intervalPart = interval > 1 ? `;INTERVAL=${interval}` : "";
   const DAYS: Record<string, string> = {
-    sunday: "SU", monday: "MO", tuesday: "TU", wednesday: "WE",
-    thursday: "TH", friday: "FR", saturday: "SA",
+    sunday: "SU",
+    monday: "MO",
+    tuesday: "TU",
+    wednesday: "WE",
+    thursday: "TH",
+    friday: "FR",
+    saturday: "SA",
   };
   const byday = Array.isArray(pattern.daysOfWeek)
     ? (pattern.daysOfWeek as unknown[])

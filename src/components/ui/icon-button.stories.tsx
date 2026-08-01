@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Plus, Trash2, Settings2 } from "lucide-react";
+import { Plus, Settings2, Trash2 } from "lucide-react";
 
 import { IconButton } from "./icon-button";
 import { TooltipProvider } from "./tooltip";

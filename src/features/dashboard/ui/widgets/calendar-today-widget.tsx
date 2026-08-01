@@ -3,19 +3,18 @@
 // the upcoming few, and an "unfinished from earlier" strip with an inline
 // Move-to-today (edit-gated by `canWrite`). Rows deep-link; never a guilt wall.
 
+import { ArrowRight, CalendarClock } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { ArrowRight, CalendarClock } from "lucide-react";
-
-import { cn } from "@/lib/utils";
-import { getRuntime } from "@/lib/runtime";
-import { shapeToday, type TodayChip } from "@/features/calendar/today";
-import { stripItems } from "@/features/calendar/strip";
-import { planRollForward, rollForwardMessage } from "@/features/calendar/roll-forward";
-import { DEFAULT_CALENDAR_PREFS } from "@/features/calendar/prefs";
-import { localDayKey, startOfLocalDay, taskBlocks, visibleRange } from "@/features/calendar/lens";
 import { eventChipsInRange } from "@/features/calendar/events";
+import { localDayKey, startOfLocalDay, taskBlocks, visibleRange } from "@/features/calendar/lens";
+import { DEFAULT_CALENDAR_PREFS } from "@/features/calendar/prefs";
+import { planRollForward, rollForwardMessage } from "@/features/calendar/roll-forward";
+import { stripItems } from "@/features/calendar/strip";
+import { shapeToday, type TodayChip } from "@/features/calendar/today";
 import { formatTimeOfDay } from "@/features/calendar/ui/time-format";
+import { getRuntime } from "@/lib/runtime";
+import { cn } from "@/lib/utils";
 
 import {
   requestDashboardDataRefresh,
@@ -112,9 +111,7 @@ export function CalendarTodayWidget({ size, canWrite }: WidgetComponentProps) {
     <WidgetBodyRoot>
       {view.stripCount > 0 ? (
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
-          <span className="min-w-0 flex-1 truncate">
-            {view.stripCount} unfinished from earlier
-          </span>
+          <span className="min-w-0 flex-1 truncate">{view.stripCount} unfinished from earlier</span>
           {canWrite ? (
             <button
               type="button"
@@ -130,7 +127,9 @@ export function CalendarTodayWidget({ size, canWrite }: WidgetComponentProps) {
       {remaining.length === 0 ? (
         <div className="grid h-full place-items-center px-3 text-center">
           <p className="text-sm text-muted-foreground">
-            {view.chips.length > 0 ? "Nothing left today — nicely done." : "Nothing scheduled today."}
+            {view.chips.length > 0
+              ? "Nothing left today — nicely done."
+              : "Nothing scheduled today."}
           </p>
         </div>
       ) : (
@@ -154,7 +153,10 @@ export function CalendarTodayWidget({ size, canWrite }: WidgetComponentProps) {
                   {chip.title}
                 </span>
                 {i === 0 ? (
-                  <ArrowRight className="size-icon-xs shrink-0 text-muted-foreground/70" aria-hidden />
+                  <ArrowRight
+                    className="size-icon-xs shrink-0 text-muted-foreground/70"
+                    aria-hidden
+                  />
                 ) : null}
               </button>
             </li>

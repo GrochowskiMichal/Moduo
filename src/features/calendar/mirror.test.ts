@@ -4,12 +4,7 @@ process.env.TZ = "Europe/Warsaw";
 
 import { describe, expect, it } from "vitest";
 
-import {
-  deletedExternalIds,
-  mapGoogleEvent,
-  mapOutlookEvent,
-  mapProviderEvents,
-} from "./mirror";
+import { deletedExternalIds, mapGoogleEvent, mapOutlookEvent, mapProviderEvents } from "./mirror";
 
 describe("mirror — Google provider→row mapper (AC12)", () => {
   it("maps a timed Google event to the mirror input shape", () => {
@@ -157,7 +152,11 @@ describe("mirror — Microsoft-Graph provider→row mapper (AC12)", () => {
 describe("mirror — batch + deletion diff", () => {
   it("maps a batch and drops unmappable rows", () => {
     const rows = mapProviderEvents("google", [
-      { id: "a", start: { dateTime: "2026-07-02T09:00:00Z" }, end: { dateTime: "2026-07-02T10:00:00Z" } },
+      {
+        id: "a",
+        start: { dateTime: "2026-07-02T09:00:00Z" },
+        end: { dateTime: "2026-07-02T10:00:00Z" },
+      },
       { summary: "no id" },
     ]);
     expect(rows.map((r) => r.externalEventId)).toEqual(["a"]);

@@ -67,13 +67,9 @@ function RefCard({
           </span>
         ) : null}
       </div>
-      <div className="truncate text-sm text-foreground">
-        {refRow.subject || "(No subject)"}
-      </div>
+      <div className="truncate text-sm text-foreground">{refRow.subject || "(No subject)"}</div>
       {refRow.snippet ? (
-        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-          {refRow.snippet}
-        </p>
+        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{refRow.snippet}</p>
       ) : null}
 
       <div className="mt-2 flex items-center gap-1.5">

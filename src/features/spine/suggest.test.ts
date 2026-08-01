@@ -8,12 +8,12 @@ import { describe, expect, it } from "vitest";
 
 import { deriveLinkKey, type EntityRef } from "../../lib/entity-links";
 import {
+  type RawLinkSuggestion,
   SIGNAL_WEIGHTS,
+  type SuggestionSignal,
   scoreSuggestions,
   suggestionReason,
   topSuggestion,
-  type RawLinkSuggestion,
-  type SuggestionSignal,
 } from "./suggest";
 
 const FOCUS: EntityRef = { type: "contact", id: "c1" };
@@ -21,14 +21,32 @@ const FOCUS: EntityRef = { type: "contact", id: "c1" };
 function raw(
   over: Partial<RawLinkSuggestion> & Pick<RawLinkSuggestion, "otherType" | "otherId" | "signal">,
 ): RawLinkSuggestion {
-  return { otherLabel: "Acme Corp", otherIcon: null, suggestedKind: "references", strength: 1, ...over };
+  return {
+    otherLabel: "Acme Corp",
+    otherIcon: null,
+    suggestedKind: "references",
+    strength: 1,
+    ...over,
+  };
 }
 
 describe("scoreSuggestions", () => {
   it("builds a candidate from each deterministic signal (shared-tag / email-domain / time-window)", () => {
     const out = scoreSuggestions(FOCUS, [
-      raw({ otherType: "note", otherId: "n1", signal: "shared-tag", strength: 2, otherLabel: "Account plan" }),
-      raw({ otherType: "company", otherId: "co1", signal: "email-domain", suggestedKind: "works-at", otherLabel: "Acme" }),
+      raw({
+        otherType: "note",
+        otherId: "n1",
+        signal: "shared-tag",
+        strength: 2,
+        otherLabel: "Account plan",
+      }),
+      raw({
+        otherType: "company",
+        otherId: "co1",
+        signal: "email-domain",
+        suggestedKind: "works-at",
+        otherLabel: "Acme",
+      }),
       raw({ otherType: "task", otherId: "t1", signal: "time-window", otherLabel: "Ship it" }),
     ]);
     expect(out.map((s) => s.other.id).sort()).toEqual(["co1", "n1", "t1"]);
@@ -41,7 +59,13 @@ describe("scoreSuggestions", () => {
   it("ranks a stronger signal above a weaker one; shared-tag strength scales the score", () => {
     const out = scoreSuggestions(FOCUS, [
       raw({ otherType: "task", otherId: "weak", signal: "time-window", otherLabel: "Z" }),
-      raw({ otherType: "note", otherId: "strong", signal: "shared-tag", strength: 3, otherLabel: "A" }),
+      raw({
+        otherType: "note",
+        otherId: "strong",
+        signal: "shared-tag",
+        strength: 3,
+        otherLabel: "A",
+      }),
     ]);
     expect(out[0].other.id).toBe("strong");
     expect(out[0].score).toBe(SIGNAL_WEIGHTS["shared-tag"] * 3);
@@ -50,7 +74,12 @@ describe("scoreSuggestions", () => {
 
   it("merges multiple signals for the same pair into one ranked suggestion", () => {
     const out = scoreSuggestions(FOCUS, [
-      raw({ otherType: "company", otherId: "co1", signal: "email-domain", suggestedKind: "works-at" }),
+      raw({
+        otherType: "company",
+        otherId: "co1",
+        signal: "email-domain",
+        suggestedKind: "works-at",
+      }),
       raw({ otherType: "company", otherId: "co1", signal: "time-window" }),
     ]);
     expect(out).toHaveLength(1);

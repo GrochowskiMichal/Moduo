@@ -1,9 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
-
-import { useWorkspace } from "../providers/workspace-provider";
+import { useCallback, useMemo, useState } from "react";
 import { useEntitlement } from "../hooks/use-entitlement";
 import { formatShortcut, SHORTCUTS, useShortcut } from "../lib/shortcuts";
+import { useWorkspace } from "../providers/workspace-provider";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Button } from "./ui/button";
 import {
@@ -48,7 +47,9 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
   const [newWorkspaceName, setNewWorkspaceName] = useState("New Workspace");
   const [deleteCandidateWorkspaceId, setDeleteCandidateWorkspaceId] = useState<string | null>(null);
   const [deleteWorkspaceInput, setDeleteWorkspaceInput] = useState("");
-  const [deleteSubmittingWorkspaceId, setDeleteSubmittingWorkspaceId] = useState<string | null>(null);
+  const [deleteSubmittingWorkspaceId, setDeleteSubmittingWorkspaceId] = useState<string | null>(
+    null,
+  );
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [isJoiningWorkspace, setIsJoiningWorkspace] = useState(false);
   const [joinToken, setJoinToken] = useState("");
@@ -303,7 +304,8 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
               // trigger: if a background refresh drops the list to one while a
               // delete panel is open, the panel collapses and its confirm becomes
               // unreachable — so the zero-workspace state stays truly impossible.
-              const isDeleteOpen = canDeleteWorkspaces && deleteCandidateWorkspaceId === workspace.id;
+              const isDeleteOpen =
+                canDeleteWorkspaces && deleteCandidateWorkspaceId === workspace.id;
               const deleteMatches = deleteWorkspaceInput.trim() === nameLabel.trim();
 
               return (
@@ -376,7 +378,8 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                     }}
                   >
                     <p className="text-xs text-muted-foreground">
-                      Retype <span className="font-semibold text-foreground">{nameLabel}</span> to delete this workspace.
+                      Retype <span className="font-semibold text-foreground">{nameLabel}</span> to
+                      delete this workspace.
                     </p>
                     <div className="mt-2 flex flex-row items-center gap-1">
                       <Input
@@ -419,7 +422,12 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                         variant="ghost"
                         size="sm"
                         onClick={async () => {
-                          if (!deleteMatches || !canDeleteWorkspaces || deleteSubmittingWorkspaceId === workspace.id) return;
+                          if (
+                            !deleteMatches ||
+                            !canDeleteWorkspaces ||
+                            deleteSubmittingWorkspaceId === workspace.id
+                          )
+                            return;
                           setDeleteSubmittingWorkspaceId(workspace.id);
                           await softDeleteWorkspace(workspace.id);
                           cancelDeleteIntent();

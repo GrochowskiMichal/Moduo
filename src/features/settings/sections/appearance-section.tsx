@@ -40,8 +40,8 @@ export function AppearanceSection() {
       description="Theme, type, and layout. Changes preview live against the app behind this modal."
     >
       <p className="text-xs text-muted-foreground">
-        Most appearance settings follow you across your devices. Density and module navigation
-        are set per device.
+        Most appearance settings follow you across your devices. Density and module navigation are
+        set per device.
       </p>
 
       <AppearanceGroup label="Color">

@@ -4,12 +4,18 @@
 // the segmented control, and arrow/Enter keyboard navigation. Rows are
 // presentational; selection + data come from the page. Tokens only (R7/R10).
 
+import {
+  ArrowDownAZ,
+  Building2,
+  Copy,
+  History,
+  Plus,
+  Search,
+  Star,
+  Upload,
+  User,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownAZ, Building2, Copy, History, Plus, Search, Star, Upload, User } from "lucide-react";
-
-import { cn } from "@/lib/utils";
-import { entityDrag } from "@/lib/drag-payload";
-import { useDragPayload } from "../../spine/hooks/use-drag-payload";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,23 +25,26 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { IconButton } from "@/components/ui/icon-button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { entityDrag } from "@/lib/drag-payload";
+import { cn } from "@/lib/utils";
+import { useDragPayload } from "../../spine/hooks/use-drag-payload";
 import type { Tag, TagLink } from "../../tasks/model";
-import type { Company, Contact } from "../model";
-import { groupByLetter } from "../letter-index";
 import { findDuplicateGroups } from "../dedupe";
 import {
+  type DirectorySort,
   filterCompanies,
   filterPeople,
   personSecondary,
-  sortRecent,
   STATUS_FILTER_NONE,
-  type DirectorySort,
+  sortRecent,
 } from "../directory-query";
+import { groupByLetter } from "../letter-index";
+import type { Company, Contact } from "../model";
 import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";
 import { ContactStatusDot } from "./contact-status-badge";
 
@@ -114,7 +123,9 @@ function DirectoryRow({
         </Avatar>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm text-foreground">{name}</span>
-          {secondary ? <span className="block truncate text-xs text-muted-foreground">{secondary}</span> : null}
+          {secondary ? (
+            <span className="block truncate text-xs text-muted-foreground">{secondary}</span>
+          ) : null}
         </span>
       </button>
       {/* Star sits INSIDE the dot column (dots are on ~every row, stars are rare —
@@ -127,7 +138,9 @@ function DirectoryRow({
           aria-pressed={favorite}
           className={cn(
             "shrink-0 rounded-sm p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            favorite ? "text-warning" : "text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-foreground",
+            favorite
+              ? "text-warning"
+              : "text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-foreground",
           )}
         >
           <Star className={cn("size-icon-sm", favorite && "fill-current")} aria-hidden />
@@ -142,11 +155,26 @@ function DirectoryRow({
  * when the page enables drag (so useDraggable always sits under a DndContext).
  * Pointer-drag only — we spread `listeners`, not `attributes`, to keep the row's
  * click-to-select semantics (no extra tab stop / role on the row). */
-function DraggableRow({ entity, label, rowProps }: { entity: DirectorySelection; label: string; rowProps: RowProps }) {
+function DraggableRow({
+  entity,
+  label,
+  rowProps,
+}: {
+  entity: DirectorySelection;
+  label: string;
+  rowProps: RowProps;
+}) {
   const { setNodeRef, listeners, isDragging } = useDragPayload(
     entityDrag({ type: entity.type, id: entity.id }, { label, from: "contacts-directory" }),
   );
-  return <DirectoryRow {...rowProps} dragRef={setNodeRef} dragHandleProps={listeners as Record<string, unknown>} dragging={isDragging} />;
+  return (
+    <DirectoryRow
+      {...rowProps}
+      dragRef={setNodeRef}
+      dragHandleProps={listeners as Record<string, unknown>}
+      dragging={isDragging}
+    />
+  );
 }
 
 function LetterHeader({ letter }: { letter: string }) {
@@ -290,7 +318,9 @@ export function ContactDirectory({
 
   const highlightIndexById = useMemo(() => {
     const map = new Map<string, number>();
-    flatRows.forEach((r, i) => map.set(r.id, i));
+    flatRows.forEach((r, i) => {
+      map.set(r.id, i);
+    });
     return map;
   }, [flatRows]);
   const highlightIndex = highlightId != null ? (highlightIndexById.get(highlightId) ?? -1) : -1;
@@ -374,7 +404,12 @@ export function ContactDirectory({
   const personRow = (c: Contact) => {
     const p = rowProps(c);
     return draggable ? (
-      <DraggableRow key={p.rowId} entity={{ type: "contact", id: c.id }} label={c.name || "Unnamed"} rowProps={p} />
+      <DraggableRow
+        key={p.rowId}
+        entity={{ type: "contact", id: c.id }}
+        label={c.name || "Unnamed"}
+        rowProps={p}
+      />
     ) : (
       <DirectoryRow key={p.rowId} {...p} />
     );
@@ -382,7 +417,12 @@ export function ContactDirectory({
   const companyRow = (c: Company) => {
     const p = companyRowProps(c);
     return draggable ? (
-      <DraggableRow key={p.rowId} entity={{ type: "company", id: c.id }} label={c.name || "Unnamed company"} rowProps={p} />
+      <DraggableRow
+        key={p.rowId}
+        entity={{ type: "company", id: c.id }}
+        label={c.name || "Unnamed company"}
+        rowProps={p}
+      />
     ) : (
       <DirectoryRow key={p.rowId} {...p} />
     );
@@ -404,18 +444,41 @@ export function ContactDirectory({
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {/* CSV import is people-only; "+" adds a contact or a company by tab. */}
           {showingPeople && onImport ? (
-            <IconButton icon={Upload} label="Import contacts" size="sm" variant="ghost" onClick={onImport} />
+            <IconButton
+              icon={Upload}
+              label="Import contacts"
+              size="sm"
+              variant="ghost"
+              onClick={onImport}
+            />
           ) : null}
           {showingPeople
-            ? onNew && <IconButton icon={Plus} label="New contact" size="sm" variant="ghost" onClick={onNew} />
+            ? onNew && (
+                <IconButton
+                  icon={Plus}
+                  label="New contact"
+                  size="sm"
+                  variant="ghost"
+                  onClick={onNew}
+                />
+              )
             : onNewCompany && (
-                <IconButton icon={Plus} label="New company" size="sm" variant="ghost" onClick={onNewCompany} />
+                <IconButton
+                  icon={Plus}
+                  label="New company"
+                  size="sm"
+                  variant="ghost"
+                  onClick={onNewCompany}
+                />
               )}
         </div>
       </div>
 
       <div className="relative">
-        <Search className="pointer-events-none absolute left-2 top-1/2 size-icon-sm -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Search
+          className="pointer-events-none absolute left-2 top-1/2 size-icon-sm -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
         <Input
           ref={searchRef}
           value={query}
@@ -434,7 +497,10 @@ export function ContactDirectory({
               <Button
                 variant="ghost"
                 size="sm"
-                className={cn("gap-1.5", statusFilter ? "text-foreground" : "text-muted-foreground")}
+                className={cn(
+                  "gap-1.5",
+                  statusFilter ? "text-foreground" : "text-muted-foreground",
+                )}
               >
                 {statusFilter && statusFilter !== STATUS_FILTER_NONE ? (
                   <ContactStatusDot status={statusFilter} />
@@ -443,7 +509,10 @@ export function ContactDirectory({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuRadioGroup value={statusFilter || ALL} onValueChange={(v) => setStatusFilter(v === ALL ? "" : v)}>
+              <DropdownMenuRadioGroup
+                value={statusFilter || ALL}
+                onValueChange={(v) => setStatusFilter(v === ALL ? "" : v)}
+              >
                 <DropdownMenuRadioItem value={ALL}>All statuses</DropdownMenuRadioItem>
                 {statusOptions.map((s) => (
                   <DropdownMenuRadioItem key={s.id} value={s.id}>
@@ -472,7 +541,10 @@ export function ContactDirectory({
             {workspaceTags.length === 0 ? (
               <p className="px-2 py-1.5 text-sm text-muted-foreground">No tags yet.</p>
             ) : (
-              <DropdownMenuRadioGroup value={tagFilter || ALL} onValueChange={(v) => setTagFilter(v === ALL ? "" : v)}>
+              <DropdownMenuRadioGroup
+                value={tagFilter || ALL}
+                onValueChange={(v) => setTagFilter(v === ALL ? "" : v)}
+              >
                 <DropdownMenuRadioItem value={ALL}>All tags</DropdownMenuRadioItem>
                 {workspaceTags.map((t) => (
                   <DropdownMenuRadioItem key={t.id} value={t.id}>
@@ -485,7 +557,9 @@ export function ContactDirectory({
         </DropdownMenu>
         <IconButton
           icon={sort === "alpha" ? ArrowDownAZ : History}
-          label={sort === "alpha" ? "Sorted A–Z — switch to recent" : "Sorted by recent — switch to A–Z"}
+          label={
+            sort === "alpha" ? "Sorted A–Z — switch to recent" : "Sorted by recent — switch to A–Z"
+          }
           size="sm"
           variant="ghost"
           className="ml-auto shrink-0"
@@ -511,7 +585,11 @@ export function ContactDirectory({
         <div className="flex flex-col items-start gap-2 rounded-md border border-border bg-card p-3 text-sm text-muted-foreground">
           <span className="text-destructive">Couldn’t load contacts.</span>
           {onRetry ? (
-            <button type="button" onClick={onRetry} className="text-foreground underline underline-offset-2">
+            <button
+              type="button"
+              onClick={onRetry}
+              className="text-foreground underline underline-offset-2"
+            >
               Retry
             </button>
           ) : null}
@@ -558,16 +636,14 @@ export function ContactDirectory({
                     {favorites.map(personRow)}
                   </>
                 ) : null}
-                {sort === "alpha" ? (
-                  peopleGroups.map((group) => (
-                    <div key={group.letter}>
-                      <LetterHeader letter={group.letter} />
-                      {group.items.map(personRow)}
-                    </div>
-                  ))
-                ) : (
-                  peopleRecent.map(personRow)
-                )}
+                {sort === "alpha"
+                  ? peopleGroups.map((group) => (
+                      <div key={group.letter}>
+                        <LetterHeader letter={group.letter} />
+                        {group.items.map(personRow)}
+                      </div>
+                    ))
+                  : peopleRecent.map(personRow)}
               </>
             ) : sort === "alpha" ? (
               orgGroups.map((group) => (

@@ -62,9 +62,9 @@ describe("followUpClearedByReply", () => {
   });
 
   it("no messages → not cleared", () => {
-    expect(
-      followUpClearedByReply({ messages: [], selfAddresses: self, armedAtMs: null }),
-    ).toBe(false);
+    expect(followUpClearedByReply({ messages: [], selfAddresses: self, armedAtMs: null })).toBe(
+      false,
+    );
   });
 
   it("a self-reply and a NEWER counterpart reply → cleared", () => {

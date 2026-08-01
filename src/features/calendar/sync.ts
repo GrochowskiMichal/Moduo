@@ -56,16 +56,14 @@ export function buildIcsDescriptor(): string {
 }
 
 /** Parse a row's sync_token; null = not a descriptor (legacy/OAuth/pre-deploy). */
-export function parseSyncDescriptor(syncToken: string | null | undefined): CalendarSyncDescriptor | null {
+export function parseSyncDescriptor(
+  syncToken: string | null | undefined,
+): CalendarSyncDescriptor | null {
   if (!syncToken) return null;
   try {
     const v = JSON.parse(syncToken) as Record<string, unknown>;
     if (v?.kind === "ics") return { kind: "ics" };
-    if (
-      v?.kind === "caldav" &&
-      typeof v.serverUrl === "string" &&
-      typeof v.username === "string"
-    ) {
+    if (v?.kind === "caldav" && typeof v.serverUrl === "string" && typeof v.username === "string") {
       return {
         kind: "caldav",
         serverUrl: v.serverUrl,

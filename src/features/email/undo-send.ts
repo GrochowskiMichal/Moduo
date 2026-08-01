@@ -25,8 +25,7 @@ export function createSendHold<TInput, TDraft>(opts: {
   cancel?: (handle: unknown) => void;
 }): SendHold<TInput, TDraft> {
   const schedule = opts.schedule ?? ((fn, ms) => setTimeout(fn, ms));
-  const cancel =
-    opts.cancel ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+  const cancel = opts.cancel ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
 
   let handle: unknown = null;
   let held: { input: TInput; draft: TDraft } | null = null;

@@ -79,7 +79,9 @@ export function useDashboardLayout(): DashboardLayoutApi {
     return runtime ? createLayoutRepo(runtime) : null;
   }, []);
 
-  const [layout, setLayout] = useState<DashboardLayout>(() => sanitizeLayout(createDefaultLayout()));
+  const [layout, setLayout] = useState<DashboardLayout>(() =>
+    sanitizeLayout(createDefaultLayout()),
+  );
   const [loading, setLoading] = useState(true);
   const [activePageId, setActivePageId] = useState<string>(() => layout.pages[0]?.id ?? "home");
 
@@ -172,8 +174,7 @@ export function useDashboardLayout(): DashboardLayoutApi {
   const tryAddWidget = useCallback(
     (type: WidgetType, size: WidgetSize): boolean => {
       const layout = layoutRef.current;
-      const active =
-        layout.pages.find((p) => p.id === activePageIdRef.current) ?? layout.pages[0];
+      const active = layout.pages.find((p) => p.id === activePageIdRef.current) ?? layout.pages[0];
       if (!active) return false;
       const placed = addWidgetOp(active.widgets, newWidgetInstance(type, size));
       if (!placed) return false; // page full — the caller offers a new page (AC9)
@@ -224,7 +225,10 @@ export function useDashboardLayout(): DashboardLayoutApi {
     }
   }, [layout, activePageId]);
 
-  const activeIndex = Math.max(0, layout.pages.findIndex((p) => p.id === activePageId));
+  const activeIndex = Math.max(
+    0,
+    layout.pages.findIndex((p) => p.id === activePageId),
+  );
 
   return {
     layout,

@@ -4,7 +4,7 @@
 // Not part of `bun run verify`; needs a running app + authed session with at
 // least TWO dated tasks (the second bar is the fixed reference that cancels
 // out any axis-window origin shift the drag itself causes).
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const APP = process.env.E2E_APP_URL;
 

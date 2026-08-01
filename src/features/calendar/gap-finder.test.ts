@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findNextGap, type BusyInterval } from "./gap-finder";
+import { type BusyInterval, findNextGap } from "./gap-finder";
 
 // A plain (non-DST) local day; working hours 08:00–18:00.
 const DAY = new Date(2026, 6, 2); // Thu Jul 2 2026

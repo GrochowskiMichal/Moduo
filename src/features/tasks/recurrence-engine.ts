@@ -15,7 +15,7 @@
 import { RRule } from "rrule";
 
 import { todayStr } from "./helpers";
-import type { RecurrenceRule, Task, TasksCatchUpItem, TaskStatus } from "./model";
+import type { RecurrenceRule, Task, TaskStatus, TasksCatchUpItem } from "./model";
 
 /** Build an RRule from a stored rule. Defensive: invalid input → null. */
 function toRRule(rec: RecurrenceRule, fallbackDtstart?: string | null): RRule | null {

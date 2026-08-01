@@ -1,7 +1,7 @@
-import * as React from "react";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { fieldShellVariants, type FieldShellVariant } from "./field-shell";
+import { type FieldShellVariant, fieldShellVariants } from "./field-shell";
 
 type InputProps = Omit<React.ComponentProps<"input">, "size"> & {
   /** Surface treatment — see field-shell.ts. Default `filled`. */
@@ -10,14 +10,7 @@ type InputProps = Omit<React.ComponentProps<"input">, "size"> & {
   size?: "sm" | "md";
 };
 
-function Input({
-  className,
-  type,
-  style,
-  variant = "filled",
-  size = "md",
-  ...props
-}: InputProps) {
+function Input({ className, type, style, variant = "filled", size = "md", ...props }: InputProps) {
   const heightVar = size === "sm" ? "var(--ctrl-h-sm)" : "var(--ctrl-h)";
   return (
     <input
@@ -38,5 +31,5 @@ function Input({
   );
 }
 
-export { Input };
 export type { InputProps };
+export { Input };

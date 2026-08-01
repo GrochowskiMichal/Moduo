@@ -43,9 +43,7 @@ export function AppearancePickerRow({
             </span>
           ) : null}
         </div>
-        {description ? (
-          <span className="text-xs text-muted-foreground">{description}</span>
-        ) : null}
+        {description ? <span className="text-xs text-muted-foreground">{description}</span> : null}
       </div>
       {children}
     </div>

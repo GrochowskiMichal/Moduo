@@ -12,9 +12,7 @@
 import { DEFAULT_BLOCK_MINUTES } from "./lens";
 
 /** The block's planned span, as the delta seconds to accrue for "Took longer". */
-export function tookLongerDeltaSeconds(
-  block: { durationMinutes?: number | null },
-): number {
+export function tookLongerDeltaSeconds(block: { durationMinutes?: number | null }): number {
   const minutes =
     block.durationMinutes && block.durationMinutes > 0
       ? block.durationMinutes

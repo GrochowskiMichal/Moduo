@@ -7,9 +7,9 @@ import { describe, expect, it } from "vitest";
 
 import * as statusModule from "./status";
 import {
+  contactStatusMeta,
   DEFAULT_CONTACT_STATUS,
   DEFAULT_CONTACT_STATUSES,
-  contactStatusMeta,
   normalizeContactStatus,
 } from "./status";
 

@@ -9,10 +9,10 @@ import {
 } from "../../../components/ui/select";
 import { Switch } from "../../../components/ui/switch";
 import {
-  usePreferences,
   type LandingView,
   type MotionPref,
   type NotificationType,
+  usePreferences,
 } from "../../../lib/preferences";
 import { isTauriRuntime } from "../../../lib/runtime";
 
@@ -189,9 +189,7 @@ function PrefGroup({
         <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
           {label}
         </span>
-        {description ? (
-          <span className="text-xs text-muted-foreground">{description}</span>
-        ) : null}
+        {description ? <span className="text-xs text-muted-foreground">{description}</span> : null}
       </div>
       <section className="flex flex-col rounded-lg border border-border bg-card px-6 py-2">
         {children}

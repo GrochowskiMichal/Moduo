@@ -44,9 +44,7 @@ export function EventPopover({
 
   return (
     <ChipPopover anchorRect={anchorRect} onClose={onClose}>
-      <span className="font-display text-sm font-medium text-foreground">
-        {event.title}
-      </span>
+      <span className="font-display text-sm font-medium text-foreground">{event.title}</span>
       <span className="text-xs text-muted-foreground">{timeLabel}</span>
       {event.rrule ? (
         <span className="text-xs text-muted-foreground">{rruleSummary(event.rrule)}</span>

@@ -8,7 +8,7 @@
  * gotchas.md). Skips unless E2E_STORYBOOK_URL is set.
  */
 
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const STORYBOOK = process.env.E2E_STORYBOOK_URL; // e.g. http://127.0.0.1:6006
 
@@ -34,7 +34,9 @@ test.describe("Recently-linked widget deep-links (CT-7, AC12)", () => {
 
     await page.getByRole("button", { name: "Ship the launch page" }).first().click();
 
-    const opened = await page.evaluate(() => (window as unknown as { __opened: unknown[] }).__opened);
+    const opened = await page.evaluate(
+      () => (window as unknown as { __opened: unknown[] }).__opened,
+    );
     expect(opened).toContainEqual({ type: "task", id: "t1" });
   });
 

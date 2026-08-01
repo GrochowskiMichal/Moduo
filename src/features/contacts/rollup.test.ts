@@ -3,11 +3,10 @@
 // live reads are the hook's job.
 
 import { describe, expect, it } from "vitest";
-
-import { buildContactRollup, lastTouchLine, timeAgo, type ContactRollupInput } from "./rollup";
-import { entityRefKey } from "../spine/rollup";
 import type { EntityLink, EntityRecord, EntityRef } from "../../lib/entity-links";
+import { entityRefKey } from "../spine/rollup";
 import type { ActivityEntry } from "../tasks/model";
+import { buildContactRollup, type ContactRollupInput, lastTouchLine, timeAgo } from "./rollup";
 
 const FOCUS: EntityRef = { type: "contact", id: "c1" };
 const NOW = new Date("2026-06-27T12:00:00Z");
@@ -144,7 +143,9 @@ describe("buildContactRollup", () => {
 describe("lastTouchLine", () => {
   it("reads as a quiet sentence with verb, relative time, and open count", () => {
     // The t1 link (06-24, an interaction) wins over the 06-25 record edit (FX-4).
-    expect(lastTouchLine(buildContactRollup(input()), NOW)).toBe("Last touch: linked 3 days ago · 1 open task");
+    expect(lastTouchLine(buildContactRollup(input()), NOW)).toBe(
+      "Last touch: linked 3 days ago · 1 open task",
+    );
   });
 
   it("says 'No activity yet' for an empty contact (never an error tone)", () => {

@@ -18,11 +18,11 @@ import { commitLayout, resolveDrag } from "../engine/grid-engine";
 import type { WidgetInstance } from "../engine/types";
 import {
   activeTransform,
-  cellMetrics,
-  pointerToTargetCell,
   type Cell,
+  cellMetrics,
   type GridMetrics,
   type Point,
+  pointerToTargetCell,
 } from "../grid-geometry";
 
 /** Travel past which a press becomes a drag (and, in normal mode, cancels the long-press). */

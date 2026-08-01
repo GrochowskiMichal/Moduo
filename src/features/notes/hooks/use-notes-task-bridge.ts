@@ -7,21 +7,20 @@
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
-
-import { undoToast } from "../../../lib/undo-toast";
-import type { ModuoRuntime } from "@/lib/runtime.types";
 import type { EntityRef } from "@/lib/entity-links";
+import type { ModuoRuntime } from "@/lib/runtime.types";
+import { undoToast } from "../../../lib/undo-toast";
 import { endPosition, makeTask } from "../../tasks/helpers";
-import type { Task } from "../../tasks/model";
 import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
+import type { Task } from "../../tasks/model";
 import type { NotesTaskBridge } from "../editor/notes-editor-bridge";
+import { buildDetachPlan, buildMintRevertPlan, type DetachPlan } from "../tasks/detach";
 import {
   applyTaskRename,
   buildMintTaskFields,
   buildTaskLineLink,
   type TaskLinkInput,
 } from "../tasks/task-line";
-import { buildDetachPlan, buildMintRevertPlan, type DetachPlan } from "../tasks/detach";
 
 /** "⌘Z right after minting" is bounded — past this window a historic
  * removal detaches with the normal undoable toast instead of deleting. */
@@ -100,49 +99,50 @@ export function useNotesTaskBridge({
     return rt.spine.listLinks({ workspaceId: ws, entityType: "note", entityId: id });
   }, []);
 
-  const mintTask = useCallback(async (title: string): Promise<Task | null> => {
-    const { runtime: rt, workspaceId: ws, tasksApi: api, noteLabel: label } = stable.current;
-    const note = noteRef();
-    if (!rt || !ws || !note || !api.canEdit) return null;
-    const inbox = api.inbox;
-    if (!inbox) {
-      toast.error("Tasks are still loading — try again in a moment.");
-      return null;
-    }
-    try {
-      // Position past BOTH the bundle and the not-yet-reloaded overlay so
-      // back-to-back mints don't collide on the same Inbox tail slot.
-      const inboxTasks = api.tasks
-        .filter((t) => t.bucketId === inbox.id)
-        .concat(
-          [...mintedOverlayRef.current.values()].filter((t) => t.bucketId === inbox.id),
-        );
-      const fields = buildMintTaskFields({
-        workspaceId: ws,
-        inboxBucketId: inbox.id,
-        title,
-        position: endPosition(inboxTasks),
-      });
-      const saved = await rt.tasks.upsertTask({ ...makeTask(fields), id: "" });
-      mintedRef.current.set(saved.id, Date.now());
-      mintedOverlayRef.current.set(saved.id, saved);
-      await rt.spine.createLink(
-        buildTaskLineLink({
+  const mintTask = useCallback(
+    async (title: string): Promise<Task | null> => {
+      const { runtime: rt, workspaceId: ws, tasksApi: api, noteLabel: label } = stable.current;
+      const note = noteRef();
+      if (!rt || !ws || !note || !api.canEdit) return null;
+      const inbox = api.inbox;
+      if (!inbox) {
+        toast.error("Tasks are still loading — try again in a moment.");
+        return null;
+      }
+      try {
+        // Position past BOTH the bundle and the not-yet-reloaded overlay so
+        // back-to-back mints don't collide on the same Inbox tail slot.
+        const inboxTasks = api.tasks
+          .filter((t) => t.bucketId === inbox.id)
+          .concat([...mintedOverlayRef.current.values()].filter((t) => t.bucketId === inbox.id));
+        const fields = buildMintTaskFields({
           workspaceId: ws,
-          note,
-          noteLabel: label,
-          taskId: saved.id,
-          taskTitle: saved.title,
-          minted: true,
-        }),
-      );
-      void api.reload();
-      return saved;
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't create the task.");
-      return null;
-    }
-  }, [noteRef]);
+          inboxBucketId: inbox.id,
+          title,
+          position: endPosition(inboxTasks),
+        });
+        const saved = await rt.tasks.upsertTask({ ...makeTask(fields), id: "" });
+        mintedRef.current.set(saved.id, Date.now());
+        mintedOverlayRef.current.set(saved.id, saved);
+        await rt.spine.createLink(
+          buildTaskLineLink({
+            workspaceId: ws,
+            note,
+            noteLabel: label,
+            taskId: saved.id,
+            taskTitle: saved.title,
+            minted: true,
+          }),
+        );
+        void api.reload();
+        return saved;
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't create the task.");
+        return null;
+      }
+    },
+    [noteRef],
+  );
 
   const linkExistingTask = useCallback(
     (task: Task) => {
@@ -309,9 +309,7 @@ export function useNotesTaskBridge({
         if (!pending) continue;
         pendingDetachRef.current.delete(taskId);
         void restoreLinks(
-          pending.plan.restoreLinks.filter(
-            (l) => l.target.id === taskId || l.source.id === taskId,
-          ),
+          pending.plan.restoreLinks.filter((l) => l.target.id === taskId || l.source.id === taskId),
         );
         if (!seenToasts.has(pending.toastId)) {
           seenToasts.add(pending.toastId);

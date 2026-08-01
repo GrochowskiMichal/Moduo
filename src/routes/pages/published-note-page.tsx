@@ -10,11 +10,11 @@
  * `noindex`. Tokens-only.
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams, useSearch } from "@tanstack/react-router";
+import { ChevronDown } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronDown } from "lucide-react";
 import {
   comparePublicNotes,
   publicUrlTransform,
@@ -161,8 +161,12 @@ export function PublishedNotePage() {
     return (
       <Shell>
         <div className="text-center">
-          <h1 className="font-display text-xl font-semibold text-foreground">Something went wrong</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Couldn't load this page. Try again shortly.</p>
+          <h1 className="font-display text-xl font-semibold text-foreground">
+            Something went wrong
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Couldn't load this page. Try again shortly.
+          </p>
         </div>
       </Shell>
     );

@@ -78,11 +78,7 @@ export type RangePrefs = {
 };
 
 /** Compute the visible day columns for a view anchored at `anchor`. */
-export function visibleRange(
-  view: CalendarView,
-  anchor: Date,
-  prefs: RangePrefs,
-): VisibleRange {
+export function visibleRange(view: CalendarView, anchor: Date, prefs: RangePrefs): VisibleRange {
   const anchorDay = startOfLocalDay(anchor);
   let days: Date[];
   if (view === "day") {
@@ -131,9 +127,7 @@ export function taskBlocks(tasks: LensTask[], range: VisibleRange): TaskBlock[] 
     if (!dayKeys.has(dayKey)) continue;
     seen.add(t.id);
     const durationMinutes =
-      t.durationMinutes && t.durationMinutes > 0
-        ? t.durationMinutes
-        : DEFAULT_BLOCK_MINUTES;
+      t.durationMinutes && t.durationMinutes > 0 ? t.durationMinutes : DEFAULT_BLOCK_MINUTES;
     out.push({
       taskId: t.id,
       title: t.title,
@@ -164,11 +158,7 @@ export function blocksByDay(blocks: TaskBlock[]): Map<string, TaskBlock[]> {
  * cross-year week reads honestly ("Dec 28, 2026 – Jan 3, 2027") and current-
  * year ranges stay terse. `now` is injectable so tests don't rot at new year.
  */
-export function rangeLabel(
-  range: VisibleRange,
-  locale?: string,
-  now: Date = new Date(),
-): string {
+export function rangeLabel(range: VisibleRange, locale?: string, now: Date = new Date()): string {
   const first = range.days[0];
   const last = range.days[range.days.length - 1];
   if (range.view === "day") {

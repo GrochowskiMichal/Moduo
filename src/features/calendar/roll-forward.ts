@@ -5,7 +5,7 @@
 // placements through the attributed reschedule op, and one Undo replays the
 // inverse plan to restore every original time.
 
-import { findNextGap, type BusyInterval } from "./gap-finder";
+import { type BusyInterval, findNextGap } from "./gap-finder";
 import type { StripItem } from "./strip";
 
 export type Placement = {
@@ -37,10 +37,7 @@ export type RollContext = {
  * Plan the placements. Each placed item reserves its new slot so the next item
  * in the queue avoids it — first-fit, original order preserved.
  */
-export function planRollForward(
-  items: StripItem[],
-  ctx: RollContext,
-): RollForwardPlan {
+export function planRollForward(items: StripItem[], ctx: RollContext): RollForwardPlan {
   const busy: BusyInterval[] = ctx.busy.slice();
   const placements: Placement[] = [];
   const notPlaced: string[] = [];
@@ -70,9 +67,7 @@ export function planRollForward(
 }
 
 /** The inverse plan — restore every placed task to its original time (Undo). */
-export function undoRollForward(
-  placements: Placement[],
-): { taskId: string; toMs: number }[] {
+export function undoRollForward(placements: Placement[]): { taskId: string; toMs: number }[] {
   return placements.map((p) => ({ taskId: p.taskId, toMs: p.fromMs }));
 }
 

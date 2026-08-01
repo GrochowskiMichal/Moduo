@@ -8,8 +8,8 @@ import {
   syncAgeLabel,
   visibleEvents,
 } from "./accounts";
-import { buildCaldavDescriptor, buildIcsDescriptor } from "./sync";
 import type { CalendarAccountModel, CalendarEventModel } from "./events";
+import { buildCaldavDescriptor, buildIcsDescriptor } from "./sync";
 
 function account(over: Partial<CalendarAccountModel>): CalendarAccountModel {
   return {
@@ -55,9 +55,9 @@ describe("accounts — attribution (AC12)", () => {
     expect(providerLabel("microsoft")).toBe("Outlook");
     expect(providerLabel("caldav")).toBe("CalDAV");
     expect(providerLabel("ics")).toBe("ICS feed");
-    expect(accountSourceLabel(account({ displayLabel: "Work — a@co", provider: "microsoft" }))).toBe(
-      "Work — a@co — Outlook",
-    );
+    expect(
+      accountSourceLabel(account({ displayLabel: "Work — a@co", provider: "microsoft" })),
+    ).toBe("Work — a@co — Outlook");
   });
 
   it("honors an override, then a stored bounded name, then spreads distinct hues", () => {
@@ -116,8 +116,9 @@ describe("accounts — attribution (AC12)", () => {
     // Google flat first (input order), then the CalDAV group (first appearance),
     // then the Feeds group — c2 joins the EXISTING caldav group even though a
     // feed appeared between c1 and c2.
-    expect(groups.map((g) => (g.kind === "flat" ? `flat:${g.row.account.id}` : `group:${g.header}`)))
-      .toEqual(["flat:g1", "group:me@fastmail.com", "group:Feeds"]);
+    expect(
+      groups.map((g) => (g.kind === "flat" ? `flat:${g.row.account.id}` : `group:${g.header}`)),
+    ).toEqual(["flat:g1", "group:me@fastmail.com", "group:Feeds"]);
     const caldavGroup = groups[1];
     const feeds = groups[2];
     if (caldavGroup.kind !== "group" || feeds.kind !== "group") throw new Error("shape");
@@ -147,7 +148,9 @@ describe("accounts — attribution (AC12)", () => {
     const groups = groupRailAccounts([
       account({ id: "x", provider: "caldav", syncToken: null, displayLabel: "Legacy" }),
     ]);
-    expect(groups).toEqual([{ kind: "flat", row: { account: expect.anything(), label: "Legacy" } }]);
+    expect(groups).toEqual([
+      { kind: "flat", row: { account: expect.anything(), label: "Legacy" } },
+    ]);
   });
 
   it("uses a plain ICS descriptor for feeds (no server fields needed)", () => {

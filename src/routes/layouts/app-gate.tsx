@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
 import { Navigate } from "@tanstack/react-router";
-import { useAuth } from "../../providers/auth-provider";
-import { WorkspaceProvider, useWorkspace } from "../../providers/workspace-provider";
+import { useEffect, useState } from "react";
 import { AppChrome } from "../../components/app/app-chrome";
 import { supabaseClient } from "../../lib/runtime.web";
+import { useAuth } from "../../providers/auth-provider";
+import { useWorkspace, WorkspaceProvider } from "../../providers/workspace-provider";
 
 function WorkspaceGate() {
   const { loading, workspaces } = useWorkspace();
@@ -73,7 +73,10 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
       } catch (err) {
         // Fail open: an entitlements read error must never lock a paying user
         // out, so "unknown" passes the gate below — but it must be visible.
-        console.warn("[app-gate] subscription check failed — failing open (no paywall redirect):", err);
+        console.warn(
+          "[app-gate] subscription check failed — failing open (no paywall redirect):",
+          err,
+        );
         if (!cancelled) setSubscriptionStatus("unknown");
       } finally {
         if (!cancelled) setCheckDone(true);
@@ -81,7 +84,9 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
     };
 
     void run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isWeb, isSignedIn, accessToken]);
 
   // Desktop always passes through.

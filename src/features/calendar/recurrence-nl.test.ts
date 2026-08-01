@@ -26,34 +26,22 @@ describe("parseRecurrenceNL — the pinned phrase set (AC5)", () => {
   });
 
   it('"last friday of month" and "third wed of every month" parse too', () => {
-    expect(parseRecurrenceNL("last friday of month")?.rrule).toBe(
-      "FREQ=MONTHLY;BYDAY=-1FR",
-    );
-    expect(parseRecurrenceNL("third wed of every month")?.rrule).toBe(
-      "FREQ=MONTHLY;BYDAY=3WE",
-    );
+    expect(parseRecurrenceNL("last friday of month")?.rrule).toBe("FREQ=MONTHLY;BYDAY=-1FR");
+    expect(parseRecurrenceNL("third wed of every month")?.rrule).toBe("FREQ=MONTHLY;BYDAY=3WE");
   });
 
   it("presets: every day / weekdays / every week / every month", () => {
     expect(parseRecurrenceNL("every day")?.rrule).toBe("FREQ=DAILY");
     expect(parseRecurrenceNL("daily")?.rrule).toBe("FREQ=DAILY");
-    expect(parseRecurrenceNL("weekdays")?.rrule).toBe(
-      "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
-    );
-    expect(parseRecurrenceNL("every weekday")?.rrule).toBe(
-      "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
-    );
+    expect(parseRecurrenceNL("weekdays")?.rrule).toBe("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+    expect(parseRecurrenceNL("every weekday")?.rrule).toBe("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
     expect(parseRecurrenceNL("every week")?.rrule).toBe("FREQ=WEEKLY");
     expect(parseRecurrenceNL("monthly")?.rrule).toBe("FREQ=MONTHLY");
   });
 
   it("intervals: every 2 weeks / every 3 days", () => {
-    expect(parseRecurrenceNL("every 2 weeks")?.rrule).toBe(
-      "FREQ=WEEKLY;INTERVAL=2",
-    );
-    expect(parseRecurrenceNL("every 3 days")?.rrule).toBe(
-      "FREQ=DAILY;INTERVAL=3",
-    );
+    expect(parseRecurrenceNL("every 2 weeks")?.rrule).toBe("FREQ=WEEKLY;INTERVAL=2");
+    expect(parseRecurrenceNL("every 3 days")?.rrule).toBe("FREQ=DAILY;INTERVAL=3");
     expect(parseRecurrenceNL("every 1 week")?.rrule).toBe("FREQ=WEEKLY");
   });
 

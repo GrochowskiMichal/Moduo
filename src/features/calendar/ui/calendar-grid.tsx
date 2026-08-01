@@ -16,32 +16,23 @@
 // (`nowMinutes` on today's column, null elsewhere) and DayColumn is memoized,
 // so a tick re-renders today's column only — not the whole week.
 
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 import { useDroppable } from "@dnd-kit/core";
-
-import { Button } from "../../../components/ui/button";
-import { onCreateNew } from "../../../components/app/create-events";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { onCreateNew } from "../../../components/app/create-events";
+import { Button } from "../../../components/ui/button";
+import { isElapsedBlock } from "../elapsed";
+import type { EventChip } from "../events";
 import {
   chipSpanInDay,
+  type DayGeometry,
   dayGeometry,
   layoutDayChips,
   minutesIntoDay,
   wallClockToRealMinutes,
-  type DayGeometry,
 } from "../grid-layout";
-import { localDayKey, type CalendarView, type TaskBlock } from "../lens";
-import type { EventChip } from "../events";
+import { type CalendarView, localDayKey, type TaskBlock } from "../lens";
 import type { CalendarPrefs } from "../prefs";
-import { isElapsedBlock } from "../elapsed";
 import { EventChipView } from "./event-chip";
 import { EventQuickCreate, type QuickCreateDraft } from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
@@ -66,9 +57,7 @@ export type MoveEventDeltas = { startDeltaMs: number; endDeltaMs: number };
 export type MoveTaskResult = { startMs: number; durationMinutes: number };
 
 /** A grid chip under a gesture — either kind shares the engine. */
-type GestureTarget =
-  | { type: "event"; chip: EventChip }
-  | { type: "task"; block: TaskBlock };
+type GestureTarget = { type: "event"; chip: EventChip } | { type: "task"; block: TaskBlock };
 
 type Props = {
   view: CalendarView;
@@ -195,10 +184,7 @@ export function CalendarGrid({
   const gridRef = useRef<HTMLDivElement>(null);
 
   const geoms = useMemo(() => days.map(dayGeometry), [days]);
-  const maxMinutes = useMemo(
-    () => Math.max(...geoms.map((g) => g.totalMinutes)),
-    [geoms],
-  );
+  const maxMinutes = useMemo(() => Math.max(...geoms.map((g) => g.totalMinutes)), [geoms]);
   // Gutter labels come from a full-height column so they align with its lines.
   // (Known cosmetic gap: on a DST week the 23h/25h column's own lines sit at
   // its real offsets, so the shared gutter reads an hour off for that one
@@ -315,9 +301,7 @@ export function CalendarGrid({
       return;
     }
     // move / resize on an event chip — slop measured in px from pointer-down.
-    g.moved =
-      g.moved ||
-      Math.hypot(e.clientX - g.downX, e.clientY - g.downY) > CLICK_SLOP_PX;
+    g.moved = g.moved || Math.hypot(e.clientX - g.downX, e.clientY - g.downY) > CLICK_SLOP_PX;
     const duration = g.endMin - g.startMin;
     const title = g.target.type === "event" ? g.target.chip.title : g.target.block.title;
     if (g.kind === "move") {
@@ -481,7 +465,12 @@ export function CalendarGrid({
 
   /** Move/resize (native events) or click-select (all events). */
   const onEventChipPointerDown = useCallback(
-    (e: React.PointerEvent, chip: EventChip, dayIdx: number, span: { topMinutes: number; heightMinutes: number }) => {
+    (
+      e: React.PointerEvent,
+      chip: EventChip,
+      dayIdx: number,
+      span: { topMinutes: number; heightMinutes: number },
+    ) => {
       if (e.button !== 0) return;
       e.stopPropagation();
       const p = propsRef.current;
@@ -500,7 +489,12 @@ export function CalendarGrid({
 
   /** Task blocks: drag writes schedule/duration; a checkbox press never drags. */
   const onTaskChipPointerDown = useCallback(
-    (e: React.PointerEvent, block: TaskBlock, dayIdx: number, span: { topMinutes: number; heightMinutes: number }) => {
+    (
+      e: React.PointerEvent,
+      block: TaskBlock,
+      dayIdx: number,
+      span: { topMinutes: number; heightMinutes: number },
+    ) => {
       if (e.button !== 0) return;
       if ((e.target as HTMLElement).closest("button")) return; // the checkbox
       e.stopPropagation();
@@ -516,13 +510,10 @@ export function CalendarGrid({
     [startChipGesture],
   );
 
-  const commitCreate = useCallback(
-    (draft: QuickCreateDraft) => {
-      setPending(null);
-      propsRef.current.onCreateEvent(draft);
-    },
-    [],
-  );
+  const commitCreate = useCallback((draft: QuickCreateDraft) => {
+    setPending(null);
+    propsRef.current.onCreateEvent(draft);
+  }, []);
   const cancelCreate = useCallback(() => setPending(null), []);
   /** The popover's time edits move the ghost — the chip is the consent gesture. */
   const adjustPendingTimes = useCallback((startMs: number, endMs: number) => {
@@ -580,10 +571,7 @@ export function CalendarGrid({
       ? (minutesIntoDay(current.getTime(), dayGeometry(current)) ?? 9 * 60)
       : 9 * 60;
     const pxPerMinute = scroller.scrollHeight / maxMinutes;
-    scroller.scrollTop = Math.max(
-      0,
-      targetMinutes * pxPerMinute - scroller.clientHeight / 2,
-    );
+    scroller.scrollTop = Math.max(0, targetMinutes * pxPerMinute - scroller.clientHeight / 2);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
@@ -613,17 +601,11 @@ export function CalendarGrid({
               key={localDayKey(day)}
               className={cn(
                 "flex items-baseline gap-1.5 px-2 text-sm",
-                isToday
-                  ? "font-medium text-foreground"
-                  : "text-muted-foreground",
+                isToday ? "font-medium text-foreground" : "text-muted-foreground",
               )}
             >
-              <span>
-                {day.toLocaleDateString(undefined, { weekday: "short" })}
-              </span>
-              <span className={cn(!isToday && "text-muted-foreground/70")}>
-                {day.getDate()}
-              </span>
+              <span>{day.toLocaleDateString(undefined, { weekday: "short" })}</span>
+              <span className={cn(!isToday && "text-muted-foreground/70")}>{day.getDate()}</span>
             </div>
           );
         })}
@@ -640,7 +622,10 @@ export function CalendarGrid({
             const key = localDayKey(day);
             const chips = allDayByDay.get(key) ?? EMPTY_EVENTS;
             return (
-              <div key={key} className="flex min-w-0 flex-col gap-0.5 border-l border-border px-0.5">
+              <div
+                key={key}
+                className="flex min-w-0 flex-col gap-0.5 border-l border-border px-0.5"
+              >
                 {chips.map((chip) => (
                   <button
                     key={chip.occurrenceKey}
@@ -660,7 +645,9 @@ export function CalendarGrid({
                       compact
                       allDay
                       external={chip.external}
-                      colorLabel={chip.sourceAccountId ? accountHues[chip.sourceAccountId] : undefined}
+                      colorLabel={
+                        chip.sourceAccountId ? accountHues[chip.sourceAccountId] : undefined
+                      }
                       recurring={chip.recurring}
                       selected={selectedOccurrenceKey === chip.occurrenceKey}
                       past={false}
@@ -708,9 +695,7 @@ export function CalendarGrid({
                 events={events}
                 accountHues={accountHues}
                 prefs={prefs}
-                nowMinutes={
-                  isToday ? minutesIntoDay(now.getTime(), geoms[i]) : null
-                }
+                nowMinutes={isToday ? minutesIntoDay(now.getTime(), geoms[i]) : null}
                 // Elapsed detection needs an absolute `now`: the live tick on
                 // today (re-renders that column per tick), a stable day-past
                 // flag elsewhere (past columns are all-elapsed, future none).
@@ -846,14 +831,8 @@ const DayColumn = memo(function DayColumn({
       ]),
     [blocks, events],
   );
-  const blockById = useMemo(
-    () => new Map(blocks.map((b) => [b.taskId, b])),
-    [blocks],
-  );
-  const eventByKey = useMemo(
-    () => new Map(events.map((c) => [c.occurrenceKey, c])),
-    [events],
-  );
+  const blockById = useMemo(() => new Map(blocks.map((b) => [b.taskId, b])), [blocks]);
+  const eventByKey = useMemo(() => new Map(events.map((c) => [c.occurrenceKey, c])), [events]);
   // Wall-clock prefs → real minutes (DST-correct wash bounds).
   const washTop = wallClockToRealMinutes(prefs.workStartMinute, geom);
   const washBottom = wallClockToRealMinutes(prefs.workEndMinute, geom);
@@ -869,10 +848,7 @@ const DayColumn = memo(function DayColumn({
       ref={setDropRef}
       data-day-col
       data-day-key={dayKey}
-      className={cn(
-        "relative border-l border-border",
-        isDropOver && "bg-accent/20",
-      )}
+      className={cn("relative border-l border-border", isDropOver && "bg-accent/20")}
       style={{ height: y(geom.totalMinutes) }}
       onPointerDown={(e) => onBackgroundPointerDown(e, dayIdx)}
     >
@@ -914,10 +890,7 @@ const DayColumn = memo(function DayColumn({
             <div
               key={p.id}
               data-chip="task"
-              className={cn(
-                "absolute z-[1] pl-px pr-0.5",
-                canEdit && !block.done && "cursor-grab",
-              )}
+              className={cn("absolute z-[1] pl-px pr-0.5", canEdit && !block.done && "cursor-grab")}
               style={{
                 top: y(span.topMinutes),
                 height: `max(${y(span.heightMinutes)}, 1.375rem)`,

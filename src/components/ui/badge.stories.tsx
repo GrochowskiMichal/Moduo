@@ -46,7 +46,9 @@ export const TagList: Story = {
   render: () => (
     <div className="flex flex-wrap gap-1.5">
       {["design", "tokens", "primitives", "shadcn", "react"].map((t) => (
-        <Badge key={t} variant="secondary">#{t}</Badge>
+        <Badge key={t} variant="secondary">
+          #{t}
+        </Badge>
       ))}
     </div>
   ),

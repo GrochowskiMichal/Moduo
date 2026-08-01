@@ -202,7 +202,7 @@ export function useAppearance(): UseAppearance {
         return next;
       });
     },
-    [pushLocalChange]
+    [pushLocalChange],
   );
 
   return {

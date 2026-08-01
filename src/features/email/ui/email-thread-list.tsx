@@ -8,9 +8,9 @@
 // Newsletters headers (EM-10); otherwise a flat list (search results, EM-9).
 // Selection is id-based and lifted to the page. Presentational — actions callback.
 
-import { forwardRef, type ReactNode } from "react";
 import { Check, Clock3, CornerUpLeft, MoreHorizontal, Pin, Trash2 } from "lucide-react";
-
+import { forwardRef, type ReactNode } from "react";
+import type { LabelColor } from "../../../components/tag-colors";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,17 +19,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
-import { IconButton } from "../../../components/ui/icon-button";
 import { EmptyState } from "../../../components/ui/empty-state";
-import type { LabelColor } from "../../../components/tag-colors";
+import { IconButton } from "../../../components/ui/icon-button";
 import {
   EMAIL_SECTIONS,
-  SECTION_LABEL,
   type EmailSection,
   type EmailSectionGroup,
+  SECTION_LABEL,
 } from "../classify";
-import { formatEmailDate } from "../utils/email-format";
 import type { EmailThread } from "../model/email-types";
+import { formatEmailDate } from "../utils/email-format";
 
 type Props = {
   /** Flat rows (search results / a single scope). Ignored when `sections` is set. */
@@ -128,11 +127,7 @@ const ThreadRow = forwardRef<
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-center gap-2">
           {showAccountDot ? (
-            <span
-              data-label={hue}
-              className="tag-dot size-2 shrink-0 rounded-full"
-              aria-hidden
-            />
+            <span data-label={hue} className="tag-dot size-2 shrink-0 rounded-full" aria-hidden />
           ) : null}
           <span
             className={

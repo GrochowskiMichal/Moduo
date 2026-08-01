@@ -68,7 +68,11 @@ const REASON_RANK: Record<AttentionReason, number> = {
  * none). Overdue follow-up wins over no-touch wins over stale-lead. Returns the
  * flagged contacts, most-urgent first then by name.
  */
-export function selectNeedsAttention({ contacts, overdue, now }: SelectNeedsAttentionInput): NeedsAttentionItem[] {
+export function selectNeedsAttention({
+  contacts,
+  overdue,
+  now,
+}: SelectNeedsAttentionInput): NeedsAttentionItem[] {
   const { noTouchDays, staleLeadDays } = NEEDS_ATTENTION_THRESHOLDS;
 
   // Earliest overdue due date per contact (so the detail shows the worst one).
@@ -85,7 +89,11 @@ export function selectNeedsAttention({ contacts, overdue, now }: SelectNeedsAtte
     const due = overdueByContact.get(c.id);
     if (due) {
       const d = daysSince(due, now);
-      items.push({ ...base, reason: "overdue-followup", detail: `Follow-up due ${plural(d, "day")} ago` });
+      items.push({
+        ...base,
+        reason: "overdue-followup",
+        detail: `Follow-up due ${plural(d, "day")} ago`,
+      });
       continue;
     }
 
@@ -95,7 +103,11 @@ export function selectNeedsAttention({ contacts, overdue, now }: SelectNeedsAtte
       continue;
     }
     if (c.status === "lead" && idle > staleLeadDays) {
-      items.push({ ...base, reason: "stale-lead", detail: `Lead untouched for ${plural(idle, "day")}` });
+      items.push({
+        ...base,
+        reason: "stale-lead",
+        detail: `Lead untouched for ${plural(idle, "day")}`,
+      });
     }
   }
 

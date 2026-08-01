@@ -5,35 +5,27 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
+import { pickTagColor } from "../../../components/tag-colors";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
-import { pickTagColor } from "../../../components/tag-colors";
 import { setBucketTimeBlock } from "../default-view";
 import {
   blockedTaskIds as computeBlockedTaskIds,
+  subtasksByParent as computeSubtasksByParent,
   endPosition,
   formatScheduled,
   frontierTasks,
   makeTask,
+  type NewTaskFields,
   subtaskProgress,
-  subtasksByParent as computeSubtasksByParent,
   todayStr,
   wouldCreateCycle,
-  type NewTaskFields,
 } from "../helpers";
 import {
-  catchUpItem,
-  catchUpPatch,
-  recurrenceOnStatusChange,
-  skipOccurrencePatch,
-} from "../recurrence-engine";
-import { commitOrderUpdates } from "../reorder";
-import {
-  INBOX_BUCKET_NAME,
-  isDrifted,
   type ActivityEntry,
   type Bucket,
+  INBOX_BUCKET_NAME,
+  isDrifted,
   type RecurrenceRule,
   type Tag,
   type TagLink,
@@ -44,6 +36,13 @@ import {
   type TimeBlockMap,
   type TimeBlockSlot,
 } from "../model";
+import {
+  catchUpItem,
+  catchUpPatch,
+  recurrenceOnStatusChange,
+  skipOccurrencePatch,
+} from "../recurrence-engine";
+import { commitOrderUpdates } from "../reorder";
 
 type Params = {
   userId: string | null;
@@ -127,20 +126,22 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
 
   // ── derived ────────────────────────────────────────────────────────────────
   const liveTasks = useMemo(
-    () => bundle.tasks.filter((t) => !t.deletedAt).slice().sort(byPosition),
+    () =>
+      bundle.tasks
+        .filter((t) => !t.deletedAt)
+        .slice()
+        .sort(byPosition),
     [bundle.tasks],
   );
-  const liveBuckets = useMemo(
-    () => bundle.buckets.filter((b) => !b.deletedAt),
-    [bundle.buckets],
-  );
-  const inbox = useMemo(
-    () => liveBuckets.find((b) => b.isSystem) ?? null,
-    [liveBuckets],
-  );
+  const liveBuckets = useMemo(() => bundle.buckets.filter((b) => !b.deletedAt), [bundle.buckets]);
+  const inbox = useMemo(() => liveBuckets.find((b) => b.isSystem) ?? null, [liveBuckets]);
   /** User buckets (Inbox excluded — the rail pins it), position-sorted. */
   const buckets = useMemo(
-    () => liveBuckets.filter((b) => !b.isSystem).slice().sort(byPosition),
+    () =>
+      liveBuckets
+        .filter((b) => !b.isSystem)
+        .slice()
+        .sort(byPosition),
     [liveBuckets],
   );
 
@@ -512,10 +513,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [patchTask],
   );
 
-  const markDone = useCallback(
-    (id: string) => patchTask(id, { status: "done" }),
-    [patchTask],
-  );
+  const markDone = useCallback((id: string) => patchTask(id, { status: "done" }), [patchTask]);
 
   /** Archive a task — terminal, removes it from open lists (used by drift triage). */
   const archiveTask = useCallback(
@@ -540,7 +538,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       // caller RETAINS the delta and retries once the bundle is loaded — else
       // time accrued while /tasks was unmounted is silently lost (DF-11).
       if (!t) return false;
-      patchTask(id, { timeSpentSeconds: Math.max(0, (t.timeSpentSeconds ?? 0) + Math.round(deltaSeconds)) });
+      patchTask(id, {
+        timeSpentSeconds: Math.max(0, (t.timeSpentSeconds ?? 0) + Math.round(deltaSeconds)),
+      });
       return true;
     },
     [bundle.tasks, patchTask],
@@ -900,10 +900,16 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       const existing = bundle.buckets.find((b) => b.id === id);
       if (!existing || !trimmed || trimmed === existing.name) return;
       const updated = { ...existing, name: trimmed, updatedAt: new Date().toISOString() };
-      setBundle((prev) => ({ ...prev, buckets: prev.buckets.map((b) => (b.id === id ? updated : b)) }));
+      setBundle((prev) => ({
+        ...prev,
+        buckets: prev.buckets.map((b) => (b.id === id ? updated : b)),
+      }));
       guard(async () => {
         const saved = await runtime!.tasks.upsertBucket(updated);
-        setBundle((prev) => ({ ...prev, buckets: prev.buckets.map((b) => (b.id === id ? saved : b)) }));
+        setBundle((prev) => ({
+          ...prev,
+          buckets: prev.buckets.map((b) => (b.id === id ? saved : b)),
+        }));
       });
     },
     [bundle.buckets, guard, runtime],
@@ -921,10 +927,16 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       const next = group?.trim() ? group.trim() : null;
       if (next === (existing.group ?? null)) return;
       const updated = { ...existing, group: next, updatedAt: new Date().toISOString() };
-      setBundle((prev) => ({ ...prev, buckets: prev.buckets.map((b) => (b.id === id ? updated : b)) }));
+      setBundle((prev) => ({
+        ...prev,
+        buckets: prev.buckets.map((b) => (b.id === id ? updated : b)),
+      }));
       guard(async () => {
         const saved = await runtime!.tasks.upsertBucket(updated);
-        setBundle((prev) => ({ ...prev, buckets: prev.buckets.map((b) => (b.id === id ? saved : b)) }));
+        setBundle((prev) => ({
+          ...prev,
+          buckets: prev.buckets.map((b) => (b.id === id ? saved : b)),
+        }));
       });
     },
     [bundle.buckets, guard, runtime],
@@ -987,7 +999,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         (l) => l.entityType === "task" && l.entityId === taskId && l.tagId === tagId,
       );
       if (existing) {
-        setBundle((prev) => ({ ...prev, tagLinks: prev.tagLinks.filter((l) => l.id !== existing.id) }));
+        setBundle((prev) => ({
+          ...prev,
+          tagLinks: prev.tagLinks.filter((l) => l.id !== existing.id),
+        }));
         void rt.tasks
           .detachTag({ workspaceId: wsId, tagId, entityType: "task", entityId: taskId })
           .catch((e) => {
@@ -1015,7 +1030,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           })),
         )
         .catch((e) => {
-          setBundle((prev) => ({ ...prev, tagLinks: prev.tagLinks.filter((l) => l.id !== tempId) }));
+          setBundle((prev) => ({
+            ...prev,
+            tagLinks: prev.tagLinks.filter((l) => l.id !== tempId),
+          }));
           toast.error(e instanceof Error ? e.message : "Couldn't add tag.");
         });
     },
@@ -1120,10 +1138,16 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       const existing = bundle.tags.find((t) => t.id === tagId);
       if (!existing || existing.color === color) return;
       const updated = { ...existing, color, updatedAt: new Date().toISOString() };
-      setBundle((prev) => ({ ...prev, tags: prev.tags.map((t) => (t.id === tagId ? updated : t)) }));
+      setBundle((prev) => ({
+        ...prev,
+        tags: prev.tags.map((t) => (t.id === tagId ? updated : t)),
+      }));
       guard(async () => {
         const saved = await runtime!.tasks.upsertTag(updated);
-        setBundle((prev) => ({ ...prev, tags: prev.tags.map((t) => (t.id === tagId ? saved : t)) }));
+        setBundle((prev) => ({
+          ...prev,
+          tags: prev.tags.map((t) => (t.id === tagId ? saved : t)),
+        }));
       });
     },
     [bundle.tags, guard, runtime],

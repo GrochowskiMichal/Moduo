@@ -1,11 +1,10 @@
-import { useContext, useEffect, useMemo } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
-
+import { useContext, useEffect, useMemo } from "react";
+import type { WorkspaceSummary } from "../../features/workspaces/types";
 import {
   WorkspaceContext,
   type WorkspaceContextValue,
 } from "../../features/workspaces/workspace-context";
-import type { WorkspaceSummary } from "../../features/workspaces/types";
 import { AppChrome } from "./app-chrome";
 
 const baseWorkspace: WorkspaceSummary = {

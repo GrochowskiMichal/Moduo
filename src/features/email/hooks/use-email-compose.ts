@@ -45,9 +45,7 @@ export function useEmailCompose({ runtime, isDesktop, onSent }: Params) {
             toast("Message sent");
             onSentRef.current?.();
           })
-          .catch((e) =>
-            toast.error(e instanceof Error ? e.message : "Couldn't send the message."),
-          );
+          .catch((e) => toast.error(e instanceof Error ? e.message : "Couldn't send the message."));
       },
     });
   }, []);

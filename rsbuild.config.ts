@@ -1,6 +1,6 @@
-import path from "node:path";
-import fs from "node:fs";
 import { execSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
 
@@ -15,7 +15,11 @@ function readLocalEnvValue(name: string): string {
     if (idx <= 0) continue;
     const key = line.slice(0, idx).trim();
     if (key !== name) continue;
-    const value = line.slice(idx + 1).trim().replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+    const value = line
+      .slice(idx + 1)
+      .trim()
+      .replace(/^"(.*)"$/, "$1")
+      .replace(/^'(.*)'$/, "$1");
     return value;
   }
   return "";

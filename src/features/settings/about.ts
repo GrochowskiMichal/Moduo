@@ -4,15 +4,13 @@
 // DF-19g). No React here.
 
 /** App version — baked from package.json at build time; "0.0.0" in tests/dev. */
-export const APP_VERSION: string =
-  (import.meta.env.MODUO_VERSION as string | undefined) ?? "0.0.0";
+export const APP_VERSION: string = (import.meta.env.MODUO_VERSION as string | undefined) ?? "0.0.0";
 
 /** Build id — short git SHA at build time (or a CI-injected value); "dev" otherwise. */
 export const APP_BUILD: string = (import.meta.env.MODUO_BUILD as string | undefined) ?? "dev";
 
 /** Desktop (Tauri) shell vs the web build — drives the "check for updates" hint. */
-export const IS_DESKTOP =
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+export const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 export const ABOUT_TAGLINE =
   "Notes, tasks, calendar, email, and contacts — synced across web and desktop, in one window.";

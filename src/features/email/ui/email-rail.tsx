@@ -7,14 +7,9 @@
 // Presentational — the page lifts `selectedAccountId` and passes it back down.
 
 import { AlertTriangle, Clock3, CornerUpLeft, Inbox, Plus } from "lucide-react";
-
-import { Button } from "../../../components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../components/ui/tooltip";
 import type { LabelColor } from "../../../components/tag-colors";
+import { Button } from "../../../components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { providerLabel } from "../accounts";
 import type { SavedAccount } from "../model/email-types";
 
@@ -92,10 +87,7 @@ export function EmailRail({
           className={`${rowBase} ${inboxView && selectedAccountId === null ? rowActive : rowIdle}`}
           style={{ minHeight: "var(--row-h)" }}
         >
-          <Inbox
-            className="size-icon-sm shrink-0 text-muted-foreground"
-            aria-hidden
-          />
+          <Inbox className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
           <span
             className={
               "min-w-0 flex-1 truncate text-sm " +

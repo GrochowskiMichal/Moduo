@@ -7,18 +7,20 @@
 // Contacts rides the Tasks permission lane at alpha, so render + edit gate on
 // `modulePermissions.tasks` until a dedicated lane lands.
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  pointerWithin,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { DndContext, PointerSensor, pointerWithin, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { Contact as ContactIcon } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
-import { undoToast } from "../../lib/undo-toast";
-import { asDragPayload, asDropLinkTarget, isSelfDrop, payloadRef, targetAccepts } from "../../lib/drag-payload";
-import type { ContactsSearch } from "../../features/contacts/search";
-import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { onCreateNew } from "../../components/app/create-events";
+import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { Button } from "../../components/ui/button";
 import {
   Dialog,
@@ -29,36 +31,60 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog";
 import { EmptyState } from "../../components/ui/empty-state";
-import { useAuth } from "../../providers/auth-provider";
-import { useWorkspace } from "../../providers/workspace-provider";
-import type { EntityLink, EntityRef, RelationKind } from "../../lib/entity-links";
-import type { ContactDetailsPatch } from "../../lib/runtime.types";
-import type { MentionCandidate } from "../../features/spine/mention";
+import type { ContactsSearch } from "../../features/contacts/search";
 import { coerceKindForPair } from "../../features/spine/kind-constraints";
+import type { MentionCandidate } from "../../features/spine/mention";
 import { entityRefKey } from "../../features/spine/rollup";
 import { createLinkWithToast } from "../../features/spine/ui/drop-link-toast";
+import {
+  asDragPayload,
+  asDropLinkTarget,
+  isSelfDrop,
+  payloadRef,
+  targetAccepts,
+} from "../../lib/drag-payload";
+import type { EntityLink, EntityRef, RelationKind } from "../../lib/entity-links";
+import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
+import type { ContactDetailsPatch } from "../../lib/runtime.types";
+import { undoToast } from "../../lib/undo-toast";
+import { useAuth } from "../../providers/auth-provider";
+import { useWorkspace } from "../../providers/workspace-provider";
 import "../../features/contacts/projectors";
-import type { Contact, ContactFieldType } from "../../features/contacts/model";
+import {
+  RightPanelSwitcher,
+  type RightPanelVariant,
+} from "../../components/app/right-panel-switcher";
+import { buildFollowupTask, followupLinkArgs } from "../../features/contacts/followup";
+import { useCompanyHub } from "../../features/contacts/hooks/use-company-hub";
+import { useContactHub } from "../../features/contacts/hooks/use-contact-hub";
 import { useContactsDirectory } from "../../features/contacts/hooks/use-contacts-directory";
 import { useDirectoryTags } from "../../features/contacts/hooks/use-directory-tags";
-import { useContactHub } from "../../features/contacts/hooks/use-contact-hub";
-import { useCompanyHub } from "../../features/contacts/hooks/use-company-hub";
-import { buildFollowupTask, followupLinkArgs } from "../../features/contacts/followup";
+import type { Contact, ContactFieldType } from "../../features/contacts/model";
 import { channelsFromValues } from "../../features/contacts/parse-contact";
-import { contactToVCard } from "../../features/contacts/vcard";
-import { ContactDirectory, type DirectorySelection } from "../../features/contacts/ui/contact-directory";
-import { ContactHub } from "../../features/contacts/ui/contact-hub";
+import {
+  CompanyFormDialog,
+  type CompanyFormValues,
+} from "../../features/contacts/ui/company-form-dialog";
 import { CompanyHub } from "../../features/contacts/ui/company-hub";
+import {
+  ContactDirectory,
+  type DirectorySelection,
+} from "../../features/contacts/ui/contact-directory";
+import {
+  ContactFormDialog,
+  type ContactFormValues,
+} from "../../features/contacts/ui/contact-form-dialog";
+import { ContactHub } from "../../features/contacts/ui/contact-hub";
 import { ContactImportDialog } from "../../features/contacts/ui/contact-import-dialog";
-import { ContactFormDialog, type ContactFormValues } from "../../features/contacts/ui/contact-form-dialog";
-import { CompanyFormDialog, type CompanyFormValues } from "../../features/contacts/ui/company-form-dialog";
 import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
-import { RightPanelSwitcher, type RightPanelVariant } from "../../components/app/right-panel-switcher";
+import { contactToVCard } from "../../features/contacts/vcard";
 import { LinkedNotesPanel } from "../../features/notes/ui/linked-notes-panel";
 
 function openEntity(ref: EntityRef) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } }));
+  window.dispatchEvent(
+    new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } }),
+  );
 }
 
 /** Trigger a client-side file download (vCard export). */
@@ -88,7 +114,9 @@ export function ContactsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [companyFormOpen, setCompanyFormOpen] = useState(false);
   // A preset company for the "+ Add person" flow from a company page (FX-7).
-  const [formCompanyPreset, setFormCompanyPreset] = useState<{ id: string; name: string } | null>(null);
+  const [formCompanyPreset, setFormCompanyPreset] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   // Company delete confirms first ("N people work here") — no restore op yet (DF-5).
   const [companyDeleteId, setCompanyDeleteId] = useState<string | null>(null);
 
@@ -113,9 +141,13 @@ export function ContactsPage() {
   );
 
   const selectedContact =
-    selected?.type === "contact" ? directory.bundle.contacts.find((c) => c.id === selected.id) ?? null : null;
+    selected?.type === "contact"
+      ? (directory.bundle.contacts.find((c) => c.id === selected.id) ?? null)
+      : null;
   const selectedCompany =
-    selected?.type === "company" ? directory.bundle.companies.find((c) => c.id === selected.id) ?? null : null;
+    selected?.type === "company"
+      ? (directory.bundle.companies.find((c) => c.id === selected.id) ?? null)
+      : null;
 
   const contactFocus = useMemo<EntityRef | null>(
     () => (selectedContact ? { type: "contact", id: selectedContact.id } : null),
@@ -126,7 +158,10 @@ export function ContactsPage() {
     [selectedCompany],
   );
   const companyMembers = useMemo(
-    () => (selectedCompany ? directory.bundle.contacts.filter((c) => c.companyId === selectedCompany.id) : []),
+    () =>
+      selectedCompany
+        ? directory.bundle.contacts.filter((c) => c.companyId === selectedCompany.id)
+        : [],
     [selectedCompany, directory.bundle.contacts],
   );
 
@@ -222,7 +257,7 @@ export function ContactsPage() {
 
   const ws = workspaceId as string;
   const companyNameFor = (companyId: string | null) =>
-    companyId ? directory.bundle.companies.find((c) => c.id === companyId)?.name ?? null : null;
+    companyId ? (directory.bundle.companies.find((c) => c.id === companyId)?.name ?? null) : null;
 
   const reload = () => {
     directory.reload();
@@ -234,16 +269,24 @@ export function ContactsPage() {
       await runtime!.contacts.setContactDetails({ workspaceId: ws, contactId, patch });
       reload();
     } catch (err) {
-      toast.error("Couldn’t save changes", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t save changes", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
   async function toggleFavorite(c: Contact) {
     try {
-      await runtime!.contacts.setFavorite({ workspaceId: ws, contactId: c.id, value: !c.isFavorite });
+      await runtime!.contacts.setFavorite({
+        workspaceId: ws,
+        contactId: c.id,
+        value: !c.isFavorite,
+      });
       directory.reload();
     } catch (err) {
-      toast.error("Couldn’t update favorite", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t update favorite", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -257,7 +300,9 @@ export function ContactsPage() {
       await runtime!.spine.setLinkKind({ workspaceId: ws, linkId: link.id, relationKind: kind });
       hub.reload();
     } catch (err) {
-      toast.error("Couldn’t change the relation", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t change the relation", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -266,7 +311,9 @@ export function ContactsPage() {
       await runtime!.spine.deleteLink({ workspaceId: ws, linkId: link.id });
       hub.reload();
     } catch (err) {
-      toast.error("Couldn’t remove the link", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t remove the link", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -278,7 +325,9 @@ export function ContactsPage() {
       directory.reload();
       hub.reload();
     } catch (err) {
-      toast.error("Couldn’t change status", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t change status", {
+        description: err instanceof Error ? err.message : undefined,
+      });
       throw err;
     }
   }
@@ -291,7 +340,10 @@ export function ContactsPage() {
       companyId = values.company.id;
       companyLabel = values.company.name;
     } else if (values.company && "createName" in values.company) {
-      const co = await runtime!.contacts.createCompany({ workspaceId: ws, name: values.company.createName });
+      const co = await runtime!.contacts.createCompany({
+        workspaceId: ws,
+        name: values.company.createName,
+      });
       companyId = co.id;
       companyLabel = co.name;
     }
@@ -316,7 +368,10 @@ export function ContactsPage() {
         await runtime!.contacts.setContactDetails({
           workspaceId: ws,
           contactId: created.id,
-          patch: { emails: channelsFromValues(values.emails), phones: channelsFromValues(values.phones) },
+          patch: {
+            emails: channelsFromValues(values.emails),
+            phones: channelsFromValues(values.phones),
+          },
         });
       }
       // The canonical works-at edge (mirrors setCompany's dual-write) so a
@@ -356,7 +411,9 @@ export function ContactsPage() {
   async function addFollowup(focus: EntityRef, name: string) {
     try {
       const inbox = await runtime!.tasks.seedInbox(ws);
-      const task = await runtime!.tasks.upsertTask(buildFollowupTask({ workspaceId: ws, bucketId: inbox.id, contactName: name }));
+      const task = await runtime!.tasks.upsertTask(
+        buildFollowupTask({ workspaceId: ws, bucketId: inbox.id, contactName: name }),
+      );
       const args = followupLinkArgs(focus, task.id);
       await runtime!.contacts.link({
         workspaceId: ws,
@@ -369,7 +426,9 @@ export function ContactsPage() {
       reloadFocus(focus);
       toast("Follow-up added", { description: task.title });
     } catch (err) {
-      toast.error("Couldn’t add follow-up", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t add follow-up", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -388,7 +447,9 @@ export function ContactsPage() {
       });
       reloadFocus(focus);
     } catch (err) {
-      toast.error("Couldn’t add the link", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t add the link", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -414,7 +475,8 @@ export function ContactsPage() {
     }
     if (!targetAccepts(target, payload)) return;
     const sourceKey = entityRefKey(payloadRef(payload));
-    const linkedKeys = target.entityType === "company" ? companyHub.directLinkKeys : contactDirectLinkKeys;
+    const linkedKeys =
+      target.entityType === "company" ? companyHub.directLinkKeys : contactDirectLinkKeys;
     if (linkedKeys.has(sourceKey)) {
       toast("Already linked");
       return;
@@ -432,12 +494,24 @@ export function ContactsPage() {
       // reflects it, not just the spine edge. Best-effort — the link already exists.
       if (created?.relationKind === "works-at") {
         const contactId =
-          payload.entityType === "contact" ? payload.entityId : target.entityType === "contact" ? target.entityId : null;
+          payload.entityType === "contact"
+            ? payload.entityId
+            : target.entityType === "contact"
+              ? target.entityId
+              : null;
         const companyId =
-          payload.entityType === "company" ? payload.entityId : target.entityType === "company" ? target.entityId : null;
+          payload.entityType === "company"
+            ? payload.entityId
+            : target.entityType === "company"
+              ? target.entityId
+              : null;
         if (contactId && companyId) {
           try {
-            await runtime.contacts.updateContact({ workspaceId, contactId, setCompany: { companyId } });
+            await runtime.contacts.updateContact({
+              workspaceId,
+              contactId,
+              setCompany: { companyId },
+            });
             reloadFocus({ type: "contact", id: contactId });
           } catch {
             /* the link is what matters; the FK is a convenience */
@@ -461,7 +535,9 @@ export function ContactsPage() {
       directory.reload();
       toast("Company deleted");
     } catch (err) {
-      toast.error("Couldn’t delete the company", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t delete the company", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -473,7 +549,10 @@ export function ContactsPage() {
         companyRef = candidate.ref;
         label = candidate.label;
       } else if (candidate.kind === "create") {
-        const company = await runtime!.contacts.createCompany({ workspaceId: ws, name: candidate.label });
+        const company = await runtime!.contacts.createCompany({
+          workspaceId: ws,
+          name: candidate.label,
+        });
         companyRef = { type: "company", id: company.id };
         label = company.name;
       } else {
@@ -488,11 +567,17 @@ export function ContactsPage() {
         targetLabel: label,
         targetIcon: "building-2",
       });
-      await runtime!.contacts.updateContact({ workspaceId: ws, contactId, setCompany: { companyId: companyRef.id } });
+      await runtime!.contacts.updateContact({
+        workspaceId: ws,
+        contactId,
+        setCompany: { companyId: companyRef.id },
+      });
       reload();
       toast("Company set", { description: label });
     } catch (err) {
-      toast.error("Couldn’t set company", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t set company", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -503,15 +588,25 @@ export function ContactsPage() {
     try {
       // The dual-write in reverse (gotchas §Drag-to-link): drop the canonical
       // works-at edge(s) AND the denormalized FK, or the chip resurrects.
-      const links = await runtime!.spine.listLinks({ workspaceId: ws, entityType: "contact", entityId: contact.id });
+      const links = await runtime!.spine.listLinks({
+        workspaceId: ws,
+        entityType: "contact",
+        entityId: contact.id,
+      });
       const workAt = links.filter(
         (l) =>
           l.relationKind === "works-at" &&
           ((l.sourceType === "company" && l.sourceId === companyId) ||
             (l.targetType === "company" && l.targetId === companyId)),
       );
-      await Promise.all(workAt.map((l) => runtime!.spine.deleteLink({ workspaceId: ws, linkId: l.id })));
-      await runtime!.contacts.updateContact({ workspaceId: ws, contactId: contact.id, setCompany: { companyId: null } });
+      await Promise.all(
+        workAt.map((l) => runtime!.spine.deleteLink({ workspaceId: ws, linkId: l.id })),
+      );
+      await runtime!.contacts.updateContact({
+        workspaceId: ws,
+        contactId: contact.id,
+        setCompany: { companyId: null },
+      });
       reload();
       undoToast("Company removed", {
         description: label ?? undefined,
@@ -527,25 +622,39 @@ export function ContactsPage() {
               targetLabel: label ?? undefined,
               targetIcon: "building-2",
             });
-            await runtime!.contacts.updateContact({ workspaceId: ws, contactId: contact.id, setCompany: { companyId } });
+            await runtime!.contacts.updateContact({
+              workspaceId: ws,
+              contactId: contact.id,
+              setCompany: { companyId },
+            });
             reload();
           })().catch((err) =>
-            toast.error("Couldn’t restore the company", { description: err instanceof Error ? err.message : undefined }),
+            toast.error("Couldn’t restore the company", {
+              description: err instanceof Error ? err.message : undefined,
+            }),
           );
         },
       });
     } catch (err) {
-      toast.error("Couldn’t remove the company", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t remove the company", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
   async function addFieldDef(label: string, type: ContactFieldType, options?: string[]) {
-    const key = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "field";
+    const key =
+      label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "") || "field";
     try {
       await runtime!.contacts.addFieldDef({ workspaceId: ws, key, label, type, options });
       directory.reload();
     } catch (err) {
-      toast.error("Couldn’t add field", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t add field", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -554,7 +663,9 @@ export function ContactsPage() {
       await runtime!.contacts.deleteFieldDef({ workspaceId: ws, fieldId });
       directory.reload();
     } catch (err) {
-      toast.error("Couldn’t remove field", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t remove field", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -582,7 +693,9 @@ export function ContactsPage() {
         },
       });
     } catch (err) {
-      toast.error("Couldn’t delete the contact", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t delete the contact", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     }
   }
 
@@ -597,10 +710,21 @@ export function ContactsPage() {
       onRefreshTags={directoryTags.reload}
       onSelect={setSelected}
       draggable={canEdit}
-      onNew={canEdit ? () => { setFormCompanyPreset(null); setFormOpen(true); } : undefined}
+      onNew={
+        canEdit
+          ? () => {
+              setFormCompanyPreset(null);
+              setFormOpen(true);
+            }
+          : undefined
+      }
       onNewCompany={canEdit ? () => setCompanyFormOpen(true) : undefined}
       onImport={canEdit ? () => setImportOpen(true) : undefined}
-      onToggleFavorite={canEdit ? (id) => void toggleFavorite(directory.bundle.contacts.find((c) => c.id === id)!) : undefined}
+      onToggleFavorite={
+        canEdit
+          ? (id) => void toggleFavorite(directory.bundle.contacts.find((c) => c.id === id)!)
+          : undefined
+      }
       onRetry={directory.reload}
     />
   );
@@ -609,62 +733,78 @@ export function ContactsPage() {
   if (selectedContact) {
     center = (
       <HubDropZone target={{ type: "contact", id: selectedContact.id }} disabled={!canEdit}>
-      <ContactHub
-        contact={selectedContact}
-        companyName={companyNameFor(selectedContact.companyId)}
-        contactsById={contactsById}
-        fieldDefs={directory.bundle.fieldDefs}
-        rollup={hub.rollup}
-        hubStatus={hub.hubStatus}
-        activity={hub.activity}
-        canEdit={canEdit}
-        currentUserId={userId ?? null}
-        runtime={runtime}
-        workspaceId={ws}
-        onSaveDetails={(patch) => void saveDetails(selectedContact.id, patch)}
-        onSetStatus={(status) => setStatus(selectedContact.id, status)}
-        onToggleFavorite={() => void toggleFavorite(selectedContact)}
-        onDelete={() => void deleteContact(selectedContact.id)}
-        onShare={() => shareVCard(selectedContact)}
-        onAddFollowup={() => void addFollowup({ type: "contact", id: selectedContact.id }, selectedContact.name)}
-        onLink={(candidate) => void linkExisting({ type: "contact", id: selectedContact.id }, candidate)}
-        onSetCompany={(candidate) => void setCompany(selectedContact.id, candidate)}
-        onClearCompany={selectedContact.companyId ? () => void clearCompany(selectedContact) : undefined}
-        onAddField={(label, type, options) => void addFieldDef(label, type, options)}
-        onDeleteField={(fieldId) => void deleteFieldDef(fieldId)}
-        onOpenEntity={openEntity}
-        onChangeKind={(link, kind) => void changeKind(link, kind)}
-        onUnlink={(link) => void unlink(link)}
-        onRetry={hub.reload}
-        onLinked={reload}
-      />
+        <ContactHub
+          contact={selectedContact}
+          companyName={companyNameFor(selectedContact.companyId)}
+          contactsById={contactsById}
+          fieldDefs={directory.bundle.fieldDefs}
+          rollup={hub.rollup}
+          hubStatus={hub.hubStatus}
+          activity={hub.activity}
+          canEdit={canEdit}
+          currentUserId={userId ?? null}
+          runtime={runtime}
+          workspaceId={ws}
+          onSaveDetails={(patch) => void saveDetails(selectedContact.id, patch)}
+          onSetStatus={(status) => setStatus(selectedContact.id, status)}
+          onToggleFavorite={() => void toggleFavorite(selectedContact)}
+          onDelete={() => void deleteContact(selectedContact.id)}
+          onShare={() => shareVCard(selectedContact)}
+          onAddFollowup={() =>
+            void addFollowup({ type: "contact", id: selectedContact.id }, selectedContact.name)
+          }
+          onLink={(candidate) =>
+            void linkExisting({ type: "contact", id: selectedContact.id }, candidate)
+          }
+          onSetCompany={(candidate) => void setCompany(selectedContact.id, candidate)}
+          onClearCompany={
+            selectedContact.companyId ? () => void clearCompany(selectedContact) : undefined
+          }
+          onAddField={(label, type, options) => void addFieldDef(label, type, options)}
+          onDeleteField={(fieldId) => void deleteFieldDef(fieldId)}
+          onOpenEntity={openEntity}
+          onChangeKind={(link, kind) => void changeKind(link, kind)}
+          onUnlink={(link) => void unlink(link)}
+          onRetry={hub.reload}
+          onLinked={reload}
+        />
       </HubDropZone>
     );
   } else if (selectedCompany) {
     center = (
       <HubDropZone target={{ type: "company", id: selectedCompany.id }} disabled={!canEdit}>
-      <CompanyHub
-        company={selectedCompany}
-        rollup={companyHub.rollup}
-        status={companyHub.status}
-        activity={companyHub.activity}
-        runtime={runtime}
-        workspaceId={ws}
-        canEdit={canEdit}
-        currentUserId={userId ?? null}
-        onSaveDetails={(patch) =>
-          void runtime!.contacts
-            .setCompanyDetails({ workspaceId: ws, companyId: selectedCompany.id, patch })
-            .then(() => directory.reload())
-            .catch((err) => toast.error("Couldn’t save company", { description: err instanceof Error ? err.message : undefined }))
-        }
-        onOpenEntity={openEntity}
-        onAddTask={() => void addFollowup({ type: "company", id: selectedCompany.id }, selectedCompany.name)}
-        onLink={(candidate) => void linkExisting({ type: "company", id: selectedCompany.id }, candidate)}
-        onAddPerson={() => addPersonToCompany({ id: selectedCompany.id, name: selectedCompany.name })}
-        onDelete={() => setCompanyDeleteId(selectedCompany.id)}
-        onRetry={companyHub.reload}
-      />
+        <CompanyHub
+          company={selectedCompany}
+          rollup={companyHub.rollup}
+          status={companyHub.status}
+          activity={companyHub.activity}
+          runtime={runtime}
+          workspaceId={ws}
+          canEdit={canEdit}
+          currentUserId={userId ?? null}
+          onSaveDetails={(patch) =>
+            void runtime!.contacts
+              .setCompanyDetails({ workspaceId: ws, companyId: selectedCompany.id, patch })
+              .then(() => directory.reload())
+              .catch((err) =>
+                toast.error("Couldn’t save company", {
+                  description: err instanceof Error ? err.message : undefined,
+                }),
+              )
+          }
+          onOpenEntity={openEntity}
+          onAddTask={() =>
+            void addFollowup({ type: "company", id: selectedCompany.id }, selectedCompany.name)
+          }
+          onLink={(candidate) =>
+            void linkExisting({ type: "company", id: selectedCompany.id }, candidate)
+          }
+          onAddPerson={() =>
+            addPersonToCompany({ id: selectedCompany.id, name: selectedCompany.name })
+          }
+          onDelete={() => setCompanyDeleteId(selectedCompany.id)}
+          onRetry={companyHub.reload}
+        />
       </HubDropZone>
     );
   } else {
@@ -716,7 +856,13 @@ export function ContactsPage() {
           the center hub (drop target) both sit inside it. pointerWithin only —
           an out-of-hub release is a no-op, never a stray link (gotchas). */}
       <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={onDragEnd}>
-        <FeaturePanelsShell feature="contacts" left={left} center={center} right={right} hideRight={!right} />
+        <FeaturePanelsShell
+          feature="contacts"
+          left={left}
+          center={center}
+          right={right}
+          hideRight={!right}
+        />
       </DndContext>
       {canEdit ? (
         <ContactImportDialog
@@ -731,7 +877,9 @@ export function ContactsPage() {
               result.created ? `${result.created} added` : null,
               result.merged ? `${result.merged} merged` : null,
             ].filter(Boolean);
-            toast("Contacts imported", { description: parts.length ? parts.join(" · ") : "Nothing to import." });
+            toast("Contacts imported", {
+              description: parts.length ? parts.join(" · ") : "Nothing to import.",
+            });
           }}
         />
       ) : null}
@@ -752,12 +900,16 @@ export function ContactsPage() {
         />
       ) : null}
       {canEdit ? (
-        <CompanyFormDialog open={companyFormOpen} onOpenChange={setCompanyFormOpen} onSubmit={submitNewCompany} />
+        <CompanyFormDialog
+          open={companyFormOpen}
+          onOpenChange={setCompanyFormOpen}
+          onSubmit={submitNewCompany}
+        />
       ) : null}
       {(() => {
         // Company delete confirm — the guard names the people affected (DF-5).
         const target = companyDeleteId
-          ? directory.bundle.companies.find((c) => c.id === companyDeleteId) ?? null
+          ? (directory.bundle.companies.find((c) => c.id === companyDeleteId) ?? null)
           : null;
         const memberCount = companyDeleteId
           ? directory.bundle.contacts.filter((c) => c.companyId === companyDeleteId).length

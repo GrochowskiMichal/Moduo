@@ -1,10 +1,9 @@
-import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import { Columns3, List, Plus, SlidersHorizontal } from "lucide-react";
-
-import { Toolbar } from "./toolbar";
+import { useState } from "react";
 import { Button } from "./button";
 import { SegmentedControl } from "./segmented-control";
+import { Toolbar } from "./toolbar";
 import { TooltipProvider } from "./tooltip";
 
 const meta: Meta<typeof Toolbar> = {

@@ -4,7 +4,7 @@
 // spine mutation logs an attributed `module_activity` row; this is how that row
 // reads. Newest-first in the hub trail and the notification card.
 
-import { RELATION_KIND_LABELS, isRelationKind } from "../../lib/entity-links";
+import { isRelationKind, RELATION_KIND_LABELS } from "../../lib/entity-links";
 
 /** The minimal shape an activity/notification row needs to render an actor. */
 export type SpineActorFields = {
@@ -37,7 +37,10 @@ function kindPhrase(kind: string | null): string {
  * Unknown ops fall back to the raw op name so the trail never lies by omission
  * when a newer client adds ops.
  */
-export function spineActivityLine(entry: { op: string; payload?: Record<string, unknown> | null }): string {
+export function spineActivityLine(entry: {
+  op: string;
+  payload?: Record<string, unknown> | null;
+}): string {
   const p = entry.payload ?? {};
   switch (entry.op) {
     case "links.create":

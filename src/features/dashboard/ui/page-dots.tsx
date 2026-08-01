@@ -45,7 +45,9 @@ export function PageDots({
               className={cn(
                 "h-1.5 rounded-full transition-all duration-(--motion-fade) ease-(--ease-out)",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                active ? "w-4 bg-foreground" : "w-1.5 bg-muted-foreground/40 hover:bg-muted-foreground/70",
+                active
+                  ? "w-4 bg-foreground"
+                  : "w-1.5 bg-muted-foreground/40 hover:bg-muted-foreground/70",
               )}
             />
           );

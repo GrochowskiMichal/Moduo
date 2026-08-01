@@ -61,8 +61,8 @@ export function DriftTriageDialog({
             {bucketName} · {count} drifted
           </DialogTitle>
           <DialogDescription>
-            Scheduled times that already passed. Triage at your own pace — nothing here is
-            overdue. Ignore keeps the task and just drops the stale time.
+            Scheduled times that already passed. Triage at your own pace — nothing here is overdue.
+            Ignore keeps the task and just drops the stale time.
           </DialogDescription>
         </DialogHeader>
 
@@ -173,7 +173,9 @@ function TriageRow({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => onArchive(task.id)}>Archive</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onIgnore(task.id)}>Ignore (clear time)</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onIgnore(task.id)}>
+              Ignore (clear time)
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}

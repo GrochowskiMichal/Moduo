@@ -2,14 +2,13 @@
 // with inline check-off — the one write this widget does, gated by `canWrite`
 // (a "view" member sees disabled checkboxes). Rows open the task in /tasks.
 
+import { Check } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Check } from "lucide-react";
-
-import { cn } from "@/lib/utils";
-import { getRuntime } from "@/lib/runtime";
 import { todayStr } from "@/features/tasks/helpers";
 import type { Task } from "@/features/tasks/model";
+import { getRuntime } from "@/lib/runtime";
+import { cn } from "@/lib/utils";
 
 import {
   requestDashboardDataRefresh,
@@ -27,10 +26,7 @@ import {
   WidgetSectionLabel,
 } from "./widget-primitives";
 
-function selectTodayTasks(
-  tasks: Task[],
-  projectIds: string[],
-): { rows: Task[]; heading: string } {
+function selectTodayTasks(tasks: Task[], projectIds: string[]): { rows: Task[]; heading: string } {
   const today = todayStr();
   const open = tasks.filter(
     (t) =>
@@ -92,7 +88,9 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
   const projectIds = useMemo(
     () =>
       Array.isArray(widget.config.projectIds)
-        ? (widget.config.projectIds as unknown[]).filter((id): id is string => typeof id === "string")
+        ? (widget.config.projectIds as unknown[]).filter(
+            (id): id is string => typeof id === "string",
+          )
         : [],
     [widget.config.projectIds],
   );
@@ -135,7 +133,9 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
 
   return (
     <WidgetBodyRoot>
-      {size !== "S" ? <WidgetSectionLabel count={visible.length}>{heading}</WidgetSectionLabel> : null}
+      {size !== "S" ? (
+        <WidgetSectionLabel count={visible.length}>{heading}</WidgetSectionLabel>
+      ) : null}
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto scrollbar-thin p-1.5 pt-0.5">
         {shown.map((task) => (
           <TaskRow key={task.id} task={task} canWrite={canWrite} onDone={markDone} />

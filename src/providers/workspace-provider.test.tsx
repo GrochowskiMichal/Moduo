@@ -35,7 +35,7 @@ vi.mock("./auth-provider", () => ({
   useAuth: () => ({ runtime, userId: "user-1" }),
 }));
 
-import { WorkspaceProvider, useWorkspace } from "./workspace-provider";
+import { useWorkspace, WorkspaceProvider } from "./workspace-provider";
 
 describe("WorkspaceProvider.joinWorkspace", () => {
   beforeEach(() => {

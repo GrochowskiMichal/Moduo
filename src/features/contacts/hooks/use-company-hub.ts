@@ -9,15 +9,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { EntityLink, EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import type { ActivityEntry } from "../../tasks/model";
-import { entityRefKey, otherEndpoint } from "../../spine/rollup";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
+import { entityRefKey, otherEndpoint } from "../../spine/rollup";
+import type { ActivityEntry } from "../../tasks/model";
 import { buildCompanyRollup, type CompanyRollup } from "../company";
 import type { Contact } from "../model";
 import { enrichHubRows } from "./enrich-hub-rows";
 import "../../spine/snippet-projectors.builtin";
 
-const EMPTY: CompanyRollup = { people: [], unionSections: [], lastTouchAt: null, lastTouchActivity: null };
+const EMPTY: CompanyRollup = {
+  people: [],
+  unionSections: [],
+  lastTouchAt: null,
+  lastTouchActivity: null,
+};
 
 export type UseCompanyHubResult = {
   rollup: CompanyRollup;
@@ -59,7 +64,12 @@ export function useCompanyHub(
       try {
         const [companyLinks, activityRows] = await Promise.all([
           runtime.spine.listLinks({ workspaceId, entityType: "company", entityId: companyId }),
-          runtime.tasks.listActivity({ workspaceId, entityType: "company", entityId: companyId, limit: 30 }),
+          runtime.tasks.listActivity({
+            workspaceId,
+            entityType: "company",
+            entityId: companyId,
+            limit: 30,
+          }),
         ]);
 
         // Every person: denormalized members ∪ works-at-linked contacts.
@@ -67,10 +77,14 @@ export function useCompanyHub(
           .filter((l) => l.relationKind === "works-at")
           .map((l) => otherEndpoint(companyRef, l))
           .filter((r): r is EntityRef => r !== null && r.type === "contact");
-        const personIds = Array.from(new Set([...denormalized.map((m) => m.id), ...worksAt.map((p) => p.id)]));
+        const personIds = Array.from(
+          new Set([...denormalized.map((m) => m.id), ...worksAt.map((p) => p.id)]),
+        );
 
         const lists = await Promise.all(
-          personIds.map((id) => runtime.spine.listLinks({ workspaceId, entityType: "contact", entityId: id })),
+          personIds.map((id) =>
+            runtime.spine.listLinks({ workspaceId, entityType: "contact", entityId: id }),
+          ),
         );
         const memberLinks: Record<string, EntityLink[]> = {};
         personIds.forEach((id, i) => {
@@ -92,8 +106,12 @@ export function useCompanyHub(
         });
         const uniqueRefs = Array.from(new Map(refs.map((r) => [entityRefKey(r), r])).values());
         const [records, enrichment] = await Promise.all([
-          uniqueRefs.length ? runtime.spine.getEntities({ workspaceId, refs: uniqueRefs }) : Promise.resolve([]),
-          uniqueRefs.length ? enrichHubRows(runtime, workspaceId, uniqueRefs) : Promise.resolve(null),
+          uniqueRefs.length
+            ? runtime.spine.getEntities({ workspaceId, refs: uniqueRefs })
+            : Promise.resolve([]),
+          uniqueRefs.length
+            ? enrichHubRows(runtime, workspaceId, uniqueRefs)
+            : Promise.resolve(null),
         ]);
         const byKey = new Map(records.map((r) => [entityRefKey({ type: r.type, id: r.id }), r]));
 

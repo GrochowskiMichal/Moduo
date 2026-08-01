@@ -8,7 +8,15 @@ import { parseFieldOptions, selectOptionsFor, serializeFieldOptions } from "./fi
 import type { ContactFieldDef } from "./model";
 
 function def(options: string[]): ContactFieldDef {
-  return { id: "f1", workspaceId: "w", key: "region", label: "Region", type: "select", options, position: 0 };
+  return {
+    id: "f1",
+    workspaceId: "w",
+    key: "region",
+    label: "Region",
+    type: "select",
+    options,
+    position: 0,
+  };
 }
 
 describe("parseFieldOptions", () => {

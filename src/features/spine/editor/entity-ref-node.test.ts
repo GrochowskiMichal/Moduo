@@ -2,11 +2,12 @@
 // email compose and the HTML-stored task / event descriptions. Proves
 // exportDOM → importDOM preserves the entity address, and that a malformed
 // marker degrades to plain text rather than minting a dead chip.
-import { describe, expect, it } from "vitest";
+
 import { createHeadlessEditor } from "@lexical/headless";
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
 import { $createParagraphNode, $getRoot, $isElementNode, type LexicalNode } from "lexical";
-import { EntityRefNode, $createEntityRefNode, $isEntityRefNode } from "./entity-ref-node";
+import { describe, expect, it } from "vitest";
+import { $createEntityRefNode, $isEntityRefNode, EntityRefNode } from "./entity-ref-node";
 
 function makeEditor() {
   return createHeadlessEditor({

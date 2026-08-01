@@ -72,8 +72,12 @@ export const tauriRuntime: ModuoRuntime = {
   // LEGACY read-only surface: redb reads for the one-time NO-2 import (the
   // Rust write commands retired with the Wave-3 rebuild).
   notes: {
-    list(workspaceId) { return invoke<any[]>("notes_list", { workspaceId }); },
-    getDocState(workspaceId, noteId) { return invoke<any>("notes_get_doc_state", { workspaceId, noteId }); },
+    list(workspaceId) {
+      return invoke<any[]>("notes_list", { workspaceId });
+    },
+    getDocState(workspaceId, noteId) {
+      return invoke<any>("notes_get_doc_state", { workspaceId, noteId });
+    },
   },
 
   // Wave-3 Notes rebuild: cloud-first, Supabase-direct — the same code path as
@@ -82,62 +86,150 @@ export const tauriRuntime: ModuoRuntime = {
   notesV2: webRuntime.notesV2,
 
   migration: {
-    importLegacy(payload) { return invoke<any>("migration_import_legacy", { payload }); },
+    importLegacy(payload) {
+      return invoke<any>("migration_import_legacy", { payload });
+    },
   },
 
   localStore: {
-    get(namespace, key) { return invoke("local_store_get", { namespace, key }); },
-    set(namespace, key, value) { return invoke("local_store_set", { namespace, key, value }); },
-    remove(namespace, key) { return invoke("local_store_remove", { namespace, key }); },
+    get(namespace, key) {
+      return invoke("local_store_get", { namespace, key });
+    },
+    set(namespace, key, value) {
+      return invoke("local_store_set", { namespace, key, value });
+    },
+    remove(namespace, key) {
+      return invoke("local_store_remove", { namespace, key });
+    },
   },
 
   window: {
-    toggleFullscreen() { return invoke<boolean>("window_toggle_fullscreen"); },
-    openExternalUrl(url) { return invoke<void>("open_external_url", { url }); },
+    toggleFullscreen() {
+      return invoke<boolean>("window_toggle_fullscreen");
+    },
+    openExternalUrl(url) {
+      return invoke<void>("open_external_url", { url });
+    },
   },
 
   timetracking: {
-    list(workspaceId) { return invoke<any>("tt_list", { workspaceId }); },
-    upsertEntry(entry) { return invoke<any>("tt_upsert_entry", { entry }); },
-    deleteEntry(entryId) { return invoke<void>("tt_delete_entry", { entryId }); },
-    upsertCategory(category) { return invoke<any>("tt_upsert_category", { category }); },
-    deleteCategory(categoryId) { return invoke<void>("tt_delete_category", { categoryId }); },
-    upsertRule(rule) { return invoke<any>("tt_upsert_rule", { rule }); },
-    deleteRule(ruleId) { return invoke<void>("tt_delete_rule", { ruleId }); },
-    upsertProject(project) { return invoke<any>("tt_upsert_project", { project }); },
-    deleteProject(projectId) { return invoke<void>("tt_delete_project", { projectId }); },
-    upsertFocusSession(session) { return invoke<any>("tt_upsert_focus_session", { session }); },
-    getActiveWindow() { return invoke<any | null>("tt_get_active_window"); },
-    startTracking(workspaceId) { return invoke<void>("tt_start_tracking", { workspaceId }); },
-    stopTracking() { return invoke<void>("tt_stop_tracking"); },
-    getTrackingStatus() { return invoke<{ isTracking: boolean }>("tt_get_tracking_status"); },
+    list(workspaceId) {
+      return invoke<any>("tt_list", { workspaceId });
+    },
+    upsertEntry(entry) {
+      return invoke<any>("tt_upsert_entry", { entry });
+    },
+    deleteEntry(entryId) {
+      return invoke<void>("tt_delete_entry", { entryId });
+    },
+    upsertCategory(category) {
+      return invoke<any>("tt_upsert_category", { category });
+    },
+    deleteCategory(categoryId) {
+      return invoke<void>("tt_delete_category", { categoryId });
+    },
+    upsertRule(rule) {
+      return invoke<any>("tt_upsert_rule", { rule });
+    },
+    deleteRule(ruleId) {
+      return invoke<void>("tt_delete_rule", { ruleId });
+    },
+    upsertProject(project) {
+      return invoke<any>("tt_upsert_project", { project });
+    },
+    deleteProject(projectId) {
+      return invoke<void>("tt_delete_project", { projectId });
+    },
+    upsertFocusSession(session) {
+      return invoke<any>("tt_upsert_focus_session", { session });
+    },
+    getActiveWindow() {
+      return invoke<any | null>("tt_get_active_window");
+    },
+    startTracking(workspaceId) {
+      return invoke<void>("tt_start_tracking", { workspaceId });
+    },
+    stopTracking() {
+      return invoke<void>("tt_stop_tracking");
+    },
+    getTrackingStatus() {
+      return invoke<{ isTracking: boolean }>("tt_get_tracking_status");
+    },
   },
 
   email: {
-    listAccounts() { return invoke<any[]>("email_accounts_list"); },
-    connectAndSave(input) { return invoke<any>("email_account_connect_and_save", { input }); },
-    disconnect(accountId) { return invoke<void>("email_account_disconnect", { accountId }); },
-    listEnvelopes(input) { return invoke<any>("email_list_envelopes", { input }); },
-    getMessageBody(input) { return invoke<any>("email_get_message_body", { input }); },
-    prefetchBodies(input) { return invoke<any>("email_prefetch_bodies", { input }); },
-    syncNow(input) { return invoke<any>("email_sync_now", { input }); },
-    setActivityState(input) { return invoke<void>("email_set_activity_state", { input }); },
-    applyFlag(input) { return invoke<any>("email_apply_flag", { input }); },
-    getMailboxStatus(input) { return invoke<any[]>("email_get_mailbox_status", { input: input ?? {} }); },
-    sendSaved(input) { return invoke<boolean>("email_send_saved", input); },
-    startGoogleOAuth(input) { return invoke<any>("email_gmail_oauth_start", { input }); },
-    getThread(input) { return invoke<any>("email_get_thread", { input }); },
-    listFolders(input) { return invoke<any[]>("email_list_folders", { input }); },
-    applyMessageOp(input) { return invoke<any>("email_apply_message_op", { input }); },
-    snoozeThread(input) { return invoke<any>("email_snooze_thread", { input }); },
-    snoozeRestore(input) { return invoke<any>("email_snooze_restore", { input }); },
-    sendMessage(input) { return invoke<any>("email_send_message", { input }); },
-    listAttachments(input) { return invoke<any[]>("email_list_attachments", { input }); },
-    saveAttachment(input) { return invoke<any>("email_save_attachment", { input }); },
-    pickAttachments() { return invoke<any[]>("email_pick_attachments", {}); },
-    getInlineImages(input) { return invoke<any[]>("email_get_inline_images", { input }); },
-    searchBodies(input) { return invoke<any[]>("email_search_bodies", { input }); },
-    searchServer(input) { return invoke<any>("email_search_server", { input }); },
+    listAccounts() {
+      return invoke<any[]>("email_accounts_list");
+    },
+    connectAndSave(input) {
+      return invoke<any>("email_account_connect_and_save", { input });
+    },
+    disconnect(accountId) {
+      return invoke<void>("email_account_disconnect", { accountId });
+    },
+    listEnvelopes(input) {
+      return invoke<any>("email_list_envelopes", { input });
+    },
+    getMessageBody(input) {
+      return invoke<any>("email_get_message_body", { input });
+    },
+    prefetchBodies(input) {
+      return invoke<any>("email_prefetch_bodies", { input });
+    },
+    syncNow(input) {
+      return invoke<any>("email_sync_now", { input });
+    },
+    setActivityState(input) {
+      return invoke<void>("email_set_activity_state", { input });
+    },
+    applyFlag(input) {
+      return invoke<any>("email_apply_flag", { input });
+    },
+    getMailboxStatus(input) {
+      return invoke<any[]>("email_get_mailbox_status", { input: input ?? {} });
+    },
+    sendSaved(input) {
+      return invoke<boolean>("email_send_saved", input);
+    },
+    startGoogleOAuth(input) {
+      return invoke<any>("email_gmail_oauth_start", { input });
+    },
+    getThread(input) {
+      return invoke<any>("email_get_thread", { input });
+    },
+    listFolders(input) {
+      return invoke<any[]>("email_list_folders", { input });
+    },
+    applyMessageOp(input) {
+      return invoke<any>("email_apply_message_op", { input });
+    },
+    snoozeThread(input) {
+      return invoke<any>("email_snooze_thread", { input });
+    },
+    snoozeRestore(input) {
+      return invoke<any>("email_snooze_restore", { input });
+    },
+    sendMessage(input) {
+      return invoke<any>("email_send_message", { input });
+    },
+    listAttachments(input) {
+      return invoke<any[]>("email_list_attachments", { input });
+    },
+    saveAttachment(input) {
+      return invoke<any>("email_save_attachment", { input });
+    },
+    pickAttachments() {
+      return invoke<any[]>("email_pick_attachments", {});
+    },
+    getInlineImages(input) {
+      return invoke<any[]>("email_get_inline_images", { input });
+    },
+    searchBodies(input) {
+      return invoke<any[]>("email_search_bodies", { input });
+    },
+    searchServer(input) {
+      return invoke<any>("email_search_server", { input });
+    },
     // EM-3 cloud tissue methods are Supabase-direct — identical on both platforms.
     listModule: webRuntime.email.listModule,
     upsertAccountRef: webRuntime.email.upsertAccountRef,
@@ -208,9 +300,7 @@ export const tauriRuntime: ModuoRuntime = {
         return events ?? [];
       }
       const command =
-        provider === "microsoft"
-          ? "calendar_outlook_events_sync"
-          : "calendar_google_events_sync";
+        provider === "microsoft" ? "calendar_outlook_events_sync" : "calendar_google_events_sync";
       const events = await invoke<Record<string, unknown>[]>(command, {
         accountId: externalAccountId,
         timeMin,

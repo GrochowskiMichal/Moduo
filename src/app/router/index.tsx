@@ -1,6 +1,6 @@
 import { createRouter } from "@tanstack/react-router";
-import { routeTree } from "./route-tree";
 import { writeLastRoute } from "../../lib/preferences";
+import { routeTree } from "./route-tree";
 
 export const router = createRouter({ routeTree });
 

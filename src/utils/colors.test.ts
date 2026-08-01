@@ -19,4 +19,3 @@ describe("normalizeHexColor", () => {
     expect(normalizeHexColor("not-a-color")).toBeNull();
   });
 });
-

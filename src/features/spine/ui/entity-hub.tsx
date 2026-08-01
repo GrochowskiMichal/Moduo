@@ -7,19 +7,10 @@
 // renders sections grouped by the fixed order, with counts, "Show all (N)",
 // tombstone dimming, and the empty/loading/error states (AC6, AC14).
 
-import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
-import {
-  RELATION_KIND_LABELS,
-  type EntityLink,
-  type EntityRef,
-  type RelationKind,
-} from "@/lib/entity-links";
-import { cn } from "@/lib/utils";
-import { allowedKinds } from "../kind-constraints";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/icon-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,14 +22,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
-import { resolveEntityIcon } from "../icon-map";
+import { IconButton } from "@/components/ui/icon-button";
 import {
-  isSectionTruncated,
-  visibleRows,
-  type HubRow,
-  type HubSection,
-} from "../rollup";
+  type EntityLink,
+  type EntityRef,
+  RELATION_KIND_LABELS,
+  type RelationKind,
+} from "@/lib/entity-links";
+import { cn } from "@/lib/utils";
 import type { HubStatus } from "../hooks/use-entity-hub";
+import { resolveEntityIcon } from "../icon-map";
+import { allowedKinds } from "../kind-constraints";
+import { type HubRow, type HubSection, isSectionTruncated, visibleRows } from "../rollup";
 
 export type EntityHubProps = {
   /** Right-rail (compact) vs center-page (roomier) presentation. */
@@ -95,10 +90,7 @@ export function EntityHub({
   if (sections.length === 0) {
     return (
       <div className={className}>
-        <EmptyState
-          title="Nothing linked yet"
-          description="Drag, @mention, or /ref to connect."
-        />
+        <EmptyState title="Nothing linked yet" description="Drag, @mention, or /ref to connect." />
       </div>
     );
   }
@@ -188,7 +180,14 @@ type RowProps = {
   onUnlink?: (link: EntityLink) => void;
 };
 
-export function EntityHubRow({ row, variant = "rail", canEdit, onOpen, onChangeKind, onUnlink }: RowProps) {
+export function EntityHubRow({
+  row,
+  variant = "rail",
+  canEdit,
+  onOpen,
+  onChangeKind,
+  onUnlink,
+}: RowProps) {
   // Neutral, monochrome — the type icon (not color) distinguishes a task from a
   // contact (R5: accent reserved; color is never the only signal).
   const Icon = resolveEntityIcon(row.other.type, row.icon);
@@ -213,7 +212,9 @@ export function EntityHubRow({ row, variant = "rail", canEdit, onOpen, onChangeK
         ) : null}
         {/* Provenance caption on a company's union rows (FX-7): "· via Jane Cooper". */}
         {row.via ? (
-          <span className="shrink-0 truncate text-xs text-muted-foreground/70">· via {row.via}</span>
+          <span className="shrink-0 truncate text-xs text-muted-foreground/70">
+            · via {row.via}
+          </span>
         ) : null}
         {variant === "page" ? (
           // The page card is calmer: sentence-case caption, and the default

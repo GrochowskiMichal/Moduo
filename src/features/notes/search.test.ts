@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shapeNoteSearchResults, snippetFor, searchTerms, type NoteSearchRow } from "./search";
+import { type NoteSearchRow, searchTerms, shapeNoteSearchResults, snippetFor } from "./search";
 
 const rows: NoteSearchRow[] = [
   {
@@ -9,7 +9,13 @@ const rows: NoteSearchRow[] = [
     isArchived: false,
     deletedAt: null,
   },
-  { id: "b", title: "Budget draft", bodyText: "numbers to review", isArchived: true, deletedAt: null },
+  {
+    id: "b",
+    title: "Budget draft",
+    bodyText: "numbers to review",
+    isArchived: true,
+    deletedAt: null,
+  },
   {
     id: "c",
     title: "Trashed",

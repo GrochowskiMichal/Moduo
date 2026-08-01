@@ -4,10 +4,9 @@
 // which is the whole point of the dual-path (same data, different source table).
 
 import { describe, expect, it } from "vitest";
-
+import type { EntityLink } from "../../lib/entity-links";
 import { blocksLinksToRelations } from "./blocks-bridge";
 import { blockedTaskIds, frontierTasks, makeTask } from "./helpers";
-import type { EntityLink } from "../../lib/entity-links";
 import type { Task, TaskStatus } from "./model";
 
 function task(id: string, opts: { status?: TaskStatus } = {}): Task {
@@ -18,7 +17,11 @@ function task(id: string, opts: { status?: TaskStatus } = {}): Task {
 }
 
 let seq = 0;
-function blocksLink(blockerId: string, blockedId: string, over: Partial<EntityLink> = {}): EntityLink {
+function blocksLink(
+  blockerId: string,
+  blockedId: string,
+  over: Partial<EntityLink> = {},
+): EntityLink {
   seq += 1;
   return {
     id: `lnk-${seq}`,

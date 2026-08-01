@@ -3,7 +3,7 @@
 // tooltip-able title so the dense directory dot is still legible.
 
 import { cn } from "@/lib/utils";
-import { contactStatusMeta, type ContactStatusTone } from "../status";
+import { type ContactStatusTone, contactStatusMeta } from "../status";
 
 /** Status tone → the semantic token that tints the dot (never a raw hue). */
 const TONE_DOT: Record<ContactStatusTone, string> = {
@@ -27,8 +27,13 @@ export function ContactStatusDot({ status, className }: { status: string; classN
 export function ContactStatusBadge({ status, className }: { status: string; className?: string }) {
   const meta = contactStatusMeta(status);
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-sm text-muted-foreground", className)}>
-      <span className={cn("inline-block size-2 shrink-0 rounded-full", TONE_DOT[meta.tone])} aria-hidden />
+    <span
+      className={cn("inline-flex items-center gap-1.5 text-sm text-muted-foreground", className)}
+    >
+      <span
+        className={cn("inline-block size-2 shrink-0 rounded-full", TONE_DOT[meta.tone])}
+        aria-hidden
+      />
       {meta.label}
     </span>
   );

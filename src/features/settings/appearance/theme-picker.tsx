@@ -1,7 +1,7 @@
-import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
+import { type LucideIcon, Monitor, Moon, Sun } from "lucide-react";
 
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
-import { type Theme } from "../../../lib/appearance";
+import type { Theme } from "../../../lib/appearance";
 
 import { AppearancePickerRow } from "./picker-row";
 

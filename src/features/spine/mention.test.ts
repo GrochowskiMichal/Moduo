@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { EntityRef } from "@/lib/entity-links";
 import {
   buildMentionCandidates,
-  originForTrigger,
-  relationKindForTrigger,
-  resolveMention,
   type MentionCreateCandidate,
   type MentionEntityCandidate,
   type MentionPersonCandidate,
+  originForTrigger,
+  relationKindForTrigger,
+  resolveMention,
 } from "./mention";
 
 const acme: EntityRef = { type: "contact", id: "acme" };

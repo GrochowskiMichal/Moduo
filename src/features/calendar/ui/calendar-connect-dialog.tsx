@@ -65,10 +65,8 @@ export function CalendarConnectDialog({
   const [error, setError] = useState<string | null>(null);
 
   // Effective server/username: fixed from the account when reconnecting.
-  const effectiveServer =
-    reconnectDesc?.kind === "caldav" ? reconnectDesc.serverUrl : serverUrl;
-  const effectiveUsername =
-    reconnectDesc?.kind === "caldav" ? reconnectDesc.username : username;
+  const effectiveServer = reconnectDesc?.kind === "caldav" ? reconnectDesc.serverUrl : serverUrl;
+  const effectiveUsername = reconnectDesc?.kind === "caldav" ? reconnectDesc.username : username;
 
   const reset = () => {
     setPreset(CALDAV_PRESETS[0]);
@@ -243,9 +241,7 @@ export function CalendarConnectDialog({
               />
             </div>
 
-            {!isReconnect ? (
-              <p className="text-xs text-muted-foreground">{preset.hint}</p>
-            ) : null}
+            {!isReconnect ? <p className="text-xs text-muted-foreground">{preset.hint}</p> : null}
             {error ? (
               <p className="text-xs text-destructive" role="alert">
                 {friendlyError(error)}
@@ -305,7 +301,11 @@ export function CalendarConnectDialog({
               >
                 Back
               </Button>
-              <Button type="button" onClick={() => void handleConnect()} disabled={checkedCount === 0 || busy}>
+              <Button
+                type="button"
+                onClick={() => void handleConnect()}
+                disabled={checkedCount === 0 || busy}
+              >
                 {busy
                   ? "Connecting…"
                   : `Connect ${checkedCount} calendar${checkedCount === 1 ? "" : "s"}`}

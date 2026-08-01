@@ -1,21 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, LogOut, TriangleAlert } from "lucide-react";
-
-import { useAuth } from "../../../providers/auth-provider";
+import { useEffect, useMemo, useRef, useState } from "react";
+import defaultProfilePic from "../../../../assets/icon.png";
+import { Button } from "../../../components/ui/button";
+import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
-import { matchesDeleteConfirm } from "../delete-account";
+import { useAuth } from "../../../providers/auth-provider";
 import {
   notifyProfileUpdated,
   readStoredAvatar,
   writeStoredAvatar,
 } from "../../profile/profile-storage";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Label } from "../../../components/ui/label";
-import defaultProfilePic from "../../../../assets/icon.png";
-
 import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
+import { matchesDeleteConfirm } from "../delete-account";
 import { SettingsSectionShell } from "./section-shell";
 
 function maskedPhrase(phrase: string | null) {
@@ -79,9 +77,12 @@ export function AccountSection() {
           Authorization: `Bearer ${accessToken}`,
         },
       });
-      const payload = (await res.json().catch(() => null)) as
-        | { ok?: boolean; blocked?: boolean; workspaces?: { id: string; name: string }[]; error?: string }
-        | null;
+      const payload = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        blocked?: boolean;
+        workspaces?: { id: string; name: string }[];
+        error?: string;
+      } | null;
       if (res.status === 409 && payload?.blocked) {
         setBlockedWorkspaces(payload.workspaces ?? []);
         return;
@@ -426,50 +427,48 @@ export function AccountSection() {
       ) : null}
 
       {hasLocalKey ? (
-      <section className="rounded-lg border border-border bg-card p-6">
-        <h3 className="font-display text-lg text-foreground">Login key</h3>
-        <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-          Your key protects this vault. You&apos;ll need it to sign in if you lose access to your
-          devices. Keep it in a safe place.
-        </p>
+        <section className="rounded-lg border border-border bg-card p-6">
+          <h3 className="font-display text-lg text-foreground">Login key</h3>
+          <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+            Your key protects this vault. You&apos;ll need it to sign in if you lose access to your
+            devices. Keep it in a safe place.
+          </p>
 
-        <div className="mt-4 flex items-center gap-2 rounded-md border border-border bg-muted p-4">
-          <p
-            className={
-              isPhraseVisible
-                ? "min-w-0 flex-1 break-words font-mono text-sm text-foreground"
-                : "min-w-0 flex-1 break-words font-mono text-sm text-muted-foreground blur-sm"
-            }
-          >
-            {isPhraseVisible ? mnemonicPhrase ?? "" : maskedPhrase(mnemonicPhrase)}
-          </p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => void togglePhraseVisibility()}
-            disabled={phraseLoading}
-            aria-label={isPhraseVisible ? "Hide login key" : "Show login key"}
-          >
-            {isPhraseVisible ? <EyeOff /> : <Eye />}
-          </Button>
-        </div>
-        {phraseLoading ? (
-          <p className="mt-2 text-xs text-muted-foreground">Reading key from keychain…</p>
-        ) : null}
-        {phraseError ? (
-          <p className="mt-2 text-xs text-destructive" role="alert">
-            {phraseError}
-          </p>
-        ) : null}
-      </section>
+          <div className="mt-4 flex items-center gap-2 rounded-md border border-border bg-muted p-4">
+            <p
+              className={
+                isPhraseVisible
+                  ? "min-w-0 flex-1 break-words font-mono text-sm text-foreground"
+                  : "min-w-0 flex-1 break-words font-mono text-sm text-muted-foreground blur-sm"
+              }
+            >
+              {isPhraseVisible ? (mnemonicPhrase ?? "") : maskedPhrase(mnemonicPhrase)}
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => void togglePhraseVisibility()}
+              disabled={phraseLoading}
+              aria-label={isPhraseVisible ? "Hide login key" : "Show login key"}
+            >
+              {isPhraseVisible ? <EyeOff /> : <Eye />}
+            </Button>
+          </div>
+          {phraseLoading ? (
+            <p className="mt-2 text-xs text-muted-foreground">Reading key from keychain…</p>
+          ) : null}
+          {phraseError ? (
+            <p className="mt-2 text-xs text-destructive" role="alert">
+              {phraseError}
+            </p>
+          ) : null}
+        </section>
       ) : null}
 
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-lg text-foreground">Session</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Sign out of Moduo on this device.
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">Sign out of Moduo on this device.</p>
         <Button
           type="button"
           variant="outline"
@@ -514,8 +513,8 @@ export function AccountSection() {
               {blockedWorkspaces && blockedWorkspaces.length > 0 ? (
                 <div className="flex flex-col gap-1.5 text-sm">
                   <p className="text-foreground">
-                    You solely own {blockedWorkspaces.length === 1 ? "a workspace" : "workspaces"} with
-                    other members. Hand off ownership or delete{" "}
+                    You solely own {blockedWorkspaces.length === 1 ? "a workspace" : "workspaces"}{" "}
+                    with other members. Hand off ownership or delete{" "}
                     {blockedWorkspaces.length === 1 ? "it" : "them"} first:
                   </p>
                   <ul className="ml-4 list-disc text-muted-foreground">

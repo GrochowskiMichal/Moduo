@@ -7,26 +7,9 @@
 // silently lost. The optimistic in-flight row is the consuming hub's job; this
 // owns persistence + the confirmation affordance.
 
-import { useState } from "react";
 import { Undo2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
-
-import { UNDO_TOAST_MS } from "@/lib/undo-toast";
-import {
-  RELATION_KIND_LABELS,
-  RELATION_KINDS,
-  type EntityLink,
-  type LinkOrigin,
-  type RelationKind,
-} from "@/lib/entity-links";
-import {
-  payloadRef,
-  resolveKind,
-  targetRef,
-  type DragPayload,
-  type DropLinkTarget,
-} from "@/lib/drag-payload";
-import type { ModuoRuntime } from "@/lib/runtime.types";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,6 +17,22 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  type DragPayload,
+  type DropLinkTarget,
+  payloadRef,
+  resolveKind,
+  targetRef,
+} from "@/lib/drag-payload";
+import {
+  type EntityLink,
+  type LinkOrigin,
+  RELATION_KIND_LABELS,
+  RELATION_KINDS,
+  type RelationKind,
+} from "@/lib/entity-links";
+import type { ModuoRuntime } from "@/lib/runtime.types";
+import { UNDO_TOAST_MS } from "@/lib/undo-toast";
 
 type ToastArgs = {
   runtime: ModuoRuntime;

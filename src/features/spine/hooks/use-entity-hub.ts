@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { entityRefKey, otherEndpoint, rollupSections, type HubSection } from "../rollup";
+import { entityRefKey, type HubSection, otherEndpoint, rollupSections } from "../rollup";
 
 export type HubStatus = "loading" | "error" | "ready";
 

@@ -4,15 +4,14 @@
 // remove has an Undo. Degrades to a calm empty state pre-migration (the table is
 // deploy-gated).
 
+import { Check, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, Plus, X } from "lucide-react";
-
-import { cn } from "@/lib/utils";
-import { getRuntime } from "@/lib/runtime";
-import { undoToast } from "@/lib/undo-toast";
 import { todayStr } from "@/features/tasks/helpers";
+import { getRuntime } from "@/lib/runtime";
 import type { HabitRow } from "@/lib/runtime.types";
+import { undoToast } from "@/lib/undo-toast";
+import { cn } from "@/lib/utils";
 
 import {
   requestDashboardDataRefresh,

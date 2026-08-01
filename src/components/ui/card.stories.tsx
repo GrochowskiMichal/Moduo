@@ -32,7 +32,9 @@ export const Default: Story = {
       </CardContent>
       <CardFooter>
         <Button size="sm">Start review</Button>
-        <Button size="sm" variant="ghost">Dismiss</Button>
+        <Button size="sm" variant="ghost">
+          Dismiss
+        </Button>
       </CardFooter>
     </Card>
   ),
@@ -45,12 +47,12 @@ export const WithAction: Story = {
         <CardTitle>Project Atlas</CardTitle>
         <CardDescription>Shared with 4 people</CardDescription>
         <CardAction>
-          <Button size="sm" variant="outline">Open</Button>
+          <Button size="sm" variant="outline">
+            Open
+          </Button>
         </CardAction>
       </CardHeader>
-      <CardContent>
-        Notes, threads, and meeting prep across the Atlas team.
-      </CardContent>
+      <CardContent>Notes, threads, and meeting prep across the Atlas team.</CardContent>
     </Card>
   ),
 };

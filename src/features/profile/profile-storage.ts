@@ -12,7 +12,9 @@ export async function readStoredAvatar(runtime: ModuoRuntime | null): Promise<st
   if (fromLocal) return fromLocal;
 
   if (!runtime) return null;
-  const fromStore = await runtime.localStore.get(AVATAR_STORE_NAMESPACE, AVATAR_STORE_KEY).catch(() => null);
+  const fromStore = await runtime.localStore
+    .get(AVATAR_STORE_NAMESPACE, AVATAR_STORE_KEY)
+    .catch(() => null);
   const next = typeof fromStore === "string" && fromStore ? fromStore : null;
   if (next) {
     window.localStorage.setItem(AVATAR_STORAGE_KEY, next);
@@ -20,7 +22,10 @@ export async function readStoredAvatar(runtime: ModuoRuntime | null): Promise<st
   return next;
 }
 
-export async function writeStoredAvatar(runtime: ModuoRuntime | null, dataUrl: string | null): Promise<void> {
+export async function writeStoredAvatar(
+  runtime: ModuoRuntime | null,
+  dataUrl: string | null,
+): Promise<void> {
   if (typeof window === "undefined") return;
 
   if (!dataUrl) {

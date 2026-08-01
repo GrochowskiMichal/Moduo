@@ -9,7 +9,6 @@
 // → a quiet "Select a conversation" empty state. The iframe is the ONE
 // sanctioned non-token surface (foreign HTML), sandboxed.
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   Download,
@@ -21,16 +20,17 @@ import {
   Reply,
   ReplyAll,
 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
 import type { EmailAttachmentMeta, EmailInlineImage } from "../../../lib/runtime.types";
-import type { ComposeMode } from "../compose";
 import { senderKey } from "../classify";
+import type { ComposeMode } from "../compose";
+import type { EmailEnvelope, EmailThread } from "../model/email-types";
 import { formatEmailDetailDate } from "../utils/email-format";
 import { buildEmailReaderDoc, EMAIL_IFRAME_HEIGHT_MESSAGE } from "../utils/email-html";
-import type { EmailEnvelope, EmailThread } from "../model/email-types";
 
 /** Hard cap so a degenerate measurement can't blow up the panel layout. */
 const IFRAME_MAX_PX = 20000;
@@ -72,11 +72,7 @@ type Props = {
     defaultFilename: string,
   ) => Promise<{ saved: boolean; path: string | null }>;
   /** Small inline cid images (<2MB) to substitute into the body HTML (EM-7/AC4). */
-  getInlineImages?: (
-    accountId: string,
-    folder: string,
-    uid: number,
-  ) => Promise<EmailInlineImage[]>;
+  getInlineImages?: (accountId: string, folder: string, uid: number) => Promise<EmailInlineImage[]>;
   /** Lowercased sender addresses whose remote images always load (DF-6). */
   imageAllowedSenders?: ReadonlySet<string>;
   /** Persist "always load images from this sender" (DF-6). */
@@ -484,9 +480,7 @@ export function EmailReader({
               listAttachments={listAttachments}
               saveAttachment={saveAttachment}
               getInlineImages={getInlineImages}
-              allowSenderImages={
-                imageAllowedSenders?.has(senderKey(message.senderEmail)) ?? false
-              }
+              allowSenderImages={imageAllowedSenders?.has(senderKey(message.senderEmail)) ?? false}
               onAlwaysAllowSender={onAllowSenderImages}
             />
           ))}

@@ -13,14 +13,17 @@
  *   E2E_CONTACT_NAME   — that contact's display name (asserted in the hub)
  */
 
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const APP = process.env.E2E_APP_URL;
 const CONTACT_ID = process.env.E2E_CONTACT_ID;
 const CONTACT_NAME = process.env.E2E_CONTACT_NAME;
 
 test.describe("Contacts deep links — URL selection (FX-1, AC1)", () => {
-  test.skip(!APP || !CONTACT_ID || !CONTACT_NAME, "E2E_APP_URL / E2E_CONTACT_ID / E2E_CONTACT_NAME not set");
+  test.skip(
+    !APP || !CONTACT_ID || !CONTACT_NAME,
+    "E2E_APP_URL / E2E_CONTACT_ID / E2E_CONTACT_NAME not set",
+  );
 
   test("a ?type=contact&id= URL opens that contact, and reload keeps it", async ({ page }) => {
     await page.goto(`${APP}/contacts?type=contact&id=${CONTACT_ID}`);
@@ -36,7 +39,10 @@ test.describe("Contacts deep links — URL selection (FX-1, AC1)", () => {
 
   test("selecting a directory row writes the selection into the URL", async ({ page }) => {
     await page.goto(`${APP}/contacts`);
-    await page.getByRole("button", { name: new RegExp(CONTACT_NAME as string) }).first().click();
+    await page
+      .getByRole("button", { name: new RegExp(CONTACT_NAME as string) })
+      .first()
+      .click();
     await expect(page.getByRole("heading", { name: CONTACT_NAME as string })).toBeVisible();
     expect(page.url()).toContain("type=contact");
     expect(page.url()).toContain(`id=${CONTACT_ID}`);

@@ -8,12 +8,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
-import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
-import {
-  noteRowToModel,
-  noteUpdateRowToModel,
-  trashWindowCutoffIso,
-} from "../features/notes/model";
+import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
 import type {
   Company,
   Contact,
@@ -22,25 +17,35 @@ import type {
   ContactDateEntry,
   ContactFieldDef,
 } from "../features/contacts/model";
-import type {
-  CalendarAccountModel,
-  CalendarEventModel,
-} from "../features/calendar/events";
-import { sanitizeTimeBlocks, type ActivityEntry, type Bucket, type Tag, type TagLink, type Task, type TaskRelation } from "../features/tasks/model";
-import type { NotificationItem } from "../features/spine/notifications";
-import type { RawLinkSuggestion } from "../features/spine/suggest";
-import { shapeRecentLinks, type RecentLinkItem } from "../features/spine/recent";
-import { selectNeedsAttention, type OverdueFollowup } from "../features/contacts/needs-attention";
+import { type OverdueFollowup, selectNeedsAttention } from "../features/contacts/needs-attention";
 import { selectReconnect } from "../features/contacts/reconnect";
-import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
-import { createRequestCache } from "./request-cache";
+import {
+  noteRowToModel,
+  noteUpdateRowToModel,
+  trashWindowCutoffIso,
+} from "../features/notes/model";
+import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/utils/base64";
+import type { NotificationItem } from "../features/spine/notifications";
+import { type RecentLinkItem, shapeRecentLinks } from "../features/spine/recent";
+import type { RawLinkSuggestion } from "../features/spine/suggest";
+import {
+  type ActivityEntry,
+  type Bucket,
+  sanitizeTimeBlocks,
+  type Tag,
+  type TagLink,
+  type Task,
+  type TaskRelation,
+} from "../features/tasks/model";
+import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
+import type { EntityLink, EntityRecord } from "./entity-links";
 import {
   missingOptionalPrefsDomain,
   optionalPrefsAvailable,
   prefsSelectCols,
 } from "./prefs-columns";
-import type { EntityLink, EntityRecord } from "./entity-links";
+import { createRequestCache } from "./request-cache";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -290,7 +295,10 @@ export const webRuntime: ModuoRuntime = {
 
     async updateDisplayName(displayName: string) {
       try {
-        const { data: { user }, error } = await supabaseClient.auth.updateUser({
+        const {
+          data: { user },
+          error,
+        } = await supabaseClient.auth.updateUser({
           data: { display_name: displayName },
         });
         if (error) return { data: { displayName }, error: toError(error) };
@@ -332,7 +340,9 @@ export const webRuntime: ModuoRuntime = {
     },
 
     onAuthStateChange(callback: AuthListener) {
-      const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, supaSession) => {
+      const {
+        data: { subscription },
+      } = supabaseClient.auth.onAuthStateChange((event, supaSession) => {
         const eventMap: Record<string, AuthChangeEvent> = {
           INITIAL_SESSION: "INITIAL_SESSION",
           SIGNED_IN: "SIGNED_IN",
@@ -365,7 +375,16 @@ export const webRuntime: ModuoRuntime = {
         });
         if (error) return { data: { user: null, session: null }, error: toError(error) };
         const session = sessionFromSupabase(data.session);
-        return { data: { user: session?.user ?? data.user ? { id: data.user!.id, email: data.user!.email ?? null } : null, session }, error: null };
+        return {
+          data: {
+            user:
+              (session?.user ?? data.user)
+                ? { id: data.user!.id, email: data.user!.email ?? null }
+                : null,
+            session,
+          },
+          error: null,
+        };
       } catch (error) {
         return { data: { user: null, session: null }, error: toError(error) };
       }
@@ -438,47 +457,75 @@ export const webRuntime: ModuoRuntime = {
       }
     },
     async list() {
-      const { data, error } = await supabaseClient.from("workspaces").select("*, workspace_members(*)").is("deleted_at", null);
+      const { data, error } = await supabaseClient
+        .from("workspaces")
+        .select("*, workspace_members(*)")
+        .is("deleted_at", null);
       if (error) throw new Error(error.message);
       return data ?? [];
     },
     async create(name) {
       const user = await getAuthedUser();
       if (!user) throw new Error("Not authenticated");
-      const { data, error } = await supabaseClient.from("workspaces").insert({ name, owner_id: user.id }).select().single();
+      const { data, error } = await supabaseClient
+        .from("workspaces")
+        .insert({ name, owner_id: user.id })
+        .select()
+        .single();
       if (error) throw new Error(error.message);
       return data;
     },
     async rename(workspaceId, name) {
-      const { data, error } = await supabaseClient.from("workspaces").update({ name }).eq("id", workspaceId).select().single();
+      const { data, error } = await supabaseClient
+        .from("workspaces")
+        .update({ name })
+        .eq("id", workspaceId)
+        .select()
+        .single();
       if (error) throw new Error(error.message);
       return data;
     },
     async leave(workspaceId) {
       const user = await getAuthedUser();
       if (!user) throw new Error("Not authenticated");
-      const { error } = await supabaseClient.from("workspace_members").delete().eq("workspace_id", workspaceId).eq("user_id", user.id);
+      const { error } = await supabaseClient
+        .from("workspace_members")
+        .delete()
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", user.id);
       if (error) throw new Error(error.message);
     },
     async softDelete(workspaceId) {
-      const { error } = await supabaseClient.from("workspaces").update({ deleted_at: new Date().toISOString() }).eq("id", workspaceId);
+      const { error } = await supabaseClient
+        .from("workspaces")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", workspaceId);
       if (error) throw new Error(error.message);
     },
     async issueInvite(workspaceId, email, role, modulePermissions) {
       const user = await getAuthedUser();
-      const { data, error } = await supabaseClient.from("workspace_invites").insert({
-        workspace_id: workspaceId,
-        created_by: user?.id,
-        email,
-        role,
-        permissions_notes: modulePermissions?.notes ?? "write",
-        permissions_tasks: modulePermissions?.tasks ?? "write",
-      }).select().single();
+      const { data, error } = await supabaseClient
+        .from("workspace_invites")
+        .insert({
+          workspace_id: workspaceId,
+          created_by: user?.id,
+          email,
+          role,
+          permissions_notes: modulePermissions?.notes ?? "write",
+          permissions_tasks: modulePermissions?.tasks ?? "write",
+        })
+        .select()
+        .single();
       if (error) throw new Error(error.message);
       return data;
     },
     async joinInvite(token) {
-      const { data: invite, error: inviteError } = await supabaseClient.from("workspace_invites").select("*").eq("token", token).eq("status", "pending").single();
+      const { data: invite, error: inviteError } = await supabaseClient
+        .from("workspace_invites")
+        .select("*")
+        .eq("token", token)
+        .eq("status", "pending")
+        .single();
       if (inviteError || !invite) throw new Error("Invalid or expired invite");
       const user = await getAuthedUser();
       if (!user) throw new Error("Not authenticated");
@@ -496,34 +543,52 @@ export const webRuntime: ModuoRuntime = {
       });
       if (memberError) {
         // Duplicate membership → a friendlier message than the raw PG unique error.
-        if (memberError.code === "23505" || /duplicate key|already exists/i.test(memberError.message)) {
+        if (
+          memberError.code === "23505" ||
+          /duplicate key|already exists/i.test(memberError.message)
+        ) {
           throw new Error("You're already a member of this workspace.");
         }
         throw new Error(memberError.message);
       }
-      await supabaseClient.from("workspace_invites").update({ status: "accepted" }).eq("id", invite.id);
+      await supabaseClient
+        .from("workspace_invites")
+        .update({ status: "accepted" })
+        .eq("id", invite.id);
       return invite;
     },
     async listMembers(workspaceId) {
-      const { data, error } = await supabaseClient.from("workspace_members").select("*, profiles(*)").eq("workspace_id", workspaceId);
+      const { data, error } = await supabaseClient
+        .from("workspace_members")
+        .select("*, profiles(*)")
+        .eq("workspace_id", workspaceId);
       if (error) throw new Error(error.message);
       return data ?? [];
     },
     async listInvites(workspaceId) {
-      const { data, error } = await supabaseClient.from("workspace_invites").select("*").eq("workspace_id", workspaceId);
+      const { data, error } = await supabaseClient
+        .from("workspace_invites")
+        .select("*")
+        .eq("workspace_id", workspaceId);
       if (error) throw new Error(error.message);
       return data ?? [];
     },
     async updateInvite(inviteId, role, modulePermissions) {
-      const { error } = await supabaseClient.from("workspace_invites").update({
-        role,
-        permissions_notes: modulePermissions?.notes ?? "write",
-        permissions_tasks: modulePermissions?.tasks ?? "write",
-      }).eq("id", inviteId);
+      const { error } = await supabaseClient
+        .from("workspace_invites")
+        .update({
+          role,
+          permissions_notes: modulePermissions?.notes ?? "write",
+          permissions_tasks: modulePermissions?.tasks ?? "write",
+        })
+        .eq("id", inviteId);
       if (error) throw new Error(error.message);
     },
     async revokeInvite(inviteId) {
-      const { error } = await supabaseClient.from("workspace_invites").update({ status: "revoked" }).eq("id", inviteId);
+      const { error } = await supabaseClient
+        .from("workspace_invites")
+        .update({ status: "revoked" })
+        .eq("id", inviteId);
       if (error) throw new Error(error.message);
     },
     async updateMemberPermissions(memberId, role, modulePermissions) {
@@ -543,14 +608,18 @@ export const webRuntime: ModuoRuntime = {
       // Owner-only; promotes the target to owner and demotes the caller to admin
       // (SECURITY DEFINER, since it rewrites workspaces.owner_id). Needed by the
       // account-deletion flow — an owner hands off before deleting.
-      const { error } = await supabaseClient.rpc("workspace_op_transfer_ownership", { p_member_id: memberId });
+      const { error } = await supabaseClient.rpc("workspace_op_transfer_ownership", {
+        p_member_id: memberId,
+      });
       if (error) throw new Error(error.message);
     },
     async removeMember(memberId) {
       // The base workspace_members write-RLS is own-row (only `leave` self-deletes),
       // so ejecting another member needs a SECURITY DEFINER op that checks the
       // caller is owner/admin and refuses to remove an owner or yourself. DF-24.
-      const { error } = await supabaseClient.rpc("workspace_op_remove_member", { p_member_id: memberId });
+      const { error } = await supabaseClient.rpc("workspace_op_remove_member", {
+        p_member_id: memberId,
+      });
       if (error) throw new Error(error.message);
     },
     inviteUrl(token) {
@@ -558,23 +627,37 @@ export const webRuntime: ModuoRuntime = {
       // desktop (tauri://) needs PUBLIC_WEB_ORIGIN. encodeURIComponent is
       // load-bearing — invite tokens are base64 (`+` `/` `=`), which are
       // path/query-hostile raw. DF-24.
-      const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(/\/+$/, "");
+      const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(
+        /\/+$/,
+        "",
+      );
       const origin = configured || (typeof window !== "undefined" ? window.location.origin : "");
       return `${origin}/join?invite=${encodeURIComponent(token)}`;
     },
     async listNotifications() {
       const user = await getAuthedUser();
       if (!user) return [];
-      const { data } = await supabaseClient.from("workspace_notifications").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+      const { data } = await supabaseClient
+        .from("workspace_notifications")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
       return data ?? [];
     },
     async markNotificationRead(notificationId) {
-      await supabaseClient.from("workspace_notifications").update({ read_at: new Date().toISOString() }).eq("id", notificationId);
+      await supabaseClient
+        .from("workspace_notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("id", notificationId);
     },
     async markAllNotificationsRead() {
       const user = await getAuthedUser();
       if (!user) return;
-      await supabaseClient.from("workspace_notifications").update({ read_at: new Date().toISOString() }).eq("user_id", user.id).is("read_at", null);
+      await supabaseClient
+        .from("workspace_notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("user_id", user.id)
+        .is("read_at", null);
     },
 
     // MCP connector keys (docs/moduo-mcp-connector.md). Explicit column list —
@@ -630,12 +713,21 @@ export const webRuntime: ModuoRuntime = {
   // widget on web; the redb import reads through the tauri implementation.
   notes: {
     async list(workspaceId) {
-      const { data, error } = await supabaseClient.from("notes").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position");
+      const { data, error } = await supabaseClient
+        .from("notes")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .order("position");
       if (error) throw new Error(error.message);
       return data ?? [];
     },
     async getDocState(_workspaceId, noteId) {
-      const { data, error } = await supabaseClient.from("notes").select("doc_state").eq("id", noteId).single();
+      const { data, error } = await supabaseClient
+        .from("notes")
+        .select("doc_state")
+        .eq("id", noteId)
+        .single();
       if (error || !data) return null;
       return {
         snapshotB64: data.doc_state ?? "",
@@ -644,7 +736,6 @@ export const webRuntime: ModuoRuntime = {
       };
     },
   },
-
 
   notesV2: {
     // ── Wave-3 rebuild surface (NO-1). Writes = notes_op_* RPCs (guard +
@@ -859,7 +950,10 @@ export const webRuntime: ModuoRuntime = {
     // is correct wherever served; desktop (tauri://) needs PUBLIC_WEB_ORIGIN set
     // to the deployed web origin.
     publishedUrl(token) {
-      const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(/\/+$/, "");
+      const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(
+        /\/+$/,
+        "",
+      );
       const origin = configured || (typeof window !== "undefined" ? window.location.origin : "");
       return `${origin}/p/${encodeURIComponent(token)}`;
     },
@@ -997,7 +1091,9 @@ export const webRuntime: ModuoRuntime = {
   },
 
   migration: {
-    async importLegacy() { throw new Error(desktopOnly().message); },
+    async importLegacy() {
+      throw new Error(desktopOnly().message);
+    },
   },
 
   localStore: {
@@ -1006,7 +1102,9 @@ export const webRuntime: ModuoRuntime = {
       try {
         const raw = window.localStorage.getItem(`${LS_PREFIX}${namespace}:${key}`);
         return raw ? JSON.parse(raw) : null;
-      } catch { return null; }
+      } catch {
+        return null;
+      }
     },
     async set(namespace, key, value) {
       if (typeof window === "undefined") return;
@@ -1046,18 +1144,21 @@ export const webRuntime: ModuoRuntime = {
       const buildRow = (): Record<string, unknown> => {
         const row: Record<string, unknown> = { user_id: user.id };
         if (patch.appearance !== undefined) row.appearance = patch.appearance ?? {};
-        if (patch.appearanceUpdatedAt !== undefined) row.appearance_updated_at = patch.appearanceUpdatedAt;
+        if (patch.appearanceUpdatedAt !== undefined)
+          row.appearance_updated_at = patch.appearanceUpdatedAt;
         if (patch.focus !== undefined) row.focus = patch.focus ?? {};
         if (patch.focusUpdatedAt !== undefined) row.focus_updated_at = patch.focusUpdatedAt;
         if (patch.calendar !== undefined) row.calendar = patch.calendar ?? {};
-        if (patch.calendarUpdatedAt !== undefined) row.calendar_updated_at = patch.calendarUpdatedAt;
+        if (patch.calendarUpdatedAt !== undefined)
+          row.calendar_updated_at = patch.calendarUpdatedAt;
         if (optionalPrefsAvailable.email) {
           if (patch.email !== undefined) row.email = patch.email ?? {};
           if (patch.emailUpdatedAt !== undefined) row.email_updated_at = patch.emailUpdatedAt;
         }
         if (optionalPrefsAvailable.preferences) {
           if (patch.preferences !== undefined) row.preferences = patch.preferences ?? {};
-          if (patch.preferencesUpdatedAt !== undefined) row.preferences_updated_at = patch.preferencesUpdatedAt;
+          if (patch.preferencesUpdatedAt !== undefined)
+            row.preferences_updated_at = patch.preferencesUpdatedAt;
         }
         return row;
       };
@@ -1180,48 +1281,124 @@ export const webRuntime: ModuoRuntime = {
   },
 
   timetracking: {
-    async list() { return { entries: [], categories: [], rules: [], projects: [] }; },
-    async upsertEntry() { throw new Error(desktopOnly().message); },
-    async deleteEntry() { throw new Error(desktopOnly().message); },
-    async upsertCategory() { throw new Error(desktopOnly().message); },
-    async deleteCategory() { throw new Error(desktopOnly().message); },
-    async upsertRule() { throw new Error(desktopOnly().message); },
-    async deleteRule() { throw new Error(desktopOnly().message); },
-    async upsertProject() { throw new Error(desktopOnly().message); },
-    async deleteProject() { throw new Error(desktopOnly().message); },
-    async upsertFocusSession() { throw new Error(desktopOnly().message); },
-    async getActiveWindow() { return null; },
-    async startTracking() { throw new Error(desktopOnly().message); },
-    async stopTracking() { throw new Error(desktopOnly().message); },
-    async getTrackingStatus() { return { isTracking: false }; },
+    async list() {
+      return { entries: [], categories: [], rules: [], projects: [] };
+    },
+    async upsertEntry() {
+      throw new Error(desktopOnly().message);
+    },
+    async deleteEntry() {
+      throw new Error(desktopOnly().message);
+    },
+    async upsertCategory() {
+      throw new Error(desktopOnly().message);
+    },
+    async deleteCategory() {
+      throw new Error(desktopOnly().message);
+    },
+    async upsertRule() {
+      throw new Error(desktopOnly().message);
+    },
+    async deleteRule() {
+      throw new Error(desktopOnly().message);
+    },
+    async upsertProject() {
+      throw new Error(desktopOnly().message);
+    },
+    async deleteProject() {
+      throw new Error(desktopOnly().message);
+    },
+    async upsertFocusSession() {
+      throw new Error(desktopOnly().message);
+    },
+    async getActiveWindow() {
+      return null;
+    },
+    async startTracking() {
+      throw new Error(desktopOnly().message);
+    },
+    async stopTracking() {
+      throw new Error(desktopOnly().message);
+    },
+    async getTrackingStatus() {
+      return { isTracking: false };
+    },
   },
 
   email: {
-    async listAccounts() { return []; },
-    async connectAndSave() { throw new Error(desktopOnly().message); },
-    async disconnect() { throw new Error(desktopOnly().message); },
-    async listEnvelopes() { throw new Error(desktopOnly().message); },
-    async getMessageBody() { throw new Error(desktopOnly().message); },
-    async prefetchBodies() { throw new Error(desktopOnly().message); },
-    async syncNow() { throw new Error(desktopOnly().message); },
-    async setActivityState() { /* no-op on web */ },
-    async applyFlag() { throw new Error(desktopOnly().message); },
-    async getMailboxStatus() { return []; },
-    async sendSaved() { throw new Error(desktopOnly().message); },
-    async startGoogleOAuth() { throw new Error(desktopOnly().message); },
-    async getThread() { throw new Error(desktopOnly().message); },
-    async listFolders() { return []; },
-    async applyMessageOp() { throw new Error(desktopOnly().message); },
-    async snoozeThread() { throw new Error(desktopOnly().message); },
-    async snoozeRestore() { throw new Error(desktopOnly().message); },
-    async sendMessage() { throw new Error(desktopOnly().message); },
-    async listAttachments() { return []; },
-    async saveAttachment() { throw new Error(desktopOnly().message); },
-    async pickAttachments() { return []; },
-    async getInlineImages() { return []; },
+    async listAccounts() {
+      return [];
+    },
+    async connectAndSave() {
+      throw new Error(desktopOnly().message);
+    },
+    async disconnect() {
+      throw new Error(desktopOnly().message);
+    },
+    async listEnvelopes() {
+      throw new Error(desktopOnly().message);
+    },
+    async getMessageBody() {
+      throw new Error(desktopOnly().message);
+    },
+    async prefetchBodies() {
+      throw new Error(desktopOnly().message);
+    },
+    async syncNow() {
+      throw new Error(desktopOnly().message);
+    },
+    async setActivityState() {
+      /* no-op on web */
+    },
+    async applyFlag() {
+      throw new Error(desktopOnly().message);
+    },
+    async getMailboxStatus() {
+      return [];
+    },
+    async sendSaved() {
+      throw new Error(desktopOnly().message);
+    },
+    async startGoogleOAuth() {
+      throw new Error(desktopOnly().message);
+    },
+    async getThread() {
+      throw new Error(desktopOnly().message);
+    },
+    async listFolders() {
+      return [];
+    },
+    async applyMessageOp() {
+      throw new Error(desktopOnly().message);
+    },
+    async snoozeThread() {
+      throw new Error(desktopOnly().message);
+    },
+    async snoozeRestore() {
+      throw new Error(desktopOnly().message);
+    },
+    async sendMessage() {
+      throw new Error(desktopOnly().message);
+    },
+    async listAttachments() {
+      return [];
+    },
+    async saveAttachment() {
+      throw new Error(desktopOnly().message);
+    },
+    async pickAttachments() {
+      return [];
+    },
+    async getInlineImages() {
+      return [];
+    },
     // Local search rides the desktop engine cache — web has no envelopes to scan.
-    async searchBodies() { return []; },
-    async searchServer() { return { status: "unsupported", message: null, envelopes: [] }; },
+    async searchBodies() {
+      return [];
+    },
+    async searchServer() {
+      return { status: "unsupported", message: null, envelopes: [] };
+    },
 
     // ── EM-3 cloud tissue surface (Supabase-first; works on web + desktop) ──
     async listModule(workspaceId) {
@@ -1253,7 +1430,15 @@ export const webRuntime: ModuoRuntime = {
         return { accounts: [], refs: [], degraded: true };
       }
     },
-    async upsertAccountRef({ workspaceId, provider, address, signatureHtml, color, status, unreadCount }) {
+    async upsertAccountRef({
+      workspaceId,
+      provider,
+      address,
+      signatureHtml,
+      color,
+      status,
+      unreadCount,
+    }) {
       const { data, error } = await supabaseClient.rpc("email_op_account_upsert", {
         p_workspace_id: workspaceId,
         p_provider: provider,
@@ -1273,7 +1458,17 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
     },
-    async upsertRef({ workspaceId, threadKey, accountId, messageKey, fromAddr, fromName, subject, snippet, sentAt }) {
+    async upsertRef({
+      workspaceId,
+      threadKey,
+      accountId,
+      messageKey,
+      fromAddr,
+      fromName,
+      subject,
+      snippet,
+      sentAt,
+    }) {
       const { data, error } = await supabaseClient.rpc("email_op_ref_upsert", {
         p_workspace_id: workspaceId,
         p_thread_key: threadKey,
@@ -1348,7 +1543,17 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
     },
-    async linkThread({ workspaceId, threadId, targetType, targetId, relationKind, origin, threadLabel, targetLabel, targetIcon }) {
+    async linkThread({
+      workspaceId,
+      threadId,
+      targetType,
+      targetId,
+      relationKind,
+      origin,
+      threadLabel,
+      targetLabel,
+      targetIcon,
+    }) {
       const { data, error } = await supabaseClient.rpc("email_op_link", {
         p_workspace_id: workspaceId,
         p_thread_id: threadId,
@@ -1366,10 +1571,18 @@ export const webRuntime: ModuoRuntime = {
   },
 
   integrations: {
-    async getStatus(): Promise<IntegrationStatusItem[]> { return []; },
-    async connectZoom(): Promise<IntegrationStatusItem> { throw new Error(desktopOnly().message); },
-    async connectGoogleMeet(): Promise<IntegrationStatusItem> { throw new Error(desktopOnly().message); },
-    async disconnect(): Promise<void> { throw new Error(desktopOnly().message); },
+    async getStatus(): Promise<IntegrationStatusItem[]> {
+      return [];
+    },
+    async connectZoom(): Promise<IntegrationStatusItem> {
+      throw new Error(desktopOnly().message);
+    },
+    async connectGoogleMeet(): Promise<IntegrationStatusItem> {
+      throw new Error(desktopOnly().message);
+    },
+    async disconnect(): Promise<void> {
+      throw new Error(desktopOnly().message);
+    },
   },
 
   calendar: {
@@ -1445,7 +1658,16 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
       return calendarEventRowToModel(firstRow(data, "calendar_op_event_restore"));
     },
-    async upsertAccount({ workspaceId, provider, externalId, displayLabel, color, status, lastSyncAt, syncToken }) {
+    async upsertAccount({
+      workspaceId,
+      provider,
+      externalId,
+      displayLabel,
+      color,
+      status,
+      lastSyncAt,
+      syncToken,
+    }) {
       const args: Record<string, unknown> = {
         p_workspace_id: workspaceId,
         p_provider: provider,
@@ -1502,9 +1724,24 @@ export const webRuntime: ModuoRuntime = {
     async list(workspaceId) {
       await ensureWebInbox(workspaceId);
       const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes] = await Promise.all([
-        supabaseClient.from("buckets").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position"),
-        supabaseClient.from("tasks").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("position"),
-        supabaseClient.from("tags").select("*").eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
+        supabaseClient
+          .from("buckets")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null)
+          .order("position"),
+        supabaseClient
+          .from("tasks")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null)
+          .order("position"),
+        supabaseClient
+          .from("tags")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null)
+          .order("created_at"),
         supabaseClient.from("tag_links").select("*").eq("workspace_id", workspaceId),
         supabaseClient.from("task_relations").select("*").eq("workspace_id", workspaceId),
       ]);
@@ -1528,7 +1765,11 @@ export const webRuntime: ModuoRuntime = {
       const id = bucket.id?.trim() || crypto.randomUUID();
       const user = await getAuthedUser();
       const now = new Date().toISOString();
-      const { data: prev } = await supabaseClient.from("buckets").select("is_system, created_at").eq("id", id).maybeSingle();
+      const { data: prev } = await supabaseClient
+        .from("buckets")
+        .select("is_system, created_at")
+        .eq("id", id)
+        .maybeSingle();
       // is_system is owned by the seeding path only — never settable via upsert.
       const row = {
         id,
@@ -1538,24 +1779,39 @@ export const webRuntime: ModuoRuntime = {
         is_system: prev ? prev.is_system : false,
         group_label: bucket.group ?? null,
         position: bucket.position ?? "",
-        created_at: prev ? prev.created_at : (bucket.createdAt || now),
+        created_at: prev ? prev.created_at : bucket.createdAt || now,
         updated_at: now,
         deleted_at: bucket.deletedAt ?? null,
       };
-      const { data, error } = await supabaseClient.from("buckets").upsert(row, { onConflict: "id" }).select().single();
+      const { data, error } = await supabaseClient
+        .from("buckets")
+        .upsert(row, { onConflict: "id" })
+        .select()
+        .single();
       if (error) throw new Error(error.message);
       return bucketRowToModel(data);
     },
 
     async deleteBucket({ workspaceId, bucketId }) {
-      const { data: bucket } = await supabaseClient.from("buckets").select("is_system").eq("id", bucketId).maybeSingle();
+      const { data: bucket } = await supabaseClient
+        .from("buckets")
+        .select("is_system")
+        .eq("id", bucketId)
+        .maybeSingle();
       if (!bucket) return;
       if (bucket.is_system) throw new Error("The Inbox bucket cannot be deleted");
       // Reassign live tasks to Inbox so none are orphaned, then soft-delete.
       const inbox = await ensureWebInbox(workspaceId);
       const now = new Date().toISOString();
-      await supabaseClient.from("tasks").update({ bucket_id: inbox.id, updated_at: now }).eq("bucket_id", bucketId).is("deleted_at", null);
-      const { error } = await supabaseClient.from("buckets").update({ deleted_at: now, updated_at: now }).eq("id", bucketId);
+      await supabaseClient
+        .from("tasks")
+        .update({ bucket_id: inbox.id, updated_at: now })
+        .eq("bucket_id", bucketId)
+        .is("deleted_at", null);
+      const { error } = await supabaseClient
+        .from("buckets")
+        .update({ deleted_at: now, updated_at: now })
+        .eq("id", bucketId);
       if (error) throw new Error(error.message);
     },
 
@@ -1568,30 +1824,51 @@ export const webRuntime: ModuoRuntime = {
       let bucketId = task.bucketId;
       let bucketOk = false;
       if (bucketId) {
-        const { data: b } = await supabaseClient.from("buckets").select("workspace_id, deleted_at").eq("id", bucketId).maybeSingle();
+        const { data: b } = await supabaseClient
+          .from("buckets")
+          .select("workspace_id, deleted_at")
+          .eq("id", bucketId)
+          .maybeSingle();
         bucketOk = !!b && b.workspace_id === task.workspaceId && !b.deleted_at;
       }
       if (!bucketOk) bucketId = (await ensureWebInbox(task.workspaceId)).id;
-      const { data: prev } = await supabaseClient.from("tasks").select("created_at").eq("id", id).maybeSingle();
+      const { data: prev } = await supabaseClient
+        .from("tasks")
+        .select("created_at")
+        .eq("id", id)
+        .maybeSingle();
       const row = taskModelToRow({
         ...task,
         id,
         bucketId,
         ownerId: task.ownerId || user?.id || "",
-        createdAt: prev ? prev.created_at : (task.createdAt || now),
+        createdAt: prev ? prev.created_at : task.createdAt || now,
         updatedAt: now,
       });
-      const { data, error } = await supabaseClient.from("tasks").upsert(row, { onConflict: "id" }).select().single();
+      const { data, error } = await supabaseClient
+        .from("tasks")
+        .upsert(row, { onConflict: "id" })
+        .select()
+        .single();
       if (error) throw new Error(error.message);
       return taskRowToModel(data);
     },
 
     async deleteTask({ taskId }) {
       const now = new Date().toISOString();
-      const { data, error } = await supabaseClient.from("tasks").update({ deleted_at: now, updated_at: now }).eq("id", taskId).select().single();
+      const { data, error } = await supabaseClient
+        .from("tasks")
+        .update({ deleted_at: now, updated_at: now })
+        .eq("id", taskId)
+        .select()
+        .single();
       if (error) throw new Error(error.message);
       // Deleting a parent promotes its subtasks to top-level (never lose work).
-      await supabaseClient.from("tasks").update({ parent_id: null, updated_at: now }).eq("parent_id", taskId).is("deleted_at", null);
+      await supabaseClient
+        .from("tasks")
+        .update({ parent_id: null, updated_at: now })
+        .eq("parent_id", taskId)
+        .is("deleted_at", null);
       return taskRowToModel(data);
     },
 
@@ -1599,18 +1876,26 @@ export const webRuntime: ModuoRuntime = {
       const id = tag.id?.trim() || crypto.randomUUID();
       const user = await getAuthedUser();
       const now = new Date().toISOString();
-      const { data: prev } = await supabaseClient.from("tags").select("created_at").eq("id", id).maybeSingle();
+      const { data: prev } = await supabaseClient
+        .from("tags")
+        .select("created_at")
+        .eq("id", id)
+        .maybeSingle();
       const row = {
         id,
         workspace_id: tag.workspaceId,
         owner_id: tag.ownerId || user?.id || null,
         name: tag.name,
         color: tag.color ?? null,
-        created_at: prev ? prev.created_at : (tag.createdAt || now),
+        created_at: prev ? prev.created_at : tag.createdAt || now,
         updated_at: now,
         deleted_at: tag.deletedAt ?? null,
       };
-      const { data, error } = await supabaseClient.from("tags").upsert(row, { onConflict: "id" }).select().single();
+      const { data, error } = await supabaseClient
+        .from("tags")
+        .upsert(row, { onConflict: "id" })
+        .select()
+        .single();
       if (error) throw new Error(error.message);
       return tagRowToModel(data);
     },
@@ -1619,38 +1904,62 @@ export const webRuntime: ModuoRuntime = {
       const now = new Date().toISOString();
       // tag_links cascade on tag delete in the schema, but soft-delete the tag.
       await supabaseClient.from("tag_links").delete().eq("tag_id", tagId);
-      const { error } = await supabaseClient.from("tags").update({ deleted_at: now, updated_at: now }).eq("id", tagId);
+      const { error } = await supabaseClient
+        .from("tags")
+        .update({ deleted_at: now, updated_at: now })
+        .eq("id", tagId);
       if (error) throw new Error(error.message);
     },
 
     async attachTag({ workspaceId, tagId, entityType, entityId }) {
       const { data: existing } = await supabaseClient
-        .from("tag_links").select("*")
-        .eq("workspace_id", workspaceId).eq("tag_id", tagId)
-        .eq("entity_type", entityType).eq("entity_id", entityId)
+        .from("tag_links")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("tag_id", tagId)
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId)
         .maybeSingle();
       if (existing) return tagLinkRowToModel(existing);
-      const { data, error } = await supabaseClient.from("tag_links")
-        .insert({ workspace_id: workspaceId, tag_id: tagId, entity_type: entityType, entity_id: entityId })
-        .select().single();
+      const { data, error } = await supabaseClient
+        .from("tag_links")
+        .insert({
+          workspace_id: workspaceId,
+          tag_id: tagId,
+          entity_type: entityType,
+          entity_id: entityId,
+        })
+        .select()
+        .single();
       if (error) throw new Error(error.message);
       return tagLinkRowToModel(data);
     },
 
     async detachTag({ workspaceId, tagId, entityType, entityId }) {
-      const { error } = await supabaseClient.from("tag_links").delete()
-        .eq("workspace_id", workspaceId).eq("tag_id", tagId)
-        .eq("entity_type", entityType).eq("entity_id", entityId);
+      const { error } = await supabaseClient
+        .from("tag_links")
+        .delete()
+        .eq("workspace_id", workspaceId)
+        .eq("tag_id", tagId)
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId);
       if (error) throw new Error(error.message);
     },
 
     async listEntityTags({ workspaceId, entityType, entityId }) {
       const [tagsRes, linksRes] = await Promise.all([
-        supabaseClient.from("tags").select("*")
-          .eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
-        supabaseClient.from("tag_links").select("*")
+        supabaseClient
+          .from("tags")
+          .select("*")
           .eq("workspace_id", workspaceId)
-          .eq("entity_type", entityType).eq("entity_id", entityId),
+          .is("deleted_at", null)
+          .order("created_at"),
+        supabaseClient
+          .from("tag_links")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .eq("entity_type", entityType)
+          .eq("entity_id", entityId),
       ]);
       const firstError = tagsRes.error || linksRes.error;
       if (firstError) throw new Error(firstError.message);
@@ -1665,12 +1974,19 @@ export const webRuntime: ModuoRuntime = {
       // covers alpha-scale workspaces (revisit with pagination if profiling
       // ever shows a workspace near it).
       let linksQuery = supabaseClient
-        .from("tag_links").select("*")
-        .eq("workspace_id", workspaceId).limit(5000);
-      if (entityTypes && entityTypes.length > 0) linksQuery = linksQuery.in("entity_type", entityTypes);
+        .from("tag_links")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .limit(5000);
+      if (entityTypes && entityTypes.length > 0)
+        linksQuery = linksQuery.in("entity_type", entityTypes);
       const [tagsRes, linksRes] = await Promise.all([
-        supabaseClient.from("tags").select("*")
-          .eq("workspace_id", workspaceId).is("deleted_at", null).order("created_at"),
+        supabaseClient
+          .from("tags")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null)
+          .order("created_at"),
         linksQuery,
       ]);
       const firstError = tagsRes.error || linksRes.error;
@@ -1684,29 +2000,41 @@ export const webRuntime: ModuoRuntime = {
     async createTaskRelation({ workspaceId, blockerTaskId, blockedTaskId }) {
       // Idempotent like attachTag — re-adding an existing edge returns it.
       const { data: existing } = await supabaseClient
-        .from("task_relations").select("*")
+        .from("task_relations")
+        .select("*")
         .eq("workspace_id", workspaceId)
         .eq("blocker_task_id", blockerTaskId)
         .eq("blocked_task_id", blockedTaskId)
         .maybeSingle();
       if (existing) return taskRelationRowToModel(existing);
-      const { data, error } = await supabaseClient.from("task_relations")
-        .insert({ workspace_id: workspaceId, blocker_task_id: blockerTaskId, blocked_task_id: blockedTaskId })
-        .select().single();
+      const { data, error } = await supabaseClient
+        .from("task_relations")
+        .insert({
+          workspace_id: workspaceId,
+          blocker_task_id: blockerTaskId,
+          blocked_task_id: blockedTaskId,
+        })
+        .select()
+        .single();
       if (error) throw new Error(error.message);
       return taskRelationRowToModel(data);
     },
 
     async deleteTaskRelation({ workspaceId, relationId }) {
-      const { error } = await supabaseClient.from("task_relations").delete()
-        .eq("workspace_id", workspaceId).eq("id", relationId);
+      const { error } = await supabaseClient
+        .from("task_relations")
+        .delete()
+        .eq("workspace_id", workspaceId)
+        .eq("id", relationId);
       if (error) throw new Error(error.message);
     },
 
     async getTimeBlocks(workspaceId) {
       const { data, error } = await supabaseClient
-        .from("task_time_blocks").select("blocks")
-        .eq("workspace_id", workspaceId).maybeSingle();
+        .from("task_time_blocks")
+        .select("blocks")
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
       if (error) throw new Error(error.message);
       return sanitizeTimeBlocks(data?.blocks);
     },
@@ -1719,7 +2047,8 @@ export const webRuntime: ModuoRuntime = {
           { workspace_id: workspaceId, blocks: clean, updated_at: new Date().toISOString() },
           { onConflict: "workspace_id" },
         )
-        .select("blocks").single();
+        .select("blocks")
+        .single();
       if (error) throw new Error(error.message);
       return sanitizeTimeBlocks(data?.blocks);
     },
@@ -1729,46 +2058,58 @@ export const webRuntime: ModuoRuntime = {
     // attributed module_activity row in one transaction.
     async opCommit({ workspaceId, taskId, forDate }) {
       return taskOpRpc("tasks_op_commit", {
-        p_workspace_id: workspaceId, p_task_id: taskId, p_for: forDate,
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_for: forDate,
       });
     },
 
     async opUncommit({ workspaceId, taskId }) {
       return taskOpRpc("tasks_op_uncommit", {
-        p_workspace_id: workspaceId, p_task_id: taskId,
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
       });
     },
 
     async opSkipToday({ workspaceId, taskId }) {
       return taskOpRpc("tasks_op_skip_today", {
-        p_workspace_id: workspaceId, p_task_id: taskId,
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
       });
     },
 
     async opSetStatus({ workspaceId, taskId, status, recurrence, position }) {
       return taskOpRpc("tasks_op_set_status", {
-        p_workspace_id: workspaceId, p_task_id: taskId, p_status: status,
-        p_recurrence: recurrence ?? null, p_position: position ?? null,
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_status: status,
+        p_recurrence: recurrence ?? null,
+        p_position: position ?? null,
       });
     },
 
     async opReschedule({ workspaceId, taskId, scheduledAt, days }) {
       return taskOpRpc("tasks_op_reschedule", {
-        p_workspace_id: workspaceId, p_task_id: taskId,
-        p_scheduled_at: scheduledAt, p_days: days ?? null,
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_scheduled_at: scheduledAt,
+        p_days: days ?? null,
       });
     },
 
     async opUnschedule({ workspaceId, taskId }) {
       return taskOpRpc("tasks_op_unschedule", {
-        p_workspace_id: workspaceId, p_task_id: taskId,
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
       });
     },
 
     async opSkipOccurrence({ workspaceId, taskId, scheduledAt, recurrence, releaseCommit }) {
       return taskOpRpc("tasks_op_skip_occurrence", {
-        p_workspace_id: workspaceId, p_task_id: taskId,
-        p_scheduled_at: scheduledAt, p_recurrence: recurrence,
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_scheduled_at: scheduledAt,
+        p_recurrence: recurrence,
         p_release_commit: releaseCommit,
       });
     },
@@ -1795,14 +2136,13 @@ export const webRuntime: ModuoRuntime = {
       // company) wants, since its touches are logged under module='contacts' (and
       // links/comments on it under other modules), never 'tasks'.
       let q = supabaseClient
-        .from("module_activity").select("*")
+        .from("module_activity")
+        .select("*")
         .eq("workspace_id", workspaceId)
         .eq("entity_type", entityType)
         .eq("entity_id", entityId);
       if (module) q = q.eq("module", module);
-      const { data, error } = await q
-        .order("created_at", { ascending: false })
-        .limit(limit ?? 50);
+      const { data, error } = await q.order("created_at", { ascending: false }).limit(limit ?? 50);
       if (error) throw new Error(error.message);
       return (data ?? []).map(activityRowToModel);
     },
@@ -1817,7 +2157,8 @@ export const webRuntime: ModuoRuntime = {
       // entityType/entityId are app-owned tokens (type slugs + uuids), not user
       // input — safe to interpolate into the PostgREST `.or()` filter below.
       const { data, error } = await supabaseClient
-        .from("entity_links").select("*")
+        .from("entity_links")
+        .select("*")
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null)
         .or(
@@ -1885,7 +2226,8 @@ export const webRuntime: ModuoRuntime = {
 
     async searchEntities({ workspaceId, query, types, limit }) {
       let q = supabaseClient
-        .from("entities").select("*")
+        .from("entities")
+        .select("*")
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null);
       const trimmed = query?.trim();
@@ -1902,7 +2244,8 @@ export const webRuntime: ModuoRuntime = {
       // filter to the exact (type,id) pairs requested. Includes tombstones.
       const ids = Array.from(new Set(refs.map((r) => r.id)));
       const { data, error } = await supabaseClient
-        .from("entities").select("*")
+        .from("entities")
+        .select("*")
         .eq("workspace_id", workspaceId)
         .in("entity_id", ids);
       if (error) throw new Error(error.message);
@@ -1922,7 +2265,15 @@ export const webRuntime: ModuoRuntime = {
     },
 
     // ── Comments + notifications (block CT-5) ────────────────────────────────
-    async addComment({ workspaceId, entityType, entityId, body, mentionedUserIds, entityLabel, entityIcon }) {
+    async addComment({
+      workspaceId,
+      entityType,
+      entityId,
+      body,
+      mentionedUserIds,
+      entityLabel,
+      entityIcon,
+    }) {
       const { data, error } = await supabaseClient.rpc("comments_op_add", {
         p_workspace_id: workspaceId,
         p_entity_type: entityType,
@@ -2018,7 +2369,8 @@ export const webRuntime: ModuoRuntime = {
 
     async recentLinks({ workspaceId, limit }) {
       const { data, error } = await supabaseClient
-        .from("entity_links").select("*")
+        .from("entity_links")
+        .select("*")
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -2030,7 +2382,8 @@ export const webRuntime: ModuoRuntime = {
       let records: EntityRecord[] = [];
       if (ids.length) {
         const res = await supabaseClient
-          .from("entities").select("*")
+          .from("entities")
+          .select("*")
           .eq("workspace_id", workspaceId)
           .in("entity_id", ids);
         if (res.error) throw new Error(res.error.message);
@@ -2049,15 +2402,20 @@ export const webRuntime: ModuoRuntime = {
     async list(workspaceId) {
       const [contactsRes, companiesRes, defsRes] = await Promise.all([
         supabaseClient
-          .from("contacts").select("*")
-          .eq("workspace_id", workspaceId).is("deleted_at", null)
+          .from("contacts")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null)
           .order("name"),
         supabaseClient
-          .from("companies").select("*")
-          .eq("workspace_id", workspaceId).is("deleted_at", null)
+          .from("companies")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null)
           .order("name"),
         supabaseClient
-          .from("contact_field_defs").select("*")
+          .from("contact_field_defs")
+          .select("*")
           .eq("workspace_id", workspaceId)
           .order("position"),
       ]);
@@ -2072,7 +2430,16 @@ export const webRuntime: ModuoRuntime = {
       };
     },
 
-    async createContact({ workspaceId, name, email, phone, title, companyId, status, notesInline }) {
+    async createContact({
+      workspaceId,
+      name,
+      email,
+      phone,
+      title,
+      companyId,
+      status,
+      notesInline,
+    }) {
       const { data, error } = await supabaseClient.rpc("contacts_op_create", {
         p_workspace_id: workspaceId,
         p_name: name,
@@ -2138,7 +2505,16 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
     },
 
-    async updateContact({ workspaceId, contactId, name, email, phone, title, notesInline, setCompany }) {
+    async updateContact({
+      workspaceId,
+      contactId,
+      name,
+      email,
+      phone,
+      title,
+      notesInline,
+      setCompany,
+    }) {
       const { data, error } = await supabaseClient.rpc("contacts_op_update", {
         p_workspace_id: workspaceId,
         p_contact_id: contactId,
@@ -2189,7 +2565,16 @@ export const webRuntime: ModuoRuntime = {
       return companyRowToModel(firstRow(data, "companies_op_update"));
     },
 
-    async link({ workspaceId, contact, target, relationKind, origin, contactLabel, targetLabel, targetIcon }) {
+    async link({
+      workspaceId,
+      contact,
+      target,
+      relationKind,
+      origin,
+      contactLabel,
+      targetLabel,
+      targetIcon,
+    }) {
       const { data, error } = await supabaseClient.rpc("contacts_op_link", {
         p_workspace_id: workspaceId,
         p_contact_type: contact.type,
@@ -2265,8 +2650,10 @@ export const webRuntime: ModuoRuntime = {
 
     async needsAttention({ workspaceId }) {
       const { data, error } = await supabaseClient
-        .from("contacts").select("*")
-        .eq("workspace_id", workspaceId).is("deleted_at", null);
+        .from("contacts")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null);
       if (error) throw new Error(error.message);
       const contacts = (data ?? []).map(contactRowToModel);
       const overdue = await loadOverdueFollowups(workspaceId);
@@ -2275,14 +2662,22 @@ export const webRuntime: ModuoRuntime = {
 
     async reconnect({ workspaceId }) {
       const { data, error } = await supabaseClient
-        .from("contacts").select("*")
-        .eq("workspace_id", workspaceId).is("deleted_at", null);
+        .from("contacts")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null);
       if (error) throw new Error(error.message);
       const contacts = (data ?? []).map(contactRowToModel);
       // Last-touch proxy = the contact's updated_at (the cheap signal; CO-2 deferral).
       const lastTouch: Record<string, string | null> = {};
       for (const c of contacts) lastTouch[c.id] = c.updatedAt;
-      return selectReconnect({ contacts, lastTouchByContactId: lastTouch, now: new Date(), limit: 6, minDays: 30 });
+      return selectReconnect({
+        contacts,
+        lastTouchByContactId: lastTouch,
+        now: new Date(),
+        limit: 6,
+        minDays: 30,
+      });
     },
   },
 };
@@ -2305,7 +2700,8 @@ function localToday(): string {
  */
 async function loadOverdueFollowups(workspaceId: string): Promise<OverdueFollowup[]> {
   const { data: links, error } = await supabaseClient
-    .from("entity_links").select("*")
+    .from("entity_links")
+    .select("*")
     .eq("workspace_id", workspaceId)
     .eq("relation_kind", "follow-up")
     .is("deleted_at", null);
@@ -2313,16 +2709,21 @@ async function loadOverdueFollowups(workspaceId: string): Promise<OverdueFollowu
 
   const taskToContact = new Map<string, string>();
   for (const l of links ?? []) {
-    const contactId = l.source_type === "contact" ? l.source_id : l.target_type === "contact" ? l.target_id : null;
-    const taskId = l.source_type === "task" ? l.source_id : l.target_type === "task" ? l.target_id : null;
+    const contactId =
+      l.source_type === "contact" ? l.source_id : l.target_type === "contact" ? l.target_id : null;
+    const taskId =
+      l.source_type === "task" ? l.source_id : l.target_type === "task" ? l.target_id : null;
     if (contactId && taskId) taskToContact.set(taskId, contactId);
   }
   const taskIds = [...taskToContact.keys()];
   if (taskIds.length === 0) return [];
 
   const { data: tasks, error: tErr } = await supabaseClient
-    .from("tasks").select("id, due_date, status")
-    .eq("workspace_id", workspaceId).in("id", taskIds).is("deleted_at", null);
+    .from("tasks")
+    .select("id, due_date, status")
+    .eq("workspace_id", workspaceId)
+    .in("id", taskIds)
+    .is("deleted_at", null);
   if (tErr) throw new Error(tErr.message);
 
   // tasks.due_date is a timestamptz (stored from local midnight → UTC), so
@@ -2419,22 +2820,31 @@ function activityRowToModel(r: any): ActivityEntry {
 /** Ensure the workspace has its reserved Inbox bucket (idempotent). */
 async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
   const find = () =>
-    supabaseClient.from("buckets").select("*")
-      .eq("workspace_id", workspaceId).eq("is_system", true).is("deleted_at", null)
-      .limit(1).maybeSingle();
+    supabaseClient
+      .from("buckets")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("is_system", true)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
   const { data: existing } = await find();
   if (existing) return bucketRowToModel(existing);
   const user = await getAuthedUser();
   const now = new Date().toISOString();
-  const { data, error } = await supabaseClient.from("buckets").insert({
-    workspace_id: workspaceId,
-    owner_id: user?.id ?? null,
-    name: "Inbox",
-    is_system: true,
-    position: "a0", // low lexorank anchor — sorts first
-    created_at: now,
-    updated_at: now,
-  }).select().single();
+  const { data, error } = await supabaseClient
+    .from("buckets")
+    .insert({
+      workspace_id: workspaceId,
+      owner_id: user?.id ?? null,
+      name: "Inbox",
+      is_system: true,
+      position: "a0", // low lexorank anchor — sorts first
+      created_at: now,
+      updated_at: now,
+    })
+    .select()
+    .single();
   if (error) {
     // Lost a create race (unique partial index) — re-read the winner.
     const { data: again } = await find();
@@ -2631,7 +3041,11 @@ function notificationRowToModel(r: any): NotificationItem {
 function channelList(v: unknown): ContactChannel[] {
   if (!Array.isArray(v)) return [];
   return v
-    .map((x: any) => ({ label: String(x?.label ?? ""), value: String(x?.value ?? ""), primary: Boolean(x?.primary) }))
+    .map((x: any) => ({
+      label: String(x?.label ?? ""),
+      value: String(x?.value ?? ""),
+      primary: Boolean(x?.primary),
+    }))
     .filter((c) => c.value !== "");
 }
 function dateList(v: unknown): ContactDateEntry[] {

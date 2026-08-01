@@ -1,17 +1,13 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import {
-  DragOverlay,
   closestCorners,
-  useDroppable,
   type DragEndEvent,
+  DragOverlay,
   type DragStartEvent,
+  useDroppable,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { type ReactNode, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   Select,
@@ -22,9 +18,9 @@ import {
 } from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
 import { nestedSubtaskIds, STATUS_LABELS } from "../helpers";
-import { positionForReorder } from "../reorder";
-import type { Bucket, Task, TaskStatus } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { Bucket, Task, TaskStatus } from "../model";
+import { positionForReorder } from "../reorder";
 import { DndBoundary, useTaskDndSensors } from "./dnd/task-dnd";
 import type { PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
@@ -174,7 +170,7 @@ export function TaskBoardView({
     api.patchTask(activeId, patch);
   };
 
-  const activeTask = activeId ? tasks.find((t) => t.id === activeId) ?? null : null;
+  const activeTask = activeId ? (tasks.find((t) => t.id === activeId) ?? null) : null;
 
   const groupControl =
     selection === "all" ? (

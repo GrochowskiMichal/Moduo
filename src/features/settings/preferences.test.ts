@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_NOTIFICATION_PREFS,
-  DEFAULT_PREFERENCES,
   applyMotion,
   consumeLandingRedirect,
+  DEFAULT_NOTIFICATION_PREFS,
+  DEFAULT_PREFERENCES,
   isNotificationEnabled,
   notificationTypeForOp,
   readLastRoute,

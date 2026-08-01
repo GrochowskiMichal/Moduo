@@ -6,10 +6,10 @@
  * materialize in the editor on first open (see import-seed.ts).
  */
 
-import { useCallback, useMemo, useState } from "react";
 import { FileUp, FolderTree } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -18,10 +18,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { mdToPlainText, planMdZipImport, type ImportFileEntry, type ImportPlan } from "../import";
 import { readZipMarkdown } from "../export";
+import { type ImportFileEntry, type ImportPlan, mdToPlainText, planMdZipImport } from "../import";
 import { registerNoteSeed } from "../import-seed";
 
 type Props = {
@@ -174,7 +173,10 @@ export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onI
               Choose different files
             </Button>
           ) : null}
-          <Button onClick={() => void confirm()} disabled={!plan || busy || plan.nodes.length === 0}>
+          <Button
+            onClick={() => void confirm()}
+            disabled={!plan || busy || plan.nodes.length === 0}
+          >
             {busy ? "Importing…" : "Import"}
           </Button>
         </DialogFooter>

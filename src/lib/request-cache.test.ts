@@ -5,7 +5,12 @@ import { createRequestCache } from "./request-cache";
 /** A controllable clock so TTL expiry is deterministic. */
 function fakeClock(start = 0) {
   let t = start;
-  return { now: () => t, advance: (ms: number) => { t += ms; } };
+  return {
+    now: () => t,
+    advance: (ms: number) => {
+      t += ms;
+    },
+  };
 }
 
 describe("createRequestCache", () => {
@@ -18,10 +23,7 @@ describe("createRequestCache", () => {
       return "v";
     };
     // Two callers before either settles → one underlying fetch.
-    const [a, b] = await Promise.all([
-      cache.read("k", fetcher),
-      cache.read("k", fetcher),
-    ]);
+    const [a, b] = await Promise.all([cache.read("k", fetcher), cache.read("k", fetcher)]);
     expect(a).toBe("v");
     expect(b).toBe("v");
     expect(calls).toBe(1);
@@ -30,7 +32,10 @@ describe("createRequestCache", () => {
   it("with ttl 0 (default), a sequential read after settle re-fetches", async () => {
     const cache = createRequestCache();
     let calls = 0;
-    const fetcher = async () => { calls += 1; return calls; };
+    const fetcher = async () => {
+      calls += 1;
+      return calls;
+    };
     expect(await cache.read("k", fetcher)).toBe(1);
     expect(await cache.read("k", fetcher)).toBe(2); // no retention → fresh
     expect(calls).toBe(2);
@@ -40,7 +45,10 @@ describe("createRequestCache", () => {
     const clock = fakeClock();
     const cache = createRequestCache(clock.now);
     let calls = 0;
-    const fetcher = async () => { calls += 1; return calls; };
+    const fetcher = async () => {
+      calls += 1;
+      return calls;
+    };
 
     expect(await cache.read("k", fetcher, 5_000)).toBe(1);
     clock.advance(4_000);
@@ -56,7 +64,10 @@ describe("createRequestCache", () => {
     const clock = fakeClock();
     const cache = createRequestCache(clock.now);
     let calls = 0;
-    const fetcher = async () => { calls += 1; return calls; };
+    const fetcher = async () => {
+      calls += 1;
+      return calls;
+    };
 
     expect(await cache.read("user", fetcher, Number.POSITIVE_INFINITY)).toBe(1);
     clock.advance(10_000_000);
@@ -84,7 +95,9 @@ describe("createRequestCache", () => {
   it("an invalidate during an in-flight fetch prevents stale repopulation", async () => {
     const cache = createRequestCache();
     let release!: (v: number) => void;
-    const gate = new Promise<number>((r) => { release = r; });
+    const gate = new Promise<number>((r) => {
+      release = r;
+    });
     let calls = 0;
     const fetcher = () => {
       calls += 1;
@@ -98,7 +111,16 @@ describe("createRequestCache", () => {
     // …but it was NOT written to the cache (invalidated mid-flight), so the next
     // read re-fetches rather than serving the stale snapshot.
     let second = 0;
-    expect(await cache.read("k", async () => { second += 1; return 99; }, Number.POSITIVE_INFINITY)).toBe(99);
+    expect(
+      await cache.read(
+        "k",
+        async () => {
+          second += 1;
+          return 99;
+        },
+        Number.POSITIVE_INFINITY,
+      ),
+    ).toBe(99);
     expect(calls).toBe(1);
     expect(second).toBe(1);
   });
@@ -107,14 +129,42 @@ describe("createRequestCache", () => {
     const cache = createRequestCache();
     let a = 0;
     let b = 0;
-    await cache.read("a", async () => { a += 1; return a; }, Number.POSITIVE_INFINITY);
-    await cache.read("b", async () => { b += 1; return b; }, Number.POSITIVE_INFINITY);
+    await cache.read(
+      "a",
+      async () => {
+        a += 1;
+        return a;
+      },
+      Number.POSITIVE_INFINITY,
+    );
+    await cache.read(
+      "b",
+      async () => {
+        b += 1;
+        return b;
+      },
+      Number.POSITIVE_INFINITY,
+    );
     // Both cached independently.
-    await cache.read("a", async () => { a += 1; return a; }, Number.POSITIVE_INFINITY);
+    await cache.read(
+      "a",
+      async () => {
+        a += 1;
+        return a;
+      },
+      Number.POSITIVE_INFINITY,
+    );
     expect(a).toBe(1);
 
     cache.clear();
-    await cache.read("a", async () => { a += 1; return a; }, Number.POSITIVE_INFINITY);
+    await cache.read(
+      "a",
+      async () => {
+        a += 1;
+        return a;
+      },
+      Number.POSITIVE_INFINITY,
+    );
     expect(a).toBe(2);
   });
 });

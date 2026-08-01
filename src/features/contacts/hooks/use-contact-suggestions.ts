@@ -6,10 +6,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import { deriveLinkKey, type EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { scoreSuggestions, topSuggestion, type LinkSuggestion, type RawLinkSuggestion } from "../../spine/suggest";
+import { deriveLinkKey, type EntityRef } from "../../../lib/entity-links";
+import {
+  type LinkSuggestion,
+  type RawLinkSuggestion,
+  scoreSuggestions,
+  topSuggestion,
+} from "../../spine/suggest";
 import { contactDeclineArgs, contactSuggestLinkArgs } from "../suggest-link";
 
 export type ContactSuggestionsResult = {
@@ -42,7 +46,11 @@ export function useContactSuggestions(
     setResolved([]);
     void (async () => {
       try {
-        const rows = await runtime.spine.suggestLinks({ workspaceId, entityType: focusType, entityId: focusId });
+        const rows = await runtime.spine.suggestLinks({
+          workspaceId,
+          entityType: focusType,
+          entityId: focusId,
+        });
         if (active) setRaw(rows);
       } catch {
         if (active) setRaw([]); // a suggestion read must never break the hub
@@ -83,7 +91,11 @@ export function useContactSuggestions(
       await runtime.contacts.link({ workspaceId, ...contactSuggestLinkArgs(focusRef, s) });
       // A works-at → company accept also sets the denormalized company_id, so the
       // accept path matches the explicit "Set company" action (AC8 writes BOTH).
-      if (focusRef.type === "contact" && s.other.type === "company" && s.suggestedKind === "works-at") {
+      if (
+        focusRef.type === "contact" &&
+        s.other.type === "company" &&
+        s.suggestedKind === "works-at"
+      ) {
         await runtime.contacts.updateContact({
           workspaceId,
           contactId: focusRef.id,
@@ -93,7 +105,9 @@ export function useContactSuggestions(
       onLinked?.();
     } catch (err) {
       setResolved((prev) => prev.filter((k) => k !== key)); // failed → re-surface it
-      toast.error("Couldn’t add the link", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t add the link", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setBusy(false);
     }
@@ -107,7 +121,9 @@ export function useContactSuggestions(
     try {
       await runtime.spine.declineSuggestion({ workspaceId, ...contactDeclineArgs(focusRef, s) });
     } catch (err) {
-      toast.error("Couldn’t dismiss the suggestion", { description: err instanceof Error ? err.message : undefined });
+      toast.error("Couldn’t dismiss the suggestion", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setBusy(false);
     }

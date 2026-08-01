@@ -1,22 +1,22 @@
-import { useEffect, useMemo } from "react";
 import type { Decorator, Preview } from "@storybook/react";
 import {
-  Outlet,
-  RouterProvider,
   createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
+  Outlet,
+  RouterProvider,
 } from "@tanstack/react-router";
+import { useEffect, useMemo } from "react";
 
 import "../src/global.css";
 import "@fontsource/nunito/400.css";
 import "@fontsource/nunito/600.css";
 import "@fontsource/nunito/700.css";
 
+import { TooltipProvider } from "../src/components/ui/tooltip";
 import { AuthContext, type AuthContextValue } from "../src/providers/auth-provider";
 import { WorkspaceContext, type WorkspaceContextValue } from "../src/providers/workspace-provider";
-import { TooltipProvider } from "../src/components/ui/tooltip";
 
 const mockAuth: AuthContextValue = {
   userId: "storybook-user",
@@ -31,9 +31,27 @@ const mockAuth: AuthContextValue = {
 
 const mockWorkspace: WorkspaceContextValue = {
   loading: false,
-  workspaces: [{ id: "w1", name: "Storybook Workspace", role: "owner", permissions: { notes: "edit", tasks: "edit" }, isDeleted: false, createdAt: "", updatedAt: "" }],
+  workspaces: [
+    {
+      id: "w1",
+      name: "Storybook Workspace",
+      role: "owner",
+      permissions: { notes: "edit", tasks: "edit" },
+      isDeleted: false,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ],
   selectedWorkspaceId: "w1",
-  selectedWorkspace: { id: "w1", name: "Storybook Workspace", role: "owner", permissions: { notes: "edit", tasks: "edit" }, isDeleted: false, createdAt: "", updatedAt: "" },
+  selectedWorkspace: {
+    id: "w1",
+    name: "Storybook Workspace",
+    role: "owner",
+    permissions: { notes: "edit", tasks: "edit" },
+    isDeleted: false,
+    createdAt: "",
+    updatedAt: "",
+  },
   modulePermissions: { notes: "edit", tasks: "edit" },
   canManageWorkspace: true,
   members: [],

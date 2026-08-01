@@ -13,15 +13,13 @@
 // source makes it insert-only; here we always pass a real source, so each pick
 // also writes an `entity_link`). Tokens-only theme (Tailwind utilities).
 
-import { useEffect, useMemo, useRef } from "react";
-
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
-import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
+import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
+import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import {
   $createLineBreakNode,
   $createParagraphNode,
@@ -32,12 +30,13 @@ import {
   COMMAND_PRIORITY_LOW,
   type LexicalNode,
 } from "lexical";
+import { useEffect, useMemo, useRef } from "react";
 
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { EntityRefNode } from "./entity-ref-node";
-import { MentionMenuPlugin } from "./mention-menu-plugin";
 import { looksLikeRichHtml } from "./entity-rich-html";
+import { MentionMenuPlugin } from "./mention-menu-plugin";
 
 /** Tokens-only theme (Tailwind utilities → no bespoke CSS, no raw values). */
 const THEME = {
@@ -116,11 +115,7 @@ function SeedPlugin({ value }: { value: string }) {
 }
 
 /** Commit `{ html, text }` on blur, only when the content actually changed. */
-function CommitOnBlurPlugin({
-  onCommit,
-}: {
-  onCommit?: (html: string, text: string) => void;
-}) {
+function CommitOnBlurPlugin({ onCommit }: { onCommit?: (html: string, text: string) => void }) {
   const [editor] = useLexicalComposerContext();
   // Baseline against the SERIALIZED seed (not the raw stored string): a legacy
   // plain-text value re-serializes to `<p>…</p>`, so baselining off the raw
@@ -206,9 +201,7 @@ export function EntityTextEditor({
               aria-label={ariaLabel ?? "Description"}
               className={
                 "min-h-16 rounded-md text-sm leading-relaxed text-foreground outline-none " +
-                (editable
-                  ? "focus-visible:ring-2 focus-visible:ring-ring "
-                  : "cursor-default ") +
+                (editable ? "focus-visible:ring-2 focus-visible:ring-ring " : "cursor-default ") +
                 (className ?? "")
               }
             />

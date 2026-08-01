@@ -1,13 +1,12 @@
 // DB-6 — "Countdown" widget (S). Counts down to a target date/time. Configured
 // inline (no popover until DB-8) and persisted via updateConfig; ticks at 250ms.
 
-import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-
-import type { WidgetComponentProps } from "../../registry/types";
 import { computeCountdown, parseLocalDateTime, toDateTimeLocalValue } from "../../countdown";
+import type { WidgetComponentProps } from "../../registry/types";
 
 function str(config: Record<string, unknown>, key: string): string {
   const v = config[key];
@@ -93,7 +92,9 @@ export function CountdownWidget({ widget, updateConfig }: WidgetComponentProps) 
       </button>
 
       <div className="flex flex-col items-center gap-1">
-        {title ? <p className="max-w-full truncate text-xs text-muted-foreground">{title}</p> : null}
+        {title ? (
+          <p className="max-w-full truncate text-xs text-muted-foreground">{title}</p>
+        ) : null}
         {parts.isComplete ? (
           <p className="font-display text-2xl font-semibold text-foreground">🎉 Done</p>
         ) : parts.days > 0 ? (

@@ -3,6 +3,7 @@
 // 9 module widgets ship real bodies; the other 7 render ComingSoonWidget until
 // DB-6/DB-7 replace their entries.
 
+import type { WidgetType } from "../engine/types";
 import { ActivityFeedWidget } from "../ui/widgets/activity-feed-widget";
 import { CalendarTodayWidget } from "../ui/widgets/calendar-today-widget";
 import { ClockWidget } from "../ui/widgets/clock-widget";
@@ -19,8 +20,6 @@ import { ReconnectWidget } from "../ui/widgets/reconnect-widget";
 import { TasksWidget } from "../ui/widgets/tasks-widget";
 import { TimetrackingWidget } from "../ui/widgets/timetracking-widget";
 import { WeatherWidget } from "../ui/widgets/weather-widget";
-
-import type { WidgetType } from "../engine/types";
 import { WIDGET_CATALOG } from "./catalog";
 import type { WidgetComponent, WidgetDefinition } from "./types";
 

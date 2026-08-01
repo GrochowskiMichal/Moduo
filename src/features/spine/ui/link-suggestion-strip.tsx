@@ -12,13 +12,13 @@
 // hub, since the hub itself isn't mounted on a live surface until Tasks adopts
 // the spine).
 
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { resolveEntityIcon } from "../icon-map";
-import { suggestionReason, type LinkSuggestion } from "../suggest";
+import { cn } from "@/lib/utils";
 import { useLinkSuggestions } from "../hooks/use-link-suggestions";
+import { resolveEntityIcon } from "../icon-map";
+import { type LinkSuggestion, suggestionReason } from "../suggest";
 
 export type LinkSuggestionStripProps = {
   /** The suggestion to show, or null to render nothing (max one at rest). */
@@ -81,7 +81,12 @@ export function EntityLinkSuggestions({
   onLinked,
   className,
 }: EntityLinkSuggestionsProps) {
-  const { current, busy, accept, dismiss } = useLinkSuggestions(runtime, workspaceId, focus, onLinked);
+  const { current, busy, accept, dismiss } = useLinkSuggestions(
+    runtime,
+    workspaceId,
+    focus,
+    onLinked,
+  );
   return (
     <LinkSuggestionStrip
       suggestion={current}

@@ -1,21 +1,27 @@
-import { createRootRoute, createRoute, lazyRouteComponent, Outlet, redirect } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  lazyRouteComponent,
+  Outlet,
+  redirect,
+} from "@tanstack/react-router";
+import { validateCalendarSearch } from "../../features/calendar/search";
+import { validateContactsSearch } from "../../features/contacts/search";
+import { validateEmailSearch } from "../../features/email/url-search";
+import { validateNotesSearch } from "../../features/notes/search";
+import { validateTasksSearch } from "../../features/tasks/search";
+import { consumeLandingRedirect } from "../../lib/preferences";
 import { AuthProvider } from "../../providers/auth-provider";
 import { AppGate } from "../../routes/layouts/app-gate";
 import { AuthPage } from "../../routes/pages/auth-page";
-import { OnboardingPage } from "../../routes/pages/onboarding-page";
-import { HomePage } from "../../routes/pages/home-page";
-import { TasksPage } from "../../routes/pages/tasks-page";
 import { CalendarPage } from "../../routes/pages/calendar-page";
 import { ContactsPage } from "../../routes/pages/contacts-page";
-import { validateContactsSearch } from "../../features/contacts/search";
-import { validateNotesSearch } from "../../features/notes/search";
-import { validateTasksSearch } from "../../features/tasks/search";
-import { validateCalendarSearch } from "../../features/calendar/search";
-import { validateEmailSearch } from "../../features/email/url-search";
-import { SettingsPage } from "../../routes/pages/settings-page";
-import { PaywallPage } from "../../routes/pages/paywall-page";
+import { HomePage } from "../../routes/pages/home-page";
 import { JoinPage } from "../../routes/pages/join-page";
-import { consumeLandingRedirect } from "../../lib/preferences";
+import { OnboardingPage } from "../../routes/pages/onboarding-page";
+import { PaywallPage } from "../../routes/pages/paywall-page";
+import { SettingsPage } from "../../routes/pages/settings-page";
+import { TasksPage } from "../../routes/pages/tasks-page";
 
 function RootLayout() {
   return (
@@ -53,7 +59,10 @@ const paywallRoute = createRoute({
 const publishedNoteRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/p/$token",
-  component: lazyRouteComponent(() => import("../../routes/pages/published-note-page"), "PublishedNotePage"),
+  component: lazyRouteComponent(
+    () => import("../../routes/pages/published-note-page"),
+    "PublishedNotePage",
+  ),
   validateSearch: (search: Record<string, unknown>): { note?: string } => {
     const note = typeof search.note === "string" && search.note ? search.note : undefined;
     return note ? { note } : {};
@@ -98,7 +107,9 @@ const homeRoute = createRoute({
 const legacyGridRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/product-demo",
-  beforeLoad: () => { throw redirect({ to: "/", replace: true }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/", replace: true });
+  },
   component: () => null,
 });
 
@@ -154,7 +165,9 @@ const contactsRoute = createRoute({
 const legacyCrmRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/crm",
-  beforeLoad: () => { throw redirect({ to: "/contacts", replace: true }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/contacts", replace: true });
+  },
   component: () => null,
 });
 

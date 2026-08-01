@@ -75,7 +75,9 @@ export function shapeRecentNotes(
 ): RecentNoteItem[] {
   const limit = opts.limit ?? 6;
   return [...rows]
-    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : a.id < b.id ? -1 : 1))
+    .sort((a, b) =>
+      a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : a.id < b.id ? -1 : 1,
+    )
     .slice(0, limit)
     .map((r) => ({
       id: r.id,

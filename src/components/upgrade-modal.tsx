@@ -1,14 +1,7 @@
 import { Sparkles, Users, Zap } from "lucide-react";
-
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
+import { type FeatureGate, useEntitlement } from "../hooks/use-entitlement";
 import { Button } from "./ui/button";
-import { useEntitlement, type FeatureGate } from "../hooks/use-entitlement";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 
 type Props = {
   visible: boolean;
@@ -89,8 +82,7 @@ export function UpgradeModal({ visible, feature, onClose }: Props) {
 
         {planTier !== "free" ? (
           <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-            You&apos;re currently on the{" "}
-            <span className="text-foreground">{planTier}</span> plan.
+            You&apos;re currently on the <span className="text-foreground">{planTier}</span> plan.
           </p>
         ) : null}
 

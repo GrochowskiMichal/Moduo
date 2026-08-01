@@ -1,9 +1,9 @@
-import { useCallback, useMemo } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useCallback, useMemo } from "react";
 
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
-import { CalendarPageView } from "../../features/calendar/ui/calendar-page-view";
 import type { CalendarSearch } from "../../features/calendar/search";
+import { CalendarPageView } from "../../features/calendar/ui/calendar-page-view";
 import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
@@ -57,9 +57,7 @@ export function CalendarPage() {
         hideRight
         center={
           <div className="grid h-full place-content-center gap-2 text-center text-muted-foreground">
-            <h2 className="font-display text-2xl text-foreground">
-              Calendar unavailable
-            </h2>
+            <h2 className="font-display text-2xl text-foreground">Calendar unavailable</h2>
             <p className="text-sm">
               {configError ??
                 (modulePermissions.tasks === "none"

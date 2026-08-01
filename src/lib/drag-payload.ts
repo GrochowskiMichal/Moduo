@@ -64,7 +64,11 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  */
 export function asDragPayload(data: unknown): DragPayload | null {
   if (!isRecord(data)) return null;
-  if (data.kind === "entity-drag" && typeof data.entityType === "string" && typeof data.entityId === "string") {
+  if (
+    data.kind === "entity-drag" &&
+    typeof data.entityType === "string" &&
+    typeof data.entityId === "string"
+  ) {
     return data as DragPayload;
   }
   // Legacy Tasks payload adapter.
@@ -82,7 +86,11 @@ export function asDragPayload(data: unknown): DragPayload | null {
 /** Narrow a droppable's `data` to a {@link DropLinkTarget}. */
 export function asDropLinkTarget(data: unknown): DropLinkTarget | null {
   if (!isRecord(data)) return null;
-  if (data.kind === "link-target" && typeof data.entityType === "string" && typeof data.entityId === "string") {
+  if (
+    data.kind === "link-target" &&
+    typeof data.entityType === "string" &&
+    typeof data.entityId === "string"
+  ) {
     return data as DropLinkTarget;
   }
   return null;

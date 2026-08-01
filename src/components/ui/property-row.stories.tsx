@@ -1,8 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { CalendarDays, Flag, Inbox, Tag } from "lucide-react";
-
-import { PropertyRow } from "./property-row";
 import { Badge } from "./badge";
+import { PropertyRow } from "./property-row";
 
 const meta: Meta<typeof PropertyRow> = {
   title: "Components/ui/property-row",

@@ -3,9 +3,8 @@
 // the shapes.)
 
 import { describe, expect, it } from "vitest";
-
-import { buildFollowupTask, followupLinkArgs, followupTitle } from "./followup";
 import type { EntityRef } from "../../lib/entity-links";
+import { buildFollowupTask, followupLinkArgs, followupTitle } from "./followup";
 
 describe("followupTitle", () => {
   it("names the contact, with a bare fallback", () => {
@@ -31,7 +30,9 @@ describe("buildFollowupTask", () => {
   });
 
   it("defaults a missing due date to null", () => {
-    expect(buildFollowupTask({ workspaceId: "w", bucketId: "inbox", contactName: "X" }).dueDate).toBeNull();
+    expect(
+      buildFollowupTask({ workspaceId: "w", bucketId: "inbox", contactName: "X" }).dueDate,
+    ).toBeNull();
   });
 });
 

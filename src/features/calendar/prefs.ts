@@ -51,19 +51,12 @@ export function defaultViewState(now: Date = new Date()): CalendarViewState {
   return { view: "week", anchor: localDayKey(now) };
 }
 
-export function sanitizeViewState(
-  raw: unknown,
-  now: Date = new Date(),
-): CalendarViewState {
+export function sanitizeViewState(raw: unknown, now: Date = new Date()): CalendarViewState {
   const fallback = defaultViewState(now);
   if (!raw || typeof raw !== "object") return fallback;
   const o = raw as Record<string, unknown>;
-  const view: CalendarView =
-    o.view === "day" || o.view === "week" ? o.view : fallback.view;
-  const anchor =
-    typeof o.anchor === "string" && parseDayKey(o.anchor)
-      ? o.anchor
-      : fallback.anchor;
+  const view: CalendarView = o.view === "day" || o.view === "week" ? o.view : fallback.view;
+  const anchor = typeof o.anchor === "string" && parseDayKey(o.anchor) ? o.anchor : fallback.anchor;
   return { view, anchor };
 }
 
@@ -100,7 +93,8 @@ function panelVariantKey(userId: string, workspaceId: string): string {
 export function readPanelVariant(userId: string, workspaceId: string): PanelVariantId {
   return readStored(
     panelVariantKey(userId, workspaceId),
-    (raw) => (PANEL_VARIANT_IDS.includes(raw as PanelVariantId) ? (raw as PanelVariantId) : "tasks"),
+    (raw) =>
+      PANEL_VARIANT_IDS.includes(raw as PanelVariantId) ? (raw as PanelVariantId) : "tasks",
     () => "tasks" as PanelVariantId,
   );
 }
@@ -165,8 +159,7 @@ export function sanitizeCalendarPrefs(raw: unknown): CalendarPrefs {
     o.weekStartsOn <= 6
       ? o.weekStartsOn
       : d.weekStartsOn;
-  const showWeekends =
-    typeof o.showWeekends === "boolean" ? o.showWeekends : d.showWeekends;
+  const showWeekends = typeof o.showWeekends === "boolean" ? o.showWeekends : d.showWeekends;
   const hiddenAccountIds = Array.isArray(o.hiddenAccountIds)
     ? o.hiddenAccountIds.filter((v): v is string => typeof v === "string")
     : [];

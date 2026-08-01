@@ -53,6 +53,13 @@ export const Editing: Story = {
 /** A single page in edit mode — dots still render so a page can be added; remove is disabled. */
 export const SinglePageEditing: Story = {
   render: () => (
-    <PageDots count={1} activeIndex={0} onSelect={() => {}} editing onAddPage={() => {}} onRemovePage={() => {}} />
+    <PageDots
+      count={1}
+      activeIndex={0}
+      onSelect={() => {}}
+      editing
+      onAddPage={() => {}}
+      onRemovePage={() => {}}
+    />
   ),
 };

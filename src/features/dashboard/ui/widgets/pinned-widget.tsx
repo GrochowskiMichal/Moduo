@@ -3,13 +3,12 @@
 // module. The picked ref + label/icon are stored in config (updateConfig); a stale
 // label is acceptable at alpha (DB-8 can add a live refresh).
 
-import { useState } from "react";
 import { Pencil, Pin } from "lucide-react";
-
-import { getRuntime } from "@/lib/runtime";
-import { resolveEntityIcon } from "@/features/spine/icon-map";
+import { useState } from "react";
 import { useMentionSearch } from "@/features/spine/hooks/use-mention-search";
+import { resolveEntityIcon } from "@/features/spine/icon-map";
 import { MentionPicker } from "@/features/spine/ui/mention-picker";
+import { getRuntime } from "@/lib/runtime";
 
 import { useDashboardData } from "../../context/dashboard-data-context";
 import type { WidgetComponentProps } from "../../registry/types";
@@ -104,8 +103,12 @@ export function PinnedWidget({ widget, updateConfig }: WidgetComponentProps) {
         className="flex max-w-full flex-col items-center gap-1.5 rounded-md p-2 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Icon className="size-icon-lg text-muted-foreground" aria-hidden />
-        <span className="max-w-full truncate text-sm font-medium text-foreground">{pinned.label}</span>
-        <span className="text-2xs uppercase tracking-wide text-muted-foreground/70">{pinned.type}</span>
+        <span className="max-w-full truncate text-sm font-medium text-foreground">
+          {pinned.label}
+        </span>
+        <span className="text-2xs uppercase tracking-wide text-muted-foreground/70">
+          {pinned.type}
+        </span>
       </button>
     </div>
   );

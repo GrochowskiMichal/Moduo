@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
 import { CreditCard } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
@@ -8,10 +8,10 @@ import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
 import { useAuth } from "../../../providers/auth-provider";
 import {
   ENTITLEMENTS_COLUMNS,
+  type EntitlementsRow,
   isTrialing,
   planLabel,
   subscriptionLine,
-  type EntitlementsRow,
 } from "../billing";
 import { SettingsSectionShell } from "./section-shell";
 
@@ -89,9 +89,10 @@ export function BillingSection() {
         },
         body: JSON.stringify(body),
       });
-      const payload = (await res.json().catch(() => null)) as
-        | { url?: string; error?: string }
-        | null;
+      const payload = (await res.json().catch(() => null)) as {
+        url?: string;
+        error?: string;
+      } | null;
       if (!res.ok || !payload?.url) {
         throw new Error(payload?.error || "Couldn't open the billing portal.");
       }
@@ -147,8 +148,8 @@ export function BillingSection() {
         ) : null}
 
         <p className="text-xs text-muted-foreground">
-          Payments are handled by Stripe. Manage billing opens Stripe&apos;s secure portal
-          to update your card, change plans, or download invoices.
+          Payments are handled by Stripe. Manage billing opens Stripe&apos;s secure portal to update
+          your card, change plans, or download invoices.
         </p>
       </section>
     </SettingsSectionShell>

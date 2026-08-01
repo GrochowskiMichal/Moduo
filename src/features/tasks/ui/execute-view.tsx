@@ -1,18 +1,17 @@
-import { useEffect, useState } from "react";
 import { Check, Clock, MoreHorizontal, Pause, Play, Plus, Square } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
+import { TagChipList } from "../../../components/tag-chip";
 import { Button } from "../../../components/ui/button";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import { CompleteToggle } from "../../../components/ui/complete-toggle";
-import { TagChipList } from "../../../components/tag-chip";
-import { EntityRichText } from "../../spine/ui/entity-rich-text";
+import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
 import { cn } from "../../../lib/utils";
 import { dispatchOpenSettings } from "../../settings/settings-events";
-import { useFocusPrefs, type FocusPrefs } from "../../../lib/focus-prefs";
+import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import {
   bindFocusTask,
   previewFocusInterval,
@@ -23,7 +22,7 @@ import {
   useFocusSession,
 } from "../focus-session-store";
 import { formatDue, formatScheduled } from "../helpers";
-import type { Task, Tag } from "../model";
+import type { Tag, Task } from "../model";
 
 type Props = {
   committedTasks: Task[];
@@ -123,7 +122,11 @@ export function ExecuteView({
               focusPrefs={focusPrefs}
               onFocusPrefsChange={setFocusPrefs}
             />
-            <Queue tasks={upcoming} bucketNameById={bucketNameById} parentTitleFor={parentTitleFor} />
+            <Queue
+              tasks={upcoming}
+              bucketNameById={bucketNameById}
+              parentTitleFor={parentTitleFor}
+            />
           </div>
         )}
       </div>
@@ -270,7 +273,9 @@ function NowCard({
           {bucketName}
         </p>
         <div className="flex min-w-0 items-center justify-end gap-2">
-          {due ? <span className="shrink-0 font-sans text-2xs text-muted-foreground">Due {due}</span> : null}
+          {due ? (
+            <span className="shrink-0 font-sans text-2xs text-muted-foreground">Due {due}</span>
+          ) : null}
           {tags.length ? <TagChipList tags={tags} max={3} className="min-w-0" /> : null}
         </div>
       </div>
@@ -283,14 +288,18 @@ function NowCard({
         />
       ) : null}
 
-      {subtasks.length > 0 ? <SubtaskChecklist subtasks={subtasks} onToggle={onToggleSubtask} /> : null}
+      {subtasks.length > 0 ? (
+        <SubtaskChecklist subtasks={subtasks} onToggle={onToggleSubtask} />
+      ) : null}
 
       <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
         {/* bottom-left — opt-in time tracking */}
         <div className="min-w-0">
           {tracking ? (
             <div className="flex items-center gap-1.5">
-              {running ? <span className="track-pulse size-2 rounded-full bg-muted-foreground" aria-hidden /> : null}
+              {running ? (
+                <span className="track-pulse size-2 rounded-full bg-muted-foreground" aria-hidden />
+              ) : null}
               <span className="mr-1 font-sans text-lg tabular-nums text-foreground">
                 {formatClock(isThisTask ? session.bigClock : 0)}
               </span>
@@ -309,7 +318,12 @@ function NowCard({
                       </span>
                     ) : null}
                     {formatDuration(trackedTotal)}
-                    {estimateSeconds ? <span className="text-muted-foreground/60"> / ~{formatDuration(estimateSeconds)}</span> : null}
+                    {estimateSeconds ? (
+                      <span className="text-muted-foreground/60">
+                        {" "}
+                        / ~{formatDuration(estimateSeconds)}
+                      </span>
+                    ) : null}
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>Total time tracked on this task</TooltipContent>
@@ -344,7 +358,9 @@ function NowCard({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {trackedTotal > 0 ? "Total time tracked · click to keep tracking" : "Start tracking time"}
+                {trackedTotal > 0
+                  ? "Total time tracked · click to keep tracking"
+                  : "Start tracking time"}
               </TooltipContent>
             </Tooltip>
           )}
@@ -352,7 +368,11 @@ function NowCard({
 
         {/* bottom-right — Skip / Done (reorder lives in the Queue now) */}
         <div className="flex shrink-0 items-center gap-3">
-          <button type="button" onClick={onSkip} className="font-sans text-sm text-muted-foreground hover:text-foreground">
+          <button
+            type="button"
+            onClick={onSkip}
+            className="font-sans text-sm text-muted-foreground hover:text-foreground"
+          >
             Skip
           </button>
           <Button size="md" onClick={onMarkDone}>
@@ -367,7 +387,13 @@ function NowCard({
 
 // ── subtask checklist — tick the pieces off while focusing the parent ─────────
 
-function SubtaskChecklist({ subtasks, onToggle }: { subtasks: Task[]; onToggle: (subtask: Task) => void }) {
+function SubtaskChecklist({
+  subtasks,
+  onToggle,
+}: {
+  subtasks: Task[];
+  onToggle: (subtask: Task) => void;
+}) {
   const done = subtasks.filter((s) => s.status === "done").length;
   return (
     <div className="mt-4">
@@ -378,7 +404,10 @@ function SubtaskChecklist({ subtasks, onToggle }: { subtasks: Task[]; onToggle: 
         {subtasks.map((st) => {
           const isDone = st.status === "done";
           return (
-            <div key={st.id} className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-accent">
+            <div
+              key={st.id}
+              className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-accent"
+            >
               <CompleteToggle done={isDone} onToggle={() => onToggle(st)} />
               <span
                 className={cn(
@@ -425,10 +454,17 @@ function TimerMenu({
       <PopoverContent align="start" className="w-64 text-left">
         <div className="flex flex-col gap-3">
           <div>
-            <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">Add time</p>
+            <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+              Add time
+            </p>
             <div className="mt-1.5 flex gap-1.5">
               {[5, 15, 30].map((m) => (
-                <Button key={m} variant="secondary" size="sm" onClick={() => onAddTime(task.id, m * 60)}>
+                <Button
+                  key={m}
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onAddTime(task.id, m * 60)}
+                >
                   +{m}m
                 </Button>
               ))}
@@ -466,7 +502,9 @@ function TimerMenu({
           {/* Pomodoro — work/break edit the persisted Focus prefs (Settings →
               Focus holds long break / auto-start / sound). */}
           <div className="border-t border-border pt-3">
-            <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">Pomodoro</p>
+            <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+              Pomodoro
+            </p>
             <div className="mt-1.5 flex items-center gap-2 font-sans text-sm text-muted-foreground">
               <span>Work</span>
               <Input
@@ -475,7 +513,9 @@ function TimerMenu({
                 min={1}
                 max={180}
                 value={String(prefs.workMinutes)}
-                onChange={(e) => onPrefsChange({ workMinutes: Math.max(1, Number(e.target.value) || 1) })}
+                onChange={(e) =>
+                  onPrefsChange({ workMinutes: Math.max(1, Number(e.target.value) || 1) })
+                }
                 className="w-14"
               />
               <span>Break</span>
@@ -485,7 +525,9 @@ function TimerMenu({
                 min={1}
                 max={180}
                 value={String(prefs.breakMinutes)}
-                onChange={(e) => onPrefsChange({ breakMinutes: Math.max(1, Number(e.target.value) || 1) })}
+                onChange={(e) =>
+                  onPrefsChange({ breakMinutes: Math.max(1, Number(e.target.value) || 1) })
+                }
                 className="w-14"
               />
             </div>
@@ -519,7 +561,11 @@ function Queue({
   parentTitleFor: (task: Task) => string | null;
 }) {
   if (tasks.length === 0) {
-    return <p className="text-center font-sans text-sm text-muted-foreground">Last one — nothing else queued.</p>;
+    return (
+      <p className="text-center font-sans text-sm text-muted-foreground">
+        Last one — nothing else queued.
+      </p>
+    );
   }
   return (
     <div className="flex flex-col gap-1">
@@ -536,13 +582,17 @@ function Queue({
           style={{ minHeight: "var(--row-h)" }}
         >
           <span className="size-1.5 rounded-full bg-muted-foreground/50" aria-hidden />
-          <span className="min-w-0 flex-1 truncate font-display text-foreground">{task.title || "Untitled"}</span>
+          <span className="min-w-0 flex-1 truncate font-display text-foreground">
+            {task.title || "Untitled"}
+          </span>
           {parentTitleFor(task) ? (
             <span className="min-w-0 shrink truncate font-sans text-xs text-muted-foreground/70">
               ↳ {parentTitleFor(task)}
             </span>
           ) : null}
-          <span className="shrink-0 font-sans text-xs text-muted-foreground">{bucketNameById(task.bucketId)}</span>
+          <span className="shrink-0 font-sans text-xs text-muted-foreground">
+            {bucketNameById(task.bucketId)}
+          </span>
         </div>
       ))}
     </div>

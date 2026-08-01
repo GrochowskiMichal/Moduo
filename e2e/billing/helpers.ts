@@ -9,13 +9,13 @@
  *   STRIPE_SECRET_KEY     – Stripe test-mode secret key (for direct API calls)
  */
 
-import { Page } from '@playwright/test';
+import type { Page } from "@playwright/test";
 
-export const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:8081';
+export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:8081";
 
 /** Generate a unique test email address. */
-export function testEmail(label: string = 'user'): string {
-  const domain = process.env.E2E_TEST_EMAIL_DOMAIN ?? 'mailinator.com';
+export function testEmail(label: string = "user"): string {
+  const domain = process.env.E2E_TEST_EMAIL_DOMAIN ?? "mailinator.com";
   return `e2e-${label}-${Date.now()}@${domain}`;
 }
 
@@ -30,8 +30,8 @@ export function testEmail(label: string = 'user'): string {
  */
 export async function fillSignupEmail(page: Page, email: string): Promise<void> {
   await page.goto(`${BASE_URL}/auth?mode=signup`);
-  await page.getByPlaceholder('you@example.com').fill(email);
-  await page.getByRole('button', { name: /send code/i }).click();
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: /send code/i }).click();
 }
 
 /** Navigate to the app's billing / paywall section. */

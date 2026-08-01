@@ -24,7 +24,16 @@ type Props = {
   title?: string;
 };
 
-export function TagChip({ name, color, onClick, onRemove, active, size = "sm", className, title }: Props) {
+export function TagChip({
+  name,
+  color,
+  onClick,
+  onRemove,
+  active,
+  size = "sm",
+  className,
+  title,
+}: Props) {
   const label = (
     <span className={cn("min-w-0 truncate", active ? "tag-chip-active" : "text-foreground/90")}>
       <span className={cn(!active && "tag-hash")} aria-hidden>

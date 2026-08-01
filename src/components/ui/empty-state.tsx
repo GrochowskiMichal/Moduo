@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -29,12 +29,14 @@ function EmptyState({ icon: Icon, title, description, action, hint, className }:
     >
       {Icon ? <Icon className="size-icon-lg opacity-60" aria-hidden /> : null}
       <p className="text-sm text-foreground">{title}</p>
-      {description ? <p className="max-w-xs text-xs text-muted-foreground/80">{description}</p> : null}
+      {description ? (
+        <p className="max-w-xs text-xs text-muted-foreground/80">{description}</p>
+      ) : null}
       {action ? <div className="mt-1">{action}</div> : null}
       {hint ? <p className="text-2xs text-muted-foreground/70">{hint}</p> : null}
     </div>
   );
 }
 
-export { EmptyState };
 export type { EmptyStateProps };
+export { EmptyState };

@@ -24,14 +24,22 @@ export function FocusSection() {
             onChange={(n) => setPrefs({ workMinutes: n })}
           />
         </FocusRow>
-        <FocusRow title="Short break" description="The breather between focus blocks." htmlFor="focus-break">
+        <FocusRow
+          title="Short break"
+          description="The breather between focus blocks."
+          htmlFor="focus-break"
+        >
           <MinutesInput
             id="focus-break"
             value={prefs.breakMinutes}
             onChange={(n) => setPrefs({ breakMinutes: n })}
           />
         </FocusRow>
-        <FocusRow title="Long break" description="The longer rest after a run of blocks." htmlFor="focus-long-break">
+        <FocusRow
+          title="Long break"
+          description="The longer rest after a run of blocks."
+          htmlFor="focus-long-break"
+        >
           <MinutesInput
             id="focus-long-break"
             value={prefs.longBreakMinutes}

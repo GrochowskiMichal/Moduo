@@ -7,9 +7,8 @@
 
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
-
-import { deriveBody } from "../sync/doc-text";
 import { extractOutline, type OutlineHeading } from "../outline";
+import { deriveBody } from "../sync/doc-text";
 
 type Props = {
   doc: Y.Doc | null;
@@ -47,7 +46,10 @@ export function NoteOutlinePanel({ doc, onNavigate }: Props) {
   }
 
   return (
-    <nav className="flex min-h-0 flex-col gap-0.5 overflow-y-auto scrollbar-thin py-1" aria-label="Outline">
+    <nav
+      className="flex min-h-0 flex-col gap-0.5 overflow-y-auto scrollbar-thin py-1"
+      aria-label="Outline"
+    >
       {headings.map((h) => (
         <button
           key={h.index}

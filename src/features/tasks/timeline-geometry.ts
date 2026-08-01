@@ -218,7 +218,11 @@ export type TimelineBar = {
  * Bar geometry for one task, or null when it is undated (tray, not axis).
  * Bad data (due before scheduled) heals to a 1-day bar at scheduledAt.
  */
-export function barForTask(task: Task, window: AxisWindow, now: Date = new Date()): TimelineBar | null {
+export function barForTask(
+  task: Task,
+  window: AxisWindow,
+  now: Date = new Date(),
+): TimelineBar | null {
   const sched = taskDay(task.scheduledAt);
   let due = taskDay(task.dueDate);
   if (!sched && !due) return null;

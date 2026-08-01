@@ -77,12 +77,12 @@ describe("publicUrlTransform (NO-9b — public-page URL allow-list)", () => {
 });
 
 describe("comparePublicNotes (DF-13 — authored page order)", () => {
-  const n = (
-    id: string,
-    title: string,
-    position?: string | null,
-    createdAt?: string | null,
-  ) => ({ id, title, position, createdAt });
+  const n = (id: string, title: string, position?: string | null, createdAt?: string | null) => ({
+    id,
+    title,
+    position,
+    createdAt,
+  });
 
   it("orders by fractional position, not title", () => {
     const list = [n("1", "Alpha", "m"), n("2", "Zulu", "a"), n("3", "Mike", "z")];
