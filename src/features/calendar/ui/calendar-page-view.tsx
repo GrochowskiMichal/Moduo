@@ -18,11 +18,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
-import { truncationNotice } from "../../../components/app/truncation-notice";
 import {
   RightPanelSwitcher,
   type RightPanelVariant,
 } from "../../../components/app/right-panel-switcher";
+import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,

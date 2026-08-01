@@ -5,8 +5,8 @@ import {
   DEFAULT_HISTORY_DEPTH,
   describeDepthChange,
   EMAIL_HISTORY_DEPTHS,
-  historyDepthLabel,
   type EmailHistoryDepth,
+  historyDepthLabel,
 } from "./history-depth";
 
 describe("email history depth (IM-2c)", () => {

@@ -11,23 +11,22 @@
  * grammar (they're editor-agnostic Lexical plugins).
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import * as Y from "yjs";
 import { registerCodeHighlighting } from "@lexical/code";
 import { $createListItemNode, $createListNode, $isListItemNode } from "@lexical/list";
+import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
+import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
+import { CollaborationPluginV2__EXPERIMENTAL } from "@lexical/react/LexicalCollaborationPlugin";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
-import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
+import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
-import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
-import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
-import { CollaborationPluginV2__EXPERIMENTAL } from "@lexical/react/LexicalCollaborationPlugin";
-import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
-import { $createHeadingNode } from "@lexical/rich-text";
+import { ListPlugin } from "@lexical/react/LexicalListPlugin";
+import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
+import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
+import { $createHeadingNode } from "@lexical/rich-text";
 import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $createParagraphNode,
@@ -43,27 +42,28 @@ import {
   KEY_TAB_COMMAND,
   OUTDENT_CONTENT_COMMAND,
 } from "lexical";
-import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
-import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
-import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
-import { FormatToolbarPlugin } from "../editor/plugins/format-toolbar-plugin";
-import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
-import { $createPageRowNode } from "../editor/nodes/page-row-node";
-import {
-  INSERT_ENTITY_CHIP_EVENT,
-  INSERT_PAGE_ROW_EVENT,
-  NotesEditorBridgeContext,
-  type InsertEntityChipDetail,
-  type InsertPageRowDetail,
-  type NotesEditorBridge,
-} from "../editor/notes-editor-bridge";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type * as Y from "yjs";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { useAuth } from "@/providers/auth-provider";
-import type { NotesSyncEngineV2 } from "../sync/engine-v2";
-import { deriveBody } from "../sync/doc-text";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
+import { $createPageRowNode } from "../editor/nodes/page-row-node";
 import { NOTE_EDITOR_NODES } from "../editor/note-nodes";
+import {
+  INSERT_ENTITY_CHIP_EVENT,
+  INSERT_PAGE_ROW_EVENT,
+  type InsertEntityChipDetail,
+  type InsertPageRowDetail,
+  type NotesEditorBridge,
+  NotesEditorBridgeContext,
+} from "../editor/notes-editor-bridge";
+import { FormatToolbarPlugin } from "../editor/plugins/format-toolbar-plugin";
+import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
+import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
+import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
+import { deriveBody } from "../sync/doc-text";
+import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
 
 type Props = {
@@ -167,13 +167,7 @@ function TitleDerivationPlugin({
 
 /** The sidebar's "+ child" mirrors into the OPEN parent as a page-row — via
  * the canonical Lexical path, never raw Yjs XML (spec risk #10 posture). */
-function InsertPageRowPlugin({
-  noteId,
-  bridge,
-}: {
-  noteId: string;
-  bridge: NotesEditorBridge;
-}) {
+function InsertPageRowPlugin({ noteId, bridge }: { noteId: string; bridge: NotesEditorBridge }) {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
     const onInsert = (event: Event) => {
@@ -401,74 +395,74 @@ export function NoteEditor({
   return (
     <div className="notes-editor-v2 relative h-full min-h-0 overflow-auto bg-background">
       <NotesEditorBridgeContext.Provider value={bridge}>
-      <LexicalCollaboration key={`collab-${noteId}`}>
-        <LexicalComposer initialConfig={initialConfig} key={noteId}>
-          <RichTextPlugin
-            contentEditable={
-              <ContentEditable className="mx-auto min-h-full w-full max-w-3xl px-6 pb-24 pt-10 text-base leading-relaxed text-foreground outline-none" />
-            }
-            placeholder={
-              <div className="pointer-events-none absolute left-1/2 top-10 w-full max-w-3xl -translate-x-1/2 px-6 font-display text-3xl font-semibold text-muted-foreground/60">
-                Untitled
-              </div>
-            }
-            ErrorBoundary={LexicalErrorBoundary}
-          />
-          <HistoryPlugin />
-          <ListPlugin />
-          <CheckListPlugin />
-          <ListTabIndentationPlugin />
-          <CodeHighlightingPlugin />
-          <LinkPlugin />
-          <TablePlugin />
-          <SlashMenuPlugin
-            workspaceId={workspaceId}
-            runtime={runtime}
-            source={{ type: "note", id: noteId }}
-            sourceLabel={titleForLabel || "Untitled"}
-          />
-          <MentionMenuPlugin
-            workspaceId={workspaceId ?? null}
-            runtime={runtime}
-            source={{ type: "note", id: noteId }}
-            sourceLabel={titleForLabel || "Untitled"}
-            sourceIcon="note"
-            currentUserId={userId}
-            // The Notes grammar: @ = workspace people ONLY (AC5); a mention
-            // writes the person-targeted activity row → their notification.
-            peopleOnly
-            onMentionPerson={
-              runtime && editable
-                ? (memberId) =>
-                    runtime.notesV2.mention({
-                      workspaceId,
-                      noteId,
-                      mentionedUserIds: [memberId],
-                    })
-                : undefined
-            }
-          />
-          <MarkdownClipboardPlugin />
-          {/* Live markdown-as-you-type (DF-13): the same transformer set the
+        <LexicalCollaboration key={`collab-${noteId}`}>
+          <LexicalComposer initialConfig={initialConfig} key={noteId}>
+            <RichTextPlugin
+              contentEditable={
+                <ContentEditable className="mx-auto min-h-full w-full max-w-3xl px-6 pb-24 pt-10 text-base leading-relaxed text-foreground outline-none" />
+              }
+              placeholder={
+                <div className="pointer-events-none absolute left-1/2 top-10 w-full max-w-3xl -translate-x-1/2 px-6 font-display text-3xl font-semibold text-muted-foreground/60">
+                  Untitled
+                </div>
+              }
+              ErrorBoundary={LexicalErrorBoundary}
+            />
+            <HistoryPlugin />
+            <ListPlugin />
+            <CheckListPlugin />
+            <ListTabIndentationPlugin />
+            <CodeHighlightingPlugin />
+            <LinkPlugin />
+            <TablePlugin />
+            <SlashMenuPlugin
+              workspaceId={workspaceId}
+              runtime={runtime}
+              source={{ type: "note", id: noteId }}
+              sourceLabel={titleForLabel || "Untitled"}
+            />
+            <MentionMenuPlugin
+              workspaceId={workspaceId ?? null}
+              runtime={runtime}
+              source={{ type: "note", id: noteId }}
+              sourceLabel={titleForLabel || "Untitled"}
+              sourceIcon="note"
+              currentUserId={userId}
+              // The Notes grammar: @ = workspace people ONLY (AC5); a mention
+              // writes the person-targeted activity row → their notification.
+              peopleOnly
+              onMentionPerson={
+                runtime && editable
+                  ? (memberId) =>
+                      runtime.notesV2.mention({
+                        workspaceId,
+                        noteId,
+                        mentionedUserIds: [memberId],
+                      })
+                  : undefined
+              }
+            />
+            <MarkdownClipboardPlugin />
+            {/* Live markdown-as-you-type (DF-13): the same transformer set the
               paste/import path uses, so `**bold**`, `# heading`, `- [ ]` etc.
               format while typing. ⌘B/⌘I ride Lexical's built-in rich-text
               bindings; the floating toolbar makes them discoverable. */}
-          <MarkdownShortcutPlugin transformers={NOTES_TRANSFORMERS} />
-          <FormatToolbarPlugin editable={editable} />
-          <TaskLinePlugin editable={editable} noteId={noteId} />
-          <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
-          <InsertEntityChipPlugin noteId={noteId} editable={editable} />
-          <CollaborationPluginV2__EXPERIMENTAL
-            id={noteId}
-            doc={session.doc}
-            provider={session.provider as any}
-            __shouldBootstrapUnsafe={true}
-          />
-          <SyncFromYjsPlugin doc={session.doc} />
-          <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
-          <WelcomeSeedPlugin enabled={seedWelcome && editable} />
-        </LexicalComposer>
-      </LexicalCollaboration>
+            <MarkdownShortcutPlugin transformers={NOTES_TRANSFORMERS} />
+            <FormatToolbarPlugin editable={editable} />
+            <TaskLinePlugin editable={editable} noteId={noteId} />
+            <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
+            <InsertEntityChipPlugin noteId={noteId} editable={editable} />
+            <CollaborationPluginV2__EXPERIMENTAL
+              id={noteId}
+              doc={session.doc}
+              provider={session.provider as any}
+              __shouldBootstrapUnsafe={true}
+            />
+            <SyncFromYjsPlugin doc={session.doc} />
+            <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
+            <WelcomeSeedPlugin enabled={seedWelcome && editable} />
+          </LexicalComposer>
+        </LexicalCollaboration>
       </NotesEditorBridgeContext.Provider>
     </div>
   );

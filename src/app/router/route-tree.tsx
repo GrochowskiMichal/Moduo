@@ -42,7 +42,7 @@ function RootLayout() {
  * these surfaces got inconsistent before. `display: contents` adds no box, so
  * layout is untouched while custom properties still inherit through it.
  */
-function preWorkspace(Component: () => React.ReactNode) {
+function preWorkspace(Component: React.ComponentType) {
   return function PreWorkspaceRoute() {
     return (
       <div data-accent="mono" className="contents">
@@ -80,10 +80,9 @@ const paywallRoute = createRoute({
 const publishedNoteRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/p/$token",
-  component: preWorkspace(lazyRouteComponent(
-    () => import("../../routes/pages/published-note-page"),
-    "PublishedNotePage",
-  )),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/published-note-page"), "PublishedNotePage"),
+  ),
   validateSearch: (search: Record<string, unknown>): { note?: string } => {
     const note = typeof search.note === "string" && search.note ? search.note : undefined;
     return note ? { note } : {};

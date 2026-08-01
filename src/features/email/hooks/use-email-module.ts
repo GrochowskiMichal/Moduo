@@ -5,9 +5,8 @@
 // local restore — no fragile cross-expunge reversal).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-import type { EmailAccountRef, EmailThreadRef, ModuoRuntime } from "../../../lib/runtime.types";
 import type { Truncation } from "../../../lib/paged-select";
+import type { EmailAccountRef, EmailThreadRef, ModuoRuntime } from "../../../lib/runtime.types";
 import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
 import type { EmailEnvelope, EmailThread, SavedAccount } from "../model/email-types";
 import {

@@ -12,13 +12,12 @@ import { LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
 import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
-import { TableNode, TableCellNode, TableRowNode } from "@lexical/table";
+import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
 import type { Klass, LexicalNode } from "lexical";
-
-import { EmbedNode } from "./nodes/EmbedNode";
-import { TaskLineNode } from "./nodes/task-line-node";
-import { PageRowNode } from "./nodes/page-row-node";
 import { EntityRefNode } from "../../spine/editor/entity-ref-node";
+import { EmbedNode } from "./nodes/EmbedNode";
+import { PageRowNode } from "./nodes/page-row-node";
+import { TaskLineNode } from "./nodes/task-line-node";
 
 export const NOTE_EDITOR_NODES: ReadonlyArray<Klass<LexicalNode>> = [
   HeadingNode,

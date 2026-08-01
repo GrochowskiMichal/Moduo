@@ -139,14 +139,16 @@ export async function readPaged<T, E>(args: ReadPagedArgs<T, E>): Promise<PagedR
     // it read "5,000 of 4,998" — or the equally silly "5,000 of 5,000, and
     // there's more". A total that no longer exceeds what we hold is stale, so
     // drop it and fall back to the honest "N (of more)".
-    truncation: { scope: args.scope, shown: cap, total: total != null && total > cap ? total : null },
+    truncation: {
+      scope: args.scope,
+      shown: cap,
+      total: total != null && total > cap ? total : null,
+    },
   };
 }
 
 /** Drop the `null`s — the shape every bundle's `truncated` field wants. */
-export function collectTruncations(
-  ...items: Array<Truncation | null | undefined>
-): Truncation[] {
+export function collectTruncations(...items: Array<Truncation | null | undefined>): Truncation[] {
   return items.filter((t): t is Truncation => !!t);
 }
 

@@ -158,31 +158,81 @@ export const tauriRuntime: ModuoRuntime = {
   },
 
   email: {
-    listAccounts() { return invoke<any[]>("email_accounts_list"); },
-    connectAndSave(input) { return invoke<any>("email_account_connect_and_save", { input }); },
-    disconnect(accountId) { return invoke<void>("email_account_disconnect", { accountId }); },
-    setHistoryDepth(input) { return invoke<any>("email_account_set_history_depth", input); },
-    listEnvelopes(input) { return invoke<any>("email_list_envelopes", { input }); },
-    getMessageBody(input) { return invoke<any>("email_get_message_body", { input }); },
-    prefetchBodies(input) { return invoke<any>("email_prefetch_bodies", { input }); },
-    syncNow(input) { return invoke<any>("email_sync_now", { input }); },
-    setActivityState(input) { return invoke<void>("email_set_activity_state", { input }); },
-    applyFlag(input) { return invoke<any>("email_apply_flag", { input }); },
-    getMailboxStatus(input) { return invoke<any[]>("email_get_mailbox_status", { input: input ?? {} }); },
-    sendSaved(input) { return invoke<boolean>("email_send_saved", input); },
-    startGoogleOAuth(input) { return invoke<any>("email_gmail_oauth_start", { input }); },
-    getThread(input) { return invoke<any>("email_get_thread", { input }); },
-    listFolders(input) { return invoke<any[]>("email_list_folders", { input }); },
-    applyMessageOp(input) { return invoke<any>("email_apply_message_op", { input }); },
-    snoozeThread(input) { return invoke<any>("email_snooze_thread", { input }); },
-    snoozeRestore(input) { return invoke<any>("email_snooze_restore", { input }); },
-    sendMessage(input) { return invoke<any>("email_send_message", { input }); },
-    listAttachments(input) { return invoke<any[]>("email_list_attachments", { input }); },
-    saveAttachment(input) { return invoke<any>("email_save_attachment", { input }); },
-    pickAttachments() { return invoke<any[]>("email_pick_attachments", {}); },
-    getInlineImages(input) { return invoke<any[]>("email_get_inline_images", { input }); },
-    searchBodies(input) { return invoke<any[]>("email_search_bodies", { input }); },
-    searchServer(input) { return invoke<any>("email_search_server", { input }); },
+    listAccounts() {
+      return invoke<any[]>("email_accounts_list");
+    },
+    connectAndSave(input) {
+      return invoke<any>("email_account_connect_and_save", { input });
+    },
+    disconnect(accountId) {
+      return invoke<void>("email_account_disconnect", { accountId });
+    },
+    setHistoryDepth(input) {
+      return invoke<any>("email_account_set_history_depth", input);
+    },
+    listEnvelopes(input) {
+      return invoke<any>("email_list_envelopes", { input });
+    },
+    getMessageBody(input) {
+      return invoke<any>("email_get_message_body", { input });
+    },
+    prefetchBodies(input) {
+      return invoke<any>("email_prefetch_bodies", { input });
+    },
+    syncNow(input) {
+      return invoke<any>("email_sync_now", { input });
+    },
+    setActivityState(input) {
+      return invoke<void>("email_set_activity_state", { input });
+    },
+    applyFlag(input) {
+      return invoke<any>("email_apply_flag", { input });
+    },
+    getMailboxStatus(input) {
+      return invoke<any[]>("email_get_mailbox_status", { input: input ?? {} });
+    },
+    sendSaved(input) {
+      return invoke<boolean>("email_send_saved", input);
+    },
+    startGoogleOAuth(input) {
+      return invoke<any>("email_gmail_oauth_start", { input });
+    },
+    getThread(input) {
+      return invoke<any>("email_get_thread", { input });
+    },
+    listFolders(input) {
+      return invoke<any[]>("email_list_folders", { input });
+    },
+    applyMessageOp(input) {
+      return invoke<any>("email_apply_message_op", { input });
+    },
+    snoozeThread(input) {
+      return invoke<any>("email_snooze_thread", { input });
+    },
+    snoozeRestore(input) {
+      return invoke<any>("email_snooze_restore", { input });
+    },
+    sendMessage(input) {
+      return invoke<any>("email_send_message", { input });
+    },
+    listAttachments(input) {
+      return invoke<any[]>("email_list_attachments", { input });
+    },
+    saveAttachment(input) {
+      return invoke<any>("email_save_attachment", { input });
+    },
+    pickAttachments() {
+      return invoke<any[]>("email_pick_attachments", {});
+    },
+    getInlineImages(input) {
+      return invoke<any[]>("email_get_inline_images", { input });
+    },
+    searchBodies(input) {
+      return invoke<any[]>("email_search_bodies", { input });
+    },
+    searchServer(input) {
+      return invoke<any>("email_search_server", { input });
+    },
     // EM-3 cloud tissue methods are Supabase-direct — identical on both platforms.
     listModule: webRuntime.email.listModule,
     upsertAccountRef: webRuntime.email.upsertAccountRef,

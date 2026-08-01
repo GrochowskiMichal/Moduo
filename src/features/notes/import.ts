@@ -196,7 +196,9 @@ export function importPositions(
     // root level shares a sibling list with notes that already exist.
     const after = parentKey === "" ? existingRootPositions : [];
     const positions = positionsAfter(group.length, after);
-    group.forEach((n, i) => out.set(n.tempId, positions[i]!));
+    group.forEach((n, i) => {
+      out.set(n.tempId, positions[i]!);
+    });
   }
   return out;
 }
@@ -270,17 +272,13 @@ export function stableNoteId(workspaceId: string, seedPath: string): string {
  * Collisions are broken deterministically by plan order, so the discriminator is
  * itself stable across re-runs.
  */
-export function assignImportIds(
-  workspaceId: string,
-  nodes: ImportPlanNode[],
-): Map<string, string> {
+export function assignImportIds(workspaceId: string, nodes: ImportPlanNode[]): Map<string, string> {
   const out = new Map<string, string>();
   const used = new Set<string>();
   const seenSeed = new Map<string, number>();
   for (const node of nodes) {
     const base =
-      notionPageId(node.path) ??
-      node.path.split("/").filter(Boolean).map(normSeg).join("/");
+      notionPageId(node.path) ?? node.path.split("/").filter(Boolean).map(normSeg).join("/");
     const nth = seenSeed.get(base) ?? 0;
     seenSeed.set(base, nth + 1);
     let id = stableNoteId(workspaceId, nth === 0 ? base : `${base}#${nth}`);

@@ -10,6 +10,7 @@ import type {
   CalendarMirrorEventInput,
   CalendarModuleBundle,
 } from "../features/calendar/events";
+import type { CalendarWindow } from "../features/calendar/window";
 import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
 import type {
   Company,
@@ -24,13 +25,11 @@ import type {
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
 import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
-import type { CalendarWindow } from "../features/calendar/window";
-import type { Truncation } from "./paged-select";
 import type {
-  Note as NoteV2,
   NoteDocPull,
   NotesImportRow,
   NotesV2Bundle,
+  Note as NoteV2,
 } from "../features/notes/model";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RecentLinkItem } from "../features/spine/recent";
@@ -49,6 +48,7 @@ import type {
   TimeBlockMap,
 } from "../features/tasks/model";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
+import type { Truncation } from "./paged-select";
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -533,10 +533,7 @@ export type ModuoRuntime = {
     }): Promise<boolean>;
     /** Gmail "Sign in with Google" (EM-2, desktop-only): runs the PKCE flow,
      *  stores tokens in the OS keychain, registers the account. */
-    startGoogleOAuth(input: {
-      workspaceId?: string | null;
-      historyDepth?: string;
-    }): Promise<any>;
+    startGoogleOAuth(input: { workspaceId?: string | null; historyDepth?: string }): Promise<any>;
     /** All messages of a thread (EM-4), oldest→newest, across folders. */
     getThread(input: { accountId: string; threadId: string }): Promise<any>;
     /** LIST the account's server folders, delimiter-aware (EM-5). */

@@ -7,16 +7,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Truncation } from "../../../lib/paged-select";
+import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
 import { endPosition } from "../../tasks/helpers";
 import type { Note } from "../model";
+import { repairNote, repairUnmaterializedNotes } from "../repair";
 import { NotesSyncEngineV2, type NotesSyncStatusV2 } from "../sync/engine-v2";
 import { readMetaCache, writeMetaCache } from "../sync/idb";
 import { runRedbImportOnce } from "../sync/redb-import";
 import { descendantIds, siblingsOf, wouldCreateCycle } from "../tree";
-import { repairNote, repairUnmaterializedNotes } from "../repair";
 
 const WELCOME_FLAG_PREFIX = "moduo:notes:welcome-seeded:v1:";
 

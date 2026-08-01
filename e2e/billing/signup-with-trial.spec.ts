@@ -10,9 +10,9 @@
 import { expect, test } from "@playwright/test";
 import { BASE_URL, fillSignupEmail, testEmail } from "./helpers";
 
-test.describe('Signup → 7-day trial', () => {
-  test('new user sees onboarding workspace setup after signup', async ({ page }) => {
-    const email = testEmail('signup-trial');
+test.describe("Signup → 7-day trial", () => {
+  test("new user sees onboarding workspace setup after signup", async ({ page }) => {
+    const email = testEmail("signup-trial");
     await fillSignupEmail(page, email);
 
     // After sending the code the OTP input should appear.

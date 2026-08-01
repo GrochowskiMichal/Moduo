@@ -23,18 +23,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { buildDocStateFromMarkdown } from "../editor/materialize";
 import {
   assignImportIds,
   buildImportRows,
   describeSkips,
-  planMdZipImport,
   type ImportPlan,
+  planMdZipImport,
 } from "../import";
 import { readImportFiles } from "../import-zip";
-import { buildDocStateFromMarkdown } from "../editor/materialize";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -239,8 +238,8 @@ export function NoteImportDialog({
             </div>
             {plan.skipped.length ? (
               <p className="text-xs text-muted-foreground">
-                Skipped {describeSkips(plan.skippedByKind)}. These stay in your export file —
-                only pages become notes.
+                Skipped {describeSkips(plan.skippedByKind)}. These stay in your export file — only
+                pages become notes.
               </p>
             ) : null}
           </div>

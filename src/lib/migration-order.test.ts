@@ -19,7 +19,10 @@ import { describe, expect, it } from "vitest";
 // the launch cwd, so `vitest run --root ..` from a subdirectory would look in the wrong
 // place. `bun run verify` happens to be safe (bun chdirs to the package root) — don't
 // rely on that.
-const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../supabase/migrations");
+const MIGRATIONS_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../supabase/migrations",
+);
 
 const listMigrations = () =>
   readdirSync(MIGRATIONS_DIR)

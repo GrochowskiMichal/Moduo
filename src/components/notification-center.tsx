@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import { useAuth } from "../providers/auth-provider";
-import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
-import { useWorkspace } from "../providers/workspace-provider";
-import { useShortcut } from "../lib/shortcuts";
-import { usePreferencesValue } from "../lib/preferences";
-import { undoToast } from "../lib/undo-toast";
 import {
   groupNotifications,
   type NotificationGroup,
@@ -14,7 +7,13 @@ import {
   notificationDeepLinkNoun,
   notificationSummary,
 } from "../features/spine/notifications";
-import { selectOverdueTasks, type OverdueItem } from "../features/spine/overdue-inbox";
+import { type OverdueItem, selectOverdueTasks } from "../features/spine/overdue-inbox";
+import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
+import { usePreferencesValue } from "../lib/preferences";
+import { useShortcut } from "../lib/shortcuts";
+import { undoToast } from "../lib/undo-toast";
+import { useAuth } from "../providers/auth-provider";
+import { useWorkspace } from "../providers/workspace-provider";
 import { Card } from "./ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Icon } from "./ui/icon";
@@ -173,7 +172,9 @@ export function NotificationCenter() {
   const openOverdue = useCallback((item: OverdueItem) => {
     setOpen(false);
     setHistoryOpen(false);
-    window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "task", id: item.id } }));
+    window.dispatchEvent(
+      new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "task", id: item.id } }),
+    );
   }, []);
 
   const renderOverdueItem = useCallback(
@@ -193,7 +194,9 @@ export function NotificationCenter() {
       >
         <p className="line-clamp-1 text-sm text-foreground">{item.title}</p>
         {/* Ambient, never red — "scheduled 3d ago" reads as context, not an alarm. */}
-        <p className="text-xs text-muted-foreground/70">scheduled {relativeTime(item.scheduledAt)}</p>
+        <p className="text-xs text-muted-foreground/70">
+          scheduled {relativeTime(item.scheduledAt)}
+        </p>
       </Card>
     ),
     [openOverdue],
@@ -347,7 +350,9 @@ export function NotificationCenter() {
                     {groups.map((group) => renderGroupCard(group, { dismissable: true }))}
                   </div>
                 ) : inviteGroups.length > 0 ? (
-                  <p className="px-2 py-1 text-center text-xs text-muted-foreground">No new activity.</p>
+                  <p className="px-2 py-1 text-center text-xs text-muted-foreground">
+                    No new activity.
+                  </p>
                 ) : null}
                 {/* DF-21e — the opt-in overdue section: passive, never red, never
                     badged. Only rendered when the user turned it on and has drift. */}

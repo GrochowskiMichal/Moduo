@@ -35,7 +35,9 @@ export function TruncationNotice({ truncated, className }: Props) {
     >
       <AlertTriangle className="size-icon-sm shrink-0 opacity-70" aria-hidden />
       <span>
-        <span className="text-foreground">Showing {truncated.map(describeTruncation).join(" · ")}.</span>{" "}
+        <span className="text-foreground">
+          Showing {truncated.map(describeTruncation).join(" · ")}.
+        </span>{" "}
         This workspace is bigger than one load — the rest isn’t on screen yet.
       </span>
     </div>

@@ -12,6 +12,7 @@ import {
   dispatchDashboardToggleEdit,
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
+import { EmailDueWebSweep } from "../../features/email/hooks/use-email-due-web-sweep";
 import {
   dispatchLayoutPanelsApply,
   type FeatureLayoutKey,
@@ -43,8 +44,6 @@ import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { UserMenu } from "../user-menu";
 import { WorkspaceSwitcher } from "../workspace-switcher";
-import { NotificationCenter } from "../notification-center";
-import { EmailDueWebSweep } from "../../features/email/hooks/use-email-due-web-sweep";
 import { baseModulesNavItems, hiddenReachableRoutes } from "./app-chrome-constants";
 import type { ModuleNavItem } from "./app-chrome-types";
 import { dispatchCreateNew } from "./create-events";

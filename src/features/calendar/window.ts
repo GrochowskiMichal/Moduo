@@ -61,8 +61,7 @@ export function widenCalendarWindow(
   const to = needTo.getTime();
   if (from >= curFrom && to <= curTo) return null;
   return {
-    fromIso:
-      from < curFrom ? shiftMonths(needFrom, -bufferMonths).toISOString() : current.fromIso,
+    fromIso: from < curFrom ? shiftMonths(needFrom, -bufferMonths).toISOString() : current.fromIso,
     toIso: to > curTo ? shiftMonths(needTo, bufferMonths).toISOString() : current.toIso,
   };
 }

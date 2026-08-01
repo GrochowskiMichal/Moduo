@@ -105,8 +105,7 @@ export function positionsAfter(count: number, existing: Array<string> = []): str
   // A non-clean key (legacy width, or a subdivided variable-width key) decodes
   // past float precision, where `+ POS_STEP` is absorbed — the same trap
   // `endPosition` documents. Fall back to extending precision, then stepping.
-  const base =
-    maxStr === "" ? 0 : maxStr.length === POS_WIDTH ? decodePos(maxStr) : null;
+  const base = maxStr === "" ? 0 : maxStr.length === POS_WIDTH ? decodePos(maxStr) : null;
   if (base === null) {
     const out: string[] = [];
     let prefix = maxStr;

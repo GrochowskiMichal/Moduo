@@ -18,25 +18,13 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { CloudOff, PanelRight } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useAuth } from "../../providers/auth-provider";
-import { useWorkspace } from "../../providers/workspace-provider";
-import { cn } from "../../lib/utils";
-import {
-  asDragPayload,
-  asDropLinkTarget,
-  isSelfDrop,
-  targetAccepts,
-} from "../../lib/drag-payload";
-import { createLinkWithToast } from "../../features/spine/ui/drop-link-toast";
-import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
-import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
-import { truncationNotice } from "../../components/app/truncation-notice";
 import { onCreateNew } from "../../components/app/create-events";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import {
   RightPanelSwitcher,
   type RightPanelVariant,
 } from "../../components/app/right-panel-switcher";
+import { truncationNotice } from "../../components/app/truncation-notice";
 import { IconButton } from "../../components/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
 import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
@@ -108,8 +96,17 @@ export function NotesPage() {
     workspaceId: selectedWorkspaceId,
     modulePermission: modulePermissions.notes,
   });
-  const { notes, loading, degraded, truncated, loadError, syncStatus, engine, canEdit, welcomeNoteId } =
-    module;
+  const {
+    notes,
+    loading,
+    degraded,
+    truncated,
+    loadError,
+    syncStatus,
+    engine,
+    canEdit,
+    welcomeNoteId,
+  } = module;
 
   const sections = useMemo(() => buildNoteSections(notes), [notes]);
   // The summon affordance (DF-13) mirrors + toggles the shell's right-panel

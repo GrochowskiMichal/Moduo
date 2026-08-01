@@ -8,15 +8,15 @@ import { groupRailAccounts, providerLabel } from "../../calendar/accounts";
 import { cleanupCredentialsForRemoval } from "../../calendar/caldav-connect";
 import type { CalendarAccountModel } from "../../calendar/events";
 import { CalendarConnectDialog, IcsFeedDialog } from "../../calendar/ui/calendar-connect-dialog";
-import type { SavedAccount } from "../../email/model/email-types";
-import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
-import { EmailHistoryDepthSelect } from "../../email/ui/email-history-depth-select";
 import {
   asHistoryDepth,
   describeDepthChange,
   EMAIL_HISTORY_DEPTHS,
   type EmailHistoryDepth,
 } from "../../email/history-depth";
+import type { SavedAccount } from "../../email/model/email-types";
+import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
+import { EmailHistoryDepthSelect } from "../../email/ui/email-history-depth-select";
 import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
 import { dispatchOpenSettings } from "../settings-events";
 

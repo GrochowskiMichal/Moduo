@@ -8,14 +8,13 @@
 import { AlertTriangle, Mail, PenSquare, RefreshCw } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
-import { truncationNotice } from "../../../components/app/truncation-notice";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import {
   RightPanelSwitcher,
   type RightPanelVariant,
 } from "../../../components/app/right-panel-switcher";
+import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { IconButton } from "../../../components/ui/icon-button";
@@ -29,16 +28,7 @@ import { endPosition, makeTask } from "../../tasks/helpers";
 import { useTasksModule } from "../../tasks/hooks/use-tasks-module";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { accountSyncHealth, resolveAccountHues } from "../accounts";
-import { threadsForAccount, unreadCount } from "../threads";
-import {
-  flattenSections,
-  groupThreadsBySection,
-  senderKey,
-  type EmailSection,
-} from "../classify";
-import { EmailSearchFooter, EmailSearchInput } from "./email-search-bar";
-import { formatSnoozeUntil } from "../snooze";
-import { buildRefUpsertArgs } from "../refs";
+import { type EmailSection, flattenSections, groupThreadsBySection, senderKey } from "../classify";
 import { blankDraft, buildComposeDraft, type ComposeMode } from "../compose";
 import {
   buildConvertDescription,
@@ -1289,17 +1279,16 @@ export function EmailPageView({
                     ? `${brokenAccounts[0].email} isn't syncing — new mail may be missing.`
                     : `${brokenAccounts.length} accounts aren't syncing — new mail may be missing.`}
                 </span>
-                {syncHealth.reconnectable
-                  .map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() => setReconnectTarget(a)}
-                      className="shrink-0 rounded-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      Reconnect{brokenAccounts.length > 1 ? ` ${a.email}` : ""}
-                    </button>
-                  ))}
+                {syncHealth.reconnectable.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => setReconnectTarget(a)}
+                    className="shrink-0 rounded-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    Reconnect{brokenAccounts.length > 1 ? ` ${a.email}` : ""}
+                  </button>
+                ))}
                 {brokenAccounts.some((a) => a.status === "error") ? (
                   <button
                     type="button"

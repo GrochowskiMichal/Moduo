@@ -215,7 +215,7 @@ export const ScrollView = ({
 };
 
 export const ActivityIndicator = ({ className }: { className?: string }) => (
-  <div className={className} aria-label="loading">
+  <div className={className} role="status" aria-label="loading">
     <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-[#9aa0aa] border-t-transparent" />
   </div>
 );

@@ -2,14 +2,6 @@ import { strToU8 } from "fflate";
 import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-
-import { useAuth } from "../../../providers/auth-provider";
-import { useWorkspace } from "../../../providers/workspace-provider";
-import type { ModuoRuntime } from "../../../lib/runtime";
-import { allTimeCalendarWindow } from "../../calendar/window";
-import { downloadZip } from "../../notes/export";
-import { closeNotesDb, countPendingOutbox } from "../../notes/sync/idb";
-import { getSyncMeta, type SyncDomain } from "../../../lib/prefs-sync";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -23,6 +15,7 @@ import { getSyncMeta, type SyncDomain } from "../../../lib/prefs-sync";
 import type { ModuoRuntime } from "../../../lib/runtime";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
+import { allTimeCalendarWindow } from "../../calendar/window";
 import { downloadZip } from "../../notes/export";
 import { closeNotesDb, countPendingOutbox } from "../../notes/sync/idb";
 

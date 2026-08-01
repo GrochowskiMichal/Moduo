@@ -37,7 +37,12 @@ export type MotionPref = "system" | "reduced" | "full";
 //     task resolves. It lives here (not a fork) so the settings UI + synced domain
 //     stay single-source (spec Assumption 7).
 
-export type NotificationType = "mention" | "assigned" | "dueFollowUp" | "unblocked" | "overdueTasks";
+export type NotificationType =
+  | "mention"
+  | "assigned"
+  | "dueFollowUp"
+  | "unblocked"
+  | "overdueTasks";
 export type NotificationPrefs = Record<NotificationType, boolean>;
 
 const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [

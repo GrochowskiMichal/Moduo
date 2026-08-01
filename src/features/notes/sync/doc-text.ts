@@ -122,9 +122,7 @@ function walkXmlElement(node: Y.XmlElement, mode: Mode): string {
       } else if (childName === "horizontalrule") {
         if (mode === "md") parts.push("---");
       } else if (childName === "task-line") {
-        parts.push(
-          taskLineToString(prop(child, "taskId"), prop(child, "done"), childText, mode),
-        );
+        parts.push(taskLineToString(prop(child, "taskId"), prop(child, "done"), childText, mode));
       } else {
         if (childText) parts.push(childText);
       }

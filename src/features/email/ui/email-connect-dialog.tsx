@@ -18,15 +18,11 @@ import {
 } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { EmailHistoryDepthSelect } from "./email-history-depth-select";
-import {
-  asHistoryDepth,
-  DEFAULT_HISTORY_DEPTH,
-  type EmailHistoryDepth,
-} from "../history-depth";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
+import { asHistoryDepth, DEFAULT_HISTORY_DEPTH, type EmailHistoryDepth } from "../history-depth";
 import type { MailboxProvider, SavedAccount } from "../model/email-types";
+import { EmailHistoryDepthSelect } from "./email-history-depth-select";
 
 /** The three connectable providers in EM-2 (Outlook deferred). */
 type ConnectProvider = Exclude<MailboxProvider, "outlook">;
@@ -235,9 +231,8 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
                 disabled={Boolean(busy)}
               />
               <p className="text-xs text-muted-foreground">
-                Applies to your inbox — archived mail isn&rsquo;t synced yet. Recent mail
-                arrives first; older mail fills in as you use Mail. Changeable later per
-                account.
+                Applies to your inbox — archived mail isn&rsquo;t synced yet. Recent mail arrives
+                first; older mail fills in as you use Mail. Changeable later per account.
               </p>
             </div>
           ) : null}

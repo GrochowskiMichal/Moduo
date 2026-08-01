@@ -7,25 +7,17 @@
  * two devices materializing one note must not fork it.
  */
 
-import { describe, expect, it } from "vitest";
-import * as Y from "yjs";
 import { createHeadlessEditor } from "@lexical/headless";
-import {
-  createBindingV2__EXPERIMENTAL,
-  syncYjsStateToLexicalV2__EXPERIMENTAL,
-} from "@lexical/yjs";
 import { $convertToMarkdownString } from "@lexical/markdown";
+import { createBindingV2__EXPERIMENTAL, syncYjsStateToLexicalV2__EXPERIMENTAL } from "@lexical/yjs";
+import { describe, expect, it } from "vitest";
 import { Awareness } from "y-protocols/awareness";
-import { NOTE_EDITOR_NODES } from "./note-nodes";
-import { NOTES_TRANSFORMERS } from "./markdown";
-
-import {
-  buildDocStateFromMarkdown,
-  seedClientId,
-  NOTES_DOC_ROOT,
-} from "./materialize";
-import { decodeBase64ToUint8 } from "../utils/base64";
+import * as Y from "yjs";
 import { deriveBody } from "../sync/doc-text";
+import { decodeBase64ToUint8 } from "../utils/base64";
+import { NOTES_TRANSFORMERS } from "./markdown";
+import { buildDocStateFromMarkdown, NOTES_DOC_ROOT, seedClientId } from "./materialize";
+import { NOTE_EDITOR_NODES } from "./note-nodes";
 
 const NOTE_ID = "3f7c1b2e-6a4d-4b9e-8c11-0d2e5a7b9c44";
 
@@ -75,12 +67,7 @@ function readBackThroughEditor(docStateB64: string, noteId = NOTE_ID): string {
       throw e;
     },
   });
-  const binding = createBindingV2__EXPERIMENTAL(
-    editor,
-    noteId,
-    doc,
-    new Map([[noteId, doc]]),
-  );
+  const binding = createBindingV2__EXPERIMENTAL(editor, noteId, doc, new Map([[noteId, doc]]));
   // A real Awareness: the binding publishes remote cursor positions through it
   // on every sync, and a null one throws inside `syncCursorPositions`.
   const provider = {

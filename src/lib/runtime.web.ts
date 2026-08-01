@@ -9,6 +9,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
+import { defaultCalendarWindow } from "../features/calendar/window";
 import type {
   Company,
   Contact,
@@ -18,7 +19,6 @@ import type {
   ContactFieldDef,
 } from "../features/contacts/model";
 import { type OverdueFollowup, selectNeedsAttention } from "../features/contacts/needs-attention";
-import { defaultCalendarWindow } from "../features/calendar/window";
 import { selectReconnect } from "../features/contacts/reconnect";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
 import {
@@ -41,12 +41,7 @@ import {
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import type { EntityLink, EntityRecord } from "./entity-links";
-import {
-  collectTruncations,
-  READ_CAPS,
-  readPaged,
-  type Truncation,
-} from "./paged-select";
+import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
 import {
   missingOptionalPrefsDomain,
   optionalPrefsAvailable,
@@ -172,7 +167,7 @@ async function selectCapped<T>(args: {
     },
     countTotal: async () => {
       const { count, error } = await args.build({ count: "exact", head: true });
-      return error ? null : count ?? null;
+      return error ? null : (count ?? null);
     },
     // Every table here is keyed by `id` — dedupe guards the offset-paging
     // window against concurrent inserts shifting rows across a page edge.
@@ -1428,29 +1423,75 @@ export const webRuntime: ModuoRuntime = {
   },
 
   email: {
-    async listAccounts() { return []; },
-    async connectAndSave() { throw new Error(desktopOnly().message); },
-    async disconnect() { throw new Error(desktopOnly().message); },
-    async listEnvelopes() { throw new Error(desktopOnly().message); },
-    async getMessageBody() { throw new Error(desktopOnly().message); },
-    async prefetchBodies() { throw new Error(desktopOnly().message); },
-    async syncNow() { throw new Error(desktopOnly().message); },
-    async setActivityState() { /* no-op on web */ },
-    async applyFlag() { throw new Error(desktopOnly().message); },
-    async getMailboxStatus() { return []; },
-    async setHistoryDepth() { throw new Error(desktopOnly().message); },
-    async sendSaved() { throw new Error(desktopOnly().message); },
-    async startGoogleOAuth() { throw new Error(desktopOnly().message); },
-    async getThread() { throw new Error(desktopOnly().message); },
-    async listFolders() { return []; },
-    async applyMessageOp() { throw new Error(desktopOnly().message); },
-    async snoozeThread() { throw new Error(desktopOnly().message); },
-    async snoozeRestore() { throw new Error(desktopOnly().message); },
-    async sendMessage() { throw new Error(desktopOnly().message); },
-    async listAttachments() { return []; },
-    async saveAttachment() { throw new Error(desktopOnly().message); },
-    async pickAttachments() { return []; },
-    async getInlineImages() { return []; },
+    async listAccounts() {
+      return [];
+    },
+    async connectAndSave() {
+      throw new Error(desktopOnly().message);
+    },
+    async disconnect() {
+      throw new Error(desktopOnly().message);
+    },
+    async listEnvelopes() {
+      throw new Error(desktopOnly().message);
+    },
+    async getMessageBody() {
+      throw new Error(desktopOnly().message);
+    },
+    async prefetchBodies() {
+      throw new Error(desktopOnly().message);
+    },
+    async syncNow() {
+      throw new Error(desktopOnly().message);
+    },
+    async setActivityState() {
+      /* no-op on web */
+    },
+    async applyFlag() {
+      throw new Error(desktopOnly().message);
+    },
+    async getMailboxStatus() {
+      return [];
+    },
+    async setHistoryDepth() {
+      throw new Error(desktopOnly().message);
+    },
+    async sendSaved() {
+      throw new Error(desktopOnly().message);
+    },
+    async startGoogleOAuth() {
+      throw new Error(desktopOnly().message);
+    },
+    async getThread() {
+      throw new Error(desktopOnly().message);
+    },
+    async listFolders() {
+      return [];
+    },
+    async applyMessageOp() {
+      throw new Error(desktopOnly().message);
+    },
+    async snoozeThread() {
+      throw new Error(desktopOnly().message);
+    },
+    async snoozeRestore() {
+      throw new Error(desktopOnly().message);
+    },
+    async sendMessage() {
+      throw new Error(desktopOnly().message);
+    },
+    async listAttachments() {
+      return [];
+    },
+    async saveAttachment() {
+      throw new Error(desktopOnly().message);
+    },
+    async pickAttachments() {
+      return [];
+    },
+    async getInlineImages() {
+      return [];
+    },
     // Local search rides the desktop engine cache — web has no envelopes to scan.
     async searchBodies() {
       return [];
@@ -1463,7 +1504,11 @@ export const webRuntime: ModuoRuntime = {
     async listModule(workspaceId) {
       try {
         const live = (table: string) => (opts?: SelectOpts) =>
-          supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId).is("deleted_at", null);
+          supabaseClient
+            .from(table)
+            .select("*", opts)
+            .eq("workspace_id", workspaceId)
+            .is("deleted_at", null);
         const [accountsRes, refsRes] = await Promise.all([
           selectCapped<any>({
             scope: "mailboxes",
@@ -1672,7 +1717,9 @@ export const webRuntime: ModuoRuntime = {
                 .select("*", opts)
                 .eq("workspace_id", workspaceId)
                 .is("deleted_at", null)
-                .or(`recurrence_rule.not.is.null,and(start_time.lte.${toIso},end_time.gte.${fromIso})`),
+                .or(
+                  `recurrence_rule.not.is.null,and(start_time.lte.${toIso},end_time.gte.${fromIso})`,
+                ),
             order: (q) => q.order("start_time", { ascending: true }).order("id"),
           }),
           selectCapped<any>({
@@ -1807,15 +1854,44 @@ export const webRuntime: ModuoRuntime = {
     async list(workspaceId) {
       await ensureWebInbox(workspaceId);
       const live = (table: string) => (opts?: SelectOpts) =>
-        supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId).is("deleted_at", null);
+        supabaseClient
+          .from(table)
+          .select("*", opts)
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null);
       const all = (table: string) => (opts?: SelectOpts) =>
         supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId);
       const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes] = await Promise.all([
-        selectCapped<any>({ scope: "buckets", cap: READ_CAPS.buckets, build: live("buckets"), order: (q) => q.order("position").order("id") }),
-        selectCapped<any>({ scope: "tasks", cap: READ_CAPS.tasks, build: live("tasks"), order: (q) => q.order("position").order("id") }),
-        selectCapped<any>({ scope: "tags", cap: READ_CAPS.tags, build: live("tags"), order: (q) => q.order("created_at").order("id") }),
-        selectCapped<any>({ scope: "tag assignments", cap: READ_CAPS.tagLinks, build: all("tag_links"), order: (q) => q.order("id") }),
-        selectCapped<any>({ scope: "task dependencies", cap: READ_CAPS.taskRelations, build: all("task_relations"), order: (q) => q.order("id") }),
+        selectCapped<any>({
+          scope: "buckets",
+          cap: READ_CAPS.buckets,
+          build: live("buckets"),
+          order: (q) => q.order("position").order("id"),
+        }),
+        selectCapped<any>({
+          scope: "tasks",
+          cap: READ_CAPS.tasks,
+          build: live("tasks"),
+          order: (q) => q.order("position").order("id"),
+        }),
+        selectCapped<any>({
+          scope: "tags",
+          cap: READ_CAPS.tags,
+          build: live("tags"),
+          order: (q) => q.order("created_at").order("id"),
+        }),
+        selectCapped<any>({
+          scope: "tag assignments",
+          cap: READ_CAPS.tagLinks,
+          build: all("tag_links"),
+          order: (q) => q.order("id"),
+        }),
+        selectCapped<any>({
+          scope: "task dependencies",
+          cap: READ_CAPS.taskRelations,
+          build: all("task_relations"),
+          order: (q) => q.order("id"),
+        }),
       ]);
       const firstError =
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
@@ -2033,11 +2109,16 @@ export const webRuntime: ModuoRuntime = {
           scope: "tags",
           cap: READ_CAPS.tags,
           build: (opts) =>
-            supabaseClient.from("tags").select("*", opts)
-              .eq("workspace_id", workspaceId).is("deleted_at", null),
+            supabaseClient
+              .from("tags")
+              .select("*", opts)
+              .eq("workspace_id", workspaceId)
+              .is("deleted_at", null),
           order: (q) => q.order("created_at").order("id"),
         }),
-        supabaseClient.from("tag_links").select("*")
+        supabaseClient
+          .from("tag_links")
+          .select("*")
           .eq("workspace_id", workspaceId)
           .is("deleted_at", null)
           .order("created_at"),
@@ -2065,15 +2146,21 @@ export const webRuntime: ModuoRuntime = {
           scope: "tags",
           cap: READ_CAPS.tags,
           build: (opts) =>
-            supabaseClient.from("tags").select("*", opts)
-              .eq("workspace_id", workspaceId).is("deleted_at", null),
+            supabaseClient
+              .from("tags")
+              .select("*", opts)
+              .eq("workspace_id", workspaceId)
+              .is("deleted_at", null),
           order: (q) => q.order("created_at").order("id"),
         }),
         selectCapped<any>({
           scope: "tag assignments",
           cap: READ_CAPS.tagLinks,
           build: (opts) => {
-            const q = supabaseClient.from("tag_links").select("*", opts).eq("workspace_id", workspaceId);
+            const q = supabaseClient
+              .from("tag_links")
+              .select("*", opts)
+              .eq("workspace_id", workspaceId);
             return entityTypes && entityTypes.length > 0 ? q.in("entity_type", entityTypes) : q;
           },
           order: (q) => q.order("id"),
@@ -2496,23 +2583,32 @@ export const webRuntime: ModuoRuntime = {
           scope: "people",
           cap: READ_CAPS.contacts,
           build: (opts) =>
-            supabaseClient.from("contacts").select("*", opts)
-              .eq("workspace_id", workspaceId).is("deleted_at", null),
+            supabaseClient
+              .from("contacts")
+              .select("*", opts)
+              .eq("workspace_id", workspaceId)
+              .is("deleted_at", null),
           order: (q) => q.order("name").order("id"),
         }),
         selectCapped<any>({
           scope: "companies",
           cap: READ_CAPS.companies,
           build: (opts) =>
-            supabaseClient.from("companies").select("*", opts)
-              .eq("workspace_id", workspaceId).is("deleted_at", null),
+            supabaseClient
+              .from("companies")
+              .select("*", opts)
+              .eq("workspace_id", workspaceId)
+              .is("deleted_at", null),
           order: (q) => q.order("name").order("id"),
         }),
         selectCapped<any>({
           scope: "fields",
           cap: READ_CAPS.contactFieldDefs,
           build: (opts) =>
-            supabaseClient.from("contact_field_defs").select("*", opts).eq("workspace_id", workspaceId),
+            supabaseClient
+              .from("contact_field_defs")
+              .select("*", opts)
+              .eq("workspace_id", workspaceId),
           order: (q) => q.order("position").order("id"),
         }),
       ]);
