@@ -24,11 +24,13 @@ import type {
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
 import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
+import type { CalendarWindow } from "../features/calendar/window";
+import type { Truncation } from "./paged-select";
 import type {
+  Note as NoteV2,
   NoteDocPull,
   NotesImportRow,
   NotesV2Bundle,
-  Note as NoteV2,
 } from "../features/notes/model";
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RecentLinkItem } from "../features/spine/recent";
@@ -371,6 +373,23 @@ export type ModuoRuntime = {
       bodyText?: string | null;
       bodyMd?: string | null;
     }): Promise<{ folded: number; docVersion: number }>;
+    /** ONCE-ONLY materialization of a never-materialized note's CRDT doc
+     * (NOTE-FIX-1). Safe to call optimistically: the server refuses (without
+     * erroring) the moment the doc exists in any form, so two devices opening
+     * the same blank imported note can't fork it into a duplicated doc. */
+    seedDoc(input: {
+      workspaceId: string;
+      noteId: string;
+      docStateB64: string;
+      bodyText?: string | null;
+      bodyMd?: string | null;
+    }): Promise<{ seeded: boolean; reason: string | null; docVersion: number | null }>;
+    /** Notes carrying a body but NO CRDT doc — the repair sweep's work list.
+     * Degrades to [] pre-migration (the sweep is opportunistic, never a wall). */
+    listUnmaterialized(input: {
+      workspaceId: string;
+      limit?: number;
+    }): Promise<{ id: string; bodyMd: string }[]>;
     importNotes(input: {
       workspaceId: string;
       rows: NotesImportRow[];
@@ -502,6 +521,10 @@ export type ModuoRuntime = {
       value: boolean;
     }): Promise<any>;
     getMailboxStatus(input?: { accountId?: string | null }): Promise<any[]>;
+    /** Change how far back this device syncs an account (IM-2c, AC8). Raising
+     *  it backfills the gap in the background; lowering it stops fetching and
+     *  deletes nothing. Per-device — the mail store is local. */
+    setHistoryDepth(input: { accountId: string; depth: string }): Promise<any>;
     sendSaved(input: {
       accountId: string;
       to: string;
@@ -510,7 +533,10 @@ export type ModuoRuntime = {
     }): Promise<boolean>;
     /** Gmail "Sign in with Google" (EM-2, desktop-only): runs the PKCE flow,
      *  stores tokens in the OS keychain, registers the account. */
-    startGoogleOAuth(input: { workspaceId?: string | null }): Promise<any>;
+    startGoogleOAuth(input: {
+      workspaceId?: string | null;
+      historyDepth?: string;
+    }): Promise<any>;
     /** All messages of a thread (EM-4), oldest→newest, across folders. */
     getThread(input: { accountId: string; threadId: string }): Promise<any>;
     /** LIST the account's server folders, delimiter-aware (EM-5). */
@@ -651,8 +677,15 @@ export type ModuoRuntime = {
     // (Bundle/patch shapes live below the ModuoRuntime type.)
     // Writes go through calendar_op_* RPCs (guard + write + entities upsert
     // + attributed activity in one txn); reads are indexed SELECTs.
-    /** Events + accounts bundle. Reads DEGRADE to empty pre-migration. */
-    listModule(workspaceId: string): Promise<CalendarModuleBundle>;
+    /**
+     * Events + accounts bundle. Reads DEGRADE to empty pre-migration.
+     *
+     * `window` bounds the events read to a date range (SCALE-1 — it used to
+     * fetch all history); omitted = {@link defaultCalendarWindow}. Recurring
+     * series always come through regardless of the window, since their stored
+     * start is the first occurrence, not the one you're looking at.
+     */
+    listModule(workspaceId: string, window?: CalendarWindow): Promise<CalendarModuleBundle>;
     createEvent(input: {
       workspaceId: string;
       title: string;
@@ -755,7 +788,7 @@ export type ModuoRuntime = {
     listTagLinks(input: {
       workspaceId: string;
       entityTypes?: string[];
-    }): Promise<{ tags: Tag[]; links: TagLink[] }>;
+    }): Promise<{ tags: Tag[]; links: TagLink[]; truncated: Truncation[] }>;
     /** Blocked-by dependency edge (blocker → blocked, spec §5c). Idempotent. */
     createTaskRelation(input: {
       workspaceId: string;
@@ -1173,6 +1206,8 @@ export type EmailModuleBundle = {
   refs: EmailThreadRef[];
   /** True when the migration isn't applied yet (surfaces degrade, never crash). */
   degraded: boolean;
+  /** Collections cut at their read ceiling (SCALE-1) — empty = complete. */
+  truncated: Truncation[];
 };
 
 /** Partial patch for `setContactDetails` — camelCase keys mirror the SQL op. */

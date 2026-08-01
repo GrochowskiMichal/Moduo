@@ -4,7 +4,10 @@ import type { Accent } from "../../../lib/appearance";
 
 import { AppearancePickerRow } from "./picker-row";
 
+// Mono leads: it's the default and the app's native monochrome look — a hue is
+// an opt-in choice, so the neutral option reads first rather than last.
 const ACCENT_OPTIONS: ReadonlyArray<{ value: Accent; label: string }> = [
+  { value: "mono", label: "Mono" },
   { value: "pink", label: "Pink" },
   { value: "violet", label: "Violet" },
   { value: "blue", label: "Blue" },
@@ -12,7 +15,6 @@ const ACCENT_OPTIONS: ReadonlyArray<{ value: Accent; label: string }> = [
   { value: "amber", label: "Amber" },
   { value: "red", label: "Red" },
   { value: "teal", label: "Teal" },
-  { value: "mono", label: "Mono" },
 ];
 
 type Props = {

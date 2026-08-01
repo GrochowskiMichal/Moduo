@@ -18,6 +18,12 @@ type Props = {
   /** When true the right panel is never rendered, regardless of saved state */
   hideRight?: boolean;
   /**
+   * Full-width strip above the panels — module-level state the user must see
+   * before reading the panels (today: SCALE-1's "showing N of M"). Renders
+   * nothing when absent, and the panels keep their exact previous layout.
+   */
+  notice?: ReactNode;
+  /**
    * When false, the side panels render as fixed-width columns (no drag
    * handles, no per-feature width persistence). Defaults to true.
    */
@@ -92,6 +98,7 @@ export function FeaturePanelsShell({
   left,
   right,
   hideRight = false,
+  notice,
   resizable = true,
 }: Props) {
   const [panelState, setPanelState] = useState(() => readFeaturePanelState(feature));
@@ -284,7 +291,14 @@ export function FeaturePanelsShell({
 
   return (
     <>
-      <div className="flex h-full min-h-0 bg-background px-4">{panels}</div>
+      {notice ? (
+        <div className="flex h-full min-h-0 flex-col bg-background px-4">
+          {notice}
+          <div className="flex min-h-0 flex-1">{panels}</div>
+        </div>
+      ) : (
+        <div className="flex h-full min-h-0 bg-background px-4">{panels}</div>
+      )}
 
       <Sheet open={leftSheetOpen} onOpenChange={onLeftSheetOpenChange}>
         <SheetContent side="left" className="w-[var(--width-sidebar)] max-w-[85vw] p-5">

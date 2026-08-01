@@ -36,6 +36,10 @@ export interface SavedAccount {
   lastSyncAt: string | null;
   status: AccountStatus;
   lastError: string | null;
+  /** How far back this device syncs the mailbox (IM-2c). Optional so a stale
+   *  cached account (or the web stub) still type-checks; `asHistoryDepth`
+   *  coerces it. */
+  historyDepth?: string;
 }
 
 /** A synced message envelope (the `email_list_envelopes` / `email_get_thread` DTO). */

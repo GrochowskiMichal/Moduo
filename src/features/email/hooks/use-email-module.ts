@@ -5,7 +5,9 @@
 // local restore — no fragile cross-expunge reversal).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import type { EmailAccountRef, EmailThreadRef, ModuoRuntime } from "../../../lib/runtime.types";
+import type { Truncation } from "../../../lib/paged-select";
 import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
 import type { EmailEnvelope, EmailThread, SavedAccount } from "../model/email-types";
 import {
@@ -65,6 +67,8 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
   const [accounts, setAccounts] = useState<SavedAccount[]>([]);
   const [envelopes, setEnvelopes] = useState<EmailEnvelope[]>([]);
   const [tissueRefs, setTissueRefs] = useState<EmailThreadRef[]>([]);
+  /** SCALE-1: collections the cloud-tissue read had to cut — the page shows these. */
+  const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [tissueAccounts, setTissueAccounts] = useState<EmailAccountRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -96,6 +100,7 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
             if (reqRef.current === req) {
               setTissueRefs(bundle.refs ?? []);
               setTissueAccounts(bundle.accounts ?? []);
+              setTruncated(bundle.truncated ?? []);
             }
           } catch {
             /* tissue is best-effort */
@@ -138,6 +143,7 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
       const bundle = await runtime.email.listModule(workspaceId);
       setTissueRefs(bundle.refs ?? []);
       setTissueAccounts(bundle.accounts ?? []);
+      setTruncated(bundle.truncated ?? []);
     } catch {
       /* best-effort */
     }
@@ -485,6 +491,7 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
     error,
     tissueRefs,
     tissueAccounts,
+    truncated,
     snoozed,
     snoozedDue,
     followUps,

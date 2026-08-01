@@ -85,6 +85,21 @@ export function PreferencesSection() {
             />
           </PrefRow>
         ))}
+        {/* DF-21e — an opt-in surfacing, not a mute (default OFF). Overdue work
+            otherwise lives in Tasks/Home; this adds a quiet, passive list to the
+            bell. Never inflates the badge; clears when a task resolves. */}
+        <PrefRow
+          title="Show overdue tasks"
+          description="Add a quiet list of tasks whose scheduled time has passed to your bell. Off by default — it never adds to the badge."
+        >
+          <Switch
+            checked={preferences.notifications.overdueTasks}
+            onCheckedChange={(v) =>
+              setPreferences({ notifications: { ...preferences.notifications, overdueTasks: v } })
+            }
+            aria-label="Show overdue tasks in notifications"
+          />
+        </PrefRow>
       </PrefGroup>
 
       <PrefGroup label="Default landing view">

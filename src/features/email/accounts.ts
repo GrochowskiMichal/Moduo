@@ -46,3 +46,36 @@ export function providerLabel(provider: MailboxProvider | string): string {
       return provider;
   }
 }
+
+/**
+ * Per-account sync health, partitioned (AC12).
+ *
+ * Sync is per-account all the way down: the Rust engine loops accounts and
+ * catches per account, so one mailbox erroring never aborts the others' sync —
+ * it only flips that account's own `status`/`lastError`. This mirrors that
+ * contract on the read side so the UI reports the broken ones by name while the
+ * healthy ones keep listing mail.
+ */
+export interface AccountSyncHealth {
+  /** Accounts still syncing normally. */
+  active: SavedAccount[];
+  /** Accounts that have stopped syncing, for whatever reason. */
+  broken: SavedAccount[];
+  /** The subset of `broken` a reconnect can actually fix (expired auth). */
+  reconnectable: SavedAccount[];
+}
+
+export function accountSyncHealth(accounts: SavedAccount[]): AccountSyncHealth {
+  const active: SavedAccount[] = [];
+  const broken: SavedAccount[] = [];
+  const reconnectable: SavedAccount[] = [];
+  for (const account of accounts) {
+    if (account.status === "active") {
+      active.push(account);
+      continue;
+    }
+    broken.push(account);
+    if (account.status === "reauth_required") reconnectable.push(account);
+  }
+  return { active, broken, reconnectable };
+}

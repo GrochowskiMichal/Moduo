@@ -2,8 +2,13 @@
  * Markdown import wizard (NO-8, AC11): drop a `.zip` (e.g. a Notion export) or
  * `.md`/`.txt` files → preview the note tree (folders → parents) → one batched
  * attributed `notes_op_import`. Malformed / non-markdown files are isolated and
- * counted (never fatal). Imported bodies land in `body_md`/`body_text` and
- * materialize in the editor on first open (see import-seed.ts).
+ * counted (never fatal).
+ *
+ * Each row carries a fully-built `doc_state` (NOTE-FIX-1) — the CRDT doc is
+ * materialized here, at import time, so an imported note renders on every
+ * device and after every reload. It used to ship an empty doc plus an
+ * in-memory seed that only survived the importing session, which made a
+ * next-day open look like the app had eaten the import.
  */
 
 import { FileUp, FolderTree } from "lucide-react";
@@ -18,10 +23,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { readZipMarkdown } from "../export";
-import { type ImportFileEntry, type ImportPlan, mdToPlainText, planMdZipImport } from "../import";
-import { registerNoteSeed } from "../import-seed";
+import {
+  assignImportIds,
+  buildImportRows,
+  describeSkips,
+  planMdZipImport,
+  type ImportPlan,
+} from "../import";
+import { readImportFiles } from "../import-zip";
+import { buildDocStateFromMarkdown } from "../editor/materialize";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -29,11 +42,30 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported: () => void;
+  /** Root-level positions already in the tree, so the import appends. */
+  existingRootPositions?: string[];
 };
 
-export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onImported }: Props) {
+/** Rows per `notes_op_import` call. Each row now carries a full CRDT snapshot
+ * (~5× its markdown), so a big Notion export in ONE request could exceed the
+ * gateway body limit and fail the whole import. The op is idempotent per row
+ * (an existing id is skipped), so chunking is safe and a failed chunk leaves
+ * the earlier ones landed. */
+const IMPORT_CHUNK = 50;
+
+export function NoteImportDialog({
+  runtime,
+  workspaceId,
+  open,
+  onOpenChange,
+  onImported,
+  existingRootPositions = [],
+}: Props) {
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
+  /** Notes committed so far, for the determinate bar (AC5). */
+  const [progress, setProgress] = useState(0);
 
   const depthById = useMemo(() => {
     const m = new Map<string, number>();
@@ -54,50 +86,84 @@ export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onI
 
   const readFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const entries: ImportFileEntry[] = [];
-    for (const file of Array.from(files)) {
-      if (/\.zip$/i.test(file.name)) {
-        try {
-          entries.push(...readZipMarkdown(new Uint8Array(await file.arrayBuffer())));
-        } catch {
-          toast.error(`Couldn’t read ${file.name}`);
-        }
-      } else if (/\.(md|markdown|txt)$/i.test(file.name)) {
-        entries.push({ path: file.name, content: await file.text() });
-      } else {
-        entries.push({ path: file.name, content: "" }); // planner skips it, counted
-      }
+    setReading(true);
+    try {
+      // Read every dropped file first, then unwrap/merge in one pass so a
+      // multi-part export dropped together becomes ONE tree (AC1).
+      const read = await Promise.all(
+        Array.from(files).map(async (file) =>
+          /\.zip$/i.test(file.name)
+            ? { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }
+            : { name: file.name, text: await file.text().catch(() => "") },
+        ),
+      );
+      setPlan(planMdZipImport(readImportFiles(read)));
+    } catch (e) {
+      toast.error("Couldn’t read those files", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setReading(false);
     }
-    setPlan(planMdZipImport(entries));
   }, []);
 
   const confirm = async () => {
     if (!plan || !runtime || !workspaceId) return;
     setBusy(true);
     try {
-      const idMap = new Map<string, string>();
-      for (const n of plan.nodes) idMap.set(n.tempId, crypto.randomUUID());
-      const rows = plan.nodes.map((n) => ({
-        id: idMap.get(n.tempId)!,
-        parentId: n.parentTempId ? (idMap.get(n.parentTempId) ?? null) : null,
-        title: n.title,
-        position: "",
-        docStateB64: null,
-        bodyText: mdToPlainText(n.md),
-        bodyMd: n.md,
-      }));
-      const res = await runtime.notesV2.importNotes({ workspaceId, rows });
-      // Materialize each imported note's editor doc on first open (this session).
-      for (const n of plan.nodes) registerNoteSeed(idMap.get(n.tempId)!, n.md);
-      const skipped = res.skipped + plan.skipped.length;
-      toast(`Imported ${res.imported} note${res.imported === 1 ? "" : "s"}`, {
-        description: skipped ? `${skipped} skipped` : undefined,
+      // Building every note's CRDT doc is synchronous and CPU-bound; yield once
+      // so the "Importing…" state actually paints before the UI blocks.
+      await new Promise((r) => setTimeout(r, 0));
+      // Deterministic ids (AC4): `notes_op_import` skips a row whose id already
+      // exists, so a re-run of the same export is a no-op and a partially-failed
+      // import resumes instead of duplicating. Random ids made that unreachable.
+      // `assignImportIds` guarantees distinctness — a duplicate id would not
+      // error, it would silently drop the second page.
+      const idMap = assignImportIds(workspaceId, plan.nodes);
+      // Each row carries its fully-built CRDT doc (NOTE-FIX-1).
+      const rows = buildImportRows(
+        plan.nodes,
+        (tempId) => idMap.get(tempId)!,
+        buildDocStateFromMarkdown,
+        existingRootPositions,
+      );
+      let imported = 0;
+      let skippedRows = 0;
+      setProgress(0);
+      // Chunked: parents are topologically before their children in the plan,
+      // so chunking in order never orphans a child behind an unlanded parent.
+      for (let i = 0; i < rows.length; i += IMPORT_CHUNK) {
+        const res = await runtime.notesV2.importNotes({
+          workspaceId,
+          rows: rows.slice(i, i + IMPORT_CHUNK),
+        });
+        imported += res.imported;
+        skippedRows += res.skipped;
+        setProgress(Math.min(i + IMPORT_CHUNK, rows.length));
+        // Yield between chunks so the bar actually repaints — building the CRDT
+        // docs above is synchronous and CPU-bound.
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      // Keep the two kinds of "skipped" apart: files that were never pages, and
+      // rows already imported by a previous run. Merging them reads as a failure
+      // on a re-import, which is exactly when it is working correctly.
+      const alreadyImported = skippedRows;
+      const notPages = plan.skipped.length;
+      const detail = [
+        alreadyImported ? `${alreadyImported} already imported` : null,
+        notPages ? `${notPages} not a page` : null,
+      ].filter(Boolean);
+      toast(`Imported ${imported} note${imported === 1 ? "" : "s"}`, {
+        description: detail.length ? detail.join(" · ") : undefined,
       });
       setPlan(null);
+      setProgress(0);
       onOpenChange(false);
       onImported();
     } catch (e) {
       toast.error("Import failed", { description: e instanceof Error ? e.message : undefined });
+      // A chunked import can land partially — refresh so what DID import shows.
+      onImported();
     } finally {
       setBusy(false);
     }
@@ -130,7 +196,7 @@ export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onI
             }}
           >
             <FileUp className="size-6" aria-hidden />
-            <span>Drop files here, or click to choose</span>
+            <span>{reading ? "Reading…" : "Drop files here, or click to choose"}</span>
             <input
               type="file"
               multiple
@@ -145,6 +211,18 @@ export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onI
               {plan.nodes.length} note{plan.nodes.length === 1 ? "" : "s"} to import
               {plan.skipped.length ? ` · ${plan.skipped.length} skipped` : ""}.
             </p>
+            {busy ? (
+              <div className="space-y-1">
+                <Progress
+                  value={progress}
+                  max={plan.nodes.length}
+                  label={`Importing ${plan.nodes.length} notes`}
+                />
+                <p className="text-xs text-muted-foreground" role="status">
+                  Imported {Math.min(progress, plan.nodes.length)} of {plan.nodes.length}…
+                </p>
+              </div>
+            ) : null}
             <div className="max-h-64 overflow-y-auto rounded-md border border-border scrollbar-thin">
               <ul className="p-1">
                 {plan.nodes.map((n) => (
@@ -161,7 +239,8 @@ export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onI
             </div>
             {plan.skipped.length ? (
               <p className="text-xs text-muted-foreground">
-                Skipped: {plan.skipped.map((s) => s.path).join(", ")}
+                Skipped {describeSkips(plan.skippedByKind)}. These stay in your export file —
+                only pages become notes.
               </p>
             ) : null}
           </div>
@@ -175,7 +254,7 @@ export function NoteImportDialog({ runtime, workspaceId, open, onOpenChange, onI
           ) : null}
           <Button
             onClick={() => void confirm()}
-            disabled={!plan || busy || plan.nodes.length === 0}
+            disabled={!plan || busy || reading || plan.nodes.length === 0}
           >
             {busy ? "Importing…" : "Import"}
           </Button>

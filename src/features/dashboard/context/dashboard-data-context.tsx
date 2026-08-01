@@ -74,9 +74,10 @@ const EMPTY_TASKS: TasksModuleBundle = {
   tags: [],
   tagLinks: [],
   taskRelations: [],
+  truncated: [],
 };
-const EMPTY_CALENDAR: CalendarModuleBundle = { events: [], accounts: [], degraded: false };
-const EMPTY_EMAIL: EmailModuleBundle = { accounts: [], refs: [], degraded: false };
+const EMPTY_CALENDAR: CalendarModuleBundle = { events: [], accounts: [], degraded: false, truncated: [] };
+const EMPTY_EMAIL: EmailModuleBundle = { accounts: [], refs: [], degraded: false, truncated: [] };
 const EMPTY_TIMETRACKING: TimetrackingBundle = {
   entries: [],
   categories: [],

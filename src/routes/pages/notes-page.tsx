@@ -18,6 +18,19 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { CloudOff, PanelRight } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useAuth } from "../../providers/auth-provider";
+import { useWorkspace } from "../../providers/workspace-provider";
+import { cn } from "../../lib/utils";
+import {
+  asDragPayload,
+  asDropLinkTarget,
+  isSelfDrop,
+  targetAccepts,
+} from "../../lib/drag-payload";
+import { createLinkWithToast } from "../../features/spine/ui/drop-link-toast";
+import { HubDropZone } from "../../features/contacts/ui/hub-drop-zone";
+import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
+import { truncationNotice } from "../../components/app/truncation-notice";
 import { onCreateNew } from "../../components/app/create-events";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import {
@@ -95,7 +108,7 @@ export function NotesPage() {
     workspaceId: selectedWorkspaceId,
     modulePermission: modulePermissions.notes,
   });
-  const { notes, loading, degraded, loadError, syncStatus, engine, canEdit, welcomeNoteId } =
+  const { notes, loading, degraded, truncated, loadError, syncStatus, engine, canEdit, welcomeNoteId } =
     module;
 
   const sections = useMemo(() => buildNoteSections(notes), [notes]);
@@ -161,6 +174,14 @@ export function NotesPage() {
     if (loading || !selectedId) return;
     if (!notes.some((n) => n.id === selectedId)) select(null, true);
   }, [loading, selectedId, notes, select]);
+
+  // Opening a note jumps it to the front of the blank-note repair queue
+  // (NOTE-FIX-1) — the background sweep is sequential, and a note you open
+  // and type into before it is reached would lose its imported body.
+  useEffect(() => {
+    if (loading || !selectedId) return;
+    void module.repairNoteNow(selectedId);
+  }, [loading, selectedId, module.repairNoteNow]);
 
   // Task lines (NO-5): the Tasks module rides along so lines render live
   // rows, the `/task` picker searches real tasks, and the Task-detail rail
@@ -793,6 +814,7 @@ export function NotesPage() {
       >
         <FeaturePanelsShell
           feature="notes"
+          notice={truncationNotice(truncated)}
           left={sidebar}
           center={
             <NotesEditorDropZone noteId={editorNoteId} editable={canEdit && !degraded}>
@@ -808,6 +830,10 @@ export function NotesPage() {
         open={importOpen}
         onOpenChange={setImportOpen}
         onImported={module.refresh}
+        // So the import APPENDS to the tree instead of interleaving with it.
+        existingRootPositions={notes
+          .filter((n) => !n.parentId && !n.deletedAt)
+          .map((n) => n.position)}
       />
     </>
   );

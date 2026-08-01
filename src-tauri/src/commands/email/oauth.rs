@@ -11,7 +11,7 @@ use serde::Deserialize;
 use tauri::State;
 
 use super::account_config::account_id as build_account_id;
-use super::model::{EmailAccountPublic, StoredEmailAccount};
+use super::model::{EmailAccountPublic, EmailHistoryDepth, StoredEmailAccount};
 use super::realtime::schedule_idle_worker_reconcile;
 use super::secrets::{self, StoredMailSecret};
 use super::storage::{patch_account_sync_state, read_accounts, upsert_account_v2, write_accounts};
@@ -30,6 +30,11 @@ const OAUTH_REFRESH_SKEW_SECS: i64 = 120;
 #[serde(rename_all = "camelCase")]
 pub struct EmailGmailOAuthStartInput {
     pub workspace_id: Option<String>,
+    /// Connect-time history depth (AC6). The picker lives in the same dialog as
+    /// the "Sign in with Google" button, so dropping it here silently gave every
+    /// Gmail account the default no matter what the user chose.
+    #[serde(default)]
+    pub history_depth: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,6 +138,11 @@ pub async fn email_gmail_oauth_start(
             last_sync_at: None,
             status: "active".to_string(),
             last_error: None,
+            history_depth: input
+                .history_depth
+                .as_deref()
+                .and_then(EmailHistoryDepth::from_wire)
+                .unwrap_or_default(),
         });
     }
     write_accounts(&state, &accounts)?;

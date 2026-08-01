@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import type { Truncation } from "../../../lib/paged-select";
 import { undoToast } from "../../../lib/undo-toast";
 import { endPosition } from "../../tasks/helpers";
 import type { Note } from "../model";
@@ -15,6 +16,7 @@ import { NotesSyncEngineV2, type NotesSyncStatusV2 } from "../sync/engine-v2";
 import { readMetaCache, writeMetaCache } from "../sync/idb";
 import { runRedbImportOnce } from "../sync/redb-import";
 import { descendantIds, siblingsOf, wouldCreateCycle } from "../tree";
+import { repairNote, repairUnmaterializedNotes } from "../repair";
 
 const WELCOME_FLAG_PREFIX = "moduo:notes:welcome-seeded:v1:";
 
@@ -34,6 +36,8 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [degraded, setDegraded] = useState(false);
+  /** SCALE-1: collections the read had to cut — the page must show these. */
+  const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<NotesSyncStatusV2>("synced");
   const [welcomeNoteId, setWelcomeNoteId] = useState<string | null>(null);
@@ -87,6 +91,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       }
       setNotes(merged);
       setDegraded(bundle.degraded);
+      setTruncated(bundle.truncated);
       setLoadError(null);
       setLoading(false);
       void writeMetaCache(workspaceId!, bundle.notes);
@@ -104,6 +109,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     setLoading(true);
     setNotes([]);
     setDegraded(false);
+    setTruncated([]);
     setLoadError(null);
     serverLoadedRef.current = false;
     pendingCreatesRef.current.clear();
@@ -145,8 +151,67 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         void load();
       }
     });
+
+    // Blank-note backfill (NOTE-FIX-1): notes imported before the importer
+    // materialized `doc_state` (and any body-only connector write) open EMPTY.
+    // Repair them here rather than making the designer open every note — the
+    // server's once-only guard makes it safe to race another device. Silent by
+    // design: nothing visibly happened, the notes just stop being blank.
+    const sweepWorkspace = workspaceId!;
+    void repairUnmaterializedNotes(runtime!, sweepWorkspace, {
+      // Push anything this device still has queued BEFORE deciding a note is
+      // empty — an old-build device may hold an unpushed in-editor seed.
+      drainLocalFirst: engine ? () => engine.wake() : undefined,
+      shouldStop: () => passesRanFor.current !== sweepWorkspace,
+      onRepaired: (noteId) => void engine?.pullNote(noteId),
+    }).then((summary) => {
+      if (summary.seeded > 0) void load();
+      if (summary.failed > 0) {
+        console.warn(`[notes] ${summary.failed} note(s) could not be repaired`);
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, loading, degraded, canEdit, workspaceId]);
+
+  /**
+   * Repair ONE note straight away (NOTE-FIX-1) — the page calls this for the
+   * note being opened. The sweep is sequential, so a large legacy import can
+   * take tens of seconds; without this, clicking a not-yet-swept note still
+   * shows it blank, and typing into it would push real updates + overwrite
+   * `body_md`, making the imported content unrecoverable.
+   *
+   * Cheap when there is nothing to do: the server refuses instantly for an
+   * already-materialized note.
+   */
+  const repairAttemptedRef = useRef(new Set<string>());
+  const repairNoteNow = useCallback(
+    async (noteId: string) => {
+      if (!ready || !canEdit) return;
+      // One attempt per note per visit — the server is the real guard, this
+      // just avoids rebuilding a doc every time you click back to a note.
+      if (repairAttemptedRef.current.has(noteId)) return;
+      const note = notesRef.current.find((n) => n.id === noteId);
+      if (!note || note.deletedAt) return;
+      repairAttemptedRef.current.add(noteId);
+      try {
+        const docs = await runtime!.notesV2.fetchExportDocs({
+          workspaceId: workspaceId!,
+          ids: [noteId],
+        });
+        const bodyMd = docs[0]?.bodyMd ?? "";
+        if (!bodyMd.trim()) return;
+        const outcome = await repairNote(runtime!, workspaceId!, noteId, bodyMd);
+        if (outcome === "seeded") {
+          await engine?.pullNote(noteId);
+          void load();
+        }
+      } catch {
+        // Opportunistic — a blank note stays blank and the sweep retries.
+        repairAttemptedRef.current.delete(noteId);
+      }
+    },
+    [ready, canEdit, runtime, workspaceId, engine, load],
+  );
 
   // Welcome seed: one deletable self-teaching note in a fresh workspace.
   useEffect(() => {
@@ -444,6 +509,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     notes,
     loading,
     degraded,
+    truncated,
     loadError,
     syncStatus,
     engine,
@@ -462,6 +528,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     purgeNote,
     publishNote,
     unpublishNote,
+    repairNoteNow,
   };
 }
 

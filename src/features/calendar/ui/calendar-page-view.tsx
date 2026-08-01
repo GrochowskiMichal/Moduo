@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
+import { truncationNotice } from "../../../components/app/truncation-notice";
 import {
   RightPanelSwitcher,
   type RightPanelVariant,
@@ -232,6 +233,14 @@ export function CalendarPageView({
     () => visibleRange(viewState.view, anchor, prefs),
     [viewState.view, anchor, prefs],
   );
+  // SCALE-1: the events read is windowed, so tell the hook what's on screen —
+  // navigating past the loaded window widens it and refetches instead of
+  // rendering a silently empty month.
+  const { ensureRange } = calendar;
+  useEffect(() => {
+    ensureRange(new Date(range.startMs), new Date(range.endMs));
+  }, [ensureRange, range.startMs, range.endMs]);
+
   const blocks = useMemo(() => taskBlocks(api.tasks, range), [api.tasks, range]);
   const grouped = useMemo(() => blocksByDay(blocks), [blocks]);
   const eventChips = useMemo(() => eventChipsInRange(shownEvents, range), [shownEvents, range]);
@@ -326,23 +335,41 @@ export function CalendarPageView({
   // the user who navigated away; wait for the events bundle before deciding an
   // id is stale. On apply — or when stale/unknown — clear the URL param.
   const processedEventIdRef = useRef<string | null>(null);
+  /** Which id we've already dropped the date window for (SCALE-1), once each. */
+  const widenedForEventIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!urlEventId) {
       processedEventIdRef.current = null;
+      widenedForEventIdRef.current = null;
       return;
     }
     if (processedEventIdRef.current === urlEventId) return;
     if (calendar.loading) return; // wait for events before ruling stale
-    processedEventIdRef.current = urlEventId;
-    takeEntityOpenIntent(urlEventId); // spend the "take me there" mark
     const target = resolveCalendarDeepLink(urlEventId, { events: calendar.events });
     if (target.kind === "none") {
+      // The events read is windowed (SCALE-1), so "not in memory" does NOT
+      // mean "deleted" — a link to a 2023 event simply hasn't been fetched.
+      // Drop the window once and let the reload re-run this effect before
+      // ruling the id stale; otherwise every pre-window deep link lies.
+      // Only wait for a reload if dropping the window will ACTUALLY cause one.
+      // `ensureAllTime` is a no-op once the window is already all-time (an
+      // earlier deep link in this session), and returning here on that path
+      // would strand the link: no toast, no consume, `?event=` stuck in the URL.
+      if (!calendar.isAllTimeWindow && widenedForEventIdRef.current !== urlEventId) {
+        widenedForEventIdRef.current = urlEventId;
+        calendar.ensureAllTime();
+        return;
+      }
+      processedEventIdRef.current = urlEventId;
+      takeEntityOpenIntent(urlEventId); // spend the "take me there" mark
       toast("Couldn't find that event", {
         description: "It may have been deleted or isn't on this calendar.",
       });
       onConsumeEventDeepLink?.();
       return;
     }
+    processedEventIdRef.current = urlEventId;
+    takeEntityOpenIntent(urlEventId); // spend the "take me there" mark
     // For a recurring event, land on the nearest UPCOMING occurrence (a weekly
     // standup created months ago shouldn't teleport the user months back); a
     // one-off / ended series falls back to the series start. Using the same
@@ -359,7 +386,16 @@ export function CalendarPageView({
     setSelectedOccurrenceKey(`${target.eventId}:${occurrenceMs}`);
     openDetail({ type: "event", id: target.eventId });
     onConsumeEventDeepLink?.();
-  }, [urlEventId, calendar.loading, calendar.events, goToDate, openDetail, onConsumeEventDeepLink]);
+  }, [
+    urlEventId,
+    calendar.loading,
+    calendar.events,
+    calendar.ensureAllTime,
+    calendar.isAllTimeWindow,
+    goToDate,
+    openDetail,
+    onConsumeEventDeepLink,
+  ]);
 
   const onEventClick = useCallback((chip: EventChip, rect: DOMRect) => {
     setTaskPopover(null);
@@ -869,6 +905,7 @@ export function CalendarPageView({
     >
       <FeaturePanelsShell
         feature="calendar"
+        notice={truncationNotice(calendar.truncated)}
         left={
           <CalendarRail
             anchor={anchor}

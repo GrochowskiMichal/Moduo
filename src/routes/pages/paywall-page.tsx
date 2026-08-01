@@ -1,14 +1,26 @@
+import { useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
-import { useState } from "react";
-import { supabaseClient } from "../../lib/runtime.web";
-import { useAuth } from "../../providers/auth-provider";
-import { Pressable, Text, View } from "../../tw";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ModuoMark } from "@/components/ui/moduo-mark";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { useAuth } from "@/providers/auth-provider";
+import { supabaseClient } from "@/lib/runtime.web";
+import { cn } from "@/lib/utils";
 
 const SUPABASE_URL =
   (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
   "https://wtoonrvuqumihpkbvwvs.supabase.co";
 
 type BillingCycle = "monthly" | "yearly";
+
+const FREE_FEATURES = [
+  "Notes, tasks, calendar & contacts",
+  "Access on web & desktop",
+  "Cloud sync across devices",
+  "7-day Pro trial, no card required",
+];
 
 const PRO_FEATURES = [
   "Cloud sync across all devices",
@@ -24,6 +36,14 @@ const TEAM_FEATURES = [
   "Admin controls",
 ];
 
+/**
+ * Plan selection after a trial ends. Monochrome by design (the `preWorkspace()`
+ * route wrapper pins `data-accent="mono"`): Pro is emphasised through HIERARCHY —
+ * a heavier border, elevation, a neutral "Most popular" badge, and the surface's
+ * single solid `bg-primary` CTA against outline CTAs — never a brand hue. That
+ * keeps DESIGN_RULES R5 ("one primary action per surface") intact and stops the
+ * page reading like a different product from the rest of the app.
+ */
 export function PaywallPage() {
   const { accessToken } = useAuth();
   const [billing, setBilling] = useState<BillingCycle>("monthly");
@@ -51,12 +71,16 @@ export function PaywallPage() {
           cancelUrl: `${window.location.origin}/paywall`,
         }),
       });
-      const { url, error: checkoutError } = await res.json();
-      if (checkoutError) throw new Error(checkoutError);
-      if (url) window.location.href = url;
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error ?? payload?.message ?? "Checkout failed.");
+      if (payload?.error) throw new Error(payload.error);
+      if (!payload?.url) throw new Error("Checkout didn't return a URL. Please try again.");
+      // Navigating away — deliberately do NOT clear `busy`. Clearing it here
+      // re-enables the CTA while the browser is still loading Stripe, which let
+      // a second create-checkout-session fire.
+      window.location.href = payload.url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start checkout. Please try again.");
-    } finally {
       setBusy(null);
     }
   };
@@ -84,10 +108,16 @@ export function PaywallPage() {
       let confirmed = false;
       for (let i = 0; i < MAX_POLLS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        const { data: row } = await supabaseClient
+        // supabase-js reports auth/RLS failures via `error`, not by throwing
+        // (gotchas §Supabase). Swallowing it made a 401 look like "not written
+        // yet" — 10s of polling, then a redirect that the gate bounces straight
+        // back to /paywall, the exact loop this poll exists to prevent.
+        const { data: row, error: pollError } = await supabaseClient
           .from("user_entitlements")
           .select("subscription_status")
+          .limit(1)
           .maybeSingle<{ subscription_status: string }>();
+        if (pollError) throw pollError;
         const status = row?.subscription_status;
         if (status === "trialing" || status === "active") {
           confirmed = true;
@@ -96,9 +126,7 @@ export function PaywallPage() {
       }
 
       if (!confirmed) {
-        console.warn(
-          "[paywall] trial created but subscription_status not yet reflected — redirecting anyway",
-        );
+        console.warn("[paywall] trial created but subscription_status not yet reflected — redirecting anyway");
       }
 
       window.location.href = "/";
@@ -109,205 +137,194 @@ export function PaywallPage() {
     }
   };
 
-  const proPrice = billing === "monthly" ? "$10/mo" : "$8/mo";
-  const teamPrice = billing === "monthly" ? "$9/seat/mo" : "$7/seat/mo";
+  const proPrice = billing === "monthly" ? "$10" : "$8";
+  const teamPrice = billing === "monthly" ? "$9" : "$7";
 
   return (
-    <View className="relative min-h-screen bg-[#070707] overflow-hidden">
-      {/* Background glow */}
-      <View className="pointer-events-none absolute left-1/2 top-[-180px] h-[460px] w-[660px] -translate-x-1/2 rounded-full bg-white/[0.04] blur-[120px]" />
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <div className="pointer-events-none absolute left-1/2 top-[-260px] h-[520px] w-[720px] -translate-x-1/2 rounded-full bg-foreground/5 blur-3xl" />
 
-      <View className="relative mx-auto max-w-[1100px] px-6 py-16">
-        {/* Header */}
-        <View className="mb-14 text-center">
-          <Text
-            as="p"
-            className="text-[12px] font-semibold uppercase tracking-[0.22em] text-white/32 mb-4"
-          >
+      <div className="relative mx-auto w-full max-w-[1000px] px-5 py-14 sm:py-16">
+        <header className="flex flex-col items-center text-center">
+          <ModuoMark className="mb-6 size-8 opacity-95" aria-hidden="true" />
+          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             Your trial has ended
-          </Text>
-          <h1 className="text-[40px] font-semibold leading-tight tracking-[-0.04em] text-[#f4f4f4]">
+          </p>
+          <h1 className="mt-2 font-display text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-4xl">
             Choose your plan to continue
           </h1>
-          <Text as="p" className="mx-auto mt-3 max-w-[480px] text-[16px] leading-7 text-white/42">
+          <p className="mx-auto mt-3 max-w-[460px] text-sm leading-6 text-muted-foreground">
             All plans include a 7-day free trial. No credit card required to start.
-          </Text>
+          </p>
 
-          {/* Billing toggle */}
-          <View className="mt-8 inline-flex flex-row items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-1">
-            <Pressable
-              onPress={() => setBilling("monthly")}
-              className={`rounded-full px-5 py-2 ${billing === "monthly" ? "bg-white/10" : "bg-transparent"}`}
-            >
-              <Text
-                className={`text-[14px] font-medium ${billing === "monthly" ? "text-[#f2f2f2]" : "text-white/40"}`}
+          <div className="mt-7 flex flex-col items-center gap-2">
+            <SegmentedControl
+              aria-label="Billing period"
+              value={billing}
+              onValueChange={(v) => {
+                setBilling(v as BillingCycle);
+                setError(null);
+              }}
+              items={[
+                { value: "monthly", label: "Monthly" },
+                { value: "yearly", label: "Yearly" },
+              ]}
+            />
+            <p className="text-xs text-muted-foreground">Yearly billing saves 20%.</p>
+          </div>
+        </header>
+
+        <div className="mt-10 grid gap-4 md:grid-cols-3">
+          <PlanCard
+            name="Free"
+            price="$0"
+            caption="Web & desktop"
+            features={FREE_FEATURES}
+            action={
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full"
+                onClick={() => window.open("https://moduo.app/download", "_blank")}
               >
-                Monthly
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setBilling("yearly")}
-              className={`rounded-full px-5 py-2 ${billing === "yearly" ? "bg-white/10" : "bg-transparent"}`}
-            >
-              <Text
-                className={`text-[14px] font-medium ${billing === "yearly" ? "text-[#f2f2f2]" : "text-white/40"}`}
+                Download desktop app
+              </Button>
+            }
+          />
+
+          <PlanCard
+            name="Pro"
+            price={proPrice}
+            priceSuffix="/mo"
+            caption={billing === "yearly" ? "billed as $96/yr · 7-day free trial" : "7-day free trial"}
+            features={PRO_FEATURES}
+            featured
+            badge="Most popular"
+            action={
+              <Button
+                size="lg"
+                className="w-full"
+                aria-label="Start free trial on Pro"
+                disabled={busy !== null}
+                onClick={() => void redirectToCheckout("pro", "Pro")}
               >
-                Yearly <Text className="text-[12px] text-amber-400">–20%</Text>
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Plan cards */}
-        <View className="flex flex-col gap-4 md:flex-row md:items-start">
-          {/* Free / Trial */}
-          <View className="flex-1 rounded-2xl border border-white/8 bg-[#0d0d0d] p-8">
-            <Text
-              as="p"
-              className="text-[12px] font-semibold uppercase tracking-widest text-white/30"
-            >
-              Free
-            </Text>
-            <Text as="p" className="mt-3 text-[36px] font-semibold text-[#f4f4f4]">
-              $0
-            </Text>
-            <Text as="p" className="mt-1 text-[14px] text-white/38">
-              Web &amp; desktop
-            </Text>
-
-            <View className="mt-6 gap-3">
-              {[
-                "Notes, tasks, calendar & contacts",
-                "Access on web & desktop",
-                "Cloud sync across devices",
-                "7-day Pro trial, no card required",
-              ].map((f) => (
-                <View key={f} className="flex flex-row items-start gap-3">
-                  <View className="mt-0.5 h-5 w-5 items-center justify-center rounded-full bg-white/8">
-                    <Check size={11} color="rgba(255,255,255,0.4)" />
-                  </View>
-                  <Text className="text-[14px] leading-5 text-white/50">{f}</Text>
-                </View>
-              ))}
-            </View>
-
-            <Pressable
-              className="mt-8 flex h-12 w-full items-center justify-center rounded-2xl border border-white/10 bg-transparent"
-              onPress={() => window.open("https://moduo.app/download", "_blank")}
-            >
-              <Text className="text-[15px] font-medium text-white/50">Download desktop app</Text>
-            </Pressable>
-          </View>
-
-          {/* Pro */}
-          <View className="flex-1 rounded-2xl border border-amber-500/30 bg-[#0f0e09] p-8 relative overflow-hidden">
-            <View className="pointer-events-none absolute inset-0 rounded-2xl bg-amber-500/[0.03]" />
-            <View className="flex flex-row items-center justify-between">
-              <Text
-                as="p"
-                className="text-[12px] font-semibold uppercase tracking-widest text-amber-400"
-              >
-                Pro
-              </Text>
-              <View className="rounded-full bg-amber-500/15 px-3 py-1">
-                <Text className="text-[11px] font-medium text-amber-300">Most popular</Text>
-              </View>
-            </View>
-            <Text as="p" className="mt-3 text-[36px] font-semibold text-[#f4f4f4]">
-              {proPrice}
-            </Text>
-            {billing === "yearly" && (
-              <Text as="p" className="mt-0.5 text-[13px] text-white/38">
-                billed as $96/yr
-              </Text>
-            )}
-            <Text as="p" className="mt-1 text-[14px] text-amber-300/70">
-              7-day free trial
-            </Text>
-
-            <View className="mt-6 gap-3">
-              {PRO_FEATURES.map((f) => (
-                <View key={f} className="flex flex-row items-start gap-3">
-                  <View className="mt-0.5 h-5 w-5 items-center justify-center rounded-full bg-amber-500/20">
-                    <Check size={11} color="#f59e0b" />
-                  </View>
-                  <Text className="text-[14px] leading-5 text-white/75">{f}</Text>
-                </View>
-              ))}
-            </View>
-
-            <Pressable
-              className={`mt-8 flex h-12 w-full items-center justify-center rounded-2xl ${busy === "Pro" ? "bg-amber-700" : "bg-amber-500 hover:bg-amber-400"}`}
-              disabled={busy !== null}
-              onPress={() => void redirectToCheckout("pro", "Pro")}
-            >
-              <Text className="text-[15px] font-semibold text-black">
                 {busy === "Pro" ? "Redirecting…" : "Start free trial"}
-              </Text>
-            </Pressable>
-          </View>
+              </Button>
+            }
+          />
 
-          {/* Team */}
-          <View className="flex-1 rounded-2xl border border-white/10 bg-[#0d0d0d] p-8">
-            <Text
-              as="p"
-              className="text-[12px] font-semibold uppercase tracking-widest text-white/40"
-            >
-              Team
-            </Text>
-            <Text as="p" className="mt-3 text-[36px] font-semibold text-[#f4f4f4]">
-              {teamPrice}
-            </Text>
-            <Text as="p" className="mt-1 text-[14px] text-white/38">
-              7-day free trial
-            </Text>
-
-            <View className="mt-6 gap-3">
-              {TEAM_FEATURES.map((f) => (
-                <View key={f} className="flex flex-row items-start gap-3">
-                  <View className="mt-0.5 h-5 w-5 items-center justify-center rounded-full bg-white/10">
-                    <Check size={11} color="rgba(255,255,255,0.7)" />
-                  </View>
-                  <Text className="text-[14px] leading-5 text-white/75">{f}</Text>
-                </View>
-              ))}
-            </View>
-
-            <Pressable
-              className={`mt-8 flex h-12 w-full items-center justify-center rounded-2xl ${busy === "Team" ? "bg-white/10" : "bg-[#f2f2f2] hover:bg-white"}`}
-              disabled={busy !== null}
-              onPress={() => void redirectToCheckout("team", "Team")}
-            >
-              <Text
-                className={`text-[15px] font-semibold ${busy === "Team" ? "text-white/40" : "text-[#111]"}`}
+          <PlanCard
+            name="Team"
+            price={teamPrice}
+            priceSuffix="/seat/mo"
+            caption="7-day free trial"
+            features={TEAM_FEATURES}
+            action={
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full"
+                aria-label="Start free trial on Team"
+                disabled={busy !== null}
+                onClick={() => void redirectToCheckout("team", "Team")}
               >
                 {busy === "Team" ? "Redirecting…" : "Start free trial"}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
+              </Button>
+            }
+          />
+        </div>
 
-        {/* "Start free trial with no card" CTA */}
-        <View className="mt-10 text-center">
-          <Pressable
-            className="inline-flex items-center gap-2"
+        <div className="mt-8 text-center">
+          <Button
+            variant="link"
+            size="sm"
+            className="text-muted-foreground underline hover:text-foreground"
             disabled={busy !== null}
-            onPress={() => void startFreeTrial()}
+            onClick={() => void startFreeTrial()}
           >
-            <Text className="text-[14px] text-white/38 underline">
-              {busy === "trial" ? "Setting up your trial…" : "Start a no-card 7-day trial on Pro →"}
-            </Text>
-          </Pressable>
-        </View>
+            {busy === "trial" ? "Setting up your trial…" : "Start a no-card 7-day trial on Pro"}
+          </Button>
+        </div>
 
-        {error && (
-          <View className="mt-6 mx-auto max-w-[480px] rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3">
-            <Text as="p" className="text-center text-[13px] text-red-100/85">
-              {error}
-            </Text>
-          </View>
-        )}
-      </View>
-    </View>
+        {error ? (
+          <div
+            role="alert"
+            className="mx-auto mt-6 max-w-[480px] rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3"
+          >
+            <p className="text-center text-sm leading-5 text-destructive">{error}</p>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One plan column. `featured` carries the emphasis budget — a heavier border and
+ * elevation — while the caller supplies the only solid CTA on the page.
+ */
+function PlanCard({
+  name,
+  price,
+  priceSuffix,
+  caption,
+  features,
+  action,
+  featured = false,
+  badge,
+}: {
+  name: string;
+  price: string;
+  priceSuffix?: string;
+  caption: string;
+  features: readonly string[];
+  action: ReactNode;
+  featured?: boolean;
+  badge?: string;
+}) {
+  return (
+    <section
+      className={cn(
+        "flex flex-col rounded-lg border bg-card p-6 sm:p-7",
+        featured ? "border-foreground/25 shadow-lg" : "border-border",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          {name}
+        </h2>
+        {badge ? (
+          <Badge variant="secondary" className="font-normal">
+            {badge}
+          </Badge>
+        ) : null}
+      </div>
+
+      <p className="mt-3 font-display text-4xl font-semibold tracking-tight text-foreground tabular-nums">
+        {price}
+        {priceSuffix ? (
+          <span className="ml-0.5 text-base font-medium text-muted-foreground">{priceSuffix}</span>
+        ) : null}
+      </p>
+      <p className="mt-1 text-sm text-muted-foreground">{caption}</p>
+
+      <ul className="mt-6 flex flex-1 flex-col gap-3">
+        {features.map((feature) => (
+          <li key={feature} className="flex items-start gap-3">
+            <span
+              className={cn(
+                "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full",
+                featured ? "bg-foreground/15 text-foreground" : "bg-muted text-muted-foreground",
+              )}
+            >
+              <Check className="size-3" aria-hidden />
+            </span>
+            <span className="text-sm leading-5 text-muted-foreground">{feature}</span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-7">{action}</div>
+    </section>
   );
 }

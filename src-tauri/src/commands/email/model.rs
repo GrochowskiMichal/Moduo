@@ -44,6 +44,9 @@ pub struct EmailAccountConnectInput {
     pub email: String,
     pub password: String,
     pub workspace_id: Option<String>,
+    /// Connect-time history depth (AC6). Absent → the 12-month default.
+    #[serde(default)]
+    pub history_depth: Option<String>,
     pub imap_host: Option<String>,
     pub smtp_host: Option<String>,
     pub imap_port: Option<u16>,
@@ -64,6 +67,39 @@ pub struct EmailAccountPublic {
     pub last_sync_at: Option<String>,
     pub status: String,
     pub last_error: Option<String>,
+    /// How far back this device syncs the mailbox (IM-2c). Surfaced so the
+    /// connect dialog and Settings → Integrations can show and change it.
+    pub history_depth: EmailHistoryDepth,
+}
+
+/// How far back a mailbox syncs envelopes (IM-2b/2c).
+///
+/// **Per-device on purpose:** the redb store is per-machine, so two devices may
+/// legitimately hold different depths and neither truncates the other
+/// (specs/import.md assumption 4). That is also why this is not in the cloud
+/// `email_accounts` row.
+///
+/// Depth is a **floor** — a promise about what *is* synced — never a ceiling that
+/// evicts. Lowering it stops fetching and deletes nothing (AC8).
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum EmailHistoryDepth {
+    ThreeMonths,
+    SixMonths,
+    /// The connect-time default (AC6).
+    #[default]
+    TwelveMonths,
+    Everything,
+}
+
+/// Deserialize a depth, falling back to the default for any value this build does
+/// not know — see the field's note on why an error here is unacceptable.
+fn depth_or_default<'de, D>(deserializer: D) -> Result<EmailHistoryDepth, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(raw).unwrap_or_default())
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -85,6 +121,15 @@ pub(super) struct StoredEmailAccount {
     pub(super) last_sync_at: Option<String>,
     pub(super) status: String,
     pub(super) last_error: Option<String>,
+    /// **Must stay defaulted AND tolerant of unknown values.** `read_accounts`
+    /// swallows a deserialize error into an EMPTY list, so anything unparseable here
+    /// silently disconnects every account (specs/import.md assumption 4). Missing is
+    /// covered by `default`; an *unknown* value matters too, because the desktop
+    /// binary is drop-in replaced — rolling back past a future depth variant must not
+    /// wipe the user's accounts. Guarded by
+    /// `storage::tests::accounts_v1_old_shape_still_loads`.
+    #[serde(default, deserialize_with = "depth_or_default")]
+    pub(super) history_depth: EmailHistoryDepth,
 }
 
 impl StoredEmailAccount {
@@ -101,6 +146,23 @@ impl StoredEmailAccount {
             last_sync_at: self.last_sync_at.clone(),
             status: self.status.clone(),
             last_error: self.last_error.clone(),
+            history_depth: self.history_depth,
+        }
+    }
+}
+
+impl EmailHistoryDepth {
+    /// Parse a depth from the wire. Returns `None` for anything this build does
+    /// not know, so a bad value is a rejected command rather than a silent reset
+    /// to the default (which, on the *stored* side, is what we deliberately do —
+    /// there the alternative is disconnecting every account).
+    pub fn from_wire(raw: &str) -> Option<Self> {
+        match raw {
+            "threeMonths" => Some(Self::ThreeMonths),
+            "sixMonths" => Some(Self::SixMonths),
+            "twelveMonths" => Some(Self::TwelveMonths),
+            "everything" => Some(Self::Everything),
+            _ => None,
         }
     }
 }
@@ -598,5 +660,108 @@ impl EmailConfig {
 
     pub(super) fn smtp_port(&self) -> u16 {
         self.smtp_port.unwrap_or(587)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The depth wire format lives in THREE places with no shared source:
+    /// serde's `rename_all = "camelCase"` on the enum, `from_wire`'s hardcoded
+    /// match, and `EMAIL_HISTORY_DEPTHS` in `src/features/email/history-depth.ts`.
+    /// This pins the two Rust ones to each other, so adding a variant can only
+    /// break the TS side — which is a visible type error, not a silent default.
+    #[test]
+    fn history_depth_wire_format_round_trips() {
+        let all = [
+            EmailHistoryDepth::ThreeMonths,
+            EmailHistoryDepth::SixMonths,
+            EmailHistoryDepth::TwelveMonths,
+            EmailHistoryDepth::Everything,
+        ];
+        for depth in all {
+            let wire = serde_json::to_value(depth).expect("serialize");
+            let raw = wire.as_str().expect("depths serialize as strings");
+            assert_eq!(
+                EmailHistoryDepth::from_wire(raw),
+                Some(depth),
+                "from_wire must accept exactly what serde emits ({raw})"
+            );
+        }
+        // The literals the frontend sends, spelled out — a rename on either side
+        // has to fail here rather than silently falling back to 12 months.
+        assert_eq!(
+            all.map(|d| serde_json::to_value(d).unwrap().as_str().unwrap().to_string()),
+            ["threeMonths", "sixMonths", "twelveMonths", "everything"].map(String::from)
+        );
+        // Unknown values are REJECTED on the wire (the command errors) — unlike the
+        // stored side, where a parse failure would empty the whole account list.
+        assert_eq!(EmailHistoryDepth::from_wire("twentyFourMonths"), None);
+        assert_eq!(EmailHistoryDepth::from_wire("TwelveMonths"), None);
+        assert_eq!(EmailHistoryDepth::from_wire(""), None);
+    }
+
+    /// The connect input carries the picker's choice. `historyDepth` is optional,
+    /// so a misspelled key would be silently swallowed and fall back to the
+    /// default — exactly the silent-default failure this block exists to prevent.
+    #[test]
+    fn connect_input_carries_the_picked_depth() {
+        let with_depth = serde_json::json!({
+            "provider": "gmail",
+            "email": "a@x.com",
+            "password": "pw",
+            "workspaceId": null,
+            "historyDepth": "everything",
+            "imapHost": null,
+            "smtpHost": null,
+            "imapPort": null,
+            "smtpPort": null,
+        });
+        let parsed =
+            serde_json::from_value::<EmailAccountConnectInput>(with_depth).expect("deserialize");
+        assert_eq!(parsed.history_depth.as_deref(), Some("everything"));
+        assert_eq!(
+            parsed
+                .history_depth
+                .as_deref()
+                .and_then(EmailHistoryDepth::from_wire),
+            Some(EmailHistoryDepth::Everything)
+        );
+
+        // Absent → the 12-month default (AC6), not an error.
+        let without = serde_json::json!({
+            "provider": "gmail",
+            "email": "a@x.com",
+            "password": "pw",
+            "workspaceId": null,
+            "imapHost": null,
+            "smtpHost": null,
+            "imapPort": null,
+            "smtpPort": null,
+        });
+        let parsed =
+            serde_json::from_value::<EmailAccountConnectInput>(without).expect("deserialize");
+        assert_eq!(parsed.history_depth, None);
+        assert_eq!(
+            parsed
+                .history_depth
+                .as_deref()
+                .and_then(EmailHistoryDepth::from_wire)
+                .unwrap_or_default(),
+            EmailHistoryDepth::TwelveMonths
+        );
+    }
+
+    /// The Gmail OAuth connect runs through its own input type — the picker sits
+    /// in the same dialog, so dropping the field here silently gave every Gmail
+    /// account the default no matter what the user chose.
+    #[test]
+    fn oauth_start_input_carries_the_picked_depth() {
+        let parsed = serde_json::from_value::<super::super::oauth::EmailGmailOAuthStartInput>(
+            serde_json::json!({ "workspaceId": null, "historyDepth": "threeMonths" }),
+        )
+        .expect("deserialize");
+        assert_eq!(parsed.history_depth.as_deref(), Some("threeMonths"));
     }
 }

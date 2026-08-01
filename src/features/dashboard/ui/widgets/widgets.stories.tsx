@@ -108,6 +108,7 @@ const SAMPLE_TASKS = {
   tags: [],
   tagLinks: [],
   taskRelations: [],
+  truncated: [],
   tasks: [
     {
       id: "t1",

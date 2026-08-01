@@ -21,13 +21,13 @@ beforeEach(() => {
 });
 
 describe("DEFAULT_PREFERENCES", () => {
-  it("defaults to Home landing, reopen-last-workspace on, sound on, system motion, all notifications on, confirm-quit off", () => {
+  it("defaults to Home landing, reopen-last-workspace on, sound on, system motion, mutes on + overdue opt-in off, confirm-quit off", () => {
     expect(DEFAULT_PREFERENCES).toEqual({
       landingView: "home",
       reopenLastWorkspace: true,
       soundEnabled: true,
       motion: "system",
-      notifications: { mention: true, assigned: true, dueFollowUp: true, unblocked: true },
+      notifications: { mention: true, assigned: true, dueFollowUp: true, unblocked: true, overdueTasks: false },
       confirmBeforeQuit: false,
     });
   });
@@ -55,7 +55,8 @@ describe("sanitizePreferences", () => {
       reopenLastWorkspace: false,
       soundEnabled: false,
       motion: "reduced",
-      notifications: { mention: false, assigned: true, dueFollowUp: false, unblocked: true },
+      // overdueTasks absent from input → coerced to its opt-in default (off).
+      notifications: { mention: false, assigned: true, dueFollowUp: false, unblocked: true, overdueTasks: false },
       confirmBeforeQuit: true,
     });
   });
@@ -76,12 +77,12 @@ describe("sanitizePreferences", () => {
     );
   });
 
-  it("coerces notifications per-key: missing/non-boolean default on, valid kept", () => {
+  it("coerces notifications per-key: missing/non-boolean → per-key default (mutes on, overdue off), valid kept", () => {
     expect(
       sanitizePreferences({
         notifications: { mention: false, assigned: "nope", unblocked: false },
       }).notifications,
-    ).toEqual({ mention: false, assigned: true, dueFollowUp: true, unblocked: false });
+    ).toEqual({ mention: false, assigned: true, dueFollowUp: true, unblocked: false, overdueTasks: false });
   });
 
   it("defaults confirmBeforeQuit false and coerces to boolean", () => {
@@ -109,7 +110,7 @@ describe("notificationTypeForOp", () => {
 
 describe("isNotificationEnabled", () => {
   it("honours the toggle for a known op", () => {
-    const prefs = { mention: true, assigned: false, dueFollowUp: true, unblocked: false };
+    const prefs = { mention: true, assigned: false, dueFollowUp: true, unblocked: false, overdueTasks: false };
     expect(isNotificationEnabled("comments.add", prefs)).toBe(true);
     expect(isNotificationEnabled("tasks.assigned", prefs)).toBe(false);
     expect(isNotificationEnabled("email.follow_up_due", prefs)).toBe(true);
@@ -117,7 +118,7 @@ describe("isNotificationEnabled", () => {
   });
 
   it("fails open for an unmapped op regardless of prefs", () => {
-    const allOff = { mention: false, assigned: false, dueFollowUp: false, unblocked: false };
+    const allOff = { mention: false, assigned: false, dueFollowUp: false, unblocked: false, overdueTasks: false };
     expect(isNotificationEnabled("workspace.invite_accepted", allOff)).toBe(true);
     expect(isNotificationEnabled("note_shared", allOff)).toBe(true);
   });

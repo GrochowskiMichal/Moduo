@@ -8,6 +8,8 @@
 import { AlertTriangle, Mail, PenSquare, RefreshCw } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
+import { truncationNotice } from "../../../components/app/truncation-notice";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import {
@@ -26,8 +28,17 @@ import type { Contact } from "../../contacts/model";
 import { endPosition, makeTask } from "../../tasks/helpers";
 import { useTasksModule } from "../../tasks/hooks/use-tasks-module";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
-import { resolveAccountHues } from "../accounts";
-import { type EmailSection, flattenSections, groupThreadsBySection, senderKey } from "../classify";
+import { accountSyncHealth, resolveAccountHues } from "../accounts";
+import { threadsForAccount, unreadCount } from "../threads";
+import {
+  flattenSections,
+  groupThreadsBySection,
+  senderKey,
+  type EmailSection,
+} from "../classify";
+import { EmailSearchFooter, EmailSearchInput } from "./email-search-bar";
+import { formatSnoozeUntil } from "../snooze";
+import { buildRefUpsertArgs } from "../refs";
 import { blankDraft, buildComposeDraft, type ComposeMode } from "../compose";
 import {
   buildConvertDescription,
@@ -304,10 +315,10 @@ export function EmailPageView({
 
   // DF-6: accounts in the current scope that have silently stopped syncing —
   // surfaced as a banner (the rail glyphs alone were invisible on All inboxes).
-  const brokenAccounts = useMemo(
-    () => scopedAccounts.filter((a) => a.status !== "active"),
-    [scopedAccounts],
-  );
+  // Partitioned per account (AC12): a broken mailbox names itself and never
+  // stands in for the healthy ones, which keep syncing and listing.
+  const syncHealth = useMemo(() => accountSyncHealth(scopedAccounts), [scopedAccounts]);
+  const brokenAccounts = syncHealth.broken;
 
   // Newest successful sync across the scope, for the refresh button's tooltip.
   const lastSyncLabel = useMemo(() => {
@@ -669,8 +680,12 @@ export function EmailPageView({
         await runtime.spine.deleteLink({ workspaceId, linkId: plan.contactLinkId }).catch(() => {});
       }
       if (plan.refId && plan.refCreated) {
-        await runtime.email.removeRef({ workspaceId, refId: plan.refId }).catch(() => {
-          /* email_op_ref_remove not deployed yet — leave the (linkless) ref */
+        await runtime.email.removeRef({ workspaceId, refId: plan.refId }).catch((err) => {
+          // Best-effort: the ref is linkless by now, so a failure here only leaves a
+          // stray tissue row — never block the undo. (`email_op_ref_remove` was
+          // undeployed until OPS-1 applied it 2026-07-29; this catch is now purely
+          // defensive, so warn rather than swallow — a silent failure is invisible.)
+          console.warn("email: convert-undo could not remove the ref", err);
         });
       }
     },
@@ -1201,6 +1216,7 @@ export function EmailPageView({
     <>
       <FeaturePanelsShell
         feature="email"
+        notice={truncationNotice(email.truncated)}
         left={
           <EmailRail
             accounts={email.accounts}
@@ -1273,8 +1289,7 @@ export function EmailPageView({
                     ? `${brokenAccounts[0].email} isn't syncing — new mail may be missing.`
                     : `${brokenAccounts.length} accounts aren't syncing — new mail may be missing.`}
                 </span>
-                {brokenAccounts
-                  .filter((a) => a.status === "reauth_required")
+                {syncHealth.reconnectable
                   .map((a) => (
                     <button
                       key={a.id}

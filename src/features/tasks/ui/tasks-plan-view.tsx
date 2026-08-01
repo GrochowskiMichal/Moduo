@@ -8,6 +8,8 @@ import {
 } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
+import { truncationNotice } from "../../../components/app/truncation-notice";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { Button } from "../../../components/ui/button";
@@ -784,7 +786,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   return (
     <>
       <DndContext sensors={pageSensors} collisionDetection={appCollision} onDragEnd={onHubDragEnd}>
-        <FeaturePanelsShell feature="tasks" left={left} center={center} right={right} />
+        <FeaturePanelsShell
+          feature="tasks"
+          notice={truncationNotice(api.truncated)}
+          left={left}
+          center={center}
+          right={right}
+        />
       </DndContext>
       <CaptureModal
         open={captureOpen}

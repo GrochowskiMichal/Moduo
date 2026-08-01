@@ -15,6 +15,42 @@ import * as Y from "yjs";
 
 type Mode = "text" | "md";
 
+/**
+ * Element properties come in TWO shapes and the walker must read both.
+ *
+ * The live editor's v2 collab binding stores every Lexical element property
+ * `__`-prefixed (`__tag`, `__listType`, `__checked`, `__value`) — the same
+ * convention this file already handled for task-lines. Plain XmlElements
+ * (unit tests, the legacy redb walker) use the bare names.
+ *
+ * Reading only the bare names is how heading levels, checkbox state and
+ * ordered-list numbering were silently flattened out of `body_md` — every
+ * heading exported as `###`, every checklist as plain bullets (NOTE-FIX-1).
+ */
+function prop(node: Y.XmlElement | Y.XmlText, name: string): unknown {
+  const prefixed = node.getAttribute(`__${name}`);
+  return prefixed !== undefined ? prefixed : node.getAttribute(name);
+}
+
+/**
+ * A list with NO recorded type is an ORDERED list.
+ *
+ * The binding only serializes properties that differ from a default-constructed
+ * node, and `ListNode`'s own default is `listType: "number"` — so `__listType`
+ * is written for `bullet` and `check` and OMITTED for ordered. Verified against
+ * the real binding:
+ *
+ *   - a - b        → <list __listType="bullet" __tag="ul">…
+ *   - [x] a        → <list __listType="check"  __tag="ul">…
+ *   1. a  2. b     → <list>…                  (no attributes at all)
+ *
+ * The bare default used to be "bullet", which is why every ordered list
+ * exported as bullets. Nothing in the app builds a list without this attribute
+ * except an ordered one (no production code hand-writes Yjs docs — every doc
+ * comes from the binding, and Lexical's own fields are `__`-prefixed).
+ */
+const DEFAULT_LIST_TYPE = "number";
+
 /** Task-line serialization shared by both shapes (lexical-yjs stores element
  * nodes as XmlText embeds with `__`-prefixed attributes; tests/legacy walkers
  * use plain XmlElements). */
@@ -56,7 +92,7 @@ function walkXmlElement(node: Y.XmlElement, mode: Mode): string {
       const childText = walkXmlElement(child, mode);
 
       if (childName === "heading") {
-        const tag = child.getAttribute("tag") as string | undefined;
+        const tag = prop(child, "tag") as string | undefined;
         const prefix = tag === "h1" ? "# " : tag === "h2" ? "## " : "### ";
         parts.push(mode === "md" ? `${prefix}${childText.trim()}` : childText.trim());
       } else if (childName === "quote") {
@@ -69,9 +105,9 @@ function walkXmlElement(node: Y.XmlElement, mode: Mode): string {
           parts.push(childText.trim());
         }
       } else if (childName === "listitem") {
-        const listType = (node.getAttribute("listType") as string | undefined) ?? "bullet";
-        const value = child.getAttribute("value") as number | undefined;
-        const checked = child.getAttribute("checked");
+        const listType = (prop(node, "listType") as string | undefined) ?? DEFAULT_LIST_TYPE;
+        const value = prop(child, "value") as number | undefined;
+        const checked = prop(child, "checked");
         if (mode === "md") {
           if (checked !== undefined) {
             parts.push(`- [${checked ? "x" : " "}] ${childText.trim()}`);
@@ -87,12 +123,7 @@ function walkXmlElement(node: Y.XmlElement, mode: Mode): string {
         if (mode === "md") parts.push("---");
       } else if (childName === "task-line") {
         parts.push(
-          taskLineToString(
-            child.getAttribute("__taskId") ?? child.getAttribute("taskId"),
-            child.getAttribute("__done") ?? child.getAttribute("done"),
-            childText,
-            mode,
-          ),
+          taskLineToString(prop(child, "taskId"), prop(child, "done"), childText, mode),
         );
       } else {
         if (childText) parts.push(childText);

@@ -508,50 +508,139 @@ export type Database = {
           },
         ]
       }
-      habits: {
+      email_accounts: {
         Row: {
-          checks: Json
+          address: string
+          color: string | null
           created_at: string
-          emoji: string
+          deleted_at: string | null
           id: string
-          name: string
-          position: string
+          last_error: string | null
+          last_sync_at: string | null
+          owner_id: string
+          provider: string
+          signature_html: string
+          status: string
+          unread_count: number
           updated_at: string
-          user_id: string
           workspace_id: string
         }
         Insert: {
-          checks?: Json
+          address: string
+          color?: string | null
           created_at?: string
-          emoji?: string
+          deleted_at?: string | null
           id?: string
-          name: string
-          position?: string
+          last_error?: string | null
+          last_sync_at?: string | null
+          owner_id?: string
+          provider: string
+          signature_html?: string
+          status?: string
+          unread_count?: number
           updated_at?: string
-          user_id: string
           workspace_id: string
         }
         Update: {
-          checks?: Json
+          address?: string
+          color?: string | null
           created_at?: string
-          emoji?: string
+          deleted_at?: string | null
           id?: string
-          name?: string
-          position?: string
+          last_error?: string | null
+          last_sync_at?: string | null
+          owner_id?: string
+          provider?: string
+          signature_html?: string
+          status?: string
+          unread_count?: number
           updated_at?: string
-          user_id?: string
           workspace_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "habits_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "email_accounts_workspace_id_fkey"
+            columns: ["workspace_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_refs: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          deleted_at: string | null
+          follow_up_at: string | null
+          follow_up_cleared_at: string | null
+          follow_up_notified_at: string | null
+          from_addr: string | null
+          from_name: string | null
+          id: string
+          is_snoozed: boolean
+          message_key: string | null
+          owner_id: string
+          sent_at: string | null
+          snippet: string
+          snooze_until: string | null
+          subject: string
+          thread_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          follow_up_at?: string | null
+          follow_up_cleared_at?: string | null
+          follow_up_notified_at?: string | null
+          from_addr?: string | null
+          from_name?: string | null
+          id?: string
+          is_snoozed?: boolean
+          message_key?: string | null
+          owner_id?: string
+          sent_at?: string | null
+          snippet?: string
+          snooze_until?: string | null
+          subject?: string
+          thread_key: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          follow_up_at?: string | null
+          follow_up_cleared_at?: string | null
+          follow_up_notified_at?: string | null
+          from_addr?: string | null
+          from_name?: string | null
+          id?: string
+          is_snoozed?: boolean
+          message_key?: string | null
+          owner_id?: string
+          sent_at?: string | null
+          snippet?: string
+          snooze_until?: string | null
+          subject?: string
+          thread_key?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_refs_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "habits_workspace_id_fkey"
+            foreignKeyName: "email_refs_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -813,6 +902,64 @@ export type Database = {
           submitted_at?: string
         }
         Relationships: []
+      }
+      habits: {
+        Row: {
+          checks: Json
+          created_at: string
+          emoji: string
+          id: string
+          name: string
+          position: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          checks?: Json
+          created_at?: string
+          emoji?: string
+          id?: string
+          name: string
+          position?: string
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          checks?: Json
+          created_at?: string
+          emoji?: string
+          id?: string
+          name?: string
+          position?: string
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "habits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "habits_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       link_suggestion_declines: {
         Row: {
@@ -1111,6 +1258,7 @@ export type Database = {
         Row: {
           activity_id: string
           created_at: string
+          dismissed_at: string | null
           id: string
           read_at: string | null
           user_id: string
@@ -1119,6 +1267,7 @@ export type Database = {
         Insert: {
           activity_id: string
           created_at?: string
+          dismissed_at?: string | null
           id?: string
           read_at?: string | null
           user_id?: string
@@ -1127,6 +1276,7 @@ export type Database = {
         Update: {
           activity_id?: string
           created_at?: string
+          dismissed_at?: string | null
           id?: string
           read_at?: string | null
           user_id?: string
@@ -2081,6 +2231,7 @@ export type Database = {
         Row: {
           id: string
           joined_at: string
+          permissions_email: string | null
           permissions_notes: string
           permissions_tasks: string
           role: string
@@ -2090,6 +2241,7 @@ export type Database = {
         Insert: {
           id?: string
           joined_at?: string
+          permissions_email?: string | null
           permissions_notes?: string
           permissions_tasks?: string
           role?: string
@@ -2099,6 +2251,7 @@ export type Database = {
         Update: {
           id?: string
           joined_at?: string
+          permissions_email?: string | null
           permissions_notes?: string
           permissions_tasks?: string
           role?: string
@@ -2473,6 +2626,39 @@ export type Database = {
         Args: { p_event_id: string; p_workspace_id: string }
         Returns: undefined
       }
+      calendar_op_event_restore: {
+        Args: { p_event_id: string; p_workspace_id: string }
+        Returns: {
+          all_day: boolean
+          attendees: Json
+          calendar_id: string
+          color: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          end_time: string
+          external_event_id: string | null
+          id: string
+          location: string | null
+          owner_id: string
+          recurrence_rule: string | null
+          recurring: boolean
+          reminders: Json
+          source_account_id: string | null
+          start_time: string
+          status: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "calendar_events"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       calendar_op_event_update: {
         Args: { p_event_id: string; p_patch: Json; p_workspace_id: string }
         Returns: {
@@ -2834,6 +3020,38 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      contacts_op_restore: {
+        Args: { p_contact_id: string; p_workspace_id: string }
+        Returns: {
+          addresses: Json
+          avatar_url: string | null
+          company_id: string | null
+          created_at: string
+          custom: Json
+          dates: Json
+          deleted_at: string | null
+          email: string | null
+          emails: Json
+          id: string
+          is_favorite: boolean
+          name: string
+          notes_inline: string
+          owner_id: string | null
+          phone: string | null
+          phones: Json
+          status: string
+          title: string | null
+          updated_at: string
+          urls: Json
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "contacts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       contacts_op_set_details: {
         Args: { p_contact_id: string; p_patch: Json; p_workspace_id: string }
         Returns: {
@@ -2991,6 +3209,390 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "contacts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_module_permission: {
+        Args: { p_workspace_id: string }
+        Returns: string
+      }
+      email_op__guard: { Args: { p_workspace_id: string }; Returns: undefined }
+      email_op__guard_ref: {
+        Args: { p_ref_id: string; p_workspace_id: string }
+        Returns: {
+          account_id: string | null
+          created_at: string
+          deleted_at: string | null
+          follow_up_at: string | null
+          follow_up_cleared_at: string | null
+          follow_up_notified_at: string | null
+          from_addr: string | null
+          from_name: string | null
+          id: string
+          is_snoozed: boolean
+          message_key: string | null
+          owner_id: string
+          sent_at: string | null
+          snippet: string
+          snooze_until: string | null
+          subject: string
+          thread_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_refs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_account_remove: {
+        Args: { p_account_id: string; p_workspace_id: string }
+        Returns: {
+          address: string
+          color: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          last_error: string | null
+          last_sync_at: string | null
+          owner_id: string
+          provider: string
+          signature_html: string
+          status: string
+          unread_count: number
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_account_upsert: {
+        Args: {
+          p_address: string
+          p_color?: string
+          p_provider: string
+          p_signature_html?: string
+          p_status?: string
+          p_unread_count?: number
+          p_workspace_id: string
+        }
+        Returns: {
+          address: string
+          color: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          last_error: string | null
+          last_sync_at: string | null
+          owner_id: string
+          provider: string
+          signature_html: string
+          status: string
+          unread_count: number
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_clear_follow_up: {
+        Args: { p_ref_id: string; p_workspace_id: string }
+        Returns: {
+          account_id: string | null
+          created_at: string
+          deleted_at: string | null
+          follow_up_at: string | null
+          follow_up_cleared_at: string | null
+          follow_up_notified_at: string | null
+          from_addr: string | null
+          from_name: string | null
+          id: string
+          is_snoozed: boolean
+          message_key: string | null
+          owner_id: string
+          sent_at: string | null
+          snippet: string
+          snooze_until: string | null
+          subject: string
+          thread_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_refs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_follow_up: {
+        Args: {
+          p_follow_up_at: string
+          p_ref_id: string
+          p_workspace_id: string
+        }
+        Returns: {
+          account_id: string | null
+          created_at: string
+          deleted_at: string | null
+          follow_up_at: string | null
+          follow_up_cleared_at: string | null
+          follow_up_notified_at: string | null
+          from_addr: string | null
+          from_name: string | null
+          id: string
+          is_snoozed: boolean
+          message_key: string | null
+          owner_id: string
+          sent_at: string | null
+          snippet: string
+          snooze_until: string | null
+          subject: string
+          thread_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_refs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_follow_up_due: {
+        Args: { p_ref_id: string; p_workspace_id: string }
+        Returns: {
+          account_id: string | null
+          created_at: string
+          deleted_at: string | null
+          follow_up_at: string | null
+          follow_up_cleared_at: string | null
+          follow_up_notified_at: string | null
+          from_addr: string | null
+          from_name: string | null
+          id: string
+          is_snoozed: boolean
+          message_key: string | null
+          owner_id: string
+          sent_at: string | null
+          snippet: string
+          snooze_until: string | null
+          subject: string
+          thread_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_refs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_link: {
+        Args: {
+          p_origin?: string
+          p_relation_kind?: string
+          p_target_icon?: string
+          p_target_id: string
+          p_target_label?: string
+          p_target_type: string
+          p_thread_id: string
+          p_thread_label?: string
+          p_workspace_id: string
+        }
+        Returns: {
+          created_at: string
+          created_by: string
+          deleted_at: string | null
+          id: string
+          origin: string
+          pair_key: string | null
+          relation_kind: string
+          source_id: string
+          source_type: string
+          target_id: string
+          target_type: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "entity_links"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_ref_remove: {
+        Args: { p_ref_id: string; p_workspace_id: string }
+        Returns: {
+          account_id: string | null
+          created_at: string
+          deleted_at: string | null
+          follow_up_at: string | null
+          follow_up_cleared_at: string | null
+          follow_up_notified_at: string | null
+          from_addr: string | null
+          from_name: string | null
+          id: string
+          is_snoozed: boolean
+          message_key: string | null
+          owner_id: string
+          sent_at: string | null
+          snippet: string
+          snooze_until: string | null
+          subject: string
+          thread_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_refs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_ref_upsert: {
+        Args: {
+          p_account_id?: string
+          p_from_addr?: string
+          p_from_name?: string
+          p_message_key?: string
+          p_sent_at?: string
+          p_snippet?: string
+          p_subject?: string
+          p_thread_key: string
+          p_workspace_id: string
+        }
+        Returns: {
+          account_id: string | null
+          created_at: string
+          deleted_at: string | null
+          follow_up_at: string | null
+          follow_up_cleared_at: string | null
+          follow_up_notified_at: string | null
+          from_addr: string | null
+          from_name: string | null
+          id: string
+          is_snoozed: boolean
+          message_key: string | null
+          owner_id: string
+          sent_at: string | null
+          snippet: string
+          snooze_until: string | null
+          subject: string
+          thread_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_refs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_snooze: {
+        Args: {
+          p_ref_id: string
+          p_snooze_until: string
+          p_workspace_id: string
+        }
+        Returns: {
+          account_id: string | null
+          created_at: string
+          deleted_at: string | null
+          follow_up_at: string | null
+          follow_up_cleared_at: string | null
+          follow_up_notified_at: string | null
+          from_addr: string | null
+          from_name: string | null
+          id: string
+          is_snoozed: boolean
+          message_key: string | null
+          owner_id: string
+          sent_at: string | null
+          snippet: string
+          snooze_until: string | null
+          subject: string
+          thread_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_refs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_snooze_due: {
+        Args: { p_ref_id: string; p_workspace_id: string }
+        Returns: {
+          account_id: string | null
+          created_at: string
+          deleted_at: string | null
+          follow_up_at: string | null
+          follow_up_cleared_at: string | null
+          follow_up_notified_at: string | null
+          from_addr: string | null
+          from_name: string | null
+          id: string
+          is_snoozed: boolean
+          message_key: string | null
+          owner_id: string
+          sent_at: string | null
+          snippet: string
+          snooze_until: string | null
+          subject: string
+          thread_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_refs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      email_op_unsnooze: {
+        Args: { p_ref_id: string; p_workspace_id: string }
+        Returns: {
+          account_id: string | null
+          created_at: string
+          deleted_at: string | null
+          follow_up_at: string | null
+          follow_up_cleared_at: string | null
+          follow_up_notified_at: string | null
+          from_addr: string | null
+          from_name: string | null
+          id: string
+          is_snoozed: boolean
+          message_key: string | null
+          owner_id: string
+          sent_at: string | null
+          snippet: string
+          snooze_until: string | null
+          subject: string
+          thread_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "email_refs"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -3577,6 +4179,7 @@ export type Database = {
           actor_label: string
           actor_type: string
           created_at: string
+          dismissed_at: string
           entity_id: string
           entity_type: string
           id: string
@@ -3587,11 +4190,19 @@ export type Database = {
           workspace_id: string
         }[]
       }
+      notifications_op_dismiss: {
+        Args: { p_activity_id: string; p_workspace_id: string }
+        Returns: undefined
+      }
       notifications_op_mark_all_read: {
         Args: { p_workspace_id: string }
         Returns: undefined
       }
       notifications_op_mark_read: {
+        Args: { p_activity_id: string; p_workspace_id: string }
+        Returns: undefined
+      }
+      notifications_op_undismiss: {
         Args: { p_activity_id: string; p_workspace_id: string }
         Returns: undefined
       }
@@ -3962,6 +4573,23 @@ export type Database = {
       }
       workspace_api_keys_revoke: {
         Args: { p_key_id: string }
+        Returns: undefined
+      }
+      workspace_op_remove_member: {
+        Args: { p_member_id: string }
+        Returns: undefined
+      }
+      workspace_op_set_member_role: {
+        Args: {
+          p_member_id: string
+          p_perm_notes?: string
+          p_perm_tasks?: string
+          p_role: string
+        }
+        Returns: undefined
+      }
+      workspace_op_transfer_ownership: {
+        Args: { p_member_id: string }
         Returns: undefined
       }
       workspaces_owned_count_for_user: {

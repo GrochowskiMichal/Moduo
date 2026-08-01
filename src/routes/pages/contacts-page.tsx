@@ -19,6 +19,11 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Contact as ContactIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
+import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
+import { undoToast } from "../../lib/undo-toast";
+import { asDragPayload, asDropLinkTarget, isSelfDrop, payloadRef, targetAccepts } from "../../lib/drag-payload";
+import { truncationNotice } from "../../components/app/truncation-notice";
 import { onCreateNew } from "../../components/app/create-events";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { Button } from "../../components/ui/button";
@@ -858,6 +863,7 @@ export function ContactsPage() {
       <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={onDragEnd}>
         <FeaturePanelsShell
           feature="contacts"
+          notice={truncationNotice([...directory.bundle.truncated, ...directoryTags.truncated])}
           left={left}
           center={center}
           right={right}
