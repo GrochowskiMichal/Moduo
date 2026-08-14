@@ -217,14 +217,14 @@ fn start_sync_worker_if_needed(state: &AppState, access_token: &str) {
     // Plan tier gating happens inside the sync worker itself (run_worker checks at startup
     // and periodically), so we start it here for all cloud sessions. The worker will
     // self-terminate if the user is on the free tier.
-    let anon_key = std::env::var("PUBLIC_SUPABASE_ANON_KEY")
-        .or_else(|_| std::env::var("MODUO_SUPABASE_ANON_KEY"))
+    let publishable_key = std::env::var("PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+        .or_else(|_| std::env::var("MODUO_SUPABASE_PUBLISHABLE_KEY"))
         .unwrap_or_default();
 
     let handle = crate::sync::start_if_cloud(
         state.store.clone(),
         state.config.supabase_url.clone(),
-        anon_key,
+        publishable_key,
         access_token.to_string(),
     );
 
