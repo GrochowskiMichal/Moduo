@@ -108,13 +108,14 @@ export function buildDocStateFromMarkdown(
   } as any;
 
   const unregister = editor.registerUpdateListener(
-    ({ prevEditorState, editorState, dirtyElements, normalizedNodes, tags }) => {
+    ({ prevEditorState, editorState, dirtyElements, dirtyLeaves, normalizedNodes, tags }) => {
       syncLexicalUpdateToYjsV2__EXPERIMENTAL(
         binding,
         provider,
         prevEditorState,
         editorState,
         dirtyElements,
+        dirtyLeaves,
         normalizedNodes,
         tags,
       );
