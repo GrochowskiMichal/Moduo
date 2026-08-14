@@ -21,10 +21,11 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import { connectorModules, moduleScope, toolsForKey, type KeyContext } from "./registry.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const DEFAULT_SECRET_KEY = getDefaultSecretKey();
 
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const SERVER_INFO = { name: "moduo-mcp", title: "Moduo", version: "1.0.0" };
@@ -113,7 +114,7 @@ async function handleToolCall(id: unknown, params: any, key: KeyContext) {
   // Per-request client: the x-moduo-key-id header is what Postgres uses to
   // attribute mutations to this key (module_api_key_id() trusts it only
   // under the service_role JWT this client carries).
-  const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+  const db = createClient(SUPABASE_URL, DEFAULT_SECRET_KEY, {
     auth: { persistSession: false },
     global: { headers: { "x-moduo-key-id": key.id } },
   });
@@ -134,7 +135,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "moduo-mcp speaks MCP Streamable HTTP: POST JSON-RPC messages." }, { status: 405 });
   }
 
-  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const admin = createClient(SUPABASE_URL, DEFAULT_SECRET_KEY, { auth: { persistSession: false } });
   const key = await authenticate(req, admin);
   if (!key) {
     return json(

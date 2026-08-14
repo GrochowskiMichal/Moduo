@@ -17,8 +17,10 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const DEFAULT_SECRET_KEY = getDefaultSecretKey();
 
 const MAX_DEPTH = 100;
 
@@ -81,7 +83,7 @@ Deno.serve(async (req: Request) => {
   const token = new URL(req.url).searchParams.get("token")?.trim() ?? "";
   if (!token) return notFound();
 
-  const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const db = createClient(SUPABASE_URL, DEFAULT_SECRET_KEY, { auth: { persistSession: false } });
 
   // Resolve the published ROOT by token (the capability). A revoked token
   // (publish_token cleared) or an archived/trashed root finds nothing.

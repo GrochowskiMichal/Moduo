@@ -4,7 +4,10 @@
  * Creates a Stripe Coupon (100% off, once, lifetime entitlement) and records
  * it in founders_interest for the given email. Optionally sends the coupon via Resend.
  *
- * Protected: only service-role callers (team dashboard) can hit this.
+ * Protected: only callers presenting the project's default secret key in the
+ * `apikey` header (team dashboard) can hit this.
+ *
+ * Deploy with verify_jwt = false — auth is the `apikey` header secret check below.
  *
  * Body: { email: string; sendEmail?: boolean }
  * Returns: { couponCode: string; promotionCodeId: string }
@@ -12,6 +15,8 @@
 
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
+
+import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
   apiVersion: "2023-10-16",
@@ -21,10 +26,11 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
 const FOUNDERS_PRICE_ID = Deno.env.get("STRIPE_PRICE_FOUNDERS") ?? "";
 
 Deno.serve(async (req: Request) => {
-  // Require service-role key in Authorization header.
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!authHeader.includes(serviceKey.slice(-20))) {
+  // Require the project's default secret key in the `apikey` header — the new
+  // secret-key transport. Authorization bearer is NOT accepted as a key
+  // transport here; the dashboard sends the secret as `apikey`.
+  const secretKey = getDefaultSecretKey();
+  if (req.headers.get("apikey") !== secretKey) {
     return new Response("Forbidden", { status: 403 });
   }
 
@@ -34,7 +40,7 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      serviceKey,
+      secretKey,
       { auth: { persistSession: false } }
     );
 
