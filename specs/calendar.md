@@ -1,6 +1,6 @@
 # Spec: Calendar (Wave 2) — the schedule-to-completion loop
 
-> Status: **Ready** · Owner: maciej · Related briefs: [.design/calendar/BRIEF.md](../.design/calendar/BRIEF.md) (product), [.design/calendar/DESIGN_BRIEF.md](../.design/calendar/DESIGN_BRIEF.md) (the build spec — **authoritative for all UX detail below**), [.design/calendar/COMPETITIVE_RESEARCH.md](../.design/calendar/COMPETITIVE_RESEARCH.md) (the Morgen bar).
+> Status: **Shipped** — CAL-1…CAL-7 landed 2026-07-02 and the CAL-8a/CAL-8b CalDAV/ICS fast-follow 2026-07-03; Wave 2 complete. **[`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) is the status of record**; this spec is the design/AC reference. Still manual-only: the desktop Google/Outlook OAuth round-trip (needs real credentials). · Owner: maciej · Related briefs: [.design/calendar/BRIEF.md](../.design/calendar/BRIEF.md) (product), [.design/calendar/DESIGN_BRIEF.md](../.design/calendar/DESIGN_BRIEF.md) (the build spec — **authoritative for all UX detail below**), [.design/calendar/COMPETITIVE_RESEARCH.md](../.design/calendar/COMPETITIVE_RESEARCH.md) (the Morgen bar).
 
 ## Scope
 

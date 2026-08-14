@@ -1,5 +1,7 @@
 # Manual test checklist — spine foundation (CT-1 + CT-2 + CT-3)
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): APPLIED to prod.** The "Migration not applied to prod by this session … applying to prod is your deploy step" note below is stale — OPS-1 + OPS-2 (2026-07-29) applied and verified every migration file in the repo. **There is no deploy step left here; the rows are runnable now.** Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 > Generated 2026-06-25 · branch `t/maciej/ct-1-link-substrate` · **Live-verified:** partial.
 > CT-1's DB layer was fully exercised on **real Postgres 17** (the moduohyb prod DB) inside a **rolled-back transaction** — all 15 AC1–AC5 checks passed and prod was left byte-clean. CT-2/CT-3 pass `bun run verify` (typecheck + lint + 151 unit tests) and compile in the Storybook bundler; their *rendered* UI and *wired* drag couldn't be live-verified here (pre-existing Storybook `preview.tsx` load fault + no wired consumer yet — see Known gaps).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.

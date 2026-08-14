@@ -1,5 +1,7 @@
 # Manual test checklist — CAL-2: Native events end-to-end
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): APPLIED to prod** — the header below already says so, and OPS-2's 2026-07-29 reconciliation confirms it repo-wide. **So the ⚠ "Deploy steps (do these first)" preamble and every `[post-deploy]` marker below are satisfied, not pending** — and the one "BEFORE applying the migration, open /calendar…" step is no longer reachable; skip it. Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 > Generated 2026-07-02 · branch `t/maciej/cal-2-native-events` · **Live-verified:** partial — every grid interaction verified on the web preview with stubbed RPCs; **the migration IS APPLIED to prod** (2026-07-02, Supabase MCP) and the authed op round-trip is verified — create (recurring) / patch update / validation / registry / activity / RLS read / delete cascade. **[post-deploy]** items are now runnable.
 > Run top-to-bottom; check off as you go.
 

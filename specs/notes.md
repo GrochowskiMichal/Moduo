@@ -1,6 +1,6 @@
 # Spec: Notes rebuild (Wave 3)
 
-> Status: **Ready** · Owner: maciej · Related briefs: [.design/notes/BRIEF.md](../.design/notes/BRIEF.md) (product intent), [.design/notes/DESIGN_BRIEF.md](../.design/notes/DESIGN_BRIEF.md) (the build spec — **authoritative for UX/data details**; §1 lists its designer-ratified deltas from the BRIEF)
+> Status: **Shipped** — NO-1…NO-10 landed 2026-07-03 → 2026-07-04, plus the follow-ups NO-9b (public-page renderer) and NO-7b (Notes rail + drag-into-editor); Wave 3 complete. **[`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) is the status of record**; this spec is the design/AC reference. · Owner: maciej · Related briefs: [.design/notes/BRIEF.md](../.design/notes/BRIEF.md) (product intent), [.design/notes/DESIGN_BRIEF.md](../.design/notes/DESIGN_BRIEF.md) (the build spec — **authoritative for UX/data details**; §1 lists its designer-ratified deltas from the BRIEF)
 
 ## Scope
 

@@ -12,7 +12,7 @@ This was a **docs-only session** — no product code, schema, or migrations chan
 - [ ] **Do:** In HANDOFF.md, click the internal links (architecture.md, data-layers.md, BUILD_ORDER.md, backend-refactor-memo.md) → **Expect:** all resolve within the repo _(GitHub or editor)_
 
 ## Stale-doc fixes
-- [ ] **Do:** Open `docs/data-layers.md` → **Expect:** the **⚠ STATUS UPDATE (2026-07-11)** banner near the top corrects the ~4-waves-stale status (35 migrations, 7+ modules cloud-first, spine built) and points to HANDOFF.md _(any)_
+- [ ] **Do:** Open `docs/data-layers.md` → **Expect:** the **⚠ STATUS UPDATE (2026-07-11, refreshed 2026-08-14)** banner near the top corrects the stale status (43 migrations, 7+ modules cloud-first, spine built) and points to `specs/BUILD_ORDER.md` as the status of record _(any)_
 - [ ] **Do:** Open `docs/ROADMAP.md` §B item 5 → **Expect:** now reads **✅ RESOLVED → central `entities` registry** (the stale "lean trigger-based" line is corrected) _(any)_
 - [ ] **Do:** Open `specs/contacts-v2.md` header → **Expect:** Status reads **Done** (superseded by `contacts-v3-fixpack.md`), not "In progress" _(any)_
 

@@ -1,6 +1,6 @@
 # Spec: Connective Tissue (the Spine) — Wave 0 core
 
-> Status: **Ready to execute** · Owner: maciej · Related briefs: [`.design/connective-tissue/BRIEF.md`](../.design/connective-tissue/BRIEF.md), [`.design/connective-tissue/DESIGN_BRIEF.md`](../.design/connective-tissue/DESIGN_BRIEF.md) · Contract: [`docs/moduo-module-contract.md`](../docs/moduo-module-contract.md) · Architecture: [`docs/data-layers.md`](../docs/data-layers.md) §5
+> Status: **Shipped** — CT-1…CT-7 all landed 2026-06-25 → 2026-06-27 (Wave 0 complete); the spine is the substrate every module since has consumed. **[`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) is the status of record**; this spec is the design/AC reference. · Owner: maciej · Related briefs: [`.design/connective-tissue/BRIEF.md`](../.design/connective-tissue/BRIEF.md), [`.design/connective-tissue/DESIGN_BRIEF.md`](../.design/connective-tissue/DESIGN_BRIEF.md) · Contract: [`docs/moduo-module-contract.md`](../docs/moduo-module-contract.md) · Architecture: [`docs/data-layers.md`](../docs/data-layers.md) §5
 >
 > This spec is the **execution contract** over the spine briefs. It does not restate them — the product/UX/visual detail lives in the BRIEF + DESIGN_BRIEF and is referenced by section. This adds acceptance criteria, the tests that prove them, the block decomposition, the resolved technical decisions, and the Definition-of-Ready gate.
 

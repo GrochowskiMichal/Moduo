@@ -1,5 +1,7 @@
 # Manual test checklist — DF-19f (Settings → Preferences)
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): APPLIED to prod, so cross-device preference sync is live.** This file contradicts itself — the header says the migration was applied and round-tripped, while §Known gaps says "Migration unapplied to prod … cross-device sync is deferred". **The header is right**, and OPS-2's 2026-07-29 reconciliation confirms every repo migration exists in prod. Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 > Generated 2026-07-12 · branch `t/maciej/df-19f-preferences` · **Live-verified:** yes (web, hosted test account). The migration was applied to prod + round-trip-verified after the first live-verify pass (initial verify ran against the migration-absent DB = the graceful-degrade path; cross-device sync is now live). Desktop-specific rows not run (no desktop this session).
 
 ## Preferences section renders
