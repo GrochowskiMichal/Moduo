@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { AlertTriangle, Mail, PenSquare, RefreshCw } from "lucide-react";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
+import { truncationNotice } from "../../../components/app/truncation-notice";
 import { onCreateNew } from "../../../components/app/create-events";
 import {
   RightPanelSwitcher,
@@ -1233,6 +1234,7 @@ export function EmailPageView({
     <>
       <FeaturePanelsShell
         feature="email"
+        notice={truncationNotice(email.truncated)}
         left={
           <EmailRail
             accounts={email.accounts}

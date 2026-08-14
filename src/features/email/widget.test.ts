@@ -48,7 +48,7 @@ function ref(over: Partial<EmailThreadRef>): EmailThreadRef {
 }
 
 function bundle(over: Partial<EmailModuleBundle>): EmailModuleBundle {
-  return { accounts: [], refs: [], degraded: false, ...over };
+  return { accounts: [], refs: [], degraded: false, truncated: [], ...over };
 }
 
 describe("shapeEmailInbox", () => {

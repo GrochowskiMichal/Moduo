@@ -353,6 +353,7 @@ pub fn run() {
             commands::email::account_commands::email_accounts_list,
             commands::email::account_commands::email_account_connect_and_save,
             commands::email::account_commands::email_account_disconnect,
+            commands::email::account_commands::email_account_set_history_depth,
             commands::email::oauth::email_gmail_oauth_start,
             commands::email::email_list_envelopes,
             commands::email::email_get_thread,
