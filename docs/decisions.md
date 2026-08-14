@@ -4,6 +4,10 @@ Newest-first index of **locked product/architecture decisions**, so they stop sc
 
 **At the end of every block, append any decision you made or that was ratified.** Read this file at session start.
 
+- **2026-08-14 · S-1 deployment — all 13 Supabase Edge Functions now run with `verify_jwt=false` and the new secret-key environment.** The default `sb_secret_...` key is platform-managed through `SUPABASE_SECRET_KEYS`; no secret value enters the repository. Live unauthenticated probes reached each function's own authorization/configuration handler (401/403/400/404/503 as appropriate), while legacy keys remain active for rollback and client smoke testing. → [Supabase API-key migration checklist](./testing/t-mike-supabase-api-key-migration.md)
+
+- **2026-08-14 · S-1 API-key migration — backend code uses only the new key model, with no legacy fallback.** Browser/runtime configuration uses `PUBLIC_SUPABASE_PUBLISHABLE_KEY`; Edge Functions resolve the full-access credential from `SUPABASE_SECRET_KEYS.default`, and `verify_jwt=false` plus in-code authorization is the target for every function because the gateway understands only legacy JWT keys. Deployment is gated on creating the new default secret key first, so strict code cannot boot against an absent credential. → [Supabase API-key migration](./gotchas.md#supabase-api-key-migration)
+
 > **⚠ Migration-status clauses in the entries below are HISTORY.** Many entries say a migration was "deploy-ready but unapplied", "deploy-gated", or "not deployed to prod" — true **on the day that entry was written**, when sessions often could not reach prod. **As of 2026-07-29 (OPS-1 + OPS-2) every migration file in this repo is applied to prod** — every object those files declare exists in prod, with no semantic function-body drift ([`docs/reviews/ops-2-schema-reconciliation.md`](./reviews/ops-2-schema-reconciliation.md); re-run with `bun run db:reconcile`; note its §1.1 limits — indexes, grants and signatures are not compared, so "applied" ≠ "audited"). Never treat one of those clauses as an outstanding deploy step — probe the database. The live ledger is [`specs/BUILD_ORDER.md`](../specs/BUILD_ORDER.md).
 
 ---
