@@ -3,6 +3,7 @@ import { Eye, EyeOff, LogOut, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import defaultProfilePic from "../../../../assets/icon.png";
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
@@ -354,9 +355,7 @@ export function AccountSection() {
           </p>
 
           <div className="mt-5 flex flex-col gap-1">
-            <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-              Email
-            </span>
+            <Eyebrow>Email</Eyebrow>
             <span className="text-sm text-foreground">{userEmail ?? "—"}</span>
           </div>
 

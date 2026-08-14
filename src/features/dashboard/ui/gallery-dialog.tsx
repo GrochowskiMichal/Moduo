@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
 import type { WidgetSize, WidgetType } from "../engine/types";
@@ -95,9 +96,7 @@ export function GalleryDialog({
                       }
                     />
                   ) : (
-                    <span className="text-2xs uppercase tracking-wide text-muted-foreground/70">
-                      {meta.sizes[0]}
-                    </span>
+                    <Eyebrow tone="tag">{meta.sizes[0]}</Eyebrow>
                   )}
                   <Button size="sm" variant="secondary" onClick={() => handleAdd(type)}>
                     <Plus className="size-icon-sm" aria-hidden />

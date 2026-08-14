@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { isDesktopShell, openStripeUrl } from "../../../hooks/use-entitlement";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
 import { useAuth } from "../../../providers/auth-provider";
@@ -124,9 +125,7 @@ export function BillingSection() {
       <section className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
         <div className="flex flex-row items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-2xs uppercase tracking-wide text-muted-foreground">
-              Current plan
-            </span>
+            <Eyebrow>Current plan</Eyebrow>
             <span className="font-display text-lg text-foreground">{planLabel(tier)}</span>
             <p className="text-sm text-muted-foreground">{statusLine}</p>
           </div>

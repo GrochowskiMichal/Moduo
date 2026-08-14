@@ -1,3 +1,4 @@
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { useAuth } from "../../../providers/auth-provider";
 import {
   ABOUT_LINKS,
@@ -29,7 +30,7 @@ export function AboutSection() {
 
         <dl className="mt-5 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-2xs uppercase tracking-wide text-muted-foreground">Version</dt>
+            <Eyebrow as="dt">Version</Eyebrow>
             <dd className="mt-1 text-foreground">{versionLabel()}</dd>
             {IS_DESKTOP ? (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -38,11 +39,11 @@ export function AboutSection() {
             ) : null}
           </div>
           <div>
-            <dt className="text-2xs uppercase tracking-wide text-muted-foreground">Storage</dt>
+            <Eyebrow as="dt">Storage</Eyebrow>
             <dd className="mt-1 text-foreground">{ABOUT_STORAGE_LINE}</dd>
           </div>
           <div>
-            <dt className="text-2xs uppercase tracking-wide text-muted-foreground">Runtime</dt>
+            <Eyebrow as="dt">Runtime</Eyebrow>
             <dd className="mt-1 text-foreground">{ABOUT_RUNTIME_LINE}</dd>
           </div>
         </dl>

@@ -9,6 +9,7 @@
 import { AlertTriangle, Clock3, CornerUpLeft, Inbox, Plus } from "lucide-react";
 import type { LabelColor } from "../../../components/tag-colors";
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { providerLabel } from "../accounts";
 import type { SavedAccount } from "../model/email-types";
@@ -105,9 +106,9 @@ export function EmailRail({
       {/* Per-account rows. */}
       {accounts.length > 0 ? (
         <div className="flex flex-col gap-0.5">
-          <div className="px-2 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          <Eyebrow as="div" className="px-2">
             Accounts
-          </div>
+          </Eyebrow>
           {accounts.map((account) => {
             const active = inboxView && selectedAccountId === account.id;
             const label = account.email || providerLabel(account.provider);

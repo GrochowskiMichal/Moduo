@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { Input } from "@/components/ui/input";
 import { ModuoMark } from "@/components/ui/moduo-mark";
 import { notifyProfileUpdated, writeStoredAvatar } from "@/features/profile/profile-storage";
@@ -598,9 +599,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
         {!cloudAuth && flow === "create_phrase" ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                12-word phrase
-              </span>
+              <Eyebrow tone="strong">12-word phrase</Eyebrow>
               <div className="group relative">
                 <button
                   type="button"

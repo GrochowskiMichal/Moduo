@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { formatScheduled } from "../helpers";
 import type { Task } from "../model";
 
@@ -72,9 +73,7 @@ export function DriftTriageDialog({
           <>
             {canEdit ? (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
-                  Apply to all
-                </span>
+                <Eyebrow tone="muted">Apply to all</Eyebrow>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="outline">

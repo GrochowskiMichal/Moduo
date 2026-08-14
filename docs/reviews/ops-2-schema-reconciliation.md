@@ -72,7 +72,7 @@ _Was 12 when first run. **NOTE-FIX-1 wrote files back for `notes_op_seed_doc` an
 
 ## 4. The real gap — the repo cannot bootstrap a database
 
-Prod has **73** applied migration versions (3 of them applied by this session); the repo has **42** files — and the mapping isn't 1:1 even where it exists (`contacts_v2` is one file but three applies). **No file exists** for anything applied before `create_tasks_module` (26 versions — the whole profiles/workspaces/notes/CRM/billing foundation), nor for `df24_workspace_remove_member_owner_id_guard`, `workspace_roles_transfer_hardening` or `notification_dismiss_grants` (later hardening applies that were never written back).
+Prod has **73** applied migration versions (3 of them applied by this session); the repo has **43** files (this section was written at 42, before NOTE-FIX-1's file landed mid-session — §1's count is the current one) — and the mapping isn't 1:1 even where it exists (`contacts_v2` is one file but three applies). **No file exists** for anything applied before `create_tasks_module` (26 versions — the whole profiles/workspaces/notes/CRM/billing foundation), nor for `df24_workspace_remove_member_owner_id_guard`, `workspace_roles_transfer_hardening` or `notification_dismiss_grants` (later hardening applies that were never written back).
 
 Consequence: **22 prod tables exist that no migration file creates**, including the foundations —
 

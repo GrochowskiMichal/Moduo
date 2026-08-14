@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { useAuth } from "../../../providers/auth-provider";
@@ -196,9 +197,7 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
               </p>
               <div className="flex items-center gap-3 py-1">
                 <span className="h-px flex-1 bg-border" />
-                <span className="text-2xs uppercase tracking-wide text-muted-foreground">
-                  or use an app password
-                </span>
+                <Eyebrow>or use an app password</Eyebrow>
                 <span className="h-px flex-1 bg-border" />
               </div>
             </div>

@@ -29,6 +29,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "../ui/command";
+import { Eyebrow } from "../ui/eyebrow";
 import { announceOverlayOpen, onOtherOverlayOpen } from "./global-overlay-events";
 
 type Action = {
@@ -306,9 +307,9 @@ export function GlobalCommandPalette() {
                   >
                     <Icon />
                     <span className="min-w-0 flex-1 truncate">{record.label || "Untitled"}</span>
-                    <span className="shrink-0 text-2xs uppercase tracking-wide text-muted-foreground/70">
+                    <Eyebrow className="shrink-0" tone="tag">
                       {TYPE_LABEL[record.type] ?? record.type}
-                    </span>
+                    </Eyebrow>
                   </CommandItem>
                 );
               })}

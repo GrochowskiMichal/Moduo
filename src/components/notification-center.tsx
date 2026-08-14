@@ -16,6 +16,7 @@ import { useAuth } from "../providers/auth-provider";
 import { useWorkspace } from "../providers/workspace-provider";
 import { Card } from "./ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Eyebrow } from "./ui/eyebrow";
 import { Icon } from "./ui/icon";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -334,18 +335,18 @@ export function NotificationCenter() {
               <div className="flex flex-col gap-3">
                 {inviteGroups.length > 0 ? (
                   <div className="flex flex-col gap-2">
-                    <div className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <Eyebrow as="div" className="px-1">
                       Invitations
-                    </div>
+                    </Eyebrow>
                     {inviteGroups.map((group) => renderGroupCard(group, { dismissable: false }))}
                   </div>
                 ) : null}
                 {groups.length > 0 ? (
                   <div className="flex flex-col gap-2">
                     {inviteGroups.length > 0 ? (
-                      <div className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      <Eyebrow as="div" className="px-1">
                         Activity
-                      </div>
+                      </Eyebrow>
                     ) : null}
                     {groups.map((group) => renderGroupCard(group, { dismissable: true }))}
                   </div>
@@ -358,9 +359,9 @@ export function NotificationCenter() {
                     badged. Only rendered when the user turned it on and has drift. */}
                 {overdueShown.length > 0 ? (
                   <div className="flex flex-col gap-2">
-                    <div className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <Eyebrow as="div" className="px-1">
                       Overdue
-                    </div>
+                    </Eyebrow>
                     {overdueShown.map((item) => renderOverdueItem(item))}
                     {overdueOverflow > 0 ? (
                       <p className="px-1 text-xs text-muted-foreground/70">

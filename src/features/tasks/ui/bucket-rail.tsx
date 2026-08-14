@@ -20,6 +20,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
@@ -29,12 +30,6 @@ import { bucketSections } from "../helpers";
 import type { Bucket } from "../model";
 
 export type TasksMode = "plan" | "execute";
-
-// Section eyebrows use the BODY font (Geist): at 11px the wide display face
-// read too large/heavy; body is narrower + quieter while staying on the type
-// ladder (text-2xs is the smallest step — going smaller would be off-ladder).
-const SECTION_LABEL =
-  "px-2 font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground/70";
 
 type Props = {
   mode: TasksMode;
@@ -131,7 +126,9 @@ export function BucketRail({
 
           {/* Buckets section header — hover reveals a "+" (Notion-style add). */}
           <div className="group/sec mt-3 mb-1 flex items-center justify-between">
-            <span className={SECTION_LABEL}>Buckets</span>
+            <Eyebrow className="px-2" tone="muted">
+              Buckets
+            </Eyebrow>
             {canEdit ? (
               <button
                 type="button"
@@ -194,9 +191,9 @@ export function BucketRail({
                   ) : (
                     <ChevronDown className="size-3.5 shrink-0" aria-hidden />
                   )}
-                  <span className="min-w-0 flex-1 truncate font-sans text-2xs font-medium uppercase tracking-wide">
+                  <Eyebrow className="min-w-0 flex-1 truncate" tone="inherit">
                     {section.name}
-                  </span>
+                  </Eyebrow>
                   <span className="flex shrink-0 items-center font-sans text-xs tabular-nums text-muted-foreground/60">
                     {openCount}
                     {collapsed && driftCount > 0 ? (

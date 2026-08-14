@@ -15,6 +15,7 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { formatDue, formatScheduled } from "../../tasks/helpers";
@@ -108,9 +109,9 @@ function ReviewSection({ review, canEdit }: { review: ReviewController; canEdit:
   return (
     <div className="shrink-0 rounded-lg border border-border bg-card/40 p-2">
       <div className="flex items-center gap-2 px-1">
-        <span className="min-w-0 flex-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        <Eyebrow className="min-w-0 flex-1">
           Unfinished from earlier ({review.items.length})
-        </span>
+        </Eyebrow>
         <IconButton icon={X} label="Close review" onClick={review.onClose} />
       </div>
 
@@ -211,9 +212,9 @@ function TaskGroup({
   if (tasks.length === 0) return null;
   return (
     <div className="flex shrink-0 flex-col gap-0.5">
-      <div className="px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <Eyebrow as="div" className="px-1">
         {title} ({tasks.length})
-      </div>
+      </Eyebrow>
       {tasks.map((task) => (
         <PanelTaskRow key={task.id} task={task} api={api} onOpen={() => onOpenTask(task.id)} />
       ))}

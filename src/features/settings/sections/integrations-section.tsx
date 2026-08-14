@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Bot, Calendar, Globe, Mail } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { groupRailAccounts, providerLabel } from "../../calendar/accounts";
@@ -397,9 +398,9 @@ export function IntegrationsSection() {
                     >
                       <div className="min-w-0 flex-1">
                         {header && i === 0 ? (
-                          <p className="truncate text-2xs uppercase tracking-wide text-muted-foreground">
+                          <Eyebrow as="p" className="truncate">
                             {header}
-                          </p>
+                          </Eyebrow>
                         ) : null}
                         <p className="truncate text-sm text-foreground">{row.label}</p>
                         {row.account.status === "error" ? (
@@ -507,12 +508,11 @@ export function IntegrationsSection() {
                           "This device" because the mail store is local — the
                           other machine keeps its own depth. */}
                       <div className="flex flex-col items-end gap-0.5">
-                        <label
-                          htmlFor={`email-depth-${acc.id}`}
-                          className="text-2xs uppercase tracking-wide text-muted-foreground"
-                        >
-                          Inbox history · this device
-                        </label>
+                        <Eyebrow asChild>
+                          <label htmlFor={`email-depth-${acc.id}`}>
+                            Inbox history · this device
+                          </label>
+                        </Eyebrow>
                         <EmailHistoryDepthSelect
                           id={`email-depth-${acc.id}`}
                           value={depthDraft[acc.id] ?? asHistoryDepth(acc.historyDepth)}

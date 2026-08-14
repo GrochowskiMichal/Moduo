@@ -3,6 +3,8 @@
 // end deep-links to that entity. Neutral, tokens-only (no per-type hue).
 
 import { ArrowRight } from "lucide-react";
+
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { resolveEntityIcon } from "@/features/spine/icon-map";
 import type { RecentLinkEndpoint } from "@/features/spine/recent";
 import { RELATION_KIND_LABELS } from "@/lib/entity-links";
@@ -67,9 +69,9 @@ export function RecentlyLinkedWidget({ size }: WidgetComponentProps) {
             <Endpoint end={item.source} />
             <ArrowRight className="size-icon-xs shrink-0 text-muted-foreground/70" aria-hidden />
             <Endpoint end={item.target} />
-            <span className="ml-auto shrink-0 pl-2 text-2xs uppercase tracking-wide text-muted-foreground/70">
+            <Eyebrow className="ml-auto shrink-0 pl-2" tone="tag">
               {RELATION_KIND_LABELS[item.relationKind] ?? item.relationKind}
-            </span>
+            </Eyebrow>
           </li>
         ))}
       </WidgetList>

@@ -1,9 +1,37 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/deepseek-v4-flash-free",
+  "provider": {
+    "modal": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Modal",
+      "options": {
+        "baseURL": "https://inference.us-west.modal.direct/v1",
+        "apiKey": "wk-N5UfzTritBVkXTT3CIhMrh.ws-0aGNc5JqQdpqWH5Zhdw9VI"
+      },
+      "models": {
+        "grochowskimichal--ep-kimi-k3-server.us-west.modal.direct": {
+          "name": "Kimi K3",
+          "attachment": false,
+          "reasoning": true,
+          "temperature": true,
+          "tool_call": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          }
+        }
+      }
+    }
+  },
   "mcp": {
     "supabase": {
       "type": "remote",
-      "url": "https://mcp.supabase.com/mcp?project_ref=wtoonrvuqumihpkbvwvs"
+      "url": "https://mcp.supabase.com/mcp?project_ref=wtoonrvuqumihpkbvwvs",
+      "oauth": {
+        "redirectUri": "http://127.0.0.1:57123/mcp/oauth/callback?server=supabase&directory=%2FUsers%2Fmikegrochowski%2FDocuments%2Fmoduo2.0"
+      },
+      "enabled": true
     },
     "subframe": {
       "type": "remote",

@@ -8,13 +8,11 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import { type HubRow, type HubSection, isSectionTruncated, visibleRows } from "../../spine/rollup";
 import { EntityHubRow } from "../../spine/ui/entity-hub";
-
-const SECTION_HEADING =
-  "font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground";
 
 /** The fixed page sections, one per module relation. Order is the page order. */
 const MODULE_SECTIONS = [
@@ -154,7 +152,7 @@ function ModuleSection({
   return (
     <section className="space-y-1">
       <div className="flex items-center gap-2">
-        <h3 className={SECTION_HEADING}>{label}</h3>
+        <Eyebrow as="h3">{label}</Eyebrow>
         {rows.length > 0 ? (
           <Badge variant="secondary" className="px-1.5 py-0 text-2xs tabular-nums">
             {rows.length}

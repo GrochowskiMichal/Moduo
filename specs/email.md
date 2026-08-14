@@ -1,6 +1,6 @@
 # Spec: Email module (Spark replacement, desktop-first hybrid)
 
-> Status: **DoR-ready** (planned 2026-07-04) · Owner: maciej · Related briefs: [.design/email/BRIEF.md](../.design/email/BRIEF.md), [.design/email/DESIGN_BRIEF.md](../.design/email/DESIGN_BRIEF.md) · Architecture: [docs/data-layers.md §6](../docs/data-layers.md)
+> Status: **Shipped** — EM-1…EM-11 all landed 2026-07-04 → 2026-07-07 (Wave 5 complete). Planned 2026-07-04. **[`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) is the status of record**; this spec is the design/AC reference. Test checklists: [`docs/testing/email-em1-em3.md`](../docs/testing/email-em1-em3.md) … [`email-em11.md`](../docs/testing/email-em11.md). · Owner: maciej · Related briefs: [.design/email/BRIEF.md](../.design/email/BRIEF.md), [.design/email/DESIGN_BRIEF.md](../.design/email/DESIGN_BRIEF.md) · Architecture: [docs/data-layers.md §6](../docs/data-layers.md)
 >
 > **Scope call (2026-07-04 pm, designer):** Email is the **next build**, ahead of the Dashboard/Mindmap reworks (partial reversal of the same-day morning call; Finance stays post-alpha). Bar: **full Spark parity before the designer switches** — the module ships whole, then dogfood starts.
 

@@ -6,6 +6,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { cn } from "@/lib/utils";
 
 /** Fills the frame body as a column (header lives in WidgetFrame). */
@@ -47,9 +48,7 @@ export function WidgetList({ children, className }: { children: ReactNode; class
 export function WidgetSectionLabel({ children, count }: { children: ReactNode; count?: number }) {
   return (
     <div className="flex items-center gap-2 px-2 pb-0.5 pt-2 first:pt-1">
-      <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        {children}
-      </span>
+      <Eyebrow>{children}</Eyebrow>
       {typeof count === "number" ? (
         <span className="text-2xs tabular-nums text-muted-foreground/70">{count}</span>
       ) : null}

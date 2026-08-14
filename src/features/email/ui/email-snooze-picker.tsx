@@ -8,6 +8,7 @@ import { CalendarClock, Clock3 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { normalizeSnoozeAt, snoozePresets } from "../snooze";
@@ -68,9 +69,9 @@ export function EmailSnoozePicker({
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-1">
-        <div className="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        <Eyebrow as="div" className="px-2 py-1.5">
           {title}
-        </div>
+        </Eyebrow>
         <div className="flex flex-col">
           {presets.map((preset) => (
             <button
@@ -89,10 +90,10 @@ export function EmailSnoozePicker({
         </div>
 
         <div className="mt-1 border-t border-border px-2 pb-1 pt-2">
-          <div className="mb-1 flex items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          <Eyebrow as="div" className="mb-1 flex items-center gap-1.5">
             <CalendarClock className="size-icon-xs" aria-hidden />
             Pick a date &amp; time
-          </div>
+          </Eyebrow>
           <div className="flex items-center gap-1.5">
             <Input
               type="datetime-local"

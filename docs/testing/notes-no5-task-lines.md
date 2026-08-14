@@ -1,5 +1,7 @@
 # Manual test checklist — Notes NO-5: Task lines (the great moment)
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): every migration this checklist depends on is APPLIED to prod.** OPS-1 + OPS-2 (2026-07-29) applied and verified every migration file in the repo against the live catalog. Any "unapplied" / "deploy-gated" / "**[post-deploy]**" wording below describes the state when this doc was written — **those rows are runnable now, not blocked**. Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 > Generated 2026-07-04 · branch `claude/nifty-torvalds-7c2339` · **Live-verified:** partial — every server-round-trip flow (mint→Inbox+spawned-from link, link-existing→references, checkbox→status op, rename→title patch, ⌘Z-after-mint full revert incl. task+link deletion, detach toast+undo) was verified against the REAL hosted Tasks/spine backend from a local dev server; the notes shell ran on stubbed `notes_op_*` RPCs (migration still unapplied — same NO-1..4 posture). Gestures that resist synthetic events (⌘⇧T batch selection, schedule popover click-through) are listed for your pass.
 > Run top-to-bottom in `/notes`; check off as you go. Task lines only fully work once the NO-1 migration is deployed; pre-deploy the notes module is read-only (degraded banner) and none of this is reachable.
 

@@ -1,6 +1,6 @@
 # Spec: Import & migration — Notion notes + email history depth
 
-> Status: **In progress** — IM-1 + IM-2a + IM-2b shipped (IM-1 & IM-2a/2b on 2026-07-29/30). Email: **AC7 + AC9 partial**, see Open questions. Notes: AC1–AC5 done. · Owner: maciej · Block ids: **IM-1 … IM-5** (Wave D, dogfood lane)
+> Status: **In progress** — IM-1, IM-2a, IM-2b and **IM-2c-a** (depth picker) shipped 2026-07-29 → 2026-07-30. **Next: IM-2c-b** (backfill progress + cancel, AC9) — DoR-ready; read §Assumptions 12, the transport is amended. Email: **AC7 + AC9 partial**, see Open questions. Notes: AC1–AC5 done. IM-3/IM-4 are deferred post-alpha. **[`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) is the status of record.** · Owner: maciej · Block ids: **IM-1 … IM-4** (Wave D, dogfood lane)
 > Supersedes the placeholder `/s1 IMPORT` line in [`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) Wave D.
 
 ## Scope
@@ -10,7 +10,7 @@ Get the designer **cold turkey onto Moduo** — his stated goal is to force real
 Research collapsed this from an "importer epic" into a much smaller, sharper feature. The `/s1` interview (2026-07-29) plus a three-agent audit established:
 
 - **Notion** — ~350 markdown pages, **no databases worth importing** (one Claude-generated fragrance DB stays in Notion). The importer already exists; it needs hardening against a real export.
-- **Tasks** — live in **Morgen's own store**. The designer will **re-enter them by hand** ("not a lot to import"). **No task importer is built here** (deferred to IM-4).
+- **Tasks** — live in **Morgen's own store**. The designer will **re-enter them by hand** ("not a lot to import"). **No task importer is built here** (deferred to **IM-3** — see the block table below).
 - **Calendar** — 5 Google + 2 CalDAV accounts, surfaced *through* Morgen but **owned by the providers**. He wants **no history**. Moduo already connects all of these. **Nothing to build.**
 - **Spark** — owns none of his mail (IMAP client). He uses **archive, not snooze**, so the `Later`-folder data-loss trap does not apply to him. **Nothing to build** beyond a courtesy checklist (IM-5).
 - **Email history** — he wants **~12 months, with the amount selectable**, because he searches for year-old invoices, order confirmations and game keys. **This is the only substantial engineering in the migration**, and it is much larger than "add a picker" (see Assumptions 4–7).

@@ -1,6 +1,6 @@
 # Spec: Tasks Timeline view (lightweight roadmap)
 
-> Status: **Ready** · Owner: maciej · Related briefs: [docs/moduo-tasks-feature-spec.md](../docs/moduo-tasks-feature-spec.md) (§views — "Gantt deferred" is this spec un-deferring it), [docs/PRODUCT_BRIEF.md](../docs/PRODUCT_BRIEF.md) ("Lightweight Timeline/roadmap view"), [docs/ROADMAP.md](../docs/ROADMAP.md) §Open Questions ("slot in Wave 2 or shortly after")
+> Status: **Shipped** — TL-1…TL-3 all landed 2026-07-03. **[`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) is the status of record**; this spec is the design/AC reference. · Owner: maciej · Related briefs: [docs/moduo-tasks-feature-spec.md](../docs/moduo-tasks-feature-spec.md) (§views — "Gantt deferred" is this spec un-deferring it), [docs/PRODUCT_BRIEF.md](../docs/PRODUCT_BRIEF.md) ("Lightweight Timeline/roadmap view"), [docs/ROADMAP.md](../docs/ROADMAP.md) §Open Questions ("slot in Wave 2 or shortly after")
 
 ## Scope
 

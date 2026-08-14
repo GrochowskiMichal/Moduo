@@ -38,6 +38,8 @@ import {
 } from "../../../components/ui/command";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { DateField } from "../../../components/ui/date-field";
+import { detailTitleVariants } from "../../../components/ui/detail-title";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Field, Mirror } from "../../../components/ui/field";
 import { Input } from "../../../components/ui/input";
 import { Kbd } from "../../../components/ui/kbd";
@@ -293,7 +295,7 @@ function DetailBody({
               e.currentTarget.blur();
             }
           }}
-          className="border-transparent bg-transparent px-0 font-sans text-md text-foreground"
+          className={cn(detailTitleVariants(), "border-transparent bg-transparent px-0")}
         />
 
         {/* sub-task of — quiet breadcrumb back to the parent (one level) */}
@@ -607,9 +609,7 @@ function DetailBody({
           <>
             <Separator />
             <div className="space-y-1">
-              <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                Linked
-              </span>
+              <Eyebrow>Linked</Eyebrow>
               <EntityHub
                 variant="rail"
                 status={hub.status}
@@ -695,9 +695,7 @@ function ActivitySection({ task, api }: { task: Task; api: TasksModuleApi }) {
 
   return (
     <div className="space-y-1">
-      <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        Activity
-      </span>
+      <Eyebrow>Activity</Eyebrow>
       <div className="space-y-1 text-2xs leading-relaxed text-muted-foreground/80">
         {(entries ?? []).map((entry) => (
           // One flowing line (action + a quiet inline timestamp) — wraps as a
@@ -748,7 +746,7 @@ function SubtasksField({
 
   return (
     <div className="space-y-1">
-      <span className="flex items-baseline gap-1.5 font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <Eyebrow className="flex items-baseline gap-1.5">
         Subtasks
         {progress && progress.total > 0 ? (
           // quiet n/m mirror — factual, never alarming (principles 4 & 5)
@@ -756,7 +754,7 @@ function SubtasksField({
             {progress.done}/{progress.total}
           </span>
         ) : null}
-      </span>
+      </Eyebrow>
       {subtasks.length > 0 ? (
         <div className="space-y-0.5">
           {subtasks.map((subtask) => (

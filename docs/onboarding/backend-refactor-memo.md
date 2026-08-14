@@ -14,7 +14,7 @@ They share a phrase and almost nothing else. Cost and merit differ by an order o
 
 | # | The proposal | Rough cost | My read |
 |---|---|---|---|
-| **A** | **Replace Supabase** with a custom backend (own Postgres + app server, or another BaaS) | **Very high** — re-implement auth, RLS, 35 migrations' worth of schema + intent ops, re-verify every invariant on live data, rebuild the MCP layer | **Hard to justify pre-alpha.** See §4/§5. |
+| **A** | **Replace Supabase** with a custom backend (own Postgres + app server, or another BaaS) | **Very high** — re-implement auth, RLS, 43 migrations' worth of schema + intent ops, re-verify every invariant on live data, rebuild the MCP layer | **Hard to justify pre-alpha.** See §4/§5. |
 | **B** | **Refactor *within* Supabase** — move business logic out of plpgsql intent-ops into edge functions / a thin app layer | **Medium** — real work, but incremental and reversible; the seam already supports it | **Legitimately debatable.** This is the real conversation (§6). |
 | **C** | **Prune the dead Rust sidecar** — delete the graph/embeddings subsystem, feature-gate the paused local-auth/workspace vault + vestigial sync worker | **Low** — deletion behind a clean seam, ~1–2 days | **Do this. It's a genuine win** regardless of the bigger question (§3). |
 | **D** | **Reshape the data model** — e.g. the polymorphic `entities` registry, the single `permissions_tasks` lane, the derived-notifications design | **Varies** — some are one-migration tweaks (per-module permission lanes), some are foundational (the registry) | **Case by case.** Some are already on the someday-list; ripping the registry would hit the moat. |
@@ -32,7 +32,7 @@ This is not accreted legacy spaghetti. It has a deliberate, consistent signature
 - **One integrity model.** A central `entities` registry; `entity_links`/`comments`/`tags` FK into it. One indexed query powers search, @mention, roll-up; deletes cascade cleanly.
 - **Consistent RLS.** Member-`SELECT` only; no direct write policies; writes flow through the ops. Same shape on every module table.
 
-**What's already done and in production:** 35 migrations applied, 7+ modules cloud-first, the spine (the moat) built Supabase-native, ~60 MCP tools across 6 modules, async multiplayer, Notes CRDT↔Postgres sync. This is months of decisions, not a prototype.
+**What's already done and in production:** 43 migrations applied, 7+ modules cloud-first, the spine (the moat) built Supabase-native, ~60 MCP tools across 6 modules, async multiplayer, Notes CRDT↔Postgres sync. This is months of decisions, not a prototype.
 
 **Where the real debt actually is:** concentrated in **Rust**, not Supabase — a dormant tasks store, a paused local-auth/workspace vault, a near-vestigial sync worker, and a **fully dead graph + embeddings subsystem still booting in `AppState` with no caller**. That's proposal **C**, and it's cheap. The *cloud* backend is the coherent part.
 
@@ -69,7 +69,7 @@ These are *not* sufficient reasons to refactor a working pre-alpha backend:
 
 **The governing principle for a pre-alpha, two-person product: you refactor a backend when it *blocks* you, not before you have users, for cleanliness.** Every week spent re-implementing working, in-prod, invariant-verified infrastructure is a week not spent getting the alpha in front of people — which is the only thing that tells you whether any of this backend was even the right shape. Rebuilding it *before* that signal risks rebuilding it *wrong*, twice.
 
-And the concrete re-litigation cost of proposal A specifically: 35 migrations to re-express, every intent-op invariant to re-verify against live data, the RLS model to reproduce, the entire MCP/agent-access layer (a product pillar) to rebuild, and every gotcha in [`docs/gotchas.md`](../gotchas.md) to re-discover. That's the months of grilling and decisions in [`docs/decisions.md`](../decisions.md), paid again.
+And the concrete re-litigation cost of proposal A specifically: 43 migrations to re-express, every intent-op invariant to re-verify against live data, the RLS model to reproduce, the entire MCP/agent-access layer (a product pillar) to rebuild, and every gotcha in [`docs/gotchas.md`](../gotchas.md) to re-discover. That's the months of grilling and decisions in [`docs/decisions.md`](../decisions.md), paid again.
 
 ---
 

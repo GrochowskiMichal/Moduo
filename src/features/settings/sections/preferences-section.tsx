@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Select,
   SelectContent,
@@ -201,9 +202,7 @@ function PrefGroup({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-0.5 px-1">
-        <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </span>
+        <Eyebrow>{label}</Eyebrow>
         {description ? <span className="text-xs text-muted-foreground">{description}</span> : null}
       </div>
       <section className="flex flex-col rounded-lg border border-border bg-card px-6 py-2">

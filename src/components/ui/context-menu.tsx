@@ -3,6 +3,7 @@ import { ContextMenu as ContextMenuPrimitive } from "radix-ui";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { eyebrowVariants } from "./eyebrow";
 
 const contentBase = cn(
   "min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground",
@@ -192,11 +193,7 @@ function ContextMenuLabel({
     <ContextMenuPrimitive.Label
       data-slot="context-menu-label"
       data-inset={inset}
-      className={cn(
-        "px-2 py-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase",
-        inset && "pl-8",
-        className,
-      )}
+      className={cn(eyebrowVariants(), "px-2 py-1.5", inset && "pl-8", className)}
       {...props}
     />
   );

@@ -8,7 +8,7 @@ import {
 import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type ReactNode, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Select,
   SelectContent,
@@ -284,9 +284,7 @@ function BoardColumn({
   return (
     <section className="flex h-full w-72 shrink-0 flex-col">
       <header className="mb-2 flex items-center gap-1.5 px-1">
-        <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-          {column.label}
-        </span>
+        <Eyebrow>{column.label}</Eyebrow>
         <span className="font-sans text-xs tabular-nums text-muted-foreground/70">
           {column.tasks.length}
         </span>

@@ -16,6 +16,7 @@ import {
   CommandItem,
   CommandList,
 } from "../../../components/ui/command";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { cn } from "../../../lib/utils";
 import type { Tag } from "../model";
@@ -108,7 +109,7 @@ export function ActiveTagFilters({
   if (active.length === 0) return null;
   return (
     <>
-      <span className="text-2xs uppercase tracking-wide text-muted-foreground/70">Filter</span>
+      <Eyebrow tone="muted">Filter</Eyebrow>
       {active.map((tag) => (
         <TagChip
           key={tag.id}

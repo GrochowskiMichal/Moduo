@@ -1,6 +1,7 @@
 ---
 description: Skeptical senior/staff review of the current diff before a block is reported done. Read-only; reports findings in BLOCKER/MAJOR/MINOR/NIT buckets.
 mode: subagent
+model: opencode/deepseek-v4-flash-free
 tools:
   write: false
   edit: false

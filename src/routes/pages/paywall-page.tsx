@@ -3,6 +3,7 @@ import { type ReactNode, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { ModuoMark } from "@/components/ui/moduo-mark";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { supabaseClient } from "@/lib/runtime.web";
@@ -149,9 +150,7 @@ export function PaywallPage() {
       <div className="relative mx-auto w-full max-w-[1000px] px-5 py-14 sm:py-16">
         <header className="flex flex-col items-center text-center">
           <ModuoMark className="mb-6 size-8 opacity-95" aria-hidden="true" />
-          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            Your trial has ended
-          </p>
+          <Eyebrow as="p">Your trial has ended</Eyebrow>
           <h1 className="mt-2 font-display text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-4xl">
             Choose your plan to continue
           </h1>
@@ -294,9 +293,7 @@ function PlanCard({
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-          {name}
-        </h2>
+        <Eyebrow as="h2">{name}</Eyebrow>
         {badge ? (
           <Badge variant="secondary" className="font-normal">
             {badge}

@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { EmptyState } from "../../../components/ui/empty-state";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import {
   EMAIL_SECTIONS,
@@ -350,9 +351,7 @@ export function EmailThreadList({
           {sections.map((group) => (
             <section key={group.section} className="flex flex-col gap-0.5">
               <header className="flex items-center gap-2 px-2.5 pb-0.5 pt-2">
-                <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {group.label}
-                </span>
+                <Eyebrow>{group.label}</Eyebrow>
                 <span className="text-2xs tabular-nums text-muted-foreground/70">
                   {group.threads.length}
                 </span>

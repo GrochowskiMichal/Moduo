@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { IconButton } from "../../../components/ui/icon-button";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
+import { Toolbar } from "../../../components/ui/toolbar";
 import type { CalendarView } from "../lens";
 
 type Props = {
@@ -39,18 +40,19 @@ export function CalendarToolbar({
   refreshing = false,
 }: Props) {
   return (
-    <div className="flex shrink-0 items-center gap-2 pb-3">
-      <div className="flex items-center gap-0.5">
+    <Toolbar aria-label="Calendar controls" className="shrink-0 pb-3">
+      <Toolbar.Group gap="tight">
         <IconButton icon={ChevronLeft} label="Previous period (←)" onClick={onPrev} />
         <IconButton icon={ChevronRight} label="Next period (→)" onClick={onNext} />
-      </div>
+      </Toolbar.Group>
       <Button variant="outline" size="sm" onClick={onToday}>
         Today
       </Button>
       <span className="font-display text-sm font-medium text-foreground">{label}</span>
-      <div className="ml-auto flex items-center gap-1.5">
+      <Toolbar.Spacer />
+      <Toolbar.Group>
         {onRefresh ? (
-          <div className="flex items-center gap-1">
+          <Toolbar.Group gap="snug">
             {syncLabel ? <span className="text-2xs text-muted-foreground">{syncLabel}</span> : null}
             <IconButton
               icon={RefreshCw}
@@ -58,7 +60,7 @@ export function CalendarToolbar({
               onClick={onRefresh}
               className={refreshing ? "animate-spin motion-reduce:animate-none" : undefined}
             />
-          </div>
+          </Toolbar.Group>
         ) : null}
         <SegmentedControl
           size="sm"
@@ -67,7 +69,7 @@ export function CalendarToolbar({
           onValueChange={(v) => onViewChange(v as CalendarView)}
           items={VIEW_ITEMS}
         />
-      </div>
-    </div>
+      </Toolbar.Group>
+    </Toolbar>
   );
 }

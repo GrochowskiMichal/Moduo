@@ -3,6 +3,7 @@ import { Select as SelectPrimitive } from "radix-ui";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { eyebrowVariants } from "./eyebrow";
 import { type FieldShellVariant, fieldShellVariants } from "./field-shell";
 
 function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
@@ -98,10 +99,7 @@ function SelectLabel({ className, ...props }: React.ComponentProps<typeof Select
   return (
     <SelectPrimitive.Label
       data-slot="select-label"
-      className={cn(
-        "px-2 py-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase",
-        className,
-      )}
+      className={cn(eyebrowVariants(), "px-2 py-1.5", className)}
       {...props}
     />
   );

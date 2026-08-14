@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
 import {
   type EntityLink,
@@ -137,9 +138,7 @@ export function EntityHubSection({
     <section className="space-y-1">
       {/* Uppercase section label (the Field pattern) + count. */}
       <div className="flex items-center gap-2">
-        <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-          {section.label}
-        </span>
+        <Eyebrow>{section.label}</Eyebrow>
         <Badge variant="secondary" className="px-1.5 py-0 text-2xs tabular-nums">
           {section.count}
         </Badge>
@@ -225,9 +224,9 @@ export function EntityHubRow({
             </span>
           ) : null
         ) : (
-          <span className="ml-auto shrink-0 pl-2 text-2xs uppercase tracking-wide text-muted-foreground/70">
+          <Eyebrow className="ml-auto shrink-0 pl-2" tone="tag">
             {RELATION_KIND_LABELS[row.relationKind]}
-          </span>
+          </Eyebrow>
         )}
       </button>
 

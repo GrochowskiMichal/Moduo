@@ -1,5 +1,7 @@
 # Manual test checklist — spine Wave 0 finish (CT-6, CT-7) + Contacts hub (CO-2)
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): APPLIED to prod.** The "the two new migrations are unapplied here" note below is stale — OPS-1 + OPS-2 (2026-07-29) applied and verified every migration file in the repo. **The migration-gated rows are runnable now** — but this covers migrations only: any MCP `tools/list` row still waits on the `moduo-mcp` redeploy (`MCP-1`, still open). Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 > Generated 2026-06-27 · branch `claude/quizzical-moser-dc04b6` · **Live-verified: no** — Storybook render + the Supabase project are both unreachable from this worktree (docs/gotchas.md), and the two new migrations are unapplied here. Everything below is first-discovery for the runner. The pure logic (suggest/recent/blocks-bridge/contact-rollup/module-registry — 40 new unit tests) is green via `bun run verify`.
 
 ## 0. Apply migrations first (everything else depends on this)

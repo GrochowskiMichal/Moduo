@@ -1,5 +1,7 @@
 # Manual test checklist — Email EM-9 (search) · EM-10 (smart inbox)
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): the migration this checklist calls "deploy-gated" is APPLIED to prod** (OPS-1 + OPS-2, 2026-07-29, verified against the live catalog), so EM-10's per-sender override **sync half is live** — overrides are no longer local-only. What is still genuinely manual is the *desktop engine* (local body sidecar, IMAP search escalation) — that needs a real mail account, not a deploy. Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 > Generated 2026-07-07 · branch `claude/quirky-goodall-aab1ab` · **Live-verified:** no — search + smart inbox are desktop-engine features (the local body sidecar, IMAP server search, and the HEADER.FIELDS fetch all live in the Rust engine and are headless-incompatible), and the one migration is deploy-gated. `bun run verify` (807 unit tests) + `cargo check` + `cargo test` (email suite) are green; the pure logic (search merge/dedupe, envelope match, classifier rules, query escaping, body-text truncation) is unit-proven. Everything below is the designer's desktop pass on the disposable IMAP mailbox.
 
 ## Pre-req — migration (EM-10 sync half) — **APPLIED to prod 2026-07-07**

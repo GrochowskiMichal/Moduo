@@ -20,14 +20,44 @@ type Pattern = { name: string; regex: RegExp };
 const COLOR_UTILS =
   "bg|text|border|ring|ring-offset|outline|decoration|divide|fill|stroke|caret|accent|from|via|to|shadow";
 
+// Side/axis suffixes a color utility can carry: border-t-, divide-x-, border-s-…
+const COLOR_UTIL_SIDES = "(?:-(?:t|r|b|l|s|e|x|y))?";
+
+// Tailwind's built-in palette. These are NOT arbitrary values, so the
+// `-[…]` patterns miss them entirely — but `text-red-400` bypasses the token
+// layer exactly as hard as `text-[#f87171]` does (and drifts with the palette,
+// not with the theme). Only the semantic tokens from tokens.css are legal.
+const TW_PALETTE =
+  "slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose";
+
 const PATTERNS: Pattern[] = [
-  // Raw hex in any color utility: bg-[#fff], text-[#d4d8e1], border-[#222]…
-  { name: "color-[#hex]", regex: new RegExp(`\\b(?:${COLOR_UTILS})-\\[#[0-9a-fA-F]{3,8}\\b`, "g") },
+  // Named palette utilities: text-red-400, bg-red-500/10, border-t-emerald-500.
+  {
+    name: "color-palette",
+    regex: new RegExp(
+      `\\b(?:${COLOR_UTILS})${COLOR_UTIL_SIDES}-(?:${TW_PALETTE})-\\d{2,3}(?:\\/\\d{1,3})?\\b`,
+      "g",
+    ),
+  },
+  // Absolute black/white — theme-blind by definition (`bg-white` stays white in
+  // dark mode). Use `bg-background` / `text-foreground` / `bg-foreground/10`.
+  {
+    name: "color-absolute",
+    regex: new RegExp(
+      `\\b(?:${COLOR_UTILS})${COLOR_UTIL_SIDES}-(?:white|black)(?:\\/\\d{1,3})?\\b`,
+      "g",
+    ),
+  },
+  // Raw hex in any color utility: bg-[#fff], text-[#d4d8e1], border-t-[#222]…
+  {
+    name: "color-[#hex]",
+    regex: new RegExp(`\\b(?:${COLOR_UTILS})${COLOR_UTIL_SIDES}-\\[#[0-9a-fA-F]{3,8}\\b`, "g"),
+  },
   // Color functions in any color utility: bg-[rgb(...)], text-[oklch(...)]…
   {
     name: "color-[fn]",
     regex: new RegExp(
-      `\\b(?:${COLOR_UTILS})-\\[(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch|color|hwb)\\(`,
+      `\\b(?:${COLOR_UTILS})${COLOR_UTIL_SIDES}-\\[(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch|color|hwb)\\(`,
       "g",
     ),
   },
@@ -64,6 +94,9 @@ const PATTERNS: Pattern[] = [
 ];
 
 const IGNORED_PATHS: string[] = [
+  // This gate's own test fixtures — the probe strings ARE violations by design.
+  "src/components/design-lint.test.ts",
+
   // React Native compatibility shim — intentionally untouched per AGENTS.md.
   "src/tw",
 
@@ -217,4 +250,19 @@ async function main() {
   process.exit(1);
 }
 
-await main();
+// Exported so the patterns are unit-testable (src/components/design-lint.test.ts)
+// — a silently-broken regex here reads exactly like a clean codebase.
+export { type Hit, isIgnored, PATTERNS, scanFile };
+
+// `import.meta.main` under Bun (how `lint:tw` runs); the argv fallback keeps the
+// gate alive under any runner that lacks it. A silent no-op here would report a
+// clean design surface forever, so prefer over-running to under-running.
+const meta = import.meta as ImportMeta & { main?: boolean };
+const isDirectRun =
+  typeof meta.main === "boolean"
+    ? meta.main
+    : Boolean(process.argv[1] && /check-arbitrary-tw\.[tj]s$/.test(process.argv[1]));
+
+if (isDirectRun) {
+  await main();
+}

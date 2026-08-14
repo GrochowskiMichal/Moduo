@@ -28,6 +28,7 @@ import { User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { useMentionSearch } from "../hooks/use-mention-search";
@@ -365,9 +366,9 @@ export function MentionMenuPlugin({
               <Icon className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
               <span className="min-w-0 flex-1 truncate">{candidate.label}</span>
               {candidate.kind === "person" ? (
-                <span className="shrink-0 text-2xs uppercase tracking-wide text-muted-foreground/70">
+                <Eyebrow className="shrink-0" tone="tag">
                   person
-                </span>
+                </Eyebrow>
               ) : null}
             </button>
           );

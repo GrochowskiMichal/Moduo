@@ -56,6 +56,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { useMentionSearch } from "@/features/spine/hooks/use-mention-search";
 import { type MentionCandidate, resolveMention } from "@/features/spine/mention";
@@ -666,9 +667,9 @@ export function SlashMenuPlugin({
         const Icon = COMMAND_ICONS[command.id];
         const groupHeader =
           command.group !== lastGroup ? (
-            <div className="px-2 pb-0.5 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground first:pt-1">
+            <Eyebrow as="div" className="px-2 pb-0.5 pt-2 first:pt-1">
               {command.group}
-            </div>
+            </Eyebrow>
           ) : null;
         lastGroup = command.group;
         return (

@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { spineActivityLine, spineActorName } from "../../spine/activity";
 import type { ActivityEntry } from "../../tasks/model";
 import { timeAgo } from "../rollup";
@@ -30,9 +31,7 @@ export function ActivityTrail({
 
   return (
     <section className="space-y-1">
-      <h3 className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        Activity
-      </h3>
+      <Eyebrow as="h3">Activity</Eyebrow>
       <ul className="space-y-1">
         {rows.map((entry) => (
           <li key={entry.id} className="flex items-baseline gap-2 text-sm">
