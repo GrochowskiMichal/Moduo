@@ -6,17 +6,8 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModuoMark } from "@/components/ui/moduo-mark";
+import { checkoutRedirectUrl } from "@/lib/checkout-redirect";
 import { useAuth } from "@/providers/auth-provider";
-
-function checkoutRedirectUrl(priceId: string, accessToken: string | null) {
-  const supabaseUrl =
-    (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-    "https://wtoonrvuqumihpkbvwvs.supabase.co";
-  const q = new URLSearchParams();
-  q.set("price_id", priceId);
-  if (accessToken) q.set("access_token", accessToken);
-  return `${supabaseUrl}/functions/v1/create-checkout-session?${q}`;
-}
 
 /**
  * First-run setup. Deliberately ONE screen: naming a workspace is the only

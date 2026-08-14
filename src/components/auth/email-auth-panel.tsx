@@ -7,6 +7,7 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { Input } from "@/components/ui/input";
 import { ModuoMark } from "@/components/ui/moduo-mark";
 import { notifyProfileUpdated, writeStoredAvatar } from "@/features/profile/profile-storage";
+import { checkoutRedirectUrl } from "@/lib/checkout-redirect";
 import type { AuthMnemonic } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -194,12 +195,9 @@ export function EmailAuthPanel({ priceId = null }: Props) {
     const pendingPriceId = priceId ?? window.localStorage.getItem("moduo:pending_price_id");
     if (pendingPriceId) {
       window.localStorage.removeItem("moduo:pending_price_id");
-      const supabaseUrl =
-        (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-        "https://wtoonrvuqumihpkbvwvs.supabase.co";
       const session = await runtime.auth.getSession();
-      const token = session?.data?.session?.access_token;
-      window.location.href = `${supabaseUrl}/functions/v1/create-checkout-session?price_id=${encodeURIComponent(pendingPriceId)}${token ? `&access_token=${encodeURIComponent(token)}` : ""}`;
+      const token = session?.data?.session?.access_token ?? null;
+      window.location.href = checkoutRedirectUrl(pendingPriceId, token);
       return;
     }
 

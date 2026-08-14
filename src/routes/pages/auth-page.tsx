@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import { EmailAuthPanel } from "@/components/auth/email-auth-panel";
+import { checkoutRedirectUrl } from "@/lib/checkout-redirect";
 import { useAuth } from "@/providers/auth-provider";
 
 function getSearchParam(key: string): string | null {
@@ -10,7 +11,7 @@ function getSearchParam(key: string): string | null {
 }
 
 export function AuthPage() {
-  const { isSignedIn, loading } = useAuth();
+  const { isSignedIn, loading, accessToken } = useAuth();
   const navigate = useNavigate();
 
   const priceId = getSearchParam("price_id");
@@ -22,10 +23,7 @@ export function AuthPage() {
     const pendingPriceId = priceId ?? window.localStorage.getItem("moduo:pending_price_id");
     if (pendingPriceId) {
       window.localStorage.removeItem("moduo:pending_price_id");
-      const supabaseUrl =
-        (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-        "https://wtoonrvuqumihpkbvwvs.supabase.co";
-      window.location.href = `${supabaseUrl}/functions/v1/create-checkout-session?price_id=${encodeURIComponent(pendingPriceId)}`;
+      window.location.href = checkoutRedirectUrl(pendingPriceId, accessToken);
       return;
     }
 
@@ -38,7 +36,7 @@ export function AuthPage() {
     }
 
     void navigate({ to: "/", replace: true });
-  }, [isSignedIn, loading, navigate, priceId]);
+  }, [isSignedIn, loading, navigate, priceId, accessToken]);
 
   if (loading) {
     return (
