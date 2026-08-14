@@ -15,17 +15,20 @@
 import { expect, test } from "@playwright/test";
 
 const SUPABASE_URL = process.env.E2E_SUPABASE_URL;
-const ANON_KEY = process.env.E2E_SUPABASE_ANON_KEY;
+const PUBLISHABLE_KEY = process.env.E2E_SUPABASE_PUBLISHABLE_KEY;
 
 test.describe("Desktop sync tier gate", () => {
-  test.skip(!SUPABASE_URL || !ANON_KEY, "E2E_SUPABASE_URL / E2E_SUPABASE_ANON_KEY not set");
+  test.skip(
+    !SUPABASE_URL || !PUBLISHABLE_KEY,
+    "E2E_SUPABASE_URL / E2E_SUPABASE_PUBLISHABLE_KEY not set",
+  );
 
   test("profiles table exposes plan_tier column", async ({ request }) => {
     // Unauthenticated request returns 200 with RLS-filtered (empty) results.
     const res = await request.get(`${SUPABASE_URL}/rest/v1/profiles?select=plan_tier&limit=1`, {
       headers: {
-        apikey: ANON_KEY!,
-        Authorization: `Bearer ${ANON_KEY!}`,
+        apikey: PUBLISHABLE_KEY!,
+        Authorization: `Bearer ${PUBLISHABLE_KEY!}`,
       },
     });
     expect(res.status()).toBe(200);
@@ -38,8 +41,8 @@ test.describe("Desktop sync tier gate", () => {
       `${SUPABASE_URL}/rest/v1/user_entitlements?select=plan_tier,subscription_status,trial_days_remaining&limit=1`,
       {
         headers: {
-          apikey: ANON_KEY!,
-          Authorization: `Bearer ${ANON_KEY!}`,
+          apikey: PUBLISHABLE_KEY!,
+          Authorization: `Bearer ${PUBLISHABLE_KEY!}`,
         },
       },
     );

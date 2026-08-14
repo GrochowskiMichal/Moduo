@@ -4,7 +4,7 @@
  * Tests rely on Supabase / Stripe sandbox environments via env vars:
  *   E2E_BASE_URL          – app base URL  (default: http://localhost:8081)
  *   E2E_SUPABASE_URL      – Supabase project URL
- *   E2E_SUPABASE_ANON_KEY – Supabase anon key
+ *   E2E_SUPABASE_PUBLISHABLE_KEY – Supabase publishable key
  *   E2E_TEST_EMAIL_DOMAIN – disposable domain for generated email addresses
  *   STRIPE_SECRET_KEY     – Stripe test-mode secret key (for direct API calls)
  */

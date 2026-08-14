@@ -10,7 +10,7 @@ import { defineConfig } from "@playwright/test";
  *   E2E_BASE_URL            – app dev server  (default: http://localhost:8081)
  *   E2E_LANDING_URL         – landing dev server (default: http://localhost:3000)
  *   E2E_SUPABASE_URL        – Supabase project URL
- *   E2E_SUPABASE_ANON_KEY   – Supabase anon key
+ *   E2E_SUPABASE_PUBLISHABLE_KEY – Supabase publishable key
  *   E2E_TEST_EMAIL_DOMAIN   – disposable email domain (default: mailinator.com)
  */
 export default defineConfig({
