@@ -41,6 +41,10 @@ export class EmbedNode extends DecoratorNode<ReactNode> {
     return false;
   }
 
+  isInline(): boolean {
+    return false;
+  }
+
   static importJSON(serializedNode: SerializedEmbedNode): EmbedNode {
     const node = $createEmbedNode(serializedNode.kind, serializedNode.itemId);
     return node;

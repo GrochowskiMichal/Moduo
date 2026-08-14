@@ -10,6 +10,7 @@
       "**",
       "!.omo",
       "!.claude",
+      "!.opencode/plugins",
       "!.design-sync",
       "!dist",
       "!src-tauri",
