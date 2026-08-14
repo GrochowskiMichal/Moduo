@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Pause, Play, RotateCcw, SkipForward } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
 
 import type { WidgetComponentProps } from "../../registry/types";
@@ -87,9 +88,9 @@ export function PomodoroWidget({ widget }: WidgetComponentProps) {
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 px-3">
-      <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <Eyebrow>
         {phase === "work" ? "Focus" : "Break"}
-      </span>
+      </Eyebrow>
       <p className="font-display text-3xl font-semibold tabular-nums text-foreground">
         {formatMMSS(remaining)}
       </p>

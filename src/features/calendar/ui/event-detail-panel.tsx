@@ -11,6 +11,8 @@ import { Field } from "../../../components/ui/field";
 import { Button } from "../../../components/ui/button";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
+import { Eyebrow } from "../../../components/ui/eyebrow";
+import { DetailTitle, detailTitleVariants } from "../../../components/ui/detail-title";
 import { Separator } from "../../../components/ui/separator";
 import { Switch } from "../../../components/ui/switch";
 import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
@@ -132,9 +134,7 @@ export function EventDetailPanel({
   return (
     <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-          Event
-        </span>
+        <Eyebrow>Event</Eyebrow>
         <IconButton icon={X} label="Close details" onClick={onClose} />
       </div>
 
@@ -147,12 +147,10 @@ export function EventDetailPanel({
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           }}
           aria-label="Event title"
-          className="font-display text-base font-medium"
+          className={detailTitleVariants()}
         />
       ) : (
-        <span className="font-display text-base font-medium text-foreground">
-          {event.title}
-        </span>
+        <DetailTitle>{event.title}</DetailTitle>
       )}
 
       {external ? (
@@ -267,9 +265,7 @@ export function EventDetailPanel({
       <Separator />
 
       <div className="flex flex-col gap-1.5">
-        <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-          Activity
-        </span>
+        <Eyebrow>Activity</Eyebrow>
         {activity.length === 0 ? (
           <span className="text-xs text-muted-foreground">No activity yet.</span>
         ) : (

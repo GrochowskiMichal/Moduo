@@ -59,6 +59,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { IconButton } from "@/components/ui/icon-button";
+import { Toolbar } from "@/components/ui/toolbar";
 import { cn } from "@/lib/utils";
 import type { Note } from "../model";
 import { trashDaysLeft } from "../model";
@@ -206,30 +209,14 @@ export function NoteTreeSidebar(props: Props) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between px-3 pb-1 pt-3">
         <span className="font-display text-sm font-semibold text-foreground">Notes</span>
-        <div className="flex items-center gap-0.5">
-          {canEdit && props.onImport ? (
-            <button
-              type="button"
-              onClick={props.onImport}
-              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              title="Import notes"
-              aria-label="Import notes"
-            >
-              <Upload className="size-4" />
-            </button>
-          ) : null}
-          {canEdit ? (
-            <button
-              type="button"
-              onClick={props.onCreateRoot}
-              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              title="New note (⌘N)"
-              aria-label="New note"
-            >
-              <Plus className="size-4" />
-            </button>
-          ) : null}
-        </div>
+        {canEdit ? (
+          <Toolbar aria-label="Notes controls" gap="tight">
+            {props.onImport ? (
+              <IconButton icon={Upload} label="Import notes" onClick={props.onImport} />
+            ) : null}
+            <IconButton icon={Plus} label="New note (⌘N)" onClick={props.onCreateRoot} />
+          </Toolbar>
+        ) : null}
       </div>
       {onSearch ? (
         <div className="px-3 pb-1.5">
@@ -750,9 +737,9 @@ function RowMenu({ note, ctx, variant }: { note: Note; ctx: RowCtx; variant: Row
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mt-3 first:mt-1">
-      <div className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <Eyebrow as="div" className="px-2 pb-1">
         {title}
-      </div>
+      </Eyebrow>
       <div className="flex flex-col gap-px">{children}</div>
     </div>
   );

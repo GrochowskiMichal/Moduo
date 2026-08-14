@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { Pencil, Pin } from "lucide-react";
 
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { getRuntime } from "@/lib/runtime";
 import { resolveEntityIcon } from "@/features/spine/icon-map";
 import { useMentionSearch } from "@/features/spine/hooks/use-mention-search";
@@ -105,7 +106,7 @@ export function PinnedWidget({ widget, updateConfig }: WidgetComponentProps) {
       >
         <Icon className="size-icon-lg text-muted-foreground" aria-hidden />
         <span className="max-w-full truncate text-sm font-medium text-foreground">{pinned.label}</span>
-        <span className="text-2xs uppercase tracking-wide text-muted-foreground/70">{pinned.type}</span>
+        <Eyebrow tone="tag">{pinned.type}</Eyebrow>
       </button>
     </div>
   );

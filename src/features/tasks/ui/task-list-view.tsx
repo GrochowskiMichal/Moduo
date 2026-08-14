@@ -16,6 +16,8 @@ import {
 
 import { Button } from "../../../components/ui/button";
 import { EmptyState as EmptyStateBase } from "../../../components/ui/empty-state";
+import { eyebrowVariants } from "../../../components/ui/eyebrow";
+import { cn } from "../../../lib/utils";
 import {
   Select,
   SelectContent,
@@ -614,14 +616,17 @@ export function TaskListView({
                   <button
                     type="button"
                     onClick={() => toggleGroup(group.key)}
-                    className="flex w-full items-center gap-1.5 rounded px-1 py-1 text-left font-display text-2xs font-medium text-muted-foreground hover:text-foreground"
+                    className={cn(
+                      eyebrowVariants(),
+                      "flex w-full items-center gap-1.5 rounded px-1 py-1 text-left hover:text-foreground",
+                    )}
                   >
                     {isCollapsed ? (
                       <ChevronRight className="size-3.5" aria-hidden />
                     ) : (
                       <ChevronDown className="size-3.5" aria-hidden />
                     )}
-                    <span className="uppercase tracking-wide">{group.label}</span>
+                    {group.label}
                     <span className="font-sans text-muted-foreground/70 tabular-nums">{group.tasks.length}</span>
                   </button>
                 ) : null}

@@ -56,6 +56,7 @@ import {
   Table,
   Type,
 } from "lucide-react";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { resolveMention, type MentionCandidate } from "@/features/spine/mention";
@@ -665,9 +666,9 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
         const Icon = COMMAND_ICONS[command.id];
         const groupHeader =
           command.group !== lastGroup ? (
-            <div className="px-2 pb-0.5 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground first:pt-1">
+            <Eyebrow as="div" className="px-2 pb-0.5 pt-2 first:pt-1">
               {command.group}
-            </div>
+            </Eyebrow>
           ) : null;
         lastGroup = command.group;
         return (

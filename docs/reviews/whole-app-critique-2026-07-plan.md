@@ -2,7 +2,7 @@
 
 > **Status: RATIFIED 2026-07-10** (designer quiz round) — blocks mirrored into `specs/BUILD_ORDER.md` §"Dogfood fixes (DF)". Source: [whole-app-critique-2026-07.md](./whole-app-critique-2026-07.md) (all finding IDs below refer to it).
 > **⚠ This file is the DF wave's *spec* (scope, ratified calls, ACs) — [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) is the status of record.** The checkboxes below are a convenience mirror of the ledger; if the two ever disagree, the ledger wins.
-> **Progress (reconciled 2026-08-14, DOC-1):** **22 of 24 DF blocks shipped.** Only **DF-15** (Home first-run composition — gated on the designer's look-approval of the draft) and **DF-18** (eyebrow/header/toolbar standardization — DoR-ready, no gate) remain open.
+> **Progress (reconciled 2026-08-14, DOC-1):** **23 of 24 DF blocks shipped.** Only **DF-15** (Home first-run composition) remains — and it is gated on the designer's look-approval of the draft layout, not on engineering. *(DF-18 landed the same day this reconcile ran; the count went 22 → 23 mid-session.)*
 > **Ledger context (as of 2026-07-10, now superseded):** at ratification time every feature block in BUILD_ORDER was `[x]` except MCP-1 and DESKTOP-1, and the Mindmap rethink existed only in ROADMAP prose. **Both facts have since changed:** Wave 6 (Dashboard, DB-1…DB-8) and Wave D (OPS/IM/NOTE-FIX/SCALE/DOC blocks) were added to the ledger after this, and the **Mindmap rethink was removed from alpha entirely** (designer call 2026-07-29) — MCP-1 no longer waits on it.
 > **Shape:** three waves. Wave A = trust-killers before dogfood day 1. Wave B = making the moat *felt*. Wave C = one-product cohesion + the pulled-forward spine features. Each block is sized for one `/s2` session, ends at `bun run verify` + validator, and names its lane so parallel sessions don't collide.
 
@@ -64,7 +64,7 @@
   Feature-settings no-op button (hide or wire); **ratified: wire per-module create** for `⌘N`/"+" (Calendar → event quick-create · Contacts → new-contact dialog · Email → compose on desktop · Home → focus Quick-capture); About/paywall local-first copy → cloud-first truth; a `?` shortcuts sheet; show a workspace label at 1 workspace; palette permission-filtering. *(CC-9, CC-10, §4.8. Settings stubs moved to DF-19.)*
 - [x] **DF-17 — Legacy deletions** · `Sev Medium` · effort M · lane: *cleanup* · ✅ 2026-07-27 `t/maciej/df-21def-comment-overdue-email`
   Delete the dead `email-workspace.tsx` tree (~108 hex, stories-only); token-route or quarantine `EmbeddedMindmap.tsx`; mindmap dead code per call #1; onboarding/paywall re-skin onto tokens (first-impression surfaces). *(§5 B.)*
-- [ ] **DF-18 — Eyebrow / header / toolbar standardization** · `Sev Medium` · effort M · lane: *design-system* · ⏳ **STILL OPEN** — DoR-ready, no gate
+- [x] **DF-18 — Eyebrow / header / toolbar standardization** · `Sev Medium` · effort M · lane: *design-system* · ✅ 2026-08-14 `t/maciej/df-18-eyebrow-toolbar` (one `Eyebrow` primitive + a drift guard that fails the build on any hand-rolled `uppercase` class; one `DetailTitle` scale; `Toolbar` gained a gap axis and real roving-tabindex keyboard nav; `lint:tw` now catches named palette utilities — §B4 closed)
   One eyebrow spec (`font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground`) extracted as a component; one detail-panel title scale; migrate calendar/contacts/notes toolbars onto `Toolbar`; extend `lint:tw` to catch named palette utilities (`text-red-400` class). *(§5 A2–A4, B4.)*
 - [x] **DF-19 — Settings overhaul** · `Sev High` · effort L · deps: ~~short /s1 first~~ (done 2026-07-11 → [`specs/settings-overhaul.md`](../../specs/settings-overhaul.md)) · lane: *platform* · ✅ sub-blocks DF-19a…i, 2026-07-11 → 2026-07-12; the held Notifications slice shipped as **DF-19f-notif** 2026-07-12 + **DF-19f-quit** 2026-07-13
   **Ratified 2026-07-10:** designer wants a full feature pass, not stub-hiding — Settings is "an important part of the app that currently is subpar." Scope to grill in the /s1: section architecture (what exists vs Preferences/Advanced stubs), where API keys live (today split between Settings and the workspace modal), billing's final home (absorbs DF-3's minimal section), integrations organization, appearance-picker layout (+ DF-14's de-tint), device-local vs synced messaging, About-copy truth. *(§4.8 S2/S3/S6 + designer verdict.)*
@@ -88,7 +88,7 @@
 
 ## Suggested parallel-session assignment
 
-*(Historical — the lanes below were the 2026-07-10 execution plan. Everything in them has shipped except DF-15 and DF-18.)*
+*(Historical — the lanes below were the 2026-07-10 execution plan. Everything in them has shipped except DF-15.)*
 
 | Session lane | Blocks in order |
 | --- | --- |

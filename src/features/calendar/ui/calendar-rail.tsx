@@ -9,6 +9,7 @@ import { Eye, EyeOff, MoreHorizontal, Plus } from "lucide-react";
 
 import { Calendar } from "../../../components/ui/calendar";
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import {
   DropdownMenu,
@@ -196,9 +197,9 @@ export function CalendarRail({
       />
 
       <div className="flex flex-col gap-1">
-        <div className="px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        <Eyebrow as="div" className="px-1">
           Calendars
-        </div>
+        </Eyebrow>
 
         {/* Native Moduo — always on (the only writable calendar). */}
         <div
@@ -218,9 +219,9 @@ export function CalendarRail({
           }
           return (
             <div key={group.key} className="flex flex-col gap-1">
-              <div className="px-1 pt-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
+              <Eyebrow as="div" className="px-1 pt-1" tone="muted">
                 {group.header}
-              </div>
+              </Eyebrow>
               {group.rows.map((row) => renderAccountRow(row.account, row.label))}
             </div>
           );
