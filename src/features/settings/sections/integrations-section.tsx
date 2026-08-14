@@ -14,6 +14,7 @@ import {
 import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
 import type { SavedAccount } from "../../email/model/email-types";
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { dispatchOpenSettings } from "../settings-events";
 import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
 
@@ -345,9 +346,9 @@ export function IntegrationsSection() {
                     >
                       <div className="min-w-0 flex-1">
                         {header && i === 0 ? (
-                          <p className="truncate text-2xs uppercase tracking-wide text-muted-foreground">
+                          <Eyebrow as="p" className="truncate">
                             {header}
-                          </p>
+                          </Eyebrow>
                         ) : null}
                         <p className="truncate text-sm text-foreground">{row.label}</p>
                         {row.account.status === "error" ? (

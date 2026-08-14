@@ -17,6 +17,7 @@ import {
 } from "../../../components/app/right-panel-switcher";
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
@@ -158,7 +159,7 @@ function WebTissueCard({
 function WebTissueSection({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      <Eyebrow as="div">{label}</Eyebrow>
       {children}
     </div>
   );

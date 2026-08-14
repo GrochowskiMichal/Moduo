@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { Eyebrow } from "@/components/ui/eyebrow";
+
 /**
  * A full-width, uppercase-labeled section — the collection-section pattern lifted
  * out of the Tasks detail panel for reuse across detail surfaces (Tasks today,
@@ -8,9 +10,7 @@ import * as React from "react";
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <span className="block font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
+      <Eyebrow className="block">{label}</Eyebrow>
       {children}
     </div>
   );

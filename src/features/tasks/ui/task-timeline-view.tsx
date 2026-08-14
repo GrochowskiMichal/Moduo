@@ -23,6 +23,7 @@ import { ChevronDown, ChevronRight, GripVertical } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { Eyebrow, eyebrowVariants } from "../../../components/ui/eyebrow";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
@@ -483,9 +484,7 @@ export function TaskTimelineView({
                     className="absolute top-1 flex overflow-hidden"
                     style={{ left: m.x, width: m.width }}
                   >
-                    <span className="sticky left-1 truncate pl-1 font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                      {m.label}
-                    </span>
+                    <Eyebrow className="sticky left-1 truncate pl-1">{m.label}</Eyebrow>
                   </div>
                 ))}
                 {ticks.map((t) => (
@@ -661,7 +660,10 @@ export function TaskTimelineView({
               type="button"
               aria-expanded={trayOpen}
               onClick={() => setTrayOpen((v) => !v)}
-              className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className={cn(
+                eyebrowVariants(),
+                "flex h-8 w-full items-center gap-1.5 rounded-md px-2 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              )}
             >
               {trayOpen ? (
                 <ChevronDown className="size-3.5" aria-hidden />
@@ -839,7 +841,10 @@ function TimelineLaneBlock({
           type="button"
           aria-expanded={!collapsed}
           onClick={onToggle}
-          className="sticky left-0 z-10 flex h-full items-center gap-1 bg-background pl-1 pr-3 font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className={cn(
+            eyebrowVariants(),
+            "sticky left-0 z-10 flex h-full items-center gap-1 bg-background pl-1 pr-3 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          )}
         >
           {collapsed ? (
             <ChevronRight className="size-3.5" aria-hidden />

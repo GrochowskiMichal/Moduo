@@ -7,6 +7,7 @@
 import { Check, ListFilter } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Command,
   CommandEmpty,
@@ -110,7 +111,7 @@ export function ActiveTagFilters({
   if (active.length === 0) return null;
   return (
     <>
-      <span className="text-2xs uppercase tracking-wide text-muted-foreground/70">Filter</span>
+      <Eyebrow tone="muted">Filter</Eyebrow>
       {active.map((tag) => (
         <TagChip key={tag.id} name={tag.name} color={tag.color} active onRemove={() => onToggle(tag.id)} />
       ))}

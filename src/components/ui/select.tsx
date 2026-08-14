@@ -3,6 +3,7 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
+import { eyebrowVariants } from "./eyebrow";
 import { fieldShellVariants, type FieldShellVariant } from "./field-shell";
 
 function Select({
@@ -108,10 +109,7 @@ function SelectLabel({
   return (
     <SelectPrimitive.Label
       data-slot="select-label"
-      className={cn(
-        "px-2 py-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase",
-        className,
-      )}
+      className={cn(eyebrowVariants(), "px-2 py-1.5", className)}
       {...props}
     />
   );

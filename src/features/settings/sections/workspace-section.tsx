@@ -32,6 +32,7 @@ import {
 import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Dialog,
   DialogContent,
@@ -123,9 +124,7 @@ function MemberAvatar({ name, email }: { name?: string; email?: string }) {
 function WsGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
+      <Eyebrow className="px-1">{label}</Eyebrow>
       <section className="flex flex-col gap-4 rounded-lg border border-border bg-card px-6 py-5">
         {children}
       </section>

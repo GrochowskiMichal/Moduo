@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { cn } from "../../../lib/utils";
 import { nestedSubtaskIds, STATUS_LABELS } from "../helpers";
 import { positionForReorder } from "../reorder";
@@ -288,9 +289,7 @@ function BoardColumn({
   return (
     <section className="flex h-full w-72 shrink-0 flex-col">
       <header className="mb-2 flex items-center gap-1.5 px-1">
-        <span className="font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-          {column.label}
-        </span>
+        <Eyebrow>{column.label}</Eyebrow>
         <span className="font-sans text-xs tabular-nums text-muted-foreground/70">
           {column.tasks.length}
         </span>

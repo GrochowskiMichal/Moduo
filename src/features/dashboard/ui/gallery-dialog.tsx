@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
 import type { WidgetSize, WidgetType } from "../engine/types";
@@ -94,9 +95,9 @@ export function GalleryDialog({
                       onValueChange={(next) => setSizes((prev) => ({ ...prev, [type]: next as WidgetSize }))}
                     />
                   ) : (
-                    <span className="text-2xs uppercase tracking-wide text-muted-foreground/70">
+                    <Eyebrow tone="tag">
                       {meta.sizes[0]}
-                    </span>
+                    </Eyebrow>
                   )}
                   <Button size="sm" variant="secondary" onClick={() => handleAdd(type)}>
                     <Plus className="size-icon-sm" aria-hidden />

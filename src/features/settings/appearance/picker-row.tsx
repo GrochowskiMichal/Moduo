@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { cn } from "../../../lib/utils";
 
 type Props = {
@@ -38,9 +39,9 @@ export function AppearancePickerRow({
             <span className="text-sm font-medium text-foreground">{title}</span>
           )}
           {tag ? (
-            <span className="rounded-full border border-border px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+            <Eyebrow className="rounded-full border border-border px-1.5 py-0.5">
               {tag}
-            </span>
+            </Eyebrow>
           ) : null}
         </div>
         {description ? (

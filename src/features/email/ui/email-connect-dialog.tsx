@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Dialog,
   DialogContent,
@@ -196,9 +197,7 @@ export function EmailConnectDialog({
               </p>
               <div className="flex items-center gap-3 py-1">
                 <span className="h-px flex-1 bg-border" />
-                <span className="text-2xs uppercase tracking-wide text-muted-foreground">
-                  or use an app password
-                </span>
+                <Eyebrow>or use an app password</Eyebrow>
                 <span className="h-px flex-1 bg-border" />
               </div>
             </div>

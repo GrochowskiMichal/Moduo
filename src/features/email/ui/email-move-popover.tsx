@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { Folder, Loader2 } from "lucide-react";
 
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Popover,
   PopoverContent,
@@ -62,9 +63,9 @@ export function EmailMovePopover({
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-1">
-        <div className="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        <Eyebrow as="div" className="px-2 py-1.5">
           Move to folder
-        </div>
+        </Eyebrow>
         {loading ? (
           <div className="flex items-center gap-2 px-2 py-2 text-sm text-muted-foreground">
             <Loader2 className="size-icon-sm animate-spin" aria-hidden />

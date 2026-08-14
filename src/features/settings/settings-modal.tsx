@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "../../lib/utils";
+import { Eyebrow } from "../../components/ui/eyebrow";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useShortcut } from "../../lib/shortcuts";
 
@@ -162,9 +163,7 @@ export function SettingsModal() {
               className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto border-r border-border bg-muted/40 p-3"
             >
               <div className="flex items-center justify-between px-2 pt-1">
-                <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Settings
-                </span>
+                <Eyebrow>Settings</Eyebrow>
                 <DialogPrimitive.Close
                   className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
                   aria-label="Close settings"
@@ -175,9 +174,7 @@ export function SettingsModal() {
 
               {SETTINGS_GROUPS.map((group) => (
                 <div key={group.label} className="flex flex-col gap-1">
-                  <span className="px-3 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {group.label}
-                  </span>
+                  <Eyebrow className="px-3">{group.label}</Eyebrow>
                   <TabsList
                     variant="default"
                     aria-label={group.label}

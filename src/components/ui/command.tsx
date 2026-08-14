@@ -59,7 +59,9 @@ function CommandDialog({
           className={cn(
             "[&_[cmdk-input-wrapper]_svg]:size-4",
             "[&_[cmdk-input]]:bg-transparent [&_[cmdk-input]]:outline-none",
-            "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase",
+            // The eyebrow recipe (see `eyebrowVariants`), applied through cmdk's
+            // own heading element — it can't be swapped for the component.
+            "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-sans [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase",
             "[&_[cmdk-group]]:px-1",
             "[&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2",
             "[&_[cmdk-item]_svg]:size-4",
