@@ -13,7 +13,11 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "supabase/functions/_shared/contracts/**/*.test.ts",
+    ],
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
   },

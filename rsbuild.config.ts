@@ -118,6 +118,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname),
+      "@contracts": path.resolve(__dirname, "supabase/functions/_shared/contracts"),
       // In web builds, replace @tauri-apps/api/core with a stub so the
       // Tauri runtime is never bundled into the web output.
       ...(isWeb ? { "@tauri-apps/api/core": tauriStub } : {}),
