@@ -29,7 +29,7 @@ const alphaVantageKey = readLocalEnvValue("PUBLIC_ALPHA_VANTAGE_API_KEY");
 const finnhubKey = readLocalEnvValue("PUBLIC_FINNHUB_API_KEY");
 const marketstackKey = readLocalEnvValue("PUBLIC_MARKETSTACK_API_KEY");
 const supabaseUrl = readLocalEnvValue("PUBLIC_SUPABASE_URL");
-const supabaseAnonKey = readLocalEnvValue("PUBLIC_SUPABASE_ANON_KEY");
+const supabasePublishableKey = readLocalEnvValue("PUBLIC_SUPABASE_PUBLISHABLE_KEY");
 const stripePublishableKey = readLocalEnvValue("PUBLIC_STRIPE_PUBLISHABLE_KEY");
 const stripePriceProMonthly = readLocalEnvValue("PUBLIC_STRIPE_PRICE_PRO_MONTHLY");
 const stripePriceProYearly = readLocalEnvValue("PUBLIC_STRIPE_PRICE_PRO_YEARLY");
@@ -94,7 +94,7 @@ export default defineConfig({
       "import.meta.env.PUBLIC_FINNHUB_API_KEY": JSON.stringify(finnhubKey),
       "import.meta.env.PUBLIC_MARKETSTACK_API_KEY": JSON.stringify(marketstackKey),
       "import.meta.env.PUBLIC_SUPABASE_URL": JSON.stringify(supabaseUrl),
-      "import.meta.env.PUBLIC_SUPABASE_ANON_KEY": JSON.stringify(supabaseAnonKey),
+      "import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
       "import.meta.env.MODUO_TARGET": JSON.stringify(target),
       "import.meta.env.MODUO_VERSION": JSON.stringify(appVersion),
       "import.meta.env.MODUO_BUILD": JSON.stringify(appBuild),

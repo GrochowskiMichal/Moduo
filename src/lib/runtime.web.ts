@@ -68,11 +68,11 @@ import type {
 export const SUPABASE_URL: string =
   (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
   "https://wtoonrvuqumihpkbvwvs.supabase.co";
-const SUPABASE_ANON_KEY: string =
-  (import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string | undefined) ||
+const SUPABASE_PUBLISHABLE_KEY: string =
+  (import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
   "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so";
 
-export const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+export const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
