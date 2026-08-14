@@ -512,12 +512,11 @@ export function IntegrationsSection() {
                           "This device" because the mail store is local — the
                           other machine keeps its own depth. */}
                       <div className="flex flex-col items-end gap-0.5">
-                        <label
-                          htmlFor={`email-depth-${acc.id}`}
-                          className="text-2xs uppercase tracking-wide text-muted-foreground"
-                        >
-                          Inbox history · this device
-                        </label>
+                        <Eyebrow asChild>
+                          <label htmlFor={`email-depth-${acc.id}`}>
+                            Inbox history · this device
+                          </label>
+                        </Eyebrow>
                         <EmailHistoryDepthSelect
                           id={`email-depth-${acc.id}`}
                           value={depthDraft[acc.id] ?? asHistoryDepth(acc.historyDepth)}

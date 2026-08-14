@@ -15,6 +15,7 @@ The one rule: every uppercase label in the app is now 11px, medium weight, muted
 - [ ] ✅ **Do:** Open Calendar, look at CALENDARS in the left rail and the per-account sub-header under it → **Expect:** the account line is the *dimmer* of the two; same size. _(both)_
 - [ ] **Do:** Open Settings (⌘,) and walk the nav groups (PERSONAL / WORKSPACE / APP) and the section labels inside Appearance, Preferences, About → **Expect:** all 11px, matching the rest of the app (Settings was one of the 12px offenders). _(both)_
 - [ ] **Do:** Open the notification centre (bell) → **Expect:** INVITATIONS / ACTIVITY / OVERDUE headers now match everything else (were 12px). _(both)_
+- [ ] **Do:** Settings → Integrations → a connected email account → **Expect:** the "INBOX HISTORY · THIS DEVICE" label above the depth picker (which arrived from IM-2c during this merge) matches every other eyebrow. _(desktop)_
 - [ ] **Do:** Open the Focus view (Tasks → Focus tab) → **Expect:** the bucket name, SUBTASKS, ADD TIME, UP NEXT labels look the same as Plan-view labels — they used to be on a different type face. _(both)_
 
 ### Kind tags should be *quieter* than section headers

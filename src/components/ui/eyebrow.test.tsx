@@ -64,6 +64,18 @@ describe("Eyebrow", () => {
     expect(strong).not.toMatch(/(?:^|\s)tracking-wide(?:\s|$)/);
   });
 
+  it("asChild carries the recipe onto an element with its own props", () => {
+    render(
+      <Eyebrow asChild>
+        <label htmlFor="depth">Inbox history</label>
+      </Eyebrow>,
+    );
+    const el = screen.getByText("Inbox history");
+    expect(el.tagName).toBe("LABEL");
+    expect(el.getAttribute("for")).toBe("depth");
+    expect(el.className).toContain("text-2xs");
+  });
+
   it("merges layout classes without letting them override the type recipe", () => {
     render(<Eyebrow className="sticky top-0 px-2 backdrop-blur">A</Eyebrow>);
     const el = screen.getByText("A");

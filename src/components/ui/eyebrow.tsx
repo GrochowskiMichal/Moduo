@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { Slot } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
@@ -49,10 +50,12 @@ type EyebrowProps = React.ComponentProps<"span"> &
   VariantProps<typeof eyebrowVariants> & {
     /** Keep the heading/definition-list semantics of the markup it replaces. */
     as?: EyebrowTag;
+    /** For an element that carries its own props (a `<label htmlFor>`). */
+    asChild?: boolean;
   };
 
-function Eyebrow({ className, tone, as = "span", ...props }: EyebrowProps) {
-  const Comp = as as React.ElementType;
+function Eyebrow({ className, tone, as = "span", asChild = false, ...props }: EyebrowProps) {
+  const Comp = asChild ? Slot.Root : (as as React.ElementType);
   return <Comp data-slot="eyebrow" className={cn(eyebrowVariants({ tone }), className)} {...props} />;
 }
 
