@@ -5,6 +5,7 @@
 
 import type { ComponentType } from "react";
 
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { cn } from "@/lib/utils";
 
 import { useDashboardData } from "../context/dashboard-data-context";
@@ -41,9 +42,7 @@ function ClockConfig({ widget, updateConfig }: ConfigFormProps) {
   };
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        Extra timezones
-      </p>
+      <Eyebrow as="p">Extra timezones</Eyebrow>
       <div className="flex flex-wrap gap-1">
         {CLOCK_PRESETS.map((p) => {
           const on = selected.includes(p.zone);
@@ -111,9 +110,7 @@ function PomodoroConfig({ widget, updateConfig }: ConfigFormProps) {
   const brk = numConfig(widget.config, "pomodoroBreakMinutes", 5);
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        Durations (minutes)
-      </p>
+      <Eyebrow as="p">Durations (minutes)</Eyebrow>
       <DurationField
         label="Focus"
         value={work}
@@ -147,9 +144,9 @@ function TasksConfig({ widget, updateConfig }: ConfigFormProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <Eyebrow as="p">
         Projects {selected.length === 0 ? "(all)" : `(${selected.length})`}
-      </p>
+      </Eyebrow>
       {buckets.length === 0 ? (
         <p className="text-xs text-muted-foreground">No projects yet.</p>
       ) : (

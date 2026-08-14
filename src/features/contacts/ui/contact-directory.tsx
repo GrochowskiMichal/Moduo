@@ -19,11 +19,13 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { IconButton } from "@/components/ui/icon-button";
+import { Toolbar } from "@/components/ui/toolbar";
 import type { Tag, TagLink } from "../../tasks/model";
 import type { Company, Contact } from "../model";
 import { groupByLetter } from "../letter-index";
@@ -151,9 +153,9 @@ function DraggableRow({ entity, label, rowProps }: { entity: DirectorySelection;
 
 function LetterHeader({ letter }: { letter: string }) {
   return (
-    <div className="sticky top-0 z-10 bg-card/95 px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground backdrop-blur">
+    <Eyebrow as="div" className="sticky top-0 z-10 bg-card/95 px-2 py-0.5 backdrop-blur">
       {letter}
-    </div>
+    </Eyebrow>
   );
 }
 
@@ -312,8 +314,10 @@ export function ContactDirectory({
       return;
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      // Segmented control / menu triggers own their arrow keys.
-      if (target?.closest('[data-slot="segmented-control"],[aria-haspopup]')) return;
+      // Segmented control / menu triggers own their arrow keys — and so does a
+      // toolbar: a control row announced as `role="toolbar"` must not move the
+      // list highlight underneath it (DF-18).
+      if (target?.closest('[data-slot="segmented-control"],[aria-haspopup],[role="toolbar"]')) return;
       event.preventDefault();
       const next =
         event.key === "ArrowDown"
@@ -390,7 +394,7 @@ export function ContactDirectory({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2" onKeyDown={onKeyDown}>
-      <div className="flex w-full items-center gap-1">
+      <Toolbar gap="snug" aria-label="Directory" className="w-full">
         <SegmentedControl
           aria-label="Filter directory"
           value={filter}
@@ -401,7 +405,8 @@ export function ContactDirectory({
           ]}
           size="sm"
         />
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <Toolbar.Spacer />
+        <Toolbar.Group gap="snug" className="shrink-0">
           {/* CSV import is people-only; "+" adds a contact or a company by tab. */}
           {showingPeople && onImport ? (
             <IconButton icon={Upload} label="Import contacts" size="sm" variant="ghost" onClick={onImport} />
@@ -411,8 +416,8 @@ export function ContactDirectory({
             : onNewCompany && (
                 <IconButton icon={Plus} label="New company" size="sm" variant="ghost" onClick={onNewCompany} />
               )}
-        </div>
-      </div>
+        </Toolbar.Group>
+      </Toolbar>
 
       <div className="relative">
         <Search className="pointer-events-none absolute left-2 top-1/2 size-icon-sm -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -427,7 +432,7 @@ export function ContactDirectory({
       </div>
 
       {/* Filters + sort — quiet ghost controls on one row (FX-3 AC4). */}
-      <div className="flex items-center gap-1">
+      <Toolbar gap="snug" aria-label="Filter and sort">
         {showingPeople ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -483,15 +488,16 @@ export function ContactDirectory({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        <Toolbar.Spacer />
         <IconButton
           icon={sort === "alpha" ? ArrowDownAZ : History}
           label={sort === "alpha" ? "Sorted A–Z — switch to recent" : "Sorted by recent — switch to A–Z"}
           size="sm"
           variant="ghost"
-          className="ml-auto shrink-0"
+          className="shrink-0"
           onClick={() => setSort((s) => (s === "alpha" ? "recent" : "alpha"))}
         />
-      </div>
+      </Toolbar>
 
       {status === "ready" && showingPeople && dupGroups.length > 0 ? (
         <button

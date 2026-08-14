@@ -18,6 +18,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { resolveEntityIcon } from "../icon-map";
 import { type MentionCandidate } from "../mention";
@@ -53,9 +54,9 @@ function CandidateRow({ candidate }: { candidate: MentionCandidate }) {
       <Icon className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
       <span className="min-w-0 flex-1 truncate">{candidate.label}</span>
       {candidate.kind === "person" ? (
-        <span className="shrink-0 text-2xs uppercase tracking-wide text-muted-foreground/70">
+        <Eyebrow className="shrink-0" tone="tag">
           person
-        </span>
+        </Eyebrow>
       ) : null}
     </>
   );

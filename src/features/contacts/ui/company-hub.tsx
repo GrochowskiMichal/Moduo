@@ -10,6 +10,8 @@ import { AtSign, CalendarPlus, Globe, Link2, MoreHorizontal, Pencil, UserPlus } 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { DetailTitle, detailTitleVariants } from "@/components/ui/detail-title";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +34,6 @@ import { ContactStatusDot } from "./contact-status-badge";
 import { EntityLinkPicker } from "./entity-link-picker";
 import { EntityTagRow } from "./entity-tag-row";
 import { LinkedSections } from "./linked-sections";
-
-const SECTION_HEADING = "font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground";
 
 export type CompanyHubProps = {
   company: Company;
@@ -138,10 +138,10 @@ export function CompanyHub({
               onChange={(e) => setName(e.target.value)}
               aria-label="Company name"
               style={{ height: "auto" }}
-              className="font-display text-2xl focus-visible:ring-0"
+              className={cn(detailTitleVariants({ size: "page" }), "focus-visible:ring-0")}
             />
           ) : (
-            <h2 className="font-display text-2xl text-foreground">{company.name || "Unnamed company"}</h2>
+            <DetailTitle size="page">{company.name || "Unnamed company"}</DetailTitle>
           )}
           {!editing && (company.domains[0] || company.website) ? (
             <p className="truncate text-sm text-muted-foreground">{company.domains[0] ?? company.website}</p>
@@ -257,7 +257,7 @@ export function CompanyHub({
       ) : null}
 
       <section className="space-y-1">
-        <h3 className={SECTION_HEADING}>People ({rollup.people.length})</h3>
+        <Eyebrow as="h3">People ({rollup.people.length})</Eyebrow>
         {rollup.people.length === 0 ? (
           <p className="text-sm text-muted-foreground">No people linked yet.</p>
         ) : (

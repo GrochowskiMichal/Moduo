@@ -1,6 +1,7 @@
 import { Archive, CalendarClock, Clock, EyeOff } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Dialog,
   DialogClose,
@@ -72,9 +73,7 @@ export function DriftTriageDialog({
           <>
             {canEdit ? (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
-                  Apply to all
-                </span>
+                <Eyebrow tone="muted">Apply to all</Eyebrow>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="outline">

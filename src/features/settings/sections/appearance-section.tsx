@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { useAppearance } from "../../../lib/appearance";
 import { AccentPicker } from "../appearance/accent-picker";
 import { DensityPicker } from "../appearance/density-picker";
@@ -16,9 +17,7 @@ import { SettingsSectionShell } from "./section-shell";
 function AppearanceGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
+      <Eyebrow className="px-1">{label}</Eyebrow>
       <section className="flex flex-col rounded-lg border border-border bg-card px-6 pb-6 pt-5">
         {children}
       </section>

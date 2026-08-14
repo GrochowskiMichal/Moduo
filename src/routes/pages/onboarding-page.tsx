@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModuoMark } from "@/components/ui/moduo-mark";
@@ -104,9 +105,7 @@ export function OnboardingPage() {
         <div className="w-full rounded-xl border border-border bg-card px-6 py-7 shadow-xl sm:px-7 sm:py-8">
           <div className="mb-7 flex w-full flex-col items-center">
             <ModuoMark className="mb-6 size-8 opacity-95" aria-hidden="true" />
-            <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-              Welcome to Moduo
-            </p>
+            <Eyebrow as="p">Welcome to Moduo</Eyebrow>
             <h1 className="mt-2 w-full text-center font-display text-3xl font-semibold leading-tight tracking-tight text-foreground">
               Set up your workspace
             </h1>

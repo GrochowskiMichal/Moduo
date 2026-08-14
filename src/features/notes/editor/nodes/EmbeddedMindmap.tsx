@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { ReactFlow, ReactFlowProvider } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { MindmapCustomNode } from "../../../mindmap/ui/custom-node";
 import type { MindmapNode, MindmapEdge } from "../../../mindmap/ui/types";
 
@@ -89,7 +90,7 @@ export function EmbeddedMindmap({ mindmapId }: { mindmapId: string }) {
         <div className="w-full max-w-[800px] h-[400px] flex flex-col rounded-2xl border border-border bg-card overflow-hidden shadow-lg relative cursor-default select-none pointer-events-auto">
             <div className="absolute top-0 left-0 w-full px-4 py-2 bg-gradient-to-b from-card to-transparent z-10 flex items-center gap-2 pointer-events-none">
                 <span className="text-base font-semibold text-foreground drop-shadow-md">{name}</span>
-                <span className="text-2xs uppercase font-bold text-muted-foreground tracking-widest bg-accent/80 px-1.5 py-0.5 rounded backdrop-blur-sm border border-border">Mindmap</span>
+                <Eyebrow tone="strong" className="rounded border border-border bg-accent/80 px-1.5 py-0.5 backdrop-blur-sm">Mindmap</Eyebrow>
             </div>
             <div className="flex-1 w-full h-full relative">
                 <ReactFlowProvider>

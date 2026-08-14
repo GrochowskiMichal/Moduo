@@ -8,6 +8,7 @@ import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { TagChipList } from "../../../components/tag-chip";
 import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { cn } from "../../../lib/utils";
@@ -266,9 +267,9 @@ function NowCard({
     // surface contrast carries elevation on dark). Left-aligned, task-first.
     <div className="rounded-lg border border-border bg-popover px-6 py-5">
       <div className="flex items-center justify-between gap-3">
-        <p className="shrink-0 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
+        <Eyebrow as="p" className="shrink-0" tone="muted">
           {bucketName}
-        </p>
+        </Eyebrow>
         <div className="flex min-w-0 items-center justify-end gap-2">
           {due ? <span className="shrink-0 font-sans text-2xs text-muted-foreground">Due {due}</span> : null}
           {tags.length ? <TagChipList tags={tags} max={3} className="min-w-0" /> : null}
@@ -304,9 +305,9 @@ function NowCard({
                 <TooltipTrigger asChild>
                   <span className="ml-0.5 cursor-default font-sans text-xs tabular-nums text-muted-foreground">
                     {session.pomodoro ? (
-                      <span className="uppercase tracking-wide text-muted-foreground/70">
+                      <Eyebrow tone="tag">
                         {session.phaseLabel} ·{" "}
-                      </span>
+                      </Eyebrow>
                     ) : null}
                     {formatDuration(trackedTotal)}
                     {estimateSeconds ? <span className="text-muted-foreground/60"> / ~{formatDuration(estimateSeconds)}</span> : null}
@@ -371,9 +372,9 @@ function SubtaskChecklist({ subtasks, onToggle }: { subtasks: Task[]; onToggle: 
   const done = subtasks.filter((s) => s.status === "done").length;
   return (
     <div className="mt-4">
-      <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
+      <Eyebrow as="p" tone="muted">
         Subtasks {done}/{subtasks.length}
-      </p>
+      </Eyebrow>
       <div className="mt-1.5 flex flex-col">
         {subtasks.map((st) => {
           const isDone = st.status === "done";
@@ -425,7 +426,7 @@ function TimerMenu({
       <PopoverContent align="start" className="w-64 text-left">
         <div className="flex flex-col gap-3">
           <div>
-            <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">Add time</p>
+            <Eyebrow as="p">Add time</Eyebrow>
             <div className="mt-1.5 flex gap-1.5">
               {[5, 15, 30].map((m) => (
                 <Button key={m} variant="secondary" size="sm" onClick={() => onAddTime(task.id, m * 60)}>
@@ -436,9 +437,7 @@ function TimerMenu({
           </div>
 
           <div>
-            <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-              Set total (min)
-            </p>
+            <Eyebrow as="p">Set total (min)</Eyebrow>
             <div className="mt-1.5 flex items-center gap-1.5">
               <Input
                 size="sm"
@@ -466,7 +465,7 @@ function TimerMenu({
           {/* Pomodoro — work/break edit the persisted Focus prefs (Settings →
               Focus holds long break / auto-start / sound). */}
           <div className="border-t border-border pt-3">
-            <p className="font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground">Pomodoro</p>
+            <Eyebrow as="p">Pomodoro</Eyebrow>
             <div className="mt-1.5 flex items-center gap-2 font-sans text-sm text-muted-foreground">
               <span>Work</span>
               <Input
@@ -523,9 +522,9 @@ function Queue({
   }
   return (
     <div className="flex flex-col gap-1">
-      <p className="px-1 font-display text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
+      <Eyebrow as="p" className="px-1" tone="muted">
         Up next
-      </p>
+      </Eyebrow>
       {tasks.map((task, i) => (
         <div
           key={task.id}

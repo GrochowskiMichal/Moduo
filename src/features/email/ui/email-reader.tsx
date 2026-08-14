@@ -25,6 +25,7 @@ import {
 import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
+import { DetailTitle } from "../../../components/ui/detail-title";
 import type { EmailAttachmentMeta, EmailInlineImage } from "../../../lib/runtime.types";
 import type { ComposeMode } from "../compose";
 import { senderKey } from "../classify";
@@ -437,7 +438,7 @@ export function EmailReader({
   return (
     <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
       <div className="flex shrink-0 items-start justify-between gap-2">
-        <h2 className="min-w-0 flex-1 text-sm font-medium text-foreground">{thread.subject}</h2>
+        <DetailTitle className="min-w-0 flex-1">{thread.subject}</DetailTitle>
         {onReply ? (
           <div className="flex shrink-0 items-center gap-1">
             <Button variant="ghost" size="sm" onClick={() => onReply("reply")}>

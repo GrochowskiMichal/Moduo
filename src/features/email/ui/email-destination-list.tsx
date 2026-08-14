@@ -7,6 +7,7 @@ import { Clock3, CornerUpLeft } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import type { EmailThreadRef } from "../../../lib/runtime.types";
 import { isFollowUpDue } from "../refs";
 import { formatSnoozeUntil } from "../snooze";
@@ -133,9 +134,9 @@ export function EmailDestinationList({
 
   return (
     <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto p-2">
-      <div className="px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <Eyebrow as="div" className="px-1">
         {mode === "snoozed" ? "Snoozed" : "Follow-ups"}
-      </div>
+      </Eyebrow>
       {refs.map((refRow) => (
         <RefCard
           key={refRow.id}

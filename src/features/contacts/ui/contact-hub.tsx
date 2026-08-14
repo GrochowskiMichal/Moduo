@@ -32,6 +32,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { DetailTitle, detailTitleVariants } from "@/components/ui/detail-title";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,8 +66,6 @@ import { EntityLinkPicker } from "./entity-link-picker";
 
 // Radix Select forbids an empty-string item value, so "No status" rides a sentinel.
 const NO_STATUS = "__none__";
-
-const SECTION_HEADING = "font-sans text-2xs font-medium uppercase tracking-wide text-muted-foreground";
 
 /** Copy to clipboard with the notes-module fallback for non-secure contexts. */
 function copyText(text: string): void {
@@ -470,10 +470,10 @@ export function ContactHub(props: ContactHubProps) {
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               aria-label="Contact name"
               style={{ height: "auto" }}
-              className="font-display text-2xl focus-visible:ring-0"
+              className={cn(detailTitleVariants({ size: "page" }), "focus-visible:ring-0")}
             />
           ) : (
-            <h2 className="font-display text-2xl text-foreground">{contact.name || "Unnamed"}</h2>
+            <DetailTitle size="page">{contact.name || "Unnamed"}</DetailTitle>
           )}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
             {contact.title ? <span className="truncate">{contact.title}</span> : null}
@@ -712,7 +712,7 @@ export function ContactHub(props: ContactHubProps) {
       {/* Linked people — person↔person links get their own quiet section (FX-5) */}
       {!editing && linkedPeople.length > 0 ? (
         <section className="space-y-1">
-          <h3 className={SECTION_HEADING}>People</h3>
+          <Eyebrow as="h3">People</Eyebrow>
           <ul className="space-y-0.5">
             {linkedPeople.map((p) => (
               <li key={p.id}>

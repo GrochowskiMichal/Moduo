@@ -14,6 +14,7 @@ import { FileText, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
@@ -97,9 +98,7 @@ export function LinkedNotesPanel({
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Notes
-        </span>
+        <Eyebrow>Notes</Eyebrow>
         {canEdit ? (
           <button
             type="button"
