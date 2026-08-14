@@ -1,5 +1,7 @@
 # Manual test checklist — DF-21d/e/f (Universal Inbox: comment-notify · overdue opt-in · email-due web)
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): APPLIED to prod — the deploy gate on this checklist is closed.** `20260714120000_comments_notify_owner_participants` is live (confirmed by OPS-1's 2026-07-29 catalog probe of the deployed two-branch `spine_activity_targets_me`), and OPS-1 also applied `20260704180000`, so `email_op_follow_up_due` no longer 404s. **DF-21d and DF-21f are testable now** — read the "(needs the migration applied)" section headings below as satisfied. Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 > Generated 2026-07-14, extended 2026-07-27 · branch `t/maciej/df-21def-comment-overdue-email` · **Live-verified:** DF-17 + accent yes; DF-21d/e/f partial.
 > Covers **DF-21d/e/f**, **DF-17** (legacy deletions + onboarding/paywall rebuild) and the **monochrome accent default**. Unit tests green (**1231**). Run top-to-bottom.
 

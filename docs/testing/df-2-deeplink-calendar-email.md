@@ -1,5 +1,7 @@
 # DF-2 — Deep-link selection: Calendar + Email
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1):** the note below saying `email_op_ref_remove` (`20260704190000_email_ref_remove.sql`) is "not deployed to prod" is **stale — OPS-1 applied it 2026-07-29.** The consequence: the lingering labeled probe ref in the test workspace is now **removable**, so it need not be tolerated as a permanent "Recently linked" card. Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 Branch: `t/maciej/df-2-deeplink-calendar-email` · extends DF-1's `moduo:entity:open` route map + URL-held selection to Calendar (`?event=`) and Email (`?thread=` + a one-shot in-app event).
 
 **What changed (one line):** clicking an event or email thread anywhere in the app (dashboard widget row, linked chip, notification) now lands on that exact event/thread instead of dead-ending on the calendar's current week / the unfiltered inbox.

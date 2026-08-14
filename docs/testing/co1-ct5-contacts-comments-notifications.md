@@ -1,5 +1,7 @@
 # Manual test checklist — CO-1 (Contacts schema/ops/route) + CT-5 (comments/notifications)
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): APPLIED to prod.** The "the two new migrations can't be applied from this env … apply + exercise post-deploy" framing below is stale — OPS-1 + OPS-2 (2026-07-29) applied and verified every migration file in the repo. **There is no apply step left; the rows are runnable now.** Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 > Generated 2026-06-26 · branch `claude/blissful-sinoussi-0a13fb` · **Live-verified:** no — the two new migrations can't be applied from this env (Supabase MCP is on the wrong org; no local stack) and the preview sandbox binds to another worktree. All server-invariant checks below are first-discovery for you; the client-only route/nav checks are low-risk and covered by `bun run verify` + the validator pass.
 >
 > **Prereq for everything under "needs migration":** deploy `supabase/migrations/20260626120000_contacts_module.sql` and `20260626130000_spine_comments_notifications.sql` to the Moduo Supabase project, then regenerate `src/types/supabase.ts`. Until then, the Contacts ops + the derived notification feed are inert (the app degrades gracefully — see the notification checks).

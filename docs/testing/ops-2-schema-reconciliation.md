@@ -6,7 +6,7 @@
 
 ## Already verified in-session — do NOT re-do
 
-- _(verified)_ **Reconciliation is clean.** All 193 objects declared across the 42 migration files exist in prod (110 functions · 22 tables · 29 columns · 4 triggers · 27 policies · 1 view), and **0 of 110 function bodies drift**. A new query 3 for overload ambiguity also returns none.
+- _(verified)_ **Reconciliation is clean.** All 193 objects declared across the 42 migration files exist in prod (110 functions · 22 tables · 29 columns · 4 triggers · 27 policies · 1 view) — _**superseded mid-session:** the check was re-run after NOTE-FIX-1 merged and added the 43rd file, giving the current figures **195 objects / 43 files / 112 functions**; the inventory doc §1 carries those_ — and **0 of 110 function bodies drift**. A new query 3 for overload ambiguity also returns none.
 - _(verified)_ **The grants migration is applied and correct.** `has_function_privilege('anon', …)` is now **false** for the six `*_op__guard*` helpers and for `accept_workspace_invite`.
 - _(verified)_ **No regression from the revoke** (authed, rolled back): `email_op_follow_up`, `contacts_op_set_details` and `calendar_op_event_create` all still succeed; a direct client call to `calendar_op__guard` is correctly denied `42501`.
 - _(verified)_ **The invite hole is closed.** Before the fix, an *unauthenticated* caller using an invite already marked `revoked` drove `workspace_members` 0 → 1 at role `admin`. After the fix, `anon` cannot execute the function at all.

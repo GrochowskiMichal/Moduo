@@ -1,6 +1,6 @@
 # Spec: Universal Inbox (DF-21) — "the notification bell grows up"
 
-> Status: **Draft (DoR-ready)** · Owner: maciej · Related briefs: `.design/connective-tissue/BRIEF.md` §Universal Inbox, `.design/connective-tissue/DESIGN_BRIEF.md`, `docs/PRODUCT_BRIEF.md` §7 (quiet notifications) · Block id: **DF-21** (spine lane, Wave C)
+> Status: **Shipped** — DF-21a/b/c 2026-07-13 · DF-21d/e/f built 2026-07-14, landed 2026-07-27 on `t/maciej/df-21def-comment-overdue-email`. **[`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) is the status of record**; this spec is the design/AC reference. Its migration `20260714120000_comments_notify_owner_participants.sql` **is applied to prod** (confirmed by OPS-1's 2026-07-29 catalog probe — the DF-21 ledger note's "prod apply PENDING" predates that). · Owner: maciej · Related briefs: `.design/connective-tissue/BRIEF.md` §Universal Inbox, `.design/connective-tissue/DESIGN_BRIEF.md`, `docs/PRODUCT_BRIEF.md` §7 (quiet notifications) · Block id: **DF-21** (spine lane, Wave C)
 
 ## Scope
 

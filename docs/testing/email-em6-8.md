@@ -1,5 +1,7 @@
 # Manual test checklist — Email EM-6 · EM-7 · EM-8
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): the two migrations this checklist calls "deploy-gated" are APPLIED to prod** — `20260704180000_email_snooze_followup` and `20260704190000_email_ref_remove` both landed 2026-07-29 (OPS-1), which also re-armed the follow-up one-shot guard and made `email_op_ref_remove` callable. **The `[post-deploy]` rows are runnable now.** What is still genuinely manual here is the *desktop engine* (IMAP/SMTP, snooze move/restore, attachments, send) — that needs a real mail account, not a deploy. Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 > Generated 2026-07-04 · branch `claude/cranky-wiles-0bbf66` · **Live-verified:** no — the email engine (IMAP/SMTP, snooze move/restore, attachments, send) is desktop-only and headless-incompatible, and the two migrations are deploy-gated. `bun run verify` (788 unit tests) + `cargo check`/`cargo test` are green; everything below is the designer's desktop pass. Pure logic (snooze presets, follow-up reply-clear, compose prefill, undo-send hold, convert args) is unit-proven.
 
 ## Pre-req — deploy the two migrations

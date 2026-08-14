@@ -1,5 +1,7 @@
 # Manual test checklist — Notes rebuild NO-1..NO-4 (schema + sync engine + page shell + grammar)
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): every migration this checklist depends on is APPLIED to prod.** OPS-1 + OPS-2 (2026-07-29) applied and verified every migration file in the repo against the live catalog. Any "unapplied" / "deploy-gated" / "**[post-deploy]**" wording below describes the state when this doc was written — **those rows are runnable now, not blocked**, and any "test the pre-migration degraded behavior first" step is no longer reachable. Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 > Generated 2026-07-03 · branch `claude/practical-brahmagupta-7cef0c` · **Live-verified:** partial — the whole UI flow was exercised on a local dev server with the real hosted session (deploy-gap mode) AND with stubbed `notes_op_*` RPCs (non-degraded mode); the **real server round-trip needs the migration applied first** (see Migrations below).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 

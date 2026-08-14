@@ -1,6 +1,6 @@
 # Spec: Settings overhaul (DF-19)
 
-> Status: **DoR-ready** · Owner: maciej · Lane: platform · Source: `docs/reviews/whole-app-critique-2026-07.md` §4.8 (S2/S3/S6, CC-7/CC-9/CC-10) + designer verdict ("Settings … currently subpar — we need more"). Ratified /s1 grill 2026-07-11.
+> Status: **Shipped** — all sub-blocks landed: DF-19a/b/c/d 2026-07-11 · DF-19e/f/g/h/i 2026-07-12. The held Notifications sub-slice shipped separately as **DF-19f-notif** (2026-07-12, spec [`specs/df-19f-notification-toggles.md`](./df-19f-notification-toggles.md)), with **DF-19f-quit** 2026-07-13. **[`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) is the status of record**; this spec is the design/AC reference. · Owner: maciej · Lane: platform · Source: `docs/reviews/whole-app-critique-2026-07.md` §4.8 (S2/S3/S6, CC-7/CC-9/CC-10) + designer verdict ("Settings … currently subpar — we need more"). Ratified /s1 grill 2026-07-11.
 > This is a **platform surface**, not a spine entity module — the `docs/moduo-module-contract.md` spine-wiring / MCP-tools / dashboard-widget checklist is **N/A** (see Out of scope).
 
 ## Scope

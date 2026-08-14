@@ -1,5 +1,7 @@
 # Manual test — Notes NO-6/7/8 (multiplayer · right panel · find & interchange)
 
+> **✅ Migration status (reconciled 2026-08-14 · DOC-1): every migration this checklist depends on is APPLIED to prod.** OPS-1 + OPS-2 (2026-07-29) applied and verified every migration file in the repo against the live catalog. Any "unapplied" / "deploy-gated" / "**[post-deploy]**" wording below describes the state when this doc was written — **the 17 `[post-deploy]` rows are runnable now, not blocked**, and `/notes` is not in degraded/read-only mode. Status of record: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md).
+
 Branch: `claude/compassionate-pasteur-d42b7d` · Wave 3 (Notes) blocks **NO-6, NO-7, NO-8**.
 
 > **Deploy note.** The Notes migration (`20260703120000_notes_module.sql`, NO-1) is still **deploy-gated / unapplied on prod**. Until it lands, `/notes` runs in **degraded** mode (read-only banner) against the real project, and the flows below that need the migration (search, comments-on-notes, import, mentions) are verified either against the deployed migration or with stubbed RPCs. Rows marked **[post-deploy]** need the migration applied first.
