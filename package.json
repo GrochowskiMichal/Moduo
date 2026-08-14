@@ -55,7 +55,7 @@
     "@lexical/utils": "^0.40.0",
     "@lexical/yjs": "^0.40.0",
     "@subframe/core": "^1.155.0",
-    "@supabase/supabase-js": "^2.105.4",
+    "@supabase/supabase-js": "^2.112.3",
     "@tailwindcss/postcss": "^4.3.0",
     "@tanstack/react-router": "^1.169.2",
     "@tauri-apps/api": "^2.11.0",
