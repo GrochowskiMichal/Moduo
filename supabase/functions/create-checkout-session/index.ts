@@ -16,12 +16,17 @@
  *
  * Returns: { url: string } — redirect to Stripe Checkout
  *
+ * Deploy with verify_jwt = false — the caller's JWT is verified in code
+ * (getUser); GET redirects pass access_token as a query param.
+ *
  * If the user already has an active/trialing subscription, redirects them to the
  * Stripe Billing Portal instead so they can manage their plan.
  */
 
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
+
+import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
   apiVersion: "2023-10-16",
@@ -128,7 +133,7 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      getDefaultSecretKey(),
       { auth: { persistSession: false } }
     );
 
