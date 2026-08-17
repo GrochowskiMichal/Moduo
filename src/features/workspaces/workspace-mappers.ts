@@ -1,3 +1,9 @@
+import {
+  isMemberDbRole,
+  isWorkspaceRole,
+  type MemberDbPermission,
+  type MemberDbRole,
+} from "@contracts/vocabularies";
 import type {
   ModulePermission,
   WorkspaceInvite,
@@ -17,14 +23,14 @@ export function storageKey(userId: string): string {
  * side maps `editor` → `member` in runtime.web `toMemberRole`). Missing/unknown
  * → least privilege. DF-24.
  */
-export function normalizeMemberRole(role: any): WorkspaceRole {
+export function normalizeMemberRole(role: unknown): WorkspaceRole {
   if (role === "member") return "editor";
-  if (role === "owner" || role === "admin" || role === "editor" || role === "viewer") return role;
+  if (isWorkspaceRole(role)) return role;
   return "viewer";
 }
 
 /** DB perm {read,write,none} (+ legacy admin) → app ModulePermission. DF-24. */
-function memberPermToModulePermission(perm: any): ModulePermission {
+function memberPermToModulePermission(perm: unknown): ModulePermission {
   if (perm === "read" || perm === "view") return "view";
   if (perm === "none") return "none";
   if (perm === "admin") return "admin";
@@ -37,12 +43,12 @@ function memberPermToModulePermission(perm: any): ModulePermission {
  * role ∈ {owner,admin,member,viewer} and perm ∈ {read,write,none}; the app hands
  * us `editor` / view-edit-admin, so map before writing or the insert 400s. DF-24.
  */
-export function toMemberRole(role: string | null | undefined): string {
+export function toMemberRole(role: string | null | undefined): MemberDbRole {
   if (role === "editor") return "member";
-  if (role === "owner" || role === "admin" || role === "viewer" || role === "member") return role;
+  if (isMemberDbRole(role)) return role;
   return "member";
 }
-export function toMemberPerm(perm: string | null | undefined): string {
+export function toMemberPerm(perm: string | null | undefined): MemberDbPermission {
   if (perm === "view" || perm === "read") return "read";
   if (perm === "none") return "none";
   return "write"; // write / edit / admin / anything else → write

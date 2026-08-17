@@ -4,8 +4,10 @@
 // mirror op. This file holds the pure pieces (the sync window); the effectful
 // loop is the `useCalendarSync` hook.
 
+import type { SyncableProvider } from "@contracts/vocabularies";
+
 /** Providers the desktop engine can fetch. */
-export type SyncableProvider = "google" | "microsoft" | "caldav" | "ics";
+export type { SyncableProvider } from "@contracts/vocabularies";
 
 export function isSyncableProvider(p: string): p is SyncableProvider {
   return p === "google" || p === "microsoft" || p === "caldav" || p === "ics";

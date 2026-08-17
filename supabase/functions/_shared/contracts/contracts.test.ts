@@ -13,9 +13,7 @@ import {
   optionalString,
   positiveInt,
   uuid,
-  PLAN_TIER_VALUES,
 } from "./index.ts";
-import { Constants } from "@/types/supabase";
 
 // ---------------------------------------------------------------------------
 // parseOrError
@@ -245,19 +243,5 @@ describe("jsonString", () => {
   });
   it("rejects a number (not a string)", () => {
     expect(jsonString.safeParse(42).success).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// PLAN_TIER_VALUES drift check
-// ---------------------------------------------------------------------------
-
-describe("PLAN_TIER_VALUES", () => {
-  it("matches the generated Constants.public.Enums.plan_tier", () => {
-    expect(PLAN_TIER_VALUES).toEqual(Constants.public.Enums.plan_tier);
-  });
-
-  it("contains the expected four tiers", () => {
-    expect(PLAN_TIER_VALUES).toEqual(["free", "pro", "team", "founder"]);
   });
 });

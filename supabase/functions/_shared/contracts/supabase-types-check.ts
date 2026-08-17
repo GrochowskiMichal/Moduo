@@ -9,10 +9,13 @@
  * The generated types file (`src/types/supabase.ts`) is self-contained
  * (no imports), so both tsc and Deno can resolve this relative import.
  *
- * When task 2 adds vocabulary schemas, their drift checks go HERE.
+ * Runtime drift tests (contract values vs `Constants.public.Enums` vs the
+ * live pg_enum probe fixture) live in `vocabularies.test.ts`.
  */
 
 import type { Database } from "../../../../src/types/supabase.ts";
+
+import type { PlanTier } from "./vocabularies.ts";
 
 // ---------------------------------------------------------------------------
 // plan_tier — the only enum in Database.public.Enums today
@@ -27,31 +30,20 @@ type PlanTierGenerated = Database["public"]["Enums"]["plan_tier"];
  * `[T] extends [U]` (wrapped in tuples) prevents distributive conditional
  * types, giving a true bidirectional equality check.
  */
-type AssertEqual<A, B> =
-  [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+type AssertEqual<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
 const _planTierCheck: AssertEqual<
   PlanTierGenerated,
   "free" | "pro" | "team" | "founder"
 > = true;
 
-// ---------------------------------------------------------------------------
-// Constants runtime check (re-exported for tests)
-// ---------------------------------------------------------------------------
-
 /**
- * The canonical `plan_tier` values as declared in the generated types.
- * Task 3's live `pg_enum` probe is the authority on whether the actual
- * production label is `founder` (singular, per generated types) or
- * `founders` (plural, per some Stripe/sync write paths). This constant
- * mirrors the generated `Constants` — it is NOT the live-catalog truth.
+ * Assert the contract-layer `PlanTier` type (vocabularies.ts) is exactly the
+ * generated enum — the type-level half of the drift guard; the runtime half
+ * compares `PLAN_TIERS` to `Constants.public.Enums.plan_tier`.
  */
-export const PLAN_TIER_VALUES = [
-  "free",
-  "pro",
-  "team",
-  "founder",
-] as const;
+const _planTierContractCheck: AssertEqual<PlanTier, PlanTierGenerated> = true;
 
-// Silence "unused" — _planTierCheck is a compile-time assertion.
+// Silence "unused" — these are compile-time assertions.
 void _planTierCheck;
+void _planTierContractCheck;

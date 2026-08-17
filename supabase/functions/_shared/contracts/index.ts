@@ -1,10 +1,11 @@
 /**
  * Barrel re-export for the shared Zod contract layer.
  *
- * Import from `@contracts` (browser) or `../_shared/contracts` (Deno):
+ * Import from `@contracts/<module>` (browser) or `../_shared/contracts/<module>.ts`
+ * (Deno):
  *
  * ```ts
- * import { parseOrError, isoDateTime, uuid } from "@contracts";
+ * import { parseOrError, isoDateTime, uuid } from "@contracts/index";
  * // or in Deno:
  * import { parseOrError, isoDateTime, uuid } from "../_shared/contracts/index.ts";
  * ```
@@ -39,4 +40,83 @@ export {
   type Uuid,
 } from "./primitives.ts";
 
-export { PLAN_TIER_VALUES } from "./supabase-types-check.ts";
+export {
+  ACTIVITY_ACTOR_TYPES,
+  CALENDAR_ACCOUNT_STATUSES,
+  CALENDAR_PROVIDERS,
+  CONNECTION_STATUSES,
+  CONTACT_FIELD_TYPES,
+  EMAIL_ACCOUNT_STATUSES,
+  EMAIL_PROVIDERS,
+  ENERGY_LEVELS,
+  INVITE_STATUSES,
+  KNOWN_SUBSCRIPTION_STATUSES,
+  LINK_ORIGINS,
+  MCP_KEY_SCOPES,
+  MEMBER_DB_PERMISSIONS,
+  MEMBER_DB_ROLES,
+  MODULE_PERMISSIONS,
+  PLAN_TIERS,
+  PRIORITY_LEVELS,
+  RELATION_KINDS,
+  SYNCABLE_PROVIDERS,
+  TASK_STATUSES,
+  WORKSPACE_ROLES,
+  activityActorTypeSchema,
+  calendarAccountStatusSchema,
+  calendarProviderSchema,
+  connectionStatusSchema,
+  contactFieldTypeSchema,
+  emailAccountStatusSchema,
+  energyLevelSchema,
+  inviteStatusSchema,
+  isCalendarProvider,
+  isKnownSubscriptionStatus,
+  isMailboxProvider,
+  isMemberDbRole,
+  isPlanTier,
+  isRelationKind,
+  isTaskStatus,
+  isWorkspaceRole,
+  knownSubscriptionStatusSchema,
+  linkOriginSchema,
+  mailboxProviderSchema,
+  mcpKeyScopeSchema,
+  memberDbPermissionSchema,
+  memberDbRoleSchema,
+  modulePermissionSchema,
+  normalizeCalendarProvider,
+  normalizeEmailProvider,
+  normalizeLinkOrigin,
+  normalizeMcpKeyScope,
+  normalizePlanTier,
+  normalizeRelationKind,
+  parsePlanTier,
+  planTierSchema,
+  priorityLevelSchema,
+  relationKindSchema,
+  syncableProviderSchema,
+  taskStatusSchema,
+  workspaceRoleSchema,
+  type ActivityActorType,
+  type CalendarAccountStatus,
+  type CalendarProvider,
+  type ConnectionStatus,
+  type ContactFieldType,
+  type EmailAccountStatus,
+  type EnergyLevel,
+  type InviteStatus,
+  type KnownSubscriptionStatus,
+  type LinkOrigin,
+  type MailboxProvider,
+  type McpKeyScope,
+  type MemberDbPermission,
+  type MemberDbRole,
+  type ModulePermission,
+  type PlanTier,
+  type PriorityLevel,
+  type RelationKind,
+  type SyncableProvider,
+  type TaskStatus,
+  type WorkspaceRole,
+} from "./vocabularies.ts";
