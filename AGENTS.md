@@ -4,9 +4,10 @@ Project context for coding agents. Always loaded. **Tool-agnostic** — written 
 
 ## Session start (do this first, every session)
 
-1. **Base check.** Your branch must be cut off the latest personal branch (`maciej` or `mike`) — never `main`/`develop`. If you're behind the personal branch, reconcile before editing: this file, `specs/`, and `src/styles/tokens.css` may be stale.
+1. **Base check.** Your branch must be cut off the latest personal branch (`maciej` or `mike`) — never `main`/`develop`. If you're behind the personal branch, reconcile before editing: this file, `specs/`, and `src/styles/tokens.css` may be stale. Also `git fetch` and note whether `origin/develop` has moved (the other person may have synced).
 2. **Read the three knowledge files:** `docs/decisions.md` · `docs/gotchas.md` · `specs/BUILD_ORDER.md` (the live execution ledger — what's next, dependencies, parallel-session lanes).
 3. **If `docs/local/` exists, read it.** It's the gitignored personal layer (§Personal layer) — present for some people, absent for others. Never require it.
+4. **Entire + contracts.** GitHub's **default branch is `develop`**. Entire.io repo Overview/Analytics only count work that has landed there — see [docs/entire.md](./docs/entire.md). Domain enums/unions live in the shared Zod layer — see §Domain contracts below.
 
 ## Stack
 
@@ -50,6 +51,8 @@ The architecture, data model, and conventions are already documented — find th
 - **Architecture:** [docs/architecture.md](./docs/architecture.md) (code layout) · [docs/data-layers.md](./docs/data-layers.md) (runtimes, spine, data flow) · [docs/moduo-module-contract.md](./docs/moduo-module-contract.md) (the 4-pillar module pattern + "done" checklist).
 - **Data model:** [docs/data-layers.md](./docs/data-layers.md) §2–3 · per-module `.design/<module>/BRIEF.md` data sketches · `supabase/migrations/`.
 - **Conventions & glossary:** [docs/moduo-architecture-vocabulary.md](./docs/moduo-architecture-vocabulary.md) (terms, principles, decision rules, anti-patterns) · [docs/DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md) (UI).
+- **Entire.io:** [docs/entire.md](./docs/entire.md) — capture, search, default branch.
+- **Domain contracts:** `supabase/functions/_shared/contracts/` (import as `@contracts/*`) — Zod vocabularies + parse/normalize bridges.
 - **Decisions log:** [docs/decisions.md](./docs/decisions.md) — newest-first index of locked decisions; **append new ones here** so they stop scattering.
 - **Gotchas / footguns:** [docs/gotchas.md](./docs/gotchas.md) — read before debugging; **append when something bites.**
 
@@ -116,6 +119,7 @@ Three-pane desktop shell. Min window 1024×700. See [.design/foundation/INFORMAT
 - `specs/` — feature specs + `BUILD_ORDER.md` (execution ledger) + `_template.md`.
 - `.design/<feature-slug>/` — design briefs per feature. Foundation lives at `.design/foundation/`.
 - `.claude/skills/` — the `/s1` `/s2` `/s3` + `moduo-design-quality` skills (shared by OpenCode and Claude Code). `.claude/hooks/` — Claude Code lifecycle hooks.
+- `.cursor/rules/` — Cursor always-on pointers into AGENTS.md (do not fork policy here).
 - `.opencode/` — OpenCode slash-commands (`commands/`) and subagents (`agents/`).
 - `.storybook/` — Storybook config.
 
@@ -136,17 +140,41 @@ Branching model and PR direction live in [CONTRIBUTING.md](./CONTRIBUTING.md). S
 
 - **Cut the task branch before editing any files.** The moment a task is more than a one-off question, create `t/<owner>/<short-kebab-case>` off the personal branch *first* — do not start editing on `maciej`/`mike` and move the work later.
 - Default base for new task branches is the user's personal branch (`maciej` or `mike`). Never branch from `main`. Never branch from `develop` unless explicitly told.
-- Never push directly to `main` or `develop`. Never merge or close PRs without explicit authorization. (Exception: `/s3` has standing authorization to merge into the **personal** branch only — see `.claude/skills/s3/SKILL.md`.)
-- Force-push only on your own task branches, only with `--force-with-lease`.
+- Never push directly to `main`. Never merge to `main` without both-devs sign-off.
+- **Standing authorization to land on `develop`:** after a **bigger** chunk is on the personal branch (`/s3` merge, or any multi-file / user-visible / schema change the designer would expect to "show up"), **you merge personal → `develop` yourself** — do not wait to be asked. Entire.io repo Analytics only sees `develop` (GitHub default). Procedure is in `/s3` and [CONTRIBUTING.md](./CONTRIBUTING.md). Skip only when the designer said to keep the work on a task branch, or when a duplication-guard conflict is unresolved.
+- Never merge or close unrelated PRs. Force-push only on your own task branches, only with `--force-with-lease`.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contract.
+
+## Entire.io (use it; don't only capture it)
+
+Entire records agent sessions + checkpoints. **Use it for your own work**, not as a dashboard for the designer:
+
+- `entire search "…"` / `entire why <file>:<line>` / `entire checkpoint explain` — find why code exists before re-deriving.
+- `entire status` / `entire session list` — see what this repo is capturing.
+- Repo Overview/Analytics on entire.io follow GitHub's **default branch = `develop`**. Home and Sessions list all branches; that is why work that never leaves `mike`/`maciej`/`t/*` looks missing on the repo charts.
+- Playbook: [docs/entire.md](./docs/entire.md). Do not wipe Entire data or rewrite checkpoint refs unless the designer asks.
+
+## Domain contracts (Zod + enums)
+
+Closed vocabularies (plan tier, task status, roles, link origins, …) live **once** in `supabase/functions/_shared/contracts/` (`vocabularies.ts`, `primitives.ts`, `errors.ts`). App code imports `@contracts/*`; Deno Edge Functions import the same files relatively.
+
+When you add or change a domain value (new feature, refactor, migration):
+
+1. Add it to the const array + Zod schema + type in `vocabularies.ts` (or a new focused module if it is a new closed set).
+2. Keep **parse\*** (strict, writes) vs **normalize\*** (lax, reads) vs **is\*** in lockstep.
+3. If Postgres CHECKs / enums exist, add a migration so DB and TS cannot drift. Do not invent a parallel union in `src/features/*/model.ts`.
+4. When a value dies: remove it from the vocabulary, tests, CHECK/enum, and call sites — don't leave a zombie union "for later."
+5. Leave **open** strings alone: polymorphic entity types, user-renamable contact statuses, IMAP folders, Stripe event names, opaque prefs. Those are documented as out of this layer.
+
+This layer is in use even while the broader enum/Zod foundation is unfinished. Extend it; don't bypass it with a fresh `type Foo = "a" | "b"` next to the table.
 
 ## Agent tooling
 
 - **`/s1` `/s2` `/s3`** — the plan → execute → wrap workflow. The skills live in `.claude/skills/` (one shared home, discovered by both OpenCode and Claude Code); thin slash-commands for OpenCode live in `.opencode/commands/`.
 - **`validator`** — skeptical-senior review subagent (`.opencode/agents/validator.md`), run by `/s2` step 4 before any block is reported done.
 - **MCP servers** — `supabase`, `subframe`, `notion`. Configured in project `opencode.json` (OpenCode) and `.mcp.json` (Claude Code). Each needs a one-time browser OAuth: `opencode mcp auth <name>`.
-- **Setup & notifications** — [docs/agent-setup.md](./docs/agent-setup.md) (OpenCode + Claude Code, incl. the personal layer).
+- **Setup & notifications** — [docs/agent-setup.md](./docs/agent-setup.md) (Cursor + OpenCode + Claude Code, incl. the personal layer). All three load [AGENTS.md](./AGENTS.md); `CLAUDE.md` is only a pointer.
 
 ## Personal layer (gitignored, never committed)
 
