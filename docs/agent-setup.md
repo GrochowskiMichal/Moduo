@@ -1,6 +1,12 @@
-# Agent setup — OpenCode & Claude Code
+# Agent setup — Cursor, OpenCode & Claude Code
 
-How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised, in either tool. The workflow itself (skills, spec template, execution ledger) is committed and shared; this doc covers the per-machine setup each person does once.
+How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. **One instruction file:** `AGENTS.md` is what Cursor, OpenCode, and Claude Code all load (Claude Code via the `CLAUDE.md` pointer). Cursor also has a short always-on rule in `.cursor/rules/moduo-always.mdc` that points here.
+
+The workflow itself (skills, spec template, execution ledger) is committed and shared; this doc covers the per-machine setup each person does once.
+
+## Cursor
+
+Mike's IDE. Project instructions: `AGENTS.md` + `.cursor/rules/moduo-always.mdc`. Entire hooks live in `.cursor/hooks.json` (installed via `entire agent add cursor`). Do not treat Cursor-only rules as the source of truth — edit `AGENTS.md` first.
 
 ## OpenCode
 
@@ -51,12 +57,12 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised, in eithe
 
 These give the *away-from-desk* signal; the repo hooks give the *at-desk* desktop notification.
 
-## The unsupervised flow (either tool)
+## The unsupervised flow (any of the three)
 
 1. `/s1` → grill + spec + execution blocks → "Ready to execute." (read-only; use your tool's plan mode if it has one)
 2. Approve → switch to the tool's autonomous mode.
 3. `/s2` one block. It builds, runs `bun run verify`, runs the validator, and reports. Notifications tell you it's done.
-4. You test, approve the next block. (Each session runs on its own branch/worktree — nothing hits `main` until you merge.)
-5. `/s3` at the end.
+4. You test, approve the next block. Task branches merge to the personal branch, then **bigger chunks to `develop`** (`/s3` step 5b). Nothing hits `main` until a release.
+5. `/s3` at the end (personal merge + develop sync).
 
 The only two things you ever manage: **the work plan** and **your subscription limits.**
