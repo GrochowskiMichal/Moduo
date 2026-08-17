@@ -1,6 +1,10 @@
-export type WorkspaceRole = "owner" | "admin" | "editor" | "viewer";
+import type { InviteStatus, ModulePermission, WorkspaceRole } from "@contracts/vocabularies";
 
-export type ModulePermission = "none" | "view" | "edit" | "admin";
+export type {
+  InviteStatus,
+  ModulePermission,
+  WorkspaceRole,
+} from "@contracts/vocabularies";
 
 export type WorkspaceSummary = {
   id: string;
@@ -45,7 +49,7 @@ export type WorkspaceInvite = {
   workspaceId: string;
   email: string;
   role: WorkspaceRole;
-  status: "pending" | "accepted" | "revoked" | "expired";
+  status: InviteStatus;
   token?: string;
   createdAt: string;
   updatedAt: string;

@@ -1,7 +1,8 @@
-export type ConnectionStatus = "disconnected" | "connecting" | "connected";
-export type MailboxProvider = "gmail" | "outlook" | "icloud" | "custom";
+import type { EmailAccountStatus as AccountStatus, MailboxProvider } from "@contracts/vocabularies";
+
+export type { ConnectionStatus, MailboxProvider } from "@contracts/vocabularies";
 export type FolderType = "inbox" | "sent" | "drafts" | "trash" | "spam";
-export type AccountStatus = "active" | "reauth_required" | "error";
+export type { EmailAccountStatus as AccountStatus } from "@contracts/vocabularies";
 
 export interface Email {
   id: string;

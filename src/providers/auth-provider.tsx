@@ -1,3 +1,4 @@
+import { normalizePlanTier, type PlanTier } from "@contracts/vocabularies";
 import { createContext, type PropsWithChildren, useContext, useEffect, useState } from "react";
 import { Analytics, identify, resetIdentity } from "../lib/analytics";
 import {
@@ -7,7 +8,7 @@ import {
   runtimeConfigError,
 } from "../lib/runtime";
 
-export type PlanTier = "free" | "pro" | "team" | "founders";
+export type { PlanTier } from "@contracts/vocabularies";
 
 export type AuthContextValue = {
   userId: string | null;
@@ -70,7 +71,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (uid) {
         try {
           const { data: profile } = await client.workspace.getProfile(uid);
-          if (active && profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
+          if (active && profile?.plan_tier) setPlanTier(normalizePlanTier(profile.plan_tier));
         } catch {
           // ignore — keep "free" default
         }
@@ -107,7 +108,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         rt.workspace
           .getProfile(nextSession.user.id)
           .then(({ data: profile }) => {
-            if (active && profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
+            if (active && profile?.plan_tier) setPlanTier(normalizePlanTier(profile.plan_tier));
           })
           .catch(() => {});
       }
@@ -136,7 +137,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!rt || !uid) return;
     try {
       const { data: profile } = await rt.workspace.getProfile(uid);
-      if (profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
+      if (profile?.plan_tier) setPlanTier(normalizePlanTier(profile.plan_tier));
     } catch {
       /* ignore */
     }
@@ -155,8 +156,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       });
       const { plan_tier, error } = await res.json();
       if (error) throw new Error(error);
-      if (plan_tier) setPlanTier(plan_tier as PlanTier);
-      return (plan_tier as PlanTier) ?? planTier;
+      if (plan_tier) {
+        const normalized = normalizePlanTier(plan_tier);
+        setPlanTier(normalized);
+        return normalized;
+      }
+      return planTier;
     } catch (err) {
       console.error("[auth] syncSubscription failed:", err);
       return planTier;

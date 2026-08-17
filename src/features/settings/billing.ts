@@ -6,6 +6,8 @@
  * DF-19 (Settings overhaul) will grow this into the section's real model.
  */
 
+import { normalizePlanTier } from "@contracts/vocabularies";
+
 export type EntitlementsRow = {
   plan_tier: string | null;
   subscription_status: string | null;
@@ -18,13 +20,12 @@ export const ENTITLEMENTS_COLUMNS =
   "plan_tier,subscription_status,trial_days_remaining,trial_ends_at,current_period_end";
 
 export function planLabel(tier: string | null | undefined): string {
-  switch (tier) {
+  switch (normalizePlanTier(tier)) {
     case "pro":
       return "Pro";
     case "team":
       return "Team";
     case "founder":
-    case "founders":
       return "Founders";
     default:
       return "Free";

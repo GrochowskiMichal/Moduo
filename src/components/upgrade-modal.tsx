@@ -19,7 +19,7 @@ const FEATURE_LABELS: Record<FeatureGate, string> = {
   custom_domain: "Custom Domain",
 };
 
-const PLAN_BULLETS: Record<"pro" | "team" | "founders", string[]> = {
+const PLAN_BULLETS: Record<"pro" | "team" | "founder", string[]> = {
   pro: [
     "Cloud sync across all your devices",
     "Unlimited workspaces",
@@ -34,7 +34,7 @@ const PLAN_BULLETS: Record<"pro" | "team" | "founders", string[]> = {
     "Team audit log",
     "SSO / SAML (coming soon)",
   ],
-  founders: [
+  founder: [
     "Everything in Pro forever",
     "Early access to new features",
     "Direct founder support",
