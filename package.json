@@ -18,6 +18,7 @@
     "verify:desktop:signature": "codesign -d -r- ./src-tauri/target/release/bundle/macos/moduo.app/Contents/MacOS/moduo && codesign -vv ./src-tauri/target/release/bundle/macos/moduo.app",
     "icon:liquid": "bun scripts/icons/build-liquid-icon.ts",
     "db:reconcile": "bun scripts/db-reconcile.ts",
+    "db:preflight": "bun scripts/db-contract-preflight.ts",
     "storybook": "sb dev -p 6006",
     "build-storybook": "sb build",
     "storybook:gen": "bun ./scripts/generate-storybook-stories.ts",
