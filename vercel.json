@@ -1,7 +1,9 @@
 {
   "framework": null,
   "installCommand": "bun install --frozen-lockfile",
-  "buildCommand": "bun run build:web",
+  "buildCommand": "node scripts/vercel-build.mjs",
   "outputDirectory": "dist/web",
-  "rewrites": [{ "source": "/((?!assets|favicon|manifest|sw\\.).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/((?!assets|favicon|manifest|sw\\.).*)", "destination": "/index.html" }
+  ]
 }
