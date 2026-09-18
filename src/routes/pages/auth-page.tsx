@@ -97,7 +97,7 @@ export function AuthPage() {
                 STAGING
               </span>
               <span className="text-xs text-muted-foreground">
-                Invite-only · for founders and alpha testers
+                app.staging.moduo.app · invite-only
               </span>
             </div>
           </div>
