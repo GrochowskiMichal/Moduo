@@ -8,6 +8,8 @@
 //    shape + sanitizer live here already so the cloud wiring is a transport
 //    change, not a model change.
 
+import { z } from "zod";
+
 import type { CalendarView } from "./lens";
 import { localDayKey, parseDayKey } from "./lens";
 
@@ -51,12 +53,21 @@ export function defaultViewState(now: Date = new Date()): CalendarViewState {
   return { view: "week", anchor: localDayKey(now) };
 }
 
+const viewStateSchema = z.object({
+  view: z.enum(["day", "week"]).optional(),
+  anchor: z.string().optional(),
+});
+
 export function sanitizeViewState(raw: unknown, now: Date = new Date()): CalendarViewState {
   const fallback = defaultViewState(now);
-  if (!raw || typeof raw !== "object") return fallback;
-  const o = raw as Record<string, unknown>;
-  const view: CalendarView = o.view === "day" || o.view === "week" ? o.view : fallback.view;
-  const anchor = typeof o.anchor === "string" && parseDayKey(o.anchor) ? o.anchor : fallback.anchor;
+  const parsed = viewStateSchema.safeParse(raw);
+  if (!parsed.success) return fallback;
+  const view: CalendarView =
+    parsed.data.view === "day" || parsed.data.view === "week" ? parsed.data.view : fallback.view;
+  const anchor =
+    typeof parsed.data.anchor === "string" && parseDayKey(parsed.data.anchor)
+      ? parsed.data.anchor
+      : fallback.anchor;
   return { view, anchor };
 }
 
@@ -141,11 +152,21 @@ function asMinute(v: unknown, fallback: number): number {
   return n < 0 || n > 1440 ? fallback : n;
 }
 
+const calendarPrefsShape = z.object({
+  workStartMinute: z.unknown().optional(),
+  workEndMinute: z.unknown().optional(),
+  weekStartsOn: z.unknown().optional(),
+  showWeekends: z.unknown().optional(),
+  hiddenAccountIds: z.unknown().optional(),
+  accountColors: z.unknown().optional(),
+});
+
 /** Coerce any stored/synced value into a valid prefs object (round-trips). */
 export function sanitizeCalendarPrefs(raw: unknown): CalendarPrefs {
   const d = DEFAULT_CALENDAR_PREFS;
-  if (!raw || typeof raw !== "object") return { ...d };
-  const o = raw as Record<string, unknown>;
+  const parsed = calendarPrefsShape.safeParse(raw);
+  if (!parsed.success) return { ...d };
+  const o = parsed.data;
   let workStartMinute = asMinute(o.workStartMinute, d.workStartMinute);
   let workEndMinute = asMinute(o.workEndMinute, d.workEndMinute);
   if (workStartMinute >= workEndMinute) {

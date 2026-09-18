@@ -14,6 +14,7 @@
  * ctx.key.workspaceId.
  */
 
+import { TASK_STATUSES, isTaskStatus } from "../../_shared/contracts/vocabularies.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import {
   pointerOnStatusChange,
@@ -23,8 +24,7 @@ import {
 
 type Row = Record<string, any>;
 
-const OPEN_STATUSES = ["todo", "in_progress"];
-const ALL_STATUSES = ["todo", "in_progress", "done", "archived"];
+const OPEN_STATUSES = ["todo", "in_progress"] as const;
 
 function str(args: Row, name: string, required = true): string {
   const v = args?.[name];
@@ -192,7 +192,7 @@ export const tasksConnectorModule: ConnectorModule = {
           bucket_id: { type: "string", description: "Only this bucket." },
           status: {
             type: "string",
-            enum: ["open", ...ALL_STATUSES],
+            enum: ["open", ...TASK_STATUSES],
             description: "Filter by status; 'open' = todo + in_progress (default).",
           },
           limit: { type: "number", description: "Max tasks (default 100, max 200)." },
@@ -206,7 +206,7 @@ export const tasksConnectorModule: ConnectorModule = {
         let list = data.tasks;
         if (bucketId) list = list.filter((t) => t.bucket_id === bucketId);
         if (status === "open") list = list.filter((t) => OPEN_STATUSES.includes(t.status));
-        else if (ALL_STATUSES.includes(status)) list = list.filter((t) => t.status === status);
+        else if (isTaskStatus(status)) list = list.filter((t) => t.status === status);
         list = list.slice(0, clampLimit(args, 100, 200));
         return list.map((t) => shapeTask(t, data, now));
       },
@@ -396,13 +396,13 @@ export const tasksConnectorModule: ConnectorModule = {
         type: "object",
         properties: {
           task_id: { type: "string", description: "Task uuid." },
-          status: { type: "string", enum: ALL_STATUSES, description: "The new status." },
+          status: { type: "string", enum: [...TASK_STATUSES], description: "The new status." },
         },
         required: ["task_id", "status"],
       },
       handler: async (args, ctx) => {
         const status = str(args, "status");
-        if (!ALL_STATUSES.includes(status)) throw new Error("Unknown task status.");
+        if (!isTaskStatus(status)) throw new Error("Unknown task status.");
         const task = await fetchTask(ctx, str(args, "task_id"));
         const recurrence = pointerOnStatusChange(task as RecurringTaskRow, status, new Date());
         return callOp(ctx, "tasks_op_set_status", {

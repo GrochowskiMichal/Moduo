@@ -13,6 +13,8 @@
  * boots into it, then hand off to `/`.
  */
 
+import { parseOrError } from "@contracts/errors";
+import { nonEmptyString } from "@contracts/primitives";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Check, LogIn, Users } from "lucide-react";
 import { useState } from "react";
@@ -40,7 +42,8 @@ export function JoinPage() {
   const { runtime, userId, isSignedIn, loading } = useAuth();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { invite?: string };
-  const inviteToken = search.invite?.trim() || null;
+  const inviteParsed = parseOrError(nonEmptyString, search.invite ?? "");
+  const inviteToken = inviteParsed.success ? inviteParsed.data : null;
 
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);

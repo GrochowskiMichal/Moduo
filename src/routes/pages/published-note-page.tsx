@@ -10,6 +10,9 @@
  * `noindex`. Tokens-only.
  */
 
+import { parseOrError } from "@contracts/errors";
+import { nonEmptyString } from "@contracts/primitives";
+import { publicNotePayloadSchema } from "@contracts/rows";
 import { Link, useParams, useSearch } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -97,17 +100,23 @@ export function PublishedNotePage() {
     let active = true;
     setState({ status: "loading" });
     void (async () => {
+      const tokenParsed = parseOrError(nonEmptyString, token);
+      if (!tokenParsed.success) {
+        if (active) setState({ status: "not-found" });
+        return;
+      }
       try {
         const res = await fetch(
-          `${SUPABASE_URL}/functions/v1/notes-public?token=${encodeURIComponent(token)}`,
+          `${SUPABASE_URL}/functions/v1/notes-public?token=${encodeURIComponent(tokenParsed.data)}`,
         );
         if (!active) return;
         if (res.status === 404) return setState({ status: "not-found" });
         if (!res.ok) return setState({ status: "error" });
-        const data = (await res.json()) as PublicPayload;
+        const json: unknown = await res.json();
+        const parsed = parseOrError(publicNotePayloadSchema, json);
         if (!active) return;
-        if (!data?.notes?.length) return setState({ status: "not-found" });
-        setState({ status: "ok", data });
+        if (!parsed.success) return setState({ status: "not-found" });
+        setState({ status: "ok", data: parsed.data });
       } catch {
         if (active) setState({ status: "error" });
       }

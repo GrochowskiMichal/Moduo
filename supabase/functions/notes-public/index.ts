@@ -17,6 +17,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { notesPublicTokenSchema } from "../_shared/contracts/http-bodies.ts";
+import { parseOrError } from "../_shared/contracts/errors.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -80,8 +82,12 @@ Deno.serve(async (req: Request) => {
     return new Response("Method not allowed", { status: 405, headers: CORS });
   }
 
-  const token = new URL(req.url).searchParams.get("token")?.trim() ?? "";
-  if (!token) return notFound();
+  const tokenParsed = parseOrError(
+    notesPublicTokenSchema,
+    new URL(req.url).searchParams.get("token")?.trim() ?? "",
+  );
+  if (!tokenParsed.success) return notFound();
+  const token = tokenParsed.data;
 
   const db = createClient(SUPABASE_URL, DEFAULT_SECRET_KEY, { auth: { persistSession: false } });
 

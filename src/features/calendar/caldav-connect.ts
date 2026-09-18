@@ -4,7 +4,10 @@
 // keychain-cleanup flows. Credentials never touch Supabase — only the
 // non-secret descriptor (server + username) rides the account's sync_token.
 
+import { parseOrError } from "@contracts/errors";
+import { caldavCalendarSchema } from "@contracts/rows";
 import { invoke } from "@tauri-apps/api/core";
+import { z } from "zod";
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { accountHue } from "./accounts";
@@ -61,12 +64,19 @@ export const CALDAV_PRESETS: CaldavPreset[] = [
 ];
 
 /** Probe a server and list its event calendars (saves nothing). */
-export function discoverCaldavCalendars(input: {
+export async function discoverCaldavCalendars(input: {
   serverUrl: string;
   username: string;
   password: string;
 }): Promise<CaldavCalendar[]> {
-  return invoke<CaldavCalendar[]>("calendar_caldav_discover", input);
+  const raw = await invoke<unknown>("calendar_caldav_discover", input);
+  const parsed = parseOrError(z.array(caldavCalendarSchema), raw);
+  if (!parsed.success) return [];
+  return parsed.data.map((c) => ({
+    url: c.url,
+    name: c.name,
+    color: c.color ?? null,
+  }));
 }
 
 /**

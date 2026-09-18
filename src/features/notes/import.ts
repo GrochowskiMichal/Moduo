@@ -8,6 +8,8 @@
  * `notesV2.importNotes` op.
  */
 
+import { z } from "zod";
+
 import { positionsAfter } from "../tasks/helpers";
 
 export type ImportFileEntry = { path: string; content: string };
@@ -91,9 +93,22 @@ export function mdToPlainText(md: string): string {
     .trim();
 }
 
+const importFileEntrySchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+});
+
 export function planMdZipImport(entries: ImportFileEntry[]): ImportPlan {
   const skipped: ImportSkip[] = [];
   const files = entries.filter((e) => {
+    if (!importFileEntrySchema.safeParse(e).success) {
+      skipped.push({
+        path: String((e as ImportFileEntry)?.path ?? ""),
+        reason: "malformed entry",
+        kind: "unknown",
+      });
+      return false;
+    }
     if (!MD_EXT.test(e.path)) {
       const kind = skipKind(e.path);
       skipped.push({

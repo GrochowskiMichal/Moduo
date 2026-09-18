@@ -6,6 +6,35 @@
  * return { error: { message: "Desktop only" } } — the UI hides them via capabilities.
  */
 
+import {
+  activityRowSchema,
+  bucketRowSchema,
+  calendarAccountRowSchema,
+  calendarEventRowSchema,
+  commentRowSchema,
+  companyRowSchema,
+  contactFieldDefRowSchema,
+  contactRowSchema,
+  emailAccountRowSchema,
+  emailRefRowSchema,
+  entityLinkRowSchema,
+  entityRecordRowSchema,
+  habitRowSchema,
+  linkSuggestionRowSchema,
+  mapKnownRows,
+  noteRowSchema,
+  noteUpdateRowSchema,
+  notificationRowSchema,
+  parsedCalendarProvider,
+  parsedMailboxProvider,
+  parsedRelationKind,
+  prefsRowSchema,
+  requireRow,
+  tagLinkRowSchema,
+  tagRowSchema,
+  taskRelationRowSchema,
+  taskRowSchema,
+} from "@contracts/rows";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
 import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
@@ -22,6 +51,8 @@ import { type OverdueFollowup, selectNeedsAttention } from "../features/contacts
 import { selectReconnect } from "../features/contacts/reconnect";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
 import {
+  type Note,
+  type NoteUpdateRow,
   noteRowToModel,
   noteUpdateRowToModel,
   trashWindowCutoffIso,
@@ -200,18 +231,8 @@ function sessionFromSupabase(supaSession: any): RuntimeSession | null {
   };
 }
 
-function prefsRowToModel(row: {
-  appearance: unknown;
-  appearance_updated_at: string | null;
-  focus: unknown;
-  focus_updated_at: string | null;
-  calendar?: unknown;
-  calendar_updated_at?: string | null;
-  email?: unknown;
-  email_updated_at?: string | null;
-  preferences?: unknown;
-  preferences_updated_at?: string | null;
-}): UserPreferences {
+function prefsRowToModel(raw: unknown): UserPreferences {
+  const row = requireRow(prefsRowSchema, raw ?? {}, "preferences");
   return {
     appearance: (row.appearance as Record<string, unknown> | null) ?? null,
     appearanceUpdatedAt: row.appearance_updated_at ?? null,
@@ -240,7 +261,8 @@ const DASHBOARD_LAYOUT_KEY = "home";
 
 /** Map a raw `habits` row to the HabitRow model (DB-7). The client is untyped,
  * so column renames are silent — keep this in lockstep with the migration. */
-function mapHabitRow(r: any): HabitRow {
+function mapHabitRow(raw: unknown): HabitRow {
+  const r = requireRow(habitRowSchema, raw, "habit");
   return {
     id: r.id as string,
     workspaceId: (r.workspace_id as string) ?? "",
@@ -809,7 +831,7 @@ export const webRuntime: ModuoRuntime = {
       const res = await query(V2_COLS);
       if (!res.error) {
         return {
-          notes: res.rows.map(noteRowToModel),
+          notes: mapKnownRows(res.rows, mapNoteRow),
           degraded: false,
           truncated: collectTruncations(res.truncation),
         };
@@ -820,7 +842,7 @@ export const webRuntime: ModuoRuntime = {
       const legacy = await query(LEGACY_COLS);
       if (legacy.error) throw new Error(legacy.error.message);
       return {
-        notes: legacy.rows.map(noteRowToModel),
+        notes: mapKnownRows(legacy.rows, mapNoteRow),
         degraded: true,
         truncated: collectTruncations(legacy.truncation),
       };
@@ -837,7 +859,7 @@ export const webRuntime: ModuoRuntime = {
         .eq("note_id", noteId)
         .gt("id", sinceUpdateId ?? 0)
         .order("id", { ascending: true });
-      const updates = updRes.error ? [] : (updRes.data ?? []).map(noteUpdateRowToModel);
+      const updates = updRes.error ? [] : mapKnownRows(updRes.data ?? [], mapNoteUpdateRow);
 
       const noteRes = await supabaseClient
         .from("notes")
@@ -875,7 +897,7 @@ export const webRuntime: ModuoRuntime = {
         p_icon: icon ?? null,
       });
       if (error) throw new Error(error.message);
-      return noteRowToModel(firstRow(data, "notes_op_create"));
+      return mapNoteRow(firstRow(data, "notes_op_create"));
     },
 
     async rename({ workspaceId, noteId, title }) {
@@ -885,7 +907,7 @@ export const webRuntime: ModuoRuntime = {
         p_title: title,
       });
       if (error) throw new Error(error.message);
-      return noteRowToModel(firstRow(data, "notes_op_rename"));
+      return mapNoteRow(firstRow(data, "notes_op_rename"));
     },
 
     async move({ workspaceId, noteId, parentId, position }) {
@@ -896,7 +918,7 @@ export const webRuntime: ModuoRuntime = {
         p_position: position ?? "",
       });
       if (error) throw new Error(error.message);
-      return noteRowToModel(firstRow(data, "notes_op_move"));
+      return mapNoteRow(firstRow(data, "notes_op_move"));
     },
 
     async setMeta({ workspaceId, noteId, patch }) {
@@ -906,7 +928,7 @@ export const webRuntime: ModuoRuntime = {
         p_patch: patch,
       });
       if (error) throw new Error(error.message);
-      return noteRowToModel(firstRow(data, "notes_op_set_meta"));
+      return mapNoteRow(firstRow(data, "notes_op_set_meta"));
     },
 
     async duplicate({ workspaceId, sourceNoteId, position }) {
@@ -916,7 +938,7 @@ export const webRuntime: ModuoRuntime = {
         p_position: position ?? "",
       });
       if (error) throw new Error(error.message);
-      return noteRowToModel(firstRow(data, "notes_op_duplicate"));
+      return mapNoteRow(firstRow(data, "notes_op_duplicate"));
     },
 
     async archive({ workspaceId, noteId }) {
@@ -925,7 +947,7 @@ export const webRuntime: ModuoRuntime = {
         p_note_id: noteId,
       });
       if (error) throw new Error(error.message);
-      return noteRowToModel(firstRow(data, "notes_op_archive"));
+      return mapNoteRow(firstRow(data, "notes_op_archive"));
     },
 
     async unarchive({ workspaceId, noteId }) {
@@ -934,7 +956,7 @@ export const webRuntime: ModuoRuntime = {
         p_note_id: noteId,
       });
       if (error) throw new Error(error.message);
-      return noteRowToModel(firstRow(data, "notes_op_unarchive"));
+      return mapNoteRow(firstRow(data, "notes_op_unarchive"));
     },
 
     async trash({ workspaceId, noteId }) {
@@ -990,7 +1012,7 @@ export const webRuntime: ModuoRuntime = {
         p_note_id: noteId,
       });
       if (error) throw new Error(error.message);
-      return noteRowToModel(firstRow(data, "notes_op_publish"));
+      return mapNoteRow(firstRow(data, "notes_op_publish"));
     },
 
     async unpublish({ workspaceId, noteId }) {
@@ -999,7 +1021,7 @@ export const webRuntime: ModuoRuntime = {
         p_note_id: noteId,
       });
       if (error) throw new Error(error.message);
-      return noteRowToModel(firstRow(data, "notes_op_unpublish"));
+      return mapNoteRow(firstRow(data, "notes_op_unpublish"));
     },
 
     // The public read URL for a published note (NO-9b): the app's own
@@ -1327,7 +1349,7 @@ export const webRuntime: ModuoRuntime = {
         if (error.code === "42P01" || error.code === "PGRST205") return [];
         throw new Error(error.message);
       }
-      return (Array.isArray(data) ? data : []).map(mapHabitRow);
+      return mapKnownRows(data, mapHabitRow);
     },
     async upsert({ id, workspaceId, name, emoji, position }) {
       const user = await getAuthedUser();
@@ -1528,8 +1550,8 @@ export const webRuntime: ModuoRuntime = {
           return { accounts: [], refs: [], degraded: true, truncated: [] };
         }
         return {
-          accounts: accountsRes.rows.map(emailAccountRowToModel),
-          refs: refsRes.rows.map(emailRefRowToModel),
+          accounts: mapKnownRows(accountsRes.rows, emailAccountRowToModel),
+          refs: mapKnownRows(refsRes.rows, emailRefRowToModel),
           degraded: false,
           truncated: collectTruncations(accountsRes.truncation, refsRes.truncation),
         };
@@ -1736,10 +1758,12 @@ export const webRuntime: ModuoRuntime = {
         ]);
         // Accounts degrade independently: the events table pre-exists (legacy),
         // calendar_accounts only lands with the migration.
-        const accounts = accountsRes.error ? [] : accountsRes.rows.map(calendarAccountRowToModel);
+        const accounts = accountsRes.error
+          ? []
+          : mapKnownRows(accountsRes.rows, calendarAccountRowToModel);
         if (eventsRes.error) return { events: [], accounts, degraded: true, truncated: [] };
         return {
-          events: eventsRes.rows.map(calendarEventRowToModel),
+          events: mapKnownRows(eventsRes.rows, calendarEventRowToModel),
           accounts,
           degraded: Boolean(accountsRes.error),
           truncated: collectTruncations(
@@ -1897,11 +1921,11 @@ export const webRuntime: ModuoRuntime = {
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
-        buckets: bucketsRes.rows.map(bucketRowToModel),
-        tasks: tasksRes.rows.map(taskRowToModel),
-        tags: tagsRes.rows.map(tagRowToModel),
-        tagLinks: linksRes.rows.map(tagLinkRowToModel),
-        taskRelations: relationsRes.rows.map(taskRelationRowToModel),
+        buckets: mapKnownRows(bucketsRes.rows, bucketRowToModel),
+        tasks: mapKnownRows(tasksRes.rows, taskRowToModel),
+        tags: mapKnownRows(tagsRes.rows, tagRowToModel),
+        tagLinks: mapKnownRows(linksRes.rows, tagLinkRowToModel),
+        taskRelations: mapKnownRows(relationsRes.rows, taskRelationRowToModel),
         truncated: collectTruncations(
           bucketsRes.truncation,
           tasksRes.truncation,
@@ -2132,8 +2156,8 @@ export const webRuntime: ModuoRuntime = {
       const firstError = tagsRes.error || linksRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
-        tags: tagsRes.rows.map(tagRowToModel),
-        links: (linksRes.data ?? []).map(tagLinkRowToModel),
+        tags: mapKnownRows(tagsRes.rows, tagRowToModel),
+        links: mapKnownRows(linksRes.data, tagLinkRowToModel),
       };
     },
 
@@ -2169,8 +2193,8 @@ export const webRuntime: ModuoRuntime = {
       const firstError = tagsRes.error || linksRes.error;
       if (firstError) throw new Error(firstError.message);
       return {
-        tags: tagsRes.rows.map(tagRowToModel),
-        links: linksRes.rows.map(tagLinkRowToModel),
+        tags: mapKnownRows(tagsRes.rows, tagRowToModel),
+        links: mapKnownRows(linksRes.rows, tagLinkRowToModel),
         truncated: collectTruncations(tagsRes.truncation, linksRes.truncation),
       };
     },
@@ -2305,7 +2329,7 @@ export const webRuntime: ModuoRuntime = {
         })),
       });
       if (error) throw new Error(error.message);
-      return (Array.isArray(data) ? data : []).map(taskRowToModel);
+      return mapKnownRows(data, taskRowToModel);
     },
 
     async listActivity({ workspaceId, entityType, entityId, limit, module }) {
@@ -2322,7 +2346,7 @@ export const webRuntime: ModuoRuntime = {
       if (module) q = q.eq("module", module);
       const { data, error } = await q.order("created_at", { ascending: false }).limit(limit ?? 50);
       if (error) throw new Error(error.message);
-      return (data ?? []).map(activityRowToModel);
+      return mapKnownRows(data, activityRowToModel);
     },
   },
 
@@ -2345,7 +2369,7 @@ export const webRuntime: ModuoRuntime = {
         )
         .order("created_at", { ascending: false });
       if (error) throw new Error(error.message);
-      return (data ?? []).map(entityLinkRowToModel);
+      return mapKnownRows(data, entityLinkRowToModel);
     },
 
     async createLink({
@@ -2413,7 +2437,7 @@ export const webRuntime: ModuoRuntime = {
       if (types && types.length) q = q.in("entity_type", types);
       const { data, error } = await q.order("label").limit(limit ?? 20);
       if (error) throw new Error(error.message);
-      return (data ?? []).map(entityRecordRowToModel);
+      return mapKnownRows(data, entityRecordRowToModel);
     },
 
     async getEntities({ workspaceId, refs }) {
@@ -2428,9 +2452,9 @@ export const webRuntime: ModuoRuntime = {
         .in("entity_id", ids);
       if (error) throw new Error(error.message);
       const wanted = new Set(refs.map((r) => `${r.type}:${r.id}`));
-      return (data ?? [])
-        .map(entityRecordRowToModel)
-        .filter((rec) => wanted.has(`${rec.type}:${rec.id}`));
+      return mapKnownRows(data, entityRecordRowToModel).filter((rec) =>
+        wanted.has(`${rec.type}:${rec.id}`),
+      );
     },
 
     async tombstoneEntity({ workspaceId, entityType, entityId }) {
@@ -2479,7 +2503,7 @@ export const webRuntime: ModuoRuntime = {
         .is("deleted_at", null)
         .order("created_at", { ascending: true });
       if (error) throw new Error(error.message);
-      return (Array.isArray(data) ? data : []).map(commentRowToModel);
+      return mapKnownRows(data, commentRowToModel);
     },
 
     async listNotifications({ workspaceId, limit }) {
@@ -2488,7 +2512,7 @@ export const webRuntime: ModuoRuntime = {
         p_limit: limit ?? 50,
       });
       if (error) throw new Error(error.message);
-      return (Array.isArray(data) ? data : []).map(notificationRowToModel);
+      return mapKnownRows(data, notificationRowToModel);
     },
 
     async markNotificationRead({ workspaceId, activityId }) {
@@ -2531,7 +2555,7 @@ export const webRuntime: ModuoRuntime = {
         p_limit: limit ?? 25,
       });
       if (error) throw new Error(error.message);
-      return (Array.isArray(data) ? data : []).map(linkSuggestionRowToModel);
+      return mapKnownRows(data, linkSuggestionRowToModel);
     },
 
     async declineSuggestion({ workspaceId, source, target }) {
@@ -2554,7 +2578,7 @@ export const webRuntime: ModuoRuntime = {
         .order("created_at", { ascending: false })
         .limit(limit ?? 20);
       if (error) throw new Error(error.message);
-      const links = (data ?? []).map(entityLinkRowToModel);
+      const links = mapKnownRows(data, entityLinkRowToModel);
       // One batched registry lookup for every endpoint (no N fan-out).
       const ids = Array.from(new Set(links.flatMap((l) => [l.sourceId, l.targetId])));
       let records: EntityRecord[] = [];
@@ -2565,7 +2589,7 @@ export const webRuntime: ModuoRuntime = {
           .eq("workspace_id", workspaceId)
           .in("entity_id", ids);
         if (res.error) throw new Error(res.error.message);
-        records = (res.data ?? []).map(entityRecordRowToModel);
+        records = mapKnownRows(res.data, entityRecordRowToModel);
       }
       const byKey = new Map(records.map((r) => [`${r.type}:${r.id}`, r]));
       return shapeRecentLinks(links, byKey);
@@ -2615,10 +2639,10 @@ export const webRuntime: ModuoRuntime = {
       if (contactsRes.error) throw new Error(contactsRes.error.message);
       if (companiesRes.error) throw new Error(companiesRes.error.message);
       // Field defs are additive — degrade to none if the v2 migration isn't deployed yet.
-      const fieldDefs = defsRes.error ? [] : defsRes.rows.map(contactFieldDefRowToModel);
+      const fieldDefs = defsRes.error ? [] : mapKnownRows(defsRes.rows, contactFieldDefRowToModel);
       return {
-        contacts: contactsRes.rows.map(contactRowToModel),
-        companies: companiesRes.rows.map(companyRowToModel),
+        contacts: mapKnownRows(contactsRes.rows, contactRowToModel),
+        companies: mapKnownRows(companiesRes.rows, companyRowToModel),
         fieldDefs,
         truncated: collectTruncations(
           contactsRes.truncation,
@@ -2853,7 +2877,7 @@ export const webRuntime: ModuoRuntime = {
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null);
       if (error) throw new Error(error.message);
-      const contacts = (data ?? []).map(contactRowToModel);
+      const contacts = mapKnownRows(data, contactRowToModel);
       const overdue = await loadOverdueFollowups(workspaceId);
       return selectNeedsAttention({ contacts, overdue, now: new Date() });
     },
@@ -2865,7 +2889,7 @@ export const webRuntime: ModuoRuntime = {
         .eq("workspace_id", workspaceId)
         .is("deleted_at", null);
       if (error) throw new Error(error.message);
-      const contacts = (data ?? []).map(contactRowToModel);
+      const contacts = mapKnownRows(data, contactRowToModel);
       // Last-touch proxy = the contact's updated_at (the cheap signal; CO-2 deferral).
       const lastTouch: Record<string, string | null> = {};
       for (const c of contacts) lastTouch[c.id] = c.updatedAt;
@@ -2947,13 +2971,22 @@ function firstRow(data: unknown, fn: string): any {
   return row;
 }
 
+function mapNoteRow(raw: unknown): Note {
+  return noteRowToModel(requireRow(noteRowSchema, raw, "note"));
+}
+
+function mapNoteUpdateRow(raw: unknown): NoteUpdateRow {
+  return noteUpdateRowToModel(requireRow(noteUpdateRowSchema, raw, "note update"));
+}
+
 // ── Email module (EM-3) row → model mappers ───────────────────────────────────
-function emailAccountRowToModel(r: any): EmailAccountRef {
+function emailAccountRowToModel(raw: unknown): EmailAccountRef {
+  const r = requireRow(emailAccountRowSchema, raw, "email account");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
     ownerId: r.owner_id,
-    provider: r.provider,
+    provider: parsedMailboxProvider(r.provider),
     address: r.address,
     status: r.status,
     signatureHtml: r.signature_html ?? "",
@@ -2966,7 +2999,8 @@ function emailAccountRowToModel(r: any): EmailAccountRef {
   };
 }
 
-function emailRefRowToModel(r: any): EmailThreadRef {
+function emailRefRowToModel(raw: unknown): EmailThreadRef {
+  const r = requireRow(emailRefRowSchema, raw, "email ref");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -2999,7 +3033,8 @@ async function taskOpRpc(fn: string, args: Record<string, unknown>): Promise<Tas
   return taskRowToModel(row);
 }
 
-function activityRowToModel(r: any): ActivityEntry {
+function activityRowToModel(raw: unknown): ActivityEntry {
+  const r = requireRow(activityRowSchema, raw, "activity");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3052,7 +3087,8 @@ async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
   return bucketRowToModel(data);
 }
 
-function bucketRowToModel(r: any): Bucket {
+function bucketRowToModel(raw: unknown): Bucket {
+  const r = requireRow(bucketRowSchema, raw, "bucket");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3067,7 +3103,8 @@ function bucketRowToModel(r: any): Bucket {
   };
 }
 
-function taskRowToModel(r: any): Task {
+function taskRowToModel(raw: unknown): Task {
+  const r = requireRow(taskRowSchema, raw, "task");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3080,7 +3117,7 @@ function taskRowToModel(r: any): Task {
     scheduledAt: r.scheduled_at ?? null,
     durationMinutes: r.duration_minutes ?? null,
     timeSpentSeconds: r.time_spent_seconds ?? 0,
-    recurrence: r.recurrence ?? null,
+    recurrence: (r.recurrence as Task["recurrence"]) ?? null,
     energyLevel: r.energy_level ?? null,
     priority: r.priority ?? null,
     status: r.status ?? "todo",
@@ -3121,7 +3158,8 @@ function taskModelToRow(t: Task): Record<string, unknown> {
   };
 }
 
-function tagRowToModel(r: any): Tag {
+function tagRowToModel(raw: unknown): Tag {
+  const r = requireRow(tagRowSchema, raw, "tag");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3134,7 +3172,8 @@ function tagRowToModel(r: any): Tag {
   };
 }
 
-function tagLinkRowToModel(r: any): TagLink {
+function tagLinkRowToModel(raw: unknown): TagLink {
+  const r = requireRow(tagLinkRowSchema, raw, "tag link");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3145,7 +3184,8 @@ function tagLinkRowToModel(r: any): TagLink {
   };
 }
 
-function taskRelationRowToModel(r: any): TaskRelation {
+function taskRelationRowToModel(raw: unknown): TaskRelation {
+  const r = requireRow(taskRelationRowSchema, raw, "task relation");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3157,7 +3197,8 @@ function taskRelationRowToModel(r: any): TaskRelation {
 
 // ── Spine: entity_links / entities row<->model mappers ────────────────────────
 
-function entityLinkRowToModel(r: any): EntityLink {
+function entityLinkRowToModel(raw: unknown): EntityLink {
+  const r = requireRow(entityLinkRowSchema, raw, "entity link");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3173,7 +3214,8 @@ function entityLinkRowToModel(r: any): EntityLink {
   };
 }
 
-function entityRecordRowToModel(r: any): EntityRecord {
+function entityRecordRowToModel(raw: unknown): EntityRecord {
+  const r = requireRow(entityRecordRowSchema, raw, "entity");
   return {
     workspaceId: r.workspace_id,
     type: r.entity_type,
@@ -3185,21 +3227,23 @@ function entityRecordRowToModel(r: any): EntityRecord {
 }
 
 /** A `links_suggest` row → a raw per-signal suggestion (scoreSuggestions ranks). */
-function linkSuggestionRowToModel(r: any): RawLinkSuggestion {
+function linkSuggestionRowToModel(raw: unknown): RawLinkSuggestion {
+  const r = requireRow(linkSuggestionRowSchema, raw, "link suggestion");
   return {
     otherType: r.other_type,
     otherId: r.other_id,
     otherLabel: r.other_label ?? "",
     otherIcon: r.other_icon ?? null,
-    signal: r.signal,
-    suggestedKind: r.suggested_kind ?? "references",
+    signal: r.signal as RawLinkSuggestion["signal"],
+    suggestedKind: parsedRelationKind(r.suggested_kind ?? "references"),
     strength: typeof r.strength === "number" ? r.strength : Number(r.strength) || 1,
   };
 }
 
 // ── Spine: comments / notifications row<->model mappers (block CT-5) ───────────
 
-function commentRowToModel(r: any): SpineComment {
+function commentRowToModel(raw: unknown): SpineComment {
+  const r = requireRow(commentRowSchema, raw, "comment");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3214,7 +3258,8 @@ function commentRowToModel(r: any): SpineComment {
 }
 
 /** A `notifications_list` row → the normalized NotificationItem the reducer groups. */
-function notificationRowToModel(r: any): NotificationItem {
+function notificationRowToModel(raw: unknown): NotificationItem {
+  const r = requireRow(notificationRowSchema, raw, "notification");
   return {
     id: r.id,
     source: "spine",
@@ -3262,7 +3307,8 @@ function customMap(v: unknown): Record<string, ContactCustomValue> {
   return out;
 }
 
-function contactRowToModel(r: any): Contact {
+function contactRowToModel(raw: unknown): Contact {
+  const r = requireRow(contactRowSchema, raw, "contact");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3288,7 +3334,8 @@ function contactRowToModel(r: any): Contact {
   };
 }
 
-function companyRowToModel(r: any): Company {
+function companyRowToModel(raw: unknown): Company {
+  const r = requireRow(companyRowSchema, raw, "company");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3305,7 +3352,8 @@ function companyRowToModel(r: any): Company {
   };
 }
 
-function contactFieldDefRowToModel(r: any): ContactFieldDef {
+function contactFieldDefRowToModel(raw: unknown): ContactFieldDef {
+  const r = requireRow(contactFieldDefRowSchema, raw, "contact field");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -3321,7 +3369,8 @@ function contactFieldDefRowToModel(r: any): ContactFieldDef {
 // snake_case legacy column names (start_time/end_time/recurrence_rule) stay in
 // the DB; the model speaks the Wave-2 vocabulary (startsAt/endsAt/rrule).
 
-function calendarEventRowToModel(r: any): CalendarEventModel {
+function calendarEventRowToModel(raw: unknown): CalendarEventModel {
+  const r = requireRow(calendarEventRowSchema, raw, "calendar event");
   return {
     id: r.id,
     workspaceId: r.workspace_id ?? null,
@@ -3343,12 +3392,13 @@ function calendarEventRowToModel(r: any): CalendarEventModel {
   };
 }
 
-function calendarAccountRowToModel(r: any): CalendarAccountModel {
+function calendarAccountRowToModel(raw: unknown): CalendarAccountModel {
+  const r = requireRow(calendarAccountRowSchema, raw, "calendar account");
   return {
     id: r.id,
     workspaceId: r.workspace_id,
     ownerId: r.owner_id ?? null,
-    provider: r.provider ?? "",
+    provider: parsedCalendarProvider(r.provider),
     externalId: r.external_id ?? "",
     displayLabel: r.display_label ?? "",
     isDefaultTarget: Boolean(r.is_default_target),

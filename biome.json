@@ -9,6 +9,7 @@
     "includes": [
       "**",
       "!.omo",
+      "!.cursor",
       "!.claude",
       "!.opencode/plugins",
       "!.design-sync",

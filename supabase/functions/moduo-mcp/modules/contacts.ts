@@ -10,20 +10,10 @@
  * every query MUST filter on ctx.key.workspaceId.
  */
 
+import { RELATION_KINDS } from "../../_shared/contracts/vocabularies.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 
 type Row = Record<string, any>;
-
-const RELATION_KINDS = [
-  "references",
-  "spawned-from",
-  "blocks",
-  "attachment",
-  "mentions",
-  "works-at",
-  "follow-up",
-  "paid-by",
-];
 
 function str(args: Row, name: string, required = true): string {
   const v = args?.[name];

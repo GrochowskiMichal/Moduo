@@ -16,6 +16,8 @@
 // Pure + relative imports only (no `@/lib/*` value imports) so it stays in the
 // vitest graph (docs/gotchas.md). The op is the single write; this is its plan.
 
+import { z } from "zod";
+
 import type { Company, Contact } from "./model";
 import { normalizeContactStatus } from "./status";
 
@@ -455,32 +457,43 @@ export type ContactImportResult = {
  * `merge` (into an existing contact). `duplicate` and `error` rows are dropped —
  * the user already saw them in the preview.
  */
+const contactImportRowSchema = z.object({
+  op: z.enum(["create", "merge"]),
+  contactId: z.string().min(1).optional(),
+  name: z.string().trim().min(1),
+  email: z.union([z.string(), z.null()]),
+  phone: z.union([z.string(), z.null()]),
+  title: z.union([z.string(), z.null()]),
+  company: z.union([z.string(), z.null()]),
+  status: z.union([z.string(), z.null()]),
+});
+
 export function toImportPayload(plan: ImportPlan): ContactImportRow[] {
   const out: ContactImportRow[] = [];
   for (const e of plan.entries) {
     if (e.action === "create") {
-      out.push({
-        op: "create",
+      const row = {
+        op: "create" as const,
         name: e.name,
         email: e.email,
         phone: e.phone,
         title: e.title,
         company: e.company,
         status: e.status ? normalizeContactStatus(e.status) : null,
-      });
+      };
+      if (contactImportRowSchema.safeParse(row).success) out.push(row);
     } else if (e.action === "merge" && e.matchedContactId) {
-      out.push({
-        op: "merge",
+      const row = {
+        op: "merge" as const,
         contactId: e.matchedContactId,
         name: e.name,
         email: e.email,
         phone: e.phone,
         title: e.title,
         company: e.company,
-        // The op fills only gaps and never changes an existing contact's status,
-        // so a merge carries none.
         status: null,
-      });
+      };
+      if (contactImportRowSchema.safeParse(row).success) out.push(row);
     }
   }
   return out;

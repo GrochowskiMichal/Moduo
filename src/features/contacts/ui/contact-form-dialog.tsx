@@ -5,6 +5,8 @@
 // autofill that keeps ALL parsed emails/phones (create, then patch the lists).
 // Tokens + shadcn only; sentence case.
 
+import { parseOrError } from "@contracts/errors";
+import { nonEmptyString } from "@contracts/primitives";
 import { Building2, Plus, UserSearch, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -162,7 +164,8 @@ export function ContactFormDialog({
   }
 
   async function handleSubmit(addAnother: boolean) {
-    if (!canSave) return;
+    const nameParsed = parseOrError(nonEmptyString, values.name);
+    if (!nameParsed.success) return;
     setSaving(true);
     setError(null);
     // Merge the single fields with any pasted extras; dedupe happens downstream.
@@ -171,7 +174,7 @@ export function ContactFormDialog({
     try {
       await onSubmit(
         {
-          name: values.name.trim(),
+          name: nameParsed.data,
           title: values.title.trim(),
           status: values.status,
           emails,

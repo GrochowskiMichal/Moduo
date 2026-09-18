@@ -17,6 +17,7 @@
 // prefers-reduced-motion — see tokens.css); the rest are read by their consumers.
 
 import { useCallback, useSyncExternalStore } from "react";
+import { z } from "zod";
 import { useDomainSync } from "./prefs-sync";
 
 export type LandingView = "home" | "tasks" | "calendar" | "notes" | "contacts" | "email" | "last";
@@ -87,20 +88,6 @@ export function isNotificationEnabled(op: string, prefs: NotificationPrefs): boo
   return type === null ? true : prefs[type];
 }
 
-/** Coerce arbitrary jsonb into a full NotificationPrefs. Each key falls back to its
- *  DEFAULT_NOTIFICATION_PREFS value when missing or non-boolean — the mutes default
- *  ON (a type added later is on for existing users), `overdueTasks` defaults OFF
- *  (opt-in), and an older client that dropped a key re-defaults it correctly. */
-export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
-  const out: NotificationPrefs = { ...DEFAULT_NOTIFICATION_PREFS };
-  if (!raw || typeof raw !== "object") return out;
-  const c = raw as Record<string, unknown>;
-  for (const key of NOTIFICATION_TYPES) {
-    if (typeof c[key] === "boolean") out[key] = c[key] as boolean;
-  }
-  return out;
-}
-
 export interface Preferences {
   /** Which surface opens on launch. `last` = the last visited module route. */
   landingView: LandingView;
@@ -131,16 +118,34 @@ export const DEFAULT_PREFERENCES: Preferences = {
 const LOCAL_STORAGE_KEY = "moduo.preferences";
 const LAST_ROUTE_KEY = "moduo.lastRoute";
 
-const LANDING_VIEWS: ReadonlyArray<LandingView> = [
-  "home",
-  "tasks",
-  "calendar",
-  "notes",
-  "contacts",
-  "email",
-  "last",
-];
-const MOTION_PREFS: ReadonlyArray<MotionPref> = ["system", "reduced", "full"];
+const LANDING_VIEWS = ["home", "tasks", "calendar", "notes", "contacts", "email", "last"] as const;
+const MOTION_PREFS = ["system", "reduced", "full"] as const;
+
+const notificationPrefsSchema = z
+  .object({
+    mention: z.boolean().catch(true),
+    assigned: z.boolean().catch(true),
+    dueFollowUp: z.boolean().catch(true),
+    unblocked: z.boolean().catch(true),
+    overdueTasks: z.boolean().catch(false),
+  })
+  .catch({ ...DEFAULT_NOTIFICATION_PREFS });
+const preferencesSchema = z.object({
+  landingView: z.enum(LANDING_VIEWS).catch(DEFAULT_PREFERENCES.landingView),
+  reopenLastWorkspace: z.boolean().catch(DEFAULT_PREFERENCES.reopenLastWorkspace),
+  soundEnabled: z.boolean().catch(DEFAULT_PREFERENCES.soundEnabled),
+  motion: z.enum(MOTION_PREFS).catch(DEFAULT_PREFERENCES.motion),
+  notifications: notificationPrefsSchema,
+  confirmBeforeQuit: z.boolean().catch(DEFAULT_PREFERENCES.confirmBeforeQuit),
+});
+
+export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
+  return notificationPrefsSchema.parse(raw && typeof raw === "object" ? raw : {});
+}
+
+export function sanitizePreferences(raw: unknown): Preferences {
+  return preferencesSchema.parse(raw && typeof raw === "object" ? raw : {});
+}
 
 /** Top-level module routes the app can land on (and remember as "last used").
  *  Hidden/utility routes (/mindmap, /settings, /onboarding…) are intentionally
@@ -168,32 +173,6 @@ export function isLandableRoute(pathname: string): boolean {
 }
 
 // ── Sanitize / read / mirror ──────────────────────────────────────────────────
-
-export function sanitizePreferences(raw: unknown): Preferences {
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_PREFERENCES };
-  const c = raw as Record<string, unknown>;
-  return {
-    landingView:
-      typeof c.landingView === "string" && (LANDING_VIEWS as string[]).includes(c.landingView)
-        ? (c.landingView as LandingView)
-        : DEFAULT_PREFERENCES.landingView,
-    reopenLastWorkspace:
-      typeof c.reopenLastWorkspace === "boolean"
-        ? c.reopenLastWorkspace
-        : DEFAULT_PREFERENCES.reopenLastWorkspace,
-    soundEnabled:
-      typeof c.soundEnabled === "boolean" ? c.soundEnabled : DEFAULT_PREFERENCES.soundEnabled,
-    motion:
-      typeof c.motion === "string" && (MOTION_PREFS as string[]).includes(c.motion)
-        ? (c.motion as MotionPref)
-        : DEFAULT_PREFERENCES.motion,
-    notifications: sanitizeNotificationPrefs(c.notifications),
-    confirmBeforeQuit:
-      typeof c.confirmBeforeQuit === "boolean"
-        ? c.confirmBeforeQuit
-        : DEFAULT_PREFERENCES.confirmBeforeQuit,
-  };
-}
 
 export function readLocalPreferences(): Preferences {
   if (typeof localStorage === "undefined") return { ...DEFAULT_PREFERENCES };
