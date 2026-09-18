@@ -269,6 +269,7 @@ fn request_app_quit(app: &AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .menu(build_app_menu)
         // ⌘Q (and the Apple-menu Quit) fire our custom Quit item here, NOT the predefined
         // Quit — so we can confirm before terminating. See `build_app_menu`.
