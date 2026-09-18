@@ -117,6 +117,23 @@ export function EmailAuthPanel({ priceId = null }: Props) {
       setError("Enter your email address.");
       return;
     }
+
+    // Staging invite-only allowlist guard. The allowlist is a comma-separated
+    // list of emails baked into the build via PUBLIC_STAGING_ALLOWLIST. When the
+    // list is non-empty, only listed emails may request an OTP — unknown addresses
+    // see a polite message and no OTP is sent to Supabase.
+    const rawAllowlist = (import.meta.env.PUBLIC_STAGING_ALLOWLIST as string | undefined)?.trim();
+    if (rawAllowlist) {
+      const allowed = rawAllowlist
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean);
+      if (allowed.length > 0 && !allowed.includes(email)) {
+        setError("This staging build is invite-only. Contact us to request access.");
+        return;
+      }
+    }
+
     setBusy(true);
     setError(null);
     setInfo(null);

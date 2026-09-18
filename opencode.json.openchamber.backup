@@ -17,8 +17,12 @@
           "temperature": true,
           "tool_call": true,
           "modalities": {
-            "input": ["text"],
-            "output": ["text"]
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
           }
         }
       }
@@ -29,7 +33,7 @@
       "model": "cline-pass/cline-pass/deepseek-v4-pro"
     },
     "explore": {
-      "model": "cline-pass/cline-pass/deepseek-v4-flash",
+      "model": "cline-pass/cline-pass/deepseek-v4-pro",
       "permission": {
         "doom_loop": "ask",
         "external_directory": {
@@ -113,20 +117,6 @@
       "type": "remote",
       "url": "https://mcp.notion.com/mcp",
       "enabled": false
-    },
-    "vercel": {
-      "type": "remote",
-      "url": "https://mcp.vercel.com",
-      "enabled": true
-    },
-    "github": {
-      "type": "remote",
-      "url": "https://api.githubcopilot.com/mcp/",
-      "enabled": true,
-      "oauth": false,
-      "headers": {
-        "Authorization": "Bearer {env:GITHUB_PERSONAL_ACCESS_TOKEN}"
-      }
     }
   }
 }
