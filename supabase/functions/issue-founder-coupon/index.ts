@@ -16,6 +16,7 @@
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { issueFounderCouponBodySchema, parseJsonBody } from "../_shared/contracts/http-bodies.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
@@ -35,8 +36,15 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { email, sendEmail = true } = await req.json();
-    if (!email) return Response.json({ error: "email required" }, { status: 400 });
+    let json: unknown;
+    try {
+      json = await req.json();
+    } catch {
+      return Response.json({ error: "email required" }, { status: 400 });
+    }
+    const parsed = parseJsonBody(issueFounderCouponBodySchema, json);
+    if (!parsed.success) return Response.json({ error: "email required" }, { status: 400 });
+    const { email, sendEmail = true } = parsed.data;
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",

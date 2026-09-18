@@ -3,12 +3,34 @@
 // is a guaranteed no-send), and stashes the in-flight draft to localStorage on
 // unmount so an app-quit inside the window surfaces it on next open.
 
+import { parseOrError } from "@contracts/errors";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import type { EmailSendInput, ModuoRuntime } from "../../../lib/runtime.types";
 import type { ComposeDraft } from "../compose";
 import { createSendHold, SEND_UNDO_MS, type SendHold } from "../undo-send";
+
+const composeDraftSchema = z.object({
+  mode: z.enum(["new", "reply", "reply-all", "forward"]),
+  accountId: z.string().min(1),
+  to: z.string(),
+  cc: z.string(),
+  bcc: z.string(),
+  subject: z.string(),
+  bodyHtml: z.string(),
+  inReplyTo: z.union([z.string(), z.null()]),
+  references: z.array(z.string()),
+  attachments: z.array(
+    z.object({
+      path: z.string(),
+      filename: z.string(),
+      mimeType: z.string(),
+      size: z.number().optional(),
+    }),
+  ),
+});
 
 const DRAFT_STASH_KEY = "moduo:email:compose-stash";
 
@@ -55,7 +77,8 @@ export function useEmailCompose({ runtime, isDesktop, onSent }: Params) {
     try {
       const raw = localStorage.getItem(DRAFT_STASH_KEY);
       if (raw) {
-        setDraft(JSON.parse(raw) as ComposeDraft);
+        const parsed = parseOrError(composeDraftSchema, JSON.parse(raw));
+        if (parsed.success) setDraft(parsed.data);
         localStorage.removeItem(DRAFT_STASH_KEY);
       }
     } catch {
