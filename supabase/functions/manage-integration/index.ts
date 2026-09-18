@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+import { parseJsonBody, manageIntegrationBodySchema, manageIntegrationQuerySchema } from "../_shared/contracts/http-bodies.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 // manage-integration: upsert or delete an encrypted OAuth token for a user.
@@ -25,14 +26,23 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (req.method === "POST") {
-      const body = await req.json() as {
-        user_id: string;
-        provider: string;
-        access_token_enc: string;
-        refresh_token_enc?: string | null;
-        token_expiry?: string | null;
-        updated_at?: string;
-      };
+      let json: unknown;
+      try {
+        json = await req.json();
+      } catch {
+        return new Response(JSON.stringify({ error: "invalid json" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const parsed = parseJsonBody(manageIntegrationBodySchema, json);
+      if (!parsed.success) {
+        return new Response(JSON.stringify({ error: "invalid body", details: parsed.errors }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const body = parsed.data;
 
       const { error } = await supabase
         .from("user_integrations")
@@ -62,15 +72,18 @@ Deno.serve(async (req: Request) => {
 
     if (req.method === "DELETE") {
       const url = new URL(req.url);
-      const provider = url.searchParams.get("provider");
-      const userId = url.searchParams.get("user_id");
-
-      if (!provider || !userId) {
+      const query = parseJsonBody(manageIntegrationQuerySchema, {
+        provider: url.searchParams.get("provider") ?? "",
+        user_id: url.searchParams.get("user_id") ?? "",
+      });
+      if (!query.success) {
         return new Response(JSON.stringify({ error: "missing provider or user_id" }), {
           status: 400,
           headers: { "Content-Type": "application/json" },
         });
       }
+      const provider = query.data.provider;
+      const userId = query.data.user_id;
 
       const { error } = await supabase
         .from("user_integrations")

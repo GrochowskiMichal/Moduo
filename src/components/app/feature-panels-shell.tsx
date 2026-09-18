@@ -1,4 +1,6 @@
+import { parseOrError } from "@contracts/errors";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { z } from "zod";
 
 import {
   dispatchLayoutPanelsSet,
@@ -55,19 +57,18 @@ function resolveMode(viewport: number, requested: boolean): RailMode {
   return "full";
 }
 
+const layoutSchema = z.record(z.string(), z.number().finite());
+
 function readPersistedLayout(key: string): Layout | undefined {
   if (typeof window === "undefined") return undefined;
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) return undefined;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return undefined;
-    const entries = Object.entries(parsed);
+    const parsed = parseOrError(layoutSchema, JSON.parse(raw));
+    if (!parsed.success) return undefined;
+    const entries = Object.entries(parsed.data);
     if (entries.length === 0) return undefined;
-    for (const [, value] of entries) {
-      if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
-    }
-    return parsed as Layout;
+    return parsed.data;
   } catch {
     return undefined;
   }

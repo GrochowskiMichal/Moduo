@@ -5,6 +5,8 @@
 // so the sync wiring is pure transport; a localStorage mirror gives instant first
 // paint and single-device persistence when the cloud column isn't applied yet.
 
+import { z } from "zod";
+
 import { EMAIL_SECTIONS, type EmailSection } from "./classify";
 
 function readStored<T>(key: string, sanitize: (raw: unknown) => T, fallback: () => T): T {
@@ -43,31 +45,31 @@ export const DEFAULT_EMAIL_PREFS: EmailPrefs = {
 
 const SECTION_SET = new Set<string>(EMAIL_SECTIONS);
 
-/** Coerce any stored/synced value into a valid prefs object (round-trips). */
+const emailPrefsSchema = z.object({
+  senderOverrides: z.record(z.string(), z.unknown()).optional(),
+  imageAllowedSenders: z.array(z.unknown()).optional(),
+});
+
 export function sanitizeEmailPrefs(raw: unknown): EmailPrefs {
-  if (!raw || typeof raw !== "object") {
+  const parsed = emailPrefsSchema.safeParse(raw);
+  if (!parsed.success) {
     return { senderOverrides: {}, imageAllowedSenders: [] };
   }
-  const o = raw as Record<string, unknown>;
   const senderOverrides: Record<string, EmailSection> = {};
-  if (o.senderOverrides && typeof o.senderOverrides === "object") {
-    for (const [addr, section] of Object.entries(o.senderOverrides as Record<string, unknown>)) {
-      const key = addr.trim().toLowerCase();
-      if (key && typeof section === "string" && SECTION_SET.has(section)) {
-        senderOverrides[key] = section as EmailSection;
-      }
+  for (const [addr, section] of Object.entries(parsed.data.senderOverrides ?? {})) {
+    const key = addr.trim().toLowerCase();
+    if (key && typeof section === "string" && SECTION_SET.has(section)) {
+      senderOverrides[key] = section as EmailSection;
     }
   }
   const imageAllowedSenders: string[] = [];
-  if (Array.isArray(o.imageAllowedSenders)) {
-    const seen = new Set<string>();
-    for (const entry of o.imageAllowedSenders) {
-      if (typeof entry !== "string") continue;
-      const key = entry.trim().toLowerCase();
-      if (key && !seen.has(key)) {
-        seen.add(key);
-        imageAllowedSenders.push(key);
-      }
+  const seen = new Set<string>();
+  for (const entry of parsed.data.imageAllowedSenders ?? []) {
+    if (typeof entry !== "string") continue;
+    const key = entry.trim().toLowerCase();
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      imageAllowedSenders.push(key);
     }
   }
   return { senderOverrides, imageAllowedSenders };

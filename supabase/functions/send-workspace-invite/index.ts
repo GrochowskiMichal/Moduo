@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
+import { parseJsonBody, workspaceInviteWebhookBodySchema } from '../_shared/contracts/http-bodies.ts'
 import { getDefaultSecretKey } from '../_shared/secret-keys.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
@@ -85,14 +86,17 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
   }
 
-  let body: { record?: { token?: string }; token?: string }
+  let json: unknown
   try {
-    body = await req.json()
+    json = await req.json()
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid body' }), { status: 400 })
   }
-
-  const token = (body.record?.token ?? body.token ?? '').trim()
+  const parsed = parseJsonBody(workspaceInviteWebhookBodySchema, json)
+  if (!parsed.success) {
+    return new Response(JSON.stringify({ error: 'Invalid body' }), { status: 400 })
+  }
+  const token = (parsed.data.record?.token ?? parsed.data.token ?? '').trim()
   if (!token) {
     return new Response(JSON.stringify({ error: 'Missing token' }), { status: 400 })
   }
