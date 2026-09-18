@@ -8,6 +8,12 @@ The workflow itself (skills, spec template, execution ledger) is committed and s
 
 Mike's IDE. Project instructions: `AGENTS.md` + `.cursor/rules/moduo-always.mdc`. Entire hooks live in `.cursor/hooks.json` (installed via `entire agent add cursor`). Do not treat Cursor-only rules as the source of truth — edit `AGENTS.md` first.
 
+**MCP (this machine):**
+
+- **Vercel** — project `.cursor/mcp.json` points at `https://mcp.vercel.com`. After Cursor picks it up, click **Needs login** in Settings → MCP and authorize the Vercel account. No token in the repo.
+- **GitHub** — Cursor's hosted GitHub MCP still wants a PAT, so it lives in **user** `~/.cursor/mcp.json` (not committed). This machine reuses the GitHub CLI login (`gh auth token`). If you `gh auth login` / logout, refresh that file. Do not paste the token into the project mcp.json.
+- Claude Code / OpenCode share the same remote URLs in `.mcp.json` and `opencode.json`. OpenCode GitHub expects `GITHUB_PERSONAL_ACCESS_TOKEN` in the environment (`oauth: false`); Vercel is `opencode mcp auth vercel`.
+
 ## OpenCode
 
 **What the repo provides (committed):**
