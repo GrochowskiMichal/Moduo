@@ -20,10 +20,12 @@ const root = path.resolve(__dirname, "..");
 const target = process.env.MODUO_BUILD_TARGET ?? "app";
 
 if (target === "landing") {
-  console.log("[vercel-build] Building landing placeholder…");
+  const ref = process.env.VERCEL_GIT_COMMIT_REF ?? "";
+  const file = ref === "staging-landing" ? "staging.html" : "index.html";
+  console.log(`[vercel-build] Building landing (${file}, branch=${ref || "unknown"})…`);
   const outDir = path.join(root, "dist", "web");
   fs.mkdirSync(outDir, { recursive: true });
-  fs.copyFileSync(path.join(root, "landing", "index.html"), path.join(outDir, "index.html"));
+  fs.copyFileSync(path.join(root, "landing", file), path.join(outDir, "index.html"));
   console.log("[vercel-build] Landing build complete → dist/web/index.html");
 } else {
   console.log("[vercel-build] Building web app…");
