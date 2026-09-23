@@ -42,7 +42,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRBNkQ0NTQwMDVCNkZCNEUKUldSTys3WUZRRVZ0U2d4U3BSbEF3cGs4ajdFRzdxVHZlUVVlczZpRytkdEJSQWd4blp5Y3dOeXYK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRFRUNCRUE5ODYyODlGRUQKUldUdG55aUdxYjdzVHUza1RiU05BdVNvM29lOFdXUER3eXJQWmpNbjlQZmRDa2dXdXZUbzh5b3IK",
       "endpoints": [
         "https://github.com/GrochowskiMichal/moduohyb/releases/download/staging-latest/latest.json"
       ],
