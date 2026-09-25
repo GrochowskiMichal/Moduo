@@ -12,6 +12,29 @@ export const APP_BUILD: string = (import.meta.env.MODUO_BUILD as string | undefi
 /** Desktop (Tauri) shell vs the web build — drives the "check for updates" hint. */
 export const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/** Staging web/desktop builds only. Production stays without public installers. */
+export const IS_STAGING_PORTAL =
+  (import.meta.env.PUBLIC_STAGING_PORTAL as string | undefined) === "true";
+
+const STAGING_RELEASE_BASE =
+  "https://github.com/GrochowskiMichal/moduohyb/releases/download/staging-latest";
+
+export type StagingDesktopDownload = { platform: "mac" | "windows"; label: string; href: string };
+
+/** Signed-in staging Settings → About. Hidden on the public login page. */
+export const STAGING_DESKTOP_DOWNLOADS: StagingDesktopDownload[] = [
+  {
+    platform: "mac",
+    label: "Download for Mac",
+    href: `${STAGING_RELEASE_BASE}/Moduo_universal.dmg`,
+  },
+  {
+    platform: "windows",
+    label: "Download for Windows",
+    href: `${STAGING_RELEASE_BASE}/Moduo_x64-setup.exe`,
+  },
+];
+
 export const ABOUT_TAGLINE =
   "Notes, tasks, calendar, email, and contacts — synced across web and desktop, in one window.";
 
