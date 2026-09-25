@@ -204,21 +204,22 @@ jobs:
           PUBLIC_STAGING_PORTAL: "true"
 
       # Rename to stable filename
+      # Git Bash's /tmp is not the path the upload action sees on Windows.
       - name: Rename artifacts to stable filenames
         shell: bash
         run: |
+          mkdir -p release-artifacts
           NSIS=$(find src-tauri/target/release/bundle/nsis -name "*-setup.exe" | head -1)
-          cp "$NSIS" /tmp/Moduo_x64-setup.exe
+          cp "$NSIS" release-artifacts/Moduo_x64-setup.exe
           SIG=$(find src-tauri/target/release/bundle/nsis -name "*-setup.exe.sig" | head -1)
-          if [ -f "$SIG" ]; then cp "$SIG" /tmp/Moduo_x64-setup.exe.sig; fi
+          if [ -f "$SIG" ]; then cp "$SIG" release-artifacts/Moduo_x64-setup.exe.sig; fi
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-nsis
-          path: |
-            /tmp/Moduo_x64-setup.exe
-            /tmp/Moduo_x64-setup.exe.sig
+          if-no-files-found: error
+          path: release-artifacts/*
 
   # ─────────────────────────────────────────────────────────────────
   # Publish — combine artifacts and update the rolling `staging-latest` release
