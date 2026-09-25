@@ -4575,6 +4575,22 @@ export type Database = {
         Args: { p_key_id: string }
         Returns: undefined
       }
+      workspace_op_accept_invite: {
+        Args: { p_token: string }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          email: string
+          expires_at: string
+          id: string
+          permissions_notes: string
+          permissions_tasks: string
+          role: string
+          status: string
+          token: string
+          workspace_id: string
+        }
+      }
       workspace_op_remove_member: {
         Args: { p_member_id: string }
         Returns: undefined
