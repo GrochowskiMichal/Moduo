@@ -58,16 +58,18 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Setup Rust (stable + both Apple targets)
-        uses: dtolnay/rust-toolchain@stable
+      # Must match src-tauri/rust-toolchain.toml. Cargo switches to that channel
+      # inside src-tauri, so targets added to `stable` are invisible to the build.
+      - name: Setup Rust (1.88.0 + both Apple targets)
+        uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      # GitHub's macOS image already has stable for Apple Silicon. `toolchain install
-      # --target` then no-ops and never adds the Intel stdlib, so universal builds fail.
       - name: Ensure Intel macOS target is installed
+        working-directory: src-tauri
         run: |
-          rustup target add x86_64-apple-darwin
+          rustup show
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
           rustup target list --installed | grep -qx x86_64-apple-darwin
 
       - name: Cache Rust dependencies
