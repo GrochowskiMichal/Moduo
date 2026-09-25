@@ -89,7 +89,22 @@
     <div class="card">
       <h1 class="wordmark">Moduo</h1>
       <p class="tagline">Private staging access portal.</p>
-      <a class="cta-link" href="https://app.staging.moduo.app">Open staging app</a>
+      <a class="cta-link" id="open-app" href="https://app.staging.moduo.app">Open staging app</a>
     </div>
+    <script>
+      // This host is only the portal. Workspace invites are /join?invite=… and
+      // must land on the app, or the token is thrown away.
+      (function () {
+        var app = "https://app.staging.moduo.app";
+        var params = new URLSearchParams(location.search);
+        var invite = params.get("invite");
+        if (invite || location.pathname === "/join") {
+          location.replace(app + "/join" + location.search);
+          return;
+        }
+        var link = document.getElementById("open-app");
+        if (link && location.search) link.href = app + location.pathname + location.search;
+      })();
+    </script>
   </body>
 </html>

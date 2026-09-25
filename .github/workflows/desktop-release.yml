@@ -115,7 +115,7 @@ jobs:
           PUBLIC_STRIPE_PRICE_PRO_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_YEARLY }}
           PUBLIC_STRIPE_PRICE_TEAM_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_MONTHLY }}
           PUBLIC_STRIPE_PRICE_TEAM_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_YEARLY }}
-          PUBLIC_WEB_ORIGIN: "https://staging.moduo.app"
+          PUBLIC_WEB_ORIGIN: "https://app.staging.moduo.app"
           PUBLIC_STAGING_PORTAL: "true"
 
       - name: Notarise the .dmg
@@ -198,7 +198,7 @@ jobs:
           PUBLIC_STRIPE_PRICE_PRO_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_YEARLY }}
           PUBLIC_STRIPE_PRICE_TEAM_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_MONTHLY }}
           PUBLIC_STRIPE_PRICE_TEAM_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_YEARLY }}
-          PUBLIC_WEB_ORIGIN: "https://staging.moduo.app"
+          PUBLIC_WEB_ORIGIN: "https://app.staging.moduo.app"
           PUBLIC_STAGING_PORTAL: "true"
 
       # Rename to stable filename
