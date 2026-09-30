@@ -1495,134 +1495,6 @@
         color: var(--foreground);
       }
 
-      /* ─── Day one ──────────────────────────────────────────────────────── */
-      .dayone {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: clamp(2rem, 6vw, 5rem);
-        align-items: center;
-      }
-      .dayone .h-section {
-        margin-top: 1.25rem;
-      }
-      .dayone .lead {
-        margin-top: 1.5rem;
-        max-width: 30rem;
-      }
-      .truths {
-        list-style: none;
-        margin-top: 2.5rem;
-        border-top: 1px solid var(--border);
-      }
-      .truths li {
-        display: flex;
-        align-items: center;
-        gap: 0.875rem;
-        padding: 1rem 0;
-        border-bottom: 1px solid var(--border);
-        font-size: var(--text-md);
-      }
-      .truths .icon {
-        color: var(--muted-foreground);
-      }
-      .capture-stage {
-        position: relative;
-        border-radius: var(--radius-lg);
-        border: 1px solid var(--border);
-        background:
-          radial-gradient(
-            120% 90% at 50% 0%,
-            color-mix(in oklab, var(--foreground) 5%, transparent),
-            transparent 60%
-          ),
-          var(--background);
-        padding: clamp(2rem, 5vw, 3.5rem) clamp(1.25rem, 4vw, 2.5rem);
-        overflow: hidden;
-      }
-      .dialog {
-        border-radius: var(--radius-xl);
-        border: 1px solid var(--border-strong);
-        background: var(--popover);
-        box-shadow: var(--shadow-overlay);
-        overflow: hidden;
-      }
-      .dialog-input {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 1.125rem 1.25rem;
-        font-size: var(--text-lg);
-        letter-spacing: -0.01em;
-      }
-      .dialog-input .check {
-        width: 1.125rem;
-        height: 1.125rem;
-      }
-      .typed {
-        white-space: nowrap;
-        overflow: hidden;
-      }
-      .caret {
-        display: inline-block;
-        width: 1.5px;
-        height: 1.25em;
-        margin-left: 1px;
-        vertical-align: -0.2em;
-        background: var(--foreground);
-        animation: blink 1.1s steps(1) infinite;
-      }
-      @keyframes blink {
-        50% {
-          opacity: 0;
-        }
-      }
-      .dialog-foot {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.75rem 1.25rem;
-        border-top: 1px solid var(--border);
-        font-size: var(--text-xs);
-        color: var(--subtle-foreground);
-      }
-      .dialog-foot .ref {
-        border-style: dashed;
-        color: var(--subtle-foreground);
-      }
-      .dialog-foot .hint {
-        margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.375rem;
-      }
-      .saved {
-        margin-top: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        height: var(--row-h);
-        padding-inline: 0.875rem;
-        border-radius: var(--radius-md);
-        border: 1px solid var(--border);
-        background: var(--card);
-        font-size: var(--text-base);
-        opacity: 0;
-        transform: translateY(6px);
-        filter: blur(var(--blur-veil));
-        transition:
-          opacity var(--motion-slow) var(--ease-out),
-          transform var(--motion-slow) var(--ease-out),
-          filter var(--motion-slow) var(--ease-out);
-      }
-      .saved.is-shown {
-        opacity: 1;
-        transform: none;
-        filter: none;
-      }
-      .saved .row-meta {
-        margin-left: auto;
-      }
-
       /* ─── Principles ───────────────────────────────────────────────────── */
       .principles {
         list-style: none;
@@ -1771,172 +1643,6 @@
       }
       .h-hero .soft {
         color: var(--subtle-foreground);
-      }
-
-      /* ─── Stack tax ────────────────────────────────────────────────────── */
-      .tax {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-        gap: clamp(2rem, 6vw, 5rem);
-        align-items: center;
-      }
-      .tax .h-section {
-        margin-top: 1.25rem;
-      }
-      .tax .lead {
-        margin-top: 1.5rem;
-        max-width: 30rem;
-      }
-      .tax-stage {
-        border-radius: var(--radius-lg);
-        border: 1px solid var(--border);
-        background: var(--card);
-        padding: 1.5rem;
-        overflow: hidden;
-      }
-      .tabbar {
-        display: flex;
-        align-items: flex-end;
-        gap: 0.25rem;
-        height: 2.75rem;
-        padding: 0 0.5rem;
-        border-radius: var(--radius-md) var(--radius-md) 0 0;
-        background: var(--background);
-        border: 1px solid var(--border);
-        border-bottom: 0;
-        overflow: hidden;
-      }
-      .btab {
-        display: flex;
-        align-items: center;
-        gap: 0.4375rem;
-        min-width: 0;
-        flex: 1 1 0;
-        height: 2.125rem;
-        padding-inline: 0.625rem;
-        border-radius: var(--radius-md) var(--radius-md) 0 0;
-        background: var(--muted);
-        border: 1px solid var(--border);
-        border-bottom: 0;
-        font-size: var(--text-xs);
-        color: var(--muted-foreground);
-        white-space: nowrap;
-        overflow: hidden;
-        transition:
-          flex-grow var(--motion-slower) var(--ease-out),
-          opacity var(--motion-slow) var(--ease-out),
-          padding var(--motion-slower) var(--ease-out),
-          filter var(--motion-slow) var(--ease-out),
-          background-color var(--motion-slow) var(--ease-out),
-          color var(--motion-slow) var(--ease-out);
-      }
-      .btab span {
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .btab .x {
-        margin-left: auto;
-        color: var(--faint-foreground);
-      }
-      .btab.is-moduo {
-        flex-grow: 0.0001;
-        padding-inline: 0;
-        border-width: 0;
-        opacity: 0;
-        background: var(--card);
-        color: var(--foreground);
-      }
-      .tax-stage.is-collapsed .btab:not(.is-moduo) {
-        flex-grow: 0.0001;
-        padding-inline: 0;
-        border-width: 0;
-        opacity: 0;
-        filter: blur(var(--blur-veil));
-      }
-      .tax-stage.is-collapsed .btab.is-moduo {
-        flex-grow: 1;
-        padding-inline: 0.75rem;
-        border-width: 1px;
-        opacity: 1;
-      }
-      .tab-page {
-        height: 11rem;
-        border: 1px solid var(--border);
-        border-radius: 0 0 var(--radius-md) var(--radius-md);
-        background: var(--background);
-        display: grid;
-        place-items: center;
-        position: relative;
-        overflow: hidden;
-      }
-      .tab-page .chaos,
-      .tab-page .calm {
-        position: absolute;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        text-align: center;
-        padding: 1.5rem;
-        transition:
-          opacity var(--motion-slow) var(--ease-out),
-          filter var(--motion-slow) var(--ease-out);
-      }
-      .tab-page .calm {
-        opacity: 0;
-        filter: blur(var(--blur-veil));
-      }
-      .tax-stage.is-collapsed .chaos {
-        opacity: 0;
-        filter: blur(var(--blur-veil));
-      }
-      .tax-stage.is-collapsed .calm {
-        opacity: 1;
-        filter: none;
-      }
-      .chaos-q {
-        font-size: var(--text-lg);
-        font-weight: 500;
-        letter-spacing: -0.015em;
-        color: var(--muted-foreground);
-      }
-      .chaos-q small {
-        display: block;
-        margin-top: 0.375rem;
-        font-size: var(--text-sm);
-        font-weight: 400;
-        color: var(--faint-foreground);
-      }
-      .calm-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        justify-content: center;
-      }
-      .tax-meta {
-        margin-top: 1.25rem;
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        flex-wrap: wrap;
-      }
-      .tally {
-        display: flex;
-        gap: 1.5rem;
-        font-size: var(--text-sm);
-        color: var(--subtle-foreground);
-        font-variant-numeric: tabular-nums;
-      }
-      .tally b {
-        display: block;
-        font-size: var(--text-2xl);
-        font-weight: 600;
-        letter-spacing: -0.02em;
-        color: var(--foreground);
-        transition: opacity var(--motion-fade) var(--ease-out);
-      }
-      .tax-meta .btn {
-        margin-left: auto;
       }
 
       /* ─── Feature tabs ─────────────────────────────────────────────────── */
@@ -2347,64 +2053,6 @@
         background: var(--accent);
         border-color: var(--border-strong);
         color: var(--foreground);
-      }
-
-      /* ─── Links (spine) ────────────────────────────────────────────────── */
-      .chain {
-        list-style: none;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-      }
-      .chain > li {
-        position: relative;
-        display: grid;
-        grid-template-columns: 2.25rem minmax(0, 1fr);
-        gap: 0.875rem;
-        padding-bottom: 1.5rem;
-      }
-      .chain > li:last-child {
-        padding-bottom: 0;
-      }
-      .chain > li::before {
-        content: "";
-        position: absolute;
-        left: 1.125rem;
-        top: 2.25rem;
-        bottom: 0;
-        width: 1px;
-        background: var(--border-strong);
-      }
-      .chain > li:last-child::before {
-        display: none;
-      }
-      .chain-icon {
-        display: grid;
-        place-items: center;
-        width: 2.25rem;
-        height: 2.25rem;
-        border-radius: var(--radius-md);
-        border: 1px solid var(--border-strong);
-        background: var(--background);
-        color: var(--muted-foreground);
-      }
-      .chain-kind {
-        font-size: var(--text-2xs);
-        letter-spacing: 0.04em;
-        color: var(--faint-foreground);
-      }
-      .chain-title {
-        margin-top: 0.125rem;
-        font-size: var(--text-base);
-        font-weight: 500;
-      }
-      .chain-verb {
-        margin-top: 0.5rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.375rem;
-        font-size: var(--text-xs);
-        color: var(--subtle-foreground);
       }
 
       /* ─── Make it yours ────────────────────────────────────────────────── */
@@ -3155,7 +2803,6 @@
         </a>
         <nav class="nav-links" aria-label="Sections">
           <a class="btn btn-ghost" href="#features">Features</a>
-          <a class="btn btn-ghost" href="#links">How it links</a>
           <a class="btn btn-ghost" href="#yours">Make it yours</a>
           <a class="btn btn-ghost" href="#refuse">On purpose</a>
         </nav>
@@ -3175,7 +2822,7 @@
           <h1 class="h-hero" id="hero-title" style="--i: 2">Fire five apps.<br /><span class="soft">Keep the work.</span></h1>
           <p class="lead" style="--i: 3">
             Notes, tasks, email, calendar, and mind maps — in one window that links them for you.
-            No setup project. No system to babysit. You don’t build a workflow. You just work.
+            You don’t build a workflow. You just work.
           </p>
           <div class="hero-cta" style="--i: 4">
             <a class="btn btn-primary btn-lg" href="https://app.moduo.app/auth">
@@ -3303,55 +2950,6 @@
         </div>
       </section>
 
-      <!-- ─── Stack tax ─────────────────────────────────────────────────── -->
-      <section class="section container" id="tax" aria-labelledby="tax-title">
-        <div class="tax">
-          <div class="reveal">
-            <div class="eyebrow">The stack tax</div>
-            <h2 class="h-section" id="tax-title">Your stack is a tax you pay in attention.</h2>
-            <p class="lead">
-              Six apps. Six logins. Six places the same client lives. Every switch costs you the
-              thread. You were hired to do the work — <span class="fg">not to maintain the system that tracks it.</span>
-            </p>
-          </div>
-          <div class="tax-stage reveal" id="tax-stage" style="--d: 90ms">
-            <div class="tabbar" aria-hidden="true">
-              <div class="btab"><svg class="icon icon-xs"><use href="#i-mail" /></svg><span>Mail</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
-              <div class="btab"><svg class="icon icon-xs"><use href="#i-calendar" /></svg><span>Calendar</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
-              <div class="btab"><svg class="icon icon-xs"><use href="#i-notes" /></svg><span>Docs</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
-              <div class="btab"><svg class="icon icon-xs"><use href="#i-tasks" /></svg><span>To-dos</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
-              <div class="btab"><svg class="icon icon-xs"><use href="#i-mindmap" /></svg><span>Whiteboard</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
-              <div class="btab"><svg class="icon icon-xs"><use href="#i-contact" /></svg><span>Clients.xlsx</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
-              <div class="btab is-moduo"><svg class="icon icon-xs mark"><use href="#mark" /></svg><span>Moduo — everything</span></div>
-            </div>
-            <div class="tab-page">
-              <div class="chaos">
-                <div class="chaos-q">“Wait — where did Anna send that?”<small>Mail? The doc comments? The whiteboard? Tuesday’s to-do list?</small></div>
-              </div>
-              <div class="calm" aria-hidden="true">
-                <div>
-                  <div class="calm-row">
-                    <span class="ref"><svg class="icon icon-xs"><use href="#i-mail" /></svg>Email</span>
-                    <span class="ref"><svg class="icon icon-xs"><use href="#i-tasks" /></svg>Task</span>
-                    <span class="ref"><svg class="icon icon-xs"><use href="#i-notes" /></svg>Note</span>
-                    <span class="ref"><svg class="icon icon-xs"><use href="#i-calendar" /></svg>Meeting</span>
-                  </div>
-                  <div class="chaos-q" style="margin-top: 1rem; color: var(--foreground)">All on Anna. All in one place.</div>
-                </div>
-              </div>
-            </div>
-            <div class="tax-meta">
-              <div class="tally" aria-live="polite">
-                <div><b id="tally-apps">6</b>apps</div>
-                <div><b id="tally-logins">6</b>logins</div>
-                <div><b id="tally-bills">6</b>bills</div>
-              </div>
-              <button class="btn btn-outline" id="tax-toggle" type="button">Close five tabs</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- ─── Features (tabs) ───────────────────────────────────────────── -->
       <section class="section container" id="features" aria-labelledby="features-title">
         <div class="section-intro reveal">
@@ -3383,11 +2981,6 @@
                   Plan mode to decide what matters. Execute mode to actually do it — one task, one
                   timer, zero noise. A bare title is a complete task. Everything else is optional.
                 </p>
-                <div class="chips">
-                  <span class="ref">Plan &amp; Execute modes</span>
-                  <span class="ref">List · Board · Timeline</span>
-                  <span class="ref">Capture from anywhere</span>
-                </div>
               </div>
             </div>
             <div class="frame" role="img" aria-label="Execute mode: one task in focus with a running timer, subtasks, and what’s up next.">
@@ -3443,11 +3036,6 @@
                   Type a checkbox and it’s a real task — with a date, a slot in your day, and a link
                   back to the sentence that made it. <span class="fg">/task</span>, <span class="fg">/note</span>, <span class="fg">@person</span>. Keep writing.
                 </p>
-                <div class="chips">
-                  <span class="ref">Slash commands</span>
-                  <span class="ref">Checkboxes are real tasks</span>
-                  <span class="ref">@mentions link people</span>
-                </div>
               </div>
             </div>
             <div class="frame" role="img" aria-label="A meeting note with checklist items that are real tasks, an @mention, and a slash-command menu open.">
@@ -3499,11 +3087,6 @@
                   Turn any email into a task with one key. It keeps the person, the thread, and the
                   project — so you never ask “where was that?” again.
                 </p>
-                <div class="chips">
-                  <span class="ref">Native desktop mail</span>
-                  <span class="ref">Email → task in one key</span>
-                  <span class="ref">Threads linked to people</span>
-                </div>
               </div>
             </div>
             <div class="frame" role="img" aria-label="An inbox with one email turned into a task. The task shows the contact and the original email it came from.">
@@ -3590,11 +3173,6 @@
                   asks what happened: done, push, shrink, or drop. Falling behind is normal. Guilt is
                   optional.
                 </p>
-                <div class="chips">
-                  <span class="ref">Drag tasks into time</span>
-                  <span class="ref">Done · Push · Shrink · Drop</span>
-                  <span class="ref">Reflow my day</span>
-                </div>
               </div>
             </div>
             <div class="frame" role="img" aria-label="A calendar day. A time block has just ended and offers Done, Push, Shrink, and Drop. A side panel offers to reflow the day.">
@@ -3669,11 +3247,6 @@
                   Sketch the messy version as a map. When a branch makes sense, turn it into tasks
                   in one click. The map stays. The work moves. <span class="fg">Click a branch.</span>
                 </p>
-                <div class="chips">
-                  <span class="ref">Infinite canvas</span>
-                  <span class="ref">Branch → tasks</span>
-                  <span class="ref">Links to notes and people</span>
-                </div>
               </div>
             </div>
             <div class="frame">
@@ -3687,99 +3260,6 @@
               </div>
             </div>
           </div>
-        </div>
-      </section>
-
-      <!-- ─── Links ─────────────────────────────────────────────────────── -->
-      <section class="section container" id="links" aria-labelledby="links-title">
-        <div class="section-intro reveal">
-          <div>
-            <div class="eyebrow">How it links</div>
-            <h2 class="h-section" id="links-title">Stop logging. Start knowing.</h2>
-          </div>
-          <p class="lead">
-            Open a person and see every email, task, note, meeting, and map that touches them —
-            gathered on its own. Links are a side effect of working. Never a chore.
-          </p>
-        </div>
-
-        <div class="pair">
-          <article class="panel reveal" aria-label="Contact example">
-            <div class="contact-head">
-              <span class="avatar avatar-xl">AK</span>
-              <div>
-                <div class="contact-name">Anna Kowalska</div>
-                <div class="contact-sub">Kowalska &amp; Co. · Client since March</div>
-              </div>
-              <span class="badge">Last contact 2 days ago</span>
-            </div>
-            <ul class="rollup">
-              <li>
-                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg>
-                <span class="rollup-kind">Emails<span>12</span></span>
-                <span class="rollup-item"><span class="t">Re: Final deck notes</span><span class="w">08:47</span></span>
-              </li>
-              <li>
-                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>
-                <span class="rollup-kind">Tasks<span>3</span></span>
-                <span class="rollup-item"><span class="t">Send Anna the revised brand deck</span><span class="w">Today</span></span>
-              </li>
-              <li>
-                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>
-                <span class="rollup-kind">Notes<span>2</span></span>
-                <span class="rollup-item"><span class="t">Kickoff — Kowalska rebrand</span><span class="w">Today</span></span>
-              </li>
-              <li>
-                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>
-                <span class="rollup-kind">Meetings<span>1</span></span>
-                <span class="rollup-item"><span class="t">Launch review</span><span class="w">Fri 10:00</span></span>
-              </li>
-              <li>
-                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-mindmap" /></svg>
-                <span class="rollup-kind">Maps<span>1</span></span>
-                <span class="rollup-item"><span class="t">Rebrand moodmap</span><span class="w">Sep 20</span></span>
-              </li>
-            </ul>
-            <p class="panel-foot">Nothing here was logged by hand. It’s just <b>everything that already mentions Anna</b>.</p>
-          </article>
-
-          <article class="panel reveal" style="--d: 90ms" aria-label="How one email links across modules">
-            <div class="money-head" style="margin-bottom: 1.5rem">One email, four modules, zero copy-paste</div>
-            <ol class="chain">
-              <li>
-                <span class="chain-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg></span>
-                <div>
-                  <div class="chain-kind">EMAIL</div>
-                  <div class="chain-title">Logo files for print</div>
-                  <div class="chain-verb"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-link" /></svg>became a task</div>
-                </div>
-              </li>
-              <li>
-                <span class="chain-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg></span>
-                <div>
-                  <div class="chain-kind">TASK</div>
-                  <div class="chain-title">Reply to Marta about the logo files</div>
-                  <div class="chain-verb"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-link" /></svg>got a slot</div>
-                </div>
-              </li>
-              <li>
-                <span class="chain-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg></span>
-                <div>
-                  <div class="chain-kind">CALENDAR</div>
-                  <div class="chain-title">Thursday, 10:00 – 10:30</div>
-                  <div class="chain-verb"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-link" /></svg>pulls in</div>
-                </div>
-              </li>
-              <li>
-                <span class="chain-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg></span>
-                <div>
-                  <div class="chain-kind">NOTE</div>
-                  <div class="chain-title">Brand colours, final</div>
-                </div>
-              </li>
-            </ol>
-            <p class="panel-foot">No graph to learn. Just <b>familiar things that know about each other</b>.</p>
-          </article>
         </div>
       </section>
 
@@ -3835,44 +3315,6 @@
         </div>
       </section>
 
-      <!-- ─── Day one ───────────────────────────────────────────────────── -->
-      <section class="section container" id="dayone" aria-labelledby="dayone-title">
-        <div class="dayone">
-          <div class="reveal">
-            <div class="eyebrow">Day one</div>
-            <h2 class="h-section" id="dayone-title">No setup. No templates. No lost weekend.</h2>
-            <p class="lead">
-              Other tools hand you a blank canvas and call it freedom. Moduo opens ready to use. A
-              bare title is a complete task — dates, people, and links come later, if you want them.
-            </p>
-            <ul class="truths">
-              <li><svg class="icon" aria-hidden="true"><use href="#i-grid-off" /></svg>No databases to build first</li>
-              <li><svg class="icon" aria-hidden="true"><use href="#i-home" /></svg>A home screen that’s useful on first open</li>
-              <li><svg class="icon" aria-hidden="true"><use href="#i-feather" /></svg>Quiet by default — you turn things up</li>
-            </ul>
-          </div>
-
-          <div class="capture-stage reveal" style="--d: 90ms" role="img" aria-label="A quick-capture box with a task being typed, then saved to Inbox.">
-            <div class="dialog" aria-hidden="true">
-              <div class="dialog-input">
-                <span class="check"></span>
-                <span class="typed" id="typed"></span><span class="caret"></span>
-              </div>
-              <div class="dialog-foot">
-                <span class="ref"><svg class="icon icon-xs"><use href="#i-calendar" /></svg>Date</span>
-                <span class="ref"><svg class="icon icon-xs"><use href="#i-contact" /></svg>Person</span>
-                <span class="hint">Save <span class="kbd">↵</span></span>
-              </div>
-            </div>
-            <div class="saved" id="saved" aria-hidden="true">
-              <span class="check"></span>
-              <span class="row-title">Call Marta about the print deadline</span>
-              <span class="row-meta"><svg class="icon icon-xs"><use href="#i-inbox" /></svg>Inbox</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- ─── Refuse ────────────────────────────────────────────────────── -->
       <section class="section container" id="refuse" aria-labelledby="refuse-title">
         <div class="section-intro reveal">
@@ -3888,26 +3330,9 @@
         <ul class="refuse">
           <li class="reveal"><span class="no">Databases you design before you work</span><span class="why">You came here to do the work, <b>not to model your life in tables</b>.</span></li>
           <li class="reveal"><span class="no">An AI button on every screen</span><span class="why">Bring your own model over MCP. <b>We never train on your workspace.</b></span></li>
-          <li class="reveal"><span class="no">A scheduler that rearranges your day behind your back</span><span class="why">We suggest, with a reason. <b>You decide.</b></span></li>
-          <li class="reveal"><span class="no">Yet another chat app</span><span class="why">Keep Slack. <b>We keep the context.</b></span></li>
-          <li class="reveal"><span class="no">Seat minimums</span><span class="why">Two people pay for <b>two people</b>. Students get a free tier that’s actually usable.</span></li>
+          <li class="reveal"><span class="no">A scheduler that moves your day for you</span><span class="why">We suggest, with a reason. <b>You decide.</b></span></li>
           <li class="reveal"><span class="no">A wall of red overdue tasks</span><span class="why">Falling behind is normal. <b>Shame isn’t a feature.</b></span></li>
         </ul>
-
-        <div class="promises">
-          <div class="reveal">
-            <h3><svg class="icon" aria-hidden="true"><use href="#i-bolt" /></svg>Instant</h3>
-            <p>A native app, not a browser in a trench coat. Tasks open, search answers, and views switch without the wait.</p>
-          </div>
-          <div class="reveal" style="--d: 60ms">
-            <h3><svg class="icon" aria-hidden="true"><use href="#i-export" /></svg>Yours</h3>
-            <p>Every note, task, contact, and map exports cleanly. We’d rather you stay because it’s good — not because you’re stuck.</p>
-          </div>
-          <div class="reveal" style="--d: 120ms">
-            <h3><span class="ai-disc" aria-hidden="true"></span>Private</h3>
-            <p>No AI confetti. Connect the assistant you already trust. Your work never trains anyone’s model.</p>
-          </div>
-        </div>
       </section>
 
       <!-- ─── Close ─────────────────────────────────────────────────────── -->
@@ -4086,26 +3511,6 @@
             }, reduce ? 0 : 140);
           });
         });
-
-        // ── Stack tax: close five tabs ──
-        var taxStage = $("tax-stage");
-        var taxBtn = $("tax-toggle");
-        var setTax = function (collapsed) {
-          taxStage.classList.toggle("is-collapsed", collapsed);
-          var n = collapsed ? "1" : "6";
-          $("tally-apps").textContent = n;
-          $("tally-logins").textContent = n;
-          $("tally-bills").textContent = n;
-          taxBtn.textContent = collapsed ? "Bring the chaos back" : "Close five tabs";
-        };
-        taxBtn.addEventListener("click", function () {
-          setTax(!taxStage.classList.contains("is-collapsed"));
-        });
-        observeOnce([taxStage], function () {
-          setTimeout(function () {
-            setTax(true);
-          }, reduce ? 0 : 1600);
-        }, { threshold: 0.6 });
 
         // ── Feature tabs ──
         var ftabs = Array.prototype.slice.call(document.querySelectorAll(".ftab"));
@@ -4467,33 +3872,6 @@
           });
         }, 15000);
 
-        // ── Day one: type a bare title, save it to Inbox ──
-        var typed = $("typed");
-        var saved = $("saved");
-        var phrase = "Call Marta about the print deadline";
-        if (reduce) {
-          typed.textContent = phrase;
-          saved.classList.add("is-shown");
-        } else {
-          var run = function () {
-            var i = 0;
-            typed.textContent = "";
-            saved.classList.remove("is-shown");
-            var step = function () {
-              i++;
-              typed.textContent = phrase.slice(0, i);
-              if (i < phrase.length) setTimeout(step, 38 + Math.random() * 50);
-              else
-                setTimeout(function () {
-                  saved.classList.add("is-shown");
-                  typed.textContent = "";
-                  setTimeout(run, 4200);
-                }, 700);
-            };
-            setTimeout(step, 400);
-          };
-          observeOnce([document.querySelector(".capture-stage")], run, { threshold: 0.4 });
-        }
       })();
     </script>
   </body>
