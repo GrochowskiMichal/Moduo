@@ -3,19 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Moduo — One window for the whole working life</title>
+    <title>Moduo — Fire five apps. Keep the work.</title>
     <meta
       name="description"
-      content="Tasks, notes, calendar, email, contacts, and finance — linked together, in one fast window. You don’t build a system. You just work."
+      content="Fire five apps. Keep the work. Notes, tasks, email, calendar, and mind maps in one window that links them. You don’t build a system. You just work."
     />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#000000" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://www.moduo.app/" />
-    <meta property="og:title" content="Moduo — One window for the whole working life" />
+    <meta property="og:title" content="Moduo — Fire five apps. Keep the work." />
     <meta
       property="og:description"
-      content="Tasks, notes, calendar, email, contacts, and finance — linked together, in one fast window."
+      content="Fire five apps. Keep the work. Notes, tasks, email, calendar, and mind maps — linked, in one window."
     />
     <meta name="twitter:card" content="summary" />
     <link rel="canonical" href="https://www.moduo.app/" />
@@ -95,6 +95,8 @@
         --text-base: 0.875rem;
         --text-md: 0.9375rem;
         --text-lg: 1.125rem;
+        --text-xl: 1.25rem;
+        --text-2xl: 1.5rem;
 
         --radius-sm: 0.25rem;
         --radius-md: 0.5rem;
@@ -1763,6 +1765,1202 @@
         }
       }
 
+      /* ─── Hero v2 ──────────────────────────────────────────────────────── */
+      .hero-copy .eyebrow {
+        margin-bottom: 1.5rem;
+      }
+      .h-hero .soft {
+        color: var(--subtle-foreground);
+      }
+
+      /* ─── Stack tax ────────────────────────────────────────────────────── */
+      .tax {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+        gap: clamp(2rem, 6vw, 5rem);
+        align-items: center;
+      }
+      .tax .h-section {
+        margin-top: 1.25rem;
+      }
+      .tax .lead {
+        margin-top: 1.5rem;
+        max-width: 30rem;
+      }
+      .tax-stage {
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: var(--card);
+        padding: 1.5rem;
+        overflow: hidden;
+      }
+      .tabbar {
+        display: flex;
+        align-items: flex-end;
+        gap: 0.25rem;
+        height: 2.75rem;
+        padding: 0 0.5rem;
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-bottom: 0;
+        overflow: hidden;
+      }
+      .btab {
+        display: flex;
+        align-items: center;
+        gap: 0.4375rem;
+        min-width: 0;
+        flex: 1 1 0;
+        height: 2.125rem;
+        padding-inline: 0.625rem;
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
+        background: var(--muted);
+        border: 1px solid var(--border);
+        border-bottom: 0;
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        transition:
+          flex-grow var(--motion-slower) var(--ease-out),
+          opacity var(--motion-slow) var(--ease-out),
+          padding var(--motion-slower) var(--ease-out),
+          filter var(--motion-slow) var(--ease-out),
+          background-color var(--motion-slow) var(--ease-out),
+          color var(--motion-slow) var(--ease-out);
+      }
+      .btab span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .btab .x {
+        margin-left: auto;
+        color: var(--faint-foreground);
+      }
+      .btab.is-moduo {
+        flex-grow: 0.0001;
+        padding-inline: 0;
+        border-width: 0;
+        opacity: 0;
+        background: var(--card);
+        color: var(--foreground);
+      }
+      .tax-stage.is-collapsed .btab:not(.is-moduo) {
+        flex-grow: 0.0001;
+        padding-inline: 0;
+        border-width: 0;
+        opacity: 0;
+        filter: blur(var(--blur-veil));
+      }
+      .tax-stage.is-collapsed .btab.is-moduo {
+        flex-grow: 1;
+        padding-inline: 0.75rem;
+        border-width: 1px;
+        opacity: 1;
+      }
+      .tab-page {
+        height: 11rem;
+        border: 1px solid var(--border);
+        border-radius: 0 0 var(--radius-md) var(--radius-md);
+        background: var(--background);
+        display: grid;
+        place-items: center;
+        position: relative;
+        overflow: hidden;
+      }
+      .tab-page .chaos,
+      .tab-page .calm {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        padding: 1.5rem;
+        transition:
+          opacity var(--motion-slow) var(--ease-out),
+          filter var(--motion-slow) var(--ease-out);
+      }
+      .tab-page .calm {
+        opacity: 0;
+        filter: blur(var(--blur-veil));
+      }
+      .tax-stage.is-collapsed .chaos {
+        opacity: 0;
+        filter: blur(var(--blur-veil));
+      }
+      .tax-stage.is-collapsed .calm {
+        opacity: 1;
+        filter: none;
+      }
+      .chaos-q {
+        font-size: var(--text-lg);
+        font-weight: 500;
+        letter-spacing: -0.015em;
+        color: var(--muted-foreground);
+      }
+      .chaos-q small {
+        display: block;
+        margin-top: 0.375rem;
+        font-size: var(--text-sm);
+        font-weight: 400;
+        color: var(--faint-foreground);
+      }
+      .calm-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .tax-meta {
+        margin-top: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      .tally {
+        display: flex;
+        gap: 1.5rem;
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .tally b {
+        display: block;
+        font-size: var(--text-2xl);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--foreground);
+        transition: opacity var(--motion-fade) var(--ease-out);
+      }
+      .tax-meta .btn {
+        margin-left: auto;
+      }
+
+      /* ─── Feature tabs ─────────────────────────────────────────────────── */
+      .ftabs {
+        display: inline-flex;
+        gap: 0.125rem;
+        padding: 0.25rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: var(--card);
+        margin-bottom: clamp(2rem, 4vw, 3rem);
+        max-width: 100%;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .ftab {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: var(--ctrl-h);
+        padding-inline: 0.875rem;
+        border-radius: var(--radius-md);
+        font-size: var(--text-base);
+        font-weight: 500;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        transition:
+          background-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out);
+      }
+      .ftab:hover {
+        color: var(--foreground);
+      }
+      .ftab[aria-selected="true"] {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .fpanel[hidden] {
+        display: none;
+      }
+      .fpanel.is-entering {
+        animation: rise var(--motion-slow) var(--ease-out) both;
+      }
+      .fpanel-intro {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+        gap: 1.5rem clamp(2rem, 6vw, 5rem);
+        align-items: end;
+        margin-bottom: 2rem;
+      }
+      .h-feature {
+        font-size: clamp(1.75rem, 3.2vw, 2.5rem);
+        font-weight: 600;
+        letter-spacing: -0.028em;
+        line-height: 1.1;
+        text-wrap: balance;
+      }
+      .fpanel-intro .body {
+        font-size: var(--text-md);
+        max-width: 30rem;
+      }
+      .chips {
+        margin-top: 1rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+      }
+      .chips .ref {
+        height: 1.625rem;
+        padding-inline: 0.625rem;
+        color: var(--muted-foreground);
+      }
+
+      /* focus mode */
+      .focus {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 18rem;
+        min-height: 26rem;
+      }
+      .focus-main {
+        padding: clamp(1.5rem, 4vw, 3rem);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 1.25rem;
+      }
+      .focus-title {
+        font-size: clamp(1.375rem, 2.4vw, 1.75rem);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+      }
+      .timer {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        font-variant-numeric: tabular-nums;
+      }
+      .timer b {
+        font-size: clamp(2.5rem, 5vw, 3.5rem);
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        line-height: 1;
+      }
+      .timer span {
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .progress {
+        height: 0.25rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        overflow: hidden;
+        max-width: 28rem;
+      }
+      .progress i {
+        display: block;
+        height: 100%;
+        width: 68%;
+        background: var(--foreground);
+        border-radius: inherit;
+        transition: width 1s linear;
+      }
+      .subtasks {
+        list-style: none;
+        max-width: 28rem;
+      }
+      .subtasks .row {
+        padding-inline: 0.5rem;
+        height: 2rem;
+        cursor: pointer;
+      }
+      .focus-actions {
+        display: flex;
+        gap: 0.375rem;
+        flex-wrap: wrap;
+      }
+      .focus-side {
+        border-left: 1px solid var(--border);
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      .seg {
+        display: inline-flex;
+        padding: 0.1875rem;
+        border-radius: var(--radius-md);
+        background: var(--muted);
+        border: 1px solid var(--border);
+      }
+      .seg span,
+      .seg button {
+        flex: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 1.625rem;
+        padding-inline: 0.75rem;
+        border-radius: var(--radius-sm);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        color: var(--muted-foreground);
+        transition:
+          background-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out);
+      }
+      .seg .is-on,
+      .seg [aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+
+      /* notes */
+      .notes {
+        display: grid;
+        grid-template-columns: 15rem minmax(0, 1fr);
+        min-height: 28rem;
+      }
+      .notes-list {
+        border-right: 1px solid var(--border);
+        padding: 0.75rem 0.5rem;
+      }
+      .note-item {
+        padding: 0.625rem 0.75rem;
+        border-radius: var(--radius-md);
+      }
+      .note-item.is-selected {
+        background: var(--selected-bg);
+        box-shadow: inset 2px 0 0 var(--primary);
+      }
+      .note-item b {
+        display: block;
+        font-size: var(--text-sm);
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .note-item span {
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .doc {
+        position: relative;
+        padding: clamp(1.5rem, 4vw, 2.75rem) clamp(1.5rem, 5vw, 3.5rem);
+        max-width: 44rem;
+      }
+      .doc h4 {
+        font-size: var(--text-2xl);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .doc-meta {
+        margin-top: 0.375rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .doc p {
+        margin-top: 1.25rem;
+        font-size: var(--text-md);
+        line-height: 1.65;
+        color: var(--muted-foreground);
+      }
+      .doc h5 {
+        margin-top: 1.5rem;
+        font-size: var(--text-md);
+        font-weight: 600;
+      }
+      .mention {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0 0.375rem;
+        border-radius: var(--radius-sm);
+        background: var(--accent);
+        color: var(--foreground);
+        font-size: 0.95em;
+      }
+      .doc .rows {
+        margin-top: 0.5rem;
+        padding: 0;
+      }
+      .doc .row {
+        padding-inline: 0.25rem;
+        height: 2.125rem;
+        cursor: pointer;
+      }
+      .doc .row:hover {
+        background: transparent;
+      }
+      .is-task-badge {
+        font-size: var(--text-2xs);
+        color: var(--faint-foreground);
+        letter-spacing: 0.02em;
+      }
+      .slash-line {
+        margin-top: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.125rem;
+        height: 2.125rem;
+        padding-inline: 0.25rem;
+        font-size: var(--text-md);
+      }
+      .slash-line {
+        position: relative;
+        margin-bottom: 9.5rem;
+      }
+      .slash-menu {
+        position: absolute;
+        top: calc(100% + 0.25rem);
+        left: 0;
+        width: 15rem;
+        padding: 0.25rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-strong);
+        background: var(--popover);
+        box-shadow: var(--shadow-md);
+        z-index: 3;
+      }
+      .slash-menu div {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        height: 2rem;
+        padding-inline: 0.5rem;
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+      }
+      .slash-menu div span {
+        margin-left: auto;
+        font-size: var(--text-xs);
+        color: var(--faint-foreground);
+      }
+      .slash-menu div.is-on {
+        background: var(--accent);
+      }
+      .slash-menu .icon {
+        color: var(--muted-foreground);
+      }
+
+      /* mindmap */
+      .mind {
+        position: relative;
+        height: clamp(24rem, 40vw, 28rem);
+        background-image: radial-gradient(
+          color-mix(in oklab, var(--foreground) 9%, transparent) 1px,
+          transparent 1px
+        );
+        background-size: 1.25rem 1.25rem;
+        overflow: hidden;
+      }
+      .mind svg.edges {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .mind svg.edges path {
+        fill: none;
+        stroke: var(--border-strong);
+        stroke-width: 1.5;
+        vector-effect: non-scaling-stroke;
+      }
+      .mind svg.edges path.is-hot {
+        stroke: var(--muted-foreground);
+      }
+      .node {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: 2.25rem;
+        padding-inline: 0.875rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-strong);
+        background: var(--card);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        white-space: nowrap;
+        cursor: pointer;
+        transition:
+          background-color var(--motion-fade) var(--ease-out),
+          border-color var(--motion-fade) var(--ease-out);
+      }
+      .node:hover {
+        border-color: var(--muted-foreground);
+      }
+      .node .count {
+        font-size: var(--text-xs);
+        font-weight: 400;
+        color: var(--subtle-foreground);
+      }
+      .node.is-root {
+        height: 2.75rem;
+        padding-inline: 1.25rem;
+        background: var(--foreground);
+        color: var(--background);
+        border-color: var(--foreground);
+        font-size: var(--text-base);
+        font-weight: 600;
+      }
+      .node.is-selected {
+        background: var(--selected-bg);
+        border-color: var(--primary);
+      }
+      .node-pop {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        width: 13.5rem;
+        padding: 0.75rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-strong);
+        background: var(--popover);
+        box-shadow: var(--shadow-md);
+        z-index: 4;
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+        transition:
+          opacity var(--motion-base) var(--ease-out),
+          filter var(--motion-base) var(--ease-out);
+      }
+      .node-pop.is-swapping {
+        opacity: 0;
+        filter: blur(var(--blur-veil));
+      }
+      .node-pop ul {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        color: var(--foreground);
+        font-size: var(--text-sm);
+      }
+      .node-pop li {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .node-pop .chip-btn {
+        justify-content: center;
+      }
+      .node-pop .chip-btn.is-done {
+        background: var(--accent);
+        border-color: var(--border-strong);
+        color: var(--foreground);
+      }
+
+      /* ─── Links (spine) ────────────────────────────────────────────────── */
+      .chain {
+        list-style: none;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+      }
+      .chain > li {
+        position: relative;
+        display: grid;
+        grid-template-columns: 2.25rem minmax(0, 1fr);
+        gap: 0.875rem;
+        padding-bottom: 1.5rem;
+      }
+      .chain > li:last-child {
+        padding-bottom: 0;
+      }
+      .chain > li::before {
+        content: "";
+        position: absolute;
+        left: 1.125rem;
+        top: 2.25rem;
+        bottom: 0;
+        width: 1px;
+        background: var(--border-strong);
+      }
+      .chain > li:last-child::before {
+        display: none;
+      }
+      .chain-icon {
+        display: grid;
+        place-items: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-strong);
+        background: var(--background);
+        color: var(--muted-foreground);
+      }
+      .chain-kind {
+        font-size: var(--text-2xs);
+        letter-spacing: 0.04em;
+        color: var(--faint-foreground);
+      }
+      .chain-title {
+        margin-top: 0.125rem;
+        font-size: var(--text-base);
+        font-weight: 500;
+      }
+      .chain-verb {
+        margin-top: 0.5rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+
+      /* ─── Make it yours ────────────────────────────────────────────────── */
+      .own {
+        display: grid;
+        grid-template-columns: 19rem minmax(0, 1fr);
+        min-height: 36rem;
+      }
+      .own-controls {
+        border-right: 1px solid var(--border);
+        background: var(--card);
+        padding: 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+      .ctrl-label {
+        margin-bottom: 0.625rem;
+        font-size: var(--text-2xs);
+        letter-spacing: 0.04em;
+        color: var(--faint-foreground);
+      }
+      .own-controls .seg {
+        display: flex;
+      }
+      .mods {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+      }
+      .mod {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        width: 100%;
+        padding: 0.5rem 0.5rem;
+        border-radius: var(--radius-md);
+        text-align: left;
+        transition: background-color var(--motion-fade) var(--ease-out);
+      }
+      .mod:hover {
+        background: var(--accent);
+      }
+      .mod .icon {
+        color: var(--muted-foreground);
+      }
+      .mod-text {
+        min-width: 0;
+        flex: 1;
+      }
+      .mod-text b {
+        display: block;
+        font-size: var(--text-sm);
+        font-weight: 500;
+      }
+      .mod-text span {
+        display: block;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .switch {
+        position: relative;
+        width: 2rem;
+        height: 1.125rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--border-strong);
+        flex-shrink: 0;
+        transition: background-color var(--motion-base) var(--ease-out);
+      }
+      .switch::after {
+        content: "";
+        position: absolute;
+        top: 0.1875rem;
+        left: 0.1875rem;
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: var(--radius-full);
+        background: var(--muted-foreground);
+        transition:
+          transform var(--motion-base) var(--ease-out),
+          background-color var(--motion-base) var(--ease-out);
+      }
+      .mod[aria-checked="true"] .switch {
+        background: var(--primary);
+        box-shadow: none;
+      }
+      .mod[aria-checked="true"] .switch::after {
+        transform: translateX(0.875rem);
+        background: var(--primary-foreground);
+      }
+      .mod[aria-checked="false"] .mod-text b {
+        color: var(--muted-foreground);
+      }
+      .mod.is-denied {
+        animation: shake var(--motion-slow) var(--ease-out);
+      }
+      @keyframes shake {
+        25% {
+          transform: translateX(-3px);
+        }
+        75% {
+          transform: translateX(3px);
+        }
+      }
+      .own-hint {
+        margin-top: auto;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        line-height: 1.5;
+      }
+
+      .own-preview {
+        display: grid;
+        grid-template-columns: 11.5rem minmax(0, 1fr);
+        min-width: 0;
+      }
+      .mini-rail {
+        border-right: 1px solid var(--border);
+        padding: 0.75rem 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .mini-rail .nav-item {
+        animation: rise var(--motion-base) var(--ease-out) both;
+      }
+      .board-wrap {
+        position: relative;
+        padding: 1rem 1.25rem 1.25rem;
+        min-width: 0;
+      }
+      .board-head {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        height: 2.25rem;
+        margin-bottom: 0.75rem;
+      }
+      .board-head h3 {
+        font-size: var(--text-lg);
+        font-weight: 600;
+        letter-spacing: -0.015em;
+      }
+      .board-head .muted {
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .board-head .btn {
+        margin-left: auto;
+      }
+      .board {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-auto-rows: 6.25rem;
+        grid-auto-flow: dense;
+        gap: 0.625rem;
+      }
+      .wd {
+        position: relative;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: var(--card);
+        padding: 0.75rem 0.875rem;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .wd.s-2x1 {
+        grid-column: span 2;
+      }
+      .wd.s-2x2 {
+        grid-column: span 2;
+        grid-row: span 2;
+      }
+      .wd.is-new {
+        animation: widget-in var(--motion-slow) var(--ease-out) both;
+      }
+      .wd.is-leaving {
+        animation: widget-out var(--motion-base) var(--ease-out) both;
+      }
+      @keyframes widget-in {
+        from {
+          opacity: 0;
+          transform: scale(0.96);
+          filter: blur(var(--blur-veil));
+        }
+      }
+      @keyframes widget-out {
+        to {
+          opacity: 0;
+          transform: scale(0.96);
+          filter: blur(var(--blur-veil));
+        }
+      }
+      .w-head {
+        display: flex;
+        align-items: center;
+        gap: 0.4375rem;
+        font-size: var(--text-xs);
+        font-weight: 500;
+        color: var(--muted-foreground);
+        padding-right: 1.25rem;
+      }
+      .w-head .icon {
+        color: var(--faint-foreground);
+      }
+      .w-x {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        display: grid;
+        place-items: center;
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        color: var(--muted-foreground);
+        opacity: 0.35;
+        transition:
+          opacity var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out);
+      }
+      .wd:hover .w-x,
+      .w-x:focus-visible {
+        opacity: 1;
+        color: var(--foreground);
+      }
+      .w-body {
+        margin-top: auto;
+        min-width: 0;
+      }
+      .w-big {
+        font-size: 1.75rem;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        line-height: 1.05;
+        font-variant-numeric: tabular-nums;
+      }
+      .w-sub {
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .w-line {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--text-sm);
+        min-width: 0;
+      }
+      .w-line + .w-line {
+        margin-top: 0.3125rem;
+      }
+      .w-line span:not(.check):not(.avatar):not(.dot) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .w-line .when {
+        margin-left: auto;
+        flex-shrink: 0;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .wd .rows {
+        padding: 0;
+        margin-top: 0.5rem;
+      }
+      .wd .row {
+        height: 1.875rem;
+        padding-inline: 0.25rem;
+        cursor: pointer;
+        font-size: var(--text-sm);
+      }
+      .w-input {
+        margin-top: auto;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: 1.875rem;
+        padding-inline: 0.625rem;
+        border-radius: var(--radius-md);
+        background: var(--muted);
+        border: 1px solid var(--border);
+        font-size: var(--text-sm);
+        color: var(--faint-foreground);
+      }
+      .w-input .kbd {
+        margin-left: auto;
+      }
+      .w-map {
+        position: relative;
+        flex: 1;
+        margin-top: 0.5rem;
+      }
+      .w-map svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .w-map path {
+        fill: none;
+        stroke: var(--border-strong);
+        stroke-width: 1.25;
+        vector-effect: non-scaling-stroke;
+      }
+      .w-map i {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        padding: 0.125rem 0.4375rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-strong);
+        background: var(--background);
+        font-style: normal;
+        font-size: var(--text-2xs);
+        white-space: nowrap;
+      }
+      .w-map i.root {
+        background: var(--foreground);
+        color: var(--background);
+        border-color: var(--foreground);
+        font-weight: 600;
+      }
+      .w-week {
+        display: flex;
+        align-items: flex-end;
+        gap: 0.3125rem;
+        height: 2.25rem;
+      }
+      .w-week span {
+        flex: 1;
+        border-radius: var(--radius-sm);
+        background: var(--accent);
+      }
+      .w-week span.is-today {
+        background: var(--foreground);
+      }
+      .w-add {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        border-radius: var(--radius-lg);
+        border: 1px dashed var(--border-strong);
+        color: var(--subtle-foreground);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        transition:
+          border-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out),
+          background-color var(--motion-fade) var(--ease-out);
+      }
+      .w-add:hover {
+        border-color: var(--muted-foreground);
+        color: var(--foreground);
+        background: var(--card);
+      }
+      .gallery {
+        position: absolute;
+        right: 1.25rem;
+        top: 3.5rem;
+        z-index: 6;
+        width: 17rem;
+        max-height: calc(100% - 4.5rem);
+        overflow: auto;
+        padding: 0.375rem;
+        border-radius: var(--radius-xl);
+        border: 1px solid var(--border-strong);
+        background: var(--popover);
+        box-shadow: var(--shadow-overlay);
+        animation: widget-in var(--motion-base) var(--ease-out) both;
+      }
+      .gallery[hidden] {
+        display: none;
+      }
+      .gallery-head {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0.5rem 0.625rem;
+        font-size: var(--text-sm);
+        font-weight: 500;
+      }
+      .gallery-head span {
+        margin-left: auto;
+        font-size: var(--text-xs);
+        font-weight: 400;
+        color: var(--subtle-foreground);
+      }
+      .gallery button {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        width: 100%;
+        height: 2.25rem;
+        padding-inline: 0.5rem;
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        text-align: left;
+      }
+      .gallery button:hover {
+        background: var(--accent);
+      }
+      .gallery button .icon {
+        color: var(--muted-foreground);
+      }
+      .gallery button span {
+        margin-left: auto;
+        font-size: var(--text-xs);
+        color: var(--faint-foreground);
+      }
+      .gallery-empty {
+        padding: 0.75rem 0.5rem 1rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+
+      /* ─── Refuse ───────────────────────────────────────────────────────── */
+      .refuse {
+        list-style: none;
+        border-top: 1px solid var(--border);
+      }
+      .refuse li {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+        gap: 0.5rem 2rem;
+        align-items: baseline;
+        padding: 1.375rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .refuse .no {
+        position: relative;
+        justify-self: start;
+        font-size: clamp(1.25rem, 2.4vw, 1.75rem);
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        color: var(--muted-foreground);
+      }
+      .refuse .no::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 55%;
+        height: 1.5px;
+        background: var(--foreground);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform var(--motion-slower) var(--ease-out);
+        transition-delay: var(--d, 0ms);
+      }
+      .refuse li.is-in .no::after {
+        transform: scaleX(1);
+      }
+      .refuse .why {
+        font-size: var(--text-md);
+        color: var(--muted-foreground);
+      }
+      .refuse .why b {
+        color: var(--foreground);
+        font-weight: 500;
+      }
+      .promises {
+        margin-top: clamp(3rem, 6vw, 4.5rem);
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 2rem;
+      }
+      .promises h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        font-size: var(--text-md);
+        font-weight: 500;
+      }
+      .promises h3 .icon {
+        color: var(--muted-foreground);
+      }
+      .promises p {
+        margin-top: 0.5rem;
+        font-size: var(--text-sm);
+        line-height: 1.6;
+        color: var(--subtle-foreground);
+      }
+
+      @media (max-width: 1100px) {
+        .own {
+          grid-template-columns: 16rem minmax(0, 1fr);
+        }
+        .own-preview {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .mini-rail {
+          display: none;
+        }
+      }
+      @media (max-width: 960px) {
+        .tax,
+        .fpanel-intro,
+        .own {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .own-controls {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .focus {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .focus-side {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+        .notes {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .notes-list {
+          display: none;
+        }
+      }
+      @media (max-width: 720px) {
+        .board {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .refuse li {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .promises {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .node {
+          font-size: var(--text-xs);
+          height: 1.875rem;
+          padding-inline: 0.5rem;
+        }
+        .node .count {
+          display: none;
+        }
+        .node-pop {
+          width: 12rem;
+        }
+        .tax-meta .btn {
+          margin-left: 0;
+        }
+      }
+
       /* ─── Responsive ───────────────────────────────────────────────────── */
       @media (max-width: 1100px) {
         .shell {
@@ -1859,12 +3057,6 @@
             d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z"
           />
         </symbol>
-        <symbol id="i-dashboard" viewBox="0 0 24 24">
-          <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
-          <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
-          <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
-          <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
-        </symbol>
         <symbol id="i-inbox" viewBox="0 0 24 24">
           <path d="M3.5 13.5h5l1.5 2.5h4l1.5-2.5h5" />
           <path d="M5.5 5h13l2 8.5V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-5.5z" />
@@ -1893,13 +3085,6 @@
           <circle cx="12" cy="8.5" r="4" />
           <path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5" />
         </symbol>
-        <symbol id="i-finance" viewBox="0 0 24 24">
-          <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
-        </symbol>
-        <symbol id="i-invoice" viewBox="0 0 24 24">
-          <path d="M6 3h12v18l-2.5-1.5L13 21l-2.5-1.5L8 21l-2-1.5z" />
-          <path d="M9 8h6M9 11.5h6M9 15h3" />
-        </symbol>
         <symbol id="i-link" viewBox="0 0 24 24">
           <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" />
           <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
@@ -1923,10 +3108,6 @@
         <symbol id="i-bolt" viewBox="0 0 24 24">
           <path d="M13 2.5 4.5 13.5H12l-1 8 8.5-11H12z" />
         </symbol>
-        <symbol id="i-scale" viewBox="0 0 24 24">
-          <path d="M12 4v16M7 20h10M5 8h14" />
-          <path d="m5 8-2.5 6a3 3 0 0 0 5 0zM19 8l-2.5 6a3 3 0 0 0 5 0z" />
-        </symbol>
         <symbol id="i-export" viewBox="0 0 24 24">
           <path d="M12 3.5v11M7.5 8 12 3.5 16.5 8" />
           <path d="M4.5 14v4.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V14" />
@@ -1947,6 +3128,21 @@
           <rect x="3.5" y="3.5" width="17" height="17" rx="2" />
           <path d="M3.5 9.5h17M9.5 3.5v17M4 20 20 4" />
         </symbol>
+        <symbol id="i-home" viewBox="0 0 24 24">
+          <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z" />
+          <path d="M9.5 20.5v-6h5v6" />
+        </symbol>
+        <symbol id="i-mindmap" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="2.5" />
+          <circle cx="4.5" cy="5.5" r="1.75" />
+          <circle cx="19.5" cy="5.5" r="1.75" />
+          <circle cx="4.5" cy="18.5" r="1.75" />
+          <circle cx="19.5" cy="18.5" r="1.75" />
+          <path d="M9.9 10.4 5.9 6.7M14.1 10.4l4-3.7M9.9 13.6l-4 3.7M14.1 13.6l4 3.7" />
+        </symbol>
+        <symbol id="i-x" viewBox="0 0 24 24">
+          <path d="M6 6l12 12M18 6 6 18" />
+        </symbol>
       </defs>
     </svg>
 
@@ -1958,10 +3154,10 @@
           Moduo
         </a>
         <nav class="nav-links" aria-label="Sections">
-          <a class="btn btn-ghost" href="#connect">How it links</a>
-          <a class="btn btn-ghost" href="#day">Your day</a>
-          <a class="btn btn-ghost" href="#people">People &amp; money</a>
-          <a class="btn btn-ghost" href="#principles">Principles</a>
+          <a class="btn btn-ghost" href="#features">Features</a>
+          <a class="btn btn-ghost" href="#links">How it links</a>
+          <a class="btn btn-ghost" href="#yours">Make it yours</a>
+          <a class="btn btn-ghost" href="#refuse">On purpose</a>
         </nav>
         <div class="nav-actions">
           <a class="btn btn-ghost" href="https://app.moduo.app/auth">Sign in</a>
@@ -1975,23 +3171,24 @@
       <section class="hero" id="top" aria-labelledby="hero-title">
         <div class="container hero-copy">
           <svg class="mark" style="--i: 0" role="img" aria-label="Moduo"><use href="#mark" /></svg>
-          <h1 class="h-hero" id="hero-title" style="--i: 1">One window for the whole working life.</h1>
-          <p class="lead" style="--i: 2">
-            Notes, tasks, calendar, email, and contacts — linked, so context never splits across
-            five apps. You don’t build a system. You just work.
+          <div class="eyebrow" style="--i: 1">One window for the whole working life</div>
+          <h1 class="h-hero" id="hero-title" style="--i: 2">Fire five apps.<br /><span class="soft">Keep the work.</span></h1>
+          <p class="lead" style="--i: 3">
+            Notes, tasks, email, calendar, and mind maps — in one window that links them for you.
+            No setup project. No system to babysit. You don’t build a workflow. You just work.
           </p>
-          <div class="hero-cta" style="--i: 3">
+          <div class="hero-cta" style="--i: 4">
             <a class="btn btn-primary btn-lg" href="https://app.moduo.app/auth">
               Get started
               <svg class="icon icon-sm arrow" aria-hidden="true"><use href="#i-arrow" /></svg>
             </a>
-            <a class="btn btn-outline btn-lg" href="#connect">See how it links</a>
+            <a class="btn btn-outline btn-lg" href="#yours">Build your workspace</a>
           </div>
-          <p class="hero-note" style="--i: 4">Free to start. No seat minimums. Your data exports with you.</p>
+          <p class="hero-note" style="--i: 5">Free to start. No seat minimums. Your data leaves whenever you do.</p>
         </div>
 
         <div class="hero-stage">
-          <div class="frame frame-hero" role="img" aria-label="The Moduo app: a Today list of tasks, with the selected task’s linked contact, email, calendar block, and invoice shown in the right rail.">
+          <div class="frame frame-hero" role="img" aria-label="The Moduo app: a Today list of tasks, with the selected task’s linked person, email, note, and calendar block in the right rail.">
             <div class="titlebar" aria-hidden="true">
               <div class="lights"><span></span><span></span><span></span></div>
               <div class="titlebar-title">Today — North Studio</div>
@@ -2009,19 +3206,19 @@
                   North Studio
                   <svg class="icon icon-sm chev"><use href="#i-chev" /></svg>
                 </div>
-                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-dashboard" /></svg>Dashboard</div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-home" /></svg>Home</div>
                 <div class="nav-item"><svg class="icon icon-sm"><use href="#i-inbox" /></svg>Inbox<span class="count">3</span></div>
                 <div class="nav-item is-active"><svg class="icon icon-sm"><use href="#i-today" /></svg>Today<span class="count">6</span></div>
                 <div class="nav-item"><svg class="icon icon-sm"><use href="#i-tasks" /></svg>Tasks</div>
                 <div class="nav-item"><svg class="icon icon-sm"><use href="#i-notes" /></svg>Notes</div>
-                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-calendar" /></svg>Calendar</div>
                 <div class="nav-item"><svg class="icon icon-sm"><use href="#i-mail" /></svg>Email<span class="count">12</span></div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-calendar" /></svg>Calendar</div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-mindmap" /></svg>Mindmap</div>
                 <div class="nav-item"><svg class="icon icon-sm"><use href="#i-contact" /></svg>Contacts</div>
-                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-finance" /></svg>Finance</div>
                 <div class="rail-label">Projects</div>
                 <div class="nav-item"><span class="dot" data-label="pink"></span>Kowalska rebrand</div>
                 <div class="nav-item"><span class="dot" data-label="blue"></span>Q4 proposal</div>
-                <div class="nav-item"><span class="dot" data-label="green"></span>Studio ops</div>
+                <div class="nav-item"><span class="dot" data-label="green"></span>Autumn launch</div>
               </aside>
 
               <div class="main">
@@ -2040,10 +3237,10 @@
                 </div>
 
                 <div class="group-label">Morning</div>
-                <ul class="rows" id="hero-rows">
-                  <li class="row is-selected" data-task="invoice">
+                <ul class="rows">
+                  <li class="row is-selected" data-task="deck">
                     <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
-                    <span class="row-title">Send the revised invoice</span>
+                    <span class="row-title">Send Anna the revised brand deck</span>
                     <span class="row-meta">
                       <span class="tag" data-label="pink">Kowalska rebrand</span>
                       <span class="avatar">AK</span>
@@ -2074,11 +3271,12 @@
                       <span class="tag" data-label="blue">Q4 proposal</span>
                     </span>
                   </li>
-                  <li class="row" data-task="expenses">
+                  <li class="row" data-task="launch">
                     <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
-                    <span class="row-title">Review August expenses</span>
+                    <span class="row-title">Map out the launch plan</span>
                     <span class="row-meta">
-                      <span class="ref"><svg class="icon icon-xs"><use href="#i-finance" /></svg>14 items</span>
+                      <span class="ref"><svg class="icon icon-xs"><use href="#i-mindmap" /></svg>Map</span>
+                      <span class="tag" data-label="green">Autumn launch</span>
                     </span>
                   </li>
                   <li class="row" data-task="call">
@@ -2103,216 +3301,405 @@
             </div>
           </div>
         </div>
+      </section>
 
-        <div class="container modules" id="modules">
-          <ul aria-label="Modules">
-            <li><svg class="icon" aria-hidden="true"><use href="#i-tasks" /></svg>Tasks</li>
-            <li><svg class="icon" aria-hidden="true"><use href="#i-notes" /></svg>Notes</li>
-            <li><svg class="icon" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</li>
-            <li><svg class="icon" aria-hidden="true"><use href="#i-mail" /></svg>Email</li>
-            <li><svg class="icon" aria-hidden="true"><use href="#i-contact" /></svg>Contacts</li>
-            <li><svg class="icon" aria-hidden="true"><use href="#i-finance" /></svg>Finance</li>
-          </ul>
-          <p>Six tools you already pay for, in one window that links them.</p>
+      <!-- ─── Stack tax ─────────────────────────────────────────────────── -->
+      <section class="section container" id="tax" aria-labelledby="tax-title">
+        <div class="tax">
+          <div class="reveal">
+            <div class="eyebrow">The stack tax</div>
+            <h2 class="h-section" id="tax-title">Your stack is a tax you pay in attention.</h2>
+            <p class="lead">
+              Six apps. Six logins. Six places the same client lives. Every switch costs you the
+              thread. You were hired to do the work — <span class="fg">not to maintain the system that tracks it.</span>
+            </p>
+          </div>
+          <div class="tax-stage reveal" id="tax-stage" style="--d: 90ms">
+            <div class="tabbar" aria-hidden="true">
+              <div class="btab"><svg class="icon icon-xs"><use href="#i-mail" /></svg><span>Mail</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
+              <div class="btab"><svg class="icon icon-xs"><use href="#i-calendar" /></svg><span>Calendar</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
+              <div class="btab"><svg class="icon icon-xs"><use href="#i-notes" /></svg><span>Docs</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
+              <div class="btab"><svg class="icon icon-xs"><use href="#i-tasks" /></svg><span>To-dos</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
+              <div class="btab"><svg class="icon icon-xs"><use href="#i-mindmap" /></svg><span>Whiteboard</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
+              <div class="btab"><svg class="icon icon-xs"><use href="#i-contact" /></svg><span>Clients.xlsx</span><svg class="icon icon-xs x"><use href="#i-x" /></svg></div>
+              <div class="btab is-moduo"><svg class="icon icon-xs mark"><use href="#mark" /></svg><span>Moduo — everything</span></div>
+            </div>
+            <div class="tab-page">
+              <div class="chaos">
+                <div class="chaos-q">“Wait — where did Anna send that?”<small>Mail? The doc comments? The whiteboard? Tuesday’s to-do list?</small></div>
+              </div>
+              <div class="calm" aria-hidden="true">
+                <div>
+                  <div class="calm-row">
+                    <span class="ref"><svg class="icon icon-xs"><use href="#i-mail" /></svg>Email</span>
+                    <span class="ref"><svg class="icon icon-xs"><use href="#i-tasks" /></svg>Task</span>
+                    <span class="ref"><svg class="icon icon-xs"><use href="#i-notes" /></svg>Note</span>
+                    <span class="ref"><svg class="icon icon-xs"><use href="#i-calendar" /></svg>Meeting</span>
+                  </div>
+                  <div class="chaos-q" style="margin-top: 1rem; color: var(--foreground)">All on Anna. All in one place.</div>
+                </div>
+              </div>
+            </div>
+            <div class="tax-meta">
+              <div class="tally" aria-live="polite">
+                <div><b id="tally-apps">6</b>apps</div>
+                <div><b id="tally-logins">6</b>logins</div>
+                <div><b id="tally-bills">6</b>bills</div>
+              </div>
+              <button class="btn btn-outline" id="tax-toggle" type="button">Close five tabs</button>
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- ─── Connect ───────────────────────────────────────────────────── -->
-      <section class="section container" id="connect" aria-labelledby="connect-title">
+      <!-- ─── Features (tabs) ───────────────────────────────────────────── -->
+      <section class="section container" id="features" aria-labelledby="features-title">
+        <div class="section-intro reveal">
+          <div>
+            <div class="eyebrow">Features</div>
+            <h2 class="h-section" id="features-title">Five tools. One brain.</h2>
+          </div>
+          <p class="lead">
+            Each module is good enough to replace the app you use today — and better, because it
+            knows about the other four.
+          </p>
+        </div>
+
+        <div class="reveal">
+          <div class="ftabs" role="tablist" aria-label="Modules">
+            <button class="ftab" role="tab" id="tab-tasks" aria-controls="panel-tasks" aria-selected="true" type="button"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>Tasks</button>
+            <button class="ftab" role="tab" id="tab-notes" aria-controls="panel-notes" aria-selected="false" tabindex="-1" type="button"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Notes</button>
+            <button class="ftab" role="tab" id="tab-email" aria-controls="panel-email" aria-selected="false" tabindex="-1" type="button"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg>Email</button>
+            <button class="ftab" role="tab" id="tab-calendar" aria-controls="panel-calendar" aria-selected="false" tabindex="-1" type="button"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</button>
+            <button class="ftab" role="tab" id="tab-mindmap" aria-controls="panel-mindmap" aria-selected="false" tabindex="-1" type="button"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mindmap" /></svg>Mindmap</button>
+          </div>
+
+          <!-- Tasks -->
+          <div class="fpanel" role="tabpanel" id="panel-tasks" aria-labelledby="tab-tasks">
+            <div class="fpanel-intro">
+              <h3 class="h-feature">Plans are cheap. Finishing is the feature.</h3>
+              <div>
+                <p class="body">
+                  Plan mode to decide what matters. Execute mode to actually do it — one task, one
+                  timer, zero noise. A bare title is a complete task. Everything else is optional.
+                </p>
+                <div class="chips">
+                  <span class="ref">Plan &amp; Execute modes</span>
+                  <span class="ref">List · Board · Timeline</span>
+                  <span class="ref">Capture from anywhere</span>
+                </div>
+              </div>
+            </div>
+            <div class="frame" role="img" aria-label="Execute mode: one task in focus with a running timer, subtasks, and what’s up next.">
+              <div class="titlebar" aria-hidden="true">
+                <div class="lights"><span></span><span></span><span></span></div>
+                <div class="titlebar-title">Execute — Focus</div>
+                <div></div>
+              </div>
+              <div class="focus" aria-hidden="true">
+                <div class="focus-main">
+                  <div class="eyebrow">Now</div>
+                  <div class="focus-title">Draft the Q4 proposal</div>
+                  <div class="calm-row" style="justify-content: flex-start">
+                    <span class="tag" data-label="blue">Q4 proposal</span>
+                    <span class="ref"><svg class="icon icon-xs"><use href="#i-calendar" /></svg>13:00–15:00</span>
+                    <span class="avatar">TW</span>
+                  </div>
+                  <div class="timer"><b id="focus-timer">38:12</b><span>left in this block</span></div>
+                  <div class="progress"><i id="focus-progress"></i></div>
+                  <ul class="subtasks rows">
+                    <li class="row is-done"><span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span><span class="row-title">Outline scope and timeline</span></li>
+                    <li class="row"><span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span><span class="row-title">Three pricing options</span></li>
+                    <li class="row"><span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span><span class="row-title">Send to Tomasz for a read</span></li>
+                  </ul>
+                  <div class="focus-actions">
+                    <span class="chip-btn is-primary"><svg class="icon icon-xs"><use href="#i-check" /></svg>Done</span>
+                    <span class="chip-btn">Push to tomorrow</span>
+                    <span class="chip-btn">Shrink to 30m</span>
+                  </div>
+                </div>
+                <div class="focus-side">
+                  <div class="seg"><span>Plan</span><span class="is-on">Execute</span></div>
+                  <div>
+                    <div class="link-group-label">Up next</div>
+                    <div class="link-card"><svg class="icon icon-sm"><use href="#i-tasks" /></svg><div class="link-card-main"><div class="link-card-title">Map out the launch plan</div><div class="link-card-snip">15:00 · Autumn launch</div></div></div>
+                    <div class="link-card"><svg class="icon icon-sm"><use href="#i-tasks" /></svg><div class="link-card-main"><div class="link-card-title">Prep notes for the studio call</div><div class="link-card-snip">16:30 · Note attached</div></div></div>
+                  </div>
+                  <div class="reason">
+                    <svg class="icon icon-sm"><use href="#i-info" /></svg>
+                    <span>Notifications are held until this block ends.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notes -->
+          <div class="fpanel" role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" hidden>
+            <div class="fpanel-intro">
+              <h3 class="h-feature">Notes that actually do things.</h3>
+              <div>
+                <p class="body">
+                  Type a checkbox and it’s a real task — with a date, a slot in your day, and a link
+                  back to the sentence that made it. <span class="fg">/task</span>, <span class="fg">/note</span>, <span class="fg">@person</span>. Keep writing.
+                </p>
+                <div class="chips">
+                  <span class="ref">Slash commands</span>
+                  <span class="ref">Checkboxes are real tasks</span>
+                  <span class="ref">@mentions link people</span>
+                </div>
+              </div>
+            </div>
+            <div class="frame" role="img" aria-label="A meeting note with checklist items that are real tasks, an @mention, and a slash-command menu open.">
+              <div class="titlebar" aria-hidden="true">
+                <div class="lights"><span></span><span></span><span></span></div>
+                <div class="titlebar-title">Notes — Kowalska rebrand</div>
+                <div></div>
+              </div>
+              <div class="notes" aria-hidden="true">
+                <div class="notes-list">
+                  <div class="note-item is-selected"><b>Kickoff — Kowalska rebrand</b><span>Edited 2 min ago</span></div>
+                  <div class="note-item"><b>Brand colours, final</b><span>Sep 18</span></div>
+                  <div class="note-item"><b>Launch brainstorm</b><span>Sep 14</span></div>
+                  <div class="note-item"><b>Studio call — agenda</b><span>Sep 11</span></div>
+                </div>
+                <div class="doc">
+                  <h4>Kickoff — Kowalska rebrand</h4>
+                  <div class="doc-meta">With Anna Kowalska and Marta Nowak · 30 September</div>
+                  <p>
+                    Anna wants the new identity live before the autumn launch. <span class="mention"><span class="avatar" style="width: 1rem; height: 1rem; font-size: 0.5rem">MN</span>Marta Nowak</span>
+                    owns the logo files; print needs final SVGs by Friday.
+                  </p>
+                  <h5>Next steps</h5>
+                  <ul class="rows">
+                    <li class="row is-done"><span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span><span class="row-title">Book the photographer</span><span class="row-meta"><span class="is-task-badge">Task · Done</span></span></li>
+                    <li class="row"><span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span><span class="row-title">Send Anna the revised brand deck</span><span class="row-meta"><span class="ref"><svg class="icon icon-xs"><use href="#i-today" /></svg>Today</span><span class="avatar">AK</span></span></li>
+                    <li class="row"><span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span><span class="row-title">Reply to Marta about the logo files</span><span class="row-meta"><span class="ref"><svg class="icon icon-xs"><use href="#i-calendar" /></svg>Thu</span><span class="avatar">MN</span></span></li>
+                  </ul>
+                  <div class="slash-line">
+                    <span class="fg">/ta</span><span class="caret"></span>
+                    <div class="slash-menu">
+                      <div class="is-on"><svg class="icon icon-sm"><use href="#i-tasks" /></svg>Task<span>Enter</span></div>
+                      <div><svg class="icon icon-sm"><use href="#i-notes" /></svg>Link a note</div>
+                      <div><svg class="icon icon-sm"><use href="#i-contact" /></svg>Mention a person</div>
+                      <div><svg class="icon icon-sm"><use href="#i-mindmap" /></svg>Embed a map</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Email -->
+          <div class="fpanel" role="tabpanel" id="panel-email" aria-labelledby="tab-email" hidden>
+            <div class="fpanel-intro">
+              <h3 class="h-feature">Inbox zero, minus the copy-paste.</h3>
+              <div>
+                <p class="body">
+                  Turn any email into a task with one key. It keeps the person, the thread, and the
+                  project — so you never ask “where was that?” again.
+                </p>
+                <div class="chips">
+                  <span class="ref">Native desktop mail</span>
+                  <span class="ref">Email → task in one key</span>
+                  <span class="ref">Threads linked to people</span>
+                </div>
+              </div>
+            </div>
+            <div class="frame" role="img" aria-label="An inbox with one email turned into a task. The task shows the contact and the original email it came from.">
+              <div class="split" aria-hidden="true">
+                <div class="pane">
+                  <div class="pane-head">
+                    <svg class="icon icon-sm"><use href="#i-mail" /></svg>
+                    Inbox <span class="muted">· 3 unread</span>
+                  </div>
+                  <ul class="mail">
+                    <li class="is-selected">
+                      <span class="avatar avatar-lg">MN</span>
+                      <span class="mail-from">Marta Nowak</span>
+                      <span class="mail-time">09:12</span>
+                      <span class="mail-subject">Logo files for print <b>— Could you send the SVGs and the…</b></span>
+                      <span class="mail-action">
+                        <svg class="icon icon-xs"><use href="#i-tasks" /></svg>
+                        Make a task
+                        <span class="kbd">T</span>
+                      </span>
+                    </li>
+                    <li>
+                      <span class="avatar avatar-lg">AK</span>
+                      <span class="mail-from">Anna Kowalska</span>
+                      <span class="mail-time">08:47</span>
+                      <span class="mail-subject">Re: Final deck notes <b>— Love it, just swap the hero photo…</b></span>
+                    </li>
+                    <li class="is-read">
+                      <span class="avatar avatar-lg">TW</span>
+                      <span class="mail-from">Tomasz Wiśniewski</span>
+                      <span class="mail-time">Yesterday</span>
+                      <span class="mail-subject">Studio call Thursday? <b>— Works for me after four…</b></span>
+                    </li>
+                    <li class="is-read">
+                      <span class="avatar avatar-lg">PS</span>
+                      <span class="mail-from">Print Shop Łódź</span>
+                      <span class="mail-time">Mon</span>
+                      <span class="mail-subject">Proof for the posters <b>— Attached is the proof for 500…</b></span>
+                    </li>
+                  </ul>
+                </div>
+                <div class="pane">
+                  <div class="pane-head">
+                    <svg class="icon icon-sm"><use href="#i-tasks" /></svg>
+                    Task
+                    <span class="right badge badge-success">Created from email</span>
+                  </div>
+                  <div class="task-detail">
+                    <h4>
+                      <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                      Reply to Marta about the logo files
+                    </h4>
+                    <dl class="props">
+                      <dt>When</dt>
+                      <dd><svg class="icon icon-sm"><use href="#i-today" /></svg>Today</dd>
+                      <dt>Person</dt>
+                      <dd><span class="avatar">MN</span>Marta Nowak</dd>
+                      <dt>Project</dt>
+                      <dd><span class="tag" data-label="pink">Kowalska rebrand</span></dd>
+                    </dl>
+                    <div class="quote">
+                      <div class="quote-head">
+                        <svg class="icon icon-xs"><use href="#i-link" /></svg>
+                        Created from · Logo files for print · 09:12
+                      </div>
+                      <p>
+                        Hi — could you send the SVGs and the final colour values? The print shop
+                        needs them by Friday so we can hit the launch date.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Calendar -->
+          <div class="fpanel" role="tabpanel" id="panel-calendar" aria-labelledby="tab-calendar" hidden>
+            <div class="fpanel-intro">
+              <h3 class="h-feature">Your calendar is lying to you.</h3>
+              <div>
+                <p class="body">
+                  It shows meetings, not work. Moduo drops tasks into time — and when a block ends, it
+                  asks what happened: done, push, shrink, or drop. Falling behind is normal. Guilt is
+                  optional.
+                </p>
+                <div class="chips">
+                  <span class="ref">Drag tasks into time</span>
+                  <span class="ref">Done · Push · Shrink · Drop</span>
+                  <span class="ref">Reflow my day</span>
+                </div>
+              </div>
+            </div>
+            <div class="frame" role="img" aria-label="A calendar day. A time block has just ended and offers Done, Push, Shrink, and Drop. A side panel offers to reflow the day.">
+              <div class="titlebar" aria-hidden="true">
+                <div class="lights"><span></span><span></span><span></span></div>
+                <div class="titlebar-title">Calendar — Wednesday</div>
+                <div></div>
+              </div>
+              <div class="day" aria-hidden="true">
+                <div class="cal">
+                  <ul class="hours">
+                    <li>09:00</li><li>10:00</li><li>11:00</li><li>12:00</li><li>13:00</li><li>14:00</li><li>15:00</li><li>16:00</li>
+                  </ul>
+                  <div class="grid">
+                    <div class="block is-elapsed" data-label="pink" style="top: 0.125rem; height: 5.75rem">
+                      <div class="block-title">Send Anna the revised brand deck</div>
+                      <div class="block-time">09:00 – 10:30 · Kowalska rebrand</div>
+                      <div class="elapsed-row">
+                        <span class="label">Block ended</span>
+                        <span class="chip-btn is-primary"><svg class="icon icon-xs"><use href="#i-check" /></svg>Done</span>
+                        <span class="chip-btn">Push</span>
+                        <span class="chip-btn">Shrink</span>
+                        <span class="chip-btn">Drop</span>
+                      </div>
+                    </div>
+                    <div class="block is-event" style="top: 8.125rem; height: 3.75rem">
+                      <div class="block-title">Coffee with Tomasz</div>
+                      <div class="block-time">11:00 – 12:00</div>
+                    </div>
+                    <div class="now" style="top: 13rem"></div>
+                    <div class="block" data-label="blue" style="top: 16.125rem; height: 7.75rem">
+                      <div class="block-title">Draft the Q4 proposal</div>
+                      <div class="block-time">13:00 – 15:00 · Q4 proposal</div>
+                    </div>
+                    <div class="block" data-label="green" style="top: 24.125rem; height: 3.75rem">
+                      <div class="block-title">Map out the launch plan</div>
+                      <div class="block-time">15:00 – 16:00 · Autumn launch</div>
+                    </div>
+                    <div class="block is-event" style="top: 30.125rem; height: 1.75rem; padding-block: 0.1875rem">
+                      <div class="block-title">Studio call · 16:30</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="day-side">
+                  <div class="side-card">
+                    <h5><svg class="icon icon-sm"><use href="#i-today" /></svg>Day fullness<span class="muted">5h / 7h</span></h5>
+                    <p>Two hours free after lunch. Room for one more focused block.</p>
+                  </div>
+                  <div class="side-card">
+                    <h5>Carried over<span class="muted">2</span></h5>
+                    <ul class="mini-list">
+                      <li><span class="dot" data-label="amber"></span><span>Update the client brief</span><span>Mon</span></li>
+                      <li><span class="dot"></span><span>Renew the domain</span><span>Tue</span></li>
+                    </ul>
+                    <span class="btn btn-secondary btn-sm reflow"><svg class="icon icon-sm"><use href="#i-reflow" /></svg>Reflow my day</span>
+                  </div>
+                  <div class="reason">
+                    <svg class="icon icon-sm"><use href="#i-info" /></svg>
+                    <span>Suggestions only. Moduo tells you why it would move something — it never moves it for you.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mindmap -->
+          <div class="fpanel" role="tabpanel" id="panel-mindmap" aria-labelledby="tab-mindmap" hidden>
+            <div class="fpanel-intro">
+              <h3 class="h-feature">Think in shapes. Ship in lists.</h3>
+              <div>
+                <p class="body">
+                  Sketch the messy version as a map. When a branch makes sense, turn it into tasks
+                  in one click. The map stays. The work moves. <span class="fg">Click a branch.</span>
+                </p>
+                <div class="chips">
+                  <span class="ref">Infinite canvas</span>
+                  <span class="ref">Branch → tasks</span>
+                  <span class="ref">Links to notes and people</span>
+                </div>
+              </div>
+            </div>
+            <div class="frame">
+              <div class="titlebar" aria-hidden="true">
+                <div class="lights"><span></span><span></span><span></span></div>
+                <div class="titlebar-title">Mindmap — Autumn launch</div>
+                <div></div>
+              </div>
+              <div class="mind" id="mind">
+                <svg class="edges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" id="mind-edges"></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── Links ─────────────────────────────────────────────────────── -->
+      <section class="section container" id="links" aria-labelledby="links-title">
         <div class="section-intro reveal">
           <div>
             <div class="eyebrow">How it links</div>
-            <h2 class="h-section" id="connect-title">Links happen while you work.</h2>
+            <h2 class="h-section" id="links-title">Stop logging. Start knowing.</h2>
           </div>
           <p class="lead">
-            Turn an email into a task and it already knows the person, the thread, and the
-            invoice. No fields to fill in, nothing to file, no system to keep up.
-          </p>
-        </div>
-
-        <div class="frame reveal" role="img" aria-label="An inbox with one email turned into a task. The task shows the contact and the original email it came from.">
-          <div class="split" aria-hidden="true">
-            <div class="pane">
-              <div class="pane-head">
-                <svg class="icon icon-sm"><use href="#i-mail" /></svg>
-                Inbox <span class="muted">· 3 unread</span>
-              </div>
-              <ul class="mail">
-                <li class="is-selected">
-                  <span class="avatar avatar-lg">MN</span>
-                  <span class="mail-from">Marta Nowak</span>
-                  <span class="mail-time">09:12</span>
-                  <span class="mail-subject">Logo files for print <b>— Could you send the SVGs and the…</b></span>
-                  <span class="mail-action">
-                    <svg class="icon icon-xs"><use href="#i-tasks" /></svg>
-                    Make a task
-                    <span class="kbd">T</span>
-                  </span>
-                </li>
-                <li>
-                  <span class="avatar avatar-lg">AK</span>
-                  <span class="mail-from">Anna Kowalska</span>
-                  <span class="mail-time">08:47</span>
-                  <span class="mail-subject">Re: Final invoice numbers <b>— Looks right, just the VAT line…</b></span>
-                </li>
-                <li class="is-read">
-                  <span class="avatar avatar-lg">TW</span>
-                  <span class="mail-from">Tomasz Wiśniewski</span>
-                  <span class="mail-time">Yesterday</span>
-                  <span class="mail-subject">Studio call Thursday? <b>— Works for me after four…</b></span>
-                </li>
-                <li class="is-read">
-                  <span class="avatar avatar-lg">PS</span>
-                  <span class="mail-from">Print Shop Łódź</span>
-                  <span class="mail-time">Mon</span>
-                  <span class="mail-subject">Your quote #2291 <b>— Attached is the quote for 500…</b></span>
-                </li>
-              </ul>
-            </div>
-
-            <div class="pane">
-              <div class="pane-head">
-                <svg class="icon icon-sm"><use href="#i-tasks" /></svg>
-                Task
-                <span class="right badge badge-success">Created from email</span>
-              </div>
-              <div class="task-detail">
-                <h4>
-                  <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
-                  Reply to Marta about the logo files
-                </h4>
-                <dl class="props">
-                  <dt>When</dt>
-                  <dd><svg class="icon icon-sm"><use href="#i-today" /></svg>Today</dd>
-                  <dt>Person</dt>
-                  <dd><span class="avatar">MN</span>Marta Nowak</dd>
-                  <dt>Project</dt>
-                  <dd><span class="tag" data-label="pink">Kowalska rebrand</span></dd>
-                </dl>
-                <div class="quote">
-                  <div class="quote-head">
-                    <svg class="icon icon-xs"><use href="#i-link" /></svg>
-                    Created from · Logo files for print · 09:12
-                  </div>
-                  <p>
-                    Hi — could you send the SVGs and the final colour values? The print shop needs
-                    them by Friday so we can hit the launch date.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <p class="caption reveal">
-          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-link" /></svg>
-          One keystroke. The person, the thread, and the project come with it.
-        </p>
-      </section>
-
-      <!-- ─── Day ───────────────────────────────────────────────────────── -->
-      <section class="section container" id="day" aria-labelledby="day-title">
-        <div class="section-intro reveal">
-          <div>
-            <div class="eyebrow">Your day</div>
-            <h2 class="h-section" id="day-title">A day that bends, not breaks.</h2>
-          </div>
-          <p class="lead">
-            Drag tasks into time. When a block ends, finish it, push it, shrink it, or drop it —
-            then reflow the rest of the day in one tap. Falling behind is normal. Guilt isn’t part
-            of the plan.
-          </p>
-        </div>
-
-        <div class="frame reveal" role="img" aria-label="A calendar day. A time block has just ended and offers Done, Push, Shrink, and Drop. A side panel offers to reflow the day.">
-          <div class="titlebar" aria-hidden="true">
-            <div class="lights"><span></span><span></span><span></span></div>
-            <div class="titlebar-title">Calendar — Wednesday</div>
-            <div></div>
-          </div>
-          <div class="day" aria-hidden="true">
-            <div class="cal">
-              <ul class="hours">
-                <li>09:00</li>
-                <li>10:00</li>
-                <li>11:00</li>
-                <li>12:00</li>
-                <li>13:00</li>
-                <li>14:00</li>
-                <li>15:00</li>
-                <li>16:00</li>
-              </ul>
-              <div class="grid">
-                <div class="block is-elapsed" data-label="pink" style="top: 0.125rem; height: 5.75rem">
-                  <div class="block-title">Send the revised invoice</div>
-                  <div class="block-time">09:00 – 10:30 · Kowalska rebrand</div>
-                  <div class="elapsed-row">
-                    <span class="label">Block ended</span>
-                    <span class="chip-btn is-primary"><svg class="icon icon-xs"><use href="#i-check" /></svg>Done</span>
-                    <span class="chip-btn">Push</span>
-                    <span class="chip-btn">Shrink</span>
-                    <span class="chip-btn">Drop</span>
-                  </div>
-                </div>
-                <div class="block is-event" style="top: 8.125rem; height: 3.75rem">
-                  <div class="block-title">Coffee with Tomasz</div>
-                  <div class="block-time">11:00 – 12:00</div>
-                </div>
-                <div class="now" style="top: 13rem"></div>
-                <div class="block" data-label="blue" style="top: 16.125rem; height: 7.75rem">
-                  <div class="block-title">Draft the Q4 proposal</div>
-                  <div class="block-time">13:00 – 15:00 · Q4 proposal</div>
-                </div>
-                <div class="block" data-label="green" style="top: 24.125rem; height: 3.75rem">
-                  <div class="block-title">Review August expenses</div>
-                  <div class="block-time">15:00 – 16:00</div>
-                </div>
-                <div class="block is-event" style="top: 30.125rem; height: 1.75rem; padding-block: 0.1875rem">
-                  <div class="block-title">Studio call · 16:30</div>
-                </div>
-              </div>
-            </div>
-            <div class="day-side">
-              <div class="side-card">
-                <h5>
-                  <svg class="icon icon-sm"><use href="#i-today" /></svg>
-                  Day fullness
-                  <span class="muted">5h / 7h</span>
-                </h5>
-                <p>Two hours free after lunch. Room for one more focused block.</p>
-              </div>
-              <div class="side-card">
-                <h5>
-                  Carried over
-                  <span class="muted">2</span>
-                </h5>
-                <ul class="mini-list">
-                  <li><span class="dot" data-label="amber"></span><span>Update the client brief</span><span>Mon</span></li>
-                  <li><span class="dot"></span><span>Renew the domain</span><span>Tue</span></li>
-                </ul>
-                <span class="btn btn-secondary btn-sm reflow">
-                  <svg class="icon icon-sm"><use href="#i-reflow" /></svg>
-                  Reflow my day
-                </span>
-              </div>
-              <div class="reason">
-                <svg class="icon icon-sm"><use href="#i-info" /></svg>
-                <span>Suggestions only. Moduo tells you why it would move something — it never moves it for you.</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ─── People & money ────────────────────────────────────────────── -->
-      <section class="section container" id="people" aria-labelledby="people-title">
-        <div class="section-intro reveal">
-          <div>
-            <div class="eyebrow">People &amp; money</div>
-            <h2 class="h-section" id="people-title">Every person, with everything attached.</h2>
-          </div>
-          <p class="lead">
-            Open a contact and see every email, task, note, and invoice — gathered on its own,
-            with zero logging. Close the month with one honest number.
+            Open a person and see every email, task, note, meeting, and map that touches them —
+            gathered on its own. Links are a side effect of working. Never a chore.
           </p>
         </div>
 
@@ -2330,17 +3717,17 @@
               <li>
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg>
                 <span class="rollup-kind">Emails<span>12</span></span>
-                <span class="rollup-item"><span class="t">Re: Final invoice numbers</span><span class="w">08:47</span></span>
+                <span class="rollup-item"><span class="t">Re: Final deck notes</span><span class="w">08:47</span></span>
               </li>
               <li>
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>
                 <span class="rollup-kind">Tasks<span>3</span></span>
-                <span class="rollup-item"><span class="t">Send the revised invoice</span><span class="w">Today</span></span>
+                <span class="rollup-item"><span class="t">Send Anna the revised brand deck</span><span class="w">Today</span></span>
               </li>
               <li>
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>
                 <span class="rollup-kind">Notes<span>2</span></span>
-                <span class="rollup-item"><span class="t">Rebrand scope, v2</span><span class="w">Sep 22</span></span>
+                <span class="rollup-item"><span class="t">Kickoff — Kowalska rebrand</span><span class="w">Today</span></span>
               </li>
               <li>
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>
@@ -2348,27 +3735,103 @@
                 <span class="rollup-item"><span class="t">Launch review</span><span class="w">Fri 10:00</span></span>
               </li>
               <li>
-                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-invoice" /></svg>
-                <span class="rollup-kind">Invoices<span>4</span></span>
-                <span class="rollup-item"><span class="t">#0142 · €2,400</span><span class="badge badge-warning">Unpaid</span></span>
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-mindmap" /></svg>
+                <span class="rollup-kind">Maps<span>1</span></span>
+                <span class="rollup-item"><span class="t">Rebrand moodmap</span><span class="w">Sep 20</span></span>
               </li>
             </ul>
             <p class="panel-foot">Nothing here was logged by hand. It’s just <b>everything that already mentions Anna</b>.</p>
           </article>
 
-          <article class="panel reveal" style="--d: 90ms" aria-label="Monthly finance example">
-            <div class="money-head">August, in one number</div>
-            <div class="money-big">€8,420</div>
-            <div class="money-delta">came in. Here’s where it went.</div>
-            <ul class="flow">
-              <li><span>Contractors</span><span class="amt">€1,850</span><span class="bar"><i style="--w: 22%"></i></span></li>
-              <li><span>Taxes set aside</span><span class="amt">€2,100</span><span class="bar"><i style="--w: 25%"></i></span></li>
-              <li><span>Studio rent</span><span class="amt">€1,200</span><span class="bar"><i style="--w: 14%"></i></span></li>
-              <li><span>Software</span><span class="amt">€312</span><span class="bar"><i style="--w: 4%"></i></span></li>
-              <li class="kept"><span>You kept</span><span class="amt">€2,958</span><span class="bar"><i style="--w: 35%"></i></span></li>
-            </ul>
-            <p class="panel-foot">From a CSV you already have. No bank login, no budget to police.</p>
+          <article class="panel reveal" style="--d: 90ms" aria-label="How one email links across modules">
+            <div class="money-head" style="margin-bottom: 1.5rem">One email, four modules, zero copy-paste</div>
+            <ol class="chain">
+              <li>
+                <span class="chain-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg></span>
+                <div>
+                  <div class="chain-kind">EMAIL</div>
+                  <div class="chain-title">Logo files for print</div>
+                  <div class="chain-verb"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-link" /></svg>became a task</div>
+                </div>
+              </li>
+              <li>
+                <span class="chain-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg></span>
+                <div>
+                  <div class="chain-kind">TASK</div>
+                  <div class="chain-title">Reply to Marta about the logo files</div>
+                  <div class="chain-verb"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-link" /></svg>got a slot</div>
+                </div>
+              </li>
+              <li>
+                <span class="chain-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg></span>
+                <div>
+                  <div class="chain-kind">CALENDAR</div>
+                  <div class="chain-title">Thursday, 10:00 – 10:30</div>
+                  <div class="chain-verb"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-link" /></svg>pulls in</div>
+                </div>
+              </li>
+              <li>
+                <span class="chain-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg></span>
+                <div>
+                  <div class="chain-kind">NOTE</div>
+                  <div class="chain-title">Brand colours, final</div>
+                </div>
+              </li>
+            </ol>
+            <p class="panel-foot">No graph to learn. Just <b>familiar things that know about each other</b>.</p>
           </article>
+        </div>
+      </section>
+
+      <!-- ─── Make it yours ─────────────────────────────────────────────── -->
+      <section class="section container" id="yours" aria-labelledby="yours-title">
+        <div class="section-intro reveal">
+          <div>
+            <div class="eyebrow">Make it yours</div>
+            <h2 class="h-section" id="yours-title">Turn off what you don’t use. Seriously.</h2>
+          </div>
+          <p class="lead">
+            Every workspace picks its own modules. The studio gets email and calendar; the side
+            project gets notes and a mind map. Switch one off and it’s gone — from the sidebar, the
+            search, the home screen. <span class="fg">Try it.</span>
+          </p>
+        </div>
+
+        <div class="frame reveal">
+          <div class="titlebar">
+            <div class="lights" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div class="titlebar-title" id="own-title">Home — North Studio</div>
+            <div></div>
+          </div>
+          <div class="own">
+            <div class="own-controls">
+              <div>
+                <div class="ctrl-label" id="ws-label">WORKSPACE</div>
+                <div class="seg" role="group" aria-labelledby="ws-label" id="ws-seg">
+                  <button type="button" data-ws="studio" aria-pressed="true">Studio</button>
+                  <button type="button" data-ws="personal" aria-pressed="false">Personal</button>
+                  <button type="button" data-ws="side" aria-pressed="false">Side gig</button>
+                </div>
+              </div>
+              <div>
+                <div class="ctrl-label" id="mods-label">MODULES IN THIS WORKSPACE</div>
+                <ul class="mods" aria-labelledby="mods-label" id="mods"></ul>
+              </div>
+              <p class="own-hint">Remove a widget with ×. Add one with +. Each workspace remembers its own setup.</p>
+            </div>
+            <div class="own-preview">
+              <aside class="mini-rail" id="mini-rail" aria-label="Sidebar preview"></aside>
+              <div class="board-wrap">
+                <div class="board-head">
+                  <h3>Home</h3>
+                  <span class="muted" id="board-count"></span>
+                  <button class="btn btn-outline btn-sm" type="button" id="board-reset">Reset</button>
+                </div>
+                <div class="board" id="board" aria-live="polite"></div>
+                <div class="gallery" id="gallery" hidden role="dialog" aria-label="Add a widget"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2377,14 +3840,14 @@
         <div class="dayone">
           <div class="reveal">
             <div class="eyebrow">Day one</div>
-            <h2 class="h-section" id="dayone-title">Works the day you sign up.</h2>
+            <h2 class="h-section" id="dayone-title">No setup. No templates. No lost weekend.</h2>
             <p class="lead">
-              There’s nothing to design first. A bare title is a complete task. Dates, people, and
-              links come later — if you want them.
+              Other tools hand you a blank canvas and call it freedom. Moduo opens ready to use. A
+              bare title is a complete task — dates, people, and links come later, if you want them.
             </p>
             <ul class="truths">
-              <li><svg class="icon" aria-hidden="true"><use href="#i-grid-off" /></svg>No databases to build</li>
-              <li><svg class="icon" aria-hidden="true"><use href="#i-dashboard" /></svg>A dashboard that’s useful on first open</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-grid-off" /></svg>No databases to build first</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-home" /></svg>A home screen that’s useful on first open</li>
               <li><svg class="icon" aria-hidden="true"><use href="#i-feather" /></svg>Quiet by default — you turn things up</li>
             </ul>
           </div>
@@ -2403,61 +3866,55 @@
             </div>
             <div class="saved" id="saved" aria-hidden="true">
               <span class="check"></span>
-              <span class="row-title" id="saved-title">Call Marta about the print deadline</span>
+              <span class="row-title">Call Marta about the print deadline</span>
               <span class="row-meta"><svg class="icon icon-xs"><use href="#i-inbox" /></svg>Inbox</span>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ─── Principles ────────────────────────────────────────────────── -->
-      <section class="section container" id="principles" aria-labelledby="principles-title">
+      <!-- ─── Refuse ────────────────────────────────────────────────────── -->
+      <section class="section container" id="refuse" aria-labelledby="refuse-title">
         <div class="section-intro reveal">
           <div>
-            <div class="eyebrow">Principles</div>
-            <h2 class="h-section" id="principles-title">Built to stay out of the way.</h2>
+            <div class="eyebrow">On purpose</div>
+            <h2 class="h-section" id="refuse-title">What we refuse to build.</h2>
           </div>
           <p class="lead">
-            An all-in-one only works if it’s light. These are the promises that keep it that way.
+            Every all-in-one dies the same way: it keeps adding things. Here’s our list of things we
+            won’t.
           </p>
         </div>
-        <ul class="principles">
-          <li class="reveal">
-            <h3><svg class="icon" aria-hidden="true"><use href="#i-bolt" /></svg>Instant</h3>
-            <p class="body">
-              A native app, not a heavy browser wrapper. Opening a task, searching, and switching
-              views should feel immediate — even in a big workspace.
-            </p>
-          </li>
-          <li class="reveal" style="--d: 60ms">
-            <h3><svg class="icon" aria-hidden="true"><use href="#i-scale" /></svg>Fair</h3>
-            <p class="body">
-              Pay for the people you actually have. No seat minimums. A free tier students can
-              genuinely use.
-            </p>
-          </li>
-          <li class="reveal">
-            <h3><svg class="icon" aria-hidden="true"><use href="#i-export" /></svg>Yours</h3>
-            <p class="body">
-              Every note, task, contact, and number exports cleanly. Your data is yours — even if
-              you leave.
-            </p>
-          </li>
-          <li class="reveal" style="--d: 60ms">
-            <h3><span class="ai-disc" aria-hidden="true"></span>Bring your own AI</h3>
-            <p class="body">
-              No assistant stapled onto every screen. Connect the AI you already use over MCP.
-              Moduo never trains on your workspace.
-            </p>
-          </li>
+        <ul class="refuse">
+          <li class="reveal"><span class="no">Databases you design before you work</span><span class="why">You came here to do the work, <b>not to model your life in tables</b>.</span></li>
+          <li class="reveal"><span class="no">An AI button on every screen</span><span class="why">Bring your own model over MCP. <b>We never train on your workspace.</b></span></li>
+          <li class="reveal"><span class="no">A scheduler that rearranges your day behind your back</span><span class="why">We suggest, with a reason. <b>You decide.</b></span></li>
+          <li class="reveal"><span class="no">Yet another chat app</span><span class="why">Keep Slack. <b>We keep the context.</b></span></li>
+          <li class="reveal"><span class="no">Seat minimums</span><span class="why">Two people pay for <b>two people</b>. Students get a free tier that’s actually usable.</span></li>
+          <li class="reveal"><span class="no">A wall of red overdue tasks</span><span class="why">Falling behind is normal. <b>Shame isn’t a feature.</b></span></li>
         </ul>
+
+        <div class="promises">
+          <div class="reveal">
+            <h3><svg class="icon" aria-hidden="true"><use href="#i-bolt" /></svg>Instant</h3>
+            <p>A native app, not a browser in a trench coat. Tasks open, search answers, and views switch without the wait.</p>
+          </div>
+          <div class="reveal" style="--d: 60ms">
+            <h3><svg class="icon" aria-hidden="true"><use href="#i-export" /></svg>Yours</h3>
+            <p>Every note, task, contact, and map exports cleanly. We’d rather you stay because it’s good — not because you’re stuck.</p>
+          </div>
+          <div class="reveal" style="--d: 120ms">
+            <h3><span class="ai-disc" aria-hidden="true"></span>Private</h3>
+            <p>No AI confetti. Connect the assistant you already trust. Your work never trains anyone’s model.</p>
+          </div>
+        </div>
       </section>
 
       <!-- ─── Close ─────────────────────────────────────────────────────── -->
       <section class="container close reveal" aria-labelledby="close-title">
         <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
-        <h2 class="h-section" id="close-title">Stop stitching five apps together.</h2>
-        <p class="lead">Tasks, notes, calendar, email, contacts, and finance — in one window that already knows how they connect.</p>
+        <h2 class="h-section" id="close-title">One window for the whole working life.</h2>
+        <p class="lead">Start with one module. Turn on the rest when you need them. Leave whenever you want — your data comes with you.</p>
         <div class="hero-cta">
           <a class="btn btn-primary btn-lg" href="https://app.moduo.app/auth">
             Get started
@@ -2475,8 +3932,8 @@
         </a>
         <span>© 2026 Moduo. Your data exports with you.</span>
         <nav class="footer-links" aria-label="Footer">
-          <a href="#connect">How it links</a>
-          <a href="#principles">Principles</a>
+          <a href="#features">Features</a>
+          <a href="#yours">Make it yours</a>
           <a href="https://app.moduo.app/auth">Sign in</a>
         </nav>
       </div>
@@ -2487,9 +3944,22 @@
         var doc = document.documentElement;
         doc.classList.add("js");
         var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var $ = function (id) {
+          return document.getElementById(id);
+        };
+        var I = function (id, cls) {
+          return '<svg class="icon ' + (cls || "icon-sm") + '" aria-hidden="true"><use href="#' + id + '"/></svg>';
+        };
+        var CHECK = '<span class="check"><svg viewBox="0 0 24 24"><use href="#i-check"/></svg></span>';
+        var pop = function (check) {
+          if (reduce) return;
+          check.classList.remove("check-pop");
+          void check.offsetWidth;
+          check.classList.add("check-pop");
+        };
 
-        // Nav hairline once the page has scrolled.
-        var nav = document.getElementById("nav");
+        // Nav hairline once scrolled.
+        var nav = $("nav");
         var onScroll = function () {
           nav.classList.toggle("is-scrolled", window.scrollY > 8);
         };
@@ -2497,32 +3967,38 @@
         window.addEventListener("scroll", onScroll, { passive: true });
 
         // Reveal on scroll.
-        var reveals = document.querySelectorAll(".reveal");
-        if ("IntersectionObserver" in window) {
-          var io = new IntersectionObserver(
-            function (entries) {
-              entries.forEach(function (e) {
-                if (e.isIntersecting) {
-                  e.target.classList.add("is-in");
-                  io.unobserve(e.target);
-                }
-              });
-            },
-            { rootMargin: "0px 0px -12% 0px", threshold: 0.08 }
-          );
-          reveals.forEach(function (el) {
+        var observeOnce = function (els, cb, opts) {
+          if (!("IntersectionObserver" in window)) {
+            els.forEach(cb);
+            return;
+          }
+          var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+              if (e.isIntersecting) {
+                cb(e.target);
+                io.unobserve(e.target);
+              }
+            });
+          }, opts || { rootMargin: "0px 0px -12% 0px", threshold: 0.08 });
+          els.forEach(function (el) {
             io.observe(el);
           });
-        } else {
-          reveals.forEach(function (el) {
-            el.classList.add("is-in");
-          });
-        }
-
-        // Hero: the right rail follows the selected task.
-        var I = function (id, cls) {
-          return '<svg class="icon ' + (cls || "icon-sm") + '"><use href="#' + id + '"/></svg>';
         };
+        observeOnce(document.querySelectorAll(".reveal"), function (el) {
+          el.classList.add("is-in");
+        });
+
+        // Any checkbox row toggles done.
+        document.addEventListener("click", function (ev) {
+          var row = ev.target.closest(".row");
+          if (!row || row.closest(".frame-hero")) return;
+          var check = row.querySelector(".check");
+          if (!check) return;
+          row.classList.toggle("is-done");
+          if (row.classList.contains("is-done")) pop(check);
+        });
+
+        // ── Hero: right rail follows the selected task ──
         var card = function (icon, title, snip, extra) {
           return (
             '<div class="link-card">' + I(icon) +
@@ -2542,104 +4018,463 @@
           );
         };
         var tasks = {
-          invoice: {
-            title: "Send the revised invoice",
-            sub: "Today · Kowalska rebrand",
-            count: "4 items",
+          deck: {
+            title: "Send Anna the revised brand deck", sub: "Today · Kowalska rebrand", count: "4 items",
             body:
               group("Person", person("AK", "Anna Kowalska", "Kowalska &amp; Co.")) +
-              group("Came from", card("i-mail", "Re: Final invoice numbers", "Looks right, just the VAT line needs the new rate…")) +
-              group("Money", card("i-invoice", "Invoice #0142 · €2,400", "Due Friday", '<span class="badge badge-warning">Unpaid</span>')) +
+              group("Came from", card("i-mail", "Re: Final deck notes", "Love it — just swap the hero photo and we’re done…")) +
+              group("Note", card("i-notes", "Kickoff — Kowalska rebrand", "Anna wants the new identity live before launch")) +
               group("On the calendar", card("i-calendar", "Fri 10:00 · Launch review", null)),
           },
           logo: {
-            title: "Reply to Marta about the logo files",
-            sub: "Today · Kowalska rebrand",
-            count: "3 items",
+            title: "Reply to Marta about the logo files", sub: "Today · Kowalska rebrand", count: "3 items",
             body:
               group("Person", person("MN", "Marta Nowak", "Designer · Kowalska &amp; Co.")) +
               group("Came from", card("i-mail", "Logo files for print", "Could you send the SVGs and the final colour values?")) +
-              group("Related", card("i-notes", "Brand colours, final", "Pantone and hex values, signed off Sep 18")),
+              group("Related", card("i-notes", "Brand colours, final", "Signed off Sep 18")),
           },
           proposal: {
-            title: "Draft the Q4 proposal",
-            sub: "13:00–15:00 · Q4 proposal",
-            count: "3 items",
+            title: "Draft the Q4 proposal", sub: "13:00–15:00 · Q4 proposal", count: "3 items",
             body:
               group("On the calendar", card("i-calendar", "Today 13:00 – 15:00", "Focus block")) +
-              group("Notes", card("i-notes", "Q4 proposal — outline", "Scope, timeline, three pricing options…")) +
+              group("Note", card("i-notes", "Q4 proposal — outline", "Scope, timeline, three pricing options…")) +
               group("Person", person("TW", "Tomasz Wiśniewski", "Partner · Wiśniewski Media")),
           },
-          expenses: {
-            title: "Review August expenses",
-            sub: "Today · Studio ops",
-            count: "2 items",
+          launch: {
+            title: "Map out the launch plan", sub: "15:00 · Autumn launch", count: "3 items",
             body:
-              group("Money", card("i-finance", "August · 14 transactions", "€5,462 out · €8,420 in")) +
-              group("Came from", card("i-mail", "Your August statement", "The CSV is attached to this email.")),
+              group("Map", card("i-mindmap", "Autumn launch", "6 branches · 19 ideas")) +
+              group("Note", card("i-notes", "Launch brainstorm", "Everything we said on the whiteboard, typed up")) +
+              group("Person", person("TW", "Tomasz Wiśniewski", "Partner · Wiśniewski Media")),
           },
           call: {
-            title: "Prep notes for the studio call",
-            sub: "Today · 16:30",
-            count: "3 items",
+            title: "Prep notes for the studio call", sub: "Today · 16:30", count: "3 items",
             body:
-              group("Notes", card("i-notes", "Studio call — agenda", "Hiring, the Łódź print run, Q4 capacity")) +
+              group("Note", card("i-notes", "Studio call — agenda", "Hiring, the Łódź print run, Q4 capacity")) +
               group("On the calendar", card("i-calendar", "Today 16:30 · Studio call", null)) +
               group("Person", person("TW", "Tomasz Wiśniewski", "Partner · Wiśniewski Media")),
           },
         };
-
-        var rail = document.getElementById("rail-body");
-        var railCount = document.getElementById("rail-count");
-        var render = function (key) {
+        var rail = $("rail-body");
+        var renderRail = function (key) {
           var t = tasks[key];
-          rail.innerHTML =
-            '<div><div class="rail-title">' + t.title + '</div><div class="rail-sub">' + t.sub + "</div></div>" +
-            t.body;
-          railCount.textContent = t.count;
+          rail.innerHTML = '<div><div class="rail-title">' + t.title + '</div><div class="rail-sub">' + t.sub + "</div></div>" + t.body;
+          $("rail-count").textContent = t.count;
         };
-        render("invoice");
-
-        var rows = document.querySelectorAll(".row[data-task]");
+        renderRail("deck");
+        var heroRows = document.querySelectorAll(".frame-hero .row");
         var swapTimer;
-        rows.forEach(function (row) {
+        heroRows.forEach(function (row) {
           row.addEventListener("click", function (ev) {
             var check = ev.target.closest(".check");
-            if (check) {
+            if (check || !row.hasAttribute("data-task")) {
+              if (!check) return;
               row.classList.toggle("is-done");
-              if (!reduce && row.classList.contains("is-done")) {
-                check.classList.remove("check-pop");
-                void check.offsetWidth;
-                check.classList.add("check-pop");
-              }
+              if (row.classList.contains("is-done")) pop(check);
               return;
             }
             if (row.classList.contains("is-selected")) return;
-            rows.forEach(function (r) {
+            heroRows.forEach(function (r) {
               r.classList.remove("is-selected");
             });
             row.classList.add("is-selected");
             clearTimeout(swapTimer);
             rail.classList.add("is-swapping");
-            swapTimer = setTimeout(
-              function () {
-                render(row.getAttribute("data-task"));
-                rail.classList.remove("is-swapping");
-              },
-              reduce ? 0 : 140
-            );
+            swapTimer = setTimeout(function () {
+              renderRail(row.getAttribute("data-task"));
+              rail.classList.remove("is-swapping");
+            }, reduce ? 0 : 140);
           });
         });
 
-        // Day one: type a bare title, save it to Inbox.
-        var typed = document.getElementById("typed");
-        var saved = document.getElementById("saved");
+        // ── Stack tax: close five tabs ──
+        var taxStage = $("tax-stage");
+        var taxBtn = $("tax-toggle");
+        var setTax = function (collapsed) {
+          taxStage.classList.toggle("is-collapsed", collapsed);
+          var n = collapsed ? "1" : "6";
+          $("tally-apps").textContent = n;
+          $("tally-logins").textContent = n;
+          $("tally-bills").textContent = n;
+          taxBtn.textContent = collapsed ? "Bring the chaos back" : "Close five tabs";
+        };
+        taxBtn.addEventListener("click", function () {
+          setTax(!taxStage.classList.contains("is-collapsed"));
+        });
+        observeOnce([taxStage], function () {
+          setTimeout(function () {
+            setTax(true);
+          }, reduce ? 0 : 1600);
+        }, { threshold: 0.6 });
+
+        // ── Feature tabs ──
+        var ftabs = Array.prototype.slice.call(document.querySelectorAll(".ftab"));
+        var selectTab = function (tab, focus) {
+          ftabs.forEach(function (t) {
+            var on = t === tab;
+            t.setAttribute("aria-selected", on ? "true" : "false");
+            t.tabIndex = on ? 0 : -1;
+            var panel = $(t.getAttribute("aria-controls"));
+            panel.hidden = !on;
+            if (on) {
+              panel.classList.remove("is-entering");
+              void panel.offsetWidth;
+              if (!reduce) panel.classList.add("is-entering");
+              if (panel.id === "panel-mindmap" && activeBranch) placePop(activeBranch);
+            }
+          });
+          if (focus) tab.focus();
+        };
+        ftabs.forEach(function (tab, i) {
+          tab.addEventListener("click", function () {
+            selectTab(tab);
+          });
+          tab.addEventListener("keydown", function (e) {
+            var d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+            if (!d) return;
+            e.preventDefault();
+            selectTab(ftabs[(i + d + ftabs.length) % ftabs.length], true);
+          });
+        });
+
+        // Focus timer ticks down.
+        var secs = 38 * 60 + 12;
+        var total = 120 * 60;
+        setInterval(function () {
+          if (secs <= 0) return;
+          secs--;
+          var m = Math.floor(secs / 60), s = secs % 60;
+          $("focus-timer").textContent = m + ":" + (s < 10 ? "0" : "") + s;
+          $("focus-progress").style.width = (100 - (secs / total) * 100).toFixed(2) + "%";
+        }, 1000);
+
+        // ── Mindmap ──
+        var mind = $("mind");
+        var edges = $("mind-edges");
+        var root = { x: 50, y: 48 };
+        var branches = [
+          { id: "site", label: "Website", x: 17, y: 20, kids: ["Landing copy", "New photos", "Launch banner", "Press page"] },
+          { id: "press", label: "Press kit", x: 11, y: 50, kids: ["Founder bio", "Product shots", "Fact sheet"] },
+          { id: "print", label: "Print run", x: 18, y: 80, kids: ["Posters", "Postcards"] },
+          { id: "event", label: "Launch event", x: 82, y: 22, kids: ["Book the venue", "Guest list", "Catering quote"] },
+          { id: "social", label: "Socials", x: 88, y: 52, kids: ["Teaser post", "Launch reel", "Carousel", "Stories", "Thank-you post"] },
+          { id: "partners", label: "Partners", x: 82, y: 81, kids: ["Intro to Wiśniewski Media", "Co-post with the studio"] },
+        ];
+        var made = {};
+        var paths = "";
+        branches.forEach(function (b) {
+          var mx = (root.x + b.x) / 2;
+          paths += '<path data-edge="' + b.id + '" d="M' + root.x + " " + root.y + " C " + mx + " " + root.y + ", " + mx + " " + b.y + ", " + b.x + " " + b.y + '"/>';
+        });
+        edges.innerHTML = paths;
+        var rootEl = document.createElement("div");
+        rootEl.className = "node is-root";
+        rootEl.style.left = root.x + "%";
+        rootEl.style.top = root.y + "%";
+        rootEl.textContent = "Autumn launch";
+        mind.appendChild(rootEl);
+        var popEl = document.createElement("div");
+        popEl.className = "node-pop";
+        mind.appendChild(popEl);
+        var nodeEls = {};
+        branches.forEach(function (b) {
+          var el = document.createElement("button");
+          el.type = "button";
+          el.className = "node";
+          el.style.left = b.x + "%";
+          el.style.top = b.y + "%";
+          el.innerHTML = b.label + ' <span class="count">' + b.kids.length + "</span>";
+          el.setAttribute("aria-label", b.label + ", " + b.kids.length + " ideas");
+          el.addEventListener("click", function () {
+            selectBranch(b);
+          });
+          mind.appendChild(el);
+          nodeEls[b.id] = el;
+        });
+        var placePop = function (b) {
+          var m = mind.getBoundingClientRect();
+          var n = nodeEls[b.id].getBoundingClientRect();
+          var pw = popEl.offsetWidth, ph = popEl.offsetHeight, gap = 12;
+          var left, top;
+          if (m.width >= 640) {
+            left = b.x < 50 ? n.right - m.left + gap : n.left - m.left - gap - pw;
+            top = n.top - m.top + n.height / 2 - ph / 2;
+          } else {
+            left = n.left - m.left + n.width / 2 - pw / 2;
+            top = b.y > 50 ? n.top - m.top - gap - ph : n.bottom - m.top + gap;
+          }
+          popEl.style.left = Math.min(Math.max(left, 8), m.width - pw - 8) + "px";
+          popEl.style.top = Math.min(Math.max(top, 8), m.height - ph - 8) + "px";
+        };
+        var renderPop = function (b) {
+          var done = made[b.id];
+          popEl.innerHTML =
+            "<div>" + b.label + " · " + b.kids.length + " ideas</div><ul>" +
+            b.kids.map(function (k) {
+              return "<li>" + (done ? I("i-tasks", "icon-xs") : '<span class="dot"></span>') + k + "</li>";
+            }).join("") +
+            '</ul><button type="button" class="chip-btn ' + (done ? "is-done" : "is-primary") + '">' +
+            (done ? I("i-check", "icon-xs") + b.kids.length + " tasks in Today" : "Turn into " + b.kids.length + " tasks") +
+            "</button>";
+          popEl.querySelector("button").addEventListener("click", function () {
+            made[b.id] = !made[b.id];
+            renderPop(b);
+          });
+          placePop(b);
+          activeBranch = b;
+        };
+        var activeBranch = null;
+        window.addEventListener("resize", function () {
+          if (activeBranch && !mind.closest("[hidden]")) placePop(activeBranch);
+        });
+        var selectBranch = function (b) {
+          Object.keys(nodeEls).forEach(function (id) {
+            nodeEls[id].classList.toggle("is-selected", id === b.id);
+            nodeEls[id].setAttribute("aria-pressed", id === b.id ? "true" : "false");
+          });
+          edges.querySelectorAll("path").forEach(function (p) {
+            p.classList.toggle("is-hot", p.getAttribute("data-edge") === b.id);
+          });
+          popEl.classList.add("is-swapping");
+          setTimeout(function () {
+            renderPop(b);
+            popEl.classList.remove("is-swapping");
+          }, reduce ? 0 : 120);
+        };
+        selectBranch(branches[3]);
+
+        // ── Make it yours: modules + widget board ──
+        var MODULES = [
+          { id: "tasks", name: "Tasks", icon: "i-tasks", desc: "Plan, execute, focus" },
+          { id: "notes", name: "Notes", icon: "i-notes", desc: "Docs that make tasks" },
+          { id: "email", name: "Email", icon: "i-mail", desc: "Inbox, threads, email → task" },
+          { id: "calendar", name: "Calendar", icon: "i-calendar", desc: "Time-blocking, your day" },
+          { id: "mindmap", name: "Mindmap", icon: "i-mindmap", desc: "Canvas for messy ideas" },
+          { id: "contacts", name: "Contacts", icon: "i-contact", desc: "People, with context" },
+        ];
+        var now = new Date();
+        var hhmm = function (d) {
+          return (d.getHours() < 10 ? "0" : "") + d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+        };
+        var WIDGETS = {
+          today: { name: "Today", mod: "tasks", size: "s-2x2", icon: "i-today",
+            html: function () {
+              return '<ul class="rows">' +
+                ['Send Anna the revised brand deck', 'Draft the Q4 proposal', 'Prep notes for the studio call', 'Renew the domain']
+                  .map(function (t, i) { return '<li class="row' + (i === 0 ? " is-done" : "") + '">' + CHECK + '<span class="row-title">' + t + "</span></li>"; }).join("") +
+                "</ul>";
+            } },
+          capture: { name: "Quick capture", mod: "tasks", size: "s-2x1", icon: "i-plus",
+            html: function () { return '<div class="w-input">What’s on your mind?<span class="kbd">⌘ ⇧ Space</span></div>'; } },
+          focus: { name: "Focus", mod: "tasks", size: "", icon: "i-bolt",
+            html: function () { return '<div class="w-body"><div class="w-big">25:00</div><div class="w-sub">Next: Q4 proposal</div></div>'; } },
+          notes: { name: "Recent notes", mod: "notes", size: "s-2x1", icon: "i-notes",
+            html: function () { return '<div class="w-body"><div class="w-line">' + I("i-notes", "icon-xs") + '<span>Kickoff — Kowalska rebrand</span><span class="when">2m</span></div><div class="w-line">' + I("i-notes", "icon-xs") + '<span>Launch brainstorm</span><span class="when">Sep 14</span></div></div>'; } },
+          pinned: { name: "Pinned note", mod: "notes", size: "s-2x1", icon: "i-notes",
+            html: function () { return '<div class="w-body"><div class="w-line"><span>Brand colours, final</span></div><div class="w-sub">Ink #0B0B0C · Paper #F4F1EA · Signal #E2553A</div></div>'; } },
+          unread: { name: "Unread", mod: "email", size: "", icon: "i-mail",
+            html: function () { return '<div class="w-body"><div class="w-big">12</div><div class="w-sub">3 need a reply</div></div>'; } },
+          waiting: { name: "Waiting on", mod: "email", size: "s-2x1", icon: "i-mail",
+            html: function () { return '<div class="w-body"><div class="w-line"><span class="avatar">AK</span><span>Final deck notes</span><span class="when">2d</span></div><div class="w-line"><span class="avatar">PS</span><span>Poster proof</span><span class="when">Mon</span></div></div>'; } },
+          next: { name: "Next up", mod: "calendar", size: "s-2x1", icon: "i-calendar",
+            html: function () { return '<div class="w-body"><div class="w-line" style="font-weight:500"><span>Studio call</span></div><div class="w-sub">16:30 · with Tomasz · notes attached</div></div>'; } },
+          week: { name: "This week", mod: "calendar", size: "s-2x1", icon: "i-calendar",
+            html: function () { return '<div class="w-body"><div class="w-week"><span style="height:60%"></span><span style="height:85%"></span><span class="is-today" style="height:70%"></span><span style="height:40%"></span><span style="height:55%"></span><span style="height:15%"></span><span style="height:10%"></span></div><div class="w-sub" style="margin-top:0.375rem">22h planned · Thu is lightest</div></div>'; } },
+          map: { name: "Autumn launch", mod: "mindmap", size: "s-2x2", icon: "i-mindmap",
+            html: function () {
+              return '<div class="w-map"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M50 50 C 35 50, 35 22, 20 22"/><path d="M50 50 C 35 50, 35 78, 22 78"/><path d="M50 50 C 65 50, 65 20, 80 20"/><path d="M50 50 C 65 50, 65 80, 78 80"/></svg>' +
+                '<i class="root" style="left:50%;top:50%">Launch</i><i style="left:20%;top:22%">Website</i><i style="left:22%;top:78%">Print</i><i style="left:80%;top:20%">Event</i><i style="left:78%;top:80%">Socials</i></div>';
+            } },
+          reconnect: { name: "Reconnect", mod: "contacts", size: "s-2x1", icon: "i-contact",
+            html: function () { return '<div class="w-body"><div class="w-line"><span class="avatar">TW</span><span>Tomasz Wiśniewski</span><span class="when">3 wks</span></div><div class="w-line"><span class="avatar">MN</span><span>Marta Nowak</span><span class="when">9 days</span></div></div>'; } },
+          clock: { name: "Clock", mod: null, size: "", icon: "i-today",
+            html: function () { return '<div class="w-body"><div class="w-big" data-clock>' + hhmm(new Date()) + '</div><div class="w-sub">Warsaw</div></div>'; } },
+        };
+        var PRESETS = {
+          studio: { name: "North Studio", mods: ["tasks", "notes", "email", "calendar", "contacts"], board: ["today", "next", "unread", "clock", "reconnect", "waiting"] },
+          personal: { name: "Personal", mods: ["tasks", "notes", "calendar"], board: ["today", "focus", "clock", "week", "pinned", "capture"] },
+          side: { name: "Autumn launch", mods: ["tasks", "notes", "mindmap"], board: ["map", "notes", "capture", "focus", "clock"] },
+        };
+        var DEFAULT_WIDGET = { tasks: "today", notes: "notes", email: "unread", calendar: "next", mindmap: "map", contacts: "reconnect" };
+        var clone = function (p) {
+          return { name: p.name, mods: p.mods.slice(), board: p.board.slice() };
+        };
+        var state = { studio: clone(PRESETS.studio), personal: clone(PRESETS.personal), side: clone(PRESETS.side) };
+        var current = "studio";
+        var fresh = {};
+
+        var modsEl = $("mods"), railEl = $("mini-rail"), boardEl = $("board"), galleryEl = $("gallery");
+
+        var renderMods = function () {
+          var ws = state[current];
+          modsEl.innerHTML = MODULES.map(function (m) {
+            var on = ws.mods.indexOf(m.id) > -1;
+            return '<li><button type="button" class="mod" role="switch" aria-checked="' + on + '" data-mod="' + m.id + '">' +
+              I(m.icon) + '<span class="mod-text"><b>' + m.name + "</b><span>" + m.desc + '</span></span><span class="switch" aria-hidden="true"></span></button></li>';
+          }).join("");
+        };
+        var renderRailMini = function () {
+          var ws = state[current];
+          railEl.innerHTML =
+            '<div class="ws"><span class="ws-avatar">' + ws.name.charAt(0) + "</span>" + ws.name + "</div>" +
+            '<div class="nav-item is-active">' + I("i-home") + "Home</div>" +
+            MODULES.filter(function (m) { return ws.mods.indexOf(m.id) > -1; })
+              .map(function (m) { return '<div class="nav-item">' + I(m.icon) + m.name + "</div>"; }).join("");
+          $("own-title").textContent = "Home — " + ws.name;
+        };
+        var renderBoard = function () {
+          var ws = state[current];
+          boardEl.innerHTML = ws.board.map(function (id) {
+            var w = WIDGETS[id];
+            return '<div class="wd ' + w.size + (fresh[id] ? " is-new" : "") + '" data-w="' + id + '">' +
+              '<div class="w-head">' + I(w.icon, "icon-xs") + w.name + "</div>" +
+              '<button type="button" class="w-x" aria-label="Remove ' + w.name + '">' + I("i-x", "icon-xs") + "</button>" +
+              w.html() + "</div>";
+          }).join("") +
+            '<button type="button" class="w-add" id="w-add" aria-haspopup="dialog">' + I("i-plus") + "Add widget</button>";
+          fresh = {};
+          var n = ws.board.length;
+          $("board-count").textContent = n + (n === 1 ? " widget" : " widgets");
+        };
+        var renderAll = function () {
+          renderMods();
+          renderRailMini();
+          renderBoard();
+        };
+        var available = function () {
+          var ws = state[current];
+          return Object.keys(WIDGETS).filter(function (id) {
+            var w = WIDGETS[id];
+            return ws.board.indexOf(id) === -1 && (w.mod === null || ws.mods.indexOf(w.mod) > -1);
+          });
+        };
+        var openGallery = function () {
+          var list = available();
+          var modName = function (m) {
+            if (!m) return "Anywhere";
+            return MODULES.filter(function (x) { return x.id === m; })[0].name;
+          };
+          galleryEl.innerHTML =
+            '<div class="gallery-head">Add a widget<span>' + list.length + " available</span></div>" +
+            (list.length
+              ? list.map(function (id) {
+                  var w = WIDGETS[id];
+                  return '<button type="button" data-add="' + id + '">' + I(w.icon) + w.name + "<span>" + modName(w.mod) + "</span></button>";
+                }).join("")
+              : '<div class="gallery-empty">Everything’s on the board. Turn on another module for more.</div>');
+          galleryEl.hidden = false;
+          var first = galleryEl.querySelector("button");
+          if (first) first.focus();
+        };
+        var closeGallery = function () {
+          galleryEl.hidden = true;
+        };
+
+        modsEl.addEventListener("click", function (e) {
+          var btn = e.target.closest(".mod");
+          if (!btn) return;
+          var id = btn.getAttribute("data-mod");
+          var ws = state[current];
+          var i = ws.mods.indexOf(id);
+          if (i > -1) {
+            if (ws.mods.length === 1) {
+              btn.classList.remove("is-denied");
+              void btn.offsetWidth;
+              btn.classList.add("is-denied");
+              return;
+            }
+            ws.mods.splice(i, 1);
+            ws.board = ws.board.filter(function (w) { return WIDGETS[w].mod !== id; });
+          } else {
+            ws.mods.push(id);
+            var def = DEFAULT_WIDGET[id];
+            if (ws.board.indexOf(def) === -1) {
+              ws.board.unshift(def);
+              fresh[def] = true;
+            }
+          }
+          closeGallery();
+          renderAll();
+          var again = modsEl.querySelector('[data-mod="' + id + '"]');
+          if (again) again.focus();
+        });
+
+        boardEl.addEventListener("click", function (e) {
+          var x = e.target.closest(".w-x");
+          if (x) {
+            var tile = x.closest(".wd");
+            var id = tile.getAttribute("data-w");
+            tile.classList.add("is-leaving");
+            setTimeout(function () {
+              var ws = state[current];
+              ws.board = ws.board.filter(function (w) { return w !== id; });
+              renderBoard();
+            }, reduce ? 0 : 170);
+            return;
+          }
+          if (e.target.closest("#w-add")) {
+            if (galleryEl.hidden) openGallery();
+            else closeGallery();
+          }
+        });
+
+        galleryEl.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-add]");
+          if (!b) return;
+          var id = b.getAttribute("data-add");
+          state[current].board.push(id);
+          fresh[id] = true;
+          closeGallery();
+          renderBoard();
+        });
+
+        document.addEventListener("click", function (e) {
+          if (galleryEl.hidden) return;
+          if (e.target.closest("#gallery") || e.target.closest("#w-add")) return;
+          closeGallery();
+        });
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape" && !galleryEl.hidden) {
+            closeGallery();
+            var add = $("w-add");
+            if (add) add.focus();
+          }
+        });
+
+        $("ws-seg").addEventListener("click", function (e) {
+          var b = e.target.closest("[data-ws]");
+          if (!b) return;
+          current = b.getAttribute("data-ws");
+          this.querySelectorAll("[data-ws]").forEach(function (x) {
+            x.setAttribute("aria-pressed", x === b ? "true" : "false");
+          });
+          state[current].board.forEach(function (id) { fresh[id] = true; });
+          closeGallery();
+          renderAll();
+        });
+
+        $("board-reset").addEventListener("click", function () {
+          state[current] = clone(PRESETS[current]);
+          state[current].board.forEach(function (id) { fresh[id] = true; });
+          closeGallery();
+          renderAll();
+        });
+
+        renderAll();
+        setInterval(function () {
+          document.querySelectorAll("[data-clock]").forEach(function (el) {
+            el.textContent = hhmm(new Date());
+          });
+        }, 15000);
+
+        // ── Day one: type a bare title, save it to Inbox ──
+        var typed = $("typed");
+        var saved = $("saved");
         var phrase = "Call Marta about the print deadline";
         if (reduce) {
           typed.textContent = phrase;
           saved.classList.add("is-shown");
         } else {
-          var started = false;
           var run = function () {
             var i = 0;
             typed.textContent = "";
@@ -2647,30 +4482,17 @@
             var step = function () {
               i++;
               typed.textContent = phrase.slice(0, i);
-              if (i < phrase.length) {
-                setTimeout(step, 38 + Math.random() * 50);
-              } else {
+              if (i < phrase.length) setTimeout(step, 38 + Math.random() * 50);
+              else
                 setTimeout(function () {
                   saved.classList.add("is-shown");
                   typed.textContent = "";
                   setTimeout(run, 4200);
                 }, 700);
-              }
             };
             setTimeout(step, 400);
           };
-          var stage = document.querySelector(".capture-stage");
-          if ("IntersectionObserver" in window) {
-            new IntersectionObserver(function (entries, obs) {
-              if (entries[0].isIntersecting && !started) {
-                started = true;
-                run();
-                obs.disconnect();
-              }
-            }, { threshold: 0.4 }).observe(stage);
-          } else {
-            run();
-          }
+          observeOnce([document.querySelector(".capture-stage")], run, { threshold: 0.4 });
         }
       })();
     </script>
