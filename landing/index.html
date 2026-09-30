@@ -3,14 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Moduo</title>
+    <title>Moduo — One window for the whole working life</title>
     <meta
       name="description"
-      content="Notes, tasks, calendar, email, and contacts — linked together, in one window."
+      content="Tasks, notes, calendar, email, contacts, and finance — linked together, in one fast window. You don’t build a system. You just work."
     />
     <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#000000" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.moduo.app/" />
+    <meta property="og:title" content="Moduo — One window for the whole working life" />
+    <meta
+      property="og:description"
+      content="Tasks, notes, calendar, email, contacts, and finance — linked together, in one fast window."
+    />
+    <meta name="twitter:card" content="summary" />
+    <link rel="canonical" href="https://www.moduo.app/" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000'%3E%3Crect width='1000' height='1000' rx='220' fill='%23000'/%3E%3Cpath fill='%23fafafa' fill-rule='evenodd' d='M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z'/%3E%3C/svg%3E"
+    />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <style>
+      /* ─── Fonts ─────────────────────────────────────────────────────────── */
       @font-face {
         font-family: Geist;
         font-style: normal;
@@ -35,7 +51,91 @@
         src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-600-normal.woff2")
           format("woff2");
       }
+      @font-face {
+        font-family: "Geist Mono";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5.2.5/files/geist-mono-latin-400-normal.woff2")
+          format("woff2");
+      }
 
+      /* ─── Tokens (mirrors src/styles/tokens.css, dark · black · mono · soft) ─ */
+      :root {
+        color-scheme: dark;
+
+        --background: oklch(0 0 0);
+        --foreground: oklch(0.985 0 0);
+        --card: oklch(0.14 0 0);
+        --popover: oklch(0.18 0 0);
+        --muted: oklch(0.18 0 0);
+        --muted-foreground: oklch(0.72 0 0);
+        --subtle-foreground: oklch(0.58 0 0);
+        --faint-foreground: oklch(0.45 0 0);
+        --accent: oklch(0.22 0 0);
+        --border: oklch(0.22 0 0);
+        --border-strong: oklch(0.32 0 0);
+        --primary: oklch(0.95 0 0);
+        --primary-hover: oklch(1 0 0);
+        --primary-foreground: oklch(0.1 0 0);
+        --ring: oklch(0.95 0 0);
+        --selected-bg: color-mix(in oklab, var(--primary) 14%, var(--card));
+
+        --success: oklch(0.74 0.16 145);
+        --warning: oklch(0.82 0.15 75);
+        --info: oklch(0.7 0.14 230);
+        --ai: oklch(0.71 0.2 350);
+
+        --font-ui: Geist, Inter, system-ui, -apple-system, sans-serif;
+        --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+        --text-2xs: 0.6875rem;
+        --text-xs: 0.75rem;
+        --text-sm: 0.8125rem;
+        --text-base: 0.875rem;
+        --text-md: 0.9375rem;
+        --text-lg: 1.125rem;
+
+        --radius-sm: 0.25rem;
+        --radius-md: 0.5rem;
+        --radius-lg: 0.75rem;
+        --radius-xl: 1rem;
+        --radius-full: 9999px;
+
+        --ctrl-h-sm: 1.625rem;
+        --ctrl-h: 2rem;
+        --ctrl-h-lg: 2.5rem;
+        --row-h: 2.25rem;
+        --bar-h: 3rem;
+
+        --page-max: 70rem;
+        --frame-max: 76rem;
+        --section-gap: clamp(6rem, 12vw, 10rem);
+
+        --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
+        --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+        --shadow-overlay: 0 24px 64px rgb(0 0 0 / 0.65);
+
+        --motion-fade: 100ms;
+        --motion-base: 180ms;
+        --motion-slow: 320ms;
+        --motion-slower: 500ms;
+        --blur-veil: 0.25rem;
+        --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+        --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        :root {
+          --motion-base: 0ms;
+          --motion-slow: 0ms;
+          --motion-slower: 0ms;
+          --motion-fade: 80ms;
+          --blur-veil: 0;
+        }
+      }
+
+      /* ─── Base ──────────────────────────────────────────────────────────── */
       *,
       *::before,
       *::after {
@@ -44,105 +144,2535 @@
         padding: 0;
       }
 
-      :root {
-        color-scheme: dark;
-        --background: oklch(0 0 0);
-        --foreground: oklch(0.985 0 0);
-        --muted-foreground: oklch(0.58 0 0);
-        --border: oklch(0.22 0 0);
-        --font-ui: Geist, Inter, system-ui, -apple-system, sans-serif;
-        --motion-fade: 100ms;
-        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-      }
-
-      html,
-      body {
-        height: 100%;
+      html {
         background: var(--background);
-        color: var(--foreground);
-        font-family: var(--font-ui);
-        -webkit-font-smoothing: antialiased;
-      }
-
-      body {
-        min-height: 100dvh;
-      }
-
-      main {
-        min-height: 100dvh;
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        padding: clamp(2rem, 6vw, 5rem) clamp(1.5rem, 8vw, 8rem);
-        animation: fade-in var(--motion-fade) var(--ease-standard) both;
-      }
-
-      @keyframes fade-in {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 1;
-        }
+        scroll-behavior: smooth;
+        scroll-padding-top: calc(var(--bar-h) + 1.5rem);
+        -webkit-text-size-adjust: 100%;
       }
 
       @media (prefers-reduced-motion: reduce) {
-        main {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+
+      body {
+        min-height: 100dvh;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-ui);
+        font-size: 1rem;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+        overflow-x: hidden;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        cursor: pointer;
+      }
+
+      svg {
+        display: block;
+        flex-shrink: 0;
+      }
+
+      ::selection {
+        background: color-mix(in oklab, var(--primary) 28%, transparent);
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+      }
+
+      .skip {
+        position: absolute;
+        left: 1rem;
+        top: -3rem;
+        z-index: 100;
+        padding: 0.5rem 0.75rem;
+        border-radius: var(--radius-md);
+        background: var(--primary);
+        color: var(--primary-foreground);
+        font-size: var(--text-base);
+        font-weight: 500;
+      }
+      .skip:focus {
+        top: 0.75rem;
+      }
+
+      .container {
+        width: 100%;
+        max-width: var(--page-max);
+        margin-inline: auto;
+        padding-inline: clamp(1.25rem, 4vw, 2rem);
+      }
+
+      .icon {
+        width: 1rem;
+        height: 1rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .icon-sm {
+        width: 0.875rem;
+        height: 0.875rem;
+      }
+      .icon-xs {
+        width: 0.75rem;
+        height: 0.75rem;
+      }
+
+      .mark {
+        color: var(--foreground);
+        fill: currentColor;
+      }
+
+      /* ─── Buttons ───────────────────────────────────────────────────────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        height: var(--ctrl-h);
+        padding-inline: 1rem;
+        border-radius: var(--radius-md);
+        font-size: var(--text-base);
+        font-weight: 500;
+        white-space: nowrap;
+        transition:
+          background-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out),
+          border-color var(--motion-fade) var(--ease-out);
+      }
+      .btn-lg {
+        height: var(--ctrl-h-lg);
+        padding-inline: 1.5rem;
+      }
+      .btn-sm {
+        height: var(--ctrl-h-sm);
+        padding-inline: 0.625rem;
+        font-size: var(--text-sm);
+      }
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .btn-primary:hover {
+        background: var(--primary-hover);
+      }
+      .btn-outline {
+        border: 1px solid var(--border);
+        color: var(--foreground);
+      }
+      .btn-outline:hover {
+        background: var(--accent);
+        border-color: var(--border-strong);
+      }
+      .btn-ghost {
+        color: var(--muted-foreground);
+      }
+      .btn-ghost:hover {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .btn-secondary {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .btn .icon {
+        transition: transform var(--motion-base) var(--ease-out);
+      }
+      .btn:hover .arrow {
+        transform: translateX(2px);
+      }
+
+      /* ─── Nav ───────────────────────────────────────────────────────────── */
+      .nav {
+        position: fixed;
+        inset: 0 0 auto;
+        z-index: 30;
+        height: var(--bar-h);
+        background: color-mix(in oklab, var(--background) 86%, transparent);
+        -webkit-backdrop-filter: saturate(140%) blur(12px);
+        backdrop-filter: saturate(140%) blur(12px);
+        border-bottom: 1px solid transparent;
+        transition: border-color var(--motion-base) var(--ease-out);
+      }
+      .nav.is-scrolled {
+        border-bottom-color: var(--border);
+      }
+      .nav-inner {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--text-md);
+        font-weight: 600;
+        letter-spacing: -0.015em;
+      }
+      .brand .mark {
+        width: 1.375rem;
+        height: 1.375rem;
+      }
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 0.125rem;
+        margin-left: 0.5rem;
+      }
+      .nav-links .btn {
+        height: var(--ctrl-h-sm);
+        padding-inline: 0.625rem;
+        font-size: var(--text-sm);
+      }
+      .nav-actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      /* ─── Type ──────────────────────────────────────────────────────────── */
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--subtle-foreground);
+      }
+      .h-hero {
+        font-size: clamp(2.5rem, 7.2vw, 5.5rem);
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        line-height: 1.02;
+        max-width: 16ch;
+        text-wrap: balance;
+      }
+      .h-section {
+        font-size: clamp(2rem, 4.2vw, 3.25rem);
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        line-height: 1.06;
+        text-wrap: balance;
+      }
+      .lead {
+        font-size: clamp(1.0625rem, 1.5vw, 1.3125rem);
+        line-height: 1.55;
+        color: var(--muted-foreground);
+        text-wrap: pretty;
+      }
+      .body {
+        font-size: var(--text-md);
+        line-height: 1.6;
+        color: var(--muted-foreground);
+        text-wrap: pretty;
+      }
+      .fg {
+        color: var(--foreground);
+      }
+
+      /* ─── Hero ──────────────────────────────────────────────────────────── */
+      .hero {
+        position: relative;
+        padding-top: calc(var(--bar-h) + clamp(4.5rem, 11vh, 8rem));
+      }
+      .hero-copy {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .hero-copy .mark {
+        width: 2.5rem;
+        height: 2.5rem;
+        margin-bottom: clamp(2rem, 5vh, 3rem);
+      }
+      .hero-copy .lead {
+        margin-top: 1.75rem;
+        max-width: 36rem;
+      }
+      .hero-cta {
+        margin-top: 2.5rem;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .hero-note {
+        margin-top: 1rem;
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+
+      .hero-stage {
+        position: relative;
+        margin-top: clamp(4rem, 9vh, 6rem);
+        max-width: var(--frame-max);
+        margin-inline: auto;
+        padding-inline: clamp(1.25rem, 3vw, 2rem);
+      }
+      /* the light: a faint top edge that grounds the window, not a gradient floor */
+      .hero-stage::before {
+        content: "";
+        position: absolute;
+        inset: -1px clamp(1.25rem, 3vw, 2rem) auto;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          color-mix(in oklab, var(--foreground) 28%, transparent) 50%,
+          transparent
+        );
+        z-index: 2;
+        pointer-events: none;
+      }
+
+      /* ─── Product frame (app window) ────────────────────────────────────── */
+      .frame {
+        position: relative;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--background);
+        overflow: hidden;
+        font-size: var(--text-base);
+        line-height: 1.5;
+        user-select: none;
+      }
+      .frame-hero {
+        box-shadow: var(--shadow-lg), 0 0 0 1px rgb(0 0 0 / 0.6);
+      }
+      .titlebar {
+        height: 2.5rem;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        padding-inline: 0.875rem;
+        background: var(--card);
+        border-bottom: 1px solid var(--border);
+      }
+      .lights {
+        display: flex;
+        gap: 0.4375rem;
+      }
+      .lights span {
+        width: 0.6875rem;
+        height: 0.6875rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--border-strong);
+      }
+      .titlebar-title {
+        font-size: var(--text-xs);
+        font-weight: 500;
+        color: var(--subtle-foreground);
+      }
+      .search {
+        justify-self: end;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: 1.625rem;
+        padding: 0 0.375rem 0 0.625rem;
+        border-radius: var(--radius-md);
+        background: var(--muted);
+        border: 1px solid var(--border);
+        color: var(--subtle-foreground);
+        font-size: var(--text-xs);
+      }
+      kbd,
+      .kbd {
+        display: inline-flex;
+        align-items: center;
+        height: 1.125rem;
+        padding-inline: 0.3125rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-strong);
+        font-family: var(--font-mono);
+        font-size: 0.625rem;
+        color: var(--muted-foreground);
+        background: var(--background);
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 13.5rem minmax(0, 1fr) 19rem;
+        height: clamp(32rem, 56vw, 38rem);
+      }
+
+      /* left rail */
+      .rail-left {
+        border-right: 1px solid var(--border);
+        padding: 0.75rem 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        overflow: hidden;
+      }
+      .ws {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: var(--row-h);
+        padding-inline: 0.5rem;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+      }
+      .ws-avatar {
+        display: grid;
+        place-items: center;
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: var(--radius-sm);
+        background: var(--foreground);
+        color: var(--background);
+        font-size: 0.625rem;
+        font-weight: 600;
+      }
+      .ws .chev {
+        margin-left: auto;
+        color: var(--faint-foreground);
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        height: 1.875rem;
+        padding-inline: 0.5rem;
+        border-radius: var(--radius-md);
+        color: var(--muted-foreground);
+        font-size: var(--text-sm);
+      }
+      .nav-item .count {
+        margin-left: auto;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .nav-item.is-active {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .rail-label {
+        margin: 1rem 0 0.25rem;
+        padding-inline: 0.5rem;
+        font-size: var(--text-2xs);
+        letter-spacing: 0.04em;
+        color: var(--faint-foreground);
+      }
+      .dot {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: var(--radius-full);
+        background: var(--label, var(--muted-foreground));
+        flex-shrink: 0;
+      }
+
+      /* center */
+      .main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .main-head {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        height: 3.25rem;
+        padding-inline: 1.25rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .main-head h3 {
+        font-size: var(--text-lg);
+        font-weight: 600;
+        letter-spacing: -0.015em;
+      }
+      .main-head .date {
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .fullness {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .meter {
+        width: 4.5rem;
+        height: 0.25rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        overflow: hidden;
+      }
+      .meter i {
+        display: block;
+        height: 100%;
+        width: 71%;
+        border-radius: inherit;
+        background: var(--muted-foreground);
+      }
+      .capture {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        height: 2.5rem;
+        margin: 0.75rem 1.25rem 0.25rem;
+        padding-inline: 0.75rem;
+        border-radius: var(--radius-md);
+        border: 1px dashed var(--border-strong);
+        color: var(--subtle-foreground);
+        font-size: var(--text-sm);
+      }
+      .capture .kbd {
+        margin-left: auto;
+      }
+      .group-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.875rem 1.25rem 0.375rem;
+        font-size: var(--text-2xs);
+        letter-spacing: 0.04em;
+        color: var(--faint-foreground);
+      }
+      .rows {
+        list-style: none;
+        padding-inline: 0.5rem;
+      }
+      .row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        height: var(--row-h);
+        padding-inline: 0.75rem;
+        border-radius: var(--radius-md);
+        cursor: default;
+        transition: background-color var(--motion-fade) var(--ease-out);
+      }
+      .row[data-task] {
+        cursor: pointer;
+      }
+      .row:hover {
+        background: var(--card);
+      }
+      .row.is-selected {
+        background: var(--selected-bg);
+        box-shadow: inset 2px 0 0 var(--primary);
+      }
+      .check {
+        position: relative;
+        width: 0.9375rem;
+        height: 0.9375rem;
+        border-radius: var(--radius-full);
+        border: 1.5px solid var(--border-strong);
+        flex-shrink: 0;
+        display: grid;
+        place-items: center;
+        transition:
+          border-color var(--motion-fade) var(--ease-out),
+          background-color var(--motion-fade) var(--ease-out);
+      }
+      .check svg {
+        width: 0.5625rem;
+        height: 0.5625rem;
+        stroke: var(--primary-foreground);
+        stroke-width: 3;
+        fill: none;
+        opacity: 0;
+        transition: opacity var(--motion-fade) var(--ease-out);
+      }
+      .row:hover .check {
+        border-color: var(--muted-foreground);
+      }
+      .row.is-done .check {
+        background: var(--success);
+        border-color: var(--success);
+      }
+      .row.is-done .check svg {
+        opacity: 1;
+      }
+      .row.is-done .row-title {
+        color: var(--faint-foreground);
+        text-decoration: line-through;
+        text-decoration-color: var(--faint-foreground);
+      }
+      .check-pop {
+        animation: check-pop var(--motion-slow) var(--ease-spring);
+      }
+      @keyframes check-pop {
+        0% {
+          transform: scale(1);
+        }
+        40% {
+          transform: scale(1.28);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      .row-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        transition: color var(--motion-fade) var(--ease-out);
+      }
+      .row-meta {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+        color: var(--subtle-foreground);
+        font-size: var(--text-xs);
+        font-variant-numeric: tabular-nums;
+      }
+      .ref {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3125rem;
+        height: 1.375rem;
+        padding-inline: 0.4375rem;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--border);
+        color: var(--muted-foreground);
+        font-size: var(--text-xs);
+        white-space: nowrap;
+      }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        height: 1.375rem;
+        padding-inline: 0.5rem;
+        border-radius: var(--radius-full);
+        background: var(--label-surface);
+        color: var(--foreground);
+        font-size: var(--text-xs);
+        white-space: nowrap;
+      }
+      .tag::before {
+        content: "";
+        width: 0.375rem;
+        height: 0.375rem;
+        border-radius: var(--radius-full);
+        background: var(--label);
+      }
+      [data-label="pink"] {
+        --label: oklch(0.71 0.2 350);
+        --label-surface: oklch(0.71 0.2 350 / 0.16);
+      }
+      [data-label="violet"] {
+        --label: oklch(0.66 0.2 295);
+        --label-surface: oklch(0.66 0.2 295 / 0.16);
+      }
+      [data-label="blue"] {
+        --label: oklch(0.66 0.18 245);
+        --label-surface: oklch(0.66 0.18 245 / 0.16);
+      }
+      [data-label="green"] {
+        --label: oklch(0.72 0.17 150);
+        --label-surface: oklch(0.72 0.17 150 / 0.16);
+      }
+      [data-label="amber"] {
+        --label: oklch(0.8 0.16 75);
+        --label-surface: oklch(0.8 0.16 75 / 0.16);
+      }
+      [data-label="teal"] {
+        --label: oklch(0.72 0.13 200);
+        --label-surface: oklch(0.72 0.13 200 / 0.16);
+      }
+      .avatar {
+        display: grid;
+        place-items: center;
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--border-strong);
+        color: var(--foreground);
+        font-size: 0.5625rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        flex-shrink: 0;
+      }
+      .avatar-lg {
+        width: 2.25rem;
+        height: 2.25rem;
+        font-size: var(--text-xs);
+      }
+      .avatar-xl {
+        width: 3rem;
+        height: 3rem;
+        font-size: var(--text-md);
+      }
+
+      /* right rail */
+      .rail-right {
+        border-left: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .rail-head {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: 3.25rem;
+        padding-inline: 1rem;
+        border-bottom: 1px solid var(--border);
+        font-size: var(--text-sm);
+        font-weight: 500;
+      }
+      .rail-head .muted {
+        margin-left: auto;
+        font-size: var(--text-xs);
+        font-weight: 400;
+        color: var(--subtle-foreground);
+      }
+      .rail-body {
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.125rem;
+        transition:
+          opacity var(--motion-base) var(--ease-out),
+          filter var(--motion-base) var(--ease-out),
+          transform var(--motion-base) var(--ease-out);
+      }
+      .rail-body.is-swapping {
+        opacity: 0;
+        filter: blur(var(--blur-veil));
+        transform: translateY(4px);
+      }
+      .rail-title {
+        font-size: var(--text-md);
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        line-height: 1.35;
+      }
+      .rail-sub {
+        margin-top: 0.25rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .link-group-label {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        margin-bottom: 0.375rem;
+        font-size: var(--text-2xs);
+        letter-spacing: 0.04em;
+        color: var(--faint-foreground);
+      }
+      .link-card {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.625rem;
+        padding: 0.625rem 0.75rem;
+        border-radius: var(--radius-md);
+        background: var(--card);
+        border: 1px solid var(--border);
+      }
+      .link-card + .link-card {
+        margin-top: 0.375rem;
+      }
+      .link-card .icon {
+        margin-top: 0.125rem;
+        color: var(--muted-foreground);
+      }
+      .link-card-main {
+        min-width: 0;
+        flex: 1;
+      }
+      .link-card-title {
+        font-size: var(--text-sm);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .link-card-snip {
+        margin-top: 0.125rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        height: 1.25rem;
+        padding-inline: 0.5rem;
+        border-radius: var(--radius-full);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        white-space: nowrap;
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .badge-warning {
+        background: color-mix(in oklab, var(--warning) 16%, transparent);
+        color: var(--warning);
+      }
+      .badge-success {
+        background: color-mix(in oklab, var(--success) 16%, transparent);
+        color: var(--success);
+      }
+
+      /* ─── Modules strip ─────────────────────────────────────────────────── */
+      .modules {
+        margin-top: clamp(3.5rem, 7vw, 5rem);
+      }
+      .modules ul {
+        list-style: none;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.75rem clamp(1.5rem, 4vw, 3rem);
+      }
+      .modules li {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--text-md);
+        font-weight: 500;
+        color: var(--subtle-foreground);
+      }
+      .modules li .icon {
+        color: var(--faint-foreground);
+      }
+      .modules p {
+        margin-top: 1.25rem;
+        text-align: center;
+        font-size: var(--text-sm);
+        color: var(--faint-foreground);
+      }
+
+      /* ─── Sections ──────────────────────────────────────────────────────── */
+      .section {
+        padding-top: var(--section-gap);
+      }
+      .section-intro {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+        gap: 2rem clamp(2rem, 6vw, 5rem);
+        align-items: end;
+        margin-bottom: clamp(2.5rem, 5vw, 4rem);
+      }
+      .section-intro .eyebrow {
+        margin-bottom: 1.25rem;
+      }
+      .section-intro .lead {
+        max-width: 30rem;
+      }
+      .caption {
+        margin-top: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .caption .icon {
+        color: var(--faint-foreground);
+      }
+
+      /* ─── Connect frame (email → task) ─────────────────────────────────── */
+      .split {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        min-height: 27rem;
+      }
+      .pane + .pane {
+        border-left: 1px solid var(--border);
+      }
+      .pane-head {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: 3rem;
+        padding-inline: 1.25rem;
+        border-bottom: 1px solid var(--border);
+        font-size: var(--text-sm);
+        font-weight: 500;
+      }
+      .pane-head .muted {
+        font-weight: 400;
+        color: var(--subtle-foreground);
+      }
+      .pane-head .right {
+        margin-left: auto;
+      }
+      .mail {
+        list-style: none;
+        padding: 0.5rem;
+      }
+      .mail li {
+        position: relative;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 0.25rem 0.75rem;
+        padding: 0.75rem;
+        border-radius: var(--radius-md);
+      }
+      .mail li + li {
+        margin-top: 1px;
+      }
+      .mail .avatar {
+        grid-row: span 2;
+        margin-top: 0.125rem;
+      }
+      .mail-from {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .mail-time {
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .mail-subject {
+        grid-column: 2 / 4;
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .mail-subject b {
+        font-weight: 400;
+        color: var(--muted-foreground);
+      }
+      .mail li.is-read .mail-from {
+        color: var(--muted-foreground);
+        font-weight: 400;
+      }
+      .mail li.is-selected {
+        background: var(--selected-bg);
+        box-shadow: inset 2px 0 0 var(--primary);
+      }
+      .mail-action {
+        position: absolute;
+        right: 4.5rem;
+        bottom: -0.875rem;
+        z-index: 2;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        height: 1.75rem;
+        padding-inline: 0.625rem;
+        border-radius: var(--radius-md);
+        background: var(--popover);
+        border: 1px solid var(--border-strong);
+        box-shadow: var(--shadow-md);
+        font-size: var(--text-xs);
+        font-weight: 500;
+      }
+      .mail-action .kbd {
+        margin-left: 0.25rem;
+      }
+      .task-detail {
+        padding: 1.5rem 1.5rem 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+      }
+      .task-detail h4 {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        font-size: var(--text-lg);
+        font-weight: 500;
+        letter-spacing: -0.015em;
+        line-height: 1.35;
+      }
+      .task-detail h4 .check {
+        margin-top: 0.3125rem;
+      }
+      .props {
+        display: grid;
+        grid-template-columns: 6rem minmax(0, 1fr);
+        row-gap: 0.625rem;
+        font-size: var(--text-sm);
+        align-items: center;
+      }
+      .props dt {
+        color: var(--subtle-foreground);
+      }
+      .props dd {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+      }
+      .quote {
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        background: var(--card);
+        padding: 0.875rem 1rem;
+      }
+      .quote-head {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .quote-head .icon {
+        color: var(--muted-foreground);
+      }
+      .quote p {
+        margin-top: 0.5rem;
+        font-size: var(--text-sm);
+        color: var(--muted-foreground);
+        line-height: 1.55;
+      }
+
+      /* ─── Day frame (calendar) ─────────────────────────────────────────── */
+      .day {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 17rem;
+      }
+      .cal {
+        position: relative;
+        display: grid;
+        grid-template-columns: 3.5rem minmax(0, 1fr);
+        padding: 0.5rem 1rem 1rem 0;
+      }
+      .hours {
+        list-style: none;
+      }
+      .hours li {
+        height: 4rem;
+        padding-right: 0.625rem;
+        text-align: right;
+        font-size: var(--text-2xs);
+        color: var(--faint-foreground);
+        font-variant-numeric: tabular-nums;
+        transform: translateY(-0.4375rem);
+      }
+      .grid {
+        position: relative;
+        background-image: linear-gradient(var(--border) 1px, transparent 1px);
+        background-size: 100% 4rem;
+        border-left: 1px solid var(--border);
+      }
+      .block {
+        position: absolute;
+        left: 0.5rem;
+        right: 0.5rem;
+        border-radius: var(--radius-md);
+        padding: 0.5rem 0.75rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        box-shadow: inset 2px 0 0 var(--label, var(--border-strong));
+        font-size: var(--text-sm);
+        overflow: hidden;
+      }
+      .block-title {
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .block-time {
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .block.is-event {
+        background: var(--muted);
+        box-shadow: none;
+        border-style: dashed;
+        border-color: var(--border-strong);
+      }
+      .block.is-elapsed {
+        border-color: var(--border-strong);
+        background: var(--popover);
+        box-shadow: var(--shadow-md), inset 2px 0 0 var(--label);
+        z-index: 2;
+      }
+      .elapsed-row {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        margin-top: 0.625rem;
+        flex-wrap: wrap;
+      }
+      .elapsed-row .label {
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+        margin-right: 0.25rem;
+      }
+      .chip-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3125rem;
+        height: 1.625rem;
+        padding-inline: 0.625rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-strong);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .chip-btn.is-primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .now {
+        position: absolute;
+        left: -0.3125rem;
+        right: 0;
+        height: 0;
+        border-top: 1px solid var(--foreground);
+        z-index: 3;
+      }
+      .now::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: -0.3125rem;
+        width: 0.5625rem;
+        height: 0.5625rem;
+        border-radius: var(--radius-full);
+        background: var(--foreground);
+      }
+      .day-side {
+        border-left: 1px solid var(--border);
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      .side-card {
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        background: var(--card);
+        padding: 0.875rem;
+      }
+      .side-card h5 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--text-sm);
+        font-weight: 500;
+      }
+      .side-card h5 .muted {
+        margin-left: auto;
+        font-weight: 400;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .side-card p {
+        margin-top: 0.375rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        line-height: 1.5;
+      }
+      .mini-list {
+        list-style: none;
+        margin-top: 0.625rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+      }
+      .mini-list li {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+      }
+      .mini-list li span:last-child {
+        margin-left: auto;
+        color: var(--subtle-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .reflow {
+        width: 100%;
+        margin-top: 0.75rem;
+      }
+      .reason {
+        display: flex;
+        gap: 0.5rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        line-height: 1.5;
+      }
+      .reason .icon {
+        margin-top: 0.125rem;
+        color: var(--faint-foreground);
+      }
+
+      /* ─── People + money ───────────────────────────────────────────────── */
+      .pair {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+        gap: 1rem;
+      }
+      .panel {
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: var(--card);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .panel-foot {
+        margin-top: auto;
+        padding-top: 1.25rem;
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .panel-foot b {
+        color: var(--foreground);
+        font-weight: 500;
+      }
+      .contact-head {
+        display: flex;
+        align-items: center;
+        gap: 0.875rem;
+        padding-bottom: 1.25rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .contact-name {
+        font-size: var(--text-lg);
+        font-weight: 500;
+        letter-spacing: -0.015em;
+      }
+      .contact-sub {
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .contact-head .badge {
+        margin-left: auto;
+      }
+      .rollup {
+        list-style: none;
+      }
+      .rollup > li {
+        display: grid;
+        grid-template-columns: 1.25rem 5.5rem minmax(0, 1fr);
+        align-items: baseline;
+        gap: 0.75rem;
+        padding: 0.875rem 0;
+        border-bottom: 1px solid var(--border);
+        font-size: var(--text-sm);
+      }
+      .rollup > li:last-child {
+        border-bottom: 0;
+      }
+      .rollup .icon {
+        color: var(--muted-foreground);
+        transform: translateY(0.1875rem);
+      }
+      .rollup-kind {
+        color: var(--muted-foreground);
+      }
+      .rollup-kind span {
+        color: var(--faint-foreground);
+        font-variant-numeric: tabular-nums;
+        margin-left: 0.25rem;
+      }
+      .rollup-item {
+        min-width: 0;
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+      }
+      .rollup-item .t {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rollup-item .badge {
+        margin-left: auto;
+      }
+      .rollup-item .w {
+        margin-left: auto;
+        flex-shrink: 0;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .money-head {
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .money-big {
+        margin-top: 0.5rem;
+        font-size: clamp(2.5rem, 5vw, 3.5rem);
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+      .money-delta {
+        margin-top: 0.625rem;
+        font-size: var(--text-sm);
+        color: var(--muted-foreground);
+      }
+      .flow {
+        list-style: none;
+        margin-top: 1.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.875rem;
+      }
+      .flow li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.375rem 1rem;
+        font-size: var(--text-sm);
+      }
+      .flow .amt {
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
+      }
+      .bar {
+        grid-column: 1 / -1;
+        height: 0.3125rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        overflow: hidden;
+      }
+      .bar i {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--muted-foreground);
+        width: 0;
+        transition: width var(--motion-slower) var(--ease-out);
+      }
+      .is-in .bar i {
+        width: var(--w);
+      }
+      .flow li.kept .bar i {
+        background: var(--foreground);
+      }
+      .flow li.kept {
+        font-weight: 500;
+      }
+      .flow li.kept .amt {
+        color: var(--foreground);
+      }
+
+      /* ─── Day one ──────────────────────────────────────────────────────── */
+      .dayone {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: clamp(2rem, 6vw, 5rem);
+        align-items: center;
+      }
+      .dayone .h-section {
+        margin-top: 1.25rem;
+      }
+      .dayone .lead {
+        margin-top: 1.5rem;
+        max-width: 30rem;
+      }
+      .truths {
+        list-style: none;
+        margin-top: 2.5rem;
+        border-top: 1px solid var(--border);
+      }
+      .truths li {
+        display: flex;
+        align-items: center;
+        gap: 0.875rem;
+        padding: 1rem 0;
+        border-bottom: 1px solid var(--border);
+        font-size: var(--text-md);
+      }
+      .truths .icon {
+        color: var(--muted-foreground);
+      }
+      .capture-stage {
+        position: relative;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background:
+          radial-gradient(
+            120% 90% at 50% 0%,
+            color-mix(in oklab, var(--foreground) 5%, transparent),
+            transparent 60%
+          ),
+          var(--background);
+        padding: clamp(2rem, 5vw, 3.5rem) clamp(1.25rem, 4vw, 2.5rem);
+        overflow: hidden;
+      }
+      .dialog {
+        border-radius: var(--radius-xl);
+        border: 1px solid var(--border-strong);
+        background: var(--popover);
+        box-shadow: var(--shadow-overlay);
+        overflow: hidden;
+      }
+      .dialog-input {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1.125rem 1.25rem;
+        font-size: var(--text-lg);
+        letter-spacing: -0.01em;
+      }
+      .dialog-input .check {
+        width: 1.125rem;
+        height: 1.125rem;
+      }
+      .typed {
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .caret {
+        display: inline-block;
+        width: 1.5px;
+        height: 1.25em;
+        margin-left: 1px;
+        vertical-align: -0.2em;
+        background: var(--foreground);
+        animation: blink 1.1s steps(1) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+      .dialog-foot {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.25rem;
+        border-top: 1px solid var(--border);
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .dialog-foot .ref {
+        border-style: dashed;
+        color: var(--subtle-foreground);
+      }
+      .dialog-foot .hint {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+      }
+      .saved {
+        margin-top: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        height: var(--row-h);
+        padding-inline: 0.875rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        background: var(--card);
+        font-size: var(--text-base);
+        opacity: 0;
+        transform: translateY(6px);
+        filter: blur(var(--blur-veil));
+        transition:
+          opacity var(--motion-slow) var(--ease-out),
+          transform var(--motion-slow) var(--ease-out),
+          filter var(--motion-slow) var(--ease-out);
+      }
+      .saved.is-shown {
+        opacity: 1;
+        transform: none;
+        filter: none;
+      }
+      .saved .row-meta {
+        margin-left: auto;
+      }
+
+      /* ─── Principles ───────────────────────────────────────────────────── */
+      .principles {
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        border-top: 1px solid var(--border);
+      }
+      .principles li {
+        padding: 2rem 2rem 2.25rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .principles li:nth-child(even) {
+        padding-left: 2rem;
+        padding-right: 0;
+        border-left: 1px solid var(--border);
+      }
+      .principles h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        font-size: var(--text-lg);
+        font-weight: 500;
+        letter-spacing: -0.015em;
+      }
+      .principles h3 .icon {
+        color: var(--muted-foreground);
+      }
+      .principles p {
+        margin-top: 0.625rem;
+        max-width: 28rem;
+      }
+      .ai-disc {
+        width: 0.625rem;
+        height: 0.625rem;
+        border-radius: var(--radius-full);
+        background: var(--ai);
+        flex-shrink: 0;
+      }
+
+      /* ─── Close + footer ───────────────────────────────────────────────── */
+      .close {
+        padding-block: var(--section-gap) clamp(5rem, 10vw, 8rem);
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .close .mark {
+        width: 3rem;
+        height: 3rem;
+        margin-bottom: 2rem;
+      }
+      .close .h-section {
+        max-width: 18ch;
+        font-size: clamp(2.25rem, 5.4vw, 4rem);
+      }
+      .close .lead {
+        margin-top: 1.25rem;
+        max-width: 32rem;
+      }
+      .close .hero-cta {
+        justify-content: center;
+      }
+      .footer {
+        border-top: 1px solid var(--border);
+        padding-block: 2rem 2.5rem;
+      }
+      .footer-inner {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem 1.5rem;
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .footer .brand {
+        color: var(--foreground);
+        font-size: var(--text-base);
+      }
+      .footer .brand .mark {
+        width: 1.125rem;
+        height: 1.125rem;
+      }
+      .footer-links {
+        margin-left: auto;
+        display: flex;
+        gap: 1.25rem;
+      }
+      .footer-links a:hover {
+        color: var(--foreground);
+      }
+
+      /* ─── Reveal ───────────────────────────────────────────────────────── */
+      .js .reveal {
+        opacity: 0;
+        transform: translateY(14px);
+        filter: blur(var(--blur-veil));
+        transition:
+          opacity var(--motion-slower) var(--ease-out),
+          transform var(--motion-slower) var(--ease-out),
+          filter var(--motion-slower) var(--ease-out);
+        transition-delay: var(--d, 0ms);
+      }
+      .js .reveal.is-in {
+        opacity: 1;
+        transform: none;
+        filter: none;
+      }
+      .hero-copy > * {
+        animation: rise var(--motion-slower) var(--ease-out) both;
+        animation-delay: calc(var(--i, 0) * 70ms);
+      }
+      .hero-stage {
+        animation: rise 900ms var(--ease-out) both;
+        animation-delay: 280ms;
+      }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+          filter: blur(var(--blur-veil));
+        }
+        to {
+          opacity: 1;
+          transform: none;
+          filter: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .hero-copy > *,
+        .hero-stage {
+          animation: none;
+        }
+        .js .reveal {
+          transform: none;
+          filter: none;
+        }
+        .caret {
           animation: none;
         }
       }
 
-      .mark {
-        display: block;
-        width: 2.5rem;
-        height: 2.5rem;
-        margin-bottom: clamp(2.5rem, 6vh, 4.5rem);
-        color: var(--foreground);
+      /* ─── Responsive ───────────────────────────────────────────────────── */
+      @media (max-width: 1100px) {
+        .shell {
+          grid-template-columns: 12rem minmax(0, 1fr) 17rem;
+        }
       }
-
-      h1 {
-        font-size: clamp(2.25rem, 7.2vw, 5.5rem);
-        font-weight: 600;
-        letter-spacing: -0.035em;
-        line-height: 1.05;
-        max-width: 18ch;
-        text-wrap: balance;
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr) 17rem;
+        }
+        .rail-left {
+          display: none;
+        }
+        .section-intro,
+        .dayone,
+        .pair {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .section-intro {
+          align-items: start;
+        }
+        .day {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .day-side {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+        }
       }
-
-      .manifesto {
-        margin-top: clamp(1.5rem, 3vh, 2.5rem);
-        max-width: 36rem;
-        font-size: clamp(1.0625rem, 1.6vw, 1.375rem);
-        font-weight: 400;
-        line-height: 1.5;
-        color: var(--muted-foreground);
-        text-wrap: pretty;
+      @media (max-width: 720px) {
+        .nav-links {
+          display: none;
+        }
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          height: auto;
+        }
+        .rail-right {
+          display: none;
+        }
+        .fullness,
+        .search,
+        .row-meta .ref,
+        .row-meta .tag {
+          display: none;
+        }
+        .split {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .pane + .pane {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+        .day-side {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .principles {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .principles li,
+        .principles li:nth-child(even) {
+          padding: 1.75rem 0;
+          border-left: 0;
+        }
+        .footer-links {
+          margin-left: 0;
+        }
+        .rollup > li {
+          grid-template-columns: 1.25rem minmax(0, 1fr);
+        }
+        .rollup-item {
+          grid-column: 2;
+        }
+      }
+      @media (max-width: 420px) {
+        .nav-actions .btn-ghost {
+          display: none;
+        }
       }
     </style>
   </head>
   <body>
-    <main>
-      <svg
-        class="mark"
-        viewBox="0 0 1000 1000"
-        xmlns="http://www.w3.org/2000/svg"
-        role="img"
-        aria-label="Moduo"
-      >
-        <title>Moduo</title>
-        <path
-          fill="currentColor"
-          fill-rule="evenodd"
-          clip-rule="evenodd"
-          d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z"
-        />
-      </svg>
-      <h1>One window for the whole working life.</h1>
-      <p class="manifesto">
-        Notes, tasks, calendar, email, and contacts — linked, so context never
-        splits across five apps. You don’t build a system. You just work.
-      </p>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <!-- Icon sprite (line icons, 24px grid) -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <symbol id="mark" viewBox="0 0 1000 1000">
+          <path
+            fill-rule="evenodd"
+            clip-rule="evenodd"
+            d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z"
+          />
+        </symbol>
+        <symbol id="i-dashboard" viewBox="0 0 24 24">
+          <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+        </symbol>
+        <symbol id="i-inbox" viewBox="0 0 24 24">
+          <path d="M3.5 13.5h5l1.5 2.5h4l1.5-2.5h5" />
+          <path d="M5.5 5h13l2 8.5V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-5.5z" />
+        </symbol>
+        <symbol id="i-today" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.5V12l3 2" />
+        </symbol>
+        <symbol id="i-tasks" viewBox="0 0 24 24">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="3" />
+          <path d="m8 12.25 2.75 2.75L16 9.5" />
+        </symbol>
+        <symbol id="i-notes" viewBox="0 0 24 24">
+          <path d="M6 3.5h8.5l4 4V19a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5z" />
+          <path d="M14 3.5V8h4.5M8 12.5h8M8 16h5" />
+        </symbol>
+        <symbol id="i-calendar" viewBox="0 0 24 24">
+          <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+          <path d="M3.5 10h17M8 3v4M16 3v4" />
+        </symbol>
+        <symbol id="i-mail" viewBox="0 0 24 24">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3.5 6.5 8.5 6 8.5-6" />
+        </symbol>
+        <symbol id="i-contact" viewBox="0 0 24 24">
+          <circle cx="12" cy="8.5" r="4" />
+          <path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5" />
+        </symbol>
+        <symbol id="i-finance" viewBox="0 0 24 24">
+          <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+        </symbol>
+        <symbol id="i-invoice" viewBox="0 0 24 24">
+          <path d="M6 3h12v18l-2.5-1.5L13 21l-2.5-1.5L8 21l-2-1.5z" />
+          <path d="M9 8h6M9 11.5h6M9 15h3" />
+        </symbol>
+        <symbol id="i-link" viewBox="0 0 24 24">
+          <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" />
+          <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
+        </symbol>
+        <symbol id="i-search" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m20 20-4.35-4.35" />
+        </symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24">
+          <path d="M12 5v14M5 12h14" />
+        </symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24">
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </symbol>
+        <symbol id="i-chev" viewBox="0 0 24 24">
+          <path d="m8 10 4 4 4-4" />
+        </symbol>
+        <symbol id="i-check" viewBox="0 0 24 24">
+          <path d="m5 12.5 4.5 4.5L19 7.5" />
+        </symbol>
+        <symbol id="i-bolt" viewBox="0 0 24 24">
+          <path d="M13 2.5 4.5 13.5H12l-1 8 8.5-11H12z" />
+        </symbol>
+        <symbol id="i-scale" viewBox="0 0 24 24">
+          <path d="M12 4v16M7 20h10M5 8h14" />
+          <path d="m5 8-2.5 6a3 3 0 0 0 5 0zM19 8l-2.5 6a3 3 0 0 0 5 0z" />
+        </symbol>
+        <symbol id="i-export" viewBox="0 0 24 24">
+          <path d="M12 3.5v11M7.5 8 12 3.5 16.5 8" />
+          <path d="M4.5 14v4.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V14" />
+        </symbol>
+        <symbol id="i-reflow" viewBox="0 0 24 24">
+          <path d="M4 7h11a4 4 0 0 1 0 8H8" />
+          <path d="m11 12-3 3 3 3" />
+        </symbol>
+        <symbol id="i-info" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 11v5M12 8h.01" />
+        </symbol>
+        <symbol id="i-feather" viewBox="0 0 24 24">
+          <path d="M19.5 4.5c-6 0-11 4-12.5 11L4.5 19.5" />
+          <path d="M19.5 4.5c0 7-4.5 11.5-11 12M9 13h6" />
+        </symbol>
+        <symbol id="i-grid-off" viewBox="0 0 24 24">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="2" />
+          <path d="M3.5 9.5h17M9.5 3.5v17M4 20 20 4" />
+        </symbol>
+      </defs>
+    </svg>
+
+    <!-- ─── Nav ─────────────────────────────────────────────────────────── -->
+    <header class="nav" id="nav">
+      <div class="container nav-inner">
+        <a class="brand" href="#top" aria-label="Moduo home">
+          <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
+          Moduo
+        </a>
+        <nav class="nav-links" aria-label="Sections">
+          <a class="btn btn-ghost" href="#connect">How it links</a>
+          <a class="btn btn-ghost" href="#day">Your day</a>
+          <a class="btn btn-ghost" href="#people">People &amp; money</a>
+          <a class="btn btn-ghost" href="#principles">Principles</a>
+        </nav>
+        <div class="nav-actions">
+          <a class="btn btn-ghost" href="https://app.moduo.app/auth">Sign in</a>
+          <a class="btn btn-primary" href="https://app.moduo.app/auth">Get started</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ─── Hero ──────────────────────────────────────────────────────── -->
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="container hero-copy">
+          <svg class="mark" style="--i: 0" role="img" aria-label="Moduo"><use href="#mark" /></svg>
+          <h1 class="h-hero" id="hero-title" style="--i: 1">One window for the whole working life.</h1>
+          <p class="lead" style="--i: 2">
+            Notes, tasks, calendar, email, and contacts — linked, so context never splits across
+            five apps. You don’t build a system. You just work.
+          </p>
+          <div class="hero-cta" style="--i: 3">
+            <a class="btn btn-primary btn-lg" href="https://app.moduo.app/auth">
+              Get started
+              <svg class="icon icon-sm arrow" aria-hidden="true"><use href="#i-arrow" /></svg>
+            </a>
+            <a class="btn btn-outline btn-lg" href="#connect">See how it links</a>
+          </div>
+          <p class="hero-note" style="--i: 4">Free to start. No seat minimums. Your data exports with you.</p>
+        </div>
+
+        <div class="hero-stage">
+          <div class="frame frame-hero" role="img" aria-label="The Moduo app: a Today list of tasks, with the selected task’s linked contact, email, calendar block, and invoice shown in the right rail.">
+            <div class="titlebar" aria-hidden="true">
+              <div class="lights"><span></span><span></span><span></span></div>
+              <div class="titlebar-title">Today — North Studio</div>
+              <div class="search">
+                <svg class="icon icon-xs"><use href="#i-search" /></svg>
+                Search everything
+                <span class="kbd">⌘K</span>
+              </div>
+            </div>
+
+            <div class="shell" aria-hidden="true">
+              <aside class="rail-left">
+                <div class="ws">
+                  <span class="ws-avatar">N</span>
+                  North Studio
+                  <svg class="icon icon-sm chev"><use href="#i-chev" /></svg>
+                </div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-dashboard" /></svg>Dashboard</div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-inbox" /></svg>Inbox<span class="count">3</span></div>
+                <div class="nav-item is-active"><svg class="icon icon-sm"><use href="#i-today" /></svg>Today<span class="count">6</span></div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-tasks" /></svg>Tasks</div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-notes" /></svg>Notes</div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-calendar" /></svg>Calendar</div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-mail" /></svg>Email<span class="count">12</span></div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-contact" /></svg>Contacts</div>
+                <div class="nav-item"><svg class="icon icon-sm"><use href="#i-finance" /></svg>Finance</div>
+                <div class="rail-label">Projects</div>
+                <div class="nav-item"><span class="dot" data-label="pink"></span>Kowalska rebrand</div>
+                <div class="nav-item"><span class="dot" data-label="blue"></span>Q4 proposal</div>
+                <div class="nav-item"><span class="dot" data-label="green"></span>Studio ops</div>
+              </aside>
+
+              <div class="main">
+                <div class="main-head">
+                  <h3>Today</h3>
+                  <span class="date">Wednesday, 30 September</span>
+                  <div class="fullness">
+                    5h of 7h planned
+                    <span class="meter"><i></i></span>
+                  </div>
+                </div>
+                <div class="capture">
+                  <svg class="icon icon-sm"><use href="#i-plus" /></svg>
+                  New task
+                  <span class="kbd">N</span>
+                </div>
+
+                <div class="group-label">Morning</div>
+                <ul class="rows" id="hero-rows">
+                  <li class="row is-selected" data-task="invoice">
+                    <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                    <span class="row-title">Send the revised invoice</span>
+                    <span class="row-meta">
+                      <span class="tag" data-label="pink">Kowalska rebrand</span>
+                      <span class="avatar">AK</span>
+                    </span>
+                  </li>
+                  <li class="row" data-task="logo">
+                    <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                    <span class="row-title">Reply to Marta about the logo files</span>
+                    <span class="row-meta">
+                      <span class="ref"><svg class="icon icon-xs"><use href="#i-mail" /></svg>From email</span>
+                      <span class="avatar">MN</span>
+                    </span>
+                  </li>
+                  <li class="row is-done">
+                    <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                    <span class="row-title">Book the photographer</span>
+                    <span class="row-meta">Done</span>
+                  </li>
+                </ul>
+
+                <div class="group-label">Afternoon</div>
+                <ul class="rows">
+                  <li class="row" data-task="proposal">
+                    <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                    <span class="row-title">Draft the Q4 proposal</span>
+                    <span class="row-meta">
+                      <span class="ref"><svg class="icon icon-xs"><use href="#i-calendar" /></svg>13:00–15:00</span>
+                      <span class="tag" data-label="blue">Q4 proposal</span>
+                    </span>
+                  </li>
+                  <li class="row" data-task="expenses">
+                    <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                    <span class="row-title">Review August expenses</span>
+                    <span class="row-meta">
+                      <span class="ref"><svg class="icon icon-xs"><use href="#i-finance" /></svg>14 items</span>
+                    </span>
+                  </li>
+                  <li class="row" data-task="call">
+                    <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                    <span class="row-title">Prep notes for the studio call</span>
+                    <span class="row-meta">
+                      <span class="ref"><svg class="icon icon-xs"><use href="#i-notes" /></svg>Note</span>
+                      <span>16:30</span>
+                    </span>
+                  </li>
+                </ul>
+              </div>
+
+              <aside class="rail-right">
+                <div class="rail-head">
+                  <svg class="icon icon-sm"><use href="#i-link" /></svg>
+                  Linked
+                  <span class="muted" id="rail-count">4 items</span>
+                </div>
+                <div class="rail-body" id="rail-body"></div>
+              </aside>
+            </div>
+          </div>
+        </div>
+
+        <div class="container modules" id="modules">
+          <ul aria-label="Modules">
+            <li><svg class="icon" aria-hidden="true"><use href="#i-tasks" /></svg>Tasks</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-notes" /></svg>Notes</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-mail" /></svg>Email</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-contact" /></svg>Contacts</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-finance" /></svg>Finance</li>
+          </ul>
+          <p>Six tools you already pay for, in one window that links them.</p>
+        </div>
+      </section>
+
+      <!-- ─── Connect ───────────────────────────────────────────────────── -->
+      <section class="section container" id="connect" aria-labelledby="connect-title">
+        <div class="section-intro reveal">
+          <div>
+            <div class="eyebrow">How it links</div>
+            <h2 class="h-section" id="connect-title">Links happen while you work.</h2>
+          </div>
+          <p class="lead">
+            Turn an email into a task and it already knows the person, the thread, and the
+            invoice. No fields to fill in, nothing to file, no system to keep up.
+          </p>
+        </div>
+
+        <div class="frame reveal" role="img" aria-label="An inbox with one email turned into a task. The task shows the contact and the original email it came from.">
+          <div class="split" aria-hidden="true">
+            <div class="pane">
+              <div class="pane-head">
+                <svg class="icon icon-sm"><use href="#i-mail" /></svg>
+                Inbox <span class="muted">· 3 unread</span>
+              </div>
+              <ul class="mail">
+                <li class="is-selected">
+                  <span class="avatar avatar-lg">MN</span>
+                  <span class="mail-from">Marta Nowak</span>
+                  <span class="mail-time">09:12</span>
+                  <span class="mail-subject">Logo files for print <b>— Could you send the SVGs and the…</b></span>
+                  <span class="mail-action">
+                    <svg class="icon icon-xs"><use href="#i-tasks" /></svg>
+                    Make a task
+                    <span class="kbd">T</span>
+                  </span>
+                </li>
+                <li>
+                  <span class="avatar avatar-lg">AK</span>
+                  <span class="mail-from">Anna Kowalska</span>
+                  <span class="mail-time">08:47</span>
+                  <span class="mail-subject">Re: Final invoice numbers <b>— Looks right, just the VAT line…</b></span>
+                </li>
+                <li class="is-read">
+                  <span class="avatar avatar-lg">TW</span>
+                  <span class="mail-from">Tomasz Wiśniewski</span>
+                  <span class="mail-time">Yesterday</span>
+                  <span class="mail-subject">Studio call Thursday? <b>— Works for me after four…</b></span>
+                </li>
+                <li class="is-read">
+                  <span class="avatar avatar-lg">PS</span>
+                  <span class="mail-from">Print Shop Łódź</span>
+                  <span class="mail-time">Mon</span>
+                  <span class="mail-subject">Your quote #2291 <b>— Attached is the quote for 500…</b></span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="pane">
+              <div class="pane-head">
+                <svg class="icon icon-sm"><use href="#i-tasks" /></svg>
+                Task
+                <span class="right badge badge-success">Created from email</span>
+              </div>
+              <div class="task-detail">
+                <h4>
+                  <span class="check"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                  Reply to Marta about the logo files
+                </h4>
+                <dl class="props">
+                  <dt>When</dt>
+                  <dd><svg class="icon icon-sm"><use href="#i-today" /></svg>Today</dd>
+                  <dt>Person</dt>
+                  <dd><span class="avatar">MN</span>Marta Nowak</dd>
+                  <dt>Project</dt>
+                  <dd><span class="tag" data-label="pink">Kowalska rebrand</span></dd>
+                </dl>
+                <div class="quote">
+                  <div class="quote-head">
+                    <svg class="icon icon-xs"><use href="#i-link" /></svg>
+                    Created from · Logo files for print · 09:12
+                  </div>
+                  <p>
+                    Hi — could you send the SVGs and the final colour values? The print shop needs
+                    them by Friday so we can hit the launch date.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="caption reveal">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-link" /></svg>
+          One keystroke. The person, the thread, and the project come with it.
+        </p>
+      </section>
+
+      <!-- ─── Day ───────────────────────────────────────────────────────── -->
+      <section class="section container" id="day" aria-labelledby="day-title">
+        <div class="section-intro reveal">
+          <div>
+            <div class="eyebrow">Your day</div>
+            <h2 class="h-section" id="day-title">A day that bends, not breaks.</h2>
+          </div>
+          <p class="lead">
+            Drag tasks into time. When a block ends, finish it, push it, shrink it, or drop it —
+            then reflow the rest of the day in one tap. Falling behind is normal. Guilt isn’t part
+            of the plan.
+          </p>
+        </div>
+
+        <div class="frame reveal" role="img" aria-label="A calendar day. A time block has just ended and offers Done, Push, Shrink, and Drop. A side panel offers to reflow the day.">
+          <div class="titlebar" aria-hidden="true">
+            <div class="lights"><span></span><span></span><span></span></div>
+            <div class="titlebar-title">Calendar — Wednesday</div>
+            <div></div>
+          </div>
+          <div class="day" aria-hidden="true">
+            <div class="cal">
+              <ul class="hours">
+                <li>09:00</li>
+                <li>10:00</li>
+                <li>11:00</li>
+                <li>12:00</li>
+                <li>13:00</li>
+                <li>14:00</li>
+                <li>15:00</li>
+                <li>16:00</li>
+              </ul>
+              <div class="grid">
+                <div class="block is-elapsed" data-label="pink" style="top: 0.125rem; height: 5.75rem">
+                  <div class="block-title">Send the revised invoice</div>
+                  <div class="block-time">09:00 – 10:30 · Kowalska rebrand</div>
+                  <div class="elapsed-row">
+                    <span class="label">Block ended</span>
+                    <span class="chip-btn is-primary"><svg class="icon icon-xs"><use href="#i-check" /></svg>Done</span>
+                    <span class="chip-btn">Push</span>
+                    <span class="chip-btn">Shrink</span>
+                    <span class="chip-btn">Drop</span>
+                  </div>
+                </div>
+                <div class="block is-event" style="top: 8.125rem; height: 3.75rem">
+                  <div class="block-title">Coffee with Tomasz</div>
+                  <div class="block-time">11:00 – 12:00</div>
+                </div>
+                <div class="now" style="top: 13rem"></div>
+                <div class="block" data-label="blue" style="top: 16.125rem; height: 7.75rem">
+                  <div class="block-title">Draft the Q4 proposal</div>
+                  <div class="block-time">13:00 – 15:00 · Q4 proposal</div>
+                </div>
+                <div class="block" data-label="green" style="top: 24.125rem; height: 3.75rem">
+                  <div class="block-title">Review August expenses</div>
+                  <div class="block-time">15:00 – 16:00</div>
+                </div>
+                <div class="block is-event" style="top: 30.125rem; height: 1.75rem; padding-block: 0.1875rem">
+                  <div class="block-title">Studio call · 16:30</div>
+                </div>
+              </div>
+            </div>
+            <div class="day-side">
+              <div class="side-card">
+                <h5>
+                  <svg class="icon icon-sm"><use href="#i-today" /></svg>
+                  Day fullness
+                  <span class="muted">5h / 7h</span>
+                </h5>
+                <p>Two hours free after lunch. Room for one more focused block.</p>
+              </div>
+              <div class="side-card">
+                <h5>
+                  Carried over
+                  <span class="muted">2</span>
+                </h5>
+                <ul class="mini-list">
+                  <li><span class="dot" data-label="amber"></span><span>Update the client brief</span><span>Mon</span></li>
+                  <li><span class="dot"></span><span>Renew the domain</span><span>Tue</span></li>
+                </ul>
+                <span class="btn btn-secondary btn-sm reflow">
+                  <svg class="icon icon-sm"><use href="#i-reflow" /></svg>
+                  Reflow my day
+                </span>
+              </div>
+              <div class="reason">
+                <svg class="icon icon-sm"><use href="#i-info" /></svg>
+                <span>Suggestions only. Moduo tells you why it would move something — it never moves it for you.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── People & money ────────────────────────────────────────────── -->
+      <section class="section container" id="people" aria-labelledby="people-title">
+        <div class="section-intro reveal">
+          <div>
+            <div class="eyebrow">People &amp; money</div>
+            <h2 class="h-section" id="people-title">Every person, with everything attached.</h2>
+          </div>
+          <p class="lead">
+            Open a contact and see every email, task, note, and invoice — gathered on its own,
+            with zero logging. Close the month with one honest number.
+          </p>
+        </div>
+
+        <div class="pair">
+          <article class="panel reveal" aria-label="Contact example">
+            <div class="contact-head">
+              <span class="avatar avatar-xl">AK</span>
+              <div>
+                <div class="contact-name">Anna Kowalska</div>
+                <div class="contact-sub">Kowalska &amp; Co. · Client since March</div>
+              </div>
+              <span class="badge">Last contact 2 days ago</span>
+            </div>
+            <ul class="rollup">
+              <li>
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg>
+                <span class="rollup-kind">Emails<span>12</span></span>
+                <span class="rollup-item"><span class="t">Re: Final invoice numbers</span><span class="w">08:47</span></span>
+              </li>
+              <li>
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>
+                <span class="rollup-kind">Tasks<span>3</span></span>
+                <span class="rollup-item"><span class="t">Send the revised invoice</span><span class="w">Today</span></span>
+              </li>
+              <li>
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>
+                <span class="rollup-kind">Notes<span>2</span></span>
+                <span class="rollup-item"><span class="t">Rebrand scope, v2</span><span class="w">Sep 22</span></span>
+              </li>
+              <li>
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>
+                <span class="rollup-kind">Meetings<span>1</span></span>
+                <span class="rollup-item"><span class="t">Launch review</span><span class="w">Fri 10:00</span></span>
+              </li>
+              <li>
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-invoice" /></svg>
+                <span class="rollup-kind">Invoices<span>4</span></span>
+                <span class="rollup-item"><span class="t">#0142 · €2,400</span><span class="badge badge-warning">Unpaid</span></span>
+              </li>
+            </ul>
+            <p class="panel-foot">Nothing here was logged by hand. It’s just <b>everything that already mentions Anna</b>.</p>
+          </article>
+
+          <article class="panel reveal" style="--d: 90ms" aria-label="Monthly finance example">
+            <div class="money-head">August, in one number</div>
+            <div class="money-big">€8,420</div>
+            <div class="money-delta">came in. Here’s where it went.</div>
+            <ul class="flow">
+              <li><span>Contractors</span><span class="amt">€1,850</span><span class="bar"><i style="--w: 22%"></i></span></li>
+              <li><span>Taxes set aside</span><span class="amt">€2,100</span><span class="bar"><i style="--w: 25%"></i></span></li>
+              <li><span>Studio rent</span><span class="amt">€1,200</span><span class="bar"><i style="--w: 14%"></i></span></li>
+              <li><span>Software</span><span class="amt">€312</span><span class="bar"><i style="--w: 4%"></i></span></li>
+              <li class="kept"><span>You kept</span><span class="amt">€2,958</span><span class="bar"><i style="--w: 35%"></i></span></li>
+            </ul>
+            <p class="panel-foot">From a CSV you already have. No bank login, no budget to police.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ─── Day one ───────────────────────────────────────────────────── -->
+      <section class="section container" id="dayone" aria-labelledby="dayone-title">
+        <div class="dayone">
+          <div class="reveal">
+            <div class="eyebrow">Day one</div>
+            <h2 class="h-section" id="dayone-title">Works the day you sign up.</h2>
+            <p class="lead">
+              There’s nothing to design first. A bare title is a complete task. Dates, people, and
+              links come later — if you want them.
+            </p>
+            <ul class="truths">
+              <li><svg class="icon" aria-hidden="true"><use href="#i-grid-off" /></svg>No databases to build</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-dashboard" /></svg>A dashboard that’s useful on first open</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-feather" /></svg>Quiet by default — you turn things up</li>
+            </ul>
+          </div>
+
+          <div class="capture-stage reveal" style="--d: 90ms" role="img" aria-label="A quick-capture box with a task being typed, then saved to Inbox.">
+            <div class="dialog" aria-hidden="true">
+              <div class="dialog-input">
+                <span class="check"></span>
+                <span class="typed" id="typed"></span><span class="caret"></span>
+              </div>
+              <div class="dialog-foot">
+                <span class="ref"><svg class="icon icon-xs"><use href="#i-calendar" /></svg>Date</span>
+                <span class="ref"><svg class="icon icon-xs"><use href="#i-contact" /></svg>Person</span>
+                <span class="hint">Save <span class="kbd">↵</span></span>
+              </div>
+            </div>
+            <div class="saved" id="saved" aria-hidden="true">
+              <span class="check"></span>
+              <span class="row-title" id="saved-title">Call Marta about the print deadline</span>
+              <span class="row-meta"><svg class="icon icon-xs"><use href="#i-inbox" /></svg>Inbox</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── Principles ────────────────────────────────────────────────── -->
+      <section class="section container" id="principles" aria-labelledby="principles-title">
+        <div class="section-intro reveal">
+          <div>
+            <div class="eyebrow">Principles</div>
+            <h2 class="h-section" id="principles-title">Built to stay out of the way.</h2>
+          </div>
+          <p class="lead">
+            An all-in-one only works if it’s light. These are the promises that keep it that way.
+          </p>
+        </div>
+        <ul class="principles">
+          <li class="reveal">
+            <h3><svg class="icon" aria-hidden="true"><use href="#i-bolt" /></svg>Instant</h3>
+            <p class="body">
+              A native app, not a heavy browser wrapper. Opening a task, searching, and switching
+              views should feel immediate — even in a big workspace.
+            </p>
+          </li>
+          <li class="reveal" style="--d: 60ms">
+            <h3><svg class="icon" aria-hidden="true"><use href="#i-scale" /></svg>Fair</h3>
+            <p class="body">
+              Pay for the people you actually have. No seat minimums. A free tier students can
+              genuinely use.
+            </p>
+          </li>
+          <li class="reveal">
+            <h3><svg class="icon" aria-hidden="true"><use href="#i-export" /></svg>Yours</h3>
+            <p class="body">
+              Every note, task, contact, and number exports cleanly. Your data is yours — even if
+              you leave.
+            </p>
+          </li>
+          <li class="reveal" style="--d: 60ms">
+            <h3><span class="ai-disc" aria-hidden="true"></span>Bring your own AI</h3>
+            <p class="body">
+              No assistant stapled onto every screen. Connect the AI you already use over MCP.
+              Moduo never trains on your workspace.
+            </p>
+          </li>
+        </ul>
+      </section>
+
+      <!-- ─── Close ─────────────────────────────────────────────────────── -->
+      <section class="container close reveal" aria-labelledby="close-title">
+        <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
+        <h2 class="h-section" id="close-title">Stop stitching five apps together.</h2>
+        <p class="lead">Tasks, notes, calendar, email, contacts, and finance — in one window that already knows how they connect.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href="https://app.moduo.app/auth">
+            Get started
+            <svg class="icon icon-sm arrow" aria-hidden="true"><use href="#i-arrow" /></svg>
+          </a>
+        </div>
+      </section>
     </main>
+
+    <footer class="footer">
+      <div class="container footer-inner">
+        <a class="brand" href="#top">
+          <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
+          Moduo
+        </a>
+        <span>© 2026 Moduo. Your data exports with you.</span>
+        <nav class="footer-links" aria-label="Footer">
+          <a href="#connect">How it links</a>
+          <a href="#principles">Principles</a>
+          <a href="https://app.moduo.app/auth">Sign in</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        var doc = document.documentElement;
+        doc.classList.add("js");
+        var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        // Nav hairline once the page has scrolled.
+        var nav = document.getElementById("nav");
+        var onScroll = function () {
+          nav.classList.toggle("is-scrolled", window.scrollY > 8);
+        };
+        onScroll();
+        window.addEventListener("scroll", onScroll, { passive: true });
+
+        // Reveal on scroll.
+        var reveals = document.querySelectorAll(".reveal");
+        if ("IntersectionObserver" in window) {
+          var io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (e) {
+                if (e.isIntersecting) {
+                  e.target.classList.add("is-in");
+                  io.unobserve(e.target);
+                }
+              });
+            },
+            { rootMargin: "0px 0px -12% 0px", threshold: 0.08 }
+          );
+          reveals.forEach(function (el) {
+            io.observe(el);
+          });
+        } else {
+          reveals.forEach(function (el) {
+            el.classList.add("is-in");
+          });
+        }
+
+        // Hero: the right rail follows the selected task.
+        var I = function (id, cls) {
+          return '<svg class="icon ' + (cls || "icon-sm") + '"><use href="#' + id + '"/></svg>';
+        };
+        var card = function (icon, title, snip, extra) {
+          return (
+            '<div class="link-card">' + I(icon) +
+            '<div class="link-card-main"><div class="link-card-title">' + title + "</div>" +
+            (snip ? '<div class="link-card-snip">' + snip + "</div>" : "") +
+            "</div>" + (extra || "") + "</div>"
+          );
+        };
+        var group = function (label, body) {
+          return '<div><div class="link-group-label">' + label + "</div>" + body + "</div>";
+        };
+        var person = function (initials, name, org) {
+          return (
+            '<div class="link-card"><span class="avatar">' + initials + "</span>" +
+            '<div class="link-card-main"><div class="link-card-title">' + name + "</div>" +
+            '<div class="link-card-snip">' + org + "</div></div></div>"
+          );
+        };
+        var tasks = {
+          invoice: {
+            title: "Send the revised invoice",
+            sub: "Today · Kowalska rebrand",
+            count: "4 items",
+            body:
+              group("Person", person("AK", "Anna Kowalska", "Kowalska &amp; Co.")) +
+              group("Came from", card("i-mail", "Re: Final invoice numbers", "Looks right, just the VAT line needs the new rate…")) +
+              group("Money", card("i-invoice", "Invoice #0142 · €2,400", "Due Friday", '<span class="badge badge-warning">Unpaid</span>')) +
+              group("On the calendar", card("i-calendar", "Fri 10:00 · Launch review", null)),
+          },
+          logo: {
+            title: "Reply to Marta about the logo files",
+            sub: "Today · Kowalska rebrand",
+            count: "3 items",
+            body:
+              group("Person", person("MN", "Marta Nowak", "Designer · Kowalska &amp; Co.")) +
+              group("Came from", card("i-mail", "Logo files for print", "Could you send the SVGs and the final colour values?")) +
+              group("Related", card("i-notes", "Brand colours, final", "Pantone and hex values, signed off Sep 18")),
+          },
+          proposal: {
+            title: "Draft the Q4 proposal",
+            sub: "13:00–15:00 · Q4 proposal",
+            count: "3 items",
+            body:
+              group("On the calendar", card("i-calendar", "Today 13:00 – 15:00", "Focus block")) +
+              group("Notes", card("i-notes", "Q4 proposal — outline", "Scope, timeline, three pricing options…")) +
+              group("Person", person("TW", "Tomasz Wiśniewski", "Partner · Wiśniewski Media")),
+          },
+          expenses: {
+            title: "Review August expenses",
+            sub: "Today · Studio ops",
+            count: "2 items",
+            body:
+              group("Money", card("i-finance", "August · 14 transactions", "€5,462 out · €8,420 in")) +
+              group("Came from", card("i-mail", "Your August statement", "The CSV is attached to this email.")),
+          },
+          call: {
+            title: "Prep notes for the studio call",
+            sub: "Today · 16:30",
+            count: "3 items",
+            body:
+              group("Notes", card("i-notes", "Studio call — agenda", "Hiring, the Łódź print run, Q4 capacity")) +
+              group("On the calendar", card("i-calendar", "Today 16:30 · Studio call", null)) +
+              group("Person", person("TW", "Tomasz Wiśniewski", "Partner · Wiśniewski Media")),
+          },
+        };
+
+        var rail = document.getElementById("rail-body");
+        var railCount = document.getElementById("rail-count");
+        var render = function (key) {
+          var t = tasks[key];
+          rail.innerHTML =
+            '<div><div class="rail-title">' + t.title + '</div><div class="rail-sub">' + t.sub + "</div></div>" +
+            t.body;
+          railCount.textContent = t.count;
+        };
+        render("invoice");
+
+        var rows = document.querySelectorAll(".row[data-task]");
+        var swapTimer;
+        rows.forEach(function (row) {
+          row.addEventListener("click", function (ev) {
+            var check = ev.target.closest(".check");
+            if (check) {
+              row.classList.toggle("is-done");
+              if (!reduce && row.classList.contains("is-done")) {
+                check.classList.remove("check-pop");
+                void check.offsetWidth;
+                check.classList.add("check-pop");
+              }
+              return;
+            }
+            if (row.classList.contains("is-selected")) return;
+            rows.forEach(function (r) {
+              r.classList.remove("is-selected");
+            });
+            row.classList.add("is-selected");
+            clearTimeout(swapTimer);
+            rail.classList.add("is-swapping");
+            swapTimer = setTimeout(
+              function () {
+                render(row.getAttribute("data-task"));
+                rail.classList.remove("is-swapping");
+              },
+              reduce ? 0 : 140
+            );
+          });
+        });
+
+        // Day one: type a bare title, save it to Inbox.
+        var typed = document.getElementById("typed");
+        var saved = document.getElementById("saved");
+        var phrase = "Call Marta about the print deadline";
+        if (reduce) {
+          typed.textContent = phrase;
+          saved.classList.add("is-shown");
+        } else {
+          var started = false;
+          var run = function () {
+            var i = 0;
+            typed.textContent = "";
+            saved.classList.remove("is-shown");
+            var step = function () {
+              i++;
+              typed.textContent = phrase.slice(0, i);
+              if (i < phrase.length) {
+                setTimeout(step, 38 + Math.random() * 50);
+              } else {
+                setTimeout(function () {
+                  saved.classList.add("is-shown");
+                  typed.textContent = "";
+                  setTimeout(run, 4200);
+                }, 700);
+              }
+            };
+            setTimeout(step, 400);
+          };
+          var stage = document.querySelector(".capture-stage");
+          if ("IntersectionObserver" in window) {
+            new IntersectionObserver(function (entries, obs) {
+              if (entries[0].isIntersecting && !started) {
+                started = true;
+                run();
+                obs.disconnect();
+              }
+            }, { threshold: 0.4 }).observe(stage);
+          } else {
+            run();
+          }
+        }
+      })();
+    </script>
   </body>
 </html>
