@@ -3,19 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Moduo — Every app you need. None you don’t.</title>
+    <title>Moduo · Fire five apps. Keep the work.</title>
     <meta
       name="description"
-      content="One modular app for your whole working life: tasks, notes, email, calendar, mind maps — and planning, time tracking, invoicing, goals and more. Turn on what you need. Moduo connects it."
+      content="Email, tasks, notes, calendar and contacts in one workspace, linked to each other, so nothing lives in two places. Bring any AI over MCP."
     />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#000000" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://www.moduo.app/" />
-    <meta property="og:title" content="Moduo — Every app you need. None you don’t." />
+    <meta property="og:title" content="Moduo · Fire five apps. Keep the work." />
     <meta
       property="og:description"
-      content="One modular app that connects your tasks, notes, email, calendar and more — with any AI over MCP."
+      content="Email, tasks, notes, calendar and contacts in one workspace, linked to each other. Bring any AI over MCP."
     />
     <meta name="twitter:card" content="summary" />
     <link rel="canonical" href="https://www.moduo.app/" />
@@ -1172,7 +1172,7 @@
         position: absolute;
         inset: 0;
         display: grid;
-        grid-template-columns: 2.6em minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
         grid-template-rows: 2.5em minmax(0, 1fr);
         font-size: 1.72cqw;
         border: 1px dashed var(--border-strong);
@@ -1280,9 +1280,80 @@
         grid-column: 5 / 11;
         grid-row: 3 / 6;
       }
-      .md-map {
+      .md-contacts {
         grid-column: 1 / 3;
         grid-row: 4 / 6;
+      }
+      /* Real top bar: module tabs, Home active (the app has no side rail) */
+      .ws-tabs {
+        display: flex;
+        align-items: center;
+        gap: 0.25em;
+        min-width: 0;
+        margin-inline: auto;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .ws-tabs > * {
+        padding: 0.25em 0.6em;
+        border-radius: 0.45em;
+        font-weight: 400;
+      }
+      .ws-tabs b {
+        color: var(--foreground);
+        background: color-mix(in oklab, var(--foreground) 9%, transparent);
+      }
+      .ws-k {
+        margin-left: 0;
+      }
+      .md-body.ct {
+        display: flex;
+        flex-direction: column;
+        gap: 0.55em;
+        padding: 0.7em;
+      }
+      .ct-p {
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+        min-width: 0;
+      }
+      .ct-p > span {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .ct-p strong {
+        font-weight: 500;
+        color: var(--foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ct-p em,
+      .ct-s {
+        font-style: normal;
+        font-size: 0.85em;
+        color: var(--faint-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ct-p .av {
+        flex: none;
+        display: inline-grid;
+        place-items: center;
+        width: 1.8em;
+        height: 1.8em;
+        border-radius: var(--radius-full);
+        background: var(--muted);
+        font-size: 0.75em;
+        font-weight: 500;
+        color: var(--muted-foreground);
+      }
+      .asm.is-five .aw {
+        width: 36%;
+        font-size: 2cqw;
       }
       .md-notes {
         grid-column: 3 / 5;
@@ -2160,7 +2231,7 @@
       }
       .story-track {
         position: relative;
-        height: 520vh;
+        height: 620vh;
       }
       .story-sticky {
         position: sticky;
@@ -2570,6 +2641,320 @@
         display: inline-flex;
         align-items: center;
         gap: 0.375rem;
+      }
+
+      /* ─── Stack tax: a receipt drawn as a spec plate ───────────────────── */
+      .tax-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+        gap: clamp(2.5rem, 6vw, 6rem);
+        align-items: center;
+      }
+      .rcpt {
+        position: relative;
+        padding: clamp(1.75rem, 3vw, 2.5rem) clamp(1.5rem, 3vw, 2.5rem);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: color-mix(in oklab, var(--card) 60%, var(--background));
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
+      .rcpt-fig {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        margin: 0 0 1.25rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px dashed var(--border-strong);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .rcpt-rows {
+        display: grid;
+        gap: 0.8rem;
+        margin: 0;
+        padding-bottom: 1.25rem;
+        border-bottom: 1px dashed var(--border-strong);
+      }
+      .rcpt-rows > div {
+        display: flex;
+        align-items: baseline;
+        gap: 1rem;
+      }
+      .rcpt-rows dt {
+        color: var(--foreground);
+      }
+      .rcpt-rows dt span {
+        margin-left: 0.5rem;
+        color: var(--faint-foreground);
+      }
+      .rcpt-rows dd {
+        margin: 0 0 0 auto;
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .rcpt-sum {
+        display: flex;
+        justify-content: space-between;
+        padding: 1rem 0;
+        color: var(--muted-foreground);
+      }
+      .rcpt-sum s {
+        text-decoration-color: var(--foreground);
+        text-decoration-thickness: 1.5px;
+      }
+      .rcpt-us {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border-strong);
+        font-family: var(--font-ui, inherit);
+      }
+      .rcpt-us span {
+        display: grid;
+        font-size: var(--text-md);
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .rcpt-us em {
+        font-style: normal;
+        font-size: var(--text-xs);
+        font-weight: 400;
+        color: var(--subtle-foreground);
+      }
+      .rcpt-us b {
+        font-size: clamp(2rem, 3.4vw, 2.75rem);
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        font-variant-numeric: tabular-nums;
+      }
+      .rcpt-note {
+        margin: 1.25rem 0 0;
+        font-size: var(--text-2xs);
+        color: var(--faint-foreground);
+      }
+
+      /* ─── What we refuse to build ───────────────────────────────────────── */
+      .nope {
+        margin: clamp(2.5rem, 5vw, 4rem) 0 0;
+        padding: 0;
+        list-style: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .nope li {
+        display: grid;
+        grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
+        gap: clamp(1rem, 4vw, 3rem);
+        align-items: end;
+        padding-block: clamp(1.5rem, 3vw, 2.25rem);
+        border-top: 1px solid var(--border);
+      }
+      .nope s {
+        font-size: clamp(1.75rem, 4vw, 3.5rem);
+        font-weight: 600;
+        line-height: 0.98;
+        letter-spacing: -0.045em;
+        text-transform: uppercase;
+        text-wrap: balance;
+        color: var(--faint-foreground);
+        text-decoration-color: var(--foreground);
+        text-decoration-thickness: 3px;
+      }
+      .nope p {
+        margin: 0;
+        font-size: var(--text-md);
+        line-height: 1.55;
+        color: var(--muted-foreground);
+      }
+      .nope b {
+        font-weight: 500;
+        color: var(--foreground);
+      }
+
+      /* ─── Pricing ───────────────────────────────────────────────────────── */
+      .bill {
+        display: inline-flex;
+        gap: 2px;
+        padding: 3px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--card);
+      }
+      .bill button {
+        height: 2rem;
+        padding: 0 0.875rem;
+        border: 0;
+        border-radius: calc(var(--radius-md) - 2px);
+        background: transparent;
+        font: inherit;
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--subtle-foreground);
+        cursor: pointer;
+      }
+      .bill button span {
+        color: var(--faint-foreground);
+        font-weight: 400;
+      }
+      .bill button[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .plans {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        margin-top: clamp(2.5rem, 5vw, 3.5rem);
+      }
+      .plan {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        padding: clamp(1.5rem, 2.4vw, 2rem);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--card);
+      }
+      .plan.is-pick {
+        border-color: var(--border-strong);
+        background: color-mix(in oklab, var(--foreground) 3%, var(--card));
+      }
+      .plan-h h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--text-lg);
+        font-weight: 500;
+      }
+      .plan-h p {
+        margin-top: 0.125rem;
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .plan-tag {
+        margin-left: auto;
+        padding: 0.125rem 0.5rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        color: var(--muted-foreground);
+      }
+      .plan-p {
+        display: flex;
+        align-items: baseline;
+        gap: 0.375rem;
+      }
+      .plan-p b {
+        font-size: clamp(2.5rem, 4vw, 3rem);
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        font-variant-numeric: tabular-nums;
+      }
+      .plan-p span {
+        color: var(--subtle-foreground);
+      }
+      .plan-f {
+        display: grid;
+        gap: 0.625rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        font-size: var(--text-sm);
+        color: var(--muted-foreground);
+      }
+      .plan-f li {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+      }
+      .plan-f .icon {
+        flex: none;
+        color: var(--foreground);
+      }
+      .plan-b {
+        margin-top: auto;
+        width: 100%;
+        justify-content: center;
+      }
+      .plans-note {
+        margin-top: 1.5rem;
+        text-align: center;
+        font-size: var(--text-sm);
+        color: var(--faint-foreground);
+      }
+
+      /* ─── FAQ ───────────────────────────────────────────────────────────── */
+      .faq-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+        gap: clamp(2.5rem, 6vw, 6rem);
+        align-items: start;
+      }
+      .faq-mail {
+        color: var(--foreground);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        text-decoration-color: var(--border-strong);
+      }
+      .faq {
+        border-bottom: 1px solid var(--border);
+      }
+      .faq details {
+        border-top: 1px solid var(--border);
+      }
+      .faq summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.25rem 0;
+        font-size: var(--text-lg);
+        font-weight: 500;
+        cursor: pointer;
+        list-style: none;
+      }
+      .faq summary::-webkit-details-marker {
+        display: none;
+      }
+      .faq summary::after {
+        content: "+";
+        flex: none;
+        font-family: var(--font-mono);
+        font-weight: 400;
+        color: var(--subtle-foreground);
+      }
+      .faq details[open] summary::after {
+        content: "–";
+      }
+      .faq summary:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 4px;
+        border-radius: var(--radius-sm);
+      }
+      .faq details p {
+        max-width: 60ch;
+        margin: -0.25rem 0 1.25rem;
+        font-size: var(--text-md);
+        line-height: 1.6;
+        color: var(--muted-foreground);
+      }
+
+      @media (max-width: 900px) {
+        .tax-grid,
+        .faq-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .plans {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .nope li {
+          grid-template-columns: minmax(0, 1fr);
+          align-items: start;
+        }
       }
 
       /* ─── Close + footer ────────────────────────────────────────────────── */
@@ -3815,6 +4200,244 @@
         color: var(--muted-foreground);
       }
 
+      /* ── Thread story: parts that arrive with later steps ── */
+      .rn [data-r] {
+        opacity: 0;
+        max-height: 0;
+        overflow: hidden;
+        transition:
+          opacity var(--motion-slow) var(--ease-out),
+          max-height var(--motion-slower) var(--ease-out),
+          margin var(--motion-slower) var(--ease-out);
+      }
+      .rel.s1 .rn [data-r="1"],
+      .rel.s2 .rn [data-r="2"],
+      .rel.s3 .rn [data-r="3"],
+      .rel.s4 .rn [data-r="4"],
+      .rel.s5 .rn [data-r="5"] {
+        opacity: 1;
+        max-height: 4em;
+        transition-delay: 600ms;
+      }
+      .rn-act {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+      }
+      .rn-key {
+        display: inline-grid;
+        place-items: center;
+        min-width: 22px;
+        height: 22px;
+        padding: 0 6px;
+        border: 1px solid var(--border-strong);
+        border-bottom-width: 2px;
+        border-radius: 6px;
+        background: var(--card);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--foreground);
+      }
+      .rn-key.is-press {
+        animation: rn-press 520ms var(--ease-out);
+      }
+      @keyframes rn-press {
+        40% {
+          transform: translateY(2px);
+          border-bottom-width: 1px;
+          background: var(--accent);
+        }
+      }
+      .lk {
+        display: grid;
+        gap: 4px;
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+      }
+      .lk li {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        white-space: nowrap;
+      }
+      .lk .icon,
+      .hm .icon {
+        flex: none;
+        color: var(--faint-foreground);
+      }
+      .rn-text {
+        margin: 6px 0 0;
+        font-size: var(--text-xs);
+        line-height: 1.6;
+        color: var(--muted-foreground);
+      }
+      .rn-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 6px;
+        border-radius: var(--radius-md);
+        background: var(--muted);
+        color: var(--foreground);
+        box-shadow: inset 0 0 0 1px var(--border-strong);
+      }
+      .rn-tl,
+      .rn-block {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        padding: 4px 6px;
+        border-radius: var(--radius-sm);
+        background: color-mix(in oklab, var(--foreground) 4%, transparent);
+        font-size: var(--text-xs);
+        color: var(--foreground);
+        white-space: nowrap;
+      }
+      .rn-block {
+        margin-top: 2px;
+        padding: 6px 8px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        background: var(--card);
+      }
+      .rn-tl span,
+      .rn-block span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .rn-tl em,
+      .rn-block em {
+        margin-left: auto;
+        font-style: normal;
+        color: var(--subtle-foreground);
+      }
+      .rn-tl .cb,
+      .rn-block .cb {
+        flex: none;
+        width: 12px;
+        height: 12px;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--subtle-foreground);
+      }
+      .rn-task {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .rn-ck {
+        flex: none;
+        display: inline-grid;
+        place-items: center;
+        width: 16px;
+        height: 16px;
+        padding: 0;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--subtle-foreground);
+        background: transparent;
+        color: transparent;
+        cursor: pointer;
+      }
+      .rn-ck .icon {
+        width: 10px;
+        height: 10px;
+        stroke-width: 3;
+      }
+      .rn-ck[aria-pressed="true"] {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .rn-task.is-done .rn-title {
+        color: var(--subtle-foreground);
+        text-decoration: line-through;
+      }
+      .rn-as {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        font-size: var(--text-xs);
+        color: var(--foreground);
+      }
+      .rn-as .av,
+      .hm .av {
+        display: inline-grid;
+        place-items: center;
+        width: 18px;
+        height: 18px;
+        border-radius: var(--radius-full);
+        background: var(--muted);
+        font-size: 9px;
+        font-style: normal;
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .rn-pill {
+        margin-left: auto;
+        padding: 0 6px;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        font-size: var(--text-2xs);
+        color: var(--muted-foreground);
+      }
+      .rn-note {
+        display: grid;
+        gap: 2px;
+        margin-top: 10px;
+        padding: 8px 10px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-lg);
+        background: var(--accent);
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+      }
+      .rn-note b {
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .rn-note span {
+        color: var(--faint-foreground);
+      }
+      .hm {
+        display: grid;
+        gap: 6px;
+        margin: 2px 0 0;
+        padding: 0;
+        list-style: none;
+        font-size: var(--text-xs);
+      }
+      .hm li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--card);
+        white-space: nowrap;
+      }
+      .hm b {
+        flex: none;
+        font-weight: 500;
+        color: var(--subtle-foreground);
+      }
+      .hm span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--foreground);
+      }
+      .hm .av {
+        margin-left: auto;
+      }
+
       .bars {
         display: flex;
         align-items: flex-end;
@@ -4432,7 +5055,7 @@
       }
       .sz-g {
         display: grid;
-        grid-template-columns: repeat(2, 0.5rem);
+        grid-template-columns: repeat(3, 0.4rem);
         grid-auto-rows: 0.5rem;
         gap: 2px;
       }
@@ -4442,6 +5065,24 @@
       }
       .sz-g i.on {
         background: currentColor;
+      }
+      .wd-links {
+        display: grid;
+        gap: 6px;
+        font-size: var(--text-xs);
+        color: var(--foreground);
+      }
+      .wd-links span {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .wd-links i {
+        font-style: normal;
+        color: var(--faint-foreground);
+      }
+      #store-tabs[hidden] {
+        display: none;
       }
       .pop-tones {
         display: flex;
@@ -5201,6 +5842,7 @@
             <a href="#story" data-nav="story"><b>01</b>How it connects</a>
             <a href="#yours" data-nav="yours"><b>02</b>Make it yours</a>
             <a href="#ai" data-nav="ai"><b>03</b>AI</a>
+            <a href="#pricing" data-nav="pricing"><b>04</b>Pricing</a>
           </nav>
           <div class="nav-actions">
             <button class="btn btn-primary nav-wl" type="button" data-wl-open aria-haspopup="dialog">
@@ -5233,12 +5875,12 @@
             <div class="hx-copy">
               <p class="hx-eyebrow hero-fade" style="--d: 120ms"><span class="hx-ix">00</span>The modular workspace</p>
               <h1 class="h-hero" id="hero-title">
-                <span class="line">Every app you need.</span>
-                <span class="line soft">None you don’t.</span>
+                <span class="line">Fire five apps.</span>
+                <span class="line soft">Keep the work.</span>
               </h1>
               <p class="lead hero-fade" style="--d: 520ms">
-                Tasks, notes, email, calendar and mind maps — with planning, time tracking, invoicing, goals
-                and more on the way. Switch on what you need. <span class="fg">Moduo connects all of it.</span>
+                Email, tasks, notes, calendar and contacts in one workspace,
+                <span class="fg">linked to each other, so nothing lives in two places.</span>
               </p>
               <div class="hx-cta hero-fade" style="--d: 640ms">
                 <form class="wl" data-source="hero" novalidate>
@@ -5281,42 +5923,26 @@
 
             <div class="hx-visual hero-fade" style="--d: 760ms">
               <div class="hx-tabs" aria-hidden="true">
-                <span class="hx-tab" data-first><span>moduo.app — Carter Studio</span></span>
-                <span class="hx-tab"><b>K</b></span>
-                <span class="hx-tab"><b>H</b></span>
+                <span class="hx-tab" data-first><span>Moduo · Home</span></span>
                 <span class="hx-tab"><b>D</b></span>
-                <span class="hx-tab"><b>C</b></span>
-                <span class="hx-tab"><b>S</b></span>
                 <span class="hx-tab"><b>T</b></span>
-                <span class="hx-tab"><b>M</b></span>
-                <span class="hx-tab"><b>M</b></span>
-                <span class="hx-tab"><b>I</b></span>
                 <span class="hx-tab"><b>C</b></span>
-                <span class="hx-tab"><b>N</b></span>
-                <span class="hx-tab"><b>N</b></span>
-                <span class="hx-tab"><b>D</b></span>
-                <span class="hx-tab"><b>W</b></span>
-                <span class="hx-tab"><b>B</b></span>
-                <span class="hx-tab"><b>W</b></span>
-                <span class="hx-tab"><b>M</b></span>
-                <span class="hx-tab"><b>G</b></span>
-                <span class="hx-tab"><b>R</b></span>
-                <span class="hx-tabs-n" id="hx-tabs-n">20 tabs</span>
+                <span class="hx-tab"><b>A</b></span>
+                <span class="hx-tabs-n" id="hx-tabs-n">5 tabs</span>
               </div>
-              <div class="asm" id="asm" data-state="off" role="img" aria-label="Twenty separate apps assembling into one Moduo workspace with five connected modules">
+              <div class="asm is-five" id="asm" data-state="off" role="img" aria-label="Five separate apps for mail, notes, tasks, calendar and contacts sliding together into one Moduo workspace">
                 <div class="ws" aria-hidden="true">
-                  <div class="ws-bar"><span class="ws-dots"><i></i><i></i><i></i></span><span class="ws-crumb">Carter Studio <em>/</em> Website redesign</span><span class="ws-k">⌘K Search everything</span></div>
-                  <div class="ws-rail"><svg class="icon"><use href="#mark" /></svg><svg class="icon"><use href="#i-tasks" /></svg><svg class="icon"><use href="#i-calendar" /></svg><svg class="icon"><use href="#i-mail" /></svg><svg class="icon"><use href="#i-notes" /></svg><svg class="icon"><use href="#i-mindmap" /></svg><svg class="icon ws-plus"><use href="#i-plus" /></svg></div>
+                  <div class="ws-bar"><span class="ws-dots"><i></i><i></i><i></i></span><span class="ws-tabs"><b>Home</b><span>Notes</span><span>Tasks</span><span>Calendar</span><span>Email</span><span>Contacts</span></span><span class="ws-k">⌘K Search</span></div>
                   <div class="ws-grid">
                     <section class="md md-tasks" data-m="0" style="--m: 0">
-                      <header class="md-h"><svg class="icon"><use href="#i-tasks" /></svg>Tasks<span class="md-n">4</span><span class="md-id">M·01</span></header>
+                      <header class="md-h"><svg class="icon"><use href="#i-tasks" /></svg>Tasks<span class="md-n">Today 4</span><span class="md-id">M·01</span></header>
                       <ul class="md-body">
                         <li class="tk" data-a="task" style="--n: 1"><i class="cb"></i><span>Send Anna the revised deck</span><em class="ch"><svg class="icon"><use href="#i-mail" /></svg>Email</em></li>
                         <li class="tk is-done" style="--n: 2"><i class="cb"><svg class="icon"><use href="#i-check" /></svg></i><span>Moodboard review</span></li>
-                        <li class="tk" style="--n: 3"><i class="cb"></i><span>Prep Phase 2 demo</span><em class="ch"><svg class="icon"><use href="#i-calendar" /></svg>Thu</em></li>
-                        <li class="tk" style="--n: 4"><i class="cb"></i><span>Draft invoice #014</span></li>
+                        <li class="tk" style="--n: 3"><i class="cb"></i><span>Prep the Phase 2 demo</span><em class="ch"><svg class="icon"><use href="#i-calendar" /></svg>Thu</em></li>
+                        <li class="tk" style="--n: 4"><i class="cb"></i><span>Book the print proofs</span></li>
                       </ul>
-                      <footer class="md-f">Replaces · To-do · Kanban · Habits · Planner</footer>
+                      <footer class="md-f">Replaces · to-do app · planner · board</footer>
                     </section>
                     <section class="md md-cal" data-m="1" style="--m: 1">
                       <header class="md-h"><svg class="icon"><use href="#i-calendar" /></svg>Calendar<span class="md-n">This week</span><span class="md-id">M·02</span></header>
@@ -5324,62 +5950,46 @@
                         <span class="cal-d" style="--n: 1">Mon</span><span class="cal-d" style="--n: 1">Tue</span><span class="cal-d" style="--n: 1">Wed</span><span class="cal-d" style="--n: 1">Thu</span><span class="cal-d" style="--n: 1">Fri</span>
                         <span class="ev" style="--n: 2; --c: 2; --r: 2 / 4">Standup</span>
                         <span class="ev is-soft" style="--n: 3; --c: 3; --r: 3 / 6">Focus</span>
-                        <span class="ev is-key" data-a="event" style="--n: 4; --c: 4; --r: 2 / 5">Phase 2 demo · 10:00</span>
-                        <span class="ev is-soft" style="--n: 5; --c: 5; --r: 4 / 6">Review</span>
+                        <span class="ev is-soft" style="--n: 4; --c: 4; --r: 2 / 5">Phase 2 demo · 14:00</span>
+                        <span class="ev is-key" data-a="event" style="--n: 5; --c: 5; --r: 3 / 6">Deck · Fri 10:00</span>
                       </div>
-                      <footer class="md-f">Replaces · Calendar · Scheduler · Time · Meetings</footer>
+                      <footer class="md-f">Replaces · calendar app · time blocking</footer>
                     </section>
                     <section class="md md-mail" data-m="2" style="--m: 2">
                       <header class="md-h"><svg class="icon"><use href="#i-mail" /></svg>Email<span class="md-n">3 new</span><span class="md-id">M·03</span></header>
                       <ul class="md-body">
-                        <li class="ml is-new" data-a="mail" style="--n: 1"><b class="av">AC</b><span><strong>Anna Carter</strong><em>Phase 2 demo — could we do Thursday?</em></span></li>
-                        <li class="ml" style="--n: 2"><b class="av">JR</b><span><strong>Jamie Ross</strong><em>Invoice #014 question</em></span></li>
-                        <li class="ml" style="--n: 3"><b class="av">MG</b><span><strong>Maya Green</strong><em>Brand deck, round two</em></span></li>
+                        <li class="ml is-new" data-a="mail" style="--n: 1"><b class="av">AC</b><span><strong>Anna Carter</strong><em>Final deck notes</em></span></li>
+                        <li class="ml" style="--n: 2"><b class="av">MB</b><span><strong>Maya Brooks</strong><em>Re: logo files</em></span></li>
+                        <li class="ml" style="--n: 3"><b class="av">PS</b><span><strong>Print shop</strong><em>Proof for the posters</em></span></li>
                       </ul>
-                      <footer class="md-f">Replaces · Mail · Inbox · CRM · Newsletters</footer>
+                      <footer class="md-f">Replaces · mail app · follow-up reminders</footer>
                     </section>
                     <section class="md md-notes" data-m="3" style="--m: 3">
                       <header class="md-h"><svg class="icon"><use href="#i-notes" /></svg>Notes<span class="md-id">M·04</span></header>
                       <div class="md-body nt">
-                        <strong style="--n: 1">Website redesign</strong>
+                        <strong style="--n: 1">Kickoff</strong>
                         <span class="nt-ln" style="--n: 2"></span>
                         <span class="nt-m" data-a="note" style="--n: 3">@Anna Carter</span>
                         <span class="nt-ln is-s" style="--n: 4"></span>
                       </div>
-                      <footer class="md-f">Replaces · Notes · Docs · Wiki</footer>
+                      <footer class="md-f">Replaces · notes · docs</footer>
                     </section>
-                    <section class="md md-map" data-m="4" style="--m: 4">
-                      <header class="md-h"><svg class="icon"><use href="#i-mindmap" /></svg>Map<span class="md-id">M·05</span></header>
-                      <svg class="md-body mm" viewBox="0 0 100 80" preserveAspectRatio="xMidYMid meet">
-                        <path class="mm-e" d="M50 40 C 35 40 30 20 16 20 M50 40 C 35 40 30 60 16 60 M50 40 C 65 40 70 20 84 20 M50 40 C 65 40 70 60 84 60" />
-                        <rect class="mm-n is-root" x="34" y="33" width="32" height="14" rx="4" /><text x="50" y="42.5">Launch</text>
-                        <circle class="mm-n" cx="16" cy="20" r="4" /><circle class="mm-n" cx="16" cy="60" r="4" /><circle class="mm-n" cx="84" cy="20" r="4" /><circle class="mm-n" cx="84" cy="60" r="4" />
-                      </svg>
-                      <footer class="md-f">Replaces · Whiteboards · Goals</footer>
+                    <section class="md md-contacts" data-m="4" style="--m: 4">
+                      <header class="md-h"><svg class="icon"><use href="#i-contact" /></svg>Contacts<span class="md-id">M·05</span></header>
+                      <div class="md-body ct">
+                        <span class="ct-p" data-a="contact" style="--n: 1"><b class="av">AC</b><span><strong>Anna Carter</strong><em>Carter Studio</em></span></span>
+                        <span class="ct-s" style="--n: 2">3 emails · 2 tasks · 1 note</span>
+                      </div>
+                      <footer class="md-f">Replaces · address book · light CRM</footer>
                     </section>
                   </div>
                   <svg class="ws-spine" id="ws-spine" aria-hidden="true"></svg>
                 </div>
-                <div class="aw" data-k="0" data-m="0" data-t="list"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>To-do app</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="1" data-m="0" data-t="kanban"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Kanban</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="2" data-m="0" data-t="grid"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Habit tracker</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="3" data-m="0" data-t="list"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Daily planner</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="4" data-m="1" data-t="cal"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Calendar</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="5" data-m="1" data-t="cal"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Scheduler</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="6" data-m="1" data-t="timer"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Time tracker</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="7" data-m="1" data-t="doc"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Meeting notes</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="8" data-m="2" data-t="mail"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Mail client</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="9" data-m="2" data-t="mail"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Inbox app</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="10" data-m="2" data-t="grid"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>CRM</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="11" data-m="2" data-t="doc"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Newsletters</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="12" data-m="3" data-t="doc"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Notes app</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="13" data-m="3" data-t="doc"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Docs</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="14" data-m="3" data-t="list"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Wiki</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="15" data-m="3" data-t="list"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Bookmarks</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="16" data-m="4" data-t="graph"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Whiteboard</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="17" data-m="4" data-t="graph"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Mind mapper</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="18" data-m="4" data-t="chart"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Goal tracker</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="19" data-m="4" data-t="kanban"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Roadmaps</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="0" data-m="2" data-t="mail"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Mail</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="1" data-m="3" data-t="doc"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Docs</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="2" data-m="0" data-t="list"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>To-do app</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="3" data-m="1" data-t="cal"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Calendar</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="4" data-m="4" data-t="grid"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Contacts</span></div><div class="aw-ui"></div></div></div>
               </div>
               <div class="hx-ctl">
                 <div class="hx-seg" role="group" aria-label="Compare">
@@ -5396,9 +6006,9 @@
           </div>
 
           <div class="hx-read">
-            <div class="hx-r"><span class="hx-rk">Apps</span><span class="hx-rv"><b data-count>20</b><i>→ 01</i></span></div>
-            <div class="hx-r"><span class="hx-rk">Logins</span><span class="hx-rv"><b data-count>20</b><i>→ 01</i></span></div>
-            <div class="hx-r"><span class="hx-rk">Search bars</span><span class="hx-rv"><b data-count>20</b><i>→ 01</i></span></div>
+            <div class="hx-r"><span class="hx-rk">Apps</span><span class="hx-rv"><b data-count>05</b><i>→ 01</i></span></div>
+            <div class="hx-r"><span class="hx-rk">Logins</span><span class="hx-rv"><b data-count>05</b><i>→ 01</i></span></div>
+            <div class="hx-r"><span class="hx-rk">Search bars</span><span class="hx-rv"><b data-count>05</b><i>→ 01</i></span></div>
             <a class="hx-r hx-next" href="#story"><span class="hx-rk">Next</span><span class="hx-rv-s">How it connects <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chev" /></svg></span></a>
           </div>
         </div>
@@ -5437,15 +6047,15 @@
           <div class="pal-try">
             Try
             <button type="button" data-q="anna">anna</button>
-            <button type="button" data-q="phase 1">phase 1</button>
-            <button type="button" data-q="launch">launch</button>
+            <button type="button" data-q="deck">deck</button>
+            <button type="button" data-q="friday">friday</button>
           </div>
         </div>
 
         <div class="hero-fade" style="--d: 980ms">
-          <div class="marquee-label">One app · switch modules on per workspace</div>
-          <div class="marquee" aria-label="Modules: tasks, notes, email, calendar, mind maps, contacts, planning, time tracking, invoicing, budgets, goals, forms, docs and more">
-            <div class="marquee-track" aria-hidden="true"><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>Tasks</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Notes</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg>Email</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mindmap" /></svg>Mind maps</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-contact" /></svg>Contacts</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-plan" /></svg>Planning</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-timer" /></svg>Time tracking</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-invoice" /></svg>Invoicing</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-wallet" /></svg>Budgets</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-target" /></svg>Goals</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-form" /></svg>Forms</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Docs</span><span class="chip is-more">&amp; more</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>Tasks</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Notes</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg>Email</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mindmap" /></svg>Mind maps</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-contact" /></svg>Contacts</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-plan" /></svg>Planning</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-timer" /></svg>Time tracking</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-invoice" /></svg>Invoicing</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-wallet" /></svg>Budgets</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-target" /></svg>Goals</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-form" /></svg>Forms</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Docs</span><span class="chip is-more">&amp; more</span></div>
+          <div class="marquee-label">Five modules · one workspace · one search</div>
+          <div class="marquee" aria-label="Home, tasks, notes, calendar, email and contacts, with links between everything, one search, quick capture, a focus timer, 16 widgets and Notion import">
+            <div class="marquee-track" aria-hidden="true"><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-home" /></svg>Home</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>Tasks</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Notes</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg>Email</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-contact" /></svg>Contacts</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-link" /></svg>Links between everything</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-search" /></svg>One search</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-bolt" /></svg>Quick capture</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-timer" /></svg>Focus timer</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-today" /></svg>16 widgets</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-export" /></svg>Notion import</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-home" /></svg>Home</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>Tasks</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Notes</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg>Email</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-contact" /></svg>Contacts</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-link" /></svg>Links between everything</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-search" /></svg>One search</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-bolt" /></svg>Quick capture</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-timer" /></svg>Focus timer</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-today" /></svg>16 widgets</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-export" /></svg>Notion import</span></div>
           </div>
         </div>
       </section>
@@ -5454,9 +6064,9 @@
       <section id="story" aria-labelledby="story-title">
         <div class="container story-head">
           <div class="section-head center reveal">
-            <div class="eyebrow">Smart relations</div>
-            <h2 class="h-section" id="story-title">It already knows<br /><span class="soft">how your work connects.</span></h2>
-            <p class="lead">No tagging. No linking by hand. Moduo reads what comes in and connects it to the people, projects, deadlines, hours and money it belongs to.</p>
+            <div class="eyebrow">How it connects</div>
+            <h2 class="h-section" id="story-title">One thread<br /><span class="soft">through everything.</span></h2>
+            <p class="lead">Follow one email through Moduo. Every link is one gesture: a key, an @mention, a drag. Nothing gets copied, so nothing goes stale.</p>
           </div>
         </div>
 
@@ -5465,11 +6075,12 @@
             <div class="container story-grid">
               <div class="story-copy">
                 <ol class="steps">
-                  <li><button class="step" type="button"><span class="n">01</span><span class="h">A message lands.</span><span class="p"><span class="pi"><span class="pt">Anna asks for a demo on Thursday — and the 15th still stands.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">02</span><span class="h">Moduo reads it.</span><span class="p"><span class="pi"><span class="pt">It spots the meeting, the deadline and the project, and links each one. Nobody tagged anything.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">03</span><span class="h">It finds what’s left.</span><span class="p"><span class="pi"><span class="pt">Three subtasks are still open before the 15th. Tick one off right here.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">04</span><span class="h">It remembers the client.</span><span class="p"><span class="pi"><span class="pt">Anna signed Phase 1 in June. Same client, same thread, the whole history one hop away.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">05</span><span class="h">It nudges the money.</span><span class="p"><span class="pi"><span class="pt">38 hours of Phase 1 were tracked but never billed. The invoice is drafted and waits for one click.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">01</span><span class="h">Anna writes.</span><span class="p"><span class="pi"><span class="pt">The email lands and Moduo knows who sent it. Her contact opens right beside the thread.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">02</span><span class="h">The note finds her.</span><span class="p"><span class="pi"><span class="pt">Mention Anna in your kickoff note and it shows up on her contact. Nothing to file.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">03</span><span class="h">Press T.</span><span class="p"><span class="pi"><span class="pt">The email becomes a task, linked to the thread. Type /task in the kickoff note and it lives there too.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">04</span><span class="h">Hand it to Jamie.</span><span class="p"><span class="pi"><span class="pt">Assign it, and Jamie gets it with the email and the note already attached.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">05</span><span class="h">Give it a slot.</span><span class="p"><span class="pi"><span class="pt">Drag it onto Friday at 10:00. The block opens with all of its context.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">06</span><span class="h">See it all at home.</span><span class="p"><span class="pi"><span class="pt">Every module adds widgets to Home. The same task shows up wherever it matters.</span></span></span></button></li>
                 </ol>
                 <div class="story-bar" aria-hidden="true"><i id="story-bar"></i></div>
               </div>
@@ -5477,7 +6088,7 @@
               <div class="stage" id="stage">
                 <div class="stage-bar" aria-hidden="true">
                   <div class="lights"><span></span><span></span><span></span></div>
-                  <div class="stage-title">Inbox — Phase 2 demo</div>
+                  <div class="stage-title">One workspace · Website redesign</div>
                   <div></div>
                 </div>
                 <div class="rel-fit" id="rel-fit">
@@ -5487,68 +6098,61 @@
                     <div class="rel-toast" id="rel-toast" aria-hidden="true"><span class="av">AC</span><span>New mail · <b>Anna Carter</b></span></div>
 
                     <article class="rn rn-mail" data-id="mail" data-s="0" style="--d: 750ms">
-                      <div class="who"><span class="av">AC</span><b>Anna Carter</b><span class="tag">Client</span><span class="t">9:41</span></div>
-                      <div class="subj">Phase 2 demo</div>
-                      <p class="rn-body" id="rel-body">Could we do the <mark data-to="cal" style="--d: 350ms">demo on Thursday</mark>? Can you still hit <mark data-to="due" style="--d: 600ms">the 15th</mark> for the <mark data-to="proj" style="--d: 850ms">website redesign</mark>?<span class="beam" id="rel-beam"></span></p>
+                      <div class="who"><span class="av">AC</span><b>Anna Carter</b><span class="tag">Client</span><span class="t">9:12</span></div>
+                      <div class="subj" id="rel-subj">Final deck notes</div>
+                      <p class="rn-body" id="rel-body">Love it. Just swap the hero photo and we’re done. Can you send the revised deck by Friday?</p>
+                      <div class="rn-act" data-r="2"><span class="rn-key" id="rel-key">T</span>To task</div>
                     </article>
 
-                    <article class="rn" data-id="proj" data-s="1" style="--d: 1450ms">
-                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-plan" /></svg>Project</div>
-                      <div class="rn-title">Website redesign — Phase 2</div>
-                      <div class="rn-sub">Due <span class="due" id="rel-due">15 Oct</span> · 9 days left</div>
-                      <div class="rn-more">
-                        <div>
-                          <div class="prog">
-                            <svg viewBox="0 0 20 20" aria-hidden="true"><circle class="ring-bg" cx="10" cy="10" r="8" /><circle class="ring-v" id="rel-ring" cx="10" cy="10" r="8" pathLength="1" /></svg>
-                            <span id="rel-prog">4 of 7 done · 3 open</span>
-                          </div>
-                          <div class="sts" id="rel-sts">
-                            <button class="st" type="button" role="checkbox" aria-checked="false" style="--i: 0"><span class="ck"></span><span class="lbl">Final logo exports</span><span class="when">Mon</span></button>
-                            <button class="st" type="button" role="checkbox" aria-checked="false" style="--i: 1"><span class="ck"></span><span class="lbl">Demo deck</span><span class="when">Wed</span></button>
-                            <button class="st" type="button" role="checkbox" aria-checked="false" style="--i: 2"><span class="ck"></span><span class="lbl">Print proofs</span><span class="when">Thu</span></button>
-                          </div>
-                        </div>
-                      </div>
-                    </article>
-
-                    <article class="rn" data-id="cal" data-s="1" style="--d: 950ms">
-                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</div>
-                      <div class="rn-title">Demo with Anna</div>
-                      <div class="rn-sub">Thursday · 14:00 – 15:00</div>
-                      <div class="avs"><span class="av">AC</span><span class="av">JR</span><span class="av">MG</span><span>3 attending</span></div>
-                    </article>
-
-                    <article class="rn" data-id="contact" data-s="3" style="--d: 150ms">
-                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-contact" /></svg>Client</div>
+                    <article class="rn" data-id="contact" data-s="0" style="--d: 1300ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-contact" /></svg>Contact</div>
                       <div class="rn-title">Anna Carter</div>
-                      <div class="rn-sub">Carter Studio</div>
-                      <ol class="hist">
-                        <li style="--i: 0"><b>Jun</b> · Phase 1 signed</li>
-                        <li style="--i: 1"><b>Sep</b> · Phase 2 brief</li>
-                        <li class="is-now" style="--i: 2"><b>Thu</b> · Demo</li>
-                      </ol>
+                      <div class="rn-sub">Carter Studio · client</div>
+                      <ul class="lk">
+                        <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-mail" /></svg>Final deck notes</li>
+                        <li data-r="1"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-notes" /></svg>Kickoff · Carter rebrand</li>
+                        <li data-r="2"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-tasks" /></svg>Send Anna the revised deck</li>
+                      </ul>
                     </article>
 
-                    <article class="rn" data-id="deal" data-s="3" style="--d: 600ms">
-                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-deal" /></svg>Deal</div>
-                      <div class="rn-title">Phase 1 <span class="rn-badge">Won</span></div>
-                      <div class="rn-sub">€12,000 · signed 14 Jun</div>
+                    <article class="rn" data-id="note" data-s="1" style="--d: 150ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-notes" /></svg>Note</div>
+                      <div class="rn-title">Kickoff · Carter rebrand</div>
+                      <p class="rn-text"><span class="rn-chip" id="rel-chip">@Anna Carter</span> wants it live before the launch.</p>
+                      <div class="rn-tl" data-r="2" id="rel-line"><i class="cb"></i><span>Send Anna the revised deck</span><em>Fri</em></div>
                     </article>
 
-                    <article class="rn" data-id="time" data-s="4" style="--d: 100ms">
-                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-timer" /></svg>Time tracking</div>
-                      <div class="rn-big" id="rel-hours">38h 20m</div>
-                      <div class="rn-sub">Phase 1 · not invoiced yet</div>
-                      <div class="bars" aria-hidden="true"><i style="--h: 40; --i: 0"></i><i style="--h: 72; --i: 1"></i><i style="--h: 55; --i: 2"></i><i style="--h: 90; --i: 3"></i><i style="--h: 64; --i: 4"></i><i style="--h: 30; --i: 5"></i><i style="--h: 82; --i: 6"></i><i style="--h: 100; --i: 7"></i></div>
+                    <article class="rn" data-id="task" data-s="2" style="--d: 200ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-tasks" /></svg>Task<span class="when">Inbox</span></div>
+                      <div class="rn-task">
+                        <button class="rn-ck" type="button" id="rel-done" aria-pressed="false" aria-label="Mark Send Anna the revised deck done"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></button>
+                        <div class="rn-title" id="rel-task">Send Anna the revised deck</div>
+                      </div>
+                      <div class="rn-sub">↳ From email “Final deck notes”</div>
+                      <div class="rn-as" data-r="3" id="rel-as"><span class="av">JR</span>Jamie Ross<span class="rn-pill">Assigned</span></div>
+                      <div class="rn-as" data-r="4"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-calendar" /></svg>Fri · 10:00 – 11:00</div>
                     </article>
 
-                    <article class="rn rn-inv" data-id="inv" data-s="4" style="--d: 900ms">
-                      <span class="stamp">Draft #014</span>
-                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-sparkle" /></svg>Suggestion</div>
-                      <div class="rn-title">Send Anna the Phase 1 invoice?</div>
-                      <div class="ln" style="--d: 1150ms"><span>Design · 38h 20m × €120</span><span>€4,600</span></div>
-                      <div class="tot" style="--d: 1350ms"><span>Total</span><b id="rel-total">€4,600</b></div>
-                      <button class="btn btn-primary btn-sm" type="button" id="rel-draft">Draft invoice</button>
+                    <article class="rn" data-id="person" data-s="3" style="--d: 300ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-contact" /></svg>Teammate</div>
+                      <div class="rn-title">Jamie Ross</div>
+                      <div class="rn-sub">Designer · in this workspace</div>
+                      <div class="rn-note"><b>Sam assigned you</b> Send Anna the revised deck<span>Just now · opens task</span></div>
+                    </article>
+
+                    <article class="rn" data-id="cal" data-s="4" style="--d: 350ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar<span class="when">Friday</span></div>
+                      <div class="rn-block"><i class="cb"></i><span>Send Anna the revised deck</span><em>10:00 – 11:00</em></div>
+                      <div class="rn-sub">Opens with the email, the note and Jamie.</div>
+                    </article>
+
+                    <article class="rn" data-id="home" data-s="5" style="--d: 200ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-home" /></svg>Home</div>
+                      <ul class="hm">
+                        <li><b>Tasks</b><span>Send Anna the revised deck</span><i class="av">JR</i></li>
+                        <li><b>Today</b><span>10:00 · Send Anna the revised deck</span></li>
+                        <li><b>Recently linked</b><span>Final deck notes → task</span></li>
+                      </ul>
                     </article>
                   </div>
                 </div>
@@ -5556,11 +6160,39 @@
                   <span class="rf-status" id="rel-status-wrap" aria-live="polite"><i class="rf-dot"></i><span id="rel-status">Listening for new mail</span></span>
                   <span class="rf-hint" id="rel-hint">Drag cards · hover to trace</span>
                   <button class="rf-reset" type="button" id="rel-reset" hidden>Reset layout</button>
-                  <span class="rf-count">Connections <b id="rel-found">0</b></span>
-                  <span class="rf-count rf-tag">Tagged by you <b>0</b></span>
+                  <span class="rf-count">Links <b id="rel-found">0</b></span>
+                  <span class="rf-count rf-tag">Copied <b>0</b></span>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── Stack tax ─────────────────────────────────────────────────── -->
+      <section class="section container tax" id="tax" aria-labelledby="tax-title">
+        <div class="tax-grid">
+          <div class="section-head reveal">
+            <div class="eyebrow">The stack tax</div>
+            <h2 class="h-section" id="tax-title">Five apps.<br /><span class="soft">Five bills, five logins.</span></h2>
+            <p class="lead">And five places to look for the same email. This is what the usual stack costs one person, before you count the copy-paste.</p>
+          </div>
+          <div class="rcpt reveal" style="--d: 100ms">
+            <span class="ft-plus is-tl" aria-hidden="true"></span>
+            <span class="ft-plus is-tr" aria-hidden="true"></span>
+            <span class="ft-plus is-bl" aria-hidden="true"></span>
+            <span class="ft-plus is-br" aria-hidden="true"></span>
+            <p class="rcpt-fig" aria-hidden="true"><span>Fig. 02 · Monthly, per person</span><span>USD · billed yearly</span></p>
+            <dl class="rcpt-rows">
+              <div><dt>Notion Plus <span>notes</span></dt><dd>10.00</dd></div>
+              <div><dt>Todoist Pro <span>tasks</span></dt><dd>5.00</dd></div>
+              <div><dt>Fantastical Premium <span>calendar</span></dt><dd>4.75</dd></div>
+              <div><dt>Superhuman Starter <span>email</span></dt><dd>25.00</dd></div>
+              <div><dt>folk Standard <span>contacts</span></dt><dd>24.00</dd></div>
+            </dl>
+            <div class="rcpt-sum"><span>Five apps, not linked</span><s>68.75</s></div>
+            <div class="rcpt-us"><span>Moduo Pro<em>All five, linked</em></span><b>$8</b></div>
+            <p class="rcpt-note">List prices from each vendor’s pricing page on 1 October 2026.</p>
           </div>
         </div>
       </section>
@@ -5569,8 +6201,8 @@
       <section class="section container" id="yours" aria-labelledby="yours-title">
         <div class="section-head center reveal">
           <div class="eyebrow">Make it yours</div>
-          <h2 class="h-section" id="yours-title">Your home is a board.<br /><span class="soft">Fill it with anything.</span></h2>
-          <p class="lead">Install the modules a workspace needs from the store, then pin, resize and recolor widgets from any of them — like the widgets on your desktop. A timer next to a budget next to today’s tasks.</p>
+          <h2 class="h-section" id="yours-title">Your home is a board.<br /><span class="soft">Arrange it your way.</span></h2>
+          <p class="lead">Pick from 16 widgets across every module and lay them out in four sizes, like the widgets on your phone. Every workspace keeps its own board.</p>
         </div>
 
         <div class="studio reveal" style="--d: 100ms">
@@ -5581,14 +6213,14 @@
               <button type="button" data-ws="personal" aria-pressed="false">Personal</button>
               <button type="button" data-ws="side" aria-pressed="false">Side project</button>
             </div>
-            <span class="studio-note">Every workspace keeps its own modules and its own board.</span>
+            <span class="studio-note">Every workspace keeps its own board.</span>
           </div>
           <div class="studio-body" id="studio-body">
             <div class="board-wrap">
               <div class="board-head">
                 <h3>Home</h3>
                 <span class="muted" id="board-count"></span>
-                <div class="mod-strip" id="mod-strip" role="group" aria-label="Installed modules"></div>
+                <div class="mod-strip" id="mod-strip" role="group" aria-label="Modules"></div>
                 <button class="btn btn-secondary btn-sm" type="button" id="store-open">
                   <svg class="icon icon-xs" aria-hidden="true"><use href="#i-plus" /></svg>Add widget
                 </button>
@@ -5597,8 +6229,8 @@
               <div class="board" id="board" aria-label="Home widgets"></div>
               <div class="board-hint">
                 <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-grip" /></svg>Drag to rearrange</span>
-                <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-resize" /></svg>Drag the corner to resize</span>
-                <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-tune" /></svg>Customize</span>
+                <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-resize" /></svg>Drag the corner for S, M, L or XL</span>
+                <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-tune" /></svg>Change the size</span>
                 <span><span class="kbd">⌥</span><span class="kbd">⇧</span><span class="kbd">→</span>Resize with the keyboard</span>
               </div>
               <div class="wd-pop" id="wd-pop" role="dialog" aria-label="Customize widget" hidden></div>
@@ -5608,14 +6240,14 @@
             <aside class="store-panel" id="store-panel" role="dialog" aria-modal="false" aria-labelledby="store-title">
               <div class="store-head">
                 <div>
-                  <h3 id="store-title">Store</h3>
+                  <h3 id="store-title">Add a widget</h3>
                   <span class="muted" id="store-count"></span>
                 </div>
-                <button class="icon-btn" type="button" id="store-close" aria-label="Close the widget store">
+                <button class="icon-btn" type="button" id="store-close" aria-label="Close the widget gallery">
                   <svg class="icon icon-sm" aria-hidden="true"><use href="#i-x" /></svg>
                 </button>
               </div>
-              <div class="seg store-tabs" id="store-tabs" role="group" aria-label="Store sections">
+              <div class="seg store-tabs" id="store-tabs" role="group" aria-label="Gallery sections" hidden>
                 <span class="seg-ind" id="store-ind" aria-hidden="true"></span>
                 <button type="button" data-tab="widgets" aria-pressed="true">Widgets</button>
                 <button type="button" data-tab="modules" aria-pressed="false">Modules</button>
@@ -5627,7 +6259,7 @@
               </label>
               <div class="store-cats" id="store-cats" role="group" aria-label="Categories"></div>
               <div class="store-grid" id="store-grid"></div>
-              <div class="store-foot" id="store-foot" aria-live="polite">Adding a widget installs its module. Removing a module takes its widgets off the board.</div>
+              <div class="store-foot" id="store-foot" aria-live="polite">Every module brings its own widgets. Two of them, Inbox and Time tracking, live in the Mac app.</div>
             </aside>
           </div>
         </div>
@@ -5638,14 +6270,14 @@
         <div class="section-head center reveal">
           <div class="eyebrow">AI, your way</div>
           <h2 class="h-section" id="ai-title">Plug in any AI.<br /><span class="soft">It sees what you allow.</span></h2>
-          <p class="lead">Moduo is an MCP server. Connect Claude, ChatGPT, Cursor or any MCP client, and it can search, link and act across your whole workspace — tool by tool, with your permission.</p>
+          <p class="lead">Moduo is an MCP server. Connect Claude, ChatGPT, Cursor or any MCP client with an API key, and choose per module what it can see or change. It never trains on your workspace.</p>
         </div>
 
         <div class="mcp reveal" style="--d: 100ms">
           <div class="mcp-side">
             <div class="mcp-label">Ask your assistant</div>
             <button class="prompt" type="button" data-prompt="0" aria-pressed="false"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>What’s left before the Carter demo?</button>
-            <button class="prompt" type="button" data-prompt="1" aria-pressed="false"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-invoice" /></svg>Draft the Phase 1 invoice.</button>
+            <button class="prompt" type="button" data-prompt="1" aria-pressed="false"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-link" /></svg>Link Maya’s emails to the kickoff note.</button>
             <button class="prompt" type="button" data-prompt="2" aria-pressed="false"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>Plan my Thursday around the demo.</button>
             <div class="mcp-clients">
               <span class="ref">Claude</span>
@@ -5658,12 +6290,94 @@
             <div class="mcp-bar"><span class="live-dot" aria-hidden="true"></span>Your assistant · connected to Moduo over MCP</div>
             <div class="mcp-chat" id="mcp-chat" aria-live="polite"></div>
             <div class="mcp-perms">
-              Allowed
-              <span class="ref ok">Read workspace</span>
-              <span class="ref ok">Create tasks</span>
-              <span class="ref ok">Draft invoices</span>
-              <span class="ref">Send email · asks first</span>
+              This key
+              <span class="ref ok">Tasks · edit</span>
+              <span class="ref ok">Calendar · edit</span>
+              <span class="ref ok">Notes · edit</span>
+              <span class="ref">Email · view only</span>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── Refuse ────────────────────────────────────────────────────── -->
+      <section class="section container" id="refuse" aria-labelledby="refuse-title">
+        <div class="section-head reveal">
+          <div class="eyebrow">On purpose</div>
+          <h2 class="h-section" id="refuse-title">What we refuse<br /><span class="soft">to build.</span></h2>
+        </div>
+        <ul class="nope">
+          <li class="reveal"><s>Databases you design before you work.</s><p>You came here to work, <b>not to model your life in tables.</b></p></li>
+          <li class="reveal"><s>An AI button on every screen.</s><p>Bring your own model over MCP. <b>It never trains on your workspace.</b></p></li>
+          <li class="reveal"><s>A scheduler that moves your day for you.</s><p>Moduo suggests, with a reason. <b>You decide.</b></p></li>
+          <li class="reveal"><s>A wall of red overdue tasks.</s><p>Falling behind is normal. <b>Shame isn’t a feature.</b></p></li>
+        </ul>
+      </section>
+
+      <!-- ─── Pricing ───────────────────────────────────────────────────── -->
+      <section class="section container" id="pricing" aria-labelledby="pricing-title">
+        <div class="section-head center reveal">
+          <div class="eyebrow">Pricing</div>
+          <h2 class="h-section" id="pricing-title">Pay for who you have.<br /><span class="soft">No seat minimum.</span></h2>
+          <p class="lead">Every plan starts with a 7-day trial, no card needed. Prices in USD.</p>
+          <div class="bill" id="bill" role="group" aria-label="Billing period">
+            <button type="button" data-bill="monthly" aria-pressed="false">Monthly</button>
+            <button type="button" data-bill="yearly" aria-pressed="true">Yearly <span>save 20%</span></button>
+          </div>
+        </div>
+        <div class="plans reveal" style="--d: 100ms">
+          <article class="plan">
+            <header class="plan-h"><h3>Free</h3><p>Web and desktop</p></header>
+            <div class="plan-p"><b>$0</b></div>
+            <ul class="plan-f">
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Notes, tasks, calendar and contacts</li>
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Access on web and desktop</li>
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Cloud sync across devices</li>
+            </ul>
+            <button class="btn btn-outline plan-b" type="button" data-wl-open>Join the waitlist</button>
+          </article>
+          <article class="plan is-pick">
+            <header class="plan-h"><h3>Pro <span class="plan-tag">Most popular</span></h3><p data-y="Billed as $96 a year" data-m="Billed monthly">Billed as $96 a year</p></header>
+            <div class="plan-p"><b data-y="$8" data-m="$10">$8</b><span>/mo</span></div>
+            <ul class="plan-f">
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Everything in Free</li>
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Unlimited notes and tasks</li>
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Cloud sync across all devices</li>
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Priority support</li>
+            </ul>
+            <button class="btn btn-primary plan-b" type="button" data-wl-open>Join the waitlist</button>
+          </article>
+          <article class="plan">
+            <header class="plan-h"><h3>Team</h3><p data-y="Per seat, billed yearly" data-m="Per seat, billed monthly">Per seat, billed yearly</p></header>
+            <div class="plan-p"><b data-y="$7" data-m="$9">$7</b><span>/seat/mo</span></div>
+            <ul class="plan-f">
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Everything in Pro</li>
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Shared workspaces and assignments</li>
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Invite your team, no minimum</li>
+              <li><svg class="icon icon-xs" aria-hidden="true"><use href="#i-check" /></svg>Admin controls</li>
+            </ul>
+            <button class="btn btn-secondary plan-b" type="button" data-wl-open>Join the waitlist</button>
+          </article>
+        </div>
+        <p class="plans-note">Moduo is in private beta. Your trial starts when your invite arrives.</p>
+      </section>
+
+      <!-- ─── FAQ ───────────────────────────────────────────────────────── -->
+      <section class="section container" id="faq" aria-labelledby="faq-title">
+        <div class="faq-grid">
+          <div class="section-head reveal">
+            <h2 class="h-section" id="faq-title">Questions,<br /><span class="soft">answered.</span></h2>
+            <p class="lead">Anything else? Write to <a class="faq-mail" href="mailto:support@moduo.app">support@moduo.app</a>.</p>
+          </div>
+          <div class="faq reveal" style="--d: 100ms">
+            <details open><summary>Does email work in the browser?</summary><p>Email runs in the Mac app. On the web you still see follow-ups, snoozed threads and everything linked to an email.</p></details>
+            <details><summary>Which email accounts can I connect?</summary><p>Gmail, iCloud, and any other provider that supports IMAP.</p></details>
+            <details><summary>Can I bring my notes from Notion?</summary><p>Yes. Import a Notion export or Markdown files. Contacts come in from a CSV.</p></details>
+            <details><summary>Is there a Windows or phone app?</summary><p>Mac and web today. Windows and phones are on the roadmap.</p></details>
+            <details><summary>Does Moduo train AI on my data?</summary><p>No. AI is bring-your-own over MCP, you choose what each key can see or change, and your workspace is never used to train models.</p></details>
+            <details><summary>Does it work offline?</summary><p>Moduo needs a connection today. Offline support is on the way.</p></details>
+            <details><summary>Can I use it with my team?</summary><p>Yes. Team is $9 per seat a month, or $7 billed yearly, with shared workspaces, assignments and no seat minimum.</p></details>
+            <details><summary>What happens to my data if I leave?</summary><p>Export your workspace data from Settings whenever you like, and delete your account in one step.</p></details>
           </div>
         </div>
       </section>
@@ -5672,7 +6386,7 @@
       <section class="container close reveal" id="close" aria-labelledby="close-title">
         <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
         <h2 class="h-section" id="close-title">Your whole working life.<br /><span class="soft">One app that connects it.</span></h2>
-        <p class="lead">Free to start. Switch on the modules you need today and add the rest when you need them. Leave whenever you like — your data comes with you.</p>
+        <p class="lead">Free to start. Begin with the module you need most; the rest is already linked when you get there. Leave whenever you like, and take your data with you.</p>
         <div class="hero-cta">
           <form class="wl" data-source="close" novalidate>
             <div class="wl-row">
@@ -5763,8 +6477,8 @@
           <div class="ft-cell ft-state">
             <h2 class="ft-h" id="ft-title">The last productivity app you’ll ever set&nbsp;up.</h2>
             <p class="ft-lede">
-              Tasks, notes, email, calendar and mind maps — and every module you add — in one connected
-              workspace. Close the other nineteen tabs.
+              Email, tasks, notes, calendar and contacts in one connected workspace. Close the other
+              four tabs.
             </p>
           </div>
 
@@ -5773,23 +6487,22 @@
             <ul>
               <li><a class="ft-a" href="#top">Overview</a></li>
               <li><a class="ft-a" href="#story">How it connects</a></li>
-              <li><a class="ft-a" href="#yours">Widget store</a></li>
+              <li><a class="ft-a" href="#yours">Widgets</a></li>
               <li><a class="ft-a" href="#ai">AI &amp; MCP</a></li>
-              <li><span class="ft-a is-soon" data-href="/pricing">Pricing</span></li>
-              <li><span class="ft-a is-soon" data-href="/changelog">Changelog</span></li>
+              <li><a class="ft-a" href="#pricing">Pricing</a></li>
+              <li><a class="ft-a" href="#faq">Questions</a></li>
               <li><span class="ft-a is-soon" data-href="/download">Download for Mac</span></li>
             </ul>
           </nav>
 
           <nav class="ft-cell ft-col ft-sw" aria-labelledby="ft-k-sw">
-            <p class="ft-k" id="ft-k-sw">Switch from</p>
+            <p class="ft-k" id="ft-k-sw">Modules</p>
             <ul>
-              <li><span class="ft-a is-soon" data-href="/switch/notion">Notion</span></li>
-              <li><span class="ft-a is-soon" data-href="/switch/todoist">Todoist</span></li>
-              <li><span class="ft-a is-soon" data-href="/switch/google-calendar">Google Calendar</span></li>
-              <li><span class="ft-a is-soon" data-href="/switch/trello">Trello</span></li>
-              <li><span class="ft-a is-soon" data-href="/switch/evernote">Evernote</span></li>
-              <li><span class="ft-a is-soon" data-href="/switch">All 20 apps →</span></li>
+              <li><a class="ft-a" href="#story">Email</a></li>
+              <li><a class="ft-a" href="#story">Tasks</a></li>
+              <li><a class="ft-a" href="#story">Notes</a></li>
+              <li><a class="ft-a" href="#story">Calendar</a></li>
+              <li><a class="ft-a" href="#story">Contacts</a></li>
             </ul>
           </nav>
 
@@ -5797,10 +6510,8 @@
             <p class="ft-k" id="ft-k-co">Company</p>
             <ul>
               <li><span class="ft-a is-soon" data-href="/about">About</span></li>
-              <li><span class="ft-a is-soon" data-href="/manifesto">Manifesto</span></li>
-              <li><span class="ft-a is-soon" data-href="/careers">Careers</span></li>
-              <li><span class="ft-a is-soon" data-href="/press">Press kit</span></li>
-              <li><a class="ft-a" href="mailto:hello@moduo.app">Contact</a></li>
+              <li><span class="ft-a is-soon" data-href="/changelog">Changelog</span></li>
+              <li><a class="ft-a" href="mailto:support@moduo.app">Contact</a></li>
             </ul>
           </nav>
 
@@ -5857,21 +6568,16 @@
           <nav class="ft-cell ft-col ft-re" aria-labelledby="ft-k-re">
             <p class="ft-k" id="ft-k-re">Resources</p>
             <ul>
-              <li><span class="ft-a is-soon" data-href="/help">Help center</span></li>
-              <li><span class="ft-a is-soon" data-href="/docs">Docs</span></li>
               <li><a class="ft-a" href="#ai">MCP guide</a></li>
-              <li><span class="ft-a is-soon" data-href="/roadmap">Roadmap</span></li>
-              <li><span class="ft-a is-soon" data-href="/security">Security</span></li>
+              <li><a class="ft-a" href="#faq">FAQ</a></li>
+              <li><span class="ft-a is-soon" data-href="/privacy">Privacy</span></li>
+              <li><span class="ft-a is-soon" data-href="/terms">Terms</span></li>
             </ul>
           </nav>
 
           <div class="ft-cell ft-col ft-ct">
             <p class="ft-k">Say hello</p>
-            <a class="ft-a" href="mailto:hello@moduo.app">hello@moduo.app</a>
-            <p class="ft-k ft-k-sub">Press</p>
-            <a class="ft-a" href="mailto:press@moduo.app">press@moduo.app</a>
-            <p class="ft-k ft-k-sub">Security</p>
-            <a class="ft-a" href="mailto:security@moduo.app">security@moduo.app</a>
+            <a class="ft-a" href="mailto:support@moduo.app">support@moduo.app</a>
           </div>
 
           <nav class="ft-cell ft-col ft-so" aria-labelledby="ft-k-so">
@@ -6062,7 +6768,10 @@
           { id: "story", n: "01", label: "How it connects" },
           { id: "yours", n: "02", label: "Make it yours" },
           { id: "ai", n: "03", label: "AI" },
-          { id: "close", n: "04", label: "Early access" },
+          { id: "refuse", n: "··", label: "On purpose" },
+          { id: "pricing", n: "04", label: "Pricing" },
+          { id: "faq", n: "05", label: "Questions" },
+          { id: "close", n: "06", label: "Early access" },
         ];
         var navCurrent = "";
         var navScroll = function () {
@@ -6134,31 +6843,22 @@
           tasks: { icon: "i-tasks", kind: "Task", group: "Tasks" },
           mail: { icon: "i-mail", kind: "Email", group: "Email" },
           notes: { icon: "i-notes", kind: "Note", group: "Notes" },
-          calendar: { icon: "i-calendar", kind: "Event", group: "Calendar" },
-          deals: { icon: "i-deal", kind: "Deal", group: "Deals" },
-          time: { icon: "i-timer", kind: "Time", group: "Time" },
-          invoices: { icon: "i-invoice", kind: "Invoice", group: "Invoices" },
-          goals: { icon: "i-target", kind: "Goal", group: "Goals" },
-          mindmap: { icon: "i-mindmap", kind: "Map", group: "Maps" },
+          calendar: { icon: "i-calendar", kind: "Event", group: "Events" },
         };
-        var GROUPS = ["contacts", "tasks", "mail", "notes", "calendar", "deals", "time", "invoices", "goals", "mindmap"];
+        var GROUPS = ["contacts", "tasks", "mail", "notes", "calendar"];
         var ITEMS = [
-          { id: "p1", mod: "contacts", title: "Anna Carter", meta: "Carter Studio · 14 linked", body: "Every email, task, note and meeting with Anna — in one place. Nobody logged any of it.", links: ["e1", "t1", "d1", "c1"] },
-          { id: "p2", mod: "contacts", title: "Maya Brooks", meta: "Print & logo files · 6 linked", body: "Owns the logo files. Promised final SVGs by Friday — and Moduo remembers she did.", links: ["e2", "t2", "n1"] },
-          { id: "t1", mod: "tasks", title: "Send Anna the revised brand deck", meta: "Today · Carter rebrand", body: "Made from Anna’s email with one key. The email is still attached; so is Anna.", links: ["e1", "c1", "p1"] },
-          { id: "t2", mod: "tasks", title: "Get final SVGs from Maya", meta: "Friday · from the kickoff note", body: "Was a checkbox in a meeting note. Now it’s a real task with a date — in both places.", links: ["n1", "e2", "p2"] },
-          { id: "t3", mod: "tasks", title: "Write the launch landing copy", meta: "Next week · from the launch map", body: "Was a branch on the launch map. One click turned it into a task.", links: ["m1", "n2"] },
-          { id: "e1", mod: "mail", title: "Brief: Carter rebrand", meta: "Anna Carter · 9:12", body: "“Attaching the brief — we want the new identity live before the autumn launch.”", links: ["t1", "n1", "p1"] },
+          { id: "p1", mod: "contacts", title: "Anna Carter", meta: "Carter Studio · 7 linked", body: "Every email, task, note and meeting linked to Anna, on one page.", links: ["e1", "t1", "n1", "c1"] },
+          { id: "p2", mod: "contacts", title: "Maya Brooks", meta: "Print and logo files · 4 linked", body: "Owns the logo files. Promised final SVGs by Friday.", links: ["e2", "t2", "n1"] },
+          { id: "p3", mod: "contacts", title: "Jamie Ross", meta: "Designer · in this workspace", body: "Jamie has the revised deck on Friday, with the email and the note attached.", links: ["t1", "c1"] },
+          { id: "t1", mod: "tasks", title: "Send Anna the revised deck", meta: "Friday · assigned to Jamie", body: "Made from Anna’s email with one key. The email stays linked, and so does the kickoff note.", links: ["e1", "n1", "p1", "p3"] },
+          { id: "t2", mod: "tasks", title: "Get final SVGs from Maya", meta: "Friday · from the kickoff note", body: "A task line in the kickoff note. It’s a real task, synced both ways.", links: ["n1", "e2", "p2"] },
+          { id: "t3", mod: "tasks", title: "Prep the Phase 2 demo", meta: "Thursday · in today’s queue", body: "Queued for Thursday morning, right before the demo itself.", links: ["c2", "n2"] },
+          { id: "e1", mod: "mail", title: "Final deck notes", meta: "Anna Carter · 9:12", body: "“Love it. Just swap the hero photo and we’re done. Can you send the revised deck by Friday?”", links: ["t1", "p1"] },
           { id: "e2", mod: "mail", title: "Re: logo files", meta: "Maya Brooks · Yesterday", body: "“Final SVGs Friday morning, promise.”", links: ["t2", "p2"] },
-          { id: "n1", mod: "notes", title: "Kickoff — Carter rebrand", meta: "Edited 2 min ago", body: "Anna wants it live before the launch. Maya owns the logo files; print needs SVGs by Friday.", links: ["e1", "t2", "p1", "p2"] },
-          { id: "n2", mod: "notes", title: "Launch brainstorm", meta: "14 September", body: "Everything we said at the whiteboard, typed up and linked to the plan.", links: ["m1", "t3"] },
+          { id: "n1", mod: "notes", title: "Kickoff · Carter rebrand", meta: "Edited 2 min ago", body: "@Anna Carter wants it live before the launch. Maya owns the logo files; print needs SVGs by Friday.", links: ["p1", "p2", "t1", "t2"] },
+          { id: "n2", mod: "notes", title: "Phase 2 demo agenda", meta: "Thursday", body: "Walkthrough, open questions, next steps. Linked to the demo on the calendar.", links: ["c2", "t3"] },
           { id: "c1", mod: "calendar", title: "Brand deck review", meta: "Friday 11:00–12:30", body: "Anna’s on the invite. The deck task and the kickoff note are one click away.", links: ["t1", "n1", "p1"] },
-          { id: "c2", mod: "calendar", title: "Launch go / no-go", meta: "Friday 16:30", body: "The launch map is attached, so the room sees the whole plan.", links: ["m1", "n2"] },
-          { id: "d1", mod: "deals", title: "Carter Studio — Phase 1", meta: "Won · €12,000 · June", body: "Phase 1 closed in June and Phase 2 is in flight — but 38 hours of Phase 1 work still aren’t invoiced.", links: ["p1", "h1", "i1"] },
-          { id: "h1", mod: "time", title: "Phase 1 — tracked time", meta: "38h 20m · not invoiced", body: "Every timer started on a Carter task, rolled up per phase without anyone filling in a timesheet.", links: ["d1", "i1", "t1"] },
-          { id: "i1", mod: "invoices", title: "Invoice draft #014", meta: "€4,600 · ready to send", body: "Drafted from 38h 20m of tracked Phase 1 time. Anna is already on it as the contact.", links: ["d1", "h1", "p1"] },
-          { id: "g1", mod: "goals", title: "Q4: three new studio clients", meta: "2 of 3 · on track", body: "The website redesign counts toward it. So does the autumn launch.", links: ["d1", "m1"] },
-          { id: "m1", mod: "mindmap", title: "Autumn launch", meta: "6 branches · 21 ideas", body: "Website, press kit, print run, launch event, socials, partners. Every branch can become tasks.", links: ["t3", "n2", "c2"] },
+          { id: "c2", mod: "calendar", title: "Phase 2 demo with Anna", meta: "Thursday 14:00–15:00", body: "The agenda note and the prep task open from the event.", links: ["p1", "n2", "t3"] },
         ];
         var byId = {};
         ITEMS.forEach(function (it) {
@@ -6250,7 +6950,7 @@
               '<li class="pal-item" role="option" id="pal-o-' + it.id + '" data-i="' + i + '" aria-selected="false">' +
               icon(MOD[it.mod].icon) + '<span class="t">' + mark(it.title, query) + '</span><span class="m">' + esc(it.meta.split(" · ")[0]) + "</span></li>";
           });
-          if (!results.length) html += '<li class="pal-empty" role="presentation">Nothing for “' + esc(q.value.trim()) + "”. Try “launch”.</li>";
+          if (!results.length) html += '<li class="pal-empty" role="presentation">Nothing for “' + esc(q.value.trim()) + "”. Try “anna”.</li>";
           list.innerHTML = html;
           ind = $("pal-ind");
           ind.style.transition = "none";
@@ -6290,8 +6990,8 @@
         // Idle tour: types a few searches until the visitor touches the palette.
         var TOUR = [
           ["anna", "p1"],
-          ["phase 1", "d1"],
-          ["launch", "m1"],
+          ["deck", "t1"],
+          ["friday", "c1"],
         ];
         var tourOn = !reduce;
         var tourStep = 0;
@@ -6392,19 +7092,19 @@
           nodes[el.dataset.id] = el;
         });
         var LAYOUTS = {
-          wide: { w: 820, h: 520, mail: [300, 168, 220], proj: [16, 16, 210], cal: [594, 16, 210], contact: [594, 176, 210], deal: [594, 372, 210], time: [16, 300, 210], inv: [300, 336, 220] },
-          tall: { w: 460, h: 840, mail: [70, 12, 320], proj: [12, 200, 200], cal: [248, 200, 200], contact: [248, 352, 200], deal: [248, 528, 200], time: [12, 456, 200], inv: [70, 650, 320] },
+          wide: { w: 820, h: 520, mail: [16, 16, 236], contact: [300, 16, 220], note: [584, 16, 220], task: [300, 214, 220], person: [584, 236, 220], cal: [16, 262, 236], home: [300, 404, 220] },
+          tall: { w: 460, h: 820, mail: [12, 12, 210], contact: [238, 12, 210], note: [238, 196, 210], task: [12, 222, 210], person: [238, 400, 210], cal: [12, 450, 210], home: [120, 640, 220] },
         };
         var layout = null;
         var EDGES = [
-          { a: "mail", b: "cal", s: 1, d: 350, t: 650, why: "the meeting" },
-          { a: "mail", b: "proj", s: 1, d: 850, t: 650, why: "the project" },
-          { a: "proj", b: "cal", s: 2, d: 900, t: 800, why: "due before demo" },
-          { a: "cal", b: "contact", s: 3, d: 250, t: 600, why: "attendee" },
-          { a: "mail", b: "contact", s: 3, d: 400, t: 650, why: "sender" },
-          { a: "contact", b: "deal", s: 3, d: 750, t: 600, why: "signed" },
-          { a: "time", b: "inv", s: 4, d: 950, t: 700, why: "38h 20m" },
-          { a: "deal", b: "inv", s: 4, d: 1100, t: 700, why: "not billed" },
+          { a: "mail", b: "contact", s: 0, d: 1700, t: 600, why: "sender" },
+          { a: "note", b: "contact", s: 1, d: 900, t: 650, why: "mentions" },
+          { a: "mail", b: "task", s: 2, d: 650, t: 650, why: "spawned from" },
+          { a: "task", b: "note", s: 2, d: 1250, t: 650, why: "task line" },
+          { a: "task", b: "person", s: 3, d: 750, t: 650, why: "assigned" },
+          { a: "task", b: "cal", s: 4, d: 800, t: 650, why: "scheduled" },
+          { a: "cal", b: "home", s: 5, d: 450, t: 600, why: "today" },
+          { a: "task", b: "home", s: 5, d: 650, t: 600, why: "tasks" },
         ];
         EDGES.forEach(function (e) {
           e.path = document.createElementNS(SVGNS, "path");
@@ -6425,29 +7125,25 @@
           e.dStr = "";
         });
 
-        // Words of the email fade in one by one; marks stay whole.
+        // Words of the email fade in one by one.
         var relBody = $("rel-body");
         var relWi = 0;
         Array.prototype.slice.call(relBody.childNodes).forEach(function (n) {
-          if (n.nodeType === 3) {
-            var frag = document.createDocumentFragment();
-            n.textContent.split(/(\s+)/).forEach(function (part) {
-              if (!part) return;
-              if (/^\s+$/.test(part)) {
-                frag.appendChild(document.createTextNode(part));
-                return;
-              }
-              var w = document.createElement("span");
-              w.className = "rw";
-              w.style.setProperty("--i", relWi++);
-              w.textContent = part;
-              frag.appendChild(w);
-            });
-            relBody.replaceChild(frag, n);
-          } else if (n.tagName === "MARK") {
-            n.classList.add("rw");
-            n.style.setProperty("--i", relWi++);
-          }
+          if (n.nodeType !== 3) return;
+          var frag = document.createDocumentFragment();
+          n.textContent.split(/(\s+)/).forEach(function (part) {
+            if (!part) return;
+            if (/^\s+$/.test(part)) {
+              frag.appendChild(document.createTextNode(part));
+              return;
+            }
+            var w = document.createElement("span");
+            w.className = "rw";
+            w.style.setProperty("--i", relWi++);
+            w.textContent = part;
+            frag.appendChild(w);
+          });
+          relBody.replaceChild(frag, n);
         });
 
         var applyLayout = function () {
@@ -6518,22 +7214,6 @@
           }, 18);
         };
 
-        var hoursEl = $("rel-hours");
-        var totalEl = $("rel-total");
-        var fmtHours = function (m) {
-          return Math.floor(m / 60) + "h " + String(Math.round(m % 60)).padStart(2, "0") + "m";
-        };
-        var fmtEur = function (n) {
-          return "€" + Math.round(n).toLocaleString("en-US");
-        };
-        var counters = [];
-        var countUp = function (el, to, fmt, delay, dur) {
-          var c = { el: el, to: to, fmt: fmt, start: performance.now() + delay, dur: dur };
-          counters.push(c);
-          el.textContent = fmt(0);
-          kick();
-        };
-
         var timers = [];
         var later = function (ms, fn) {
           timers.push(setTimeout(fn, ms));
@@ -6554,21 +7234,22 @@
           var s = scaleOf();
           return { x: (r.left - rr.left) / s, y: (r.top - rr.top) / s, w: r.width / s, h: r.height / s };
         };
-        var fly = function (mark, target, dur, land) {
-          var from = relPoint(mark);
-          var tb = box(nodes[target === "due" ? "proj" : target]);
-          var to = target === "due" ? { x: tb.x + 44, y: tb.y + 46 } : { x: tb.x + 14, y: tb.y + 30 };
+        // A label lifts off one card and lands on another: the visible version of making a link.
+        var fly = function (from, target, dur, land) {
+          var a0 = relPoint(from);
+          var tb = box(nodes[target]);
+          var to = { x: tb.x + 14, y: tb.y + 30 };
           var tok = document.createElement("span");
           tok.className = "rel-token";
-          tok.textContent = mark.textContent;
+          tok.textContent = from.textContent;
           rel.appendChild(tok);
-          var dx = to.x - from.x;
-          var dy = to.y - from.y;
+          var dx = to.x - a0.x;
+          var dy = to.y - a0.y;
           var lift = Math.min(-40, dy * 0.25 - 60);
           var a = tok.animate(
             [
-              { transform: "translate(" + from.x + "px," + from.y + "px) scale(1)", opacity: 1 },
-              { transform: "translate(" + (from.x + dx * 0.5) + "px," + (from.y + dy * 0.5 + lift) + "px) scale(1.06)", opacity: 1, offset: 0.5 },
+              { transform: "translate(" + a0.x + "px," + a0.y + "px) scale(1)", opacity: 1 },
+              { transform: "translate(" + (a0.x + dx * 0.5) + "px," + (a0.y + dy * 0.5 + lift) + "px) scale(1.06)", opacity: 1, offset: 0.5 },
               { transform: "translate(" + to.x + "px," + to.y + "px) scale(0.7)", opacity: 0 },
             ],
             { duration: dur, easing: "cubic-bezier(0.45, 0, 0.2, 1)", fill: "forwards" }
@@ -6582,36 +7263,23 @@
 
         var STATUS = [
           ["Listening for new mail", ""],
-          ["New mail from Anna Carter", ""],
-          ["Linked a meeting, a deadline and a project", "ok"],
-          ["3 subtasks still open before the 15th", "ok"],
-          ["Matched the client: Carter Studio", "ok"],
-          ["38h 20m unbilled — invoice drafted", "ok"],
+          ["New mail from Anna Carter, matched to her contact", "ok"],
+          ["You mentioned Anna. The note is on her contact now", "ok"],
+          ["Task created from the email and added to the kickoff note", "ok"],
+          ["Jamie was notified, with the email and the note attached", "ok"],
+          ["Blocked Friday 10:00. The block keeps every link", "ok"],
+          ["On Home: Tasks, Today and Recently linked", "ok"],
         ];
-        var progEl = $("rel-prog");
-        var ringEl = $("rel-ring");
-        var stBtns = Array.prototype.slice.call(document.querySelectorAll("#rel-sts .st"));
-        var renderProg = function () {
-          var done = 4 + stBtns.filter(function (b) {
-            return b.classList.contains("is-done");
-          }).length;
-          var open = 7 - done;
-          progEl.textContent = done + " of 7 done" + (open ? " · " + open + " open" : " · ready for the 15th");
-          ringEl.style.setProperty("--off", (1 - done / 7).toFixed(3));
-          return open;
-        };
-        stBtns.forEach(function (b) {
-          b.addEventListener("click", function () {
-            var on = b.classList.toggle("is-done");
-            b.setAttribute("aria-checked", String(on));
-            var open = renderProg();
-            STATUS[3][0] = open ? open + (open === 1 ? " subtask" : " subtasks") + " still open before the 15th" : "Everything for the 15th is done";
-            setStatus(STATUS[3][0], "ok");
-          });
+        var doneBtn = $("rel-done");
+        doneBtn.addEventListener("click", function () {
+          var on = doneBtn.getAttribute("aria-pressed") !== "true";
+          doneBtn.setAttribute("aria-pressed", String(on));
+          doneBtn.parentElement.classList.toggle("is-done", on);
+          setStatus(on ? "Done. Anna’s contact, Jamie and Home all show it" : STATUS[Math.max(0, cur) + 1][0], "ok");
         });
 
         var cur = -2;
-        var steps5 = 5;
+        var nSteps = steps.length;
         var setStep = function (i) {
           if (i === cur) return;
           var prev = cur;
@@ -6626,7 +7294,7 @@
           rel.classList.toggle("is-instant", prev === -2 || (i > prev && !animate));
           rel.classList.toggle("is-back", i < prev);
           void rel.offsetWidth;
-          for (var k = 0; k < steps5; k++) rel.classList.toggle("s" + k, k <= i);
+          for (var k = 0; k < nSteps; k++) rel.classList.toggle("s" + k, k <= i);
           Object.keys(nodes).forEach(function (id) {
             nodes[id].classList.toggle("is-on", Number(nodes[id].dataset.s) <= i);
           });
@@ -6643,14 +7311,6 @@
             else s.removeAttribute("aria-current");
           });
           $("rel-hint").classList.toggle("is-on", i >= 1);
-          counters = [];
-          hoursEl.textContent = fmtHours(i >= 4 ? 2300 : 0);
-          totalEl.textContent = fmtEur(i >= 4 ? 4600 : 0);
-          if (i < 4) {
-            nodes.inv.classList.remove("is-sent");
-            $("rel-draft").classList.remove("is-done");
-            $("rel-draft").textContent = "Draft invoice";
-          }
           var st = STATUS[i + 1];
           if (!animate) {
             setStatus(st[0], st[1], true);
@@ -6677,47 +7337,57 @@
               easing: "cubic-bezier(0.16, 1, 0.3, 1)",
               fill: "backwards",
             });
-            setStatus(st[0], "busy");
+            setStatus("New mail from Anna Carter", "busy");
+            later(1900, function () {
+              hit(nodes.contact);
+              setStatus(st[0], st[1]);
+            });
           } else if (i === 1) {
-            setStatus("Reading the message…", "busy");
-            $("rel-beam").animate(
-              [
-                { opacity: 0, backgroundPosition: "100% 0" },
-                { opacity: 1, offset: 0.1 },
-                { opacity: 1, offset: 0.9 },
-                { opacity: 0, backgroundPosition: "0% 0" },
-              ],
-              { duration: 1100, delay: 100, easing: "ease-in-out" }
-            );
-            Array.prototype.forEach.call(relBody.querySelectorAll("mark"), function (m) {
-              var to = m.dataset.to;
-              var d = parseInt(m.style.getPropertyValue("--d"), 10);
-              later(d, function () {
-                fly(m, to, to === "due" ? 1100 : 650, function () {
-                  if (to === "due") {
-                    $("rel-due").animate(
-                      [{ backgroundColor: tone("--foreground", 30) }, { backgroundColor: tone("--foreground", 0) }],
-                      { duration: 1000, easing: "ease-out" }
-                    );
-                  } else hit(nodes[to]);
-                });
+            setStatus("Typing @Anna…", "busy");
+            later(700, function () {
+              fly($("rel-chip"), "contact", 800, function () {
+                hit(nodes.contact);
+                setStatus(st[0], st[1]);
               });
             });
-            later(1750, function () {
-              setStatus(st[0], st[1]);
+          } else if (i === 2) {
+            setStatus("Pressed T on the email…", "busy");
+            later(450, function () {
+              var key = $("rel-key");
+              key.classList.remove("is-press");
+              void key.offsetWidth;
+              key.classList.add("is-press");
+            });
+            later(650, function () {
+              fly($("rel-subj"), "task", 750, function () {
+                hit(nodes.task);
+              });
+            });
+            later(1450, function () {
+              fly($("rel-task"), "note", 750, function () {
+                hit(nodes.note);
+                setStatus(st[0], st[1]);
+              });
+            });
+          } else if (i === 3) {
+            setStatus("Assigning…", "busy");
+            later(800, function () {
+              fly($("rel-as"), "person", 750, function () {
+                hit(nodes.person);
+                setStatus(st[0], st[1]);
+              });
             });
           } else if (i === 4) {
-            setStatus("Checking tracked time…", "busy");
-            countUp(hoursEl, 2300, fmtHours, 300, 1200);
-            countUp(totalEl, 4600, fmtEur, 1400, 900);
-            later(1600, function () {
-              setStatus(st[0], st[1]);
-            });
-            later(2300, function () {
-              hit($("rel-draft"));
+            setStatus("Dragging it onto Friday…", "busy");
+            later(250, function () {
+              fly($("rel-task"), "cal", 800, function () {
+                hit(nodes.cal);
+                setStatus(st[0], st[1]);
+              });
             });
           } else {
-            later(300, function () {
+            later(400, function () {
+              hit(nodes.home);
               setStatus(st[0], st[1]);
             });
           }
@@ -6805,14 +7475,7 @@
           });
         });
 
-        $("rel-draft").addEventListener("click", function () {
-          var sent = nodes.inv.classList.toggle("is-sent");
-          this.classList.toggle("is-done", sent);
-          this.textContent = sent ? "Draft #014 saved" : "Draft invoice";
-          setStatus(sent ? "Draft #014 saved — linked to Phase 1, Anna and 38h 20m" : STATUS[5][0], "ok");
-        });
-
-        // One frame loop: edge geometry, labels, travelling pulses, counters.
+        // One frame loop: edge geometry, labels, travelling pulses.
         var foundEl = $("rel-found");
         var found = 0;
         var inView = false;
@@ -6850,12 +7513,7 @@
             void foundEl.offsetWidth;
             foundEl.classList.add("is-bump");
           }
-          counters = counters.filter(function (c) {
-            var t = Math.min(1, Math.max(0, (now - c.start) / c.dur));
-            c.el.textContent = c.fmt(c.to * (1 - Math.pow(1 - t, 3)));
-            return t < 1;
-          });
-          if (inView || counters.length || relDrag) kick();
+          if (inView || relDrag) kick();
         };
         new IntersectionObserver(function (entries) {
           inView = entries[0].isIntersecting;
@@ -6867,7 +7525,7 @@
           var total = track.offsetHeight - window.innerHeight;
           var p = Math.min(1, Math.max(0, -r.top / total));
           bar.style.setProperty("--p", p.toFixed(4));
-          setStep(r.top > window.innerHeight * 0.35 ? -1 : Math.min(4, Math.floor(p * 5)));
+          setStep(r.top > window.innerHeight * 0.35 ? -1 : Math.min(nSteps - 1, Math.floor(p * nSteps)));
         };
         var ticking = false;
         window.addEventListener(
@@ -6891,11 +7549,10 @@
           s.addEventListener("click", function () {
             var top = track.getBoundingClientRect().top + window.scrollY;
             var total = track.offsetHeight - window.innerHeight;
-            window.scrollTo({ top: top + (total * (k + 0.5)) / 5, behavior: reduce ? "auto" : "smooth" });
+            window.scrollTo({ top: top + (total * (k + 0.5)) / nSteps, behavior: reduce ? "auto" : "smooth" });
           });
         });
         applyLayout();
-        renderProg();
         storyFrame();
 
         // ── Make it yours: a widget store that installs modules, a resizable board ──
@@ -6904,14 +7561,6 @@
           notes: ["Notes", "i-notes"],
           email: ["Email", "i-mail"],
           calendar: ["Calendar", "i-calendar"],
-          mindmap: ["Mindmap", "i-mindmap"],
-          time: ["Time tracking", "i-timer"],
-          invoices: ["Invoicing", "i-invoice"],
-          budget: ["Budgets", "i-wallet"],
-          goals: ["Goals", "i-target"],
-          planning: ["Planning", "i-plan"],
-          forms: ["Forms", "i-form"],
-          docs: ["Docs", "i-notes"],
           contacts: ["Contacts", "i-contact"],
           general: ["General", "i-home"],
         };
@@ -6961,52 +7610,42 @@
           );
         };
         var LIST = [
-          ["today", "tasks", "Today", 2, "3 tasks", function () {
+          ["today", "tasks", "Tasks", 2, "Today · 4", function () {
             return [
-              ["Send Anna the revised brand deck", true],
+              ["Send Anna the revised deck", true],
               ["Final logo exports", false],
               ["Prep notes for the studio call", false],
               ["Book the print proofs", false],
-              ["Reply to Maya about SVGs", false],
+              ["Reply to Maya about the SVGs", false],
               ["Review the demo deck", false],
             ].map(function (r) {
               return '<div class="trow' + (r[1] ? " is-done" : "") + '"><button type="button" class="ck" aria-pressed="' + r[1] + '" aria-label="Complete: ' + r[0] + '">' + CHECK + "</button><span>" + r[0] + "</span></div>";
             }).join("");
           }, "i-today"],
-          ["focus", "tasks", "Focus", 1, "18:42", function () {
-            return ring(25, "18:42", "Demo deck", " data-ring");
+          ["attention", "tasks", "Needs attention", 1, "2", gen("2", "drifted, nothing turns red")],
+          ["habits", "tasks", "Habits", 1, "12 days", gen("12 days", "of deep-work mornings")],
+          ["capture", "tasks", "Quick capture", 1, "⇧⌘K", function () {
+            return '<div class="big">⇧⌘K</div><div class="sub">A line becomes a task. /note, /event and /contact send it elsewhere.</div>';
           }, "i-bolt"],
-          ["week-done", "tasks", "This week", 1, "18/24", gen("18/24", "tasks done")],
-          ["slipped", "tasks", "Slipped", 1, "2", gen("2", "moved to tomorrow, no drama")],
-          ["note", "notes", "Pinned note", 2, "Kickoff", function () {
-            return '<p class="wd-note">Anna wants Phase 2 live before the launch. Maya owns the logo files — print needs SVGs by Friday.</p><div class="sub">Kickoff — Website redesign</div>';
+          ["note", "notes", "Pinned", 2, "Kickoff", function () {
+            return '<p class="wd-note">Anna wants Phase 2 live before the launch. Maya owns the logo files, print needs SVGs by Friday.</p><div class="sub">Kickoff · Website redesign</div>';
           }],
-          ["recent-notes", "notes", "Recent notes", 1, "5", gen("5", "edited today")],
-          ["unread", "email", "Inbox", 1, "12", gen("12", "3 need a reply · 2 became tasks")],
-          ["waiting", "email", "Waiting on", 1, "4", gen("4", "threads waiting for a reply")],
-          ["next", "calendar", "Next up", 1, "14:00", gen("14:00", "Demo with Anna · deck attached")],
-          ["week-load", "calendar", "This week", 1, "26h", gen("26h", "booked · 9h free")],
-          ["free-slot", "calendar", "Free time", 1, "15:30", gen("15:30", "next free hour")],
-          ["map", "mindmap", "Autumn launch", 2, "6 branches", mapSvg],
-          ["timer", "time", "Timer", 1, "00:42:13", function () {
-            return spark("timer") + '<div class="big" data-timer>00:42:13</div><div class="sub"><span class="rec"></span>Demo deck · Carter</div>';
-          }],
-          ["week-hours", "time", "Tracked", 1, "31h 40m", gen("31h 40m", "this week · 82% billable")],
-          ["to-invoice", "invoices", "Ready to invoice", 1, "€4,600", gen("€4,600", "38h 20m on Phase 1")],
-          ["unpaid", "invoices", "Unpaid", 1, "2", gen("2", "invoices awaiting payment")],
-          ["budget-bar", "budget", "Phase 2 budget", 2, "€8,400", function () {
-            return '<div class="big">€8,400 <span class="of">of €12,000</span></div><div class="meter"><i style="width: 70%"></i></div><div class="sub">70% used · 9 days to the deadline</div>';
-          }],
-          ["spend", "budget", "Spent", 1, "€1,240", gen("€1,240", "this month · on plan")],
-          ["goal-ring", "goals", "Q4 goal", 1, "2/3", function () {
-            return ring(34, "2/3", "new studio clients");
-          }],
-          ["streak", "goals", "Streak", 1, "12 days", gen("12 days", "of deep-work mornings")],
-          ["roadmap", "planning", "Roadmap", 2, "Q4", gen("Q4", "3 milestones · 1 needs attention")],
-          ["milestone", "planning", "Next milestone", 1, "15 Oct", gen("15 Oct", "Phase 2 handoff")],
-          ["responses", "forms", "Form responses", 1, "48", gen("48", "new from the launch survey")],
-          ["shared-docs", "docs", "Shared docs", 1, "5", gen("5", "shared with you this week")],
+          ["recent-notes", "notes", "Notes", 1, "5", gen("5", "edited today")],
+          ["unread", "email", "Inbox", 1, "12", gen("12", "3 need a reply · Mac app")],
+          ["next", "calendar", "Today", 1, "14:00", gen("14:00", "Demo with Anna · next up")],
+          ["countdown", "calendar", "Countdown", 1, "9 days", gen("9 days", "to the Phase 2 handoff")],
+          ["timer", "calendar", "Time tracking", 1, "00:42:13", function () {
+            return spark("timer") + '<div class="big" data-timer>00:42:13</div><div class="sub"><span class="rec"></span>Demo deck · Mac app</div>';
+          }, "i-timer"],
           ["reconnect", "contacts", "Reconnect", 1, "Jordan", gen("Jordan", "no message in 3 weeks")],
+          ["linked", "general", "Recently linked", 2, "4", function () {
+            return '<div class="wd-links"><span>Final deck notes <i>→</i> Send Anna the revised deck</span><span>Kickoff note <i>→</i> Anna Carter</span><span>Revised deck <i>→</i> Fri 10:00</span></div>';
+          }, "i-link"],
+          ["activity", "general", "Activity", 1, "8", gen("8", "changes across the workspace today")],
+          ["pomodoro", "general", "Pomodoro", 1, "18:42", function () {
+            return ring(25, "18:42", "Demo deck", " data-ring");
+          }, "i-timer"],
+          ["weather", "general", "Weather", 1, "14°", gen("14°", "light rain, clearing by noon")],
           ["clock", "general", "Clock", 1, "--:--", function () {
             return '<div class="big" data-clock>--:--</div><div class="sub">Local time</div>';
           }, "i-today"],
@@ -7015,40 +7654,36 @@
         LIST.forEach(function (w) {
           WIDGETS[w[0]] = { id: w[0], cat: w[1], mod: w[1] === "general" ? null : w[1], title: w[2], span: w[3], peek: w[4], html: w[5], icon: w[6] || CATS[w[1]][1] };
         });
-        var DEFAULT_FOR = { tasks: "today", notes: "note", email: "unread", calendar: "next", mindmap: "map", time: "timer", invoices: "to-invoice", budget: "budget-bar", goals: "goal-ring", planning: "roadmap", forms: "responses", docs: "shared-docs", contacts: "reconnect" };
+        var DEFAULT_FOR = { tasks: "today", notes: "note", email: "unread", calendar: "next", contacts: "reconnect" };
+        var ALL_MODS = ["tasks", "notes", "email", "calendar", "contacts"];
         var PRESETS = {
           studio: {
-            name: "North Studio",
-            mods: ["tasks", "notes", "email", "calendar", "time", "invoices"],
-            order: ["today", "timer", "next", "unread", "to-invoice", "note"],
-            cfg: { today: { w: 2 }, "to-invoice": { h: 2, tone: "success" }, note: { w: 2 } },
+            name: "Studio",
+            mods: ALL_MODS.slice(),
+            order: ["today", "timer", "next", "unread", "linked", "note"],
+            cfg: { today: { w: 2 }, linked: { w: 2 }, note: { w: 1 } },
           },
           personal: {
             name: "Personal",
-            mods: ["tasks", "calendar", "notes", "goals", "budget"],
-            order: ["focus", "goal-ring", "next", "budget-bar", "streak", "today"],
-            cfg: { focus: { h: 2, tone: "ai" }, "goal-ring": { tone: "info" }, "budget-bar": { w: 2 }, today: { w: 2 } },
+            mods: ALL_MODS.slice(),
+            order: ["pomodoro", "habits", "next", "capture", "today", "weather"],
+            cfg: { pomodoro: { h: 2 }, today: { w: 2 } },
           },
           side: {
-            name: "Autumn launch",
-            mods: ["notes", "mindmap", "tasks", "goals"],
-            order: ["map", "focus", "goal-ring", "note"],
-            cfg: { map: { w: 2, h: 2 }, "goal-ring": { tone: "warning" }, note: { w: 3 } },
+            name: "Side project",
+            mods: ALL_MODS.slice(),
+            order: ["note", "countdown", "attention", "reconnect", "clock"],
+            cfg: { note: { w: 2, h: 2 } },
           },
         };
+        // The app's four widget sizes, mapped onto this three-column board.
         var SIZES = [
-          [1, 1, "Small"],
-          [2, 1, "Wide"],
-          [1, 2, "Tall"],
-          [2, 2, "Large"],
+          [1, 1, "S"],
+          [2, 1, "M"],
+          [2, 2, "L"],
+          [3, 1, "XL"],
         ];
-        var TONES = [
-          ["", "No color"],
-          ["success", "Green"],
-          ["info", "Blue"],
-          ["warning", "Amber"],
-          ["ai", "Pink"],
-        ];
+        var TONES = [["", "No color"]];
         var clone = function (o) {
           return JSON.parse(JSON.stringify(o));
         };
@@ -7086,7 +7721,7 @@
           var name = c.name || WIDGETS[id].title;
           el.dataset.cw = c.w;
           el.dataset.ch = c.h;
-          el.dataset.sizeLabel = c.w + " × " + c.h;
+          el.dataset.sizeLabel = sizeName(c);
           el.classList.toggle("has-tone", !!c.tone);
           if (c.tone) el.style.setProperty("--tone", "var(--" + c.tone + ")");
           else el.style.removeProperty("--tone");
@@ -7144,7 +7779,7 @@
         var storeTabs = $("store-tabs");
         var storeInd = $("store-ind");
         var storeFoot = $("store-foot");
-        var FOOT = "Adding a widget installs its module. Removing a module takes its widgets off the board.";
+        var FOOT = "Every module brings its own widgets. Two of them, Inbox and Time tracking, live in the Mac app.";
         var storeCat = "all";
         var storeTab = "widgets";
         storeCats.innerHTML =
@@ -7224,7 +7859,7 @@
           }).filter(function (w) {
             return (storeCat === "all" || w.cat === storeCat) && (!q || (w.title + " " + CATS[w.cat][0]).toLowerCase().indexOf(q) >= 0);
           });
-          $("store-count").textContent = LIST.length + " widgets across " + MOD_IDS.length + " modules";
+          $("store-count").textContent = LIST.length + " widgets from " + MOD_IDS.length + " modules";
           storeGrid.innerHTML = items.length
             ? items
                 .map(function (w, k) {
@@ -7232,7 +7867,7 @@
                   var needs = w.mod && !installed(w.mod);
                   return (
                     '<button type="button" class="sc" style="--k:' + k + '" data-add="' + w.id + '"' + (on ? " disabled" : "") + ">" +
-                    '<span class="sc-top">' + icon(CATS[w.cat][1], "icon-xs") + CATS[w.cat][0] + '<span class="sc-size">' + (w.span || 1) + "×1</span></span>" +
+                    '<span class="sc-top">' + icon(CATS[w.cat][1], "icon-xs") + CATS[w.cat][0] + '<span class="sc-size">' + ((w.span || 1) > 1 ? "M" : "S") + "</span></span>" +
                     '<span class="sc-title">' + w.title + "</span>" +
                     '<span class="sc-peek">' + w.peek + "</span>" +
                     '<span class="sc-add">' +
@@ -7365,8 +8000,7 @@
                 .map(function (m) {
                   return '<button type="button" class="mchip" data-strip="' + m + '" title="' + CATS[m][0] + '" aria-label="' + CATS[m][0] + ' widgets">' + icon(CATS[m][1], "icon-xs") + "</button>";
                 })
-                .join("") +
-              '<button type="button" class="mchip is-more" data-strip-more title="Install modules" aria-label="Install modules">' + icon("i-plus", "icon-xs") + "</button>";
+                .join("");
           }
           var n = board.children.length;
           $("board-count").textContent = n + (n === 1 ? " widget" : " widgets");
@@ -7376,7 +8010,6 @@
         strip.addEventListener("click", function (e) {
           var b = e.target.closest("[data-strip]");
           if (b) openStore("widgets", b.dataset.strip);
-          else if (e.target.closest("[data-strip-more]")) openStore("modules");
         });
 
         var syncGen = 0;
@@ -7483,25 +8116,24 @@
         // Customize popover
         var cellsFor = function (w, h) {
           var out = "";
-          for (var r = 0; r < 2; r++) for (var c = 0; c < 2; c++) out += '<i class="' + (c < w && r < h ? "on" : "") + '"></i>';
+          for (var r = 0; r < 2; r++) for (var c = 0; c < 3; c++) out += '<i class="' + (c < w && r < h ? "on" : "") + '"></i>';
           return '<span class="sz-g" aria-hidden="true">' + out + "</span>";
+        };
+        var sizeName = function (c) {
+          var m = SIZES.filter(function (s) {
+            return s[0] === c.w && s[1] === c.h;
+          })[0];
+          return m ? m[2] : c.w + " × " + c.h;
         };
         var renderPop = function (id) {
           var c = cfgOf(id);
           pop.innerHTML =
-            '<div class="pop-h">Customize<span class="pop-sz">' + c.w + " × " + c.h + "</span></div>" +
-            '<label class="pop-l">Name<input class="pop-name" type="text" maxlength="24" spellcheck="false" value="' + esc(c.name || WIDGETS[id].title) + '" /></label>' +
+            '<div class="pop-h">' + esc(WIDGETS[id].title) + '<span class="pop-sz">' + sizeName(c) + "</span></div>" +
             '<div class="pop-l">Size<div class="pop-sizes">' +
             SIZES.map(function (s) {
               return '<button type="button" data-size="' + s[0] + "," + s[1] + '" aria-pressed="' + (c.w === s[0] && c.h === s[1]) + '" aria-label="' + s[2] + " — " + s[0] + " by " + s[1] + '">' + cellsFor(s[0], s[1]) + s[2] + "</button>";
             }).join("") +
             "</div></div>" +
-            '<div class="pop-l">Color<div class="pop-tones">' +
-            TONES.map(function (t) {
-              return '<button type="button" data-tone="' + t[0] + '" aria-pressed="' + (c.tone === t[0]) + '" aria-label="' + t[1] + '" title="' + t[1] + '"' + (t[0] ? ' style="--tone: var(--' + t[0] + ')"' : "") + "></button>";
-            }).join("") +
-            "</div></div>" +
-            '<button type="button" class="pop-sw" role="switch" aria-checked="' + c.sub + '" data-sub>Show details<span class="sw" aria-hidden="true"></span></button>' +
             '<button type="button" class="pop-rm" data-pop-remove>' + icon("i-x", "icon-xs") + "Remove from board</button>";
         };
         var placePop = function () {
@@ -7824,26 +8456,26 @@
           {
             q: "What’s left before the Carter demo?",
             tools: [
-              ["moduo.search_tasks", 'project: "Website redesign", open: true', "3 tasks"],
-              ["moduo.get_event", 'title: "Demo with Anna"', "Thu 14:00"],
+              ["tasks_search", 'query: "Website redesign", status: "open"', "3 tasks"],
+              ["calendar_list_events", 'query: "Demo with Anna"', "Thu 14:00"],
             ],
-            a: "Three things before Thursday’s 14:00 demo: final logo exports (due Wednesday), the demo deck, and print proofs. Want me to block two hours tomorrow morning for the deck?",
+            a: "Three things before Thursday’s 14:00 demo: the final logo exports (due Wednesday), the demo deck and the print proofs. Want me to put the deck on tomorrow morning?",
           },
           {
-            q: "Draft the Phase 1 invoice.",
+            q: "Link Maya’s emails to the kickoff note.",
             tools: [
-              ["moduo.time_report", 'deal: "Phase 1", unbilled: true', "38h 20m"],
-              ["moduo.create_invoice", 'client: "Carter Studio", hours: 38.33', "draft #014"],
+              ["email_search", 'from: "Maya Brooks"', "2 threads"],
+              ["links_create", 'from: "Kickoff · Carter rebrand", to: "2 threads"', "2 links"],
             ],
-            a: "Done — draft #014 for Carter Studio: 38h 20m at €120/h, €4,600. It’s linked to the Phase 1 deal and Anna’s contact. Review it in Invoicing before you send it.",
+            a: "Linked both of Maya’s logo-file threads to the kickoff note. They show up on Maya’s contact too. I only read the email, I didn’t change it.",
           },
           {
             q: "Plan my Thursday around the demo.",
             tools: [
-              ["moduo.get_calendar", 'day: "Thursday"', "2 events"],
-              ["moduo.suggest_blocks", "tasks: open, fit: free time", "3 blocks"],
+              ["calendar_day", 'date: "Thursday"', "2 events"],
+              ["calendar_schedule_task", 'task: "Demo deck", start: "09:00", minutes: 120', "blocked"],
             ],
-            a: "Deck polish 9:00–11:00, the demo 14:00–15:00, print proofs 15:30–16:30. I left lunch alone. Should I put these on your calendar?",
+            a: "Deck polish 9:00–11:00, the demo 14:00–15:00, and the print proofs at 15:30. I left lunch alone. The deck block is on your calendar now.",
           },
         ];
         var chat = $("mcp-chat");
@@ -8321,10 +8953,12 @@
         var ORDER = [0, 1, 2, 4, 3];
         var LINKS = [
           { a: "mail", b: "task", m: [2, 0] },
-          { a: "mail", b: "event", m: [2, 1] },
+          { a: "mail", b: "contact", m: [2, 4] },
+          { a: "task", b: "event", m: [0, 1] },
           { a: "task", b: "note", m: [0, 3] },
         ];
-        var TOUR = [2, 0, 3, 1];
+        var TOUR = [2, 0, 4, 3, 1];
+        var NWIN = wins.length;
         var FLY = 820;
         var STEP = 150;
         var on = false;
@@ -8446,6 +9080,14 @@
           cells[ci] = cells[sw];
           cells[sw] = tmp;
         }
+        // Five apps (one per module) get a hand-placed, readable scatter.
+        var FIVE = [
+          [2, 6, -5],
+          [34, 2, 4],
+          [62, 10, -3],
+          [10, 50, 3],
+          [52, 54, -4],
+        ];
         each(wins, function (w, k) {
           var cell = cells[k];
           var col = cell % 5;
@@ -8453,14 +9095,19 @@
           var d = rng();
           var x = Math.max(-3, Math.min(80, col * 19.4 + (rng() - 0.5) * 8));
           var y = Math.max(-3, Math.min(80, row * 25 + (rng() - 0.5) * 9));
+          if (NWIN <= FIVE.length) {
+            x = FIVE[k][0];
+            y = FIVE[k][1];
+          }
           depth[k] = d;
           w.style.setProperty("--x", x.toFixed(1) + "%");
           w.style.setProperty("--y", y.toFixed(1) + "%");
           w.style.setProperty("--z", String(2 + Math.round(d * 20)));
           w.style.setProperty("--k", String(k));
-          w.style.setProperty("--r", ((rng() - 0.5) * 14).toFixed(1) + "deg");
-          w.style.setProperty("--s", (0.8 + d * 0.24).toFixed(2));
-          w.style.setProperty("--o", (0.64 + d * 0.36).toFixed(2));
+          var rot = ((rng() - 0.5) * 14).toFixed(1);
+          w.style.setProperty("--r", (NWIN <= FIVE.length ? FIVE[k][2] : rot) + "deg");
+          w.style.setProperty("--s", (NWIN <= FIVE.length ? 0.94 + d * 0.06 : 0.8 + d * 0.24).toFixed(2));
+          w.style.setProperty("--o", (NWIN <= FIVE.length ? 0.86 + d * 0.14 : 0.64 + d * 0.36).toFixed(2));
           w.querySelector(".aw-ui").innerHTML =
             '<svg viewBox="0 0 120 64" preserveAspectRatio="xMidYMid meet">' + UI[w.getAttribute("data-t")] + "</svg>";
         });
@@ -8741,8 +9388,8 @@
           each(segs, function (b) {
             b.setAttribute("aria-pressed", String((b.getAttribute("data-to") === "on") === on));
           });
-          tabsN.textContent = on ? "1 tab" : "20 tabs";
-          tween(on ? 20 : 1, on ? 1 : 20);
+          tabsN.textContent = on ? "1 tab" : NWIN + " tabs";
+          tween(on ? NWIN : 1, on ? 1 : NWIN);
           if (on) assemble();
           else disassemble();
           later(function () {
@@ -8847,6 +9494,25 @@
             });
           })();
         }
+      })();
+    </script>
+    <script>
+      (function () {
+        "use strict";
+        var bill = document.getElementById("bill");
+        if (!bill) return;
+        var set = function (mode) {
+          Array.prototype.forEach.call(bill.querySelectorAll("[data-bill]"), function (b) {
+            b.setAttribute("aria-pressed", String(b.getAttribute("data-bill") === mode));
+          });
+          Array.prototype.forEach.call(document.querySelectorAll("#pricing [data-y]"), function (el) {
+            el.textContent = el.getAttribute(mode === "yearly" ? "data-y" : "data-m");
+          });
+        };
+        bill.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-bill]");
+          if (b) set(b.getAttribute("data-bill"));
+        });
       })();
     </script>
   </body>
