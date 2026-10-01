@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
+import { MAX_BOOKING_GUESTS, parseGuestEmails } from "../../features/calendar/booking/guests";
 import {
   type BookingPreview,
   bookingRequest,
@@ -30,7 +31,7 @@ type Phase =
   | { kind: "missing" }
   | { kind: "error" }
   | { kind: "ready"; preview: BookingPreview }
-  | { kind: "booked"; start: string; meetLink: string };
+  | { kind: "booked"; start: string; meetLink: string; guests: string[] };
 
 type Ymd = { y: number; m: number; d: number };
 
@@ -151,6 +152,7 @@ export function BookPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
+  const [guests, setGuests] = useState<{ id: string; email: string }[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -213,6 +215,17 @@ export function BookPage() {
     setSubmitting(true);
     setFormError(null);
     const questions = phase.preview.questions ?? [];
+    const invited = phase.preview.guestsEnabled
+      ? parseGuestEmails(
+          guests.map((guest) => guest.email),
+          email,
+        )
+      : { ok: true as const, emails: [] as string[] };
+    if (!invited.ok) {
+      setSubmitting(false);
+      setFormError("Each guest needs their own email address, up to 10.");
+      return;
+    }
     const res = await bookingRequest({
       action: "book",
       slug,
@@ -221,6 +234,7 @@ export function BookPage() {
       name,
       email,
       note,
+      guests: invited.emails,
       origin: bookingPublicOrigin(window.location),
       answers: questions.map((question) => ({
         id: question.id,
@@ -232,7 +246,9 @@ export function BookPage() {
       setFormError(
         res.json.error === "slot_taken"
           ? "That time was just taken. Pick another."
-          : "Could not book that time. Try again.",
+          : res.json.error === "bad_guest"
+            ? "Each guest needs their own email address, up to 10."
+            : "Could not book that time. Try again.",
       );
       if (res.json.error === "slot_taken") setStart(null);
       return;
@@ -241,6 +257,7 @@ export function BookPage() {
       kind: "booked",
       start: String(res.json.start ?? start),
       meetLink: String(res.json.meetLink ?? ""),
+      guests: invited.emails,
     });
   };
 
@@ -293,6 +310,7 @@ export function BookPage() {
           <p className="text-sm text-muted-foreground">
             A short email with the Meet link and a way to cancel is on its way. Google will also
             send the calendar invite.
+            {phase.guests.length > 0 ? ` The same invite goes to ${phase.guests.join(", ")}.` : ""}
           </p>
         </div>
       </Frame>
@@ -465,6 +483,53 @@ export function BookPage() {
                       onChange={(e) => setEmail(e.target.value)}
                     />
                   </label>
+                  {preview.guestsEnabled ? (
+                    <div className="flex flex-col gap-2">
+                      {guests.map((guest, index) => (
+                        <div key={guest.id} className="flex items-center gap-2">
+                          <Input
+                            type="email"
+                            value={guest.email}
+                            placeholder="Guest email"
+                            aria-label={`Guest ${index + 1} email`}
+                            onChange={(e) =>
+                              setGuests((current) =>
+                                current.map((item) =>
+                                  item.id === guest.id ? { ...item, email: e.target.value } : item,
+                                ),
+                              )
+                            }
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setGuests((current) => current.filter((item) => item.id !== guest.id))
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                      {guests.length < MAX_BOOKING_GUESTS ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="justify-start px-0"
+                          onClick={() =>
+                            setGuests((current) => [
+                              ...current,
+                              { id: crypto.randomUUID(), email: "" },
+                            ])
+                          }
+                        >
+                          {guests.length === 0 ? "Add guests" : "Add another guest"}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {preview.noteEnabled ? (
                     <label className="flex flex-col gap-1">
                       <span className="font-display text-sm">Note</span>
