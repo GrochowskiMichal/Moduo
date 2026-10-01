@@ -109,10 +109,10 @@ describe("vocabulary value sets", () => {
   });
 
   it("waitlist vocabularies pin the landing CTA sources and row statuses", () => {
-    expect(WAITLIST_SOURCES).toEqual(["nav", "hero", "close"]);
+    expect(WAITLIST_SOURCES).toEqual(["nav", "hero", "close", "footer"]);
     expect(WAITLIST_STATUSES).toEqual(["pending", "confirmed", "cancelled"]);
     expect(isWaitlistSource("hero")).toBe(true);
-    expect(isWaitlistSource("footer")).toBe(false);
+    expect(isWaitlistSource("sidebar")).toBe(false);
     expect(isWaitlistSource(undefined)).toBe(false);
   });
 

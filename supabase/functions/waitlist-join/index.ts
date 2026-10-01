@@ -1,13 +1,13 @@
 /**
  * Edge Function: waitlist-join
  *
- * Public endpoint behind the landing page "Join the waitlist" forms (nav dialog,
+ * Public endpoint behind the landing page "Join the waitlist" forms (nav dialog, footer,
  * hero, closing section). Writes go through public.waitlist_join() — the table
  * itself is closed to anon/authenticated.
  *
  * Method: POST
  * Auth:   none (public; deploy with --no-verify-jwt)
- * Body:   { email: string; source: "nav" | "hero" | "close"; website?: string; elapsedMs?: number }
+ * Body:   { email: string; source: "nav" | "hero" | "close" | "footer"; website?: string; elapsedMs?: number }
  * Returns: 200 { success: true } — also for duplicates and suspected bots, so the
  *          endpoint never reveals whether an address is already on the list.
  *          400 invalid_email · 403 origin · 413 too large · 429 rate_limited

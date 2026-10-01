@@ -1545,25 +1545,608 @@
       .close .lead {
         max-width: 30rem;
       }
-      .footer {
-        border-top: 1px solid var(--border);
-        padding-block: 2rem;
+      /* ─── Footer (spec-sheet grid) ──────────────────────────────────────── */
+      .ft {
+        --ft-pad: clamp(1rem, 1.6vw, 1.375rem);
+        padding: 0 clamp(0.75rem, 2vw, 1.5rem) clamp(0.75rem, 2vw, 1.5rem);
       }
-      .footer-inner {
+      .ft-frame {
+        max-width: 90rem;
+        margin-inline: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        background: var(--border);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1px;
+      }
+      .ft-grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        grid-template-areas:
+          "st st st st pr pr sw sw co co lg lg"
+          "sb sb sb sb re re ct ct so so lg lg";
+        gap: 1px;
+      }
+      .ft-cell {
+        min-width: 0;
+        padding: var(--ft-pad);
+        background: var(--background);
+      }
+      .ft-state {
+        grid-area: st;
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 1rem 1.5rem;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 1.5rem;
+        min-height: 13rem;
+      }
+      .ft-pr {
+        grid-area: pr;
+      }
+      .ft-sw {
+        grid-area: sw;
+      }
+      .ft-co {
+        grid-area: co;
+      }
+      .ft-logo {
+        grid-area: lg;
+      }
+      .ft-sb {
+        grid-area: sb;
+      }
+      .ft-re {
+        grid-area: re;
+      }
+      .ft-ct {
+        grid-area: ct;
+      }
+      .ft-so {
+        grid-area: so;
+      }
+
+      .ft-h {
+        max-width: 17ch;
+        font-size: clamp(1.5rem, 2.3vw, 2.125rem);
+        font-weight: 600;
+        line-height: 0.98;
+        letter-spacing: -0.035em;
+        text-transform: uppercase;
+        text-wrap: balance;
+      }
+      .ft-lede {
+        max-width: 34ch;
         font-size: var(--text-sm);
+        line-height: 1.5;
         color: var(--subtle-foreground);
       }
-      .footer-inner nav {
-        display: flex;
-        gap: 1.25rem;
-        margin-left: auto;
+      .ft-k {
+        margin-bottom: 0.875rem;
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
       }
-      .footer-inner nav a:hover {
+      .ft-k-sub {
+        margin: 1rem 0 0.375rem;
+      }
+      .ft ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .ft-col ul {
+        display: grid;
+        gap: 0.5rem;
+      }
+      .ft-a {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: var(--text-sm);
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
+        transition: color var(--motion-fade) var(--ease-out);
+      }
+      a.ft-a:hover {
         color: var(--foreground);
+      }
+      a.ft-a:hover .icon {
+        transform: translateX(2px);
+      }
+      .ft-a .icon {
+        transition: transform var(--motion-base) var(--ease-out);
+      }
+      .ft-a.is-soon {
+        color: var(--faint-foreground);
+        cursor: default;
+      }
+      .ft-a.is-soon::after {
+        content: "soon";
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.04em;
+        color: var(--faint-foreground);
+        opacity: 0;
+        transform: translateX(-3px);
+        transition:
+          opacity var(--motion-base) var(--ease-out),
+          transform var(--motion-base) var(--ease-out);
+      }
+      .ft-a.is-soon:hover::after {
+        opacity: 0.8;
+        transform: none;
+      }
+      .ft-so-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 0.75rem;
+      }
+
+      .ft-logo {
+        display: grid;
+        grid-template-rows: 1fr auto;
+        place-items: center;
+        gap: 0.75rem;
+      }
+      .ft-ext {
+        width: min(100%, 13rem);
+        aspect-ratio: 1;
+        overflow: visible;
+      }
+      .ft-ext use {
+        fill: var(--card);
+        stroke: color-mix(in oklab, var(--foreground) 24%, transparent);
+        stroke-width: 3;
+        vector-effect: non-scaling-stroke;
+      }
+      .ft-ext use.is-back {
+        fill: var(--background);
+        stroke: var(--muted-foreground);
+      }
+      .ft-ext use.is-front {
+        fill: var(--background);
+        stroke: var(--foreground);
+        stroke-width: 1.5;
+      }
+      .ft-logo-cap {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .ft-sb {
+        display: flex;
+        flex-direction: column;
+      }
+      .ft-copy {
+        max-width: 34ch;
+        font-size: var(--text-sm);
+        line-height: 1.5;
+        color: var(--muted-foreground);
+      }
+      .wl--line {
+        margin: auto calc(-1 * var(--ft-pad)) calc(-1 * var(--ft-pad));
+        padding-top: 1.25rem;
+        gap: 0;
+        justify-items: stretch;
+      }
+      .wl--line .wl-msg {
+        order: -1;
+        min-height: 0;
+        padding: 0 var(--ft-pad) 0.5rem;
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .wl--line[data-state="error"] .wl-msg {
+        font-family: var(--font-ui);
+        font-size: var(--text-xs);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .wl--line .wl-field {
+        width: 100%;
+        height: 2.75rem;
+        padding: 0 0 0 var(--ft-pad);
+        border: 0;
+        border-top: 1px solid var(--border);
+        border-radius: 0;
+        background: transparent;
+      }
+      .wl--line .wl-field:hover {
+        background: color-mix(in oklab, var(--card) 50%, transparent);
+      }
+      .wl--line .wl-field:focus-within {
+        background: var(--card);
+        box-shadow: none;
+      }
+      .wl--line[data-state="error"] .wl-field {
+        box-shadow: inset 0 1px 0 var(--destructive);
+      }
+      .wl--line .wl-btn {
+        display: grid;
+        place-items: center;
+        width: 2.75rem;
+        height: 100%;
+        padding: 0;
+        border-left: 1px solid var(--border);
+        color: var(--muted-foreground);
+        transition:
+          background-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out);
+      }
+      .wl--line .wl-btn:hover {
+        background: var(--foreground);
+        color: var(--background);
+      }
+      .wl--line .wl-btn .icon {
+        transition: transform var(--motion-base) var(--ease-out);
+      }
+      .wl--line .wl-btn:hover .icon {
+        transform: translateX(2px);
+      }
+      .wl--line .wl-spin {
+        border-color: color-mix(in oklab, var(--foreground) 25%, transparent);
+        border-top-color: var(--foreground);
+      }
+      .wl--line .wl-done {
+        margin: 0 var(--ft-pad) var(--ft-pad);
+      }
+
+      /* Plate: the blueprint wordmark */
+      .ft-plate {
+        position: relative;
+        padding: clamp(2.5rem, 5vw, 4rem) clamp(1.5rem, 4vw, 3.5rem) clamp(2rem, 4vw, 3rem);
+        background: var(--background);
+        overflow: hidden;
+      }
+      .ft-ruler {
+        position: absolute;
+        left: 1.75rem;
+        right: 1.75rem;
+        height: 6px;
+        background: repeating-linear-gradient(90deg, var(--border-strong) 0 1px, transparent 1px 12px);
+        opacity: 0.6;
+      }
+      .ft-ruler.is-top {
+        top: 0.75rem;
+      }
+      .ft-ruler.is-bot {
+        bottom: 0.75rem;
+      }
+      .ft-plus {
+        position: absolute;
+        width: 11px;
+        height: 11px;
+        background:
+          linear-gradient(var(--muted-foreground), var(--muted-foreground)) center / 100% 1px no-repeat,
+          linear-gradient(var(--muted-foreground), var(--muted-foreground)) center / 1px 100% no-repeat;
+      }
+      .ft-plus.is-tl {
+        top: 0.5rem;
+        left: 0.5rem;
+      }
+      .ft-plus.is-tr {
+        top: 0.5rem;
+        right: 0.5rem;
+      }
+      .ft-plus.is-bl {
+        bottom: 0.5rem;
+        left: 0.5rem;
+      }
+      .ft-plus.is-br {
+        bottom: 0.5rem;
+        right: 0.5rem;
+      }
+      .ft-fig,
+      .ft-legend {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .ft-legend {
+        justify-content: center;
+        min-height: 1rem;
+        margin-top: 0.5rem;
+        transition: color var(--motion-base) var(--ease-out);
+      }
+      .ft-legend.is-on {
+        color: var(--foreground);
+      }
+
+      .ft-word {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin-top: 0.5rem;
+        overflow: visible;
+      }
+      .ft-gl {
+        stroke: var(--border);
+        stroke-width: 1;
+        stroke-dasharray: 2 6;
+        vector-effect: non-scaling-stroke;
+      }
+      .ft-gl.is-mid {
+        stroke-dasharray: 1 10;
+      }
+      .ft-hit {
+        fill: transparent;
+      }
+      .ft-glyph {
+        fill: transparent;
+        stroke: var(--muted-foreground);
+        stroke-width: 1.25;
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
+        transition:
+          fill var(--motion-slow) var(--ease-out),
+          stroke var(--motion-base) var(--ease-out);
+      }
+      .ft-cons path,
+      .ft-cons circle {
+        fill: none;
+        stroke: var(--faint-foreground);
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+      }
+      .ft-cons .ft-arc,
+      .ft-cons .ft-axis {
+        stroke: var(--border-strong);
+        stroke-dasharray: 2 4;
+      }
+      .ft-cons .ft-ctr {
+        fill: var(--faint-foreground);
+        stroke: none;
+      }
+      .ft-tag path {
+        stroke: var(--muted-foreground);
+        vector-effect: non-scaling-stroke;
+      }
+      .ft-tag text,
+      .ft-dim {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        text-anchor: middle;
+        text-transform: uppercase;
+        fill: var(--muted-foreground);
+      }
+      .ft-dim {
+        fill: var(--faint-foreground);
+        font-size: 11px;
+      }
+      .ft-tag,
+      .ft-dim {
+        opacity: 0;
+        transition: opacity var(--motion-base) var(--ease-out);
+      }
+      .ft-l {
+        cursor: default;
+      }
+      .ft-l.is-on .ft-glyph {
+        fill: color-mix(in oklab, var(--foreground) 7%, transparent);
+        stroke: var(--foreground);
+      }
+      .ft-l.is-on .ft-tag,
+      .ft-l.is-on .ft-dim {
+        opacity: 1;
+      }
+      .ft-l.is-on .ft-cons path:not(.ft-axis) {
+        stroke: var(--muted-foreground);
+      }
+
+      .js .ft-glyph {
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+      }
+      .js .ft-cons,
+      .js .ft-gl {
+        opacity: 0;
+        transition: opacity var(--motion-slower) var(--ease-out);
+      }
+      .ft-plate.is-drawn .ft-glyph {
+        stroke-dashoffset: 0;
+        transition:
+          stroke-dashoffset 1.6s var(--ease-out) calc(var(--i) * 140ms),
+          fill var(--motion-slow) var(--ease-out),
+          stroke var(--motion-base) var(--ease-out);
+      }
+      .ft-plate.is-drawn .ft-cons,
+      .ft-plate.is-drawn .ft-gl {
+        opacity: 1;
+        transition-delay: 900ms;
+      }
+
+      .ft-cx,
+      .ft-cy,
+      .ft-coord {
+        position: absolute;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity var(--motion-base) var(--ease-out);
+      }
+      .ft-cx {
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 1px;
+        background: color-mix(in oklab, var(--foreground) 16%, transparent);
+      }
+      .ft-cy {
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 1px;
+        background: color-mix(in oklab, var(--foreground) 16%, transparent);
+      }
+      .ft-coord {
+        top: 0;
+        left: 0;
+        padding: 0.125rem 0.375rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--popover);
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .ft-plate.is-tracking .ft-cx,
+      .ft-plate.is-tracking .ft-cy,
+      .ft-plate.is-tracking .ft-coord {
+        opacity: 1;
+      }
+
+      .ft-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: stretch;
+        background: var(--background);
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--subtle-foreground);
+      }
+      .ft-bar > * {
+        display: flex;
+        align-items: center;
+        padding: 0.875rem var(--ft-pad);
+      }
+      .ft-copyr {
+        flex: 1;
+      }
+      .ft-status {
+        gap: 0.5rem;
+        border-left: 1px solid var(--border);
+      }
+      .ft-dot {
+        width: 0.4375rem;
+        height: 0.4375rem;
+        border-radius: var(--radius-full);
+        background: var(--success);
+        box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 60%, transparent);
+        animation: ft-ping 2.4s var(--ease-out) infinite;
+      }
+      @keyframes ft-ping {
+        70%,
+        100% {
+          box-shadow: 0 0 0 6px color-mix(in oklab, var(--success) 0%, transparent);
+        }
+      }
+      .ft-legal {
+        gap: 0;
+        padding: 0;
+      }
+      .ft-legal .ft-a {
+        align-self: stretch;
+        white-space: nowrap;
+        padding: 0.875rem var(--ft-pad);
+        border-left: 1px solid var(--border);
+        font-family: var(--font-ui);
+        font-size: var(--text-xs);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .ft-top .icon {
+        transform: rotate(-90deg);
+      }
+      a.ft-top:hover .icon {
+        transform: rotate(-90deg) translateX(2px);
+      }
+
+      @media (max-width: 1100px) {
+        .ft-grid {
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+          grid-template-areas:
+            "st st st st lg lg"
+            "pr pr sw sw co co"
+            "sb sb sb sb sb sb"
+            "re re ct ct so so";
+        }
+      }
+      @media (max-width: 720px) {
+        .ft-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-areas:
+            "st st"
+            "pr sw"
+            "co re"
+            "ct so"
+            "sb sb";
+        }
+        .ft-logo,
+        .ft-fig-r,
+        .ft-tag,
+        .ft-dim,
+        .ft-legend {
+          display: none;
+        }
+        .ft-state {
+          min-height: 0;
+        }
+        .ft-so-list {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .ft-copyr {
+          flex-basis: 100%;
+        }
+        .ft-status {
+          flex: 1;
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+        .ft-legal {
+          flex-basis: 100%;
+          border-top: 1px solid var(--border);
+        }
+        .ft-legal .ft-a {
+          padding-inline: 0.75rem;
+        }
+        .ft-legal .ft-a:first-child {
+          border-left: 0;
+        }
+        .ft-plate {
+          padding-inline: 1rem;
+        }
+        .ft-legal {
+          flex-wrap: wrap;
+        }
+        .ft-legal .ft-a:not(.ft-top) {
+          flex: 1;
+        }
+        .ft-legal .ft-top {
+          flex-basis: 100%;
+          justify-content: space-between;
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .ft-dot {
+          animation: none;
+        }
+        .ft-plate.is-drawn .ft-glyph {
+          transition: none;
+        }
       }
 
       /* ─── Responsive ────────────────────────────────────────────────────── */
@@ -3956,18 +4539,285 @@
           </form>
     </dialog>
 
-    <footer class="footer">
-      <div class="container footer-inner">
-        <a class="brand" href="#top">
-          <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
-          Moduo
-        </a>
-        <span>© 2026 Moduo</span>
-        <nav aria-label="Footer">
-          <a href="#story">How it connects</a>
-          <a href="#yours">Make it yours</a>
-          <a href="#waitlist" data-wl-open>Join the waitlist</a>
-        </nav>
+    <footer class="ft" aria-labelledby="ft-title">
+      <div class="ft-frame">
+        <div class="ft-grid">
+          <div class="ft-cell ft-state">
+            <h2 class="ft-h" id="ft-title">The last productivity app you’ll ever set&nbsp;up.</h2>
+            <p class="ft-lede">
+              Tasks, notes, email, calendar and mind maps — and every module you add — in one connected
+              workspace. Close the other nineteen tabs.
+            </p>
+          </div>
+
+          <nav class="ft-cell ft-col ft-pr" aria-labelledby="ft-k-pr">
+            <p class="ft-k" id="ft-k-pr">Product</p>
+            <ul>
+              <li><a class="ft-a" href="#top">Overview</a></li>
+              <li><a class="ft-a" href="#story">How it connects</a></li>
+              <li><a class="ft-a" href="#yours">Widget store</a></li>
+              <li><a class="ft-a" href="#ai">AI &amp; MCP</a></li>
+              <li><span class="ft-a is-soon" data-href="/pricing">Pricing</span></li>
+              <li><span class="ft-a is-soon" data-href="/changelog">Changelog</span></li>
+              <li><span class="ft-a is-soon" data-href="/download">Download for Mac</span></li>
+            </ul>
+          </nav>
+
+          <nav class="ft-cell ft-col ft-sw" aria-labelledby="ft-k-sw">
+            <p class="ft-k" id="ft-k-sw">Switch from</p>
+            <ul>
+              <li><span class="ft-a is-soon" data-href="/switch/notion">Notion</span></li>
+              <li><span class="ft-a is-soon" data-href="/switch/todoist">Todoist</span></li>
+              <li><span class="ft-a is-soon" data-href="/switch/google-calendar">Google Calendar</span></li>
+              <li><span class="ft-a is-soon" data-href="/switch/trello">Trello</span></li>
+              <li><span class="ft-a is-soon" data-href="/switch/evernote">Evernote</span></li>
+              <li><span class="ft-a is-soon" data-href="/switch">All 20 apps →</span></li>
+            </ul>
+          </nav>
+
+          <nav class="ft-cell ft-col ft-co" aria-labelledby="ft-k-co">
+            <p class="ft-k" id="ft-k-co">Company</p>
+            <ul>
+              <li><span class="ft-a is-soon" data-href="/about">About</span></li>
+              <li><span class="ft-a is-soon" data-href="/manifesto">Manifesto</span></li>
+              <li><span class="ft-a is-soon" data-href="/careers">Careers</span></li>
+              <li><span class="ft-a is-soon" data-href="/press">Press kit</span></li>
+              <li><a class="ft-a" href="mailto:hello@moduo.app">Contact</a></li>
+            </ul>
+          </nav>
+
+          <div class="ft-cell ft-logo">
+            <svg class="ft-ext" id="ft-ext" viewBox="0 0 1000 1000" role="img" aria-label="Moduo">
+              <g id="ft-ext-layers"></g>
+            </svg>
+            <p class="ft-logo-cap" aria-hidden="true"><span>Moduo / mark</span><span id="ft-ext-read">depth 14</span></p>
+          </div>
+
+          <div class="ft-cell ft-sb">
+            <p class="ft-k">Early access</p>
+            <p class="ft-copy">Get your invite when there’s room — plus the occasional build note. Nothing else.</p>
+            <form class="wl wl--line" data-source="footer" novalidate>
+              <div class="wl-row">
+                <div class="wl-field">
+                  <label class="sr-only" for="wl-email-footer">Email address</label>
+                  <input
+                    class="wl-input"
+                    id="wl-email-footer"
+                    name="email"
+                    type="email"
+                    inputmode="email"
+                    autocomplete="email"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    maxlength="254"
+                    placeholder="Enter your email"
+                    required
+                    aria-describedby="wl-msg-footer"
+                  />
+                  <input class="wl-hp" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" />
+                  <button class="wl-btn" type="submit">
+                    <span class="wl-label">
+                      <span class="sr-only">Join the waitlist</span>
+                      <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow" /></svg>
+                    </span>
+                    <span class="wl-spin" aria-hidden="true"></span>
+                  </button>
+                </div>
+              </div>
+              <p class="wl-msg" id="wl-msg-footer" aria-live="polite">Waitlist · no spam</p>
+              <div class="wl-done" role="status" tabindex="-1">
+                <span class="wl-tick"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check" /></svg></span>
+                <div>
+                  <strong>You’re on the list.</strong>
+                  <span>We’ll email <b class="wl-addr"></b> when your invite is ready.</span>
+                  <button class="wl-again" type="button" data-wl-reset>Use a different email</button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <nav class="ft-cell ft-col ft-re" aria-labelledby="ft-k-re">
+            <p class="ft-k" id="ft-k-re">Resources</p>
+            <ul>
+              <li><span class="ft-a is-soon" data-href="/help">Help center</span></li>
+              <li><span class="ft-a is-soon" data-href="/docs">Docs</span></li>
+              <li><a class="ft-a" href="#ai">MCP guide</a></li>
+              <li><span class="ft-a is-soon" data-href="/roadmap">Roadmap</span></li>
+              <li><span class="ft-a is-soon" data-href="/security">Security</span></li>
+            </ul>
+          </nav>
+
+          <div class="ft-cell ft-col ft-ct">
+            <p class="ft-k">Say hello</p>
+            <a class="ft-a" href="mailto:hello@moduo.app">hello@moduo.app</a>
+            <p class="ft-k ft-k-sub">Press</p>
+            <a class="ft-a" href="mailto:press@moduo.app">press@moduo.app</a>
+            <p class="ft-k ft-k-sub">Security</p>
+            <a class="ft-a" href="mailto:security@moduo.app">security@moduo.app</a>
+          </div>
+
+          <nav class="ft-cell ft-col ft-so" aria-labelledby="ft-k-so">
+            <p class="ft-k" id="ft-k-so">Social</p>
+            <ul class="ft-so-list">
+              <li><a class="ft-a" href="https://x.com/moduoapp" target="_blank" rel="noopener noreferrer">X</a></li>
+              <li><a class="ft-a" href="https://www.linkedin.com/company/moduo-app" target="_blank" rel="noopener noreferrer">LinkedIn</a></li>
+              <li><a class="ft-a" href="https://www.producthunt.com/products/moduo" target="_blank" rel="noopener noreferrer">Product Hunt</a></li>
+              <li><a class="ft-a" href="https://github.com/moduo-app" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+              <li><a class="ft-a" href="https://www.youtube.com/@moduoapp" target="_blank" rel="noopener noreferrer">YouTube</a></li>
+              <li><a class="ft-a" href="https://discord.gg/moduo" target="_blank" rel="noopener noreferrer">Discord</a></li>
+            </ul>
+          </nav>
+        </div>
+
+        <div class="ft-plate" id="ft-plate">
+          <span class="ft-plus is-tl" aria-hidden="true"></span>
+          <span class="ft-plus is-tr" aria-hidden="true"></span>
+          <span class="ft-plus is-bl" aria-hidden="true"></span>
+          <span class="ft-plus is-br" aria-hidden="true"></span>
+          <span class="ft-ruler is-top" aria-hidden="true"></span>
+          <span class="ft-ruler is-bot" aria-hidden="true"></span>
+          <p class="ft-fig" aria-hidden="true">
+            <span>Fig. 01 — Five core modules. One word.</span>
+            <span class="ft-fig-r">Grid 40 · Weight 40 · Rev 2026.10</span>
+          </p>
+          <svg class="ft-word" viewBox="-40 -40 1260 300" role="img" aria-labelledby="ft-word-t">
+            <title id="ft-word-t">Moduo — five core modules, one word</title>
+            <g class="ft-guides" aria-hidden="true">
+              <line class="ft-gl" x1="-40" x2="1220" y1="20" y2="20" />
+              <line class="ft-gl is-mid" x1="-40" x2="1220" y1="120" y2="120" />
+              <line class="ft-gl" x1="-40" x2="1220" y1="220" y2="220" />
+              <line class="ft-gl" x1="0" x2="0" y1="-40" y2="260" />
+              <line class="ft-gl" x1="1180" x2="1180" y1="-40" y2="260" />
+            </g>
+            <g class="ft-l" style="--i: 0" transform="translate(0 0)" data-mod="Tasks">
+              <rect class="ft-hit" x="-20" y="-40" width="260" height="300" />
+              <path class="ft-glyph" d="M0 220V20H50L110 120L170 20H220V220H180V95L125 185H95L40 95V220Z" pathLength="1" fill-rule="evenodd" />
+              <g class="ft-cons" aria-hidden="true">
+                <path d="M-5 20h10M0 15v10" />
+                <path d="M45 20h10M50 15v10" />
+                <path d="M105 120h10M110 115v10" />
+                <path d="M165 20h10M170 15v10" />
+                <path d="M215 20h10M220 15v10" />
+                <path d="M215 220h10M220 215v10" />
+                <path d="M175 220h10M180 215v10" />
+                <path d="M175 95h10M180 90v10" />
+                <path d="M120 185h10M125 180v10" />
+                <path d="M90 185h10M95 180v10" />
+                <path d="M35 95h10M40 90v10" />
+                <path d="M35 220h10M40 215v10" />
+                <path d="M-5 220h10M0 215v10" />
+              </g>
+              <g class="ft-tag" aria-hidden="true"><path d="M110.0 -8V-22" /><text x="110.0" y="-28">01 · Tasks</text></g>
+              <text class="ft-dim" x="110.0" y="250" aria-hidden="true">220</text>
+            </g>
+            <g class="ft-l" style="--i: 1" transform="translate(260 0)" data-mod="Notes">
+              <rect class="ft-hit" x="-20" y="-40" width="240" height="300" />
+              <path class="ft-glyph" d="M80 20H120A80 80 0 0 1 200 100V140A80 80 0 0 1 120 220H80A80 80 0 0 1 0 140V100A80 80 0 0 1 80 20ZM80 60A40 40 0 0 0 40 100V140A40 40 0 0 0 80 180H120A40 40 0 0 0 160 140V100A40 40 0 0 0 120 60Z" pathLength="1" fill-rule="evenodd" />
+              <g class="ft-cons" aria-hidden="true">
+                <path d="M75 20h10M80 15v10" />
+                <path d="M115 20h10M120 15v10" />
+                <path d="M195 100h10M200 95v10" />
+                <path d="M195 140h10M200 135v10" />
+                <path d="M115 220h10M120 215v10" />
+                <path d="M75 220h10M80 215v10" />
+                <path d="M-5 140h10M0 135v10" />
+                <path d="M-5 100h10M0 95v10" />
+                <circle class="ft-arc" cx="80" cy="100" r="40" />
+                <circle class="ft-ctr" cx="80" cy="100" r="2" />
+                <circle class="ft-arc" cx="120" cy="100" r="40" />
+                <circle class="ft-ctr" cx="120" cy="100" r="2" />
+                <circle class="ft-arc" cx="80" cy="140" r="40" />
+                <circle class="ft-ctr" cx="80" cy="140" r="2" />
+                <circle class="ft-arc" cx="120" cy="140" r="40" />
+                <circle class="ft-ctr" cx="120" cy="140" r="2" />
+                <path class="ft-axis" d="M100.0 0V240" />
+              </g>
+              <g class="ft-tag" aria-hidden="true"><path d="M100.0 -8V-22" /><text x="100.0" y="-28">02 · Notes</text></g>
+              <text class="ft-dim" x="100.0" y="250" aria-hidden="true">200</text>
+            </g>
+            <g class="ft-l" style="--i: 2" transform="translate(500 0)" data-mod="Email">
+              <rect class="ft-hit" x="-20" y="-40" width="240" height="300" />
+              <path class="ft-glyph" d="M0 20H120A80 80 0 0 1 200 100V140A80 80 0 0 1 120 220H0ZM40 60V180H120A40 40 0 0 0 160 140V100A40 40 0 0 0 120 60Z" pathLength="1" fill-rule="evenodd" />
+              <g class="ft-cons" aria-hidden="true">
+                <path d="M-5 20h10M0 15v10" />
+                <path d="M115 20h10M120 15v10" />
+                <path d="M195 100h10M200 95v10" />
+                <path d="M195 140h10M200 135v10" />
+                <path d="M115 220h10M120 215v10" />
+                <path d="M-5 220h10M0 215v10" />
+                <path d="M35 60h10M40 55v10" />
+                <path d="M35 180h10M40 175v10" />
+                <circle class="ft-arc" cx="120" cy="100" r="40" />
+                <circle class="ft-ctr" cx="120" cy="100" r="2" />
+                <circle class="ft-arc" cx="120" cy="140" r="40" />
+                <circle class="ft-ctr" cx="120" cy="140" r="2" />
+                <path class="ft-axis" d="M100 0V240" />
+              </g>
+              <g class="ft-tag" aria-hidden="true"><path d="M100.0 -8V-22" /><text x="100.0" y="-28">03 · Email</text></g>
+              <text class="ft-dim" x="100.0" y="250" aria-hidden="true">200</text>
+            </g>
+            <g class="ft-l" style="--i: 3" transform="translate(740 0)" data-mod="Calendar">
+              <rect class="ft-hit" x="-20" y="-40" width="240" height="300" />
+              <path class="ft-glyph" d="M0 20H40V140A40 40 0 0 0 80 180H120A40 40 0 0 0 160 140V20H200V140A80 80 0 0 1 120 220H80A80 80 0 0 1 0 140Z" pathLength="1" fill-rule="evenodd" />
+              <g class="ft-cons" aria-hidden="true">
+                <path d="M-5 20h10M0 15v10" />
+                <path d="M35 20h10M40 15v10" />
+                <path d="M155 20h10M160 15v10" />
+                <path d="M195 20h10M200 15v10" />
+                <path d="M195 140h10M200 135v10" />
+                <path d="M115 220h10M120 215v10" />
+                <path d="M75 220h10M80 215v10" />
+                <path d="M-5 140h10M0 135v10" />
+                <circle class="ft-arc" cx="80" cy="140" r="40" />
+                <circle class="ft-ctr" cx="80" cy="140" r="2" />
+                <circle class="ft-arc" cx="120" cy="140" r="40" />
+                <circle class="ft-ctr" cx="120" cy="140" r="2" />
+              </g>
+              <g class="ft-tag" aria-hidden="true"><path d="M100.0 -8V-22" /><text x="100.0" y="-28">04 · Calendar</text></g>
+              <text class="ft-dim" x="100.0" y="250" aria-hidden="true">200</text>
+            </g>
+            <g class="ft-l" style="--i: 4" transform="translate(980 0)" data-mod="Mind maps">
+              <rect class="ft-hit" x="-20" y="-40" width="240" height="300" />
+              <path class="ft-glyph" d="M80 20H120A80 80 0 0 1 200 100V140A80 80 0 0 1 120 220H80A80 80 0 0 1 0 140V100A80 80 0 0 1 80 20ZM80 60A40 40 0 0 0 40 100V140A40 40 0 0 0 80 180H120A40 40 0 0 0 160 140V100A40 40 0 0 0 120 60Z" pathLength="1" fill-rule="evenodd" />
+              <g class="ft-cons" aria-hidden="true">
+                <path d="M75 20h10M80 15v10" />
+                <path d="M115 20h10M120 15v10" />
+                <path d="M195 100h10M200 95v10" />
+                <path d="M195 140h10M200 135v10" />
+                <path d="M115 220h10M120 215v10" />
+                <path d="M75 220h10M80 215v10" />
+                <path d="M-5 140h10M0 135v10" />
+                <path d="M-5 100h10M0 95v10" />
+                <circle class="ft-arc" cx="80" cy="100" r="40" />
+                <circle class="ft-ctr" cx="80" cy="100" r="2" />
+                <circle class="ft-arc" cx="120" cy="100" r="40" />
+                <circle class="ft-ctr" cx="120" cy="100" r="2" />
+                <circle class="ft-arc" cx="80" cy="140" r="40" />
+                <circle class="ft-ctr" cx="80" cy="140" r="2" />
+                <circle class="ft-arc" cx="120" cy="140" r="40" />
+                <circle class="ft-ctr" cx="120" cy="140" r="2" />
+                <path class="ft-axis" d="M100.0 0V240" />
+              </g>
+              <g class="ft-tag" aria-hidden="true"><path d="M100.0 -8V-22" /><text x="100.0" y="-28">05 · Mind maps</text></g>
+              <text class="ft-dim" x="100.0" y="250" aria-hidden="true">200</text>
+            </g>
+          </svg>
+          <p class="ft-legend" id="ft-legend" aria-live="polite">Hover a letter — each one is a module.</p>
+          <span class="ft-cx" aria-hidden="true"></span>
+          <span class="ft-cy" aria-hidden="true"></span>
+          <span class="ft-coord" aria-hidden="true"></span>
+        </div>
+
+        <div class="ft-bar">
+          <p class="ft-copyr">© 2026 Moduo. All rights reserved.</p>
+          <p class="ft-status"><span class="ft-dot" aria-hidden="true"></span>Private beta · invites rolling out</p>
+          <nav class="ft-legal" aria-label="Legal">
+            <span class="ft-a is-soon" data-href="/privacy">Privacy</span>
+            <span class="ft-a is-soon" data-href="/terms">Terms</span>
+            <span class="ft-a is-soon" data-href="/cookies">Cookies</span>
+            <a class="ft-a ft-top" href="#top">Back to top <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+          </nav>
+        </div>
       </div>
     </footer>
 
@@ -6010,6 +6860,189 @@
         var saved = readStored();
         if (saved) markAll(saved.email);
         if (location.hash === "#waitlist") openDialog();
+      })();
+    </script>
+    <script>
+      (function () {
+        "use strict";
+        var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var fine = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+        var NS = "http://www.w3.org/2000/svg";
+
+        var plate = document.getElementById("ft-plate");
+        var word = plate && plate.querySelector(".ft-word");
+        var letters = plate ? plate.querySelectorAll(".ft-l") : [];
+        var legend = document.getElementById("ft-legend");
+        var legendIdle = legend ? legend.textContent : "";
+        var each = function (list, fn) {
+          Array.prototype.forEach.call(list, fn);
+        };
+
+        var lightLetter = function (target) {
+          each(letters, function (l) {
+            l.classList.toggle("is-on", l === target);
+          });
+          if (!legend) return;
+          legend.classList.toggle("is-on", !!target);
+          legend.textContent = target
+            ? "Module " + (Array.prototype.indexOf.call(letters, target) + 1) + " of 5 · " + target.getAttribute("data-mod")
+            : legendIdle;
+        };
+
+        var sweep = function () {
+          var i = 0;
+          var step = function () {
+            if (plate.classList.contains("is-hovering")) return;
+            lightLetter(letters[i] || null);
+            i += 1;
+            if (i <= letters.length) setTimeout(step, 420);
+          };
+          step();
+        };
+
+        var pad4 = function (n) {
+          var s = String(Math.abs(Math.round(n)));
+          while (s.length < 4) s = "0" + s;
+          return (n < 0 ? "−" : "") + s;
+        };
+
+        var initTracking = function () {
+          var cx = plate.querySelector(".ft-cx");
+          var cy = plate.querySelector(".ft-cy");
+          var coord = plate.querySelector(".ft-coord");
+          var raf = 0;
+          var last = null;
+          var paint = function () {
+            var r = plate.getBoundingClientRect();
+            var x = last.clientX - r.left;
+            var y = last.clientY - r.top;
+            var ctm = word.getScreenCTM();
+            var pt = word.createSVGPoint();
+            var flip = x > r.width - 140;
+            var svgPt;
+            raf = 0;
+            cx.style.transform = "translateX(" + x + "px)";
+            cy.style.transform = "translateY(" + y + "px)";
+            if (ctm) {
+              pt.x = last.clientX;
+              pt.y = last.clientY;
+              svgPt = pt.matrixTransform(ctm.inverse());
+              coord.textContent = "X " + pad4(svgPt.x) + "  Y " + pad4(svgPt.y);
+            }
+            coord.style.transform =
+              "translate(" + (flip ? x - 12 - coord.offsetWidth : x + 12) + "px," + (y + 12) + "px)";
+          };
+          plate.addEventListener("pointermove", function (e) {
+            last = e;
+            plate.classList.add("is-tracking");
+            if (!raf) raf = requestAnimationFrame(paint);
+          });
+          plate.addEventListener("pointerleave", function () {
+            plate.classList.remove("is-tracking");
+          });
+        };
+
+        var initPlate = function () {
+          var io;
+          if (reduce || !("IntersectionObserver" in window)) {
+            plate.classList.add("is-drawn");
+          } else {
+            io = new IntersectionObserver(
+              function (entries) {
+                if (!entries[0].isIntersecting) return;
+                io.disconnect();
+                plate.classList.add("is-drawn");
+                setTimeout(sweep, 1700);
+              },
+              { threshold: 0.35 }
+            );
+            io.observe(plate);
+          }
+          each(letters, function (l) {
+            l.addEventListener("pointerenter", function () {
+              plate.classList.add("is-hovering");
+              lightLetter(l);
+            });
+          });
+          word.addEventListener("pointerleave", function () {
+            plate.classList.remove("is-hovering");
+            lightLetter(null);
+          });
+          if (fine && !reduce) initTracking();
+        };
+
+        var initMark = function (ext, layersEl) {
+          var LAYERS = 14;
+          var readout = document.getElementById("ft-ext-read");
+          var uses = [];
+          var rest = { x: 9, y: -7 };
+          var cur = { x: rest.x, y: rest.y };
+          var goal = { x: rest.x, y: rest.y };
+          var raf = 0;
+          var near = false;
+          var n;
+          var u;
+          var paint = function () {
+            var half = (LAYERS - 1) / 2;
+            var k;
+            raf = 0;
+            cur.x += (goal.x - cur.x) * 0.14;
+            cur.y += (goal.y - cur.y) * 0.14;
+            for (k = 0; k < LAYERS; k += 1) {
+              uses[k].setAttribute(
+                "transform",
+                "translate(" + ((half - k) * cur.x).toFixed(2) + " " + ((half - k) * cur.y).toFixed(2) + ")"
+              );
+            }
+            if (readout) readout.textContent = "depth " + Math.round(Math.hypot(cur.x, cur.y) * 1.2);
+            if (Math.abs(goal.x - cur.x) > 0.05 || Math.abs(goal.y - cur.y) > 0.05) {
+              raf = requestAnimationFrame(paint);
+            }
+          };
+          var kick = function () {
+            if (!raf) raf = requestAnimationFrame(paint);
+          };
+          for (n = 0; n < LAYERS; n += 1) {
+            u = document.createElementNS(NS, "use");
+            u.setAttribute("href", "#mark");
+            if (n === 0) u.setAttribute("class", "is-back");
+            if (n === LAYERS - 1) u.setAttribute("class", "is-front");
+            layersEl.appendChild(u);
+            uses.push(u);
+          }
+          paint();
+          if (reduce) return;
+          new IntersectionObserver(function (entries) {
+            near = entries[0].isIntersecting;
+          }).observe(ext.closest(".ft"));
+          window.addEventListener(
+            "pointermove",
+            function (e) {
+              var r;
+              if (!near) return;
+              r = ext.getBoundingClientRect();
+              goal.x = Math.max(-14, Math.min(14, (-(e.clientX - (r.left + r.width / 2)) / window.innerWidth) * 26));
+              goal.y = Math.max(-14, Math.min(14, (-(e.clientY - (r.top + r.height / 2)) / window.innerHeight) * 26));
+              kick();
+            },
+            { passive: true }
+          );
+          document.documentElement.addEventListener("pointerleave", function () {
+            goal.x = rest.x;
+            goal.y = rest.y;
+            kick();
+          });
+        };
+
+        if (plate && word) initPlate();
+        if (document.getElementById("ft-ext") && document.getElementById("ft-ext-layers")) {
+          initMark(document.getElementById("ft-ext"), document.getElementById("ft-ext-layers"));
+        }
+
+        each(document.querySelectorAll(".ft-a.is-soon"), function (el) {
+          el.setAttribute("aria-disabled", "true");
+          el.setAttribute("title", "Coming soon");
+        });
       })();
     </script>
   </body>

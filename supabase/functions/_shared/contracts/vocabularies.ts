@@ -207,10 +207,10 @@ export const inviteStatusSchema = z.enum(INVITE_STATUSES);
 
 // ---------------------------------------------------------------------------
 // Landing waitlist — public.waitlist.source / .status (CHECKs in
-// 20261001160000_waitlist_secure_join.sql). Source = which landing CTA.
+// 20261001160000 + 20261001170000 waitlist migrations). Source = which landing CTA.
 // ---------------------------------------------------------------------------
 
-export const WAITLIST_SOURCES = ["nav", "hero", "close"] as const;
+export const WAITLIST_SOURCES = ["nav", "hero", "close", "footer"] as const;
 export type WaitlistSource = (typeof WAITLIST_SOURCES)[number];
 export const waitlistSourceSchema = z.enum(WAITLIST_SOURCES);
 

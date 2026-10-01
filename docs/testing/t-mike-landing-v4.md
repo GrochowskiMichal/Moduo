@@ -70,6 +70,20 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 - [ ] DevTools offline → submit → "Couldn’t reach the server. Check your connection and try again."
 - [ ] 9+ submits from one network within an hour → "Too many tries from this network…"
 
+## Footer (spec-sheet grid)
+
+- [ ] Hairline grid: statement "The last productivity app you’ll ever set up." · Product · Switch from · Company · 3D mark (spans two rows) · Early access · Resources · Say hello · Social
+- [ ] Live links: Overview / How it connects / Widget store / AI & MCP / MCP guide jump to their sections; Contact + the three emails open mail; socials open in a new tab
+- [ ] Not-yet-built pages (Pricing, Changelog, Download, Switch from …, About, Careers, Press, Help, Docs, Roadmap, Security, Privacy, Terms, Cookies) are dimmed, not clickable, and show a faint "soon" on hover
+- [ ] 3D Moduo mark: layered extrusion leans away from the cursor anywhere on the page and eases back; "depth" readout changes
+- [ ] Early access field: type email → arrow button → "You’re on the list" card; every other waitlist form on the page flips to joined; row in Supabase has `source = footer`
+- [ ] Blueprint "MODUO": letters draw in on first view, guides fade in, then letters light one by one (01 Tasks … 05 Mind maps)
+- [ ] Hover a letter → it fills, its module tag + width appear, legend reads "Module N of 5 · …"; leaving clears it
+- [ ] Mouse over the plate → crosshair lines + "X 0000 Y 0000" readout follow the cursor (desktop mouse only)
+- [ ] Bottom bar: © 2026 Moduo · pulsing green "Private beta · invites rolling out" · Privacy · Terms · Cookies · Back to top (scrolls up)
+- [ ] 1024px → grid becomes 6 columns; 390px → 2 columns, no mark, wordmark fits, "Back to top" on its own row, no sideways scroll
+- [ ] Reduce motion → wordmark shown fully drawn, mark static, no pulse
+
 ## Edge cases
 
 - [ ] macOS Reduce motion → no word rise, no fly-in, no auto-typing tour; everything still works
@@ -80,4 +94,5 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 - Relations, widget store, budgets, invoicing, time tracking, goals and per-workspace modules are vision ahead of the product (copy says "on the way", no "Soon" tags).
 - Still `noindex, nofollow`; no og:image.
 - Waitlist sends no confirmation email to the signer and no notification to the team (rows are read in the Supabase dashboard). No double-opt-in yet — `status` stays `pending` until that exists.
+- Social URLs (x.com/moduoapp, linkedin.com/company/moduo-app, producthunt.com/products/moduo, github.com/moduo-app, youtube.com/@moduoapp, discord.gg/moduo) and the hello@/press@/security@moduo.app mailboxes are placeholders — confirm or replace before publishing. Privacy/Terms/Cookies pages do not exist yet; a Privacy notice is needed before the waitlist goes public (EU).
 - The live endpoint only accepts moduo.app, www.moduo.app, `moduo*.vercel.app` and the local preview (127.0.0.1/localhost:8765). Another preview domain needs adding to `ALLOWED_ORIGINS`.

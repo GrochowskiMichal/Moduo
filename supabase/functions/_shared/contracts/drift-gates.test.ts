@@ -47,14 +47,13 @@ describe("cross-runtime drift guards", () => {
   });
 
   it("waitlist migration CHECKs + join function list the canonical IN-lists", () => {
-    const sql = readFileSync(
-      resolve(MIGRATIONS_DIR, "20261001160000_waitlist_secure_join.sql"),
-      "utf8",
-    );
+    const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
+    const base = read("20261001160000_waitlist_secure_join.sql");
+    const latest = read("20261001170000_waitlist_footer_source.sql");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
-    expect(sql).toContain(`source IN (${inList(WAITLIST_SOURCES)})`);
-    expect(sql).toContain(`p_source NOT IN (${inList(WAITLIST_SOURCES)})`);
-    expect(sql).toContain(`status IN (${inList(WAITLIST_STATUSES)})`);
+    expect(latest).toContain(`source IN (${inList(WAITLIST_SOURCES)})`);
+    expect(latest).toContain(`p_source NOT IN (${inList(WAITLIST_SOURCES)})`);
+    expect(base).toContain(`status IN (${inList(WAITLIST_STATUSES)})`);
   });
 
   it("task statuses stay the closed set used by MCP parsers", () => {

@@ -254,7 +254,7 @@ describe("waitlistJoinBodySchema", () => {
   });
   it("rejects malformed emails, unknown sources and oversized input", () => {
     expect(waitlistJoinBodySchema.safeParse({ email: "nope", source: "hero" }).success).toBe(false);
-    expect(waitlistJoinBodySchema.safeParse({ email: "a@b.co", source: "footer" }).success).toBe(false);
+    expect(waitlistJoinBodySchema.safeParse({ email: "a@b.co", source: "sidebar" }).success).toBe(false);
     const long = `${"a".repeat(250)}@b.co`;
     expect(waitlistJoinBodySchema.safeParse({ email: long, source: "nav" }).success).toBe(false);
   });
