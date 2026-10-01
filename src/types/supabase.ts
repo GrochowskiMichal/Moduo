@@ -2020,6 +2020,7 @@ export type Database = {
       user_integrations: {
         Row: {
           access_token_enc: string
+          account_key: string
           created_at: string
           id: string
           provider: string
@@ -2031,6 +2032,7 @@ export type Database = {
         }
         Insert: {
           access_token_enc: string
+          account_key?: string
           created_at?: string
           id?: string
           provider: string
@@ -2042,6 +2044,7 @@ export type Database = {
         }
         Update: {
           access_token_enc?: string
+          account_key?: string
           created_at?: string
           id?: string
           provider?: string
