@@ -84,6 +84,7 @@ import {
 import { resolveCalendarDeepLink } from "../search";
 import { type StripItem, stripItems } from "../strip";
 import { tookLongerDeltaSeconds } from "../triage";
+import { BookingLinks } from "./booking-links";
 import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import { CalendarGrid, type MoveEventDeltas, type MoveTaskResult } from "./calendar-grid";
 import { CalendarRail } from "./calendar-rail";
@@ -919,6 +920,14 @@ export function CalendarPageView({
             onRecolorAccount={setAccountColor}
             onRemoveAccount={removeAccount}
             onReconnectAccount={IS_DESKTOP ? setReconnectTarget : undefined}
+            footer={
+              <BookingLinks
+                runtime={runtime}
+                workspaceId={workspaceId}
+                userId={userId}
+                accounts={calendar.accounts}
+              />
+            }
           />
         }
         right={

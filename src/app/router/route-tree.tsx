@@ -14,6 +14,8 @@ import { consumeLandingRedirect } from "../../lib/preferences";
 import { AuthProvider } from "../../providers/auth-provider";
 import { AppGate } from "../../routes/layouts/app-gate";
 import { AuthPage } from "../../routes/pages/auth-page";
+import { BookCancelPage } from "../../routes/pages/book-cancel-page";
+import { BookPage } from "../../routes/pages/book-page";
 import { CalendarPage } from "../../routes/pages/calendar-page";
 import { ContactsPage } from "../../routes/pages/contacts-page";
 import { HomePage } from "../../routes/pages/home-page";
@@ -87,6 +89,22 @@ const publishedNoteRoute = createRoute({
     const note = typeof search.note === "string" && search.note ? search.note : undefined;
     return note ? { note } : {};
   },
+});
+
+const bookCancelRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/book/cancel",
+  component: preWorkspace(BookCancelPage),
+  validateSearch: (search: Record<string, unknown>): { token?: string } => {
+    const token = typeof search.token === "string" && search.token ? search.token : undefined;
+    return token ? { token } : {};
+  },
+});
+
+const bookRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/book/$slug",
+  component: preWorkspace(BookPage),
 });
 
 // Workspace invite accept surface (DF-24). Sibling of /auth, OUTSIDE the app
@@ -202,6 +220,8 @@ export const routeTree = rootRoute.addChildren([
   onboardingRoute,
   paywallRoute,
   publishedNoteRoute,
+  bookCancelRoute,
+  bookRoute,
   joinRoute,
   appGateRoute.addChildren([
     homeRoute,
