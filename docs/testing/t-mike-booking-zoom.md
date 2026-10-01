@@ -16,7 +16,7 @@ Prerequisite: the Zoom app secrets are set (see docs/gotchas.md → "Zoom on boo
 - [ ] Google Meet link → sentence reads "Let's talk over Google Meet for 30 minutes on …" with Google Meet as a fixed word.
 - [ ] Zoom link → "Let's talk over Zoom …"; booking creates a Zoom meeting on the host's account; confirmation says "30 minutes on Zoom" and "Join Zoom" opens the zoom.us link.
 - [ ] Zoom booking with Google connected → Google event on the host's calendar has the Zoom link as location; guests get Google's invite.
-- [ ] Their choice link → "Google Meet" is an underlined blank; tapping it opens "Choose how to meet" with Google Meet / Zoom cards; picking Zoom updates the sentence and the footer ("Zoom link arrives by email.").
+- [ ] Their choice link → opens with "Let's talk over *Google Meet or Zoom*" (dashed, nothing picked) and the "Choose how to meet" panel already open; the book button says "Pick Google Meet or Zoom". Picking Zoom fills the blank, opens the day picker, and the footer says "Zoom link arrives by email."
 - [ ] Guest email (Resend) names the right platform.
 - [ ] Cancel a Zoom booking from the email → the Zoom meeting is gone from the host's Zoom account.
 - [ ] Host disconnects Zoom while a Zoom-only link is shared → page shows "isn't taking bookings on this link right now."

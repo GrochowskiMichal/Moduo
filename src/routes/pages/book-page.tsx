@@ -199,6 +199,8 @@ export function BookPage() {
         const preview = res.json as unknown as BookingPreview;
         if (!preview || typeof preview.name !== "string") return setPhase({ kind: "missing" });
         setPhase({ kind: "ready", preview: { ...preview, slots: preview.slots ?? [] } });
+        // "Their choice": the guest picks the platform first.
+        if ((preview.videoOptions?.length ?? 0) > 1) setTray("video");
       } catch {
         if (active) setPhase({ kind: "error" });
       }
@@ -283,8 +285,14 @@ export function BookPage() {
     preview.videoOptions && preview.videoOptions.length > 0
       ? preview.videoOptions
       : [preview.video ?? "google_meet"];
-  const platform: VideoProvider =
-    video && videoChoices.includes(video) ? video : (videoChoices[0] ?? "google_meet");
+  const guestPicks = videoChoices.length > 1;
+  // On a "their choice" link nothing is picked until the guest picks.
+  const chosen: VideoProvider | null =
+    video && videoChoices.includes(video) ? video : guestPicks ? null : (videoChoices[0] ?? null);
+  const platform: VideoProvider = chosen ?? videoChoices[0] ?? "google_meet";
+  const platformPhrase = guestPicks
+    ? videoChoices.map((choice) => VIDEO_LABEL[choice]).join(" or ")
+    : VIDEO_LABEL[platform];
   const echo = (slot: string) =>
     zone === preview.hostTimeZone
       ? null
@@ -398,20 +406,22 @@ export function BookPage() {
   };
 
   // What the book button does next: the first missing thing, or book.
-  const nextStep: { label: string; go: () => void } | null = !activeDay
-    ? { label: "Pick a day", go: () => openTray("day", true) }
-    : !start
-      ? { label: "Pick a time", go: () => openTray("time", true) }
-      : !nameOk
-        ? { label: "Add your name", go: () => nameInput.current?.focus() }
-        : !emailOk
-          ? { label: "Add your email", go: () => emailInput.current?.focus() }
-          : unanswered
-            ? {
-                label: `Answer ${host}'s question`,
-                go: () => document.getElementById(`book-q-${unanswered.id}`)?.focus(),
-              }
-            : null;
+  const nextStep: { label: string; go: () => void } | null = !chosen
+    ? { label: `Pick ${platformPhrase}`, go: () => openTray("video", true) }
+    : !activeDay
+      ? { label: "Pick a day", go: () => openTray("day", true) }
+      : !start
+        ? { label: "Pick a time", go: () => openTray("time", true) }
+        : !nameOk
+          ? { label: "Add your name", go: () => nameInput.current?.focus() }
+          : !emailOk
+            ? { label: "Add your email", go: () => emailInput.current?.focus() }
+            : unanswered
+              ? {
+                  label: `Answer ${host}'s question`,
+                  go: () => document.getElementById(`book-q-${unanswered.id}`)?.focus(),
+                }
+              : null;
 
   const book = async () => {
     if (!start) return;
@@ -517,8 +527,8 @@ export function BookPage() {
             <Blank
               ref={videoBlank}
               label="Video call on"
-              value={VIDEO_LABEL[platform]}
-              placeholder=""
+              value={chosen ? VIDEO_LABEL[chosen] : null}
+              placeholder={platformPhrase}
               open={tray === "video"}
               controls="book-tray"
               onToggle={() => toggle("video")}
@@ -574,13 +584,13 @@ export function BookPage() {
                     <button
                       key={choice}
                       type="button"
-                      aria-pressed={choice === platform}
+                      aria-pressed={choice === chosen}
                       data-first={index === 0 ? "" : undefined}
                       onClick={() => pickVideo(choice)}
                       className={cn(
                         "flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left",
                         "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        choice === platform
+                        choice === chosen
                           ? "border-[var(--selected-border)] bg-[var(--selected-bg)]"
                           : "border-border hover:border-foreground",
                       )}
@@ -879,7 +889,7 @@ export function BookPage() {
             ) : (
               <p>
                 {start && echo(start) ? `${echo(start)} ` : ""}
-                {VIDEO_LABEL[platform]} link arrives by email.
+                {chosen ? `${VIDEO_LABEL[chosen]} link` : "The video link"} arrives by email.
               </p>
             )}
           </div>
