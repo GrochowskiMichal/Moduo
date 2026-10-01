@@ -1347,56 +1347,6 @@
         gap: 0.375rem;
       }
 
-      /* ─── Principles ────────────────────────────────────────────────────── */
-      .refuse {
-        list-style: none;
-        margin-top: clamp(3.5rem, 7vw, 5.5rem);
-        border-top: 1px solid var(--border);
-      }
-      .refuse li {
-        display: grid;
-        grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-        gap: 2rem;
-        align-items: baseline;
-        padding-block: clamp(2.25rem, 4.5vw, 3.5rem);
-        border-bottom: 1px solid var(--border);
-      }
-      .refuse .no {
-        font-size: clamp(1.625rem, 3.4vw, 2.75rem);
-        font-weight: 600;
-        letter-spacing: -0.035em;
-        line-height: 1.12;
-        color: var(--subtle-foreground);
-      }
-      .refuse .no span {
-        background: linear-gradient(var(--foreground), var(--foreground)) no-repeat 0 58% / 0% 0.075em;
-        transition: background-size 1200ms var(--ease-out) 200ms;
-      }
-      .refuse li.is-in .no span {
-        background-size: 100% 0.075em;
-      }
-      .refuse .why {
-        font-size: var(--text-md);
-        line-height: 1.6;
-        color: var(--muted-foreground);
-        text-wrap: pretty;
-      }
-      .js .refuse .why {
-        opacity: 0;
-        transform: translateY(0.5rem);
-        transition:
-          opacity 700ms var(--ease-out) 800ms,
-          transform 700ms var(--ease-out) 800ms;
-      }
-      .js .refuse li.is-in .why {
-        opacity: 1;
-        transform: none;
-      }
-      .why b {
-        font-weight: 500;
-        color: var(--foreground);
-      }
-
       /* ─── Close + footer ────────────────────────────────────────────────── */
       .close {
         display: grid;
@@ -1467,10 +1417,6 @@
         .board {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
-        .refuse li {
-          grid-template-columns: 1fr;
-          gap: 0.75rem;
-        }
       }
       @media (max-width: 720px) {
         .pal-body {
@@ -1503,9 +1449,7 @@
       @media (prefers-reduced-motion: reduce) {
         .js .h-hero .w > span,
         .js .hero-fade,
-        .obj,
-        .refuse .no span,
-        .js .refuse .why {
+        .obj {
           transition: none;
         }
         .pal-preview > *,
@@ -2995,7 +2939,6 @@
           <a class="btn btn-ghost" href="#story">How it connects</a>
           <a class="btn btn-ghost" href="#yours">Make it yours</a>
           <a class="btn btn-ghost" href="#ai">AI</a>
-          <a class="btn btn-ghost" href="#principles">Principles</a>
         </nav>
         <div class="nav-actions">
           <a class="btn btn-ghost" href="https://app.moduo.app/auth">Sign in</a>
@@ -3098,7 +3041,7 @@
               <div class="stage" id="stage">
                 <div class="stage-bar" aria-hidden="true">
                   <div class="lights"><span></span><span></span><span></span></div>
-                  <div class="stage-title">Inbox — Carter demo</div>
+                  <div class="stage-title">Inbox — Phase 2 demo</div>
                   <div></div>
                 </div>
                 <div class="rel-fit" id="rel-fit">
@@ -3110,12 +3053,12 @@
                     <article class="rn rn-mail" data-id="mail" data-s="0" style="--d: 750ms">
                       <div class="who"><span class="av">AC</span><b>Anna Carter</b><span class="tag">Client</span><span class="t">9:41</span></div>
                       <div class="subj">Phase 2 demo</div>
-                      <p class="rn-body" id="rel-body">Could we do the <mark data-to="cal" style="--d: 350ms">demo on Thursday</mark>? Can you still hit <mark data-to="due" style="--d: 600ms">the 15th</mark> for <mark data-to="proj" style="--d: 850ms">Carter Phase 2</mark>?<span class="beam" id="rel-beam"></span></p>
+                      <p class="rn-body" id="rel-body">Could we do the <mark data-to="cal" style="--d: 350ms">demo on Thursday</mark>? Can you still hit <mark data-to="due" style="--d: 600ms">the 15th</mark> for the <mark data-to="proj" style="--d: 850ms">website redesign</mark>?<span class="beam" id="rel-beam"></span></p>
                     </article>
 
                     <article class="rn" data-id="proj" data-s="1" style="--d: 1450ms">
                       <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-plan" /></svg>Project</div>
-                      <div class="rn-title">Carter — Phase 2</div>
+                      <div class="rn-title">Website redesign — Phase 2</div>
                       <div class="rn-sub">Due <span class="due" id="rel-due">15 Oct</span> · 9 days left</div>
                       <div class="rn-more">
                         <div>
@@ -3282,20 +3225,6 @@
         </div>
       </section>
 
-      <!-- ─── Principles ────────────────────────────────────────────────── -->
-      <section class="section container" id="principles" aria-labelledby="principles-title">
-        <div class="section-head reveal">
-          <div class="eyebrow">Principles</div>
-          <h2 class="h-section" id="principles-title">Things we will never build.</h2>
-          <p class="lead">Every all-in-one dies the same way: it keeps adding things. This is our list of things we won’t.</p>
-        </div>
-        <ul class="refuse">
-          <li><div class="no"><span>Databases you design before you can work.</span></div><p class="why">You came here to get things done — <b>not to model your life in tables.</b></p></li>
-          <li><div class="no"><span>An AI button on every screen.</span></div><p class="why">Bring your own over MCP. <b>Your workspace never trains anyone’s model.</b></p></li>
-          <li><div class="no"><span>A wall of red overdue tasks.</span></div><p class="why">Falling behind is normal. <b>Shame isn’t a feature.</b></p></li>
-        </ul>
-      </section>
-
       <!-- ─── Close ─────────────────────────────────────────────────────── -->
       <section class="container close reveal" aria-labelledby="close-title">
         <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
@@ -3365,7 +3294,7 @@
           },
           { threshold: 0.2, rootMargin: "0px 0px -8% 0px" }
         );
-        each(document.querySelectorAll(".reveal, .refuse li"), function (el) {
+        each(document.querySelectorAll(".reveal"), function (el) {
           io.observe(el);
         });
 
@@ -3415,7 +3344,7 @@
           { id: "d1", mod: "deals", title: "Carter Studio — Phase 1", meta: "Won · €12,000 · June", body: "Phase 1 closed in June and Phase 2 is in flight — but 38 hours of Phase 1 work still aren’t invoiced.", links: ["p1", "h1", "i1"] },
           { id: "h1", mod: "time", title: "Phase 1 — tracked time", meta: "38h 20m · not invoiced", body: "Every timer started on a Carter task, rolled up per phase without anyone filling in a timesheet.", links: ["d1", "i1", "t1"] },
           { id: "i1", mod: "invoices", title: "Invoice draft #014", meta: "€4,600 · ready to send", body: "Drafted from 38h 20m of tracked Phase 1 time. Anna is already on it as the contact.", links: ["d1", "h1", "p1"] },
-          { id: "g1", mod: "goals", title: "Q4: three new studio clients", meta: "2 of 3 · on track", body: "Carter Phase 2 counts toward it. So does the autumn launch.", links: ["d1", "m1"] },
+          { id: "g1", mod: "goals", title: "Q4: three new studio clients", meta: "2 of 3 · on track", body: "The website redesign counts toward it. So does the autumn launch.", links: ["d1", "m1"] },
           { id: "m1", mod: "mindmap", title: "Autumn launch", meta: "6 branches · 21 ideas", body: "Website, press kit, print run, launch event, socials, partners. Every branch can become tasks.", links: ["t3", "n2", "c2"] },
         ];
         var byId = {};
@@ -4236,7 +4165,7 @@
           ["week-done", "tasks", "This week", 1, "18/24", gen("18/24", "tasks done")],
           ["slipped", "tasks", "Slipped", 1, "2", gen("2", "moved to tomorrow, no drama")],
           ["note", "notes", "Pinned note", 2, "Kickoff", function () {
-            return '<p class="wd-note">Anna wants Phase 2 live before the launch. Maya owns the logo files — print needs SVGs by Friday.</p><div class="sub">Kickoff — Carter Phase 2</div>';
+            return '<p class="wd-note">Anna wants Phase 2 live before the launch. Maya owns the logo files — print needs SVGs by Friday.</p><div class="sub">Kickoff — Website redesign</div>';
           }],
           ["recent-notes", "notes", "Recent notes", 1, "5", gen("5", "edited today")],
           ["unread", "email", "Inbox", 1, "12", gen("12", "3 need a reply · 2 became tasks")],
@@ -4705,7 +4634,7 @@
           {
             q: "What’s left before the Carter demo?",
             tools: [
-              ["moduo.search_tasks", 'project: "Carter Phase 2", open: true', "3 tasks"],
+              ["moduo.search_tasks", 'project: "Website redesign", open: true', "3 tasks"],
               ["moduo.get_event", 'title: "Demo with Anna"', "Thu 14:00"],
             ],
             a: "Three things before Thursday’s 14:00 demo: final logo exports (due Wednesday), the demo deck, and print proofs. Want me to block two hours tomorrow morning for the deck?",
