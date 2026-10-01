@@ -20,8 +20,9 @@ import {
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 import { cn } from "../../../lib/utils";
-import { type GuestQuestion, newQuestionId, VIDEO_CHOICES } from "../booking/model";
+import { type GuestQuestion, newQuestionId } from "../booking/model";
 import { WEEKDAYS, type Weekday, type WeeklyHours } from "../booking/slots";
+import type { VideoSetting } from "../booking/video";
 import type { CalendarAccountModel } from "../events";
 
 export type LinkDraft = {
@@ -42,6 +43,7 @@ export type LinkDraft = {
   guestsEnabled: boolean;
   questions: GuestQuestion[];
   paused: boolean;
+  video: VideoSetting;
 };
 
 const NOTICE_OPTIONS = [
@@ -86,13 +88,53 @@ type Props = {
   draft: LinkDraft | null;
   accounts: CalendarAccountModel[];
   googleOn: boolean;
+  zoom: { configured: boolean; connected: boolean };
   busy: boolean;
   error: string | null;
   onOpenChange: (open: boolean) => void;
   onChange: (draft: LinkDraft) => void;
   onConnect: () => void;
+  onConnectZoom: () => void;
+  onDisconnectZoom: () => void;
   onSave: () => void;
 };
+
+type VideoRow = {
+  id: VideoSetting | "moduo_video";
+  label: string;
+  hint: string;
+  disabled?: boolean;
+};
+
+function videoRows(
+  googleOn: boolean,
+  zoom: { configured: boolean; connected: boolean },
+): VideoRow[] {
+  const zoomHint = zoom.connected
+    ? "Connected"
+    : zoom.configured
+      ? "Connect your Zoom account to use it"
+      : "Not available yet";
+  const choiceHint =
+    googleOn && zoom.connected
+      ? "The person booking picks Google Meet or Zoom"
+      : googleOn
+        ? "Connect Zoom too, or guests will only see Google Meet"
+        : zoom.connected
+          ? "Connect Google too, or guests will only see Zoom"
+          : "The person booking picks Google Meet or Zoom";
+  return [
+    { id: "google_meet", label: "Google Meet", hint: googleOn ? "Connected" : "Needs Google" },
+    { id: "zoom", label: "Zoom", hint: zoomHint, disabled: !zoom.configured && !zoom.connected },
+    {
+      id: "guest_choice",
+      label: "Their choice",
+      hint: choiceHint,
+      disabled: !zoom.configured && !zoom.connected,
+    },
+    { id: "moduo_video", label: "Moduo video", hint: "Later", disabled: true },
+  ];
+}
 
 function optionsWith(values: number[], current: number): number[] {
   return values.includes(current) ? values : [...values, current].sort((a, b) => a - b);
@@ -102,13 +144,22 @@ export function BookingLinkDialog({
   draft,
   accounts,
   googleOn,
+  zoom,
   busy,
   error,
   onOpenChange,
   onChange,
   onConnect,
+  onConnectZoom,
+  onDisconnectZoom,
   onSave,
 }: Props) {
+  const needsGoogle =
+    draft != null &&
+    !googleOn &&
+    (draft.video === "google_meet" || (draft.video === "guest_choice" && !zoom.connected));
+  const needsZoom =
+    draft != null && !zoom.connected && zoom.configured && draft.video !== "google_meet";
   return (
     <Dialog open={draft != null} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] w-[min(52rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0">
@@ -120,7 +171,7 @@ export function BookingLinkDialog({
                 Guests pick a time on your link. The meeting is added to Google and to Moduo.
               </DialogDescription>
             </DialogHeader>
-            {!googleOn ? (
+            {needsGoogle ? (
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-6 py-3">
                 <p className="text-sm text-muted-foreground">
                   Connect Google so this link can create a Meet while the app is closed.
@@ -206,23 +257,62 @@ export function BookingLinkDialog({
                 </section>
                 <section className="flex flex-col gap-2">
                   <Eyebrow as="h2">Video</Eyebrow>
-                  <RadioGroup value="google_meet" className="gap-1">
-                    {VIDEO_CHOICES.map((choice) => (
+                  <RadioGroup
+                    value={draft.video}
+                    onValueChange={(value) => onChange({ ...draft, video: value as VideoSetting })}
+                    className="gap-1"
+                  >
+                    {videoRows(googleOn, zoom).map((choice) => (
                       <label
                         key={choice.id}
                         className={cn(
-                          "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-                          choice.enabled
-                            ? "bg-[var(--selected-bg)] text-foreground"
-                            : "text-muted-foreground",
+                          "flex items-start gap-2 rounded-md px-2 py-1.5 text-sm",
+                          choice.disabled
+                            ? "text-muted-foreground"
+                            : "cursor-pointer text-foreground",
+                          draft.video === choice.id && "bg-[var(--selected-bg)]",
                         )}
                       >
-                        <RadioGroupItem value={choice.id} disabled={!choice.enabled} />
-                        <span>{choice.label}</span>
-                        {choice.enabled ? null : <span className="text-xs">Later</span>}
+                        <RadioGroupItem
+                          value={choice.id}
+                          disabled={choice.disabled}
+                          className="mt-0.5"
+                        />
+                        <span className="flex min-w-0 flex-col">
+                          <span>{choice.label}</span>
+                          <span className="text-xs text-muted-foreground">{choice.hint}</span>
+                        </span>
                       </label>
                     ))}
                   </RadioGroup>
+                  {needsZoom ? (
+                    <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+                      <p className="text-sm text-muted-foreground">
+                        Zoom meetings are made on your Zoom account.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={busy}
+                        onClick={onConnectZoom}
+                      >
+                        Connect Zoom
+                      </Button>
+                    </div>
+                  ) : null}
+                  {zoom.connected ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="w-fit text-muted-foreground"
+                      disabled={busy}
+                      onClick={onDisconnectZoom}
+                    >
+                      Disconnect Zoom
+                    </Button>
+                  ) : null}
                 </section>
                 <section className="flex flex-col gap-3">
                   <Eyebrow as="h2">Guest form</Eyebrow>
@@ -247,8 +337,8 @@ export function BookingLinkDialog({
                       />
                     </label>
                     <p className="text-sm text-muted-foreground">
-                      The person booking can invite others. Each one gets the Google Meet calendar
-                      invite.
+                      The person booking can invite others. Each one gets the calendar invite with
+                      the video link.
                     </p>
                   </div>
                   {draft.questions.map((question, index) => (
