@@ -68,7 +68,29 @@ export async function startWebGoogleConnect(): Promise<void> {
   if (error) throw new Error(error.message || "Could not connect Google.");
   const url = (data as { url?: string } | null)?.url;
   if (!url) throw new Error("Google connect did not return a sign-in page.");
+  // Coming back from Google should show every calendar again, including ones
+  // the user had removed from this mailbox.
+  sessionStorage.setItem("moduo:google-connect", "1");
   window.location.href = url;
+}
+
+export async function disconnectGoogleLogin(email: string): Promise<void> {
+  await invoke({ action: "disconnect", email });
+}
+
+async function tombstonedGoogleIds(workspaceId: string): Promise<Set<string>> {
+  const { data, error } = await supabaseClient
+    .from("calendar_accounts")
+    .select("external_id")
+    .eq("workspace_id", workspaceId)
+    .eq("provider", "google")
+    .not("deleted_at", "is", null);
+  if (error || !data) return new Set();
+  return new Set(
+    data
+      .map((row) => row.external_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
 }
 
 /**
@@ -83,6 +105,9 @@ export async function ensureGoogleCalendarAccounts(opts: {
 }): Promise<boolean> {
   const linked = await loadLinkedGoogleCalendars();
   const live = opts.accounts.filter((account) => !account.deletedAt);
+  const revive = sessionStorage.getItem("moduo:google-connect") === "1";
+  if (revive) sessionStorage.removeItem("moduo:google-connect");
+  const removed = revive ? new Set<string>() : await tombstonedGoogleIds(opts.workspaceId);
   let added = false;
   for (const cal of linked) {
     const loginId = `google:${cal.email}`;
@@ -90,6 +115,7 @@ export async function ensureGoogleCalendarAccounts(opts: {
       continue;
     }
     if (live.some((account) => account.externalId === cal.accountId)) continue;
+    if (removed.has(cal.accountId)) continue;
     await opts.runtime.calendar.upsertAccount({
       workspaceId: opts.workspaceId,
       provider: "google",
