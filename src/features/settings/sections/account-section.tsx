@@ -8,11 +8,10 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
 import { useAuth } from "../../../providers/auth-provider";
-import {
-  notifyProfileUpdated,
-  readStoredAvatar,
-  writeStoredAvatar,
-} from "../../profile/profile-storage";
+import { validateImageFile } from "../../branding/image-asset";
+import { ensureProfileAvatar } from "../../branding/profile-avatar";
+import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-image";
+import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
 import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
 import { matchesDeleteConfirm } from "../delete-account";
 import { SettingsSectionShell } from "./section-shell";
@@ -29,14 +28,17 @@ function maskedPhrase(phrase: string | null) {
 }
 
 export function AccountSection() {
-  const { runtime, userEmail, signOut, accessToken } = useAuth();
+  const { runtime, userEmail, userId, signOut, accessToken } = useAuth();
   const navigate = useNavigate();
   // The recovery-key section only applies to local-vault runtimes (future lite).
   const hasLocalKey = !!runtime?.capabilities.hasLocalMnemonic;
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const avatarTouched = useRef(false);
 
   const [displayName, setDisplayName] = useState("");
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
+  const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
+  const [removeAvatar, setRemoveAvatar] = useState(false);
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -110,17 +112,21 @@ export function AccountSection() {
       if (!runtime) return;
       const [{ data }, avatar] = await Promise.all([
         runtime.auth.getLocalAuthState(),
-        readStoredAvatar(runtime),
+        userId ? ensureProfileAvatar(runtime, userId) : Promise.resolve(null),
       ]);
       if (!active) return;
       setDisplayName(data.displayName ?? "");
-      setAvatarDataUrl(avatar);
+      if (!avatarTouched.current) {
+        setAvatarDataUrl(avatar);
+        setPendingAvatar(null);
+        setRemoveAvatar(false);
+      }
     };
     void load();
     return () => {
       active = false;
     };
-  }, [runtime]);
+  }, [runtime, userId]);
 
   // Cloud accounts: learn the sign-in provider so we know whether a password is
   // even applicable (OAuth-only accounts have none). Future-lite (local vault)
@@ -159,12 +165,10 @@ export function AccountSection() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setProfileError("Profile picture must be an image file.");
-      return;
-    }
-    if (file.size > 4 * 1024 * 1024) {
-      setProfileError("Profile picture is too large. Use file up to 4MB.");
+    avatarTouched.current = true;
+    const problem = validateImageFile(file);
+    if (problem) {
+      setProfileError(problem);
       return;
     }
 
@@ -172,6 +176,8 @@ export function AccountSection() {
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : null;
       if (!result) return;
+      setPendingAvatar(file);
+      setRemoveAvatar(false);
       setAvatarDataUrl(result);
       setProfileError(null);
       setProfileMessage(null);
@@ -197,7 +203,30 @@ export function AccountSection() {
       return;
     }
 
-    await writeStoredAvatar(runtime, avatarDataUrl);
+    try {
+      if (userId && pendingAvatar) {
+        const url = await uploadProfileAvatar(userId, pendingAvatar);
+        const saved = await runtime.auth.updateAvatarUrl(url);
+        if (saved.error) throw new Error(saved.error.message);
+        setAvatarDataUrl(url);
+        setPendingAvatar(null);
+        await writeStoredAvatar(runtime, null);
+      } else if (userId && removeAvatar) {
+        await clearProfileAvatar(userId).catch(() => {});
+        const saved = await runtime.auth.updateAvatarUrl(null);
+        if (saved.error) throw new Error(saved.error.message);
+        setAvatarDataUrl(null);
+        setRemoveAvatar(false);
+        await writeStoredAvatar(runtime, null);
+      } else if (!userId) {
+        await writeStoredAvatar(runtime, avatarDataUrl);
+      }
+    } catch (err) {
+      setProfileBusy(false);
+      setProfileError(err instanceof Error ? err.message : "Couldn't save the profile picture.");
+      return;
+    }
+
     notifyProfileUpdated();
     setProfileBusy(false);
     setProfileMessage("Profile updated.");
@@ -303,14 +332,33 @@ export function AccountSection() {
               </span>
             ) : null}
           </button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => avatarInputRef.current?.click()}
-          >
-            Change picture
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              Change picture
+            </Button>
+            {avatarDataUrl ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  avatarTouched.current = true;
+                  setPendingAvatar(null);
+                  setRemoveAvatar(true);
+                  setAvatarDataUrl(null);
+                  setProfileError(null);
+                  setProfileMessage(null);
+                }}
+              >
+                Remove
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         <div className="mt-6 max-w-sm">

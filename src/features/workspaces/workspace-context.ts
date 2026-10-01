@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import type { NotificationItem } from "../spine/notifications";
 import type {
   ModulePermission,
+  WorkspaceBranding,
   WorkspaceInvite,
   WorkspaceMember,
   WorkspaceRole,
@@ -61,6 +62,7 @@ export type WorkspaceContextValue = {
   refreshAccessData: () => Promise<void>;
   createWorkspace: (name?: string) => Promise<string | null>;
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
+  updateWorkspaceBranding: (workspaceId: string, branding: WorkspaceBranding) => Promise<void>;
   leaveWorkspace: (workspaceId: string) => Promise<void>;
   softDeleteWorkspace: (workspaceId: string) => Promise<void>;
   sendInvite: (args: SendWorkspaceInviteArgs) => Promise<WorkspaceInvite | null>;

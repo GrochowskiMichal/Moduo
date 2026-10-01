@@ -145,6 +145,17 @@ export function EventDetailPanel({
         <DetailTitle>{event.title}</DetailTitle>
       )}
 
+      {event.location && /^https?:\/\//.test(event.location) ? (
+        <a
+          href={event.location}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm text-foreground underline"
+        >
+          Join meeting
+        </a>
+      ) : null}
+
       {external ? (
         <span className="text-xs text-muted-foreground">
           {account ? `${account.displayLabel} — ${account.provider}` : "External calendar"}

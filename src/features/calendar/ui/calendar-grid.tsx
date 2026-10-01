@@ -34,7 +34,11 @@ import {
 import { type CalendarView, localDayKey, type TaskBlock } from "../lens";
 import type { CalendarPrefs } from "../prefs";
 import { EventChipView } from "./event-chip";
-import { EventQuickCreate, type QuickCreateDraft } from "./event-quick-create";
+import {
+  EventQuickCreate,
+  type QuickCreateCalendar,
+  type QuickCreateDraft,
+} from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
 import { TaskBlockChip } from "./task-block-chip";
 import { formatHourLabel, formatTimeOfDay } from "./time-format";
@@ -72,6 +76,8 @@ type Props = {
   canEdit: boolean;
   onToggleDone: (taskId: string) => void;
   onCreateEvent: (draft: QuickCreateDraft) => void;
+  /** Moduo plus each connected calendar the new event can land on. */
+  createCalendars: QuickCreateCalendar[];
   /** Occurrence-level drag/resize result — the page maps it onto the series. */
   onMoveEvent: (eventId: string, deltas: MoveEventDeltas) => void;
   /** Task-block drag/resize writes the task's schedule/duration (AC6). */
@@ -164,6 +170,7 @@ export function CalendarGrid({
   canEdit,
   onToggleDone,
   onCreateEvent,
+  createCalendars,
   onMoveEvent,
   onMoveTask,
   onEventClick,
@@ -719,6 +726,7 @@ export function CalendarGrid({
                     : null
                 }
                 pending={pending?.dayIdx === i ? pending : null}
+                createCalendars={createCalendars}
                 onCommitCreate={commitCreate}
                 onCancelCreate={cancelCreate}
                 onAdjustPendingTimes={adjustPendingTimes}
@@ -763,6 +771,7 @@ const DayColumn = memo(function DayColumn({
   onTaskChipPointerDown,
   selectedKey,
   pending,
+  createCalendars,
   onCommitCreate,
   onCancelCreate,
   onAdjustPendingTimes,
@@ -807,6 +816,7 @@ const DayColumn = memo(function DayColumn({
   ) => void;
   selectedKey: string | null;
   pending: PendingCreate | null;
+  createCalendars: QuickCreateCalendar[];
   onCommitCreate: (draft: QuickCreateDraft) => void;
   onCancelCreate: () => void;
   onAdjustPendingTimes: (startMs: number, endMs: number) => void;
@@ -1011,6 +1021,7 @@ const DayColumn = memo(function DayColumn({
           <EventQuickCreate
             startMs={geom.dayStartMs + pending.startMin * 60_000}
             endMs={geom.dayStartMs + pending.endMin * 60_000}
+            calendars={createCalendars}
             onCommit={onCommitCreate}
             onCancel={onCancelCreate}
             onTimesChange={onAdjustPendingTimes}
