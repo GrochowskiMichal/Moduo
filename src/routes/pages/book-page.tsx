@@ -1,11 +1,12 @@
 /**
  * Public booking page (/book/$slug). No account. The guest picks a day, then
- * a time, then confirms. The meeting is a Google Meet.
+ * a time, then confirms. On a phone those are three full-width steps. On a
+ * wide screen the day and the times sit side by side.
  */
 
 import { useParams } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Clock, Video } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -48,6 +49,20 @@ function initials(name: string): string {
   const first = parts[0]?.[0] ?? "";
   const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
   return (first + last).toUpperCase() || "?";
+}
+
+function zoneLabel(zone: string): string {
+  const place = (zone.split("/").pop() ?? zone).replace(/_/g, " ");
+  try {
+    const clock = new Intl.DateTimeFormat(undefined, {
+      timeZone: zone,
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date());
+    return `${place} (${clock})`;
+  } catch {
+    return place;
+  }
 }
 
 function zoneKey(date: Date, timeZone: string): string {
@@ -132,13 +147,32 @@ function timeLabel(slot: string, timeZone: string): string {
   }).format(new Date(slot));
 }
 
-function Frame({ children }: { children: React.ReactNode }) {
+function whenLabel(slot: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    timeZone,
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(new Date(slot));
+}
+
+function Frame({ children }: { children: ReactNode }) {
   return (
-    <main className="flex min-h-full items-start justify-center bg-background px-4 py-8 text-foreground sm:px-6 sm:py-12">
-      <div className="w-full max-w-4xl overflow-hidden rounded-lg border border-border bg-card">
+    <main className="flex min-h-dvh justify-center bg-background text-foreground sm:px-6 lg:items-center lg:py-8">
+      <div className="flex w-full max-w-6xl flex-col bg-card sm:rounded-lg sm:border sm:border-border lg:h-[calc(100dvh-4rem)] lg:overflow-hidden">
         {children}
       </div>
     </main>
+  );
+}
+
+function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={id} className="font-display text-sm text-foreground">
+        {label}
+      </label>
+      {children}
+    </div>
   );
 }
 
@@ -148,6 +182,7 @@ export function BookPage() {
   const [zone, setZone] = useState(detectedZone);
   const [cursor, setCursor] = useState<Ymd | null>(null);
   const [dayKey, setDayKey] = useState<string | null>(null);
+  const [showTimes, setShowTimes] = useState(false);
   const [start, setStart] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -209,6 +244,7 @@ export function BookPage() {
   const monthKeys = cells.filter((cell) => cell.inMonth && byDay.has(cellKey(cell))).map(cellKey);
   const activeKey = dayKey && byDay.has(dayKey) ? dayKey : (monthKeys[0] ?? null);
   const times = activeKey ? (byDay.get(activeKey) ?? []) : [];
+  const todayKey = zoneKey(new Date(), zone);
 
   const book = async () => {
     if (phase.kind !== "ready" || !start) return;
@@ -264,10 +300,11 @@ export function BookPage() {
   if (phase.kind === "loading") {
     return (
       <Frame>
-        <div className="flex flex-col gap-3 p-8">
-          <div className="h-4 w-24 rounded-md bg-muted" />
-          <div className="h-6 w-48 rounded-md bg-muted" />
-          <div className="h-4 w-64 rounded-md bg-muted" />
+        <div className="flex flex-col gap-4 p-6 sm:p-10">
+          <div className="size-16 rounded-full bg-muted" />
+          <div className="h-8 w-56 rounded-md bg-muted" />
+          <div className="h-4 w-40 rounded-md bg-muted" />
+          <div className="mt-6 h-64 rounded-lg bg-muted" />
         </div>
       </Frame>
     );
@@ -276,11 +313,11 @@ export function BookPage() {
   if (phase.kind === "missing" || phase.kind === "error") {
     return (
       <Frame>
-        <div className="flex flex-col gap-2 p-8">
-          <h1 className="font-display text-lg text-foreground">
+        <div className="flex flex-col gap-3 p-6 sm:p-10">
+          <h1 className="font-display text-3xl text-foreground">
             {phase.kind === "missing" ? "This link is not available" : "Could not load times"}
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-base text-muted-foreground">
             {phase.kind === "missing"
               ? "Ask the host for a new booking link."
               : "Refresh the page and try again."}
@@ -293,89 +330,109 @@ export function BookPage() {
   if (phase.kind === "booked") {
     return (
       <Frame>
-        <div className="flex max-w-md flex-col gap-4 p-8">
-          <h1 className="font-display text-xl text-foreground">You're booked</h1>
-          <p className="font-sans text-sm text-foreground tabular-nums">
-            {new Intl.DateTimeFormat(undefined, {
-              timeZone: zone,
-              dateStyle: "full",
-              timeStyle: "short",
-            }).format(new Date(phase.start))}
+        <div className="mx-auto flex w-full max-w-lg flex-col gap-6 p-6 sm:p-10">
+          <h1 className="font-display text-3xl text-foreground">You're booked</h1>
+          <p className="font-sans text-lg text-foreground tabular-nums">
+            {whenLabel(phase.start, zone)}
           </p>
           {phase.meetLink ? (
-            <Button asChild className="w-fit">
+            <Button asChild size="lg" className="w-full sm:w-fit">
               <a href={phase.meetLink}>Join Google Meet</a>
             </Button>
           ) : null}
-          <p className="text-sm text-muted-foreground">
+          <p className="text-base text-muted-foreground">
             A short email with the Meet link and a way to cancel is on its way. Google will also
             send the calendar invite.
-            {phase.guests.length > 0 ? ` The same invite goes to ${phase.guests.join(", ")}.` : ""}
           </p>
+          {phase.guests.length > 0 ? (
+            <p className="text-base text-foreground">Also invited: {phase.guests.join(", ")}.</p>
+          ) : null}
         </div>
       </Frame>
     );
   }
 
   const preview = phase.preview;
+  const picking = !preview.paused && byDay.size > 0 && !start;
+  const onPhoneTimes = showTimes && !start;
 
   return (
     <Frame>
-      <div className="grid grid-cols-1 lg:grid-cols-[17rem_minmax(0,1fr)]">
-        <aside className="flex flex-col gap-4 border-border p-6 lg:border-r">
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <Avatar size="lg">
-                {preview.hostAvatarUrl ? <AvatarImage src={preview.hostAvatarUrl} alt="" /> : null}
-                <AvatarFallback>{initials(preview.hostName)}</AvatarFallback>
-              </Avatar>
-              <p className="min-w-0 truncate text-sm font-medium text-foreground">
-                {preview.hostName}
-              </p>
-            </div>
-            <h1 className="font-display text-xl text-foreground">{preview.name}</h1>
+      <div
+        className={cn(
+          "flex flex-1 flex-col lg:grid lg:min-h-0",
+          picking
+            ? "lg:grid-cols-[22rem_minmax(0,1fr)_20rem]"
+            : "lg:grid-cols-[22rem_minmax(0,1fr)]",
+        )}
+      >
+        <aside
+          className={cn(
+            "flex flex-col gap-6 border-border p-6 sm:p-8 lg:overflow-y-auto lg:border-r",
+            (onPhoneTimes || start) && "max-lg:hidden",
+          )}
+        >
+          <div className="flex items-center gap-4">
+            <Avatar className="size-16">
+              {preview.hostAvatarUrl ? <AvatarImage src={preview.hostAvatarUrl} alt="" /> : null}
+              <AvatarFallback className="text-lg">{initials(preview.hostName)}</AvatarFallback>
+            </Avatar>
+            <p className="min-w-0 font-sans text-md text-foreground">{preview.hostName}</p>
           </div>
-          <p className="text-sm text-foreground">{preview.durationMinutes} min · Google Meet</p>
+          <h1 className="font-display text-3xl text-balance text-foreground">{preview.name}</h1>
+          <div className="flex flex-col gap-2 font-sans text-base text-foreground">
+            <p className="flex items-center gap-2">
+              <Clock className="size-icon text-muted-foreground" aria-hidden />
+              {preview.durationMinutes} min
+            </p>
+            <p className="flex items-center gap-2">
+              <Video className="size-icon text-muted-foreground" aria-hidden />
+              Google Meet
+            </p>
+          </div>
           {preview.description ? (
-            <p className="text-sm text-muted-foreground">{preview.description}</p>
+            <p className="whitespace-pre-wrap font-sans text-base text-muted-foreground">
+              {preview.description}
+            </p>
           ) : null}
-          <label className="mt-auto flex flex-col gap-1 pt-4">
-            <span className="font-display text-sm text-foreground">Timezone</span>
+          <Field id="book-timezone" label="Timezone">
             <Select
               value={zone}
               onValueChange={(value) => {
                 setZone(value);
                 setCursor(null);
                 setDayKey(null);
+                setShowTimes(false);
                 setStart(null);
               }}
             >
-              <SelectTrigger aria-label="Your timezone">
+              <SelectTrigger id="book-timezone" aria-label="Your timezone" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {zones.map((item) => (
                   <SelectItem key={item} value={item}>
-                    {item}
+                    {zoneLabel(item)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </label>
+          </Field>
         </aside>
-        {preview.paused ? (
-          <div className="flex items-center p-8">
-            <p className="text-sm text-foreground">This link is paused.</p>
-          </div>
-        ) : byDay.size === 0 ? (
-          <div className="flex items-center p-8">
-            <p className="text-sm text-muted-foreground">No open times in this range.</p>
+
+        {preview.paused || byDay.size === 0 ? (
+          <div className="flex flex-1 items-center p-6 sm:p-10">
+            <p className="font-sans text-base text-foreground">
+              {preview.paused ? "This link is paused." : "No open times in this range."}
+            </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_13.5rem]">
-            <div className="flex flex-col gap-3 p-6">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="font-display text-base text-foreground">{monthTitle(view)}</h2>
+          <>
+            <div
+              className={cn("flex flex-col gap-4 p-6 sm:p-8", (onPhoneTimes || start) && "hidden")}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-display text-xl text-foreground">{monthTitle(view)}</h2>
                 <div className="flex items-center gap-1">
                   <Button
                     type="button"
@@ -409,7 +466,7 @@ export function BookPage() {
                 {WEEKDAY_HEAD.map((label) => (
                   <div
                     key={label}
-                    className="py-1 text-center font-sans text-2xs text-muted-foreground"
+                    className="py-1 text-center font-sans text-xs text-muted-foreground"
                   >
                     {label}
                   </div>
@@ -418,6 +475,7 @@ export function BookPage() {
                   const key = cellKey(cell);
                   const open = cell.inMonth && byDay.has(key);
                   const selected = key === activeKey && cell.inMonth;
+                  const today = key === todayKey && cell.inMonth;
                   return (
                     <button
                       key={`${key}-${cell.inMonth ? "in" : "out"}`}
@@ -428,14 +486,16 @@ export function BookPage() {
                       onClick={() => {
                         setDayKey(key);
                         setStart(null);
+                        setShowTimes(true);
                       }}
                       className={cn(
-                        "flex size-9 items-center justify-center rounded-md font-sans text-sm tabular-nums",
+                        "flex aspect-square w-full items-center justify-center rounded-md font-sans text-base tabular-nums",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         !cell.inMonth && "text-transparent",
                         cell.inMonth && !open && "text-muted-foreground",
-                        open && "text-foreground hover:bg-accent",
-                        selected && "bg-[var(--selected-bg)] text-foreground",
+                        open && !selected && "font-medium text-foreground hover:bg-accent",
+                        today && !selected && "ring-1 ring-border",
+                        selected && "bg-[var(--selected-bg)] font-medium text-foreground",
                       )}
                     >
                       {cell.inMonth ? cell.d : ""}
@@ -444,140 +504,173 @@ export function BookPage() {
                 })}
               </div>
             </div>
-            <div className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto border-border p-4 sm:border-l">
-              {start ? (
-                <form
-                  className="flex flex-col gap-3"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void book();
-                  }}
-                >
-                  <div className="flex flex-col gap-1">
-                    <p className="text-sm text-muted-foreground">
-                      {dayTitle(zoneKey(new Date(start), zone), zone)}
-                    </p>
-                    <p className="font-sans text-sm text-foreground tabular-nums">
-                      {timeLabel(start, zone)}
-                    </p>
-                  </div>
+
+            <div
+              className={cn(
+                "flex min-h-0 flex-col gap-3 p-6 sm:p-8",
+                start && "hidden",
+                !showTimes && "max-lg:hidden",
+              )}
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-fit justify-start px-0 lg:hidden"
+                onClick={() => setShowTimes(false)}
+              >
+                <ChevronLeft aria-hidden />
+                Calendar
+              </Button>
+              <h2 className="font-display text-xl text-foreground">
+                {activeKey ? dayTitle(activeKey, zone) : "No times this month"}
+              </h2>
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+                {times.map((slot) => (
                   <Button
+                    key={slot}
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start px-0"
-                    onClick={() => setStart(null)}
+                    variant="outline"
+                    size="lg"
+                    className="w-full tabular-nums"
+                    onClick={() => setStart(slot)}
                   >
-                    Choose another time
+                    {timeLabel(slot, zone)}
                   </Button>
-                  <label className="flex flex-col gap-1">
-                    <span className="font-display text-sm">Name</span>
-                    <Input value={name} required onChange={(e) => setName(e.target.value)} />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="font-display text-sm">Email</span>
-                    <Input
-                      type="email"
-                      value={email}
-                      required
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </label>
-                  {preview.guestsEnabled ? (
-                    <div className="flex flex-col gap-2">
-                      {guests.map((guest, index) => (
-                        <div key={guest.id} className="flex items-center gap-2">
-                          <Input
-                            type="email"
-                            value={guest.email}
-                            placeholder="Guest email"
-                            aria-label={`Guest ${index + 1} email`}
-                            onChange={(e) =>
-                              setGuests((current) =>
-                                current.map((item) =>
-                                  item.id === guest.id ? { ...item, email: e.target.value } : item,
-                                ),
-                              )
-                            }
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setGuests((current) => current.filter((item) => item.id !== guest.id))
-                            }
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      ))}
-                      {guests.length < MAX_BOOKING_GUESTS ? (
+                ))}
+              </div>
+            </div>
+
+            {start ? (
+              <form
+                className="flex min-h-0 flex-col gap-5 overflow-y-auto p-6 sm:p-8"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void book();
+                }}
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-fit justify-start px-0"
+                  onClick={() => setStart(null)}
+                >
+                  <ChevronLeft aria-hidden />
+                  Choose another time
+                </Button>
+                <div className="flex flex-col gap-1">
+                  <p className="font-sans text-lg text-foreground tabular-nums">
+                    {timeLabel(start, zone)}
+                  </p>
+                  <p className="font-sans text-base text-muted-foreground">
+                    {dayTitle(zoneKey(new Date(start), zone), zone)} · {preview.durationMinutes} min
+                  </p>
+                </div>
+                <Field id="book-name" label="Name">
+                  <Input
+                    id="book-name"
+                    value={name}
+                    required
+                    autoComplete="name"
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </Field>
+                <Field id="book-email" label="Email">
+                  <Input
+                    id="book-email"
+                    type="email"
+                    value={email}
+                    required
+                    autoComplete="email"
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </Field>
+                {preview.guestsEnabled ? (
+                  <div className="flex flex-col gap-2">
+                    {guests.length > 0 ? (
+                      <p className="font-display text-sm text-foreground">Guests</p>
+                    ) : null}
+                    {guests.map((guest, index) => (
+                      <div key={guest.id} className="flex items-center gap-2">
+                        <Input
+                          type="email"
+                          value={guest.email}
+                          placeholder="name@email.com"
+                          aria-label={`Guest ${index + 1} email`}
+                          autoComplete="off"
+                          onChange={(e) =>
+                            setGuests((current) =>
+                              current.map((item) =>
+                                item.id === guest.id ? { ...item, email: e.target.value } : item,
+                              ),
+                            )
+                          }
+                        />
                         <Button
                           type="button"
                           variant="ghost"
-                          size="sm"
-                          className="justify-start px-0"
                           onClick={() =>
-                            setGuests((current) => [
-                              ...current,
-                              { id: crypto.randomUUID(), email: "" },
-                            ])
+                            setGuests((current) => current.filter((item) => item.id !== guest.id))
                           }
                         >
-                          {guests.length === 0 ? "Add guests" : "Add another guest"}
+                          Remove
                         </Button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {preview.noteEnabled ? (
-                    <label className="flex flex-col gap-1">
-                      <span className="font-display text-sm">Note</span>
-                      <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
-                    </label>
-                  ) : null}
-                  {(preview.questions ?? []).map((question) =>
-                    question.id && question.label ? (
-                      <label key={question.id} className="flex flex-col gap-1">
-                        <span className="font-display text-sm">{question.label}</span>
-                        <Input
-                          required={question.required === true}
-                          value={answers[question.id] ?? ""}
-                          onChange={(e) =>
-                            setAnswers((current) => ({
-                              ...current,
-                              [question.id as string]: e.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                    ) : null,
-                  )}
-                  {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? "Booking…" : "Confirm"}
-                  </Button>
-                </form>
-              ) : (
-                <>
-                  <h2 className="font-display text-sm text-foreground">
-                    {activeKey ? dayTitle(activeKey, zone) : "No times this month"}
-                  </h2>
-                  {times.map((slot) => (
-                    <Button
-                      key={slot}
-                      type="button"
-                      variant="outline"
-                      className="w-full tabular-nums"
-                      onClick={() => setStart(slot)}
-                    >
-                      {timeLabel(slot, zone)}
-                    </Button>
-                  ))}
-                </>
-              )}
-            </div>
-          </div>
+                      </div>
+                    ))}
+                    {guests.length < MAX_BOOKING_GUESTS ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="w-fit justify-start px-0"
+                        onClick={() =>
+                          setGuests((current) => [
+                            ...current,
+                            { id: crypto.randomUUID(), email: "" },
+                          ])
+                        }
+                      >
+                        {guests.length === 0 ? "Add guests" : "Add another guest"}
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {preview.noteEnabled ? (
+                  <Field id="book-note" label="Note">
+                    <Textarea
+                      id="book-note"
+                      value={note}
+                      rows={4}
+                      onChange={(e) => setNote(e.target.value)}
+                    />
+                  </Field>
+                ) : null}
+                {(preview.questions ?? []).map((question) =>
+                  question.id && question.label ? (
+                    <Field key={question.id} id={`book-q-${question.id}`} label={question.label}>
+                      <Input
+                        id={`book-q-${question.id}`}
+                        required={question.required === true}
+                        value={answers[question.id] ?? ""}
+                        onChange={(e) =>
+                          setAnswers((current) => ({
+                            ...current,
+                            [question.id as string]: e.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                  ) : null,
+                )}
+                {formError ? (
+                  <p role="alert" className="text-base text-destructive">
+                    {formError}
+                  </p>
+                ) : null}
+                <Button type="submit" size="lg" className="w-full sm:w-fit" disabled={submitting}>
+                  {submitting ? "Booking…" : "Schedule meeting"}
+                </Button>
+              </form>
+            ) : null}
+          </>
         )}
       </div>
     </Frame>
