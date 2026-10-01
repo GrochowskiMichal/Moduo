@@ -14,6 +14,7 @@ export type BookingPreview = {
   hostAvatarUrl: string | null;
   hostTimeZone: string;
   noteEnabled: boolean;
+  guestsEnabled: boolean;
   questions: { id?: string; label?: string; required?: boolean }[];
   paused: boolean;
   slots: string[];

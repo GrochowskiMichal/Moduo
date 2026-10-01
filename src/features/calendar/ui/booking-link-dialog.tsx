@@ -39,6 +39,7 @@ export type LinkDraft = {
   weeklyHours: WeeklyHours;
   busyCalendarIds: string[];
   noteEnabled: boolean;
+  guestsEnabled: boolean;
   questions: GuestQuestion[];
   paused: boolean;
 };
@@ -235,6 +236,21 @@ export function BookingLinkDialog({
                       onCheckedChange={(checked) => onChange({ ...draft, noteEnabled: checked })}
                     />
                   </label>
+                  <div className="flex flex-col gap-1">
+                    <label className="flex items-center justify-between gap-3 text-sm text-foreground">
+                      Add guests
+                      <Switch
+                        checked={draft.guestsEnabled}
+                        onCheckedChange={(checked) =>
+                          onChange({ ...draft, guestsEnabled: checked })
+                        }
+                      />
+                    </label>
+                    <p className="text-sm text-muted-foreground">
+                      The person booking can invite others. Each one gets the Google Meet calendar
+                      invite.
+                    </p>
+                  </div>
                   {draft.questions.map((question, index) => (
                     <div key={question.id} className="flex items-center gap-2">
                       <Input

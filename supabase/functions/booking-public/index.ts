@@ -4,7 +4,7 @@
  * service_role and booking_op_commit / booking_op_release.
  *
  * POST { action: "preview", slug, timeZone }
- * POST { action: "book", slug, start, timeZone, name, email, note, answers }
+ * POST { action: "book", slug, start, timeZone, name, email, note, guests, answers }
  * POST { action: "cancel-preview", token }
  * POST { action: "cancel", token }
  */
@@ -20,6 +20,7 @@ import {
 } from "../_shared/google-calendar.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import { decryptToken, encryptToken } from "../_shared/token-cipher.ts";
+import { parseGuestEmails } from "../../../src/features/calendar/booking/guests.ts";
 import {
   computeOpenSlots,
   normalizeWeeklyHours,
@@ -63,6 +64,7 @@ type LinkRow = {
   weekly_hours: unknown;
   busy_calendar_ids: unknown;
   note_enabled: boolean;
+  guests_enabled: boolean;
   questions_json: unknown;
   paused: boolean;
   video_provider: string | null;
@@ -279,6 +281,7 @@ function publicLink(link: LinkRow, host: { name: string; avatarUrl: string | nul
     hostAvatarUrl: host.avatarUrl,
     hostTimeZone: link.host_timezone || "UTC",
     noteEnabled: link.note_enabled,
+    guestsEnabled: link.guests_enabled === true,
     questions: Array.isArray(link.questions_json) ? link.questions_json : [],
     video: "google_meet",
     paused: link.paused,
@@ -419,6 +422,12 @@ Deno.serve(async (req: Request) => {
   const email = typeof body.email === "string" ? body.email.trim() : "";
   if (!name || !email.includes("@")) return json({ error: "bad_guest" }, 400);
   const note = link.note_enabled && typeof body.note === "string" ? body.note.trim() : "";
+  const guests = link.guests_enabled
+    ? parseGuestEmails(body.guests, email)
+    : { ok: true as const, emails: [] as string[] };
+  if (!guests.ok) return json({ error: "bad_guest" }, 400);
+  const hostAddress = (access.email || link.owner_email || "").trim().toLowerCase();
+  const invitedEmails = guests.emails.filter((address) => address !== hostAddress);
   const answersIn = Array.isArray(body.answers) ? body.answers : [];
   const questions = Array.isArray(link.questions_json)
     ? (link.questions_json as { id?: string; label?: string; required?: boolean }[])
@@ -449,6 +458,7 @@ Deno.serve(async (req: Request) => {
       attendee_name: name,
       attendee_email: email,
       attendee_notes: note || null,
+      guest_emails: invitedEmails,
       status: "pending",
       answers_json: answers,
       cancel_token: cancelToken,
@@ -473,6 +483,7 @@ Deno.serve(async (req: Request) => {
   try {
     const lines = [
       `Guest: ${name} <${email}>`,
+      invitedEmails.length > 0 ? `Also invited: ${invitedEmails.join(", ")}` : "",
       note ? `Note: ${note}` : "",
       ...answers.map((answer) => `${answer.label}: ${answer.value}`),
     ].filter(Boolean);
@@ -486,6 +497,7 @@ Deno.serve(async (req: Request) => {
       hostEmail,
       guestEmail: email,
       guestName: name,
+      guestEmails: invitedEmails,
       requestId: bookingId,
     });
   } catch {
@@ -497,6 +509,9 @@ Deno.serve(async (req: Request) => {
     .join("");
   const description = [
     `<p>Booked with ${escapeHtml(name)} (${escapeHtml(email)})</p>`,
+    invitedEmails.length > 0
+      ? `<p>Also invited: ${invitedEmails.map((address) => escapeHtml(address)).join(", ")}</p>`
+      : "",
     `<p><a href="${escapeHtml(meet.meetLink)}">Join Google Meet</a></p>`,
     note ? `<p>${escapeHtml(note)}</p>` : "",
     answerHtml,
@@ -555,6 +570,7 @@ Deno.serve(async (req: Request) => {
     start: start.toISOString(),
     end: end.toISOString(),
     meetLink: meet.meetLink,
+    guests: invitedEmails,
     cancelToken,
   });
 });

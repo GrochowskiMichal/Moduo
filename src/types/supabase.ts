@@ -810,6 +810,7 @@ export type Database = {
           link_name: string
           location_type: string
           min_notice_minutes: number
+          guests_enabled: boolean
           name: string
           note_enabled: boolean
           owner_avatar_url: string | null
@@ -841,6 +842,7 @@ export type Database = {
           link_name?: string
           location_type?: string
           min_notice_minutes?: number
+          guests_enabled?: boolean
           name?: string
           note_enabled?: boolean
           owner_avatar_url?: string | null
@@ -872,6 +874,7 @@ export type Database = {
           link_name?: string
           location_type?: string
           min_notice_minutes?: number
+          guests_enabled?: boolean
           name?: string
           note_enabled?: boolean
           owner_avatar_url?: string | null
@@ -1419,6 +1422,7 @@ export type Database = {
           contact_id: string | null
           created_at: string
           end_at: string
+          guest_emails: Json
           id: string
           meeting_id: string | null
           meeting_link: string | null
@@ -1440,6 +1444,7 @@ export type Database = {
           contact_id?: string | null
           created_at?: string
           end_at: string
+          guest_emails?: Json
           id?: string
           meeting_id?: string | null
           meeting_link?: string | null
@@ -1461,6 +1466,7 @@ export type Database = {
           contact_id?: string | null
           created_at?: string
           end_at?: string
+          guest_emails?: Json
           id?: string
           meeting_id?: string | null
           meeting_link?: string | null

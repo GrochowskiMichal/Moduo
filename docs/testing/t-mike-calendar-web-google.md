@@ -15,6 +15,10 @@
 - [ ] **Do:** Draw a new event and, in the popover, choose one of the Google calendars, then press Enter. → **Expect:** the event shows on the Moduo grid and in that calendar on Google. _(web)_
 - [ ] **Do:** Connect another Google account from Settings → Integrations, or from + Connect calendar…. → **Expect:** you stay in the app, Google’s sign-in opens, and the new calendars appear in both lists. _(web)_
 
+## Add guests
+- [ ] **Do:** Edit a booking link and turn **Add guests** on. Save. Open the link. → **Expect:** under Email, an **Add guests** button. Links with the toggle off do not show it. _(web)_
+- [ ] **Do:** Add one or two other email addresses and book a time. → **Expect:** confirmation says those addresses get the invite. Each guest receives a Google Calendar invite with the Meet link. Cancelling the booking cancels that invite for them too. _(web)_
+
 ## Who the booking page shows
 - [ ] **Do:** Change your name or profile photo in Settings, then open a booking link you already created (private window is fine). → **Expect:** the page shows the new name and the new photo, without editing the link. If you have no photo, your initials show. _(web)_
 
