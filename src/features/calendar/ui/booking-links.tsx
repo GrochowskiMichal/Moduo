@@ -38,6 +38,7 @@ type LinkRow = {
   weekly_hours: unknown;
   busy_calendar_ids: unknown;
   note_enabled: boolean;
+  guests_enabled: boolean;
   questions_json: unknown;
   paused: boolean;
 };
@@ -60,6 +61,7 @@ function emptyDraft(): Draft {
     weeklyHours: normalizeWeeklyHours(DEFAULT_WEEKLY_HOURS),
     busyCalendarIds: ["moduo"],
     noteEnabled: true,
+    guestsEnabled: true,
     questions: [],
     paused: false,
   };
@@ -81,6 +83,7 @@ function draftFromRow(row: LinkRow): Draft {
     weeklyHours: normalizeWeeklyHours(row.weekly_hours),
     busyCalendarIds: busyIdsFromJson(row.busy_calendar_ids),
     noteEnabled: row.note_enabled,
+    guestsEnabled: row.guests_enabled,
     questions: questionsFromJson(row.questions_json),
     paused: row.paused,
   };
@@ -191,6 +194,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         weekly_hours: draft.weeklyHours,
         busy_calendar_ids: draft.busyCalendarIds,
         note_enabled: draft.noteEnabled,
+        guests_enabled: draft.guestsEnabled,
         questions_json: draft.questions.filter((question) => question.label.trim()),
         paused: draft.paused,
         video_provider: "google_meet",
