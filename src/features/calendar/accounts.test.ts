@@ -17,7 +17,7 @@ function account(over: Partial<CalendarAccountModel>): CalendarAccountModel {
     workspaceId: "w",
     ownerId: "u",
     provider: over.provider ?? "google",
-    externalId: "",
+    externalId: over.externalId ?? "",
     displayLabel: over.displayLabel ?? "Personal — me@gmail.com",
     isDefaultTarget: false,
     color: over.color ?? null,
@@ -144,12 +144,47 @@ describe("accounts — attribution (AC12)", () => {
     expect(groups.every((g) => g.kind === "group")).toBe(true);
   });
 
+  it("groups Google calendars from one mailbox under that login", () => {
+    const groups = groupRailAccounts([
+      account({
+        id: "g1",
+        provider: "google",
+        externalId: "google:me@gmail.com:primary",
+        displayLabel: "Familijne",
+      }),
+      account({
+        id: "g2",
+        provider: "google",
+        externalId: "google:me@gmail.com:work",
+        displayLabel: "IT Events",
+      }),
+      account({
+        id: "o1",
+        provider: "google",
+        externalId: "google:other@gmail.com:primary",
+        displayLabel: "Other",
+      }),
+    ]);
+    expect(groups.map((g) => (g.kind === "group" ? g.detail : ""))).toEqual([
+      "me@gmail.com",
+      "other@gmail.com",
+    ]);
+    const first = groups[0];
+    if (first.kind !== "group") throw new Error("shape");
+    expect(first.header).toBe("Google");
+    expect(first.rows.map((row) => row.label)).toEqual(["Familijne", "IT Events"]);
+    expect(first.rows.every((row) => row.scope === "calendar")).toBe(true);
+  });
+
   it("falls back to a flat row for a caldav account with an unparseable descriptor", () => {
     const groups = groupRailAccounts([
       account({ id: "x", provider: "caldav", syncToken: null, displayLabel: "Legacy" }),
     ]);
     expect(groups).toEqual([
-      { kind: "flat", row: { account: expect.anything(), label: "Legacy" } },
+      {
+        kind: "flat",
+        row: { account: expect.anything(), label: "Legacy", scope: "account" },
+      },
     ]);
   });
 
