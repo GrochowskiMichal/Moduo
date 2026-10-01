@@ -13,6 +13,7 @@ import {
   optionalString,
   positiveInt,
   uuid,
+  waitlistJoinBodySchema,
 } from "./index.ts";
 
 // ---------------------------------------------------------------------------
@@ -243,5 +244,27 @@ describe("jsonString", () => {
   });
   it("rejects a number (not a string)", () => {
     expect(jsonString.safeParse(42).success).toBe(false);
+  });
+});
+
+describe("waitlistJoinBodySchema", () => {
+  it("trims and lowercases the email", () => {
+    const r = waitlistJoinBodySchema.safeParse({ email: "  Anna@Example.COM ", source: "hero" });
+    expect(r.success && r.data.email).toBe("anna@example.com");
+  });
+  it("rejects malformed emails, unknown sources and oversized input", () => {
+    expect(waitlistJoinBodySchema.safeParse({ email: "nope", source: "hero" }).success).toBe(false);
+    expect(waitlistJoinBodySchema.safeParse({ email: "a@b.co", source: "sidebar" }).success).toBe(false);
+    const long = `${"a".repeat(250)}@b.co`;
+    expect(waitlistJoinBodySchema.safeParse({ email: long, source: "nav" }).success).toBe(false);
+  });
+  it("accepts the honeypot and timing fields", () => {
+    const r = waitlistJoinBodySchema.safeParse({
+      email: "a@b.co",
+      source: "close",
+      website: "",
+      elapsedMs: 5400,
+    });
+    expect(r.success).toBe(true);
   });
 });

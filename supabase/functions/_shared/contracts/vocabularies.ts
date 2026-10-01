@@ -206,6 +206,23 @@ export type InviteStatus = (typeof INVITE_STATUSES)[number];
 export const inviteStatusSchema = z.enum(INVITE_STATUSES);
 
 // ---------------------------------------------------------------------------
+// Landing waitlist — public.waitlist.source / .status (CHECKs in
+// 20261001160000 + 20261001170000 waitlist migrations). Source = which landing CTA.
+// ---------------------------------------------------------------------------
+
+export const WAITLIST_SOURCES = ["nav", "hero", "close", "footer"] as const;
+export type WaitlistSource = (typeof WAITLIST_SOURCES)[number];
+export const waitlistSourceSchema = z.enum(WAITLIST_SOURCES);
+
+export function isWaitlistSource(input: unknown): input is WaitlistSource {
+  return waitlistSourceSchema.safeParse(input).success;
+}
+
+export const WAITLIST_STATUSES = ["pending", "confirmed", "cancelled"] as const;
+export type WaitlistStatus = (typeof WAITLIST_STATUSES)[number];
+export const waitlistStatusSchema = z.enum(WAITLIST_STATUSES);
+
+// ---------------------------------------------------------------------------
 // Email accounts — provider/status vocabularies.
 //
 // DRIFT NOTE (live resolution): the 20260704170000_email_module migration

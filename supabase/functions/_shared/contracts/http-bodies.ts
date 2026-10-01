@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { parseOrStructured } from "./errors.ts";
 import { httpUrl, nonEmptyString, uuid } from "./primitives.ts";
+import { waitlistSourceSchema } from "./vocabularies.ts";
 
 export const emailBodySchema = z.object({
   email: z.email(),
@@ -20,6 +21,14 @@ export const foundersApplyBodySchema = z.object({
   email: z.email(),
   message: z.string().optional(),
   name: z.string().optional(),
+});
+
+/** `website` is a honeypot (must stay empty); `elapsedMs` = time on page before submit. */
+export const waitlistJoinBodySchema = z.object({
+  email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
+  source: waitlistSourceSchema,
+  website: z.string().max(200).optional(),
+  elapsedMs: z.number().int().nonnegative().optional(),
 });
 
 export const createPortalSessionBodySchema = z.object({
