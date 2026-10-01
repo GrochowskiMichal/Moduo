@@ -77,8 +77,10 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 - [ ] Not-yet-built pages (Pricing, Changelog, Download, Switch from …, About, Careers, Press, Help, Docs, Roadmap, Security, Privacy, Terms, Cookies) are dimmed, not clickable, and show a faint "soon" on hover
 - [ ] 3D Moduo mark: layered extrusion leans away from the cursor anywhere on the page and eases back; "depth" readout changes
 - [ ] Early access field: type email → arrow button → "You’re on the list" card; every other waitlist form on the page flips to joined; row in Supabase has `source = footer`
-- [ ] Blueprint "MODUO": letters draw in on first view, guides fade in, then letters light one by one (01 Tasks … 05 Mind maps)
-- [ ] Hover a letter → it fills, its module tag + width appear, legend reads "Module N of 5 · …"; leaving clears it
+- [ ] Blueprint "MODUO": letters draw in on first view, guides fade in, then it plays once: MOD bracket above (M-O-D) → DUO bracket below (D-U-O) → both, with the shared D filled strongest
+- [ ] Hover M or first O → "MOD · modular" bracket + "MOD — modular. A small building block…"; other letters dim
+- [ ] Hover U or last O → "DUO · two, together" bracket + "DUO — two, working together. You and your tools. Two founders, one system."
+- [ ] Hover D → both brackets, D filled strongest, "MOD + DUO = MODUO · productivity, assembled your way."; leaving clears it
 - [ ] Mouse over the plate → crosshair lines + "X 0000 Y 0000" readout follow the cursor (desktop mouse only)
 - [ ] Bottom bar: © 2026 Moduo · pulsing green "Private beta · invites rolling out" · Privacy · Terms · Cookies · Back to top (scrolls up)
 - [ ] 1024px → grid becomes 6 columns; 390px → 2 columns, no mark, wordmark fits, "Back to top" on its own row, no sideways scroll

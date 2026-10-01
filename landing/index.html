@@ -1863,7 +1863,7 @@
       .ft-legend {
         justify-content: center;
         min-height: 1rem;
-        margin-top: 0.5rem;
+        margin-top: 1.25rem;
         transition: color var(--motion-base) var(--ease-out);
       }
       .ft-legend.is-on {
@@ -1915,40 +1915,57 @@
         fill: var(--faint-foreground);
         stroke: none;
       }
-      .ft-tag path {
+      .ft-br path {
+        fill: none;
         stroke: var(--muted-foreground);
+        stroke-width: 1;
         vector-effect: non-scaling-stroke;
       }
-      .ft-tag text,
-      .ft-dim {
+      .ft-br text {
         font-family: var(--font-mono);
-        font-size: 13px;
-        letter-spacing: 0.06em;
+        font-size: 15px;
+        letter-spacing: 0.08em;
         text-anchor: middle;
         text-transform: uppercase;
-        fill: var(--muted-foreground);
+        fill: var(--foreground);
       }
-      .ft-dim {
-        fill: var(--faint-foreground);
-        font-size: 11px;
-      }
-      .ft-tag,
-      .ft-dim {
+      .ft-br {
         opacity: 0;
-        transition: opacity var(--motion-base) var(--ease-out);
+        transform-box: fill-box;
+        transition:
+          opacity var(--motion-base) var(--ease-out),
+          transform var(--motion-slow) var(--ease-out);
+      }
+      .ft-br.is-mod {
+        transform: translateY(6px);
+      }
+      .ft-br.is-duo {
+        transform: translateY(-6px);
+      }
+      .ft-plate[data-show="mod"] .ft-br.is-mod,
+      .ft-plate[data-show="duo"] .ft-br.is-duo,
+      .ft-plate[data-show="both"] .ft-br {
+        opacity: 1;
+        transform: none;
       }
       .ft-l {
         cursor: default;
       }
-      .ft-l.is-on .ft-glyph {
+      .ft-plate[data-show] .ft-glyph {
+        stroke: var(--faint-foreground);
+      }
+      .ft-plate[data-show="mod"] .ft-l:is([data-g="mod"], [data-g="both"]) .ft-glyph,
+      .ft-plate[data-show="duo"] .ft-l:is([data-g="duo"], [data-g="both"]) .ft-glyph,
+      .ft-plate[data-show="both"] .ft-glyph {
         fill: color-mix(in oklab, var(--foreground) 7%, transparent);
         stroke: var(--foreground);
       }
-      .ft-l.is-on .ft-tag,
-      .ft-l.is-on .ft-dim {
-        opacity: 1;
+      .ft-plate[data-show="both"] .ft-l[data-g="both"] .ft-glyph {
+        fill: color-mix(in oklab, var(--foreground) 18%, transparent);
       }
-      .ft-l.is-on .ft-cons path:not(.ft-axis) {
+      .ft-plate[data-show="mod"] .ft-l:is([data-g="mod"], [data-g="both"]) .ft-cons path:not(.ft-axis),
+      .ft-plate[data-show="duo"] .ft-l:is([data-g="duo"], [data-g="both"]) .ft-cons path:not(.ft-axis),
+      .ft-plate[data-show="both"] .ft-cons path:not(.ft-axis) {
         stroke: var(--muted-foreground);
       }
 
@@ -2095,8 +2112,7 @@
         }
         .ft-logo,
         .ft-fig-r,
-        .ft-tag,
-        .ft-dim,
+        .ft-br text,
         .ft-legend {
           display: none;
         }
@@ -4677,20 +4693,22 @@
           <span class="ft-ruler is-top" aria-hidden="true"></span>
           <span class="ft-ruler is-bot" aria-hidden="true"></span>
           <p class="ft-fig" aria-hidden="true">
-            <span>Fig. 01 — Five core modules. One word.</span>
+            <span>Fig. 01 — Mod + Duo. One word.</span>
             <span class="ft-fig-r">Grid 40 · Weight 40 · Rev 2026.10</span>
           </p>
-          <svg class="ft-word" viewBox="-40 -40 1260 300" role="img" aria-labelledby="ft-word-t">
-            <title id="ft-word-t">Moduo — five core modules, one word</title>
+          <svg class="ft-word" viewBox="-40 -60 1260 360" role="img" aria-labelledby="ft-word-t">
+            <title id="ft-word-t">Moduo — MOD plus DUO, sharing the D</title>
             <g class="ft-guides" aria-hidden="true">
               <line class="ft-gl" x1="-40" x2="1220" y1="20" y2="20" />
               <line class="ft-gl is-mid" x1="-40" x2="1220" y1="120" y2="120" />
               <line class="ft-gl" x1="-40" x2="1220" y1="220" y2="220" />
-              <line class="ft-gl" x1="0" x2="0" y1="-40" y2="260" />
-              <line class="ft-gl" x1="1180" x2="1180" y1="-40" y2="260" />
+              <line class="ft-gl" x1="0" x2="0" y1="-40" y2="280" />
+              <line class="ft-gl" x1="1180" x2="1180" y1="-40" y2="280" />
             </g>
-            <g class="ft-l" style="--i: 0" transform="translate(0 0)" data-mod="Tasks">
-              <rect class="ft-hit" x="-20" y="-40" width="260" height="300" />
+            <g class="ft-br is-mod" aria-hidden="true"><path d="M0 -4V-20H700V-4" /><path class="ft-br-tick" d="M350 -20V-30" /><text x="350" y="-40">MOD · modular</text></g>
+            <g class="ft-br is-duo" aria-hidden="true"><path d="M500 244V260H1180V244" /><path class="ft-br-tick" d="M840 260V270" /><text x="840" y="290">DUO · two, together</text></g>
+            <g class="ft-l" style="--i: 0" transform="translate(0 0)" data-g="mod">
+              <rect class="ft-hit" x="-20" y="-40" width="260" height="320" />
               <path class="ft-glyph" d="M0 220V20H50L110 120L170 20H220V220H180V95L125 185H95L40 95V220Z" pathLength="1" fill-rule="evenodd" />
               <g class="ft-cons" aria-hidden="true">
                 <path d="M-5 20h10M0 15v10" />
@@ -4707,11 +4725,9 @@
                 <path d="M35 220h10M40 215v10" />
                 <path d="M-5 220h10M0 215v10" />
               </g>
-              <g class="ft-tag" aria-hidden="true"><path d="M110.0 -8V-22" /><text x="110.0" y="-28">01 · Tasks</text></g>
-              <text class="ft-dim" x="110.0" y="250" aria-hidden="true">220</text>
             </g>
-            <g class="ft-l" style="--i: 1" transform="translate(260 0)" data-mod="Notes">
-              <rect class="ft-hit" x="-20" y="-40" width="240" height="300" />
+            <g class="ft-l" style="--i: 1" transform="translate(260 0)" data-g="mod">
+              <rect class="ft-hit" x="-20" y="-40" width="240" height="320" />
               <path class="ft-glyph" d="M80 20H120A80 80 0 0 1 200 100V140A80 80 0 0 1 120 220H80A80 80 0 0 1 0 140V100A80 80 0 0 1 80 20ZM80 60A40 40 0 0 0 40 100V140A40 40 0 0 0 80 180H120A40 40 0 0 0 160 140V100A40 40 0 0 0 120 60Z" pathLength="1" fill-rule="evenodd" />
               <g class="ft-cons" aria-hidden="true">
                 <path d="M75 20h10M80 15v10" />
@@ -4732,11 +4748,9 @@
                 <circle class="ft-ctr" cx="120" cy="140" r="2" />
                 <path class="ft-axis" d="M100.0 0V240" />
               </g>
-              <g class="ft-tag" aria-hidden="true"><path d="M100.0 -8V-22" /><text x="100.0" y="-28">02 · Notes</text></g>
-              <text class="ft-dim" x="100.0" y="250" aria-hidden="true">200</text>
             </g>
-            <g class="ft-l" style="--i: 2" transform="translate(500 0)" data-mod="Email">
-              <rect class="ft-hit" x="-20" y="-40" width="240" height="300" />
+            <g class="ft-l" style="--i: 2" transform="translate(500 0)" data-g="both">
+              <rect class="ft-hit" x="-20" y="-40" width="240" height="320" />
               <path class="ft-glyph" d="M0 20H120A80 80 0 0 1 200 100V140A80 80 0 0 1 120 220H0ZM40 60V180H120A40 40 0 0 0 160 140V100A40 40 0 0 0 120 60Z" pathLength="1" fill-rule="evenodd" />
               <g class="ft-cons" aria-hidden="true">
                 <path d="M-5 20h10M0 15v10" />
@@ -4753,11 +4767,9 @@
                 <circle class="ft-ctr" cx="120" cy="140" r="2" />
                 <path class="ft-axis" d="M100 0V240" />
               </g>
-              <g class="ft-tag" aria-hidden="true"><path d="M100.0 -8V-22" /><text x="100.0" y="-28">03 · Email</text></g>
-              <text class="ft-dim" x="100.0" y="250" aria-hidden="true">200</text>
             </g>
-            <g class="ft-l" style="--i: 3" transform="translate(740 0)" data-mod="Calendar">
-              <rect class="ft-hit" x="-20" y="-40" width="240" height="300" />
+            <g class="ft-l" style="--i: 3" transform="translate(740 0)" data-g="duo">
+              <rect class="ft-hit" x="-20" y="-40" width="240" height="320" />
               <path class="ft-glyph" d="M0 20H40V140A40 40 0 0 0 80 180H120A40 40 0 0 0 160 140V20H200V140A80 80 0 0 1 120 220H80A80 80 0 0 1 0 140Z" pathLength="1" fill-rule="evenodd" />
               <g class="ft-cons" aria-hidden="true">
                 <path d="M-5 20h10M0 15v10" />
@@ -4773,11 +4785,9 @@
                 <circle class="ft-arc" cx="120" cy="140" r="40" />
                 <circle class="ft-ctr" cx="120" cy="140" r="2" />
               </g>
-              <g class="ft-tag" aria-hidden="true"><path d="M100.0 -8V-22" /><text x="100.0" y="-28">04 · Calendar</text></g>
-              <text class="ft-dim" x="100.0" y="250" aria-hidden="true">200</text>
             </g>
-            <g class="ft-l" style="--i: 4" transform="translate(980 0)" data-mod="Mind maps">
-              <rect class="ft-hit" x="-20" y="-40" width="240" height="300" />
+            <g class="ft-l" style="--i: 4" transform="translate(980 0)" data-g="duo">
+              <rect class="ft-hit" x="-20" y="-40" width="240" height="320" />
               <path class="ft-glyph" d="M80 20H120A80 80 0 0 1 200 100V140A80 80 0 0 1 120 220H80A80 80 0 0 1 0 140V100A80 80 0 0 1 80 20ZM80 60A40 40 0 0 0 40 100V140A40 40 0 0 0 80 180H120A40 40 0 0 0 160 140V100A40 40 0 0 0 120 60Z" pathLength="1" fill-rule="evenodd" />
               <g class="ft-cons" aria-hidden="true">
                 <path d="M75 20h10M80 15v10" />
@@ -4798,11 +4808,9 @@
                 <circle class="ft-ctr" cx="120" cy="140" r="2" />
                 <path class="ft-axis" d="M100.0 0V240" />
               </g>
-              <g class="ft-tag" aria-hidden="true"><path d="M100.0 -8V-22" /><text x="100.0" y="-28">05 · Mind maps</text></g>
-              <text class="ft-dim" x="100.0" y="250" aria-hidden="true">200</text>
             </g>
           </svg>
-          <p class="ft-legend" id="ft-legend" aria-live="polite">Hover a letter — each one is a module.</p>
+          <p class="ft-legend" id="ft-legend" aria-live="polite">Hover the word — there are two inside it.</p>
           <span class="ft-cx" aria-hidden="true"></span>
           <span class="ft-cy" aria-hidden="true"></span>
           <span class="ft-coord" aria-hidden="true"></span>
@@ -6878,24 +6886,33 @@
           Array.prototype.forEach.call(list, fn);
         };
 
-        var lightLetter = function (target) {
-          each(letters, function (l) {
-            l.classList.toggle("is-on", l === target);
-          });
+        var MEANING = {
+          mod: "MOD — modular. A small building block you can change, swap or add.",
+          duo: "DUO — two, working together. You and your tools. Two founders, one system.",
+          both: "MOD + DUO = MODUO · productivity, assembled your way.",
+        };
+
+        var show = function (state) {
+          if (state) plate.setAttribute("data-show", state);
+          else plate.removeAttribute("data-show");
           if (!legend) return;
-          legend.classList.toggle("is-on", !!target);
-          legend.textContent = target
-            ? "Module " + (Array.prototype.indexOf.call(letters, target) + 1) + " of 5 · " + target.getAttribute("data-mod")
-            : legendIdle;
+          legend.classList.toggle("is-on", !!state);
+          legend.textContent = state ? MEANING[state] : legendIdle;
         };
 
         var sweep = function () {
+          var seq = [
+            ["mod", 1900],
+            ["duo", 1900],
+            ["both", 2600],
+            [null, 0],
+          ];
           var i = 0;
           var step = function () {
             if (plate.classList.contains("is-hovering")) return;
-            lightLetter(letters[i] || null);
+            show(seq[i][0]);
             i += 1;
-            if (i <= letters.length) setTimeout(step, 420);
+            if (i < seq.length) setTimeout(step, seq[i - 1][1]);
           };
           step();
         };
@@ -6961,12 +6978,12 @@
           each(letters, function (l) {
             l.addEventListener("pointerenter", function () {
               plate.classList.add("is-hovering");
-              lightLetter(l);
+              show(l.getAttribute("data-g"));
             });
           });
           word.addEventListener("pointerleave", function () {
             plate.classList.remove("is-hovering");
-            lightLetter(null);
+            show(null);
           });
           if (fine && !reduce) initTracking();
         };
