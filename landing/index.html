@@ -3,19 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Moduo — Fire five apps. Keep the work.</title>
+    <title>Moduo — Every app you need. None you don’t.</title>
     <meta
       name="description"
-      content="Fire five apps. Keep the work. Notes, tasks, email, calendar, and mind maps in one window that links them. You don’t build a system. You just work."
+      content="One modular app for your whole working life: tasks, notes, email, calendar, mind maps — and planning, time tracking, invoicing, goals and more. Turn on what you need. Moduo connects it."
     />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#000000" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://www.moduo.app/" />
-    <meta property="og:title" content="Moduo — Fire five apps. Keep the work." />
+    <meta property="og:title" content="Moduo — Every app you need. None you don’t." />
     <meta
       property="og:description"
-      content="Fire five apps. Keep the work. Notes, tasks, email, calendar, and mind maps — linked, in one window."
+      content="One modular app that connects your tasks, notes, email, calendar and more — with any AI over MCP."
     />
     <meta name="twitter:card" content="summary" />
     <link rel="canonical" href="https://www.moduo.app/" />
@@ -991,282 +991,6 @@
       .stage-title.is-swap {
         animation: pv-in var(--motion-slow) var(--ease-out);
       }
-      .scenes {
-        position: absolute;
-        inset: 2.75rem 0 3rem;
-      }
-      .scene {
-        position: absolute;
-        inset: 0;
-        padding: 1.5rem 1.75rem;
-        opacity: 0;
-        transform: scale(0.985);
-        filter: blur(var(--blur-veil));
-        pointer-events: none;
-        transition:
-          opacity var(--motion-slower) var(--ease-out),
-          transform var(--motion-slower) var(--ease-out),
-          filter var(--motion-slower) var(--ease-out);
-      }
-      .scene.is-on {
-        opacity: 1;
-        transform: none;
-        filter: none;
-      }
-      .slot {
-        visibility: hidden;
-      }
-      .s-label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.875rem;
-        font-size: var(--text-2xs);
-        font-weight: 500;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--faint-foreground);
-      }
-      .s-hint {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.375rem;
-        margin-left: auto;
-        letter-spacing: 0;
-        text-transform: none;
-        font-weight: 400;
-        font-size: var(--text-xs);
-      }
-      .s-row {
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        height: 2.75rem;
-        padding-inline: 0.875rem;
-        border-radius: var(--radius-md);
-        font-size: var(--text-base);
-        color: var(--subtle-foreground);
-        white-space: nowrap;
-        overflow: hidden;
-      }
-      .s-row + .s-row {
-        margin-top: 0.25rem;
-      }
-      .s-row b,
-      .face b {
-        font-weight: 500;
-        color: var(--muted-foreground);
-      }
-      .s-sub {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        color: var(--faint-foreground);
-      }
-      .s-time {
-        margin-left: auto;
-        font-size: var(--text-xs);
-        color: var(--faint-foreground);
-      }
-      .s-row.is-done span:not(.ck) {
-        text-decoration: line-through;
-        color: var(--faint-foreground);
-      }
-      .cal {
-        position: relative;
-        height: 100%;
-      }
-      .hr {
-        position: absolute;
-        left: 0;
-        right: 0;
-        border-top: 1px solid var(--border);
-        font-size: var(--text-2xs);
-        color: var(--faint-foreground);
-      }
-      .hr span {
-        position: absolute;
-        top: -0.5rem;
-        left: 0;
-        padding-right: 0.5rem;
-        background: var(--card);
-      }
-      .blk {
-        position: absolute;
-        left: 3rem;
-        right: 0;
-        padding: 0.375rem 0.75rem;
-        border-radius: var(--radius-md);
-        background: var(--accent);
-        font-size: var(--text-xs);
-        color: var(--subtle-foreground);
-      }
-      .doc h4 {
-        font-size: var(--text-xl);
-        font-weight: 600;
-        letter-spacing: -0.02em;
-        color: var(--muted-foreground);
-      }
-      .doc .meta {
-        margin-top: 0.25rem;
-        font-size: var(--text-xs);
-        color: var(--faint-foreground);
-      }
-      .doc p {
-        margin-top: 1rem;
-        max-width: 30rem;
-        font-size: var(--text-base);
-        line-height: 1.65;
-        color: var(--subtle-foreground);
-      }
-      .doc .s-label {
-        margin-top: 1.25rem;
-        margin-bottom: 0.5rem;
-      }
-      .s-embed {
-        height: 3rem;
-        border-radius: var(--radius-md);
-      }
-      .map {
-        position: relative;
-        height: 100%;
-      }
-      .map svg {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        fill: none;
-        stroke: var(--border-strong);
-        stroke-width: 1;
-      }
-      .map svg path {
-        vector-effect: non-scaling-stroke;
-      }
-      .node {
-        position: absolute;
-        transform: translate(-50%, -50%);
-        height: 2.25rem;
-        padding-inline: 0.875rem;
-        display: flex;
-        align-items: center;
-        border: 1px solid var(--border);
-        border-radius: 1.125rem;
-        background: var(--card);
-        font-size: var(--text-sm);
-        color: var(--subtle-foreground);
-        white-space: nowrap;
-      }
-      .node.is-root {
-        background: var(--primary);
-        border-color: var(--primary);
-        color: var(--primary-foreground);
-        font-weight: 500;
-      }
-      .s-node {
-        position: absolute;
-        width: 8.5rem;
-        height: 2.25rem;
-        border-radius: 1.125rem;
-      }
-
-      .obj {
-        position: absolute;
-        top: 0;
-        left: 0;
-        z-index: 3;
-        width: var(--w, 0);
-        height: var(--h, 0);
-        transform: translate(var(--x, 0), var(--y, 0));
-        border-radius: var(--r, var(--radius-md));
-        border: 1px solid var(--border-strong);
-        background: var(--popover);
-        box-shadow:
-          var(--shadow-md),
-          0 0 0 4px color-mix(in oklab, var(--foreground) 4%, transparent);
-        overflow: hidden;
-        transition:
-          transform 760ms var(--ease-out),
-          width 760ms var(--ease-out),
-          height 760ms var(--ease-out),
-          border-radius 760ms var(--ease-out);
-      }
-      .obj.no-anim {
-        transition: none;
-      }
-      .face {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        padding-inline: 0.875rem;
-        font-size: var(--text-base);
-        color: var(--foreground);
-        white-space: nowrap;
-        opacity: 0;
-        transition: opacity var(--motion-base) var(--ease-out);
-      }
-      .face .t {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .face b {
-        color: var(--foreground);
-      }
-      .face-event {
-        flex-direction: column;
-        align-items: flex-start;
-        justify-content: flex-start;
-        gap: 0.125rem;
-        padding: 0.625rem 0.875rem;
-      }
-      .face-event .s-time {
-        margin: 0;
-      }
-      .face-node {
-        justify-content: center;
-      }
-      .obj[data-face="mail"] .face-mail,
-      .obj[data-face="task"] .face-task,
-      .obj[data-face="event"] .face-event,
-      .obj[data-face="note"] .face-note,
-      .obj[data-face="node"] .face-node {
-        opacity: 1;
-        transition-delay: 260ms;
-        transition-duration: var(--motion-slow);
-      }
-      .stage-foot {
-        position: absolute;
-        inset: auto 0 0;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        height: 3rem;
-        padding-inline: 1rem;
-        border-top: 1px solid var(--border);
-        font-size: var(--text-xs);
-        color: var(--faint-foreground);
-        overflow: hidden;
-      }
-      .trail {
-        display: flex;
-        gap: 0.375rem;
-      }
-      .trail .ref {
-        opacity: 0;
-        transform: translateY(4px) scale(0.96);
-        transition:
-          opacity var(--motion-slow) var(--ease-out),
-          transform var(--motion-slow) var(--ease-spring);
-      }
-      .trail .ref.is-on {
-        opacity: 1;
-        transform: none;
-        color: var(--muted-foreground);
-      }
-
       /* ─── Make it yours ─────────────────────────────────────────────────── */
       .studio {
         margin-top: clamp(3.5rem, 7vw, 5.5rem);
@@ -1771,6 +1495,9 @@
         .s-sub {
           display: none;
         }
+        .big {
+          font-size: 1.625rem;
+        }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -1785,6 +1512,825 @@
         .mini-map path {
           animation: none;
           stroke-dashoffset: 0;
+        }
+      }
+      /* ─── Module strip ──────────────────────────────────────────────────── */
+      .marquee {
+        overflow: hidden;
+        -webkit-mask-image: linear-gradient(90deg, transparent, var(--background) 12%, var(--background) 88%, transparent);
+        mask-image: linear-gradient(90deg, transparent, var(--background) 12%, var(--background) 88%, transparent);
+      }
+      .marquee-label {
+        margin-top: clamp(5rem, 10vw, 8rem);
+        margin-bottom: 1.25rem;
+        text-align: center;
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .marquee-track {
+        display: flex;
+        gap: 0.5rem;
+        width: max-content;
+        animation: marquee 48s linear infinite;
+      }
+      .marquee:hover .marquee-track {
+        animation-play-state: paused;
+      }
+      @keyframes marquee {
+        to {
+          transform: translateX(-50%);
+        }
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        height: 2.25rem;
+        padding-inline: 0.875rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-full);
+        font-size: var(--text-sm);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .chip.is-more {
+        border-style: dashed;
+        color: var(--subtle-foreground);
+      }
+
+      /* ─── Relations (story stage) ───────────────────────────────────────── */
+      .rel-fit {
+        position: absolute;
+        inset: 2.75rem 0 3rem;
+        overflow: hidden;
+      }
+      .rel {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 704px;
+        height: 452px;
+        transform: translate(-50%, -50%) scale(var(--s, 1));
+      }
+      .rel-edges {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: var(--border-strong);
+        stroke-width: 1.25;
+      }
+      .rel-edges path {
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+        transition: stroke-dashoffset 900ms var(--ease-out) 150ms;
+      }
+      .rel-edges path.is-on {
+        stroke-dashoffset: 0;
+      }
+      .rc {
+        position: absolute;
+        width: 196px;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--popover);
+        box-shadow: var(--shadow-md);
+        font-size: var(--text-sm);
+      }
+      .rc[data-s] {
+        opacity: 0;
+        transform: translateY(8px) scale(0.96);
+        filter: blur(var(--blur-veil));
+        transition:
+          opacity var(--motion-slower) var(--ease-out) 350ms,
+          transform var(--motion-slower) var(--ease-out) 350ms,
+          filter var(--motion-slower) var(--ease-out) 350ms;
+      }
+      .rc[data-s].is-on {
+        opacity: 1;
+        transform: none;
+        filter: none;
+      }
+      .rc-kind {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .rc-title {
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .rc-sub {
+        margin-top: 2px;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .rc-mail {
+        left: 232px;
+        top: 150px;
+        width: 240px;
+        min-height: 104px;
+        z-index: 2;
+        border-color: var(--border-strong);
+      }
+      .rc-mail .who {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+      }
+      .rc-mail .who .t {
+        margin-left: auto;
+        color: var(--faint-foreground);
+      }
+      .rc-mail p {
+        font-size: var(--text-sm);
+        line-height: 1.55;
+        color: var(--muted-foreground);
+      }
+      .rc-mail mark {
+        background: transparent;
+        color: inherit;
+        border-radius: var(--radius-sm);
+        padding-inline: 2px;
+        transition:
+          background-color var(--motion-slow) var(--ease-out),
+          color var(--motion-slow) var(--ease-out);
+      }
+      .rc-mail mark.is-on {
+        background: color-mix(in oklab, var(--primary) 16%, transparent);
+        color: var(--foreground);
+      }
+      .rc-list {
+        margin-top: 8px;
+        display: grid;
+        gap: 6px;
+      }
+      .rc-list div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+      }
+      .rc-list .ck {
+        width: 0.875rem;
+        height: 0.875rem;
+      }
+      .rc-badge {
+        display: inline-flex;
+        align-items: center;
+        height: 1.125rem;
+        margin-left: 6px;
+        padding-inline: 6px;
+        border-radius: var(--radius-full);
+        background: color-mix(in oklab, var(--success) 18%, transparent);
+        color: var(--success);
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        vertical-align: 1px;
+      }
+      .rc-hint {
+        left: 232px;
+        top: 330px;
+        width: 240px;
+        border-color: var(--border-strong);
+        box-shadow:
+          var(--shadow-lg),
+          0 0 0 4px color-mix(in oklab, var(--foreground) 5%, transparent);
+      }
+      .rc-hint .btn {
+        width: 100%;
+        margin-top: 10px;
+      }
+      .rc-hint .btn.is-done {
+        background: color-mix(in oklab, var(--success) 18%, var(--card));
+        color: var(--success);
+      }
+      .stage-foot {
+        position: absolute;
+        inset: auto 0 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: 3rem;
+        padding-inline: 1rem;
+        border-top: 1px solid var(--border);
+        font-size: var(--text-xs);
+        color: var(--faint-foreground);
+        overflow: hidden;
+      }
+      .rel-foot {
+        gap: 1.25rem;
+      }
+      .rel-foot b {
+        font-weight: 600;
+        color: var(--foreground);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ─── Studio: module switches + widget store ────────────────────────── */
+      .studio-note {
+        margin-left: auto;
+        font-size: var(--text-xs);
+        color: var(--faint-foreground);
+      }
+      .studio-body {
+        position: relative;
+        grid-template-columns: 14rem minmax(0, 1fr);
+        min-height: 33rem;
+      }
+      .side-label {
+        padding: 0.25rem 0.5rem 0.5rem;
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .sw-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        width: 100%;
+        height: 2.125rem;
+        padding-inline: 0.5rem;
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        color: var(--faint-foreground);
+        text-align: left;
+        transition:
+          color var(--motion-base) var(--ease-out),
+          background-color var(--motion-fade) var(--ease-out);
+      }
+      .sw-row:hover {
+        background: var(--accent);
+      }
+      .sw-row[aria-checked="true"] {
+        color: var(--foreground);
+      }
+      .sw-row .nm {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .sw {
+        position: relative;
+        width: 1.75rem;
+        height: 1rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        flex-shrink: 0;
+        transition: background-color var(--motion-base) var(--ease-out);
+      }
+      .sw::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: var(--radius-full);
+        background: var(--subtle-foreground);
+        transition:
+          transform var(--motion-slow) var(--ease-spring),
+          background-color var(--motion-base) var(--ease-out);
+      }
+      .sw-row[aria-checked="true"] .sw {
+        background: var(--primary);
+      }
+      .sw-row[aria-checked="true"] .sw::after {
+        transform: translateX(0.75rem);
+        background: var(--primary-foreground);
+      }
+      .sw-row.is-denied {
+        animation: shake 360ms var(--ease-out);
+      }
+      .side-more {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: auto;
+        padding: 0.75rem 0.5rem 0.25rem;
+        font-size: var(--text-xs);
+        color: var(--faint-foreground);
+      }
+      .board-head .btn + .btn {
+        margin-left: 0;
+      }
+      .wd-x {
+        display: grid;
+        place-items: center;
+        width: 1.25rem;
+        height: 1.25rem;
+        margin-left: auto;
+        border-radius: var(--radius-sm);
+        color: var(--faint-foreground);
+        opacity: 0;
+        transition:
+          opacity var(--motion-fade) var(--ease-out),
+          background-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out);
+      }
+      .wd-x:hover {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .wd-x + .wd-grip {
+        margin-left: 0;
+      }
+      .wd:hover .wd-x,
+      .wd:focus-within .wd-x {
+        opacity: 1;
+      }
+      @media (hover: none) {
+        .wd-x {
+          opacity: 1;
+        }
+      }
+      .wd.is-new {
+        box-shadow: 0 0 0 1px var(--border-strong), 0 0 0 5px color-mix(in oklab, var(--foreground) 7%, transparent);
+      }
+      .big .of {
+        font-size: var(--text-sm);
+        font-weight: 400;
+        letter-spacing: 0;
+        color: var(--subtle-foreground);
+      }
+      .meter {
+        height: 4px;
+        margin-top: 0.625rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        overflow: hidden;
+      }
+      .meter i {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--foreground);
+      }
+      .rec {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        margin-right: 6px;
+        border-radius: var(--radius-full);
+        background: var(--success);
+        vertical-align: 1px;
+        animation: rec 1.6s ease-in-out infinite;
+      }
+      @keyframes rec {
+        50% {
+          opacity: 0.25;
+        }
+      }
+
+      .store-scrim {
+        position: absolute;
+        inset: 0;
+        z-index: 8;
+        background: color-mix(in oklab, var(--background) 55%, transparent);
+        -webkit-backdrop-filter: blur(4px);
+        backdrop-filter: blur(4px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--motion-slow) var(--ease-out);
+      }
+      .store-panel {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9;
+        display: flex;
+        flex-direction: column;
+        width: min(28rem, 100%);
+        border-left: 1px solid var(--border);
+        background: var(--card);
+        box-shadow: var(--shadow-overlay);
+        transform: translateX(104%);
+        visibility: hidden;
+        transition:
+          transform var(--motion-slower) var(--ease-out),
+          visibility 0s linear var(--motion-slower);
+      }
+      .studio-body.is-store .store-scrim {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .studio-body.is-store .store-panel {
+        transform: none;
+        visibility: visible;
+        transition: transform var(--motion-slower) var(--ease-out);
+      }
+      .store-head {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem 1rem 0.75rem;
+      }
+      .store-head h3 {
+        font-size: var(--text-lg);
+        font-weight: 600;
+        letter-spacing: -0.015em;
+      }
+      .store-head .muted {
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .icon-btn {
+        display: grid;
+        place-items: center;
+        width: var(--ctrl-h-sm);
+        height: var(--ctrl-h-sm);
+        margin-left: auto;
+        border-radius: var(--radius-md);
+        color: var(--subtle-foreground);
+      }
+      .icon-btn:hover {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .store-search {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: var(--ctrl-h);
+        margin-inline: 1rem;
+        padding-inline: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--background);
+        color: var(--subtle-foreground);
+      }
+      .store-search:focus-within {
+        border-color: var(--border-strong);
+      }
+      .store-search input {
+        flex: 1;
+        min-width: 0;
+        background: none;
+        border: 0;
+        outline: 0;
+        font: inherit;
+        font-size: var(--text-sm);
+        color: var(--foreground);
+      }
+      .store-cats {
+        display: flex;
+        gap: 0.375rem;
+        padding: 0.75rem 1rem;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .store-cats::-webkit-scrollbar {
+        display: none;
+      }
+      .store-cats button {
+        height: var(--ctrl-h-sm);
+        padding-inline: 0.625rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-full);
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        white-space: nowrap;
+        transition:
+          background-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out);
+      }
+      .store-cats button[aria-pressed="true"] {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .store-grid {
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-content: start;
+        gap: 0.5rem;
+        padding: 0 1rem 1rem;
+        overflow-y: auto;
+      }
+      .sc {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-height: 7rem;
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--background);
+        text-align: left;
+        transition:
+          border-color var(--motion-fade) var(--ease-out),
+          transform var(--motion-base) var(--ease-out);
+        animation: pv-in var(--motion-slow) var(--ease-out) both;
+        animation-delay: calc(var(--k, 0) * 18ms);
+      }
+      .sc:hover:not(:disabled) {
+        border-color: var(--border-strong);
+        transform: translateY(-1px);
+      }
+      .sc:disabled {
+        cursor: default;
+        opacity: 0.55;
+      }
+      .sc-top {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: var(--text-2xs);
+        color: var(--faint-foreground);
+      }
+      .sc-size {
+        margin-left: auto;
+        font-family: var(--font-mono);
+      }
+      .sc-title {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .sc-peek {
+        margin-top: auto;
+        font-size: var(--text-lg);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--muted-foreground);
+      }
+      .sc-add {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .sc:hover:not(:disabled) .sc-add {
+        color: var(--foreground);
+      }
+      .store-empty {
+        grid-column: 1 / -1;
+        padding: 2rem 0;
+        text-align: center;
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .store-foot {
+        padding: 0.75rem 1rem;
+        border-top: 1px solid var(--border);
+        font-size: var(--text-xs);
+        color: var(--faint-foreground);
+      }
+
+      /* ─── MCP ───────────────────────────────────────────────────────────── */
+      .mcp {
+        display: grid;
+        grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+        margin-top: clamp(3.5rem, 7vw, 5.5rem);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        background: var(--card);
+        box-shadow: var(--shadow-lg);
+        overflow: hidden;
+      }
+      .mcp-side {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 1.5rem;
+        border-right: 1px solid var(--border);
+      }
+      .mcp-label {
+        margin-bottom: 0.25rem;
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .prompt {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        min-height: 2.75rem;
+        padding: 0.5rem 0.875rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        color: var(--muted-foreground);
+        text-align: left;
+        transition:
+          background-color var(--motion-fade) var(--ease-out),
+          border-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out);
+      }
+      .prompt:hover {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .prompt[aria-pressed="true"] {
+        border-color: var(--border-strong);
+        background: var(--selected-bg);
+        box-shadow: inset 2px 0 0 var(--primary);
+        color: var(--foreground);
+      }
+      .mcp-clients {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+        margin-top: auto;
+        padding-top: 1.5rem;
+      }
+      .mcp-main {
+        display: flex;
+        flex-direction: column;
+        min-height: 27rem;
+      }
+      .mcp-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: 2.75rem;
+        padding-inline: 1.25rem;
+        border-bottom: 1px solid var(--border);
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .live-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: var(--radius-full);
+        background: var(--success);
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--success) 20%, transparent);
+      }
+      .mcp-chat {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1.5rem 1.25rem;
+      }
+      .msg,
+      .tool {
+        animation: pv-in var(--motion-slow) var(--ease-out) both;
+      }
+      .msg-user {
+        align-self: flex-end;
+        max-width: 80%;
+        padding: 0.625rem 0.875rem;
+        border-radius: var(--radius-lg);
+        background: var(--accent);
+        font-size: var(--text-sm);
+      }
+      .tool {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .tool code {
+        color: var(--foreground);
+      }
+      .tool .args {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--faint-foreground);
+      }
+      .tool .res {
+        margin-left: auto;
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity var(--motion-base) var(--ease-out);
+      }
+      .tool.is-done .res {
+        opacity: 1;
+        color: var(--muted-foreground);
+      }
+      .tool-dot {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: var(--radius-full);
+        border: 1.5px solid var(--border-strong);
+        border-top-color: var(--foreground);
+        flex-shrink: 0;
+        animation: spin 700ms linear infinite;
+      }
+      .tool.is-done .tool-dot {
+        border-color: var(--success);
+        background: var(--success);
+        animation: check-pop var(--motion-slow) var(--ease-spring);
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .msg-ai {
+        display: flex;
+        gap: 0.75rem;
+        max-width: 92%;
+        font-size: var(--text-md);
+        line-height: 1.6;
+        color: var(--muted-foreground);
+      }
+      .msg-ai .mark {
+        width: 1.25rem;
+        height: 1.25rem;
+        margin-top: 0.15rem;
+      }
+      .mcp-perms {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.875rem 1.25rem;
+        border-top: 1px solid var(--border);
+        font-size: var(--text-xs);
+        color: var(--faint-foreground);
+      }
+      .mcp-perms .ref.ok {
+        color: var(--muted-foreground);
+      }
+
+      @media (max-width: 900px) {
+        .studio-body {
+          grid-template-columns: 1fr;
+        }
+        .side.side {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.625rem;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+        .side-ws,
+        .side-label,
+        .side-more {
+          display: none;
+        }
+        .sw-row {
+          width: auto;
+          flex-shrink: 0;
+          border: 1px solid var(--border);
+          border-radius: var(--radius-full);
+        }
+        .studio-note {
+          display: none;
+        }
+        .mcp {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .mcp-main {
+          min-height: 24rem;
+        }
+        .mcp-side {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .mcp-clients {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .marquee-track,
+        .rec,
+        .tool-dot {
+          animation: none;
+        }
+        .marquee-track {
+          flex-wrap: wrap;
+          justify-content: center;
+          width: auto;
+        }
+        .rel-edges path,
+        .rc[data-s] {
+          transition: none;
         }
       }
     </style>
@@ -1898,6 +2444,37 @@
             <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
           </g>
         </symbol>
+        <symbol id="i-timer" viewBox="0 0 24 24">
+          <circle cx="12" cy="13.5" r="7" />
+          <path d="M12 10v3.5l2 1.5M10 3h4M12 3v3.5" />
+        </symbol>
+        <symbol id="i-invoice" viewBox="0 0 24 24">
+          <path d="M6 3.5h12v17l-2.5-1.5-2 1.5-1.5-1.2-1.5 1.2-2-1.5L6 20.5z" />
+          <path d="M9 8.5h6M9 12h6M9 15.5h3.5" />
+        </symbol>
+        <symbol id="i-wallet" viewBox="0 0 24 24">
+          <rect x="3.5" y="6" width="17" height="13" rx="2" />
+          <path d="M3.5 9.5h17M15.5 14h2" />
+        </symbol>
+        <symbol id="i-target" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8.5" />
+          <circle cx="12" cy="12" r="5" />
+          <circle cx="12" cy="12" r="1.5" />
+        </symbol>
+        <symbol id="i-deal" viewBox="0 0 24 24">
+          <rect x="3.5" y="7.5" width="17" height="12" rx="2" />
+          <path d="M9 7.5v-2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3.5 12.5h17" />
+        </symbol>
+        <symbol id="i-plan" viewBox="0 0 24 24">
+          <path d="M5.5 20.5V4M5.5 4.5h11l-2 4 2 4h-11" />
+        </symbol>
+        <symbol id="i-form" viewBox="0 0 24 24">
+          <rect x="4.5" y="3.5" width="15" height="17" rx="2" />
+          <path d="M8 8h8M8 12h8M8 16h4" />
+        </symbol>
+        <symbol id="i-sparkle" viewBox="0 0 24 24">
+          <path d="M12 3.5l1.8 5.2 5.2 1.8-5.2 1.8L12 17.5l-1.8-5.2L5 10.5l5.2-1.8z" />
+        </symbol>
       </defs>
     </svg>
 
@@ -1909,8 +2486,9 @@
           Moduo
         </a>
         <nav class="nav-links" aria-label="Sections">
-          <a class="btn btn-ghost" href="#story">How it works</a>
+          <a class="btn btn-ghost" href="#story">How it connects</a>
           <a class="btn btn-ghost" href="#yours">Make it yours</a>
+          <a class="btn btn-ghost" href="#ai">AI</a>
           <a class="btn btn-ghost" href="#principles">Principles</a>
         </nav>
         <div class="nav-actions">
@@ -1925,19 +2503,19 @@
       <section class="hero" id="top" aria-labelledby="hero-title">
         <div class="container hero-copy">
           <h1 class="h-hero" id="hero-title">
-            <span class="line">Fire five apps.</span>
-            <span class="line soft">Keep the work.</span>
+            <span class="line">Every app you need.</span>
+            <span class="line soft">None you don’t.</span>
           </h1>
           <p class="lead hero-fade" style="--d: 520ms">
-            Notes, tasks, email, calendar and mind maps that already know about each other.
-            <span class="fg">You don’t build a system. You just work.</span>
+            Tasks, notes, email, calendar and mind maps — with planning, time tracking, invoicing,
+            goals and more on the way. Switch on what you need. <span class="fg">Moduo connects all of it.</span>
           </p>
           <div class="hero-cta hero-fade" style="--d: 640ms">
             <a class="btn btn-primary btn-lg" href="https://app.moduo.app/auth">
               Get started
               <svg class="icon icon-sm arrow" aria-hidden="true"><use href="#i-arrow" /></svg>
             </a>
-            <a class="btn btn-outline btn-lg" href="#story">See how it works</a>
+            <a class="btn btn-outline btn-lg" href="#story">See how it connects</a>
           </div>
         </div>
 
@@ -1974,8 +2552,15 @@
           <div class="pal-try">
             Try
             <button type="button" data-q="anna">anna</button>
-            <button type="button" data-q="friday">friday</button>
+            <button type="button" data-q="phase 1">phase 1</button>
             <button type="button" data-q="launch">launch</button>
+          </div>
+        </div>
+
+        <div class="hero-fade" style="--d: 980ms">
+          <div class="marquee-label">One app · switch modules on per workspace</div>
+          <div class="marquee" aria-label="Modules: tasks, notes, email, calendar, mind maps, contacts, planning, time tracking, invoicing, budgets, goals, forms, docs and more">
+            <div class="marquee-track" aria-hidden="true"><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>Tasks</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Notes</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg>Email</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mindmap" /></svg>Mind maps</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-contact" /></svg>Contacts</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-plan" /></svg>Planning</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-timer" /></svg>Time tracking</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-invoice" /></svg>Invoicing</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-wallet" /></svg>Budgets</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-target" /></svg>Goals</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-form" /></svg>Forms</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Docs</span><span class="chip is-more">&amp; more</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>Tasks</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Notes</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mail" /></svg>Email</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-mindmap" /></svg>Mind maps</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-contact" /></svg>Contacts</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-plan" /></svg>Planning</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-timer" /></svg>Time tracking</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-invoice" /></svg>Invoicing</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-wallet" /></svg>Budgets</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-target" /></svg>Goals</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-form" /></svg>Forms</span><span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-notes" /></svg>Docs</span><span class="chip is-more">&amp; more</span></div>
           </div>
         </div>
       </section>
@@ -1984,9 +2569,9 @@
       <section id="story" aria-labelledby="story-title">
         <div class="container story-head">
           <div class="section-head center reveal">
-            <div class="eyebrow">How it works</div>
-            <h2 class="h-section" id="story-title">One email. Five shapes.<br /><span class="soft">Zero copy-paste.</span></h2>
-            <p class="lead">Other tools make you move information between apps. In Moduo, the thing itself moves — and keeps every link on the way.</p>
+            <div class="eyebrow">Smart relations</div>
+            <h2 class="h-section" id="story-title">It already knows<br /><span class="soft">how your work connects.</span></h2>
+            <p class="lead">No tagging. No linking by hand. Moduo reads what comes in and connects it to the people, projects, deadlines, hours and money it belongs to.</p>
           </div>
         </div>
 
@@ -1995,94 +2580,70 @@
             <div class="container story-grid">
               <div class="story-copy">
                 <ol class="steps">
-                  <li><button class="step" type="button"><span class="n">01</span><span class="h">It lands in your inbox.</span><span class="p"><span class="pi"><span class="pt">Anna sends the brief. You don’t forward it, star it, or paste it anywhere.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">02</span><span class="h">One key makes it a task.</span><span class="p"><span class="pi"><span class="pt">Press T. The email stays attached, Anna stays linked, and the task remembers where it came from.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">03</span><span class="h">Drag it into your day.</span><span class="p"><span class="pi"><span class="pt">A deadline is a wish. A time block is a plan. Your calendar finally shows the real day.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">04</span><span class="h">Mention it in a note.</span><span class="p"><span class="pi"><span class="pt">Drop it into the kickoff doc. Check it off there or in your list — it’s the same task.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">05</span><span class="h">Zoom out to the map.</span><span class="p"><span class="pi"><span class="pt">When the project grows, it’s a branch on the plan. Still the same thing. Still linked to Anna’s email.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">01</span><span class="h">A message lands.</span><span class="p"><span class="pi"><span class="pt">Tomasz: the client wants the demo on Thursday. Can we still hit the 15th?</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">02</span><span class="h">Moduo reads it.</span><span class="p"><span class="pi"><span class="pt">It recognises the project, the deadline and the demo — and links all three. You didn’t tag a thing.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">03</span><span class="h">It finds what’s left.</span><span class="p"><span class="pi"><span class="pt">Three subtasks are still open before the 15th. They surface right next to the message.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">04</span><span class="h">It remembers the client.</span><span class="p"><span class="pi"><span class="pt">Phase 1 with Kowalska Studio was won in June. This demo is Phase 2 — same people, same thread.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">05</span><span class="h">It nudges the money.</span><span class="p"><span class="pi"><span class="pt">38 hours of Phase 1 are tracked but never invoiced. One click drafts the invoice.</span></span></span></button></li>
                 </ol>
                 <div class="story-bar" aria-hidden="true"><i id="story-bar"></i></div>
               </div>
 
-              <div class="stage" id="stage" aria-hidden="true">
-                <div class="stage-bar">
+              <div class="stage" id="stage">
+                <div class="stage-bar" aria-hidden="true">
                   <div class="lights"><span></span><span></span><span></span></div>
-                  <div class="stage-title" id="stage-title">Inbox</div>
+                  <div class="stage-title">Inbox — Kowalska demo</div>
                   <div></div>
                 </div>
-                <div class="scenes">
-                  <div class="scene">
-                    <div class="s-label">Inbox · 4 new</div>
-                    <div class="s-row"><span class="av">TW</span><b>Tomasz Wiśniewski</b><span class="s-sub">Studio call moved to 16:30</span><span class="s-time">8:40</span></div>
-                    <div class="s-row slot"></div>
-                    <div class="s-row"><span class="av">MN</span><b>Marta Nowak</b><span class="s-sub">Re: logo files</span><span class="s-time">Yesterday</span></div>
-                    <div class="s-row"><span class="av">JB</span><b>Julia Baran</b><span class="s-sub">Photos from the shoot</span><span class="s-time">Mon</span></div>
-                    <div class="s-row"><span class="av">PL</span><b>Piotr Lis</b><span class="s-sub">Partner list for the launch</span><span class="s-time">Mon</span></div>
-                  </div>
-                  <div class="scene">
-                    <div class="s-label">Today <span class="s-hint"><span class="kbd">T</span>made a task from the email</span></div>
-                    <div class="s-row slot"></div>
-                    <div class="s-row"><span class="ck"></span><span>Draft the Q4 proposal</span><span class="s-time">13:00</span></div>
-                    <div class="s-row"><span class="ck"></span><span>Prep notes for the studio call</span><span class="s-time">16:30</span></div>
-                    <div class="s-row is-done"><span class="ck"><svg viewBox="0 0 24 24"><use href="#i-check" /></svg></span><span>Book the photographer</span></div>
-                  </div>
-                  <div class="scene">
-                    <div class="cal">
-                      <div class="hr" style="top: 0%"><span>9:00</span></div>
-                      <div class="hr" style="top: 16.66%"><span>10:00</span></div>
-                      <div class="hr" style="top: 33.33%"><span>11:00</span></div>
-                      <div class="hr" style="top: 50%"><span>12:00</span></div>
-                      <div class="hr" style="top: 66.66%"><span>13:00</span></div>
-                      <div class="hr" style="top: 83.33%"><span>14:00</span></div>
-                      <div class="blk" style="top: 1%; height: 7%">Standup</div>
-                      <div class="blk slot" style="top: 34%; height: 23%"></div>
-                      <div class="blk" style="top: 67%; height: 15%">Draft the Q4 proposal</div>
+                <div class="rel-fit" id="rel-fit">
+                  <div class="rel" id="rel">
+                    <svg class="rel-edges" id="rel-edges" viewBox="0 0 704 452" aria-hidden="true"></svg>
+
+                    <div class="rc rc-mail">
+                      <div class="who"><span class="av">TW</span>Tomasz Wiśniewski<span class="t">9:41</span></div>
+                      <p>Client wants the <mark data-s="1">demo on Thursday</mark>. Can we still hit <mark data-s="1">the 15th</mark> for <mark data-s="3">Kowalska Phase 2</mark>?</p>
                     </div>
-                  </div>
-                  <div class="scene">
-                    <div class="doc">
-                      <h4>Kickoff — Kowalska rebrand</h4>
-                      <div class="meta">With Anna Kowalska · 30 September</div>
-                      <p>Anna wants the new identity live before the autumn launch. Marta owns the logo files; print needs final SVGs by Friday.</p>
-                      <div class="s-label">Next steps</div>
-                      <div class="s-embed slot"></div>
-                      <div class="s-row"><span class="ck"></span><span>Get final SVGs from Marta</span></div>
+
+                    <div class="rc" data-s="1" style="left: 16px; top: 18px">
+                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-plan" /></svg>Project</div>
+                      <div class="rc-title">Kowalska — Phase 2</div>
+                      <div class="rc-sub">Due 15 Oct · 9 days left</div>
                     </div>
-                  </div>
-                  <div class="scene">
-                    <div class="map">
-                      <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <path d="M50 50 C 36 50, 34 22, 20 22" />
-                        <path d="M50 50 C 36 50, 34 78, 22 78" />
-                        <path d="M50 50 C 64 50, 66 24, 78 24" />
-                        <path d="M50 50 C 64 50, 66 78, 80 78" />
-                      </svg>
-                      <div class="node" style="left: 20%; top: 22%">Logo files</div>
-                      <div class="node" style="left: 22%; top: 78%">Print run</div>
-                      <div class="node" style="left: 80%; top: 78%">Launch date</div>
-                      <div class="node is-root" style="left: 50%; top: 50%">Kowalska rebrand</div>
-                      <div class="s-node slot" style="left: calc(78% - 4.25rem); top: calc(24% - 1.125rem)"></div>
+                    <div class="rc" data-s="1" style="left: 492px; top: 18px">
+                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</div>
+                      <div class="rc-title">Demo with Anna</div>
+                      <div class="rc-sub">Thursday · 14:00 – 15:00</div>
+                    </div>
+                    <div class="rc" data-s="2" style="left: 16px; top: 196px">
+                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-tasks" /></svg>Subtasks · 3 open</div>
+                      <div class="rc-list">
+                        <div><span class="ck"></span>Final logo exports</div>
+                        <div><span class="ck"></span>Demo deck</div>
+                        <div><span class="ck"></span>Print proofs</div>
+                      </div>
+                      <div class="rc-sub" style="margin-top: 8px">4 done · all due before the 15th</div>
+                    </div>
+                    <div class="rc" data-s="3" style="left: 492px; top: 150px">
+                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-deal" /></svg>Deal</div>
+                      <div class="rc-title">Phase 1 <span class="rc-badge">Won</span></div>
+                      <div class="rc-sub">€12,000 · closed in June</div>
+                    </div>
+                    <div class="rc" data-s="4" style="left: 492px; top: 268px">
+                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-timer" /></svg>Time</div>
+                      <div class="rc-title">38h 20m tracked</div>
+                      <div class="rc-sub">Phase 1 · not invoiced</div>
+                    </div>
+                    <div class="rc rc-hint" data-s="4">
+                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-sparkle" /></svg>Suggestion</div>
+                      <div class="rc-title">Send the Phase 1 invoice?</div>
+                      <div class="rc-sub">38h 20m × €120 = €4,600 · to Anna Kowalska</div>
+                      <button class="btn btn-primary btn-sm" type="button" id="rel-draft">Draft invoice</button>
                     </div>
                   </div>
                 </div>
-
-                <div class="obj" id="obj" data-face="mail">
-                  <div class="face face-mail"><span class="av">AK</span><b>Anna Kowalska</b><span class="s-sub">Brief: Kowalska rebrand</span><span class="s-time">9:12</span></div>
-                  <div class="face face-task"><span class="ck"></span><span class="t">Send Anna the revised brand deck</span><span class="s-time"><span class="ref"><svg class="icon icon-xs"><use href="#i-mail" /></svg>Email</span></span></div>
-                  <div class="face face-event"><span class="s-time">11:00 – 12:30</span><b>Brand deck review</b><span class="s-sub">with Anna Kowalska</span></div>
-                  <div class="face face-note"><svg class="icon icon-sm"><use href="#i-tasks" /></svg><span class="t">Send Anna the revised brand deck</span><span class="s-time">Task · Friday</span></div>
-                  <div class="face face-node"><b>Brand deck</b></div>
-                </div>
-
-                <div class="stage-foot">
-                  Linked
-                  <div class="trail" id="trail">
-                    <span class="ref"><svg class="icon icon-xs"><use href="#i-mail" /></svg>Email</span>
-                    <span class="ref"><svg class="icon icon-xs"><use href="#i-tasks" /></svg>Task</span>
-                    <span class="ref"><svg class="icon icon-xs"><use href="#i-calendar" /></svg>Event</span>
-                    <span class="ref"><svg class="icon icon-xs"><use href="#i-notes" /></svg>Note</span>
-                    <span class="ref"><svg class="icon icon-xs"><use href="#i-mindmap" /></svg>Map</span>
-                  </div>
+                <div class="stage-foot rel-foot" aria-live="polite">
+                  <span>Connections found <b id="rel-found">0</b></span>
+                  <span>Tagged by you <b>0</b></span>
                 </div>
               </div>
             </div>
@@ -2094,8 +2655,8 @@
       <section class="section container" id="yours" aria-labelledby="yours-title">
         <div class="section-head center reveal">
           <div class="eyebrow">Make it yours</div>
-          <h2 class="h-section" id="yours-title">Your workspace should look like your work.<br /><span class="soft">Not ours.</span></h2>
-          <p class="lead">Every workspace picks its own modules and its own home screen. The studio doesn’t need your side project’s mind map — so it never sees it.</p>
+          <h2 class="h-section" id="yours-title">Your home is a board.<br /><span class="soft">Fill it with anything.</span></h2>
+          <p class="lead">Switch on the modules a workspace needs, then pin widgets from any of them — like the widgets on your desktop. A timer next to a budget next to today’s tasks. Your board, your rules.</p>
         </div>
 
         <div class="studio reveal" style="--d: 100ms">
@@ -2106,22 +2667,81 @@
               <button type="button" data-ws="personal" aria-pressed="false">Personal</button>
               <button type="button" data-ws="side" aria-pressed="false">Side project</button>
             </div>
-            <div class="mods" id="mods" role="group" aria-label="Modules in this workspace"></div>
+            <span class="studio-note">Every workspace keeps its own modules and its own board.</span>
           </div>
-          <div class="studio-body">
-            <aside class="side" id="side" aria-label="Sidebar preview"></aside>
+          <div class="studio-body" id="studio-body">
+            <aside class="side" id="side" aria-label="Modules in this workspace"></aside>
             <div class="board-wrap">
               <div class="board-head">
                 <h3>Home</h3>
                 <span class="muted" id="board-count"></span>
+                <button class="btn btn-secondary btn-sm" type="button" id="store-open">
+                  <svg class="icon icon-xs" aria-hidden="true"><use href="#i-plus" /></svg>Add widget
+                </button>
                 <button class="btn btn-outline btn-sm" type="button" id="board-reset">Reset</button>
               </div>
               <div class="board" id="board" aria-label="Home widgets"></div>
               <div class="board-hint">
-                <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-grip" /></svg>Drag a widget to rearrange</span>
-                <span>Turn a module off — it leaves the sidebar and the board</span>
-                <span><span class="kbd">⌥</span><span class="kbd">←</span><span class="kbd">→</span>move with the keyboard</span>
+                <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-grip" /></svg>Drag to rearrange</span>
+                <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-x" /></svg>Remove</span>
+                <span><span class="kbd">⌥</span><span class="kbd">←</span><span class="kbd">→</span>Move with the keyboard</span>
               </div>
+            </div>
+
+            <div class="store-scrim" id="store-scrim"></div>
+            <aside class="store-panel" id="store-panel" role="dialog" aria-modal="false" aria-labelledby="store-title">
+              <div class="store-head">
+                <div>
+                  <h3 id="store-title">Widget store</h3>
+                  <span class="muted" id="store-count"></span>
+                </div>
+                <button class="icon-btn" type="button" id="store-close" aria-label="Close the widget store">
+                  <svg class="icon icon-sm" aria-hidden="true"><use href="#i-x" /></svg>
+                </button>
+              </div>
+              <label class="store-search">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="#i-search" /></svg>
+                <span class="sr-only">Search widgets</span>
+                <input id="store-q" type="text" placeholder="Search widgets" autocomplete="off" spellcheck="false" />
+              </label>
+              <div class="store-cats" id="store-cats" role="group" aria-label="Categories"></div>
+              <div class="store-grid" id="store-grid"></div>
+              <div class="store-foot">New widgets ship with every module. Adding one switches its module on.</div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── MCP ───────────────────────────────────────────────────────── -->
+      <section class="section container" id="ai" aria-labelledby="ai-title">
+        <div class="section-head center reveal">
+          <div class="eyebrow">AI, your way</div>
+          <h2 class="h-section" id="ai-title">Plug in any AI.<br /><span class="soft">It sees what you allow.</span></h2>
+          <p class="lead">Moduo is an MCP server. Connect Claude, ChatGPT, Cursor or any MCP client, and it can search, link and act across your whole workspace — tool by tool, with your permission.</p>
+        </div>
+
+        <div class="mcp reveal" style="--d: 100ms">
+          <div class="mcp-side">
+            <div class="mcp-label">Ask your assistant</div>
+            <button class="prompt" type="button" data-prompt="0" aria-pressed="false"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-tasks" /></svg>What’s left before the Kowalska demo?</button>
+            <button class="prompt" type="button" data-prompt="1" aria-pressed="false"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-invoice" /></svg>Draft the Phase 1 invoice.</button>
+            <button class="prompt" type="button" data-prompt="2" aria-pressed="false"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg>Plan my Thursday around the demo.</button>
+            <div class="mcp-clients">
+              <span class="ref">Claude</span>
+              <span class="ref">ChatGPT</span>
+              <span class="ref">Cursor</span>
+              <span class="ref">Any MCP client</span>
+            </div>
+          </div>
+          <div class="mcp-main">
+            <div class="mcp-bar"><span class="live-dot" aria-hidden="true"></span>Your assistant · connected to Moduo over MCP</div>
+            <div class="mcp-chat" id="mcp-chat" aria-live="polite"></div>
+            <div class="mcp-perms">
+              Allowed
+              <span class="ref ok">Read workspace</span>
+              <span class="ref ok">Create tasks</span>
+              <span class="ref ok">Draft invoices</span>
+              <span class="ref">Send email · asks first</span>
             </div>
           </div>
         </div>
@@ -2136,7 +2756,7 @@
         </div>
         <ul class="refuse">
           <li><div class="no"><span>Databases you design before you can work.</span></div><p class="why">You came here to get things done — <b>not to model your life in tables.</b></p></li>
-          <li><div class="no"><span>An AI button on every screen.</span></div><p class="why">Connect the assistant you already trust. <b>Your workspace never trains anyone’s model.</b></p></li>
+          <li><div class="no"><span>An AI button on every screen.</span></div><p class="why">Bring your own over MCP. <b>Your workspace never trains anyone’s model.</b></p></li>
           <li><div class="no"><span>A wall of red overdue tasks.</span></div><p class="why">Falling behind is normal. <b>Shame isn’t a feature.</b></p></li>
         </ul>
       </section>
@@ -2144,8 +2764,8 @@
       <!-- ─── Close ─────────────────────────────────────────────────────── -->
       <section class="container close reveal" aria-labelledby="close-title">
         <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
-        <h2 class="h-section" id="close-title">Your whole working life.<br /><span class="soft">One quiet window.</span></h2>
-        <p class="lead">Free to start. Bring your inbox — Moduo does the linking. Leave whenever you like; your data comes with you.</p>
+        <h2 class="h-section" id="close-title">Your whole working life.<br /><span class="soft">One app that connects it.</span></h2>
+        <p class="lead">Free to start. Switch on the modules you need today and add the rest when you need them. Leave whenever you like — your data comes with you.</p>
         <div class="hero-cta">
           <a class="btn btn-primary btn-lg" href="https://app.moduo.app/auth">
             Get started
@@ -2164,7 +2784,7 @@
         </a>
         <span>© 2026 Moduo</span>
         <nav aria-label="Footer">
-          <a href="#story">How it works</a>
+          <a href="#story">How it connects</a>
           <a href="#yours">Make it yours</a>
           <a href="https://app.moduo.app/auth">Sign in</a>
         </nav>
@@ -2238,11 +2858,15 @@
           mail: { icon: "i-mail", kind: "Email", group: "Email" },
           notes: { icon: "i-notes", kind: "Note", group: "Notes" },
           calendar: { icon: "i-calendar", kind: "Event", group: "Calendar" },
+          deals: { icon: "i-deal", kind: "Deal", group: "Deals" },
+          time: { icon: "i-timer", kind: "Time", group: "Time" },
+          invoices: { icon: "i-invoice", kind: "Invoice", group: "Invoices" },
+          goals: { icon: "i-target", kind: "Goal", group: "Goals" },
           mindmap: { icon: "i-mindmap", kind: "Map", group: "Maps" },
         };
-        var GROUPS = ["contacts", "tasks", "mail", "notes", "calendar", "mindmap"];
+        var GROUPS = ["contacts", "tasks", "mail", "notes", "calendar", "deals", "time", "invoices", "goals", "mindmap"];
         var ITEMS = [
-          { id: "p1", mod: "contacts", title: "Anna Kowalska", meta: "Kowalska Studio · 14 linked", body: "Every email, task, note and meeting with Anna — in one place. Nobody logged any of it.", links: ["e1", "t1", "n1", "c1"] },
+          { id: "p1", mod: "contacts", title: "Anna Kowalska", meta: "Kowalska Studio · 14 linked", body: "Every email, task, note and meeting with Anna — in one place. Nobody logged any of it.", links: ["e1", "t1", "d1", "c1"] },
           { id: "p2", mod: "contacts", title: "Marta Nowak", meta: "Print & logo files · 6 linked", body: "Owns the logo files. Promised final SVGs by Friday — and Moduo remembers she did.", links: ["e2", "t2", "n1"] },
           { id: "t1", mod: "tasks", title: "Send Anna the revised brand deck", meta: "Today · Kowalska rebrand", body: "Made from Anna’s email with one key. The email is still attached; so is Anna.", links: ["e1", "c1", "p1"] },
           { id: "t2", mod: "tasks", title: "Get final SVGs from Marta", meta: "Friday · from the kickoff note", body: "Was a checkbox in a meeting note. Now it’s a real task with a date — in both places.", links: ["n1", "e2", "p2"] },
@@ -2253,6 +2877,10 @@
           { id: "n2", mod: "notes", title: "Launch brainstorm", meta: "14 September", body: "Everything we said at the whiteboard, typed up and linked to the plan.", links: ["m1", "t3"] },
           { id: "c1", mod: "calendar", title: "Brand deck review", meta: "Friday 11:00–12:30", body: "Anna’s on the invite. The deck task and the kickoff note are one click away.", links: ["t1", "n1", "p1"] },
           { id: "c2", mod: "calendar", title: "Launch go / no-go", meta: "Friday 16:30", body: "The launch map is attached, so the room sees the whole plan.", links: ["m1", "n2"] },
+          { id: "d1", mod: "deals", title: "Kowalska Studio — Phase 1", meta: "Won · €12,000 · June", body: "Phase 1 closed in June and Phase 2 is in flight — but 38 hours of Phase 1 work still aren’t invoiced.", links: ["p1", "h1", "i1"] },
+          { id: "h1", mod: "time", title: "Phase 1 — tracked time", meta: "38h 20m · not invoiced", body: "Every timer started on a Kowalska task, rolled up per phase without anyone filling in a timesheet.", links: ["d1", "i1", "t1"] },
+          { id: "i1", mod: "invoices", title: "Invoice draft #014", meta: "€4,600 · ready to send", body: "Drafted from 38h 20m of tracked Phase 1 time. Anna is already on it as the contact.", links: ["d1", "h1", "p1"] },
+          { id: "g1", mod: "goals", title: "Q4: three new studio clients", meta: "2 of 3 · on track", body: "Kowalska Phase 2 counts toward it. So does the autumn launch.", links: ["d1", "m1"] },
           { id: "m1", mod: "mindmap", title: "Autumn launch", meta: "6 branches · 21 ideas", body: "Website, press kit, print run, launch event, socials, partners. Every branch can become tasks.", links: ["t3", "n2", "c2"] },
         ];
         var byId = {};
@@ -2385,7 +3013,7 @@
         // Idle tour: types a few searches until the visitor touches the palette.
         var TOUR = [
           ["anna", "p1"],
-          ["friday", "t2"],
+          ["phase 1", "d1"],
           ["launch", "m1"],
         ];
         var tourOn = !reduce;
@@ -2474,64 +3102,45 @@
         });
         renderList();
 
-        // ── Story: one object, five modules, driven by scroll ──
+        // ── Story: one message, connected to everything it touches ──
         var track = $("story-track");
-        var stage = $("stage");
-        var obj = $("obj");
+        var fit = $("rel-fit");
+        var rel = $("rel");
         var bar = $("story-bar");
-        var titleEl = $("stage-title");
         var steps = Array.prototype.slice.call(document.querySelectorAll(".step"));
-        var scenes = Array.prototype.slice.call(stage.querySelectorAll(".scene"));
-        var trail = Array.prototype.slice.call(document.querySelectorAll("#trail .ref"));
-        var TITLES = ["Inbox", "Today", "Calendar — Friday", "Notes — Kickoff", "Mindmap — Kowalska rebrand"];
-        var FACES = ["mail", "task", "event", "note", "node"];
+        var EDGES = [
+          [232, 172, 212, 56, 1],
+          [472, 172, 492, 56, 1],
+          [232, 230, 212, 262, 2],
+          [472, 196, 492, 188, 3],
+          [472, 238, 492, 306, 4],
+          [492, 332, 472, 372, 4],
+        ];
+        $("rel-edges").innerHTML =
+          EDGES.map(function (e) {
+            var mx = (e[0] + e[2]) / 2;
+            return '<path pathLength="1" data-s="' + e[4] + '" d="M' + e[0] + " " + e[1] + " C " + mx + " " + e[1] + ", " + mx + " " + e[3] + ", " + e[2] + " " + e[3] + '" />';
+          }).join("") + '<path pathLength="1" data-s="4" d="M352 254 L352 330" />';
+        var relEls = Array.prototype.slice.call(rel.querySelectorAll("[data-s]"));
+        var FOUND = [0, 2, 3, 4, 6];
+        var foundEl = $("rel-found");
         var cur = -1;
-
-        var offsetIn = function (el, root) {
-          var x = 0;
-          var y = 0;
-          while (el && el !== root) {
-            x += el.offsetLeft;
-            y += el.offsetTop;
-            el = el.offsetParent;
-          }
-          return { x: x, y: y };
+        var fitRel = function () {
+          var s = Math.min(fit.clientWidth / 704, fit.clientHeight / 452);
+          rel.style.setProperty("--s", s.toFixed(4));
         };
-        var place = function (instant) {
-          if (cur < 0) return;
-          var slot = scenes[cur].querySelector(".slot");
-          var o = offsetIn(slot, stage);
-          if (instant) obj.classList.add("no-anim");
-          obj.style.setProperty("--x", o.x + "px");
-          obj.style.setProperty("--y", o.y + "px");
-          obj.style.setProperty("--w", slot.offsetWidth + "px");
-          obj.style.setProperty("--h", slot.offsetHeight + "px");
-          obj.style.setProperty("--r", getComputedStyle(slot).borderTopLeftRadius);
-          if (instant) {
-            void obj.offsetWidth;
-            obj.classList.remove("no-anim");
-          }
-        };
-        var setStep = function (i, instant) {
+        var setStep = function (i) {
           if (i === cur) return;
           cur = i;
-          obj.dataset.face = FACES[i];
-          scenes.forEach(function (s, k) {
-            s.classList.toggle("is-on", k === i);
-          });
           steps.forEach(function (s, k) {
             s.classList.toggle("is-on", k === i);
             if (k === i) s.setAttribute("aria-current", "step");
             else s.removeAttribute("aria-current");
           });
-          trail.forEach(function (t, k) {
-            t.classList.toggle("is-on", k <= i);
+          relEls.forEach(function (el) {
+            el.classList.toggle("is-on", Number(el.dataset.s) <= i);
           });
-          titleEl.textContent = TITLES[i];
-          titleEl.classList.remove("is-swap");
-          void titleEl.offsetWidth;
-          titleEl.classList.add("is-swap");
-          place(instant);
+          foundEl.textContent = FOUND[i];
         };
         var storyFrame = function () {
           var r = track.getBoundingClientRect();
@@ -2554,7 +3163,7 @@
           { passive: true }
         );
         window.addEventListener("resize", function () {
-          place(true);
+          fitRel();
           storyFrame();
         });
         steps.forEach(function (s, k) {
@@ -2564,23 +3173,51 @@
             window.scrollTo({ top: top + (total * (k + 0.5)) / 5, behavior: reduce ? "auto" : "smooth" });
           });
         });
-        setStep(0, true);
+        $("rel-draft").addEventListener("click", function () {
+          var done = this.classList.toggle("is-done");
+          this.textContent = done ? "Draft #014 ready — linked to Phase 1" : "Draft invoice";
+        });
+        fitRel();
         storyFrame();
-        if (document.fonts && document.fonts.ready) {
-          document.fonts.ready.then(function () {
-            place(true);
-            renderChrome();
-          });
-        }
 
-        // ── Make it yours: modules, sidebar and a draggable widget board ──
+        // ── Make it yours: module switches, a widget store, a draggable board ──
         var MODS = [
           { id: "tasks", name: "Tasks", icon: "i-tasks" },
           { id: "notes", name: "Notes", icon: "i-notes" },
           { id: "email", name: "Email", icon: "i-mail" },
           { id: "calendar", name: "Calendar", icon: "i-calendar" },
           { id: "mindmap", name: "Mindmap", icon: "i-mindmap" },
+          { id: "time", name: "Time tracking", icon: "i-timer" },
+          { id: "invoices", name: "Invoicing", icon: "i-invoice" },
+          { id: "budget", name: "Budgets", icon: "i-wallet" },
+          { id: "goals", name: "Goals", icon: "i-target" },
         ];
+        var CATS = {
+          tasks: ["Tasks", "i-tasks"],
+          notes: ["Notes", "i-notes"],
+          email: ["Email", "i-mail"],
+          calendar: ["Calendar", "i-calendar"],
+          mindmap: ["Mindmap", "i-mindmap"],
+          time: ["Time", "i-timer"],
+          invoices: ["Invoicing", "i-invoice"],
+          budget: ["Budgets", "i-wallet"],
+          goals: ["Goals", "i-target"],
+          planning: ["Planning", "i-plan"],
+          forms: ["Forms", "i-form"],
+          docs: ["Docs", "i-notes"],
+          contacts: ["Contacts", "i-contact"],
+          general: ["General", "i-home"],
+        };
+        var isMod = {};
+        MODS.forEach(function (m) {
+          isMod[m.id] = true;
+        });
+
+        var gen = function (big, sub) {
+          return function () {
+            return '<div class="big">' + big + '</div><div class="sub">' + sub + "</div>";
+          };
+        };
         var mapSvg = function () {
           var nodes = [
             [38, 16, "Website"],
@@ -2601,61 +3238,69 @@
             .join("");
           return '<svg class="mini-map" viewBox="0 0 200 80" aria-hidden="true">' + edges + pills + '<g class="root"><rect x="72" y="31" width="56" height="18" rx="9" /><text x="100" y="40">Launch</text></g></svg>';
         };
-        var WIDGETS = {
-          today: {
-            mod: "tasks", span: 2, title: "Today", icon: "i-today",
-            html: function () {
-              return [
-                ["Send Anna the revised brand deck", true],
-                ["Draft the Q4 proposal", false],
-                ["Prep notes for the studio call", false],
-              ]
-                .map(function (r) {
-                  return '<div class="trow' + (r[1] ? " is-done" : "") + '"><button type="button" class="ck" aria-pressed="' + r[1] + '" aria-label="Complete: ' + r[0] + '">' + CHECK + "</button><span>" + r[0] + "</span></div>";
-                })
-                .join("");
-            },
-          },
-          focus: {
-            mod: "tasks", title: "Focus", icon: "i-bolt",
-            html: function () {
-              return '<div class="focus"><svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-bg" cx="18" cy="18" r="15.5" /><circle class="ring-fg" cx="18" cy="18" r="15.5" pathLength="100" data-ring /></svg><div><div class="big" data-focus>18:42</div><div class="sub">Q4 proposal</div></div></div>';
-            },
-          },
-          next: {
-            mod: "calendar", title: "Next up", icon: "i-calendar",
-            html: function () {
-              return '<div class="big">16:30</div><div class="sub">Studio call · notes attached</div>';
-            },
-          },
-          unread: {
-            mod: "email", title: "Inbox", icon: "i-mail",
-            html: function () {
-              return '<div class="big">12</div><div class="sub">3 need a reply · 2 became tasks</div>';
-            },
-          },
-          note: {
-            mod: "notes", span: 2, title: "Pinned note", icon: "i-notes",
-            html: function () {
-              return '<p class="wd-note">Anna wants the identity live before the launch. Marta owns the logo files — print needs SVGs by Friday.</p><div class="sub">Kickoff — Kowalska rebrand</div>';
-            },
-          },
-          map: {
-            mod: "mindmap", span: 2, title: "Autumn launch", icon: "i-mindmap",
-            html: mapSvg,
-          },
-          clock: {
-            mod: null, title: "Clock", icon: "i-today",
-            html: function () {
-              return '<div class="big" data-clock>--:--</div><div class="sub">Local time</div>';
-            },
-          },
+        var ring = function (offset, big, sub, attrs) {
+          return (
+            '<div class="focus"><svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-bg" cx="18" cy="18" r="15.5" /><circle class="ring-fg" cx="18" cy="18" r="15.5" pathLength="100" style="stroke-dashoffset:' +
+            offset + '"' + (attrs || "") + ' /></svg><div><div class="big"' + (attrs ? " data-focus" : "") + ">" + big + '</div><div class="sub">' + sub + "</div></div></div>"
+          );
         };
-        var DEFAULT_FOR = { tasks: "today", notes: "note", email: "unread", calendar: "next", mindmap: "map" };
+        var LIST = [
+          ["today", "tasks", "Today", 2, "3 tasks", function () {
+            return [
+              ["Send Anna the revised brand deck", true],
+              ["Final logo exports", false],
+              ["Prep notes for the studio call", false],
+            ].map(function (r) {
+              return '<div class="trow' + (r[1] ? " is-done" : "") + '"><button type="button" class="ck" aria-pressed="' + r[1] + '" aria-label="Complete: ' + r[0] + '">' + CHECK + "</button><span>" + r[0] + "</span></div>";
+            }).join("");
+          }, "i-today"],
+          ["focus", "tasks", "Focus", 1, "18:42", function () {
+            return ring(25, "18:42", "Demo deck", " data-ring");
+          }, "i-bolt"],
+          ["week-done", "tasks", "This week", 1, "18/24", gen("18/24", "tasks done")],
+          ["slipped", "tasks", "Slipped", 1, "2", gen("2", "moved to tomorrow, no drama")],
+          ["note", "notes", "Pinned note", 2, "Kickoff", function () {
+            return '<p class="wd-note">Anna wants Phase 2 live before the launch. Marta owns the logo files — print needs SVGs by Friday.</p><div class="sub">Kickoff — Kowalska Phase 2</div>';
+          }],
+          ["recent-notes", "notes", "Recent notes", 1, "5", gen("5", "edited today")],
+          ["unread", "email", "Inbox", 1, "12", gen("12", "3 need a reply · 2 became tasks")],
+          ["waiting", "email", "Waiting on", 1, "4", gen("4", "threads waiting for a reply")],
+          ["next", "calendar", "Next up", 1, "14:00", gen("14:00", "Demo with Anna · deck attached")],
+          ["week-load", "calendar", "This week", 1, "26h", gen("26h", "booked · 9h free")],
+          ["free-slot", "calendar", "Free time", 1, "15:30", gen("15:30", "next free hour")],
+          ["map", "mindmap", "Autumn launch", 2, "6 branches", mapSvg],
+          ["timer", "time", "Timer", 1, "00:42:13", function () {
+            return '<div class="big" data-timer>00:42:13</div><div class="sub"><span class="rec"></span>Demo deck · Kowalska</div>';
+          }],
+          ["week-hours", "time", "Tracked", 1, "31h 40m", gen("31h 40m", "this week · 82% billable")],
+          ["to-invoice", "invoices", "Ready to invoice", 1, "€4,600", gen("€4,600", "38h 20m on Phase 1")],
+          ["unpaid", "invoices", "Unpaid", 1, "2", gen("2", "invoices awaiting payment")],
+          ["budget-bar", "budget", "Phase 2 budget", 2, "€8,400", function () {
+            return '<div class="big">€8,400 <span class="of">of €12,000</span></div><div class="meter"><i style="width: 70%"></i></div><div class="sub">70% used · 9 days to the deadline</div>';
+          }],
+          ["spend", "budget", "Spent", 1, "€1,240", gen("€1,240", "this month · on plan")],
+          ["goal-ring", "goals", "Q4 goal", 1, "2/3", function () {
+            return ring(34, "2/3", "new studio clients");
+          }],
+          ["streak", "goals", "Streak", 1, "12 days", gen("12 days", "of deep-work mornings")],
+          ["roadmap", "planning", "Roadmap", 2, "Q4", gen("Q4", "3 milestones · 1 needs attention")],
+          ["milestone", "planning", "Next milestone", 1, "15 Oct", gen("15 Oct", "Phase 2 handoff")],
+          ["responses", "forms", "Form responses", 1, "48", gen("48", "new from the launch survey")],
+          ["shared-docs", "docs", "Shared docs", 1, "5", gen("5", "shared with you this week")],
+          ["reconnect", "contacts", "Reconnect", 1, "Tomasz", gen("Tomasz", "no message in 3 weeks")],
+          ["clock", "general", "Clock", 1, "--:--", function () {
+            return '<div class="big" data-clock>--:--</div><div class="sub">Local time</div>';
+          }, "i-today"],
+        ];
+        var WIDGETS = {};
+        LIST.forEach(function (w) {
+          WIDGETS[w[0]] = { id: w[0], cat: w[1], mod: isMod[w[1]] ? w[1] : null, title: w[2], span: w[3], peek: w[4], html: w[5], icon: w[6] || CATS[w[1]][1] };
+        });
+        var DEFAULT_FOR = { tasks: "today", notes: "note", email: "unread", calendar: "next", mindmap: "map", time: "timer", invoices: "to-invoice", budget: "budget-bar", goals: "goal-ring" };
         var PRESETS = {
-          studio: { name: "North Studio", mods: ["tasks", "notes", "email", "calendar"], order: ["today", "next", "unread", "focus", "note", "clock"] },
-          personal: { name: "Personal", mods: ["tasks", "calendar", "notes"], order: ["focus", "today", "next", "note", "clock"] },
-          side: { name: "Autumn launch", mods: ["notes", "mindmap", "tasks"], order: ["map", "focus", "note", "today"] },
+          studio: { name: "North Studio", mods: ["tasks", "notes", "email", "calendar", "time", "invoices"], order: ["today", "timer", "next", "unread", "to-invoice", "note"] },
+          personal: { name: "Personal", mods: ["tasks", "calendar", "notes", "goals", "budget"], order: ["focus", "goal-ring", "next", "budget-bar", "streak", "today"] },
+          side: { name: "Autumn launch", mods: ["notes", "mindmap", "tasks", "goals"], order: ["map", "focus", "note", "goal-ring"] },
         };
         var clone = function (o) {
           return JSON.parse(JSON.stringify(o));
@@ -2665,20 +3310,17 @@
 
         var board = $("board");
         var side = $("side");
-        var modsEl = $("mods");
         var seg = $("ws-seg");
         var segInd = $("seg-ind");
+        var body = $("studio-body");
         var drag = { el: null, cand: null };
 
-        modsEl.innerHTML = MODS.map(function (m) {
-          return '<button type="button" class="mod" data-mod="' + m.id + '" aria-pressed="true">' + icon(m.icon) + m.name + "</button>";
-        }).join("");
         side.innerHTML =
-          '<div class="side-ws"><span class="sq" id="side-sq">N</span><span id="side-name">North Studio</span></div>' +
-          '<div class="side-item is-home"><div><div class="in">' + icon("i-home") + "Home</div></div></div>" +
+          '<div class="side-ws"><span class="sq" id="side-sq">N</span><span id="side-name">North Studio</span></div><div class="side-label">Modules</div>' +
           MODS.map(function (m) {
-            return '<div class="side-item" data-side="' + m.id + '"><div><div class="in">' + icon(m.icon) + m.name + "</div></div></div>";
-          }).join("");
+            return '<button type="button" class="sw-row" role="switch" aria-checked="false" data-mod="' + m.id + '">' + icon(m.icon) + '<span class="nm">' + m.name + '</span><span class="sw" aria-hidden="true"></span></button>';
+          }).join("") +
+          '<div class="side-more">' + icon("i-plus", "icon-xs") + "Planning, forms, docs &amp; more</div>";
 
         var visibleOrder = function () {
           var st = WS[ws];
@@ -2697,6 +3339,7 @@
           el.setAttribute("aria-label", w.title + " widget — Alt + arrow keys to move");
           el.innerHTML =
             '<header class="wd-head">' + icon(w.icon, "icon-xs") + w.title +
+            '<button type="button" class="wd-x" data-remove aria-label="Remove ' + w.title + '">' + icon("i-x", "icon-xs") + "</button>" +
             '<span class="wd-grip" aria-hidden="true">' + icon("i-grip", "icon-xs") + "</span></header>" +
             '<div class="wd-body">' + w.html() + "</div>";
           return el;
@@ -2719,6 +3362,90 @@
             el.animate([{ transform: "translate(" + dx + "px, " + dy + "px)" }, { transform: "none" }], { duration: 560, easing: EASE });
           });
         };
+
+        var storeQ = $("store-q");
+        var storeGrid = $("store-grid");
+        var storeCats = $("store-cats");
+        var storeCat = "all";
+        storeCats.innerHTML =
+          '<button type="button" data-cat="all" aria-pressed="true">All</button>' +
+          Object.keys(CATS)
+            .filter(function (c) {
+              return c !== "general";
+            })
+            .map(function (c) {
+              return '<button type="button" data-cat="' + c + '" aria-pressed="false">' + CATS[c][0] + "</button>";
+            })
+            .join("");
+        var renderStore = function () {
+          var q = storeQ.value.trim().toLowerCase();
+          var onBoard = visibleOrder();
+          var items = LIST.map(function (w) {
+            return WIDGETS[w[0]];
+          }).filter(function (w) {
+            return (storeCat === "all" || w.cat === storeCat) && (!q || (w.title + " " + CATS[w.cat][0]).toLowerCase().indexOf(q) >= 0);
+          });
+          $("store-count").textContent = LIST.length + " widgets across " + (Object.keys(CATS).length - 1) + " modules";
+          storeGrid.innerHTML = items.length
+            ? items
+                .map(function (w, k) {
+                  var on = onBoard.indexOf(w.id) >= 0;
+                  return (
+                    '<button type="button" class="sc" style="--k:' + k + '" data-add="' + w.id + '"' + (on ? " disabled" : "") + ">" +
+                    '<span class="sc-top">' + icon(CATS[w.cat][1], "icon-xs") + CATS[w.cat][0] + '<span class="sc-size">' + (w.span || 1) + "×1</span></span>" +
+                    '<span class="sc-title">' + w.title + "</span>" +
+                    '<span class="sc-peek">' + w.peek + "</span>" +
+                    '<span class="sc-add">' + (on ? icon("i-check", "icon-xs") + "On your board" : icon("i-plus", "icon-xs") + "Add") + "</span></button>"
+                  );
+                })
+                .join("")
+            : '<div class="store-empty">No widget for “' + esc(storeQ.value.trim()) + "” yet.</div>";
+        };
+        var openStore = function () {
+          storeQ.value = "";
+          renderStore();
+          body.classList.add("is-store");
+          setTimeout(function () {
+            storeQ.focus({ preventScroll: true });
+          }, 50);
+        };
+        var closeStore = function () {
+          body.classList.remove("is-store");
+        };
+        $("store-open").addEventListener("click", openStore);
+        $("store-close").addEventListener("click", closeStore);
+        $("store-scrim").addEventListener("click", closeStore);
+        body.addEventListener("keydown", function (e) {
+          if (e.key === "Escape" && body.classList.contains("is-store")) {
+            closeStore();
+            $("store-open").focus();
+          }
+        });
+        storeQ.addEventListener("input", renderStore);
+        storeCats.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-cat]");
+          if (!b) return;
+          storeCat = b.dataset.cat;
+          each(storeCats.children, function (c) {
+            c.setAttribute("aria-pressed", String(c === b));
+          });
+          renderStore();
+        });
+        storeGrid.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-add]");
+          if (!b || b.disabled) return;
+          var w = WIDGETS[b.dataset.add];
+          var st = WS[ws];
+          if (w.mod && st.mods.indexOf(w.mod) < 0) st.mods.push(w.mod);
+          st.order = st.order.filter(function (x) {
+            return x !== w.id;
+          });
+          st.order.push(w.id);
+          var from = b.getBoundingClientRect();
+          closeStore();
+          sync({ id: w.id, rect: from });
+        });
+
         var renderChrome = function () {
           var st = WS[ws];
           each(seg.querySelectorAll("[data-ws]"), function (b) {
@@ -2729,11 +3456,8 @@
               segInd.style.transform = "translateX(" + b.offsetLeft + "px)";
             }
           });
-          each(modsEl.querySelectorAll("[data-mod]"), function (b) {
-            b.setAttribute("aria-pressed", String(st.mods.indexOf(b.dataset.mod) >= 0));
-          });
-          each(side.querySelectorAll("[data-side]"), function (s) {
-            s.classList.toggle("is-off", st.mods.indexOf(s.dataset.side) < 0);
+          each(side.querySelectorAll("[data-mod]"), function (b) {
+            b.setAttribute("aria-checked", String(st.mods.indexOf(b.dataset.mod) >= 0));
           });
           $("side-name").textContent = st.name;
           $("side-sq").textContent = st.name.charAt(0);
@@ -2743,7 +3467,7 @@
         };
 
         var syncGen = 0;
-        var sync = function () {
+        var sync = function (fly) {
           var gen = ++syncGen;
           var target = visibleOrder();
           var leaving = [];
@@ -2775,17 +3499,33 @@
                 board.appendChild(el);
               });
             });
-            if (!reduce) {
-              fresh.forEach(function (el, k) {
+            fresh.forEach(function (el, k) {
+              if (fly && el.dataset.w === fly.id) {
+                el.classList.add("is-new");
+                setTimeout(function () {
+                  el.classList.remove("is-new");
+                }, 1600);
+                if (reduce) return;
+                var l = el.getBoundingClientRect();
+                var f = fly.rect;
                 el.animate(
                   [
-                    { opacity: 0, transform: "scale(0.94)", filter: "blur(4px)" },
-                    { opacity: 1, transform: "none", filter: "none" },
+                    { transformOrigin: "top left", transform: "translate(" + (f.left - l.left) + "px, " + (f.top - l.top) + "px) scale(" + f.width / l.width + ", " + f.height / l.height + ")", opacity: 0.4 },
+                    { transformOrigin: "top left", transform: "none", opacity: 1 },
                   ],
-                  { duration: 520, delay: 90 + k * 50, easing: EASE, fill: "backwards" }
+                  { duration: 760, easing: EASE }
                 );
-              });
-            }
+                return;
+              }
+              if (reduce) return;
+              el.animate(
+                [
+                  { opacity: 0, transform: "scale(0.94)", filter: "blur(4px)" },
+                  { opacity: 1, transform: "none", filter: "none" },
+                ],
+                { duration: 520, delay: 90 + k * 50, easing: EASE, fill: "backwards" }
+              );
+            });
             renderChrome();
           };
           if (leaving.length && !reduce) {
@@ -2815,7 +3555,7 @@
           ws = b.dataset.ws;
           sync();
         });
-        modsEl.addEventListener("click", function (e) {
+        side.addEventListener("click", function (e) {
           var b = e.target.closest("[data-mod]");
           if (!b) return;
           var st = WS[ws];
@@ -2845,10 +3585,18 @@
           sync();
         });
         board.addEventListener("click", function (e) {
+          var x = e.target.closest("[data-remove]");
+          if (x) {
+            var id = x.closest(".wd").dataset.w;
+            WS[ws].order = WS[ws].order.filter(function (w) {
+              return w !== id;
+            });
+            sync();
+            return;
+          }
           var ck = e.target.closest(".ck");
           if (!ck) return;
-          var row = ck.parentElement;
-          var done = row.classList.toggle("is-done");
+          var done = ck.parentElement.classList.toggle("is-done");
           ck.setAttribute("aria-pressed", String(done));
         });
 
@@ -2942,28 +3690,135 @@
 
         // Live widgets
         var focusLeft = 18 * 60 + 42;
+        var timerAt = 42 * 60 + 13;
+        var pad = function (n) {
+          return String(n).padStart(2, "0");
+        };
         var tickLive = function () {
-          var mm = String(Math.floor(focusLeft / 60)).padStart(2, "0");
-          var ss = String(focusLeft % 60).padStart(2, "0");
           each(board.querySelectorAll("[data-focus]"), function (el) {
-            el.textContent = mm + ":" + ss;
+            el.textContent = pad(Math.floor(focusLeft / 60)) + ":" + pad(focusLeft % 60);
           });
           each(board.querySelectorAll("[data-ring]"), function (el) {
             el.style.strokeDashoffset = String(100 - (focusLeft / (25 * 60)) * 100);
           });
+          each(board.querySelectorAll("[data-timer]"), function (el) {
+            el.textContent = pad(Math.floor(timerAt / 3600)) + ":" + pad(Math.floor(timerAt / 60) % 60) + ":" + pad(timerAt % 60);
+          });
           var d = new Date();
-          var hhmm = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
           each(board.querySelectorAll("[data-clock]"), function (el) {
-            el.textContent = hhmm;
+            el.textContent = pad(d.getHours()) + ":" + pad(d.getMinutes());
           });
         };
         setInterval(function () {
           focusLeft = focusLeft > 0 ? focusLeft - 1 : 25 * 60;
+          timerAt++;
           tickLive();
         }, 1000);
 
         sync();
         window.addEventListener("resize", renderChrome);
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(function () {
+            fitRel();
+            renderChrome();
+          });
+        }
+
+        // ── MCP: any assistant, plugged into the whole workspace ──
+        var SCRIPTS = [
+          {
+            q: "What’s left before the Kowalska demo?",
+            tools: [
+              ["moduo.search_tasks", 'project: "Kowalska Phase 2", open: true', "3 tasks"],
+              ["moduo.get_event", 'title: "Demo with Anna"', "Thu 14:00"],
+            ],
+            a: "Three things before Thursday’s 14:00 demo: final logo exports (due Wednesday), the demo deck, and print proofs. Want me to block two hours tomorrow morning for the deck?",
+          },
+          {
+            q: "Draft the Phase 1 invoice.",
+            tools: [
+              ["moduo.time_report", 'deal: "Phase 1", unbilled: true', "38h 20m"],
+              ["moduo.create_invoice", 'client: "Kowalska Studio", hours: 38.33', "draft #014"],
+            ],
+            a: "Done — draft #014 for Kowalska Studio: 38h 20m at €120/h, €4,600. It’s linked to the Phase 1 deal and Anna’s contact. Review it in Invoicing before you send it.",
+          },
+          {
+            q: "Plan my Thursday around the demo.",
+            tools: [
+              ["moduo.get_calendar", 'day: "Thursday"', "2 events"],
+              ["moduo.suggest_blocks", "tasks: open, fit: free time", "3 blocks"],
+            ],
+            a: "Deck polish 9:00–11:00, the demo 14:00–15:00, print proofs 15:30–16:30. I left lunch alone. Should I put these on your calendar?",
+          },
+        ];
+        var chat = $("mcp-chat");
+        var prompts = Array.prototype.slice.call(document.querySelectorAll("[data-prompt]"));
+        var runId = 0;
+        var wait = function (ms) {
+          return new Promise(function (r) {
+            setTimeout(r, reduce ? 0 : ms);
+          });
+        };
+        var runScript = function (k) {
+          var id = ++runId;
+          var s = SCRIPTS[k];
+          prompts.forEach(function (p, j) {
+            p.setAttribute("aria-pressed", String(j === k));
+          });
+          chat.innerHTML = '<div class="msg msg-user">' + esc(s.q) + "</div>";
+          var chain = wait(450);
+          s.tools.forEach(function (t) {
+            var row;
+            chain = chain
+              .then(function () {
+                if (id !== runId) throw 0;
+                row = document.createElement("div");
+                row.className = "tool";
+                row.innerHTML = '<span class="tool-dot" aria-hidden="true"></span><code>' + t[0] + '</code><span class="args">' + esc(t[1]) + '</span><span class="res">→ ' + t[2] + "</span>";
+                chat.appendChild(row);
+                return wait(750);
+              })
+              .then(function () {
+                if (id !== runId) throw 0;
+                row.classList.add("is-done");
+                return wait(250);
+              });
+          });
+          chain
+            .then(function () {
+              if (id !== runId) throw 0;
+              var msg = document.createElement("div");
+              msg.className = "msg msg-ai";
+              msg.innerHTML = '<svg class="mark" aria-hidden="true"><use href="#mark" /></svg><p></p>';
+              chat.appendChild(msg);
+              var p = msg.querySelector("p");
+              var words = s.a.split(" ");
+              var i = 0;
+              var next = function () {
+                if (id !== runId) return;
+                i++;
+                p.textContent = words.slice(0, i).join(" ");
+                if (i < words.length) setTimeout(next, reduce ? 0 : 26 + Math.random() * 30);
+              };
+              if (reduce) p.textContent = s.a;
+              else next();
+            })
+            .catch(function () {});
+        };
+        prompts.forEach(function (p, k) {
+          p.addEventListener("click", function () {
+            runScript(k);
+          });
+        });
+        var mcpIo = new IntersectionObserver(
+          function (entries) {
+            if (!entries[0].isIntersecting) return;
+            mcpIo.disconnect();
+            runScript(0);
+          },
+          { threshold: 0.4 }
+        );
+        mcpIo.observe(chat);
       })();
     </script>
   </body>
