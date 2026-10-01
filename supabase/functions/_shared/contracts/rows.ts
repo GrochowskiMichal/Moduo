@@ -320,6 +320,7 @@ export const calendarEventRowSchema = z.object({
   all_day: z.boolean().optional(),
   recurrence_rule: optStr,
   status: z.string().optional(),
+  location: optStr,
   color: optStr,
   created_at: z.string(),
   updated_at: z.string(),

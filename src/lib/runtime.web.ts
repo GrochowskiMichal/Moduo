@@ -3393,6 +3393,7 @@ function calendarEventRowToModel(raw: unknown): CalendarEventModel {
     allDay: Boolean(r.all_day),
     rrule: r.recurrence_rule ?? null,
     status: r.status ?? "confirmed",
+    location: r.location ?? null,
     color: r.color ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
