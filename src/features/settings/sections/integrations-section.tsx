@@ -5,10 +5,14 @@ import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-import { groupRailAccounts, providerLabel } from "../../calendar/accounts";
+import { connectedLoginCount, groupRailAccounts } from "../../calendar/accounts";
 import { cleanupCredentialsForRemoval } from "../../calendar/caldav-connect";
 import type { CalendarAccountModel } from "../../calendar/events";
-import { ensureGoogleCalendarAccounts, startWebGoogleConnect } from "../../calendar/google-web";
+import {
+  disconnectGoogleLogin,
+  ensureGoogleCalendarAccounts,
+  startWebGoogleConnect,
+} from "../../calendar/google-web";
 import { CalendarConnectDialog, IcsFeedDialog } from "../../calendar/ui/calendar-connect-dialog";
 import {
   asHistoryDepth,
@@ -179,6 +183,31 @@ export function IntegrationsSection() {
     }
   };
 
+  const handleDisconnectLogin = async (rows: CalendarAccountModel[]) => {
+    if (!runtime || !workspaceId || rows.length === 0) return;
+    setCalBusy(rows[0].id);
+    setCalError(null);
+    try {
+      const email = rows[0].externalId.startsWith("google:")
+        ? rows[0].externalId.slice("google:".length).split(":")[0]
+        : "";
+      if (email) await disconnectGoogleLogin(email);
+      for (const row of rows) {
+        await cleanupCredentialsForRemoval({
+          isDesktop: IS_DESKTOP,
+          removed: row,
+          allAccounts: calAccounts,
+        });
+        await runtime.calendar.removeAccount({ workspaceId, accountId: row.id });
+      }
+      await loadAccounts();
+    } catch (e) {
+      setCalError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCalBusy(null);
+    }
+  };
+
   const handleDepthChange = async (account: SavedAccount, depth: EmailHistoryDepth) => {
     if (!runtime) return;
     const previous = asHistoryDepth(account.historyDepth);
@@ -300,6 +329,8 @@ export function IntegrationsSection() {
         <div className="mt-4 flex flex-col gap-2">
           {CAL_PROVIDERS.map(({ key, label, command }) => {
             const connected = calAccounts.filter((a) => a.provider === key);
+            const logins = groupRailAccounts(connected);
+            const loginCount = connectedLoginCount(connected);
             const canConnect = IS_DESKTOP || key === "google";
             return (
               <div key={key} className="rounded-md border border-border bg-muted/40 p-4">
@@ -311,8 +342,8 @@ export function IntegrationsSection() {
                     <div className="flex flex-col">
                       <span className="text-sm font-medium text-foreground">{label}</span>
                       <span className="text-xs text-muted-foreground">
-                        {connected.length > 0
-                          ? `${connected.length} account${connected.length === 1 ? "" : "s"} connected`
+                        {loginCount > 0
+                          ? `${loginCount} account${loginCount === 1 ? "" : "s"} connected`
                           : canConnect
                             ? "Not connected"
                             : "Connect from the desktop app"}
@@ -336,37 +367,84 @@ export function IntegrationsSection() {
                   )}
                 </div>
 
-                {connected.length > 0 ? (
+                {logins.length > 0 ? (
                   <ul className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
-                    {connected.map((acc) => (
-                      <li
-                        key={acc.id}
-                        className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm text-foreground">
-                            {acc.displayLabel || providerLabel(acc.provider)}
-                          </p>
-                          {acc.status === "error" ? (
-                            <p className="truncate text-xs text-warning">
-                              {acc.provider === "google"
-                                ? "Sync error — reconnect"
-                                : "Sync error — reconnect from the desktop app"}
-                            </p>
-                          ) : null}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void handleDisconnect(acc)}
-                          disabled={calBusy === acc.id}
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    {logins.map((group) => {
+                      const rows = group.kind === "group" ? group.rows : [group.row];
+                      const mailbox = group.kind === "group" ? group.detail : null;
+                      const platform = group.kind === "group" ? group.header : label;
+                      return (
+                        <li
+                          key={group.kind === "group" ? group.key : group.row.account.id}
+                          className="rounded-md border border-border bg-card px-3 py-2"
                         >
-                          {calBusy === acc.id ? "Removing…" : "Disconnect"}
-                        </Button>
-                      </li>
-                    ))}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <Eyebrow as="p">{platform}</Eyebrow>
+                              <p className="truncate text-sm text-foreground">
+                                {mailbox || rows[0].label}
+                              </p>
+                            </div>
+                            {group.kind === "group" &&
+                            rows.some((row) => row.scope === "calendar") ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  void handleDisconnectLogin(rows.map((row) => row.account))
+                                }
+                                disabled={rows.some((row) => calBusy === row.account.id)}
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                Disconnect
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleDisconnect(rows[0].account)}
+                                disabled={calBusy === rows[0].account.id}
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                {calBusy === rows[0].account.id ? "Removing…" : "Disconnect"}
+                              </Button>
+                            )}
+                          </div>
+                          {group.kind === "group" &&
+                          rows.some((row) => row.scope === "calendar") ? (
+                            <ul className="mt-2 flex flex-col border-t border-border">
+                              {rows.map((row) => (
+                                <li
+                                  key={row.account.id}
+                                  className="flex items-center justify-between gap-3 py-1.5"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm text-foreground">{row.label}</p>
+                                    {row.account.status === "error" ? (
+                                      <p className="truncate text-xs text-warning">
+                                        Sync error — reconnect
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => void handleDisconnect(row.account)}
+                                    disabled={calBusy === row.account.id}
+                                    className="text-muted-foreground"
+                                  >
+                                    {calBusy === row.account.id ? "Removing…" : "Remove"}
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : null}
               </div>

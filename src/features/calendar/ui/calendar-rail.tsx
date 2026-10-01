@@ -84,7 +84,11 @@ export function CalendarRail({
   const modifiersClassNames = useMemo(() => ({ busy: BUSY_DAY_CLASSES }), []);
   const hidden = useMemo(() => new Set(hiddenAccountIds), [hiddenAccountIds]);
 
-  const renderAccountRow = (account: CalendarAccountModel, label: string) => {
+  const renderAccountRow = (
+    account: CalendarAccountModel,
+    label: string,
+    scope: "calendar" | "account" | "feed",
+  ) => {
     const isHidden = hidden.has(account.id);
     const name = label || account.displayLabel || providerLabel(account.provider);
     const canReconnect = Boolean(
@@ -168,7 +172,11 @@ export function CalendarRail({
             </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => onRemoveAccount(account.id)}>
-              Remove account
+              {scope === "feed"
+                ? "Remove feed"
+                : scope === "calendar"
+                  ? "Remove calendar"
+                  : "Remove account"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -210,14 +218,19 @@ export function CalendarRail({
             and ICS stay read-only mirrors. */}
         {railGroups.map((group) => {
           if (group.kind === "flat") {
-            return renderAccountRow(group.row.account, group.row.label);
+            return renderAccountRow(group.row.account, group.row.label, group.row.scope);
           }
           return (
-            <div key={group.key} className="flex flex-col gap-1">
-              <Eyebrow as="div" className="px-1 pt-1" tone="muted">
+            <div key={group.key} className="mt-3 flex flex-col gap-1">
+              <Eyebrow as="div" className="px-1" tone="muted">
                 {group.header}
               </Eyebrow>
-              {group.rows.map((row) => renderAccountRow(row.account, row.label))}
+              {group.detail ? (
+                <p className="truncate px-1 text-xs text-muted-foreground" title={group.detail}>
+                  {group.detail}
+                </p>
+              ) : null}
+              {group.rows.map((row) => renderAccountRow(row.account, row.label, row.scope))}
             </div>
           );
         })}

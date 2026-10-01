@@ -211,6 +211,19 @@ Deno.serve(async (req: Request) => {
     return json({ calendars });
   }
 
+  if (action === "disconnect") {
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    if (!email) return json({ error: "bad_account" }, 400);
+    const removed = await db
+      .from("user_integrations")
+      .delete()
+      .eq("user_id", userId)
+      .eq("provider", "google_calendar")
+      .eq("account_key", email);
+    if (removed.error) return json({ error: "disconnect_failed" }, 500);
+    return json({ ok: true });
+  }
+
   const externalAccountId = typeof body.externalAccountId === "string" ? body.externalAccountId : "";
   if (!externalAccountId.startsWith("google:")) return json({ error: "bad_account" }, 400);
   const rest = externalAccountId.slice("google:".length);
