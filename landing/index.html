@@ -892,8 +892,8 @@
       }
       .story-grid {
         display: grid;
-        grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-        gap: clamp(2rem, 6vw, 5.5rem);
+        grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+        gap: clamp(2rem, 5vw, 4.5rem);
         align-items: center;
       }
       .steps {
@@ -968,7 +968,7 @@
 
       .stage {
         position: relative;
-        height: min(34rem, 72svh);
+        height: min(36rem, 76svh);
         border: 1px solid var(--border);
         border-radius: var(--radius-xl);
         background: var(--card);
@@ -1453,7 +1453,7 @@
           margin-top: 0.75rem;
         }
         .stage {
-          height: min(26rem, 58svh);
+          height: min(40rem, 64svh);
         }
         .studio-body {
           grid-template-columns: 1fr;
@@ -1561,7 +1561,7 @@
         color: var(--subtle-foreground);
       }
 
-      /* ─── Relations (story stage) ───────────────────────────────────────── */
+      /* ─── Relations engine (story stage) ────────────────────────────────── */
       .rel-fit {
         position: absolute;
         inset: 2.75rem 0 3rem;
@@ -1571,52 +1571,143 @@
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 704px;
-        height: 452px;
+        width: 820px;
+        height: 520px;
         transform: translate(-50%, -50%) scale(var(--s, 1));
+      }
+      .rel::before {
+        content: "";
+        position: absolute;
+        inset: -40px;
+        background-image: radial-gradient(color-mix(in oklab, var(--foreground) 10%, transparent) 1px, transparent 1.5px);
+        background-size: 22px 22px;
+        -webkit-mask-image: radial-gradient(closest-side, black, transparent);
+        mask-image: radial-gradient(closest-side, black, transparent);
+        pointer-events: none;
       }
       .rel-edges {
         position: absolute;
         inset: 0;
         width: 100%;
         height: 100%;
+        overflow: visible;
         fill: none;
+        pointer-events: none;
+      }
+      .edge {
         stroke: var(--border-strong);
         stroke-width: 1.25;
-      }
-      .rel-edges path {
         stroke-dasharray: 1;
         stroke-dashoffset: 1;
-        transition: stroke-dashoffset 900ms var(--ease-out) 150ms;
+        transition:
+          stroke-dashoffset var(--dur, 700ms) var(--ease-out),
+          stroke var(--motion-base) var(--ease-out),
+          opacity var(--motion-base) var(--ease-out);
       }
-      .rel-edges path.is-on {
+      .edge.is-on {
         stroke-dashoffset: 0;
+        transition-delay: var(--d, 0ms), 0ms, 0ms;
       }
-      .rc {
+      .edge.is-hot {
+        stroke: var(--foreground);
+        stroke-width: 1.5;
+      }
+      .rel.is-tracing .edge:not(.is-hot) {
+        opacity: 0.2;
+      }
+      .pulse {
+        fill: var(--foreground);
+        opacity: 0;
+      }
+      .rel.is-tracing .pulse {
+        visibility: hidden;
+      }
+      .rel-why {
         position: absolute;
-        width: 196px;
+        left: 0;
+        top: 0;
+        z-index: 4;
+        padding: 1px 7px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-full);
+        background: var(--card);
+        font-size: var(--text-2xs);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity var(--motion-slow) var(--ease-out);
+      }
+      .rel-why.is-cur,
+      .rel-why.is-hot {
+        opacity: 1;
+      }
+      .rel-why.is-hot {
+        border-color: var(--border-strong);
+        color: var(--foreground);
+      }
+
+      .rn {
+        position: absolute;
+        z-index: 2;
+        width: 210px;
         padding: 12px 14px;
         border: 1px solid var(--border);
         border-radius: var(--radius-lg);
         background: var(--popover);
         box-shadow: var(--shadow-md);
         font-size: var(--text-sm);
-      }
-      .rc[data-s] {
+        user-select: none;
+        -webkit-user-select: none;
         opacity: 0;
-        transform: translateY(8px) scale(0.96);
+        transform: translateY(8px) scale(0.92);
         filter: blur(var(--blur-veil));
+        pointer-events: none;
         transition:
-          opacity var(--motion-slower) var(--ease-out) 350ms,
-          transform var(--motion-slower) var(--ease-out) 350ms,
-          filter var(--motion-slower) var(--ease-out) 350ms;
+          opacity var(--motion-slow) var(--ease-out),
+          transform var(--motion-slower) var(--ease-spring),
+          filter var(--motion-slow) var(--ease-out),
+          border-color var(--motion-base) var(--ease-out),
+          box-shadow var(--motion-base) var(--ease-out);
       }
-      .rc[data-s].is-on {
+      .rn.is-on {
         opacity: 1;
         transform: none;
         filter: none;
+        pointer-events: auto;
+        transition-delay: var(--d, 0ms), var(--d, 0ms), var(--d, 0ms), 0ms, 0ms;
       }
-      .rc-kind {
+      @media (hover: hover) {
+        .rn.is-on {
+          cursor: grab;
+        }
+        .rn.is-on:hover {
+          border-color: var(--border-strong);
+        }
+      }
+      .rn.is-drag {
+        z-index: 5;
+        cursor: grabbing;
+        box-shadow: var(--shadow-overlay);
+      }
+      .rel.is-settle .rn {
+        transition-property: opacity, transform, filter, border-color, box-shadow, left, top;
+        transition-duration: var(--motion-slow), var(--motion-slower), var(--motion-slow), var(--motion-base), var(--motion-base), var(--motion-slower), var(--motion-slower);
+      }
+      .rel.is-tracing .rn.is-on:not(.is-near) {
+        opacity: 0.3;
+        transition-delay: 0ms;
+      }
+      .rel.is-back *,
+      .rel.is-back {
+        transition-delay: 0ms !important;
+      }
+      .rel.is-instant *,
+      .rel.is-instant {
+        transition-duration: 0ms !important;
+        transition-delay: 0ms !important;
+      }
+      .rn-kind {
         display: flex;
         align-items: center;
         gap: 6px;
@@ -1627,70 +1718,22 @@
         text-transform: uppercase;
         color: var(--faint-foreground);
       }
-      .rc-title {
+      .rn-kind .when {
+        margin-left: auto;
+        letter-spacing: 0;
+        text-transform: none;
+        font-weight: 400;
+      }
+      .rn-title {
         font-weight: 500;
         color: var(--foreground);
       }
-      .rc-sub {
+      .rn-sub {
         margin-top: 2px;
         font-size: var(--text-xs);
         color: var(--subtle-foreground);
       }
-      .rc-mail {
-        left: 232px;
-        top: 150px;
-        width: 240px;
-        min-height: 104px;
-        z-index: 2;
-        border-color: var(--border-strong);
-      }
-      .rc-mail .who {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 8px;
-        font-size: var(--text-xs);
-        color: var(--muted-foreground);
-      }
-      .rc-mail .who .t {
-        margin-left: auto;
-        color: var(--faint-foreground);
-      }
-      .rc-mail p {
-        font-size: var(--text-sm);
-        line-height: 1.55;
-        color: var(--muted-foreground);
-      }
-      .rc-mail mark {
-        background: transparent;
-        color: inherit;
-        border-radius: var(--radius-sm);
-        padding-inline: 2px;
-        transition:
-          background-color var(--motion-slow) var(--ease-out),
-          color var(--motion-slow) var(--ease-out);
-      }
-      .rc-mail mark.is-on {
-        background: color-mix(in oklab, var(--primary) 16%, transparent);
-        color: var(--foreground);
-      }
-      .rc-list {
-        margin-top: 8px;
-        display: grid;
-        gap: 6px;
-      }
-      .rc-list div {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: var(--text-xs);
-        color: var(--muted-foreground);
-      }
-      .rc-list .ck {
-        width: 0.875rem;
-        height: 0.875rem;
-      }
-      .rc-badge {
+      .rn-badge {
         display: inline-flex;
         align-items: center;
         height: 1.125rem;
@@ -1703,23 +1746,408 @@
         font-weight: 500;
         vertical-align: 1px;
       }
-      .rc-hint {
-        left: 232px;
-        top: 330px;
-        width: 240px;
+
+      .rn-mail {
+        z-index: 3;
+        border-color: var(--border-strong);
+      }
+      .rn-mail .who {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+      }
+      .rn-mail .who b {
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .rn-mail .tag {
+        padding: 0 6px;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        font-size: var(--text-2xs);
+      }
+      .rn-mail .t {
+        margin-left: auto;
+        color: var(--faint-foreground);
+      }
+      .rn-mail .subj {
+        margin-top: 10px;
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .rn-body {
+        position: relative;
+        margin-top: 4px;
+        line-height: 1.55;
+        color: var(--muted-foreground);
+      }
+      .rn-body .rw {
+        opacity: 0;
+        filter: blur(3px);
+        transition:
+          opacity var(--motion-slow) var(--ease-out),
+          filter var(--motion-slow) var(--ease-out);
+      }
+      .rel.s0 .rn-body .rw {
+        opacity: 1;
+        filter: none;
+        transition-delay: calc(1050ms + var(--i) * 32ms);
+      }
+      .rn-body mark.rw {
+        border-radius: var(--radius-sm);
+        padding-inline: 2px;
+        background: transparent;
+        color: inherit;
+        transition:
+          opacity var(--motion-slow) var(--ease-out),
+          filter var(--motion-slow) var(--ease-out),
+          background-color var(--motion-slow) var(--ease-out),
+          color var(--motion-slow) var(--ease-out),
+          box-shadow var(--motion-slow) var(--ease-out);
+      }
+      .rel.s1 .rn-body mark.rw {
+        background: color-mix(in oklab, var(--primary) 16%, transparent);
+        color: var(--foreground);
+        box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--foreground) 45%, transparent);
+        transition-delay: 0ms, 0ms, var(--d), var(--d), var(--d);
+      }
+      .beam {
+        position: absolute;
+        inset: -2px -8px;
+        border-radius: var(--radius-sm);
+        background: linear-gradient(
+          90deg,
+          transparent 40%,
+          color-mix(in oklab, var(--primary) 18%, transparent) 47%,
+          color-mix(in oklab, var(--foreground) 55%, transparent) 50%,
+          transparent 51%
+        );
+        background-size: 300% 100%;
+        background-position: 100% 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .rel-toast {
+        position: absolute;
+        z-index: 4;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 34px;
+        padding: 0 14px 0 5px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-full);
+        background: var(--popover);
+        box-shadow: var(--shadow-lg);
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+      }
+      .rel-toast b {
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .rel-token {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 6;
+        padding: 0 5px;
+        border-radius: var(--radius-sm);
+        background: color-mix(in oklab, var(--primary) 30%, var(--popover));
+        box-shadow: var(--shadow-md);
+        font-size: var(--text-sm);
+        line-height: 1.55;
+        color: var(--foreground);
+        white-space: nowrap;
+        pointer-events: none;
+      }
+
+      .rn .due {
+        border-radius: var(--radius-sm);
+        padding-inline: 2px;
+        margin-inline: -2px;
+      }
+      .rn-more {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows var(--motion-slower) var(--ease-out);
+      }
+      .rel.s2 .rn-more {
+        grid-template-rows: 1fr;
+        transition-delay: 120ms;
+      }
+      .rn-more > div {
+        min-height: 0;
+        overflow: hidden;
+      }
+      .prog {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .prog svg {
+        width: 18px;
+        height: 18px;
+        transform: rotate(-90deg);
+        fill: none;
+        stroke-width: 2.5;
+      }
+      .prog .ring-bg {
+        stroke: var(--accent);
+      }
+      .prog .ring-v {
+        stroke: var(--success);
+        stroke-linecap: round;
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+        transition: stroke-dashoffset 900ms var(--ease-out);
+      }
+      .rel.s2 .prog .ring-v {
+        stroke-dashoffset: var(--off, 0.43);
+        transition-delay: 450ms;
+      }
+      .sts {
+        display: grid;
+        gap: 2px;
+        margin: 6px -6px 0;
+      }
+      .st {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 26px;
+        padding: 0 6px;
+        border-radius: var(--radius-sm);
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+        text-align: left;
+        opacity: 0;
+        transform: translateX(-6px);
+        transition:
+          opacity var(--motion-slow) var(--ease-out),
+          transform var(--motion-slow) var(--ease-out),
+          background-color var(--motion-fade) var(--ease-out),
+          color var(--motion-base) var(--ease-out);
+      }
+      .rel.s2 .st {
+        opacity: 1;
+        transform: none;
+        transition-delay: calc(380ms + var(--i) * 110ms), calc(380ms + var(--i) * 110ms), 0ms, 0ms;
+      }
+      .st:hover {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .st .lbl {
+        flex: 1;
+        background: linear-gradient(currentColor, currentColor) no-repeat 0 55% / 0 1px;
+        transition: background-size var(--motion-slow) var(--ease-out);
+      }
+      .st.is-done {
+        color: var(--faint-foreground);
+      }
+      .st.is-done .lbl {
+        background-size: 100% 1px;
+      }
+      .st .when {
+        color: var(--faint-foreground);
+      }
+
+      .avs {
+        display: flex;
+        align-items: center;
+        margin-top: 10px;
+        font-size: var(--text-2xs);
+        color: var(--faint-foreground);
+      }
+      .avs .av {
+        width: 1.625rem;
+        height: 1.625rem;
+        margin-right: -6px;
+        border: 2px solid var(--popover);
+      }
+      .avs span:last-child {
+        margin-left: 12px;
+      }
+
+      .hist {
+        position: relative;
+        display: grid;
+        gap: 6px;
+        margin-top: 10px;
+        padding-left: 14px;
+        list-style: none;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .hist::before {
+        content: "";
+        position: absolute;
+        left: 3px;
+        top: 6px;
+        bottom: 6px;
+        width: 1px;
+        background: var(--border-strong);
+        transform: scaleY(0);
+        transform-origin: top;
+        transition: transform 700ms var(--ease-out);
+      }
+      .rel.s3 .hist::before {
+        transform: none;
+        transition-delay: 450ms;
+      }
+      .hist li {
+        position: relative;
+        opacity: 0;
+        transform: translateY(4px);
+        transition:
+          opacity var(--motion-slow) var(--ease-out),
+          transform var(--motion-slow) var(--ease-out);
+      }
+      .rel.s3 .hist li {
+        opacity: 1;
+        transform: none;
+        transition-delay: calc(450ms + var(--i) * 160ms);
+      }
+      .hist li::before {
+        content: "";
+        position: absolute;
+        left: -14px;
+        top: 6px;
+        width: 7px;
+        height: 7px;
+        border-radius: var(--radius-full);
+        border: 1.5px solid var(--border-strong);
+        background: var(--popover);
+      }
+      .hist li.is-now::before {
+        border-color: var(--foreground);
+        background: var(--foreground);
+      }
+      .hist b {
+        font-weight: 500;
+        color: var(--muted-foreground);
+      }
+
+      .bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 3px;
+        height: 30px;
+        margin-top: 10px;
+      }
+      .bars i {
+        flex: 1;
+        height: calc(var(--h) * 1%);
+        border-radius: 2px 2px 0 0;
+        background: color-mix(in oklab, var(--foreground) 22%, transparent);
+        transform: scaleY(0);
+        transform-origin: bottom;
+        transition: transform var(--motion-slower) var(--ease-spring);
+      }
+      .bars i:last-child {
+        background: var(--foreground);
+      }
+      .rel.s4 .bars i {
+        transform: none;
+        transition-delay: calc(250ms + var(--i) * 55ms);
+      }
+      .rn-big {
+        font-size: var(--text-xl);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+        color: var(--foreground);
+      }
+
+      .rn-inv {
         border-color: var(--border-strong);
         box-shadow:
           var(--shadow-lg),
           0 0 0 4px color-mix(in oklab, var(--foreground) 5%, transparent);
       }
-      .rc-hint .btn {
+      .ln,
+      .tot {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        opacity: 0;
+        transform: translateY(4px);
+        transition:
+          opacity var(--motion-slow) var(--ease-out),
+          transform var(--motion-slow) var(--ease-out);
+      }
+      .ln {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .ln span:last-child,
+      .tot b {
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+        color: var(--foreground);
+      }
+      .tot {
+        margin-top: 6px;
+      }
+      .tot b {
+        font-size: var(--text-lg);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .rel.s4 .ln,
+      .rel.s4 .tot {
+        opacity: 1;
+        transform: none;
+        transition-delay: var(--d);
+      }
+      .rn-inv .btn {
         width: 100%;
         margin-top: 10px;
       }
-      .rc-hint .btn.is-done {
+      .rn-inv .btn.is-done {
         background: color-mix(in oklab, var(--success) 18%, var(--card));
         color: var(--success);
       }
+      .stamp {
+        position: absolute;
+        right: 12px;
+        top: 10px;
+        padding: 1px 7px;
+        border: 1.5px solid var(--success);
+        border-radius: var(--radius-sm);
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--success);
+        opacity: 0;
+        transform: rotate(-8deg) scale(1.6);
+        transition:
+          opacity var(--motion-base) var(--ease-out),
+          transform var(--motion-slower) var(--ease-spring);
+      }
+      .rn-inv.is-sent .stamp {
+        opacity: 1;
+        transform: rotate(-8deg);
+      }
+
       .stage-foot {
         position: absolute;
         inset: auto 0 0;
@@ -1740,6 +2168,83 @@
         font-weight: 600;
         color: var(--foreground);
         font-variant-numeric: tabular-nums;
+      }
+      .rf-status {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex: 1;
+        min-width: 0;
+        color: var(--muted-foreground);
+      }
+      .rf-status span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rf-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: var(--radius-full);
+        background: var(--faint-foreground);
+        flex-shrink: 0;
+        transition: background-color var(--motion-base) var(--ease-out);
+      }
+      .rf-status.is-busy .rf-dot {
+        background: var(--foreground);
+        animation: blink 900ms ease-in-out infinite;
+      }
+      .rf-status.is-ok .rf-dot {
+        background: var(--success);
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0.25;
+        }
+      }
+      .rf-hint {
+        opacity: 0;
+        transition: opacity var(--motion-slow) var(--ease-out);
+      }
+      .rf-hint.is-on {
+        opacity: 1;
+      }
+      .rf-reset {
+        height: 1.5rem;
+        padding-inline: 0.5rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-full);
+        font-size: var(--text-2xs);
+        color: var(--muted-foreground);
+      }
+      .rf-reset:hover {
+        color: var(--foreground);
+        border-color: var(--border-strong);
+      }
+      .rf-count b.is-bump {
+        animation: bump var(--motion-slow) var(--ease-spring);
+      }
+      @keyframes bump {
+        40% {
+          transform: scale(1.35);
+        }
+      }
+      .rf-count b {
+        display: inline-block;
+      }
+      @media (hover: none) {
+        .rf-hint {
+          display: none;
+        }
+      }
+      @media (max-width: 720px) {
+        .rf-tag,
+        .rf-hint {
+          display: none;
+        }
+      }
+      .rel.is-tall .rel-why.is-cur:not(.is-hot) {
+        opacity: 0;
       }
 
       /* ─── Studio: module switches + widget store ────────────────────────── */
@@ -2328,9 +2833,10 @@
           justify-content: center;
           width: auto;
         }
-        .rel-edges path,
-        .rc[data-s] {
-          transition: none;
+        .rel,
+        .rel * {
+          transition-duration: 0ms !important;
+          transition-delay: 0ms !important;
         }
       }
     </style>
@@ -2580,11 +3086,11 @@
             <div class="container story-grid">
               <div class="story-copy">
                 <ol class="steps">
-                  <li><button class="step" type="button"><span class="n">01</span><span class="h">A message lands.</span><span class="p"><span class="pi"><span class="pt">Tomasz: the client wants the demo on Thursday. Can we still hit the 15th?</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">02</span><span class="h">Moduo reads it.</span><span class="p"><span class="pi"><span class="pt">It recognises the project, the deadline and the demo — and links all three. You didn’t tag a thing.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">03</span><span class="h">It finds what’s left.</span><span class="p"><span class="pi"><span class="pt">Three subtasks are still open before the 15th. They surface right next to the message.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">04</span><span class="h">It remembers the client.</span><span class="p"><span class="pi"><span class="pt">Phase 1 with Kowalska Studio was won in June. This demo is Phase 2 — same people, same thread.</span></span></span></button></li>
-                  <li><button class="step" type="button"><span class="n">05</span><span class="h">It nudges the money.</span><span class="p"><span class="pi"><span class="pt">38 hours of Phase 1 are tracked but never invoiced. One click drafts the invoice.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">01</span><span class="h">A message lands.</span><span class="p"><span class="pi"><span class="pt">Tomasz passes on the client’s ask: demo on Thursday, and the 15th still stands.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">02</span><span class="h">Moduo reads it.</span><span class="p"><span class="pi"><span class="pt">It spots the meeting, the deadline and the project, and links each one. Nobody tagged anything.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">03</span><span class="h">It finds what’s left.</span><span class="p"><span class="pi"><span class="pt">Three subtasks are still open before the 15th. Tick one off right here.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">04</span><span class="h">It remembers the client.</span><span class="p"><span class="pi"><span class="pt">Anna signed Phase 1 in June. Same client, same thread, the whole history one hop away.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">05</span><span class="h">It nudges the money.</span><span class="p"><span class="pi"><span class="pt">38 hours of Phase 1 were tracked but never billed. The invoice is drafted and waits for one click.</span></span></span></button></li>
                 </ol>
                 <div class="story-bar" aria-hidden="true"><i id="story-bar"></i></div>
               </div>
@@ -2597,53 +3103,82 @@
                 </div>
                 <div class="rel-fit" id="rel-fit">
                   <div class="rel" id="rel">
-                    <svg class="rel-edges" id="rel-edges" viewBox="0 0 704 452" aria-hidden="true"></svg>
+                    <svg class="rel-edges" id="rel-edges" aria-hidden="true"></svg>
 
-                    <div class="rc rc-mail">
-                      <div class="who"><span class="av">TW</span>Tomasz Wiśniewski<span class="t">9:41</span></div>
-                      <p>Client wants the <mark data-s="1">demo on Thursday</mark>. Can we still hit <mark data-s="1">the 15th</mark> for <mark data-s="3">Kowalska Phase 2</mark>?</p>
-                    </div>
+                    <div class="rel-toast" id="rel-toast" aria-hidden="true"><span class="av">TW</span><span>New mail · <b>Tomasz Wiśniewski</b></span></div>
 
-                    <div class="rc" data-s="1" style="left: 16px; top: 18px">
-                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-plan" /></svg>Project</div>
-                      <div class="rc-title">Kowalska — Phase 2</div>
-                      <div class="rc-sub">Due 15 Oct · 9 days left</div>
-                    </div>
-                    <div class="rc" data-s="1" style="left: 492px; top: 18px">
-                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</div>
-                      <div class="rc-title">Demo with Anna</div>
-                      <div class="rc-sub">Thursday · 14:00 – 15:00</div>
-                    </div>
-                    <div class="rc" data-s="2" style="left: 16px; top: 196px">
-                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-tasks" /></svg>Subtasks · 3 open</div>
-                      <div class="rc-list">
-                        <div><span class="ck"></span>Final logo exports</div>
-                        <div><span class="ck"></span>Demo deck</div>
-                        <div><span class="ck"></span>Print proofs</div>
+                    <article class="rn rn-mail" data-id="mail" data-s="0" style="--d: 750ms">
+                      <div class="who"><span class="av">TW</span><b>Tomasz</b><span class="tag">Team</span><span class="t">9:41</span></div>
+                      <div class="subj">Re: Kowalska demo</div>
+                      <p class="rn-body" id="rel-body">Client wants the <mark data-to="cal" style="--d: 350ms">demo on Thursday</mark>. Can we still hit <mark data-to="due" style="--d: 600ms">the 15th</mark> for <mark data-to="proj" style="--d: 850ms">Kowalska Phase 2</mark>?<span class="beam" id="rel-beam"></span></p>
+                    </article>
+
+                    <article class="rn" data-id="proj" data-s="1" style="--d: 1450ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-plan" /></svg>Project</div>
+                      <div class="rn-title">Kowalska — Phase 2</div>
+                      <div class="rn-sub">Due <span class="due" id="rel-due">15 Oct</span> · 9 days left</div>
+                      <div class="rn-more">
+                        <div>
+                          <div class="prog">
+                            <svg viewBox="0 0 20 20" aria-hidden="true"><circle class="ring-bg" cx="10" cy="10" r="8" /><circle class="ring-v" id="rel-ring" cx="10" cy="10" r="8" pathLength="1" /></svg>
+                            <span id="rel-prog">4 of 7 done · 3 open</span>
+                          </div>
+                          <div class="sts" id="rel-sts">
+                            <button class="st" type="button" role="checkbox" aria-checked="false" style="--i: 0"><span class="ck"></span><span class="lbl">Final logo exports</span><span class="when">Mon</span></button>
+                            <button class="st" type="button" role="checkbox" aria-checked="false" style="--i: 1"><span class="ck"></span><span class="lbl">Demo deck</span><span class="when">Wed</span></button>
+                            <button class="st" type="button" role="checkbox" aria-checked="false" style="--i: 2"><span class="ck"></span><span class="lbl">Print proofs</span><span class="when">Thu</span></button>
+                          </div>
+                        </div>
                       </div>
-                      <div class="rc-sub" style="margin-top: 8px">4 done · all due before the 15th</div>
-                    </div>
-                    <div class="rc" data-s="3" style="left: 492px; top: 150px">
-                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-deal" /></svg>Deal</div>
-                      <div class="rc-title">Phase 1 <span class="rc-badge">Won</span></div>
-                      <div class="rc-sub">€12,000 · closed in June</div>
-                    </div>
-                    <div class="rc" data-s="4" style="left: 492px; top: 268px">
-                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-timer" /></svg>Time</div>
-                      <div class="rc-title">38h 20m tracked</div>
-                      <div class="rc-sub">Phase 1 · not invoiced</div>
-                    </div>
-                    <div class="rc rc-hint" data-s="4">
-                      <div class="rc-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-sparkle" /></svg>Suggestion</div>
-                      <div class="rc-title">Send the Phase 1 invoice?</div>
-                      <div class="rc-sub">38h 20m × €120 = €4,600 · to Anna Kowalska</div>
+                    </article>
+
+                    <article class="rn" data-id="cal" data-s="1" style="--d: 950ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</div>
+                      <div class="rn-title">Demo with Anna</div>
+                      <div class="rn-sub">Thursday · 14:00 – 15:00</div>
+                      <div class="avs"><span class="av">AK</span><span class="av">TW</span><span class="av">MG</span><span>3 attending</span></div>
+                    </article>
+
+                    <article class="rn" data-id="contact" data-s="3" style="--d: 150ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-contact" /></svg>Client</div>
+                      <div class="rn-title">Anna Kowalska</div>
+                      <div class="rn-sub">Kowalska Studio</div>
+                      <ol class="hist">
+                        <li style="--i: 0"><b>Jun</b> · Phase 1 signed</li>
+                        <li style="--i: 1"><b>Sep</b> · Phase 2 brief</li>
+                        <li class="is-now" style="--i: 2"><b>Thu</b> · Demo</li>
+                      </ol>
+                    </article>
+
+                    <article class="rn" data-id="deal" data-s="3" style="--d: 600ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-deal" /></svg>Deal</div>
+                      <div class="rn-title">Phase 1 <span class="rn-badge">Won</span></div>
+                      <div class="rn-sub">€12,000 · signed 14 Jun</div>
+                    </article>
+
+                    <article class="rn" data-id="time" data-s="4" style="--d: 100ms">
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-timer" /></svg>Time tracking</div>
+                      <div class="rn-big" id="rel-hours">38h 20m</div>
+                      <div class="rn-sub">Phase 1 · not invoiced yet</div>
+                      <div class="bars" aria-hidden="true"><i style="--h: 40; --i: 0"></i><i style="--h: 72; --i: 1"></i><i style="--h: 55; --i: 2"></i><i style="--h: 90; --i: 3"></i><i style="--h: 64; --i: 4"></i><i style="--h: 30; --i: 5"></i><i style="--h: 82; --i: 6"></i><i style="--h: 100; --i: 7"></i></div>
+                    </article>
+
+                    <article class="rn rn-inv" data-id="inv" data-s="4" style="--d: 900ms">
+                      <span class="stamp">Draft #014</span>
+                      <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-sparkle" /></svg>Suggestion</div>
+                      <div class="rn-title">Send Anna the Phase 1 invoice?</div>
+                      <div class="ln" style="--d: 1150ms"><span>Design · 38h 20m × €120</span><span>€4,600</span></div>
+                      <div class="tot" style="--d: 1350ms"><span>Total</span><b id="rel-total">€4,600</b></div>
                       <button class="btn btn-primary btn-sm" type="button" id="rel-draft">Draft invoice</button>
-                    </div>
+                    </article>
                   </div>
                 </div>
-                <div class="stage-foot rel-foot" aria-live="polite">
-                  <span>Connections found <b id="rel-found">0</b></span>
-                  <span>Tagged by you <b>0</b></span>
+                <div class="stage-foot rel-foot">
+                  <span class="rf-status" id="rel-status-wrap" aria-live="polite"><i class="rf-dot"></i><span id="rel-status">Listening for new mail</span></span>
+                  <span class="rf-hint" id="rel-hint">Drag cards · hover to trace</span>
+                  <button class="rf-reset" type="button" id="rel-reset" hidden>Reset layout</button>
+                  <span class="rf-count">Connections <b id="rel-found">0</b></span>
+                  <span class="rf-count rf-tag">Tagged by you <b>0</b></span>
                 </div>
               </div>
             </div>
@@ -3106,48 +3641,491 @@
         var track = $("story-track");
         var fit = $("rel-fit");
         var rel = $("rel");
+        var svgEl = $("rel-edges");
         var bar = $("story-bar");
         var steps = Array.prototype.slice.call(document.querySelectorAll(".step"));
+        var SVGNS = "http://www.w3.org/2000/svg";
+        var nodes = {};
+        Array.prototype.forEach.call(rel.querySelectorAll(".rn"), function (el) {
+          nodes[el.dataset.id] = el;
+        });
+        var LAYOUTS = {
+          wide: { w: 820, h: 520, mail: [300, 168, 220], proj: [16, 16, 210], cal: [594, 16, 210], contact: [594, 176, 210], deal: [594, 372, 210], time: [16, 300, 210], inv: [300, 336, 220] },
+          tall: { w: 460, h: 840, mail: [70, 12, 320], proj: [12, 200, 200], cal: [248, 200, 200], contact: [248, 352, 200], deal: [248, 528, 200], time: [12, 456, 200], inv: [70, 650, 320] },
+        };
+        var layout = null;
         var EDGES = [
-          [232, 172, 212, 56, 1],
-          [472, 172, 492, 56, 1],
-          [232, 230, 212, 262, 2],
-          [472, 196, 492, 188, 3],
-          [472, 238, 492, 306, 4],
-          [492, 332, 472, 372, 4],
+          { a: "mail", b: "cal", s: 1, d: 350, t: 650, why: "the meeting" },
+          { a: "mail", b: "proj", s: 1, d: 850, t: 650, why: "the project" },
+          { a: "proj", b: "cal", s: 2, d: 900, t: 800, why: "due before demo" },
+          { a: "cal", b: "contact", s: 3, d: 250, t: 600, why: "attendee" },
+          { a: "mail", b: "contact", s: 3, d: 400, t: 650, why: "same client" },
+          { a: "contact", b: "deal", s: 3, d: 750, t: 600, why: "signed" },
+          { a: "time", b: "inv", s: 4, d: 950, t: 700, why: "38h 20m" },
+          { a: "deal", b: "inv", s: 4, d: 1100, t: 700, why: "not billed" },
         ];
-        $("rel-edges").innerHTML =
-          EDGES.map(function (e) {
-            var mx = (e[0] + e[2]) / 2;
-            return '<path pathLength="1" data-s="' + e[4] + '" d="M' + e[0] + " " + e[1] + " C " + mx + " " + e[1] + ", " + mx + " " + e[3] + ", " + e[2] + " " + e[3] + '" />';
-          }).join("") + '<path pathLength="1" data-s="4" d="M352 254 L352 330" />';
-        var relEls = Array.prototype.slice.call(rel.querySelectorAll("[data-s]"));
-        var FOUND = [0, 2, 3, 4, 6];
-        var foundEl = $("rel-found");
-        var cur = -1;
-        var fitRel = function () {
-          var s = Math.min(fit.clientWidth / 704, fit.clientHeight / 452);
+        EDGES.forEach(function (e) {
+          e.path = document.createElementNS(SVGNS, "path");
+          e.path.setAttribute("class", "edge");
+          e.path.setAttribute("pathLength", "1");
+          e.path.style.setProperty("--d", e.d + "ms");
+          e.path.style.setProperty("--dur", e.t + "ms");
+          e.dot = document.createElementNS(SVGNS, "circle");
+          e.dot.setAttribute("class", "pulse");
+          e.dot.setAttribute("r", "2.5");
+          svgEl.appendChild(e.path);
+          svgEl.appendChild(e.dot);
+          e.label = document.createElement("span");
+          e.label.className = "rel-why";
+          e.label.textContent = e.why;
+          rel.appendChild(e.label);
+          e.live = null;
+          e.dStr = "";
+        });
+
+        // Words of the email fade in one by one; marks stay whole.
+        var relBody = $("rel-body");
+        var relWi = 0;
+        Array.prototype.slice.call(relBody.childNodes).forEach(function (n) {
+          if (n.nodeType === 3) {
+            var frag = document.createDocumentFragment();
+            n.textContent.split(/(\s+)/).forEach(function (part) {
+              if (!part) return;
+              if (/^\s+$/.test(part)) {
+                frag.appendChild(document.createTextNode(part));
+                return;
+              }
+              var w = document.createElement("span");
+              w.className = "rw";
+              w.style.setProperty("--i", relWi++);
+              w.textContent = part;
+              frag.appendChild(w);
+            });
+            relBody.replaceChild(frag, n);
+          } else if (n.tagName === "MARK") {
+            n.classList.add("rw");
+            n.style.setProperty("--i", relWi++);
+          }
+        });
+
+        var applyLayout = function () {
+          var L = fit.clientWidth < 560 ? LAYOUTS.tall : LAYOUTS.wide;
+          if (L !== layout) {
+            layout = L;
+            rel.classList.toggle("is-tall", L === LAYOUTS.tall);
+            rel.style.width = L.w + "px";
+            rel.style.height = L.h + "px";
+            Object.keys(nodes).forEach(function (id) {
+              var p = L[id];
+              nodes[id].style.left = p[0] + "px";
+              nodes[id].style.top = p[1] + "px";
+              nodes[id].style.width = p[2] + "px";
+            });
+            $("rel-reset").hidden = true;
+          }
+          var s = Math.min(fit.clientWidth / L.w, fit.clientHeight / L.h);
           rel.style.setProperty("--s", s.toFixed(4));
         };
+        var fitRel = applyLayout;
+
+        var scaleOf = function () {
+          return parseFloat(rel.style.getPropertyValue("--s")) || 1;
+        };
+        var box = function (n) {
+          return { x: n.offsetLeft, y: n.offsetTop, w: n.offsetWidth, h: n.offsetHeight };
+        };
+        var curve = function (A, B) {
+          var gx = Math.max(B.x - (A.x + A.w), A.x - (B.x + B.w));
+          var gy = Math.max(B.y - (A.y + A.h), A.y - (B.y + B.h));
+          var ax, ay, bx, by, c;
+          if (gx > 0 && gx >= gy * 0.5) {
+            var right = B.x > A.x;
+            ax = right ? A.x + A.w : A.x;
+            bx = right ? B.x : B.x + B.w;
+            ay = A.y + Math.min(A.h / 2, 44);
+            by = B.y + Math.min(B.h / 2, 44);
+            c = Math.max(24, Math.abs(bx - ax) * 0.5) * (right ? 1 : -1);
+            return "M" + ax + " " + ay + " C " + (ax + c) + " " + ay + ", " + (bx - c) + " " + by + ", " + bx + " " + by;
+          }
+          var down = B.y > A.y;
+          ax = A.x + A.w / 2;
+          bx = B.x + B.w / 2;
+          ay = down ? A.y + A.h : A.y;
+          by = down ? B.y : B.y + B.h;
+          c = Math.max(18, Math.abs(by - ay) * 0.5) * (down ? 1 : -1);
+          return "M" + ax + " " + ay + " C " + ax + " " + (ay + c) + ", " + bx + " " + (by - c) + ", " + bx + " " + by;
+        };
+
+        // Status line types itself out.
+        var statusWrap = $("rel-status-wrap");
+        var statusEl = $("rel-status");
+        var statusTimer = null;
+        var setStatus = function (text, mode, instant) {
+          clearInterval(statusTimer);
+          statusWrap.classList.toggle("is-busy", mode === "busy");
+          statusWrap.classList.toggle("is-ok", mode === "ok");
+          if (instant || reduce) {
+            statusEl.textContent = text;
+            return;
+          }
+          var i = 0;
+          statusTimer = setInterval(function () {
+            i += 2;
+            statusEl.textContent = text.slice(0, i);
+            if (i >= text.length) clearInterval(statusTimer);
+          }, 18);
+        };
+
+        var hoursEl = $("rel-hours");
+        var totalEl = $("rel-total");
+        var fmtHours = function (m) {
+          return Math.floor(m / 60) + "h " + String(Math.round(m % 60)).padStart(2, "0") + "m";
+        };
+        var fmtEur = function (n) {
+          return "€" + Math.round(n).toLocaleString("en-US");
+        };
+        var counters = [];
+        var countUp = function (el, to, fmt, delay, dur) {
+          var c = { el: el, to: to, fmt: fmt, start: performance.now() + delay, dur: dur };
+          counters.push(c);
+          el.textContent = fmt(0);
+          kick();
+        };
+
+        var timers = [];
+        var later = function (ms, fn) {
+          timers.push(setTimeout(fn, ms));
+        };
+        var flights = [];
+        var rootStyle = getComputedStyle(document.documentElement);
+        var tone = function (name, pct) {
+          return "color-mix(in oklab, " + rootStyle.getPropertyValue(name).trim() + " " + pct + "%, transparent)";
+        };
+        var hit = function (el) {
+          if (reduce || !el.animate) return;
+          var base = rootStyle.getPropertyValue("--shadow-md").trim();
+          el.animate([{ boxShadow: base + ", 0 0 0 0 " + tone("--foreground", 40) }, { boxShadow: base + ", 0 0 0 12px " + tone("--foreground", 0) }], { duration: 750, easing: "ease-out" });
+        };
+        var relPoint = function (el) {
+          var rr = rel.getBoundingClientRect();
+          var r = el.getBoundingClientRect();
+          var s = scaleOf();
+          return { x: (r.left - rr.left) / s, y: (r.top - rr.top) / s, w: r.width / s, h: r.height / s };
+        };
+        var fly = function (mark, target, dur, land) {
+          var from = relPoint(mark);
+          var tb = box(nodes[target === "due" ? "proj" : target]);
+          var to = target === "due" ? { x: tb.x + 44, y: tb.y + 46 } : { x: tb.x + 14, y: tb.y + 30 };
+          var tok = document.createElement("span");
+          tok.className = "rel-token";
+          tok.textContent = mark.textContent;
+          rel.appendChild(tok);
+          var dx = to.x - from.x;
+          var dy = to.y - from.y;
+          var lift = Math.min(-40, dy * 0.25 - 60);
+          var a = tok.animate(
+            [
+              { transform: "translate(" + from.x + "px," + from.y + "px) scale(1)", opacity: 1 },
+              { transform: "translate(" + (from.x + dx * 0.5) + "px," + (from.y + dy * 0.5 + lift) + "px) scale(1.06)", opacity: 1, offset: 0.5 },
+              { transform: "translate(" + to.x + "px," + to.y + "px) scale(0.7)", opacity: 0 },
+            ],
+            { duration: dur, easing: "cubic-bezier(0.45, 0, 0.2, 1)", fill: "forwards" }
+          );
+          flights.push(tok);
+          a.onfinish = function () {
+            tok.remove();
+            land();
+          };
+        };
+
+        var STATUS = [
+          ["Listening for new mail", ""],
+          ["New mail from Tomasz", ""],
+          ["Linked a meeting, a deadline and a project", "ok"],
+          ["3 subtasks still open before the 15th", "ok"],
+          ["Matched the client: Kowalska Studio", "ok"],
+          ["38h 20m unbilled — invoice drafted", "ok"],
+        ];
+        var progEl = $("rel-prog");
+        var ringEl = $("rel-ring");
+        var stBtns = Array.prototype.slice.call(document.querySelectorAll("#rel-sts .st"));
+        var renderProg = function () {
+          var done = 4 + stBtns.filter(function (b) {
+            return b.classList.contains("is-done");
+          }).length;
+          var open = 7 - done;
+          progEl.textContent = done + " of 7 done" + (open ? " · " + open + " open" : " · ready for the 15th");
+          ringEl.style.setProperty("--off", (1 - done / 7).toFixed(3));
+          return open;
+        };
+        stBtns.forEach(function (b) {
+          b.addEventListener("click", function () {
+            var on = b.classList.toggle("is-done");
+            b.setAttribute("aria-checked", String(on));
+            var open = renderProg();
+            STATUS[3][0] = open ? open + (open === 1 ? " subtask" : " subtasks") + " still open before the 15th" : "Everything for the 15th is done";
+            setStatus(STATUS[3][0], "ok");
+          });
+        });
+
+        var cur = -2;
+        var steps5 = 5;
         var setStep = function (i) {
           if (i === cur) return;
+          var prev = cur;
           cur = i;
+          var animate = !reduce && i === prev + 1 && prev !== -2;
+          timers.forEach(clearTimeout);
+          timers = [];
+          flights.forEach(function (t) {
+            t.remove();
+          });
+          flights = [];
+          rel.classList.toggle("is-instant", prev === -2 || (i > prev && !animate));
+          rel.classList.toggle("is-back", i < prev);
+          void rel.offsetWidth;
+          for (var k = 0; k < steps5; k++) rel.classList.toggle("s" + k, k <= i);
+          Object.keys(nodes).forEach(function (id) {
+            nodes[id].classList.toggle("is-on", Number(nodes[id].dataset.s) <= i);
+          });
+          var now = performance.now();
+          EDGES.forEach(function (e) {
+            var on = e.s <= i;
+            e.path.classList.toggle("is-on", on);
+            if (!on) e.live = null;
+            else if (e.live === null || e.s === i) e.live = animate && e.s === i ? now + e.d + e.t : now;
+          });
           steps.forEach(function (s, k) {
             s.classList.toggle("is-on", k === i);
             if (k === i) s.setAttribute("aria-current", "step");
             else s.removeAttribute("aria-current");
           });
-          relEls.forEach(function (el) {
-            el.classList.toggle("is-on", Number(el.dataset.s) <= i);
-          });
-          foundEl.textContent = FOUND[i];
+          $("rel-hint").classList.toggle("is-on", i >= 1);
+          counters = [];
+          hoursEl.textContent = fmtHours(i >= 4 ? 2300 : 0);
+          totalEl.textContent = fmtEur(i >= 4 ? 4600 : 0);
+          if (i < 4) {
+            nodes.inv.classList.remove("is-sent");
+            $("rel-draft").classList.remove("is-done");
+            $("rel-draft").textContent = "Draft invoice";
+          }
+          var st = STATUS[i + 1];
+          if (!animate) {
+            setStatus(st[0], st[1], true);
+            kick();
+            return;
+          }
+          if (i === 0) {
+            var toast = $("rel-toast");
+            var mb = box(nodes.mail);
+            toast.style.left = mb.x + mb.w / 2 + "px";
+            toast.style.top = mb.y + 34 + "px";
+            toast.animate(
+              [
+                { opacity: 0, transform: "translate(-50%, -50%) translateY(-28px) scale(0.9)" },
+                { opacity: 1, transform: "translate(-50%, -50%)", offset: 0.25 },
+                { opacity: 1, transform: "translate(-50%, -50%)", offset: 0.7 },
+                { opacity: 0, transform: "translate(-50%, -50%) scale(1.25)" },
+              ],
+              { duration: 1100, easing: "ease-out" }
+            );
+            nodes.mail.animate([{ clipPath: "inset(6% 22% 70% 22% round 999px)" }, { clipPath: "inset(0 round 12px)" }], {
+              duration: 650,
+              delay: 750,
+              easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+              fill: "backwards",
+            });
+            setStatus(st[0], "busy");
+          } else if (i === 1) {
+            setStatus("Reading the message…", "busy");
+            $("rel-beam").animate(
+              [
+                { opacity: 0, backgroundPosition: "100% 0" },
+                { opacity: 1, offset: 0.1 },
+                { opacity: 1, offset: 0.9 },
+                { opacity: 0, backgroundPosition: "0% 0" },
+              ],
+              { duration: 1100, delay: 100, easing: "ease-in-out" }
+            );
+            Array.prototype.forEach.call(relBody.querySelectorAll("mark"), function (m) {
+              var to = m.dataset.to;
+              var d = parseInt(m.style.getPropertyValue("--d"), 10);
+              later(d, function () {
+                fly(m, to, to === "due" ? 1100 : 650, function () {
+                  if (to === "due") {
+                    $("rel-due").animate(
+                      [{ backgroundColor: tone("--foreground", 30) }, { backgroundColor: tone("--foreground", 0) }],
+                      { duration: 1000, easing: "ease-out" }
+                    );
+                  } else hit(nodes[to]);
+                });
+              });
+            });
+            later(1750, function () {
+              setStatus(st[0], st[1]);
+            });
+          } else if (i === 4) {
+            setStatus("Checking tracked time…", "busy");
+            countUp(hoursEl, 2300, fmtHours, 300, 1200);
+            countUp(totalEl, 4600, fmtEur, 1400, 900);
+            later(1600, function () {
+              setStatus(st[0], st[1]);
+            });
+            later(2300, function () {
+              hit($("rel-draft"));
+            });
+          } else {
+            later(300, function () {
+              setStatus(st[0], st[1]);
+            });
+          }
+          kick();
         };
+
+        // Drag cards (mouse/pen) — edges follow. Hover or tap a card to trace its links.
+        var relDrag = null;
+        var relTop = 3;
+        rel.addEventListener("pointerdown", function (e) {
+          if (e.pointerType === "touch" || e.button !== 0) return;
+          var n = e.target.closest(".rn");
+          if (!n || !n.classList.contains("is-on") || e.target.closest("button")) return;
+          relDrag = { n: n, s: scaleOf(), x: e.clientX, y: e.clientY, l: n.offsetLeft, t: n.offsetTop, moved: false, id: e.pointerId };
+        });
+        window.addEventListener("pointermove", function (e) {
+          if (!relDrag || e.pointerId !== relDrag.id) return;
+          var dx = (e.clientX - relDrag.x) / relDrag.s;
+          var dy = (e.clientY - relDrag.y) / relDrag.s;
+          if (!relDrag.moved) {
+            if (Math.abs(dx) + Math.abs(dy) < 4) return;
+            relDrag.moved = true;
+            relDrag.n.classList.add("is-drag");
+            relDrag.n.style.zIndex = String(++relTop);
+            $("rel-hint").hidden = true;
+            relDrag.n.setPointerCapture(e.pointerId);
+            $("rel-reset").hidden = false;
+          }
+          var maxX = layout.w - relDrag.n.offsetWidth;
+          var maxY = layout.h - relDrag.n.offsetHeight;
+          relDrag.n.style.left = Math.max(0, Math.min(maxX, relDrag.l + dx)) + "px";
+          relDrag.n.style.top = Math.max(0, Math.min(maxY, relDrag.t + dy)) + "px";
+          kick();
+        });
+        var relEndDrag = function () {
+          if (!relDrag) return;
+          relDrag.n.classList.remove("is-drag");
+          relDrag = null;
+        };
+        window.addEventListener("pointerup", relEndDrag);
+        window.addEventListener("pointercancel", relEndDrag);
+        $("rel-reset").addEventListener("click", function () {
+          rel.classList.add("is-settle");
+          var L = layout;
+          layout = null;
+          applyLayout();
+          layout = L;
+          $("rel-hint").hidden = false;
+          Object.keys(nodes).forEach(function (id) {
+            nodes[id].style.zIndex = "";
+          });
+          setTimeout(function () {
+            rel.classList.remove("is-settle");
+          }, 600);
+          kick();
+        });
+
+        var tracing = null;
+        var trace = function (id) {
+          tracing = id;
+          rel.classList.toggle("is-tracing", !!id);
+          var near = {};
+          if (id) near[id] = true;
+          EDGES.forEach(function (e) {
+            var hot = !!id && e.live !== null && (e.a === id || e.b === id);
+            e.path.classList.toggle("is-hot", hot);
+            e.label.classList.toggle("is-hot", hot);
+            if (hot) near[e.a] = near[e.b] = true;
+          });
+          Object.keys(nodes).forEach(function (k) {
+            nodes[k].classList.toggle("is-near", !!near[k]);
+          });
+        };
+        Object.keys(nodes).forEach(function (id) {
+          var n = nodes[id];
+          n.addEventListener("pointerenter", function (e) {
+            if (e.pointerType !== "touch" && !relDrag) trace(id);
+          });
+          n.addEventListener("pointerleave", function (e) {
+            if (e.pointerType !== "touch" && !relDrag) trace(null);
+          });
+          n.addEventListener("click", function (e) {
+            if (e.target.closest("button")) return;
+            if (matchMedia("(hover: none)").matches) trace(tracing === id ? null : id);
+          });
+        });
+
+        $("rel-draft").addEventListener("click", function () {
+          var sent = nodes.inv.classList.toggle("is-sent");
+          this.classList.toggle("is-done", sent);
+          this.textContent = sent ? "Draft #014 saved" : "Draft invoice";
+          setStatus(sent ? "Draft #014 saved — linked to Phase 1, Anna and 38h 20m" : STATUS[5][0], "ok");
+        });
+
+        // One frame loop: edge geometry, labels, travelling pulses, counters.
+        var foundEl = $("rel-found");
+        var found = 0;
+        var inView = false;
+        var raf = 0;
+        var kick = function () {
+          if (!raf) raf = requestAnimationFrame(loop);
+        };
+        var loop = function (now) {
+          raf = 0;
+          var count = 0;
+          EDGES.forEach(function (e, k) {
+            var d = curve(box(nodes[e.a]), box(nodes[e.b]));
+            if (d !== e.dStr) {
+              e.dStr = d;
+              e.path.setAttribute("d", d);
+            }
+            var live = e.live !== null && now >= e.live;
+            if (live) count++;
+            var len = e.path.getTotalLength();
+            var mid = e.path.getPointAtLength(len / 2);
+            e.label.style.transform = "translate(" + mid.x.toFixed(1) + "px," + mid.y.toFixed(1) + "px) translate(-50%, -50%)";
+            e.label.classList.toggle("is-cur", live && e.s === cur && !tracing);
+            if (live && !reduce && inView) {
+              var t = ((now - e.live) / 2000 + k * 0.29) % 1;
+              var p = e.path.getPointAtLength(len * t);
+              e.dot.setAttribute("cx", p.x.toFixed(1));
+              e.dot.setAttribute("cy", p.y.toFixed(1));
+              e.dot.style.opacity = (Math.sin(Math.PI * t) * 0.9).toFixed(2);
+            } else e.dot.style.opacity = "0";
+          });
+          if (count !== found) {
+            found = count;
+            foundEl.textContent = found;
+            foundEl.classList.remove("is-bump");
+            void foundEl.offsetWidth;
+            foundEl.classList.add("is-bump");
+          }
+          counters = counters.filter(function (c) {
+            var t = Math.min(1, Math.max(0, (now - c.start) / c.dur));
+            c.el.textContent = c.fmt(c.to * (1 - Math.pow(1 - t, 3)));
+            return t < 1;
+          });
+          if (inView || counters.length || relDrag) kick();
+        };
+        new IntersectionObserver(function (entries) {
+          inView = entries[0].isIntersecting;
+          if (inView) kick();
+        }).observe(track);
+
         var storyFrame = function () {
           var r = track.getBoundingClientRect();
           var total = track.offsetHeight - window.innerHeight;
           var p = Math.min(1, Math.max(0, -r.top / total));
           bar.style.setProperty("--p", p.toFixed(4));
-          setStep(Math.min(4, Math.floor(p * 5)));
+          setStep(r.top > window.innerHeight * 0.35 ? -1 : Math.min(4, Math.floor(p * 5)));
         };
         var ticking = false;
         window.addEventListener(
@@ -3163,8 +4141,9 @@
           { passive: true }
         );
         window.addEventListener("resize", function () {
-          fitRel();
+          applyLayout();
           storyFrame();
+          kick();
         });
         steps.forEach(function (s, k) {
           s.addEventListener("click", function () {
@@ -3173,11 +4152,8 @@
             window.scrollTo({ top: top + (total * (k + 0.5)) / 5, behavior: reduce ? "auto" : "smooth" });
           });
         });
-        $("rel-draft").addEventListener("click", function () {
-          var done = this.classList.toggle("is-done");
-          this.textContent = done ? "Draft #014 ready — linked to Phase 1" : "Draft invoice";
-        });
-        fitRel();
+        applyLayout();
+        renderProg();
         storyFrame();
 
         // ── Make it yours: module switches, a widget store, a draggable board ──

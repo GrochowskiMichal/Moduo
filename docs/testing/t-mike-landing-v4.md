@@ -15,13 +15,18 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 
 ## How it connects (smart relations scroll story)
 
-- [ ] Scrolling keeps the stage pinned; steps advance 01 → 05
-- [ ] 01: only Tomasz's email shows. 02: "demo on Thursday", "the 15th", "Kowalska Phase 2" highlight; Project + Calendar cards appear with lines drawing to them
-- [ ] 03: Subtasks card (3 open). 04: Deal "Phase 1 · Won · €12,000". 05: Time "38h 20m" + the invoice suggestion
-- [ ] Lines start at the email card edges (none floating in empty space)
-- [ ] "Connections found" counts up; "Tagged by you" stays 0
-- [ ] "Draft invoice" → turns into "Draft #014 ready — linked to Phase 1"
-- [ ] Clicking a step scrolls to it; scrolling back up hides cards again
+- [ ] Scrolling keeps the stage pinned; steps advance 01 → 05; the stage is empty ("Listening for new mail") until you reach it
+- [ ] 01: a "New mail · Tomasz" pill drops in, then unfolds into the email card; the words fade in one by one
+- [ ] 02: a light sweeps across the email; "demo on Thursday", "the 15th", "Kowalska Phase 2" highlight and fly out as chips to the Calendar and Project cards; lines draw behind them
+- [ ] 03: the Project card expands: progress ring 4 of 7, three open subtasks. Ticking one strikes it, moves the ring and updates the status line
+- [ ] 04: Client card (Anna, a Jun → Sep → Thu history that draws in) and the Deal "Phase 1 · Won"
+- [ ] 05: Time card bars grow and hours count up to 38h 20m; the invoice suggestion builds line by line, total counts to €4,600
+- [ ] Little dots travel along every live connection; the current step's connections show why they're linked ("the meeting", "attendee", "not billed"…)
+- [ ] Hover a card → its connections light up with reasons, everything else dims (phone: tap a card)
+- [ ] Drag any card with the mouse → lines follow live; "Reset layout" puts everything back smoothly
+- [ ] "Draft invoice" → a "Draft #014" stamp lands; status says what it's linked to
+- [ ] Bottom bar: status types itself; "Connections" ticks up to 8 with a bump; "Tagged by you" stays 0
+- [ ] Clicking a step scrolls to it; scrolling back up removes cards quickly, scrolling down replays
 
 ## Make it yours (board + widget store)
 
