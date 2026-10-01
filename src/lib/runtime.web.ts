@@ -381,6 +381,24 @@ export const webRuntime: ModuoRuntime = {
       }
     },
 
+    async updateAvatarUrl(avatarUrl: string | null) {
+      try {
+        const user = await getAuthedUser();
+        if (!user) return { data: { avatarUrl }, error: { message: "Not authenticated" } };
+        const { error } = await supabaseClient
+          .from("profiles")
+          .update({ avatar_url: avatarUrl })
+          .eq("id", user.id)
+          .select("avatar_url")
+          .single();
+        if (error) return { data: { avatarUrl }, error: toError(error) };
+        bootReads.invalidate(`profile:${user.id}`);
+        return { data: { avatarUrl }, error: null };
+      } catch (error) {
+        return { data: { avatarUrl }, error: toError(error) };
+      }
+    },
+
     async getStoredMnemonic() {
       return { data: { phrase: null }, error: desktopOnly() };
     },
@@ -546,6 +564,16 @@ export const webRuntime: ModuoRuntime = {
       const { data, error } = await supabaseClient
         .from("workspaces")
         .update({ name })
+        .eq("id", workspaceId)
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async updateBranding(workspaceId, branding) {
+      const { data, error } = await supabaseClient
+        .from("workspaces")
+        .update({ icon: branding.icon, logo_url: branding.logoUrl })
         .eq("id", workspaceId)
         .select()
         .single();

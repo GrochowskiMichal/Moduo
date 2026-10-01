@@ -98,6 +98,17 @@ describe("mapWorkspace", () => {
     const asOwner = mapWorkspace(row, "owner1");
     expect(asOwner.role).toBe("owner");
     expect(asOwner.permissions.notes).toBe("edit");
+    expect(asOwner.icon).toBeNull();
+    expect(asOwner.logoUrl).toBeNull();
+  });
+
+  it("surfaces the emoji icon and logo url", () => {
+    const branded = mapWorkspace(
+      { ...row, icon: "🚀", logo_url: "https://example.com/logo.png" },
+      "owner1",
+    );
+    expect(branded.icon).toBe("🚀");
+    expect(branded.logoUrl).toBe("https://example.com/logo.png");
   });
 
   it("trusts owner_id over a drifted membership role string", () => {
