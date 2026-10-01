@@ -46,6 +46,7 @@ import {
   Tray,
   timeLabel,
 } from "../../features/calendar/booking/sentence-ui";
+import { VIDEO_LABEL, type VideoProvider } from "../../features/calendar/booking/video";
 import { cn } from "../../lib/utils";
 
 type Phase =
@@ -53,9 +54,21 @@ type Phase =
   | { kind: "missing" }
   | { kind: "error" }
   | { kind: "ready"; preview: BookingPreview }
-  | { kind: "booked"; preview: BookingPreview; start: string; meetLink: string; guests: string[] };
+  | {
+      kind: "booked";
+      preview: BookingPreview;
+      start: string;
+      meetLink: string;
+      video: VideoProvider;
+      guests: string[];
+    };
 
-type TrayKind = "day" | "time" | "zone";
+type TrayKind = "video" | "day" | "time" | "zone";
+
+const VIDEO_HINT: Record<VideoProvider, string> = {
+  google_meet: "Joins in the browser",
+  zoom: "Opens in the Zoom app",
+};
 
 const PART_LABEL: Record<DayPart, string> = {
   morning: "Morning",
@@ -152,6 +165,7 @@ export function BookPage() {
   const [dayKey, setDayKey] = useState<string | null>(null);
   const [start, setStart] = useState<string | null>(null);
   const [tray, setTray] = useState<TrayKind | null>("day");
+  const [video, setVideo] = useState<VideoProvider | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
@@ -166,6 +180,7 @@ export function BookPage() {
   const dayBlank = useRef<HTMLButtonElement>(null);
   const timeBlank = useRef<HTMLButtonElement>(null);
   const zoneBlank = useRef<HTMLButtonElement>(null);
+  const videoBlank = useRef<HTMLButtonElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
   const trayRef = useRef<HTMLDivElement>(null);
@@ -264,6 +279,12 @@ export function BookPage() {
 
   if (!preview) return null;
   const host = firstName(preview.hostName);
+  const videoChoices: VideoProvider[] =
+    preview.videoOptions && preview.videoOptions.length > 0
+      ? preview.videoOptions
+      : [preview.video ?? "google_meet"];
+  const platform: VideoProvider =
+    video && videoChoices.includes(video) ? video : (videoChoices[0] ?? "google_meet");
   const echo = (slot: string) =>
     zone === preview.hostTimeZone
       ? null
@@ -281,8 +302,8 @@ export function BookPage() {
           </p>
           <div className="flex max-w-prose flex-col gap-2 font-sans text-md text-muted-foreground">
             <p>
-              {durationPhrase(preview.durationMinutes)} on Google Meet. A calendar invite and a
-              short email with a way to cancel are on their way to {email.trim()}.
+              {durationPhrase(preview.durationMinutes)} on {VIDEO_LABEL[phase.video]}. A calendar
+              invite and a short email with a way to cancel are on their way to {email.trim()}.
             </p>
             {echo(phase.start) ? <p>{echo(phase.start)}</p> : null}
             {phase.guests.length > 0 ? <p>Also invited: {phase.guests.join(", ")}.</p> : null}
@@ -290,7 +311,7 @@ export function BookPage() {
           {phase.meetLink ? (
             <Button asChild size="lg" className="w-full sm:w-fit">
               <a href={phase.meetLink} target="_blank" rel="noopener">
-                Join Google Meet
+                Join {VIDEO_LABEL[phase.video]}
               </a>
             </Button>
           ) : null}
@@ -332,7 +353,14 @@ export function BookPage() {
   };
   const toggle = (kind: TrayKind) => openTray(tray === kind ? null : kind);
   const closeTray = () => {
-    const back = tray === "day" ? dayBlank : tray === "time" ? timeBlank : zoneBlank;
+    const back =
+      tray === "day"
+        ? dayBlank
+        : tray === "time"
+          ? timeBlank
+          : tray === "video"
+            ? videoBlank
+            : zoneBlank;
     setTray(null);
     back.current?.focus();
   };
@@ -353,6 +381,13 @@ export function BookPage() {
       if (!nameOk) nameInput.current?.focus();
       else if (!emailOk) emailInput.current?.focus();
     });
+  };
+
+  const pickVideo = (next: VideoProvider) => {
+    setVideo(next);
+    setFormError(null);
+    openTray(activeDay ? null : "day", !activeDay);
+    if (activeDay) videoBlank.current?.focus();
   };
 
   const pickZone = (next: string) => {
@@ -404,6 +439,7 @@ export function BookPage() {
         email: email.trim(),
         note: noteOpen ? note : "",
         guests: invited.emails,
+        video: platform,
         origin: bookingPublicOrigin(window.location),
         answers: questions.map((question) => ({
           id: question.id,
@@ -431,7 +467,13 @@ export function BookPage() {
       setFormError(
         res.json.error === "bad_guest"
           ? "Each guest needs their own email address, up to 10."
-          : "Couldn't book that time. Try again.",
+          : res.json.error === "zoom_failed"
+            ? videoChoices.length > 1
+              ? "Zoom couldn't create the meeting. Try again, or pick Google Meet."
+              : "Zoom couldn't create the meeting. Try again in a moment."
+            : res.json.error === "host_unavailable"
+              ? `${host}'s calendar isn't connected right now. Try again later.`
+              : "Couldn't book that time. Try again.",
       );
       return;
     }
@@ -440,6 +482,8 @@ export function BookPage() {
       preview,
       start: String(res.json.start ?? start),
       meetLink: String(res.json.meetLink ?? ""),
+      video:
+        res.json.video === "zoom" || res.json.video === "google_meet" ? res.json.video : platform,
       guests: invited.emails,
     });
     window.scrollTo({ top: 0 });
@@ -468,7 +512,21 @@ export function BookPage() {
         }}
       >
         <p className={SENTENCE}>
-          Let's talk for <Fixed>{durationPhrase(preview.durationMinutes)}</Fixed> on{" "}
+          Let's talk over{" "}
+          {videoChoices.length > 1 ? (
+            <Blank
+              ref={videoBlank}
+              label="Video call on"
+              value={VIDEO_LABEL[platform]}
+              placeholder=""
+              open={tray === "video"}
+              controls="book-tray"
+              onToggle={() => toggle("video")}
+            />
+          ) : (
+            <Fixed>{VIDEO_LABEL[platform]}</Fixed>
+          )}{" "}
+          for <Fixed>{durationPhrase(preview.durationMinutes)}</Fixed> on{" "}
           <Blank
             ref={dayBlank}
             label="Day"
@@ -503,6 +561,42 @@ export function BookPage() {
 
         {tray ? (
           <div ref={trayRef}>
+            {tray === "video" ? (
+              <Tray
+                id="book-tray"
+                label="Choose how to meet"
+                heading="Choose how to meet"
+                aside={`${host} can do either`}
+                onClose={closeTray}
+              >
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {videoChoices.map((choice, index) => (
+                    <button
+                      key={choice}
+                      type="button"
+                      aria-pressed={choice === platform}
+                      data-first={index === 0 ? "" : undefined}
+                      onClick={() => pickVideo(choice)}
+                      className={cn(
+                        "flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left",
+                        "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        choice === platform
+                          ? "border-[var(--selected-border)] bg-[var(--selected-bg)]"
+                          : "border-border hover:border-foreground",
+                      )}
+                    >
+                      <span className="font-sans text-xl text-foreground">
+                        {VIDEO_LABEL[choice]}
+                      </span>
+                      <span className="font-sans text-sm text-muted-foreground">
+                        {VIDEO_HINT[choice]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Tray>
+            ) : null}
+
             {tray === "day" ? (
               <Tray
                 id="book-tray"
@@ -785,7 +879,7 @@ export function BookPage() {
             ) : (
               <p>
                 {start && echo(start) ? `${echo(start)} ` : ""}
-                Google Meet link arrives by email.
+                {VIDEO_LABEL[platform]} link arrives by email.
               </p>
             )}
           </div>
