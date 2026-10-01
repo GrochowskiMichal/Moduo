@@ -1,9 +1,9 @@
 import { ChevronDown } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { WorkspaceMark } from "../features/workspaces/ui/workspace-mark";
 import { useEntitlement } from "../hooks/use-entitlement";
 import { formatShortcut, SHORTCUTS, useShortcut } from "../lib/shortcuts";
 import { useWorkspace } from "../providers/workspace-provider";
-import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -152,9 +152,11 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
               className="flex h-8 flex-row items-center gap-1.5 rounded-md bg-transparent px-2 text-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               aria-label={`Switch workspace · current: ${workspaceLabel}`}
             >
-              <Avatar size="sm" className="h-7 w-7 shrink-0">
-                <AvatarFallback>{workspaceLabel.charAt(0).toUpperCase()}</AvatarFallback>
-              </Avatar>
+              <WorkspaceMark
+                name={workspaceLabel}
+                icon={selectedWorkspace.icon}
+                logoUrl={selectedWorkspace.logoUrl}
+              />
               <span className="max-w-[14ch] truncate text-sm">{workspaceLabel}</span>
               <ChevronDown className="size-4 shrink-0" aria-hidden />
             </DropdownMenuTrigger>
@@ -321,9 +323,11 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                       closeMenu();
                     }}
                   >
-                    <Avatar size="sm" className="shrink-0">
-                      <AvatarFallback>{nameLabel.charAt(0).toUpperCase()}</AvatarFallback>
-                    </Avatar>
+                    <WorkspaceMark
+                      name={nameLabel}
+                      icon={workspace.icon}
+                      logoUrl={workspace.logoUrl}
+                    />
                     <span
                       className={`min-w-0 flex-1 truncate text-sm ${active ? "text-foreground" : "text-popover-foreground"}`}
                     >

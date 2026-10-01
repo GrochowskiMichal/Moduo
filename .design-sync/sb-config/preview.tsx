@@ -46,11 +46,11 @@ const mockWorkspace: WorkspaceContextValue = {
   // Two workspaces: WorkspaceSwitcher returns null with <=1 workspace, so a
   // single-workspace mock renders nothing (the repo's own story has this gap).
   workspaces: [
-    { id: "w1", name: "Storybook Workspace", role: "owner", permissions: { notes: "edit", tasks: "edit" }, isDeleted: false, createdAt: "", updatedAt: "" },
-    { id: "w2", name: "Acme Team", role: "editor", permissions: { notes: "edit", tasks: "view" }, isDeleted: false, createdAt: "", updatedAt: "" },
+    { id: "w1", name: "Storybook Workspace", icon: null, logoUrl: null, role: "owner", permissions: { notes: "edit", tasks: "edit" }, isDeleted: false, createdAt: "", updatedAt: "" },
+    { id: "w2", name: "Acme Team", icon: null, logoUrl: null, role: "editor", permissions: { notes: "edit", tasks: "view" }, isDeleted: false, createdAt: "", updatedAt: "" },
   ],
   selectedWorkspaceId: "w1",
-  selectedWorkspace: { id: "w1", name: "Storybook Workspace", role: "owner", permissions: { notes: "edit", tasks: "edit" }, isDeleted: false, createdAt: "", updatedAt: "" },
+  selectedWorkspace: { id: "w1", name: "Storybook Workspace", icon: null, logoUrl: null, role: "owner", permissions: { notes: "edit", tasks: "edit" }, isDeleted: false, createdAt: "", updatedAt: "" },
   modulePermissions: { notes: "edit", tasks: "edit" },
   canManageWorkspace: true,
   members: [],
@@ -66,6 +66,7 @@ const mockWorkspace: WorkspaceContextValue = {
   refreshAccessData: async () => {},
   createWorkspace: async () => null,
   renameWorkspace: async () => {},
+  updateWorkspaceBranding: async () => {},
   leaveWorkspace: async () => {},
   softDeleteWorkspace: async () => {},
   sendInvite: async () => {},

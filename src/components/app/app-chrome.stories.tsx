@@ -10,6 +10,8 @@ import { AppChrome } from "./app-chrome";
 const baseWorkspace: WorkspaceSummary = {
   id: "w1",
   name: "Storybook Workspace",
+  icon: null,
+  logoUrl: null,
   role: "owner",
   permissions: { notes: "edit", tasks: "edit" },
   isDeleted: false,

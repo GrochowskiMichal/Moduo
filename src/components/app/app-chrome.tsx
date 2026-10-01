@@ -2,7 +2,7 @@ import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsLeft, ChevronsRight, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
+import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
 import {
   DASHBOARD_EDIT_CHANGED_EVENT,
   DASHBOARD_PAGER_EVENT,
@@ -22,7 +22,7 @@ import {
   routeToFeatureLayout,
   writePanelsMap,
 } from "../../features/layout/panel-events";
-import { PROFILE_UPDATED_EVENT, readStoredAvatar } from "../../features/profile/profile-storage";
+import { PROFILE_UPDATED_EVENT } from "../../features/profile/profile-storage";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { SettingsModal } from "../../features/settings/settings-modal";
 import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
@@ -105,7 +105,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   // modal open / closed without bouncing through the /settings route. Keep
   // useShortcut wiring here for the rest.
   useShortcut("new-item", () => dispatchCreateNew());
-  const { runtime, userEmail } = useAuth();
+  const { runtime, userEmail, userId } = useAuth();
   const { loading, modulePermissions } = useWorkspace();
   // Global capture (Wave-3 Notes AC1): ⌘⇧N → a fresh note from anywhere.
   useShortcut(
@@ -391,7 +391,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     if (typeof window === "undefined") return;
     let active = true;
     const readAvatar = async () => {
-      const next = await readStoredAvatar(runtime);
+      const next = runtime && userId ? await ensureProfileAvatar(runtime, userId) : null;
       if (active) setAvatarDataUrl(next);
     };
     void readAvatar();
@@ -408,7 +408,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener(PROFILE_UPDATED_EVENT, onProfileUpdated);
     };
-  }, [runtime]);
+  }, [runtime, userId]);
 
   useEffect(() => {
     if (!runtime) return;
