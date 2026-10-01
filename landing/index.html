@@ -543,21 +543,40 @@
         position: fixed;
         inset: 0 0 auto;
         z-index: 30;
-        height: var(--bar-h);
-        background: color-mix(in oklab, var(--background) 86%, transparent);
-        -webkit-backdrop-filter: saturate(140%) blur(12px);
-        backdrop-filter: saturate(140%) blur(12px);
-        border-bottom: 1px solid transparent;
-        transition: border-color var(--motion-base) var(--ease-out);
+        pointer-events: none;
       }
-      .nav.is-scrolled {
-        border-bottom-color: var(--border);
+      .nav-shell {
+        position: relative;
+        pointer-events: auto;
+        height: var(--bar-h);
+        border: 1px solid transparent;
+        background: color-mix(in oklab, var(--background) 78%, transparent);
+        -webkit-backdrop-filter: saturate(140%) blur(14px);
+        backdrop-filter: saturate(140%) blur(14px);
+        transition:
+          height var(--motion-slow) var(--ease-out),
+          margin var(--motion-slow) var(--ease-out),
+          border-color var(--motion-slow) var(--ease-out),
+          border-radius var(--motion-slow) var(--ease-out),
+          background-color var(--motion-slow) var(--ease-out),
+          box-shadow var(--motion-slow) var(--ease-out);
+      }
+      .nav.is-scrolled .nav-shell {
+        height: 2.75rem;
+        margin: 0;
+        border-color: color-mix(in oklab, var(--foreground) 16%, transparent);
+        border-top-color: transparent;
+        border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+        background: color-mix(in oklab, var(--background) 52%, transparent);
+        -webkit-backdrop-filter: saturate(180%) blur(22px);
+        backdrop-filter: saturate(180%) blur(22px);
+        box-shadow: var(--shadow-lg);
       }
       .nav-inner {
         height: 100%;
         display: flex;
         align-items: center;
-        gap: 1.5rem;
+        gap: 1.25rem;
       }
       .brand {
         display: inline-flex;
@@ -571,16 +590,89 @@
         width: 1.375rem;
         height: 1.375rem;
       }
+      .nav-now {
+        display: none;
+        align-items: baseline;
+        gap: 0.5rem;
+        min-width: 0;
+        margin: 0;
+        font-size: var(--text-sm);
+        color: var(--muted-foreground);
+      }
+      .nav-now b,
+      .nav-links b {
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        color: var(--faint-foreground);
+      }
+      .nav-now span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .nav-links {
+        position: relative;
         display: flex;
         align-items: center;
-        gap: 0.125rem;
-        margin-left: 0.5rem;
+        gap: 0.25rem;
+        height: 100%;
       }
-      .nav-links .btn {
+      .nav-links a {
+        position: relative;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.375rem;
         height: var(--ctrl-h-sm);
-        padding-inline: 0.625rem;
+        padding-inline: 0.5rem;
+        border-radius: var(--radius-sm);
         font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+        transition:
+          color var(--motion-base) var(--ease-out),
+          background-color var(--motion-fade) var(--ease-out);
+      }
+      .nav-links a:hover {
+        color: var(--foreground);
+        background: var(--accent);
+      }
+      .nav-links a.is-on {
+        color: var(--foreground);
+      }
+      .nav-links a.is-on b {
+        color: var(--foreground);
+      }
+      .nav-links a.is-on::after {
+        content: "";
+        position: absolute;
+        left: 0.5rem;
+        right: 0.5rem;
+        bottom: 0.2rem;
+        height: 1px;
+        background: var(--foreground);
+      }
+      .nav-meter {
+        position: absolute;
+        left: 1.25rem;
+        right: 1.25rem;
+        bottom: 0;
+        height: 1px;
+        background: var(--border);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--motion-base) var(--ease-out);
+      }
+      .nav.is-scrolled .nav-meter {
+        opacity: 1;
+      }
+      .nav-meter > span {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: var(--foreground);
+        transform: scaleX(0);
+        transform-origin: left center;
       }
       .nav-actions {
         margin-left: auto;
@@ -852,6 +944,956 @@
       }
       .hero-demo {
         margin-top: clamp(4.5rem, 10vw, 8rem);
+      }
+
+      /* ─── Hero: Fig. 00 — the assembly ──────────────────────────────────── */
+      .hx {
+        --hx-pad: clamp(1rem, 1.6vw, 1.375rem);
+        padding: calc(var(--bar-h) + 0.75rem) clamp(0.75rem, 2vw, 1.5rem) var(--section-gap);
+      }
+      .hx-frame {
+        max-width: 90rem;
+        margin-inline: auto;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        background: var(--border);
+      }
+      .hx-bar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1px;
+      }
+      .hx-bar > span,
+      .hx-r {
+        background: var(--background);
+      }
+      .hx-bar > span {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.625rem var(--hx-pad);
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .hx-bar-r {
+        justify-content: flex-end;
+        color: var(--subtle-foreground);
+      }
+
+      .hx-plate {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+        align-items: center;
+        gap: clamp(2rem, 4.5vw, 4.5rem);
+        padding: clamp(2.5rem, 4vw, 3.25rem) clamp(1.5rem, 4vw, 3.5rem);
+        overflow: hidden;
+        background:
+          linear-gradient(color-mix(in oklab, var(--border) 45%, transparent) 1px, transparent 1px) 0 0 / 40px 40px,
+          linear-gradient(90deg, color-mix(in oklab, var(--border) 45%, transparent) 1px, transparent 1px) 0 0 / 40px 40px,
+          var(--background);
+      }
+      .hx-plate::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(ellipse 70% 70% at 30% 45%, transparent 0%, var(--background) 82%);
+        pointer-events: none;
+      }
+      .hx-plate > * {
+        position: relative;
+      }
+      .hx-plate > .ft-plus,
+      .hx-plate > .ft-ruler,
+      .hx-plate > .ft-cx,
+      .hx-plate > .ft-cy,
+      .hx-plate > .ft-coord {
+        position: absolute;
+      }
+
+      .hx-copy {
+        display: grid;
+        justify-items: start;
+        gap: 1.5rem;
+        text-align: left;
+      }
+      .hx-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.625rem;
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--subtle-foreground);
+      }
+      .hx-ix {
+        display: inline-grid;
+        place-items: center;
+        min-width: 1.75rem;
+        height: 1.25rem;
+        padding-inline: 0.25rem;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        color: var(--foreground);
+      }
+      .hx .h-hero {
+        font-size: clamp(2.75rem, 5.5vw, 5.25rem);
+        line-height: 0.9;
+        letter-spacing: -0.055em;
+        text-transform: uppercase;
+        text-wrap: balance;
+      }
+      .hx .lead {
+        max-width: 31rem;
+      }
+      .hx-cta {
+        width: 100%;
+      }
+      .hx .wl {
+        justify-items: start;
+      }
+      .hx .wl-row {
+        justify-content: flex-start;
+      }
+
+      .hx-visual {
+        display: grid;
+        gap: 0.75rem;
+        min-width: 0;
+      }
+      .hx-tabs {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        height: 1.875rem;
+        padding: 3px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--card);
+      }
+      .hx-tab {
+        position: relative;
+        flex: 1 1 0;
+        min-width: 0;
+        height: 100%;
+        border-radius: var(--radius-sm);
+        background: var(--accent);
+        overflow: hidden;
+        transition:
+          flex-grow var(--motion-slower) var(--ease-out),
+          opacity var(--motion-slow) var(--ease-out),
+          margin var(--motion-slower) var(--ease-out),
+          background-color var(--motion-slow) var(--ease-out);
+        transition-delay: calc(var(--j, 0) * 18ms);
+      }
+      .hx-tab::after {
+        content: "";
+        position: absolute;
+        right: 3px;
+        top: 50%;
+        width: 4px;
+        height: 4px;
+        border-radius: var(--radius-full);
+        background: var(--faint-foreground);
+        transform: translateY(-50%);
+      }
+      .hx-tab > span {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        padding-inline: 0.625rem;
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        color: var(--foreground);
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity var(--motion-base) var(--ease-out);
+      }
+      .hx-tabs-n {
+        flex-shrink: 0;
+        min-width: 4.5rem;
+        padding-inline: 0.5rem;
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        text-align: right;
+        color: var(--warning);
+        font-variant-numeric: tabular-nums;
+        transition: color var(--motion-slow) var(--ease-out);
+      }
+      .hx-visual.is-on .hx-tab:not([data-first]) {
+        flex-grow: 0;
+        margin-inline: -1px;
+        opacity: 0;
+      }
+      .hx-visual.is-on .hx-tab[data-first] {
+        flex-grow: 1;
+        background: var(--selected-bg);
+      }
+      .hx-visual.is-on .hx-tab[data-first]::after {
+        background: var(--success);
+      }
+      .hx-visual.is-on .hx-tab > span {
+        opacity: 1;
+        transition-delay: 380ms;
+      }
+      .hx-visual.is-on .hx-tabs-n {
+        color: var(--success);
+      }
+
+      .hx-tab b {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-family: var(--font-mono);
+        font-size: 0.5625rem;
+        font-weight: 500;
+        color: var(--faint-foreground);
+      }
+
+      /* Assembly stage — sized in container units so it scales like an illustration */
+      .asm {
+        position: relative;
+        aspect-ratio: 16 / 12.6;
+        overflow: hidden;
+        border-radius: 1em;
+        container-type: inline-size;
+      }
+      .ws {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        grid-template-columns: 2.6em minmax(0, 1fr);
+        grid-template-rows: 2.5em minmax(0, 1fr);
+        font-size: 1.72cqw;
+        border: 1px dashed var(--border-strong);
+        border-radius: 1em;
+        transition:
+          border-color var(--motion-slow) var(--ease-out),
+          background-color var(--motion-slower) var(--ease-out),
+          box-shadow var(--motion-slower) var(--ease-out);
+      }
+      .asm.is-built .ws {
+        border-style: solid;
+        border-color: var(--border);
+        background: color-mix(in oklab, var(--card) 45%, var(--background));
+        box-shadow: var(--shadow-overlay);
+      }
+      .ws-bar {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 1em;
+        min-width: 0;
+        padding: 0 0.9em;
+        border-bottom: 1px dashed var(--border);
+        font-size: 0.85em;
+        color: var(--faint-foreground);
+        transition: color var(--motion-slow) var(--ease-out);
+      }
+      .ws-dots {
+        display: flex;
+        gap: 0.4em;
+      }
+      .ws-dots i {
+        width: 0.7em;
+        height: 0.7em;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--border-strong);
+      }
+      .ws-crumb {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ws-crumb em {
+        margin-inline: 0.35em;
+        font-style: normal;
+        color: var(--faint-foreground);
+      }
+      .ws-k {
+        margin-left: auto;
+        padding: 0.2em 0.7em;
+        border: 1px solid var(--border);
+        border-radius: 0.45em;
+        font-family: var(--font-mono);
+        font-size: 0.85em;
+        white-space: nowrap;
+      }
+      .ws-rail {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1em;
+        padding-top: 0.9em;
+        border-right: 1px dashed var(--border);
+        color: var(--faint-foreground);
+      }
+      .ws-rail .icon {
+        width: 1.15em;
+        height: 1.15em;
+      }
+      .ws-rail .icon:first-child {
+        color: var(--muted-foreground);
+      }
+      .ws-plus {
+        margin-top: auto;
+        margin-bottom: 0.9em;
+      }
+      .asm.is-built .ws-bar {
+        border-bottom-style: solid;
+        color: var(--muted-foreground);
+      }
+      .asm.is-built .ws-rail {
+        border-right-style: solid;
+        color: var(--muted-foreground);
+      }
+      .asm.is-built .ws-rail .icon:first-child {
+        color: var(--foreground);
+      }
+      .ws-grid {
+        display: grid;
+        grid-template-columns: repeat(10, minmax(0, 1fr));
+        grid-template-rows: repeat(5, minmax(0, 1fr));
+        gap: 0.55em;
+        min-height: 0;
+        padding: 0.65em;
+      }
+      .md-tasks {
+        grid-column: 1 / 5;
+        grid-row: 1 / 4;
+      }
+      .md-cal {
+        grid-column: 5 / 11;
+        grid-row: 1 / 3;
+      }
+      .md-mail {
+        grid-column: 5 / 11;
+        grid-row: 3 / 6;
+      }
+      .md-map {
+        grid-column: 1 / 3;
+        grid-row: 4 / 6;
+      }
+      .md-notes {
+        grid-column: 3 / 5;
+        grid-row: 4 / 6;
+      }
+
+      .md {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        border: 1px dashed var(--border-strong);
+        border-radius: 0.75em;
+        overflow: hidden;
+        transition:
+          border-color var(--motion-slow) var(--ease-out),
+          background-color var(--motion-slow) var(--ease-out),
+          opacity var(--motion-base) var(--ease-out);
+      }
+      .md::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+      }
+      .md.is-built {
+        border-style: solid;
+        border-color: var(--border);
+        background: var(--card);
+      }
+      .md.is-built::after {
+        animation: md-snap 700ms var(--ease-out);
+      }
+      @keyframes md-snap {
+        from {
+          box-shadow:
+            inset 0 0 0 1px var(--foreground),
+            0 0 0 0 color-mix(in oklab, var(--foreground) 35%, transparent);
+        }
+        to {
+          box-shadow:
+            inset 0 0 0 1px transparent,
+            0 0 0 0.9em transparent;
+        }
+      }
+      .md-h {
+        display: flex;
+        align-items: center;
+        gap: 0.45em;
+        padding: 0.65em 0.75em 0.45em;
+        font-size: 0.95em;
+        font-weight: 500;
+        color: var(--faint-foreground);
+        white-space: nowrap;
+        transition: color var(--motion-slow) var(--ease-out);
+      }
+      .md-h .icon {
+        width: 1em;
+        height: 1em;
+        flex-shrink: 0;
+      }
+      .md-n {
+        font-size: 0.85em;
+        font-weight: 400;
+        color: var(--subtle-foreground);
+        opacity: 0;
+        transition: opacity var(--motion-slow) var(--ease-out) 300ms;
+      }
+      .md-id {
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: 0.72em;
+        font-weight: 400;
+        letter-spacing: 0.04em;
+        color: var(--faint-foreground);
+      }
+      .md.is-built .md-h {
+        color: var(--foreground);
+      }
+      .md.is-built .md-n {
+        opacity: 1;
+      }
+      .md-body {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        align-content: start;
+        gap: 0.3em;
+        margin: 0;
+        padding: 0 0.6em;
+        list-style: none;
+      }
+      .md-body > * {
+        opacity: 0;
+        transform: translateY(0.45em);
+        transition:
+          opacity var(--motion-slow) var(--ease-out),
+          transform var(--motion-slower) var(--ease-out);
+      }
+      .md.is-built .md-body > * {
+        opacity: 1;
+        transform: none;
+        transition-delay: calc(var(--n, 1) * 70ms + 200ms);
+      }
+      .md-f {
+        padding: 0.5em 0.75em 0.6em;
+        border-top: 1px solid var(--border);
+        font-family: var(--font-mono);
+        font-size: 0.66em;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        opacity: 0;
+        transition: opacity var(--motion-slow) var(--ease-out);
+      }
+      .md.is-built .md-f {
+        opacity: 1;
+        transition-delay: 620ms;
+      }
+
+      .tk {
+        display: flex;
+        align-items: center;
+        gap: 0.55em;
+        min-width: 0;
+        padding: 0.42em 0.45em;
+        border-radius: 0.45em;
+        font-size: 0.9em;
+        color: var(--muted-foreground);
+      }
+      .tk > span {
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cb {
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        width: 1em;
+        height: 1em;
+        border: 1px solid var(--border-strong);
+        border-radius: 0.28em;
+      }
+      .cb .icon {
+        width: 0.75em;
+        height: 0.75em;
+      }
+      .tk.is-done .cb {
+        border-color: var(--success);
+        background: var(--success);
+        color: var(--primary-foreground);
+      }
+      .tk.is-done > span {
+        color: var(--faint-foreground);
+        text-decoration: line-through;
+      }
+      .tk[data-a] {
+        background: var(--selected-bg);
+        color: var(--foreground);
+      }
+      .ch {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25em;
+        flex-shrink: 0;
+        padding: 0.12em 0.4em;
+        border: 1px solid var(--border);
+        border-radius: 0.35em;
+        font-family: var(--font-mono);
+        font-size: 0.72em;
+        font-style: normal;
+        color: var(--subtle-foreground);
+      }
+      .ch .icon {
+        width: 0.9em;
+        height: 0.9em;
+      }
+
+      .cal {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-rows: auto repeat(4, minmax(0, 1fr));
+        align-content: stretch;
+        gap: 0.25em 0.3em;
+        padding-bottom: 0.6em;
+      }
+      .cal-d {
+        font-family: var(--font-mono);
+        font-size: 0.66em;
+        text-align: center;
+        color: var(--faint-foreground);
+      }
+      .ev {
+        grid-column: var(--c);
+        grid-row: var(--r);
+        min-width: 0;
+        padding: 0.25em 0.35em;
+        border-left: 2px solid var(--subtle-foreground);
+        border-radius: 0.3em;
+        background: color-mix(in oklab, var(--foreground) 8%, transparent);
+        font-size: 0.68em;
+        line-height: 1.25;
+        color: var(--muted-foreground);
+        overflow: hidden;
+      }
+      .ev.is-soft {
+        border-left-color: var(--border-strong);
+        background: color-mix(in oklab, var(--foreground) 4%, transparent);
+      }
+      .ev.is-key {
+        border-left-color: var(--info);
+        background: color-mix(in oklab, var(--info) 20%, var(--card));
+        color: var(--foreground);
+      }
+
+      .ml {
+        display: flex;
+        align-items: center;
+        gap: 0.6em;
+        min-width: 0;
+        padding: 0.45em 0.5em;
+        border-radius: 0.45em;
+      }
+      .ml > span {
+        display: grid;
+        min-width: 0;
+      }
+      .av {
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        width: 1.9em;
+        height: 1.9em;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        font-family: var(--font-mono);
+        font-size: 0.62em;
+        font-weight: 500;
+        color: var(--muted-foreground);
+      }
+      .ml strong {
+        font-size: 0.85em;
+        font-weight: 500;
+        color: var(--muted-foreground);
+      }
+      .ml em {
+        font-size: 0.8em;
+        font-style: normal;
+        color: var(--subtle-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ml.is-new {
+        background: var(--selected-bg);
+      }
+      .ml.is-new strong {
+        color: var(--foreground);
+      }
+      .ml.is-new .av {
+        background: color-mix(in oklab, var(--info) 30%, var(--card));
+        color: var(--foreground);
+      }
+
+      .nt {
+        gap: 0.5em;
+        padding-top: 0.15em;
+      }
+      .nt strong {
+        font-size: 0.85em;
+        font-weight: 600;
+        color: var(--foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .nt-ln {
+        display: block;
+        width: 92%;
+        height: 0.36em;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+      }
+      .nt-ln.is-s {
+        width: 62%;
+      }
+      .nt-m {
+        justify-self: start;
+        max-width: 100%;
+        padding: 0.12em 0.4em;
+        border-radius: 0.3em;
+        background: color-mix(in oklab, var(--info) 20%, var(--card));
+        font-size: 0.75em;
+        color: var(--foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .mm {
+        width: 100%;
+        height: 100%;
+        padding: 0 0.3em 0.4em;
+      }
+      .mm-e {
+        fill: none;
+        stroke: var(--border-strong);
+        stroke-width: 1.2;
+        vector-effect: non-scaling-stroke;
+      }
+      .mm-n {
+        fill: var(--card);
+        stroke: var(--muted-foreground);
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+      }
+      .mm-n.is-root {
+        fill: var(--selected-bg);
+        stroke: var(--foreground);
+      }
+      .mm text {
+        font-size: 7px;
+        font-weight: 500;
+        text-anchor: middle;
+        fill: var(--foreground);
+      }
+
+      .ws-spine {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
+      }
+      .ws-spine path {
+        fill: none;
+        stroke: var(--foreground);
+        stroke-width: 1.25;
+        stroke-linecap: round;
+        opacity: 0.7;
+        transition: opacity var(--motion-base) var(--ease-out);
+      }
+      .ws-spine .sp-end {
+        fill: var(--background);
+        stroke: var(--foreground);
+        stroke-width: 1.25;
+      }
+      .ws-spine .sp-dot {
+        fill: var(--foreground);
+        filter: drop-shadow(0 0 4px var(--foreground));
+      }
+      .asm.is-tracing .ws-spine path:not(.is-hot) {
+        opacity: 0.12;
+      }
+      .asm.is-tracing .ws-spine .is-cold {
+        opacity: 0;
+      }
+      .asm.is-tracing .md:not(.is-focus):not(.is-rel) {
+        opacity: 0.4;
+      }
+      .md.is-focus {
+        border-color: var(--muted-foreground);
+      }
+
+      /* The twenty apps */
+      .aw {
+        position: absolute;
+        left: var(--x);
+        top: var(--y);
+        z-index: var(--z);
+        width: 23%;
+        aspect-ratio: 3 / 2;
+        font-size: 1.55cqw;
+        transform: translate(var(--px, 0px), var(--py, 0px));
+        transition: transform 900ms var(--ease-out);
+        pointer-events: none;
+      }
+      .asm.is-busy .aw {
+        transition: none;
+      }
+      .aw-in {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border: 1px solid var(--border-strong);
+        border-radius: 0.75em;
+        background: var(--popover);
+        box-shadow: var(--shadow-lg);
+        overflow: hidden;
+        opacity: var(--o, 1);
+        transform: rotate(var(--r, 0deg)) scale(var(--s, 1));
+      }
+      .aw-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.3em;
+        height: 1.8em;
+        padding: 0 0.6em;
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in oklab, var(--foreground) 3%, transparent);
+      }
+      .aw-bar i {
+        width: 0.5em;
+        height: 0.5em;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--border-strong);
+      }
+      .aw-bar span {
+        margin-left: 0.35em;
+        font-size: 0.82em;
+        font-weight: 500;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .aw-ui {
+        position: absolute;
+        inset: 1.8em 0 0;
+        padding: 0.5em 0.6em 0.6em;
+      }
+      .aw-ui svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .aw-ui svg * {
+        fill: none;
+        stroke: var(--border-strong);
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+      }
+      .aw-ui svg .f {
+        fill: var(--accent);
+        stroke: none;
+      }
+      .aw-ui svg .k {
+        fill: color-mix(in oklab, var(--foreground) 14%, transparent);
+        stroke: var(--muted-foreground);
+      }
+
+      @container (max-width: 440px) {
+        .md-f,
+        .ws-k,
+        .ch {
+          display: none;
+        }
+      }
+
+      .hx-ctl {
+        display: flex;
+        justify-content: center;
+        min-height: calc(var(--ctrl-h-sm) + 6px);
+      }
+      .hx-seg {
+        position: relative;
+        display: inline-grid;
+        grid-template-columns: 1fr 1fr;
+        padding: 3px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--card);
+      }
+      .hx-seg-b {
+        position: relative;
+        z-index: 1;
+        height: var(--ctrl-h-sm);
+        padding-inline: 0.75rem;
+        border-radius: var(--radius-sm);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        color: var(--subtle-foreground);
+        white-space: nowrap;
+        transition: color var(--motion-base) var(--ease-out);
+      }
+      .hx-seg-b[aria-pressed="true"] {
+        color: var(--primary-foreground);
+      }
+      .hx-seg-i {
+        position: absolute;
+        top: 3px;
+        bottom: 3px;
+        left: 3px;
+        width: calc(50% - 3px);
+        border-radius: var(--radius-sm);
+        background: var(--primary);
+        transition: transform var(--motion-slow) var(--ease-spring);
+      }
+      .hx-visual.is-on .hx-seg-i {
+        transform: translateX(100%);
+      }
+      .hx-read {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1px;
+      }
+      .hx-r {
+        display: grid;
+        gap: 0.375rem;
+        padding: var(--hx-pad);
+      }
+      .hx-rk {
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .hx-rv {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+      .hx-rv b {
+        font-size: var(--text-2xl);
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        color: var(--foreground);
+      }
+      .hx-rv i {
+        font-style: normal;
+        font-size: var(--text-xs);
+        color: var(--faint-foreground);
+      }
+      .hx-next {
+        transition: background-color var(--motion-fade) var(--ease-out);
+      }
+      .hx-next:hover {
+        background: var(--card);
+      }
+      .hx-rv-s {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: var(--text-md);
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .hx-next:hover .icon {
+        transform: translateY(2px);
+      }
+      .hx-rv-s .icon {
+        transition: transform var(--motion-base) var(--ease-out);
+      }
+
+      .hx-fig {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        max-width: 56rem;
+        margin: 0 auto 0.75rem;
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .hx .hero-demo {
+        margin-top: clamp(4rem, 9vw, 7rem);
+      }
+
+      @media (max-width: 1000px) {
+        .hx-plate {
+          grid-template-columns: minmax(0, 1fr);
+          min-height: 0;
+        }
+        .hx-plate::before {
+          background: radial-gradient(ellipse 90% 60% at 50% 30%, transparent 0%, var(--background) 85%);
+        }
+      }
+      @media (max-width: 720px) {
+        .hx-bar {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .hx-bar > span:not(:first-child) {
+          display: none;
+        }
+        .hx-read {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .hx-fig span + span {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .md.is-built::after {
+          animation: none;
+        }
+      }
+      .hx-plate.is-tracking .ft-cx,
+      .hx-plate.is-tracking .ft-cy,
+      .hx-plate.is-tracking .ft-coord {
+        opacity: 1;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .aw,
+        .md,
+        .md-body > *,
+        .hx-tab,
+        .hx-seg-i {
+          transition: none;
+        }
       }
 
       /* ─── Palette (hero demo) ───────────────────────────────────────────── */
@@ -2170,6 +3212,21 @@
         .nav-links {
           display: none;
         }
+        .nav-now {
+          display: inline-flex;
+          flex: 1;
+          min-width: 0;
+        }
+        .nav-inner {
+          gap: 0.75rem;
+        }
+      }
+      @media (max-width: 640px) {
+        .brand-name {
+          display: none;
+        }
+      }
+      @media (max-width: 900px) {
         .story-sticky {
           align-items: flex-start;
           padding-top: calc(var(--bar-h) + 1.5rem);
@@ -2795,11 +3852,13 @@
           var(--shadow-lg),
           0 0 0 4px color-mix(in oklab, var(--foreground) 5%, transparent);
       }
-      .ln,
-      .tot {
+      .rn-inv .ln,
+      .rn-inv .tot {
         display: flex;
         align-items: baseline;
         gap: 8px;
+        width: auto;
+        height: auto;
         font-size: var(--text-xs);
         color: var(--subtle-foreground);
         opacity: 0;
@@ -2808,27 +3867,29 @@
           opacity var(--motion-slow) var(--ease-out),
           transform var(--motion-slow) var(--ease-out);
       }
-      .ln {
+      .rn-inv .ln {
         margin-top: 10px;
         padding-top: 10px;
         border-top: 1px solid var(--border);
+        background: none;
+        border-radius: 0;
       }
-      .ln span:last-child,
-      .tot b {
+      .rn-inv .ln span:last-child,
+      .rn-inv .tot b {
         margin-left: auto;
         font-variant-numeric: tabular-nums;
         color: var(--foreground);
       }
-      .tot {
+      .rn-inv .tot {
         margin-top: 6px;
       }
-      .tot b {
+      .rn-inv .tot b {
         font-size: var(--text-lg);
         font-weight: 600;
         letter-spacing: -0.02em;
       }
-      .rel.s4 .ln,
-      .rel.s4 .tot {
+      .rel.s4 .rn-inv .ln,
+      .rel.s4 .rn-inv .tot {
         opacity: 1;
         transform: none;
         transition-delay: var(--d);
@@ -4129,80 +5190,221 @@
 
     <!-- ─── Nav ─────────────────────────────────────────────────────────── -->
     <header class="nav" id="nav">
-      <div class="container nav-inner">
-        <a class="brand" href="#top" aria-label="Moduo home">
-          <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
-          Moduo
-        </a>
-        <nav class="nav-links" aria-label="Sections">
-          <a class="btn btn-ghost" href="#story">How it connects</a>
-          <a class="btn btn-ghost" href="#yours">Make it yours</a>
-          <a class="btn btn-ghost" href="#ai">AI</a>
-        </nav>
-        <div class="nav-actions">
-          <button class="btn btn-primary nav-wl" type="button" data-wl-open aria-haspopup="dialog">
-            <span class="nav-wl-label">Join waitlist</span>
-          </button>
+      <div class="nav-shell">
+        <div class="container nav-inner">
+          <a class="brand" href="#top" aria-label="Moduo home">
+            <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
+            <span class="brand-name">Moduo</span>
+          </a>
+          <p class="nav-now" id="nav-now" aria-hidden="true"><b>00</b><span>Overview</span></p>
+          <nav class="nav-links" aria-label="Sections">
+            <a href="#story" data-nav="story"><b>01</b>How it connects</a>
+            <a href="#yours" data-nav="yours"><b>02</b>Make it yours</a>
+            <a href="#ai" data-nav="ai"><b>03</b>AI</a>
+          </nav>
+          <div class="nav-actions">
+            <button class="btn btn-primary nav-wl" type="button" data-wl-open aria-haspopup="dialog">
+              <span class="nav-wl-label">Join waitlist</span>
+            </button>
+          </div>
         </div>
+        <span class="nav-meter" aria-hidden="true"><span id="nav-meter"></span></span>
       </div>
     </header>
 
     <main id="main">
       <!-- ─── Hero ──────────────────────────────────────────────────────── -->
-      <section class="hero" id="top" aria-labelledby="hero-title">
-        <div class="container hero-copy">
-          <h1 class="h-hero" id="hero-title">
-            <span class="line">Every app you need.</span>
-            <span class="line soft">None you don’t.</span>
-          </h1>
-          <p class="lead hero-fade" style="--d: 520ms">
-            Tasks, notes, email, calendar and mind maps — with planning, time tracking, invoicing,
-            goals and more on the way. Switch on what you need. <span class="fg">Moduo connects all of it.</span>
-          </p>
-          <div class="hero-cta hero-fade" style="--d: 640ms">
-          <form class="wl" data-source="hero" novalidate>
-            <div class="wl-row">
-              <div class="wl-field">
-                <label class="sr-only" for="wl-email-hero">Email address</label>
-                <input
-                  class="wl-input"
-                  id="wl-email-hero"
-                  name="email"
-                  type="email"
-                  inputmode="email"
-                  autocomplete="email"
-                  autocapitalize="off"
-                  spellcheck="false"
-                  maxlength="254"
-                  placeholder="you@company.com"
-                  required
-                  aria-describedby="wl-msg-hero"
-                />
-                <input class="wl-hp" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" />
-                <button class="btn btn-primary wl-btn" type="submit">
-                  <span class="wl-label">Join the waitlist</span>
-                  <span class="wl-spin" aria-hidden="true"></span>
-                </button>
+      <section class="hero hx" id="top" aria-labelledby="hero-title">
+        <div class="hx-frame">
+          <div class="hx-bar" aria-hidden="true">
+            <span>Fig. 00 — The assembly</span>
+            <span>Mod + Duo · one workspace</span>
+            <span class="hx-bar-r"><span class="ft-dot"></span>Private beta · invites rolling out</span>
+          </div>
+
+          <div class="hx-plate" id="hx-plate">
+            <span class="ft-plus is-tl" aria-hidden="true"></span>
+            <span class="ft-plus is-tr" aria-hidden="true"></span>
+            <span class="ft-plus is-bl" aria-hidden="true"></span>
+            <span class="ft-plus is-br" aria-hidden="true"></span>
+            <span class="ft-ruler is-top" aria-hidden="true"></span>
+            <span class="ft-ruler is-bot" aria-hidden="true"></span>
+
+            <div class="hx-copy">
+              <p class="hx-eyebrow hero-fade" style="--d: 120ms"><span class="hx-ix">00</span>The modular workspace</p>
+              <h1 class="h-hero" id="hero-title">
+                <span class="line">Every app you need.</span>
+                <span class="line soft">None you don’t.</span>
+              </h1>
+              <p class="lead hero-fade" style="--d: 520ms">
+                Tasks, notes, email, calendar and mind maps — with planning, time tracking, invoicing, goals
+                and more on the way. Switch on what you need. <span class="fg">Moduo connects all of it.</span>
+              </p>
+              <div class="hx-cta hero-fade" style="--d: 640ms">
+                <form class="wl" data-source="hero" novalidate>
+                  <div class="wl-row">
+                    <div class="wl-field">
+                      <label class="sr-only" for="wl-email-hero">Email address</label>
+                      <input
+                        class="wl-input"
+                        id="wl-email-hero"
+                        name="email"
+                        type="email"
+                        inputmode="email"
+                        autocomplete="email"
+                        autocapitalize="off"
+                        spellcheck="false"
+                        maxlength="254"
+                        placeholder="you@company.com"
+                        required
+                        aria-describedby="wl-msg-hero"
+                      />
+                      <input class="wl-hp" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" />
+                      <button class="btn btn-primary wl-btn" type="submit">
+                        <span class="wl-label">Join the waitlist</span>
+                        <span class="wl-spin" aria-hidden="true"></span>
+                      </button>
+                    </div>
+                  </div>
+                  <p class="wl-msg" id="wl-msg-hero" aria-live="polite">One email when your invite is ready. No spam.</p>
+                  <div class="wl-done" role="status" tabindex="-1">
+                    <span class="wl-tick"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check" /></svg></span>
+                    <div>
+                      <strong>You’re on the list.</strong>
+                      <span>We’ll email <b class="wl-addr"></b> when your invite is ready.</span>
+                      <button class="wl-again" type="button" data-wl-reset>Use a different email</button>
+                    </div>
+                  </div>
+                </form>
               </div>
             </div>
-            <p class="wl-msg" id="wl-msg-hero" aria-live="polite">One email when your invite is ready. No spam.</p>
-            <div class="wl-done" role="status" tabindex="-1">
-              <span class="wl-tick"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check" /></svg></span>
-              <div>
-                <strong>You’re on the list.</strong>
-                <span>We’ll email <b class="wl-addr"></b> when your invite is ready.</span>
-                <button class="wl-again" type="button" data-wl-reset>Use a different email</button>
+
+            <div class="hx-visual hero-fade" style="--d: 760ms">
+              <div class="hx-tabs" aria-hidden="true">
+                <span class="hx-tab" data-first><span>moduo.app — Carter Studio</span></span>
+                <span class="hx-tab"><b>K</b></span>
+                <span class="hx-tab"><b>H</b></span>
+                <span class="hx-tab"><b>D</b></span>
+                <span class="hx-tab"><b>C</b></span>
+                <span class="hx-tab"><b>S</b></span>
+                <span class="hx-tab"><b>T</b></span>
+                <span class="hx-tab"><b>M</b></span>
+                <span class="hx-tab"><b>M</b></span>
+                <span class="hx-tab"><b>I</b></span>
+                <span class="hx-tab"><b>C</b></span>
+                <span class="hx-tab"><b>N</b></span>
+                <span class="hx-tab"><b>N</b></span>
+                <span class="hx-tab"><b>D</b></span>
+                <span class="hx-tab"><b>W</b></span>
+                <span class="hx-tab"><b>B</b></span>
+                <span class="hx-tab"><b>W</b></span>
+                <span class="hx-tab"><b>M</b></span>
+                <span class="hx-tab"><b>G</b></span>
+                <span class="hx-tab"><b>R</b></span>
+                <span class="hx-tabs-n" id="hx-tabs-n">20 tabs</span>
+              </div>
+              <div class="asm" id="asm" data-state="off" role="img" aria-label="Twenty separate apps assembling into one Moduo workspace with five connected modules">
+                <div class="ws" aria-hidden="true">
+                  <div class="ws-bar"><span class="ws-dots"><i></i><i></i><i></i></span><span class="ws-crumb">Carter Studio <em>/</em> Website redesign</span><span class="ws-k">⌘K Search everything</span></div>
+                  <div class="ws-rail"><svg class="icon"><use href="#mark" /></svg><svg class="icon"><use href="#i-tasks" /></svg><svg class="icon"><use href="#i-calendar" /></svg><svg class="icon"><use href="#i-mail" /></svg><svg class="icon"><use href="#i-notes" /></svg><svg class="icon"><use href="#i-mindmap" /></svg><svg class="icon ws-plus"><use href="#i-plus" /></svg></div>
+                  <div class="ws-grid">
+                    <section class="md md-tasks" data-m="0" style="--m: 0">
+                      <header class="md-h"><svg class="icon"><use href="#i-tasks" /></svg>Tasks<span class="md-n">4</span><span class="md-id">M·01</span></header>
+                      <ul class="md-body">
+                        <li class="tk" data-a="task" style="--n: 1"><i class="cb"></i><span>Send Anna the revised deck</span><em class="ch"><svg class="icon"><use href="#i-mail" /></svg>Email</em></li>
+                        <li class="tk is-done" style="--n: 2"><i class="cb"><svg class="icon"><use href="#i-check" /></svg></i><span>Moodboard review</span></li>
+                        <li class="tk" style="--n: 3"><i class="cb"></i><span>Prep Phase 2 demo</span><em class="ch"><svg class="icon"><use href="#i-calendar" /></svg>Thu</em></li>
+                        <li class="tk" style="--n: 4"><i class="cb"></i><span>Draft invoice #014</span></li>
+                      </ul>
+                      <footer class="md-f">Replaces · To-do · Kanban · Habits · Planner</footer>
+                    </section>
+                    <section class="md md-cal" data-m="1" style="--m: 1">
+                      <header class="md-h"><svg class="icon"><use href="#i-calendar" /></svg>Calendar<span class="md-n">This week</span><span class="md-id">M·02</span></header>
+                      <div class="md-body cal">
+                        <span class="cal-d" style="--n: 1">Mon</span><span class="cal-d" style="--n: 1">Tue</span><span class="cal-d" style="--n: 1">Wed</span><span class="cal-d" style="--n: 1">Thu</span><span class="cal-d" style="--n: 1">Fri</span>
+                        <span class="ev" style="--n: 2; --c: 2; --r: 2 / 4">Standup</span>
+                        <span class="ev is-soft" style="--n: 3; --c: 3; --r: 3 / 6">Focus</span>
+                        <span class="ev is-key" data-a="event" style="--n: 4; --c: 4; --r: 2 / 5">Phase 2 demo · 10:00</span>
+                        <span class="ev is-soft" style="--n: 5; --c: 5; --r: 4 / 6">Review</span>
+                      </div>
+                      <footer class="md-f">Replaces · Calendar · Scheduler · Time · Meetings</footer>
+                    </section>
+                    <section class="md md-mail" data-m="2" style="--m: 2">
+                      <header class="md-h"><svg class="icon"><use href="#i-mail" /></svg>Email<span class="md-n">3 new</span><span class="md-id">M·03</span></header>
+                      <ul class="md-body">
+                        <li class="ml is-new" data-a="mail" style="--n: 1"><b class="av">AC</b><span><strong>Anna Carter</strong><em>Phase 2 demo — could we do Thursday?</em></span></li>
+                        <li class="ml" style="--n: 2"><b class="av">JR</b><span><strong>Jamie Ross</strong><em>Invoice #014 question</em></span></li>
+                        <li class="ml" style="--n: 3"><b class="av">MG</b><span><strong>Maya Green</strong><em>Brand deck, round two</em></span></li>
+                      </ul>
+                      <footer class="md-f">Replaces · Mail · Inbox · CRM · Newsletters</footer>
+                    </section>
+                    <section class="md md-notes" data-m="3" style="--m: 3">
+                      <header class="md-h"><svg class="icon"><use href="#i-notes" /></svg>Notes<span class="md-id">M·04</span></header>
+                      <div class="md-body nt">
+                        <strong style="--n: 1">Website redesign</strong>
+                        <span class="nt-ln" style="--n: 2"></span>
+                        <span class="nt-m" data-a="note" style="--n: 3">@Anna Carter</span>
+                        <span class="nt-ln is-s" style="--n: 4"></span>
+                      </div>
+                      <footer class="md-f">Replaces · Notes · Docs · Wiki</footer>
+                    </section>
+                    <section class="md md-map" data-m="4" style="--m: 4">
+                      <header class="md-h"><svg class="icon"><use href="#i-mindmap" /></svg>Map<span class="md-id">M·05</span></header>
+                      <svg class="md-body mm" viewBox="0 0 100 80" preserveAspectRatio="xMidYMid meet">
+                        <path class="mm-e" d="M50 40 C 35 40 30 20 16 20 M50 40 C 35 40 30 60 16 60 M50 40 C 65 40 70 20 84 20 M50 40 C 65 40 70 60 84 60" />
+                        <rect class="mm-n is-root" x="34" y="33" width="32" height="14" rx="4" /><text x="50" y="42.5">Launch</text>
+                        <circle class="mm-n" cx="16" cy="20" r="4" /><circle class="mm-n" cx="16" cy="60" r="4" /><circle class="mm-n" cx="84" cy="20" r="4" /><circle class="mm-n" cx="84" cy="60" r="4" />
+                      </svg>
+                      <footer class="md-f">Replaces · Whiteboards · Goals</footer>
+                    </section>
+                  </div>
+                  <svg class="ws-spine" id="ws-spine" aria-hidden="true"></svg>
+                </div>
+                <div class="aw" data-k="0" data-m="0" data-t="list"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>To-do app</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="1" data-m="0" data-t="kanban"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Kanban</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="2" data-m="0" data-t="grid"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Habit tracker</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="3" data-m="0" data-t="list"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Daily planner</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="4" data-m="1" data-t="cal"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Calendar</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="5" data-m="1" data-t="cal"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Scheduler</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="6" data-m="1" data-t="timer"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Time tracker</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="7" data-m="1" data-t="doc"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Meeting notes</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="8" data-m="2" data-t="mail"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Mail client</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="9" data-m="2" data-t="mail"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Inbox app</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="10" data-m="2" data-t="grid"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>CRM</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="11" data-m="2" data-t="doc"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Newsletters</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="12" data-m="3" data-t="doc"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Notes app</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="13" data-m="3" data-t="doc"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Docs</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="14" data-m="3" data-t="list"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Wiki</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="15" data-m="3" data-t="list"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Bookmarks</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="16" data-m="4" data-t="graph"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Whiteboard</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="17" data-m="4" data-t="graph"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Mind mapper</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="18" data-m="4" data-t="chart"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Goal tracker</span></div><div class="aw-ui"></div></div></div>
+                <div class="aw" data-k="19" data-m="4" data-t="kanban"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Roadmaps</span></div><div class="aw-ui"></div></div></div>
+              </div>
+              <div class="hx-ctl">
+                <div class="hx-seg" role="group" aria-label="Compare">
+                  <button type="button" class="hx-seg-b" data-to="off" aria-pressed="true">Your stack today</button>
+                  <button type="button" class="hx-seg-b" data-to="on" aria-pressed="false">With Moduo</button>
+                  <span class="hx-seg-i" aria-hidden="true"></span>
+                </div>
               </div>
             </div>
-          </form>
-            <a class="btn btn-ghost hero-more" href="#story">
-              See how it connects
-              <svg class="icon icon-sm arrow" aria-hidden="true"><use href="#i-chev" /></svg>
-            </a>
+
+            <span class="ft-cx hx-cx" aria-hidden="true"></span>
+            <span class="ft-cy hx-cy" aria-hidden="true"></span>
+            <span class="ft-coord hx-coord" aria-hidden="true"></span>
+          </div>
+
+          <div class="hx-read">
+            <div class="hx-r"><span class="hx-rk">Apps</span><span class="hx-rv"><b data-count>20</b><i>→ 01</i></span></div>
+            <div class="hx-r"><span class="hx-rk">Logins</span><span class="hx-rv"><b data-count>20</b><i>→ 01</i></span></div>
+            <div class="hx-r"><span class="hx-rk">Search bars</span><span class="hx-rv"><b data-count>20</b><i>→ 01</i></span></div>
+            <a class="hx-r hx-next" href="#story"><span class="hx-rk">Next</span><span class="hx-rv-s">How it connects <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chev" /></svg></span></a>
           </div>
         </div>
 
         <div class="container hero-demo hero-fade" style="--d: 820ms">
+          <p class="hx-fig" aria-hidden="true"><span>Fig. 01 — One search across every module</span><span>Live demo · try typing</span></p>
           <div class="palette" id="palette">
             <label class="pal-input">
               <svg class="icon" aria-hidden="true"><use href="#i-search" /></svg>
@@ -4467,7 +5669,7 @@
       </section>
 
       <!-- ─── Close ─────────────────────────────────────────────────────── -->
-      <section class="container close reveal" aria-labelledby="close-title">
+      <section class="container close reveal" id="close" aria-labelledby="close-title">
         <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
         <h2 class="h-section" id="close-title">Your whole working life.<br /><span class="soft">One app that connects it.</span></h2>
         <p class="lead">Free to start. Switch on the modules you need today and add the rest when you need them. Leave whenever you like — your data comes with you.</p>
@@ -4852,11 +6054,48 @@
 
         // ── Nav + reveal ──
         var nav = $("nav");
+        var navMeter = $("nav-meter");
+        var navNow = $("nav-now");
+        var navLinks = nav.querySelectorAll("[data-nav]");
+        var navStops = [
+          { id: "top", n: "00", label: "Overview" },
+          { id: "story", n: "01", label: "How it connects" },
+          { id: "yours", n: "02", label: "Make it yours" },
+          { id: "ai", n: "03", label: "AI" },
+          { id: "close", n: "04", label: "Early access" },
+        ];
+        var navCurrent = "";
         var navScroll = function () {
-          nav.classList.toggle("is-scrolled", window.scrollY > 8);
+          var y = window.scrollY;
+          var max = document.documentElement.scrollHeight - window.innerHeight;
+          var line = y + 96;
+          var current = navStops[0];
+          var i;
+          var el;
+          nav.classList.toggle("is-scrolled", y > 24);
+          if (navMeter) navMeter.style.transform = "scaleX(" + (max > 0 ? Math.min(1, y / max) : 0) + ")";
+          for (i = 0; i < navStops.length; i += 1) {
+            el = $(navStops[i].id);
+            if (el && el.getBoundingClientRect().top + y <= line) current = navStops[i];
+          }
+          if (current.id !== navCurrent && navNow) {
+            navNow.querySelector("b").textContent = current.n;
+            navNow.querySelector("span").textContent = current.label;
+          }
+          each(navLinks, function (a) {
+            var on = a.getAttribute("data-nav") === current.id;
+            a.classList.toggle("is-on", on);
+            if (on) a.setAttribute("aria-current", "true");
+            else a.removeAttribute("aria-current");
+          });
+          navCurrent = current.id;
         };
         navScroll();
         window.addEventListener("scroll", navScroll, { passive: true });
+        window.addEventListener("resize", function () {
+          navCurrent = "";
+          navScroll();
+        });
 
         var io = new IntersectionObserver(
           function (entries) {
@@ -7060,6 +8299,554 @@
           el.setAttribute("aria-disabled", "true");
           el.setAttribute("title", "Coming soon");
         });
+      })();
+    </script>
+    <script>
+      (function () {
+        "use strict";
+        var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var fine = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+        var NS = "http://www.w3.org/2000/svg";
+        var asm = document.getElementById("asm");
+        var plate = document.getElementById("hx-plate");
+        if (!asm || !plate || !asm.animate) return;
+        var visual = asm.closest(".hx-visual");
+        var ws = asm.querySelector(".ws");
+        var spine = document.getElementById("ws-spine");
+        var tabsN = document.getElementById("hx-tabs-n");
+        var mods = asm.querySelectorAll(".md");
+        var wins = asm.querySelectorAll(".aw");
+        var segs = visual.querySelectorAll(".hx-seg-b");
+        var counts = document.querySelectorAll(".hx-read [data-count]");
+        var ORDER = [0, 1, 2, 4, 3];
+        var LINKS = [
+          { a: "mail", b: "task", m: [2, 0] },
+          { a: "mail", b: "event", m: [2, 1] },
+          { a: "task", b: "note", m: [0, 3] },
+        ];
+        var TOUR = [2, 0, 3, 1];
+        var FLY = 820;
+        var STEP = 150;
+        var on = false;
+        var built = false;
+        var touched = false;
+        var inView = true;
+        var timers = [];
+        var flights = [];
+        var paths = [];
+        var pulseRaf = 0;
+        var tourTimer = 0;
+        var tourIx = 0;
+        var depth = [];
+        var each = function (list, fn) {
+          Array.prototype.forEach.call(list, fn);
+        };
+        var later = function (fn, ms) {
+          timers.push(setTimeout(fn, ms));
+        };
+        var clearTimers = function () {
+          each(timers, clearTimeout);
+          timers = [];
+        };
+        var el = function (name, attrs) {
+          var n = document.createElementNS(NS, name);
+          Object.keys(attrs).forEach(function (k) {
+            n.setAttribute(k, attrs[k]);
+          });
+          return n;
+        };
+
+        var rng = (function (seed) {
+          return function () {
+            seed = (seed + 0x6d2b79f5) | 0;
+            var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        })(23);
+
+        var UI = {
+          list:
+            '<rect x="2" y="4" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="6" width="70" height="3" rx="1.5"/>' +
+            '<rect class="k" x="2" y="18" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="20" width="52" height="3" rx="1.5"/>' +
+            '<rect x="2" y="32" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="34" width="80" height="3" rx="1.5"/>' +
+            '<rect x="2" y="46" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="48" width="44" height="3" rx="1.5"/>',
+          kanban:
+            '<rect x="1" y="1" width="36" height="62" rx="3"/><rect x="42" y="1" width="36" height="62" rx="3"/><rect x="83" y="1" width="36" height="62" rx="3"/>' +
+            '<rect class="f" x="5" y="6" width="28" height="12" rx="2"/><rect class="f" x="5" y="22" width="28" height="12" rx="2"/>' +
+            '<rect class="k" x="46" y="6" width="28" height="12" rx="2"/><rect class="f" x="87" y="6" width="28" height="12" rx="2"/>' +
+            '<rect class="f" x="87" y="22" width="28" height="12" rx="2"/><rect class="f" x="87" y="38" width="28" height="12" rx="2"/>',
+          grid: (function () {
+            var s = "";
+            var r;
+            var c;
+            for (r = 0; r < 4; r += 1) {
+              for (c = 0; c < 8; c += 1) {
+                s +=
+                  '<rect class="' +
+                  ((r * 8 + c) % 3 === 0 || (r + c) % 5 === 0 ? "f" : "") +
+                  '" x="' +
+                  (2 + c * 14.6) +
+                  '" y="' +
+                  (2 + r * 15.5) +
+                  '" width="11" height="11" rx="2"/>';
+              }
+            }
+            return s;
+          })(),
+          cal: (function () {
+            var s = '<rect class="f" x="1" y="1" width="118" height="6" rx="2"/>';
+            var r;
+            var c;
+            for (r = 0; r < 4; r += 1) {
+              for (c = 0; c < 7; c += 1) {
+                s +=
+                  '<rect class="' +
+                  (r === 1 && c === 3 ? "k" : "") +
+                  '" x="' +
+                  (1 + c * 17) +
+                  '" y="' +
+                  (11 + r * 13.2) +
+                  '" width="15" height="11" rx="2"/>';
+              }
+            }
+            return s;
+          })(),
+          timer:
+            '<circle cx="30" cy="32" r="24"/><path class="k" d="M30 8 A24 24 0 0 1 52 40" style="fill:none"/>' +
+            '<rect class="f" x="66" y="12" width="50" height="5" rx="2.5"/><rect class="f" x="66" y="26" width="38" height="5" rx="2.5"/>' +
+            '<rect class="f" x="66" y="40" width="44" height="5" rx="2.5"/>',
+          doc:
+            '<rect class="k" x="2" y="2" width="58" height="6" rx="2"/><rect class="f" x="2" y="16" width="112" height="3" rx="1.5"/>' +
+            '<rect class="f" x="2" y="25" width="104" height="3" rx="1.5"/><rect class="f" x="2" y="34" width="110" height="3" rx="1.5"/>' +
+            '<rect class="f" x="2" y="43" width="70" height="3" rx="1.5"/><rect class="f" x="2" y="55" width="96" height="3" rx="1.5"/>',
+          mail:
+            '<circle cx="7" cy="8" r="5"/><rect class="f" x="17" y="4" width="40" height="3" rx="1.5"/><rect class="f" x="17" y="10" width="86" height="3" rx="1.5"/>' +
+            '<circle class="k" cx="7" cy="28" r="5"/><rect class="f" x="17" y="24" width="32" height="3" rx="1.5"/><rect class="f" x="17" y="30" width="72" height="3" rx="1.5"/>' +
+            '<circle cx="7" cy="48" r="5"/><rect class="f" x="17" y="44" width="46" height="3" rx="1.5"/><rect class="f" x="17" y="50" width="94" height="3" rx="1.5"/>',
+          graph:
+            '<path d="M60 32 L22 12 M60 32 L20 52 M60 32 L98 14 M60 32 L100 50 M98 14 L112 30"/>' +
+            '<rect class="k" x="46" y="25" width="28" height="14" rx="4"/><circle cx="22" cy="12" r="5"/><circle cx="20" cy="52" r="5"/>' +
+            '<circle cx="98" cy="14" r="5"/><circle cx="100" cy="50" r="5"/><circle cx="112" cy="30" r="3.5"/>',
+          chart:
+            '<path d="M2 62 H118 M2 2 V62"/><rect class="f" x="10" y="38" width="12" height="22" rx="1.5"/>' +
+            '<rect class="f" x="28" y="28" width="12" height="32" rx="1.5"/><rect class="f" x="46" y="44" width="12" height="16" rx="1.5"/>' +
+            '<rect class="f" x="64" y="18" width="12" height="42" rx="1.5"/><rect class="k" x="82" y="8" width="12" height="52" rx="1.5"/>' +
+            '<rect class="f" x="100" y="24" width="12" height="36" rx="1.5"/>',
+        };
+
+        var cells = [];
+        var ci;
+        var sw;
+        var tmp;
+        for (ci = 0; ci < 20; ci += 1) cells.push(ci);
+        for (ci = cells.length - 1; ci > 0; ci -= 1) {
+          sw = Math.floor(rng() * (ci + 1));
+          tmp = cells[ci];
+          cells[ci] = cells[sw];
+          cells[sw] = tmp;
+        }
+        each(wins, function (w, k) {
+          var cell = cells[k];
+          var col = cell % 5;
+          var row = Math.floor(cell / 5);
+          var d = rng();
+          var x = Math.max(-3, Math.min(80, col * 19.4 + (rng() - 0.5) * 8));
+          var y = Math.max(-3, Math.min(80, row * 25 + (rng() - 0.5) * 9));
+          depth[k] = d;
+          w.style.setProperty("--x", x.toFixed(1) + "%");
+          w.style.setProperty("--y", y.toFixed(1) + "%");
+          w.style.setProperty("--z", String(2 + Math.round(d * 20)));
+          w.style.setProperty("--k", String(k));
+          w.style.setProperty("--r", ((rng() - 0.5) * 14).toFixed(1) + "deg");
+          w.style.setProperty("--s", (0.8 + d * 0.24).toFixed(2));
+          w.style.setProperty("--o", (0.64 + d * 0.36).toFixed(2));
+          w.querySelector(".aw-ui").innerHTML =
+            '<svg viewBox="0 0 120 64" preserveAspectRatio="xMidYMid meet">' + UI[w.getAttribute("data-t")] + "</svg>";
+        });
+        each(visual.querySelectorAll(".hx-tab"), function (t, j) {
+          t.style.setProperty("--j", String(j));
+        });
+
+        var center = function (r, o) {
+          return { x: r.left - o.left + r.width / 2, y: r.top - o.top + r.height / 2 };
+        };
+
+        var stopPulse = function () {
+          cancelAnimationFrame(pulseRaf);
+          pulseRaf = 0;
+        };
+        var pulse = function (now) {
+          pulseRaf = 0;
+          if (!built || !inView) return;
+          each(paths, function (p, i) {
+            var len = p.len;
+            var t = (now / 2400 + i * 0.37) % 1;
+            var pt = p.path.getPointAtLength(t * len);
+            p.dot.setAttribute("cx", pt.x.toFixed(1));
+            p.dot.setAttribute("cy", pt.y.toFixed(1));
+            p.dot.style.opacity = String(Math.sin(t * Math.PI));
+          });
+          pulseRaf = requestAnimationFrame(pulse);
+        };
+        var startPulse = function () {
+          if (reduce || pulseRaf || !built) return;
+          pulseRaf = requestAnimationFrame(pulse);
+        };
+
+        var clearSpine = function () {
+          stopPulse();
+          paths = [];
+          while (spine.firstChild) spine.removeChild(spine.firstChild);
+        };
+
+        var drawSpine = function (animate) {
+          var o = ws.getBoundingClientRect();
+          clearSpine();
+          spine.setAttribute("viewBox", "0 0 " + o.width.toFixed(1) + " " + o.height.toFixed(1));
+          LINKS.forEach(function (l, i) {
+            var ra = ws.querySelector('[data-a="' + l.a + '"]').getBoundingClientRect();
+            var rb = ws.querySelector('[data-a="' + l.b + '"]').getBoundingClientRect();
+            var overlapX = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+            var x1;
+            var y1;
+            var x2;
+            var y2;
+            var d;
+            var mid;
+            var g = el("g", { "data-l": String(i) });
+            var path;
+            var len;
+            var ends;
+            if (overlapX > 0) {
+              x1 = ra.left - o.left + ra.width / 2;
+              x2 = rb.left - o.left + rb.width / 2;
+              y1 = ra.top < rb.top ? ra.bottom - o.top : ra.top - o.top;
+              y2 = ra.top < rb.top ? rb.top - o.top : rb.bottom - o.top;
+              mid = (y1 + y2) / 2;
+              d = "M" + x1 + " " + y1 + " C" + x1 + " " + mid + " " + x2 + " " + mid + " " + x2 + " " + y2;
+            } else {
+              x1 = ra.left > rb.left ? ra.left - o.left : ra.right - o.left;
+              x2 = ra.left > rb.left ? rb.right - o.left : rb.left - o.left;
+              y1 = ra.top - o.top + ra.height / 2;
+              y2 = rb.top - o.top + rb.height / 2;
+              mid = (x1 + x2) / 2;
+              d = "M" + x1 + " " + y1 + " C" + mid + " " + y1 + " " + mid + " " + y2 + " " + x2 + " " + y2;
+            }
+            path = el("path", { d: d });
+            g.appendChild(path);
+            ends = [el("circle", { class: "sp-end", cx: x1, cy: y1, r: 2.6 }), el("circle", { class: "sp-end", cx: x2, cy: y2, r: 2.6 })];
+            g.appendChild(ends[0]);
+            g.appendChild(ends[1]);
+            paths.push({ path: path, len: 0, dot: null, g: g, m: l.m });
+            spine.appendChild(g);
+            len = path.getTotalLength();
+            paths[i].len = len;
+            paths[i].dot = el("circle", { class: "sp-dot", r: 2.2, cx: x1, cy: y1 });
+            paths[i].dot.style.opacity = "0";
+            g.appendChild(paths[i].dot);
+            if (animate && !reduce) {
+              path.style.strokeDasharray = String(len);
+              path
+                .animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], {
+                  duration: 700,
+                  delay: i * 180,
+                  easing: "cubic-bezier(.65,0,.35,1)",
+                  fill: "both",
+                })
+                .finished.then(function () {
+                  path.style.strokeDasharray = "";
+                }, function () {});
+              ends.forEach(function (c, j) {
+                c.animate([{ opacity: 0, transform: "scale(0)" }, { opacity: 1, transform: "none" }], {
+                  duration: 260,
+                  delay: i * 180 + (j ? 640 : 0),
+                  easing: "cubic-bezier(.34,1.56,.64,1)",
+                  fill: "both",
+                });
+                c.style.transformBox = "fill-box";
+                c.style.transformOrigin = "center";
+              });
+            }
+          });
+          startPulse();
+        };
+
+        var untrace = function () {
+          asm.classList.remove("is-tracing");
+          each(mods, function (m) {
+            m.classList.remove("is-focus", "is-rel");
+          });
+          each(paths, function (p) {
+            p.path.classList.remove("is-hot");
+            p.g.classList.remove("is-cold");
+          });
+        };
+
+        var trace = function (k) {
+          if (!built) return;
+          untrace();
+          asm.classList.add("is-tracing");
+          mods[k].classList.add("is-focus");
+          each(paths, function (p) {
+            var hit = p.m.indexOf(k) !== -1;
+            p.path.classList.toggle("is-hot", hit);
+            p.g.classList.toggle("is-cold", !hit);
+            if (hit) {
+              p.m.forEach(function (j) {
+                if (j !== k) mods[j].classList.add("is-rel");
+              });
+            }
+          });
+        };
+
+        var tween = function (from, to) {
+          var t0 = 0;
+          var step = function (now) {
+            var p;
+            var v;
+            if (!t0) t0 = now;
+            p = Math.min(1, (now - t0) / 1400);
+            v = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+            each(counts, function (c) {
+              c.textContent = (v < 10 ? "0" : "") + v;
+            });
+            if (p < 1) requestAnimationFrame(step);
+          };
+          if (reduce) {
+            each(counts, function (c) {
+              c.textContent = (to < 10 ? "0" : "") + to;
+            });
+            return;
+          }
+          requestAnimationFrame(step);
+        };
+
+        var stopTour = function () {
+          clearTimeout(tourTimer);
+          tourTimer = 0;
+        };
+        var tour = function () {
+          stopTour();
+          if (reduce || touched || !built) return;
+          tourTimer = setTimeout(function () {
+            if (!built || touched) return;
+            if (inView) {
+              trace(TOUR[tourIx % TOUR.length]);
+              tourIx += 1;
+              tourTimer = setTimeout(function () {
+                untrace();
+                tour();
+              }, 2400);
+            } else {
+              tour();
+            }
+          }, 1600);
+        };
+
+        var finishBuild = function () {
+          built = true;
+          asm.classList.add("is-built");
+          drawSpine(true);
+          tour();
+        };
+
+        var assemble = function () {
+          var o;
+          if (reduce) {
+            each(wins, function (w) {
+              w.style.visibility = "hidden";
+            });
+            each(mods, function (m) {
+              m.classList.add("is-built");
+            });
+            finishBuild();
+            return;
+          }
+          if (flights.length) {
+            each(flights, function (a) {
+              if (a) a.reverse();
+            });
+          } else {
+            o = asm.getBoundingClientRect();
+            each(wins, function (w, k) {
+              var m = Number(w.getAttribute("data-m"));
+              var slot = center(mods[m].getBoundingClientRect(), o);
+              var inner = w.querySelector(".aw-in");
+              var from = center(inner.getBoundingClientRect(), o);
+              var dx = slot.x - from.x;
+              var dy = slot.y - from.y;
+              var nth = Number(w.getAttribute("data-k")) % 4;
+              var rot = w.style.getPropertyValue("--r");
+              var sc = w.style.getPropertyValue("--s");
+              var op = w.style.getPropertyValue("--o");
+              flights[k] = inner.animate(
+                [
+                  { transform: "translate(0px,0px) rotate(" + rot + ") scale(" + sc + ")", opacity: op },
+                  {
+                    transform: "translate(" + dx * 0.94 + "px," + dy * 0.94 + "px) rotate(0deg) scale(.62)",
+                    opacity: 1,
+                    offset: 0.8,
+                  },
+                  { transform: "translate(" + dx + "px," + dy + "px) rotate(0deg) scale(.42)", opacity: 0 },
+                ],
+                {
+                  duration: FLY,
+                  delay: ORDER.indexOf(m) * STEP + nth * 55,
+                  easing: "cubic-bezier(.7,0,.2,1)",
+                  fill: "both",
+                },
+              );
+            });
+          }
+          ORDER.forEach(function (m, i) {
+            later(function () {
+              mods[m].classList.add("is-built");
+            }, i * STEP + 3 * 55 + FLY * 0.82);
+          });
+          later(finishBuild, (ORDER.length - 1) * STEP + 3 * 55 + FLY + 120);
+        };
+
+        var disassemble = function () {
+          built = false;
+          clearSpine();
+          asm.classList.remove("is-built");
+          each(mods, function (m) {
+            m.classList.remove("is-built");
+          });
+          if (reduce) {
+            each(wins, function (w) {
+              w.style.visibility = "";
+            });
+            return;
+          }
+          each(flights, function (a) {
+            if (a) a.reverse();
+          });
+        };
+
+        var setState = function (next) {
+          if (next === on) return;
+          on = next;
+          clearTimers();
+          untrace();
+          stopTour();
+          asm.classList.add("is-busy");
+          each(wins, function (w) {
+            w.style.setProperty("--px", "0px");
+            w.style.setProperty("--py", "0px");
+          });
+          asm.setAttribute("data-state", on ? "on" : "off");
+          visual.classList.toggle("is-on", on);
+          each(segs, function (b) {
+            b.setAttribute("aria-pressed", String((b.getAttribute("data-to") === "on") === on));
+          });
+          tabsN.textContent = on ? "1 tab" : "20 tabs";
+          tween(on ? 20 : 1, on ? 1 : 20);
+          if (on) assemble();
+          else disassemble();
+          later(function () {
+            asm.classList.remove("is-busy");
+          }, FLY + STEP * 4);
+        };
+
+        each(segs, function (b) {
+          b.addEventListener("click", function () {
+            touched = true;
+            setState(b.getAttribute("data-to") === "on");
+          });
+        });
+        each(mods, function (m, k) {
+          m.addEventListener("pointerenter", function () {
+            if (!built) return;
+            touched = true;
+            stopTour();
+            trace(k);
+          });
+        });
+        ws.addEventListener("pointerleave", function () {
+          if (built) untrace();
+        });
+
+        if ("IntersectionObserver" in window) {
+          new IntersectionObserver(function (entries) {
+            inView = entries[0].isIntersecting;
+            if (inView) startPulse();
+          }).observe(asm);
+        }
+
+        if ("ResizeObserver" in window) {
+          (function () {
+            var rt = 0;
+            var lastW = 0;
+            new ResizeObserver(function (entries) {
+              var w = entries[0].contentRect.width;
+              if (Math.abs(w - lastW) < 1) return;
+              lastW = w;
+              clearTimeout(rt);
+              rt = setTimeout(function () {
+                if (built) drawSpine(false);
+              }, 120);
+            }).observe(ws);
+          })();
+        }
+
+        if (reduce) {
+          setState(true);
+        } else {
+          setTimeout(function () {
+            if (!touched) setState(true);
+          }, 2400);
+        }
+
+        if (fine && !reduce) {
+          (function () {
+            var cx = plate.querySelector(".hx-cx");
+            var cy = plate.querySelector(".hx-cy");
+            var coord = plate.querySelector(".hx-coord");
+            var raf = 0;
+            var last = null;
+            var pad4 = function (n) {
+              var s = String(Math.max(0, Math.round(n)));
+              while (s.length < 4) s = "0" + s;
+              return s;
+            };
+            var paint = function () {
+              var r = plate.getBoundingClientRect();
+              var x = last.clientX - r.left;
+              var y = last.clientY - r.top;
+              var flip = x > r.width - 140;
+              var a = asm.getBoundingClientRect();
+              var mx = (last.clientX - a.left) / a.width - 0.5;
+              var my = (last.clientY - a.top) / a.height - 0.5;
+              raf = 0;
+              cx.style.transform = "translateX(" + x + "px)";
+              cy.style.transform = "translateY(" + y + "px)";
+              coord.textContent = "X " + pad4(x) + "  Y " + pad4(y);
+              coord.style.transform =
+                "translate(" + (flip ? x - 12 - coord.offsetWidth : x + 12) + "px," + (y + 12) + "px)";
+              if (on || asm.classList.contains("is-busy")) return;
+              each(wins, function (w, k) {
+                var f = 6 + depth[k] * 28;
+                w.style.setProperty("--px", (-mx * f).toFixed(1) + "px");
+                w.style.setProperty("--py", (-my * f).toFixed(1) + "px");
+              });
+            };
+            plate.addEventListener("pointermove", function (e) {
+              last = e;
+              plate.classList.add("is-tracking");
+              if (!raf) raf = requestAnimationFrame(paint);
+            });
+            plate.addEventListener("pointerleave", function () {
+              plate.classList.remove("is-tracking");
+              if (on) return;
+              each(wins, function (w) {
+                w.style.setProperty("--px", "0px");
+                w.style.setProperty("--py", "0px");
+              });
+            });
+          })();
+        }
       })();
     </script>
   </body>

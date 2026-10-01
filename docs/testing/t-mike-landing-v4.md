@@ -12,6 +12,9 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 - [ ] ↑ / ↓ move the highlight; the right side shows the item and its linked items; clicking a linked item jumps to it
 - [ ] ⌘K (or /) anywhere scrolls to the box and focuses it; "Try" chips run that search
 - [ ] Below: "One app · switch modules on per workspace" label, then a slow scrolling strip of modules ending in "& more"
+- [ ] Right of the headline: 20 app windows over a dashed workspace; after ~2.4s they fly into five modules; the tab strip collapses to "moduo.app — Carter Studio" / "1 tab"
+- [ ] "Your stack today" / "With Moduo" reverses the flight. The plate height does not jump. No caption under the toggle.
+- [ ] Nav: at the top it’s a full-width bar. Scroll and it stays flush to the top of the screen, turns glassy, and a hairline fills with page progress. The active section (01–03) keeps a line under its label. On a phone the links hide and the bar reads the section name.
 
 ## How it connects (smart relations scroll story)
 
