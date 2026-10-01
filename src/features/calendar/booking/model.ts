@@ -30,6 +30,7 @@ export type BookingLink = {
   weeklyHours: unknown;
   busyCalendarIds: string[];
   noteEnabled: boolean;
+  guestsEnabled: boolean;
   questions: GuestQuestion[];
   paused: boolean;
   videoProvider: VideoChoice;

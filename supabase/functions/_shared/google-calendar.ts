@@ -110,6 +110,7 @@ export async function createGoogleMeetEvent(input: {
   hostEmail: string;
   guestEmail: string;
   guestName: string;
+  guestEmails?: string[];
   requestId: string;
 }): Promise<{ eventId: string; meetLink: string }> {
   const url =
@@ -128,6 +129,15 @@ export async function createGoogleMeetEvent(input: {
       attendees: [
         { email: input.hostEmail, responseStatus: "accepted" },
         { email: input.guestEmail, displayName: input.guestName },
+        ...(input.guestEmails ?? [])
+          .map((email) => email.trim().toLowerCase())
+          .filter(
+            (email) =>
+              email.length > 0 &&
+              email !== input.hostEmail.trim().toLowerCase() &&
+              email !== input.guestEmail.trim().toLowerCase(),
+          )
+          .map((email) => ({ email })),
       ],
       conferenceData: {
         createRequest: {
