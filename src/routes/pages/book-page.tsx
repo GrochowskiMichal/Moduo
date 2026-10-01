@@ -1,22 +1,20 @@
 /**
- * Public booking page (/book/$slug). No account. The guest picks a day, then
- * a time, then confirms. The calendar stays on screen when the day changes.
- * The hours for that day sit beside it on a wide screen and under it on a phone.
+ * Public booking page (/book/$slug). No account.
+ *
+ * The page is one sentence the guest finishes: "Let's talk for 30 minutes on
+ * [day] at [time] [Warsaw time]. I'm [name], and you can reach me at [email]."
+ * Each choice blank opens a tray of options under the sentence. The book
+ * button always says what is still missing and jumps there when pressed.
  */
 
 import { useParams } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Clock, Video } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
+import { Eyebrow } from "../../components/ui/eyebrow";
 import { Input } from "../../components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../components/ui/select";
+import { ModuoMark } from "../../components/ui/moduo-mark";
 import { Textarea } from "../../components/ui/textarea";
 import { MAX_BOOKING_GUESTS, parseGuestEmails } from "../../features/calendar/booking/guests";
 import {
@@ -25,6 +23,29 @@ import {
   GUEST_ZONES,
 } from "../../features/calendar/booking/public-client";
 import { bookingPublicOrigin } from "../../features/calendar/booking/public-origin";
+import {
+  type DayPart,
+  daysBetween,
+  durationPhrase,
+  firstName,
+  groupByDay,
+  groupByPart,
+  quickPicks,
+  zoneKey,
+  zonePlace,
+} from "../../features/calendar/booking/sentence";
+import {
+  Blank,
+  BlankInput,
+  Chip,
+  clockIn,
+  DayStrip,
+  dayLong,
+  dayShort,
+  Fixed,
+  Tray,
+  timeLabel,
+} from "../../features/calendar/booking/sentence-ui";
 import { cn } from "../../lib/utils";
 
 type Phase =
@@ -32,147 +53,95 @@ type Phase =
   | { kind: "missing" }
   | { kind: "error" }
   | { kind: "ready"; preview: BookingPreview }
-  | { kind: "booked"; start: string; meetLink: string; guests: string[] };
+  | { kind: "booked"; preview: BookingPreview; start: string; meetLink: string; guests: string[] };
 
-type Ymd = { y: number; m: number; d: number };
+type TrayKind = "day" | "time" | "zone";
 
-const WEEKDAY_HEAD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const PART_LABEL: Record<DayPart, string> = {
+  morning: "Morning",
+  afternoon: "Afternoon",
+  evening: "Evening",
+};
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function detectedZone(): string {
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  return GUEST_ZONES.includes(zone) ? zone : zone;
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
   const first = parts[0]?.[0] ?? "";
   const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
   return (first + last).toUpperCase() || "?";
 }
 
-function zoneLabel(zone: string): string {
-  const place = (zone.split("/").pop() ?? zone).replace(/_/g, " ");
-  try {
-    const clock = new Intl.DateTimeFormat(undefined, {
-      timeZone: zone,
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date());
-    return `${place} (${clock})`;
-  } catch {
-    return place;
+function relativeDay(key: string, todayKey: string): string {
+  const diff = daysBetween(todayKey, key);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff > 1 && diff < 7) {
+    return new Intl.DateTimeFormat(undefined, { weekday: "short", timeZone: "UTC" }).format(
+      new Date(`${key}T12:00:00Z`),
+    );
   }
+  return dayShort(key);
 }
 
-function zoneKey(date: Date, timeZone: string): string {
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const map: Record<string, string> = {};
-  for (const part of fmt.formatToParts(date)) {
-    if (part.type !== "literal") map[part.type] = part.value;
-  }
-  return `${map.year}-${map.month}-${map.day}`;
-}
-
-function zoneYmd(date: Date, timeZone: string): Ymd {
-  const key = zoneKey(date, timeZone);
-  const [y, m, d] = key.split("-").map(Number);
-  return { y, m, d };
-}
-
-function cellKey(cell: Ymd): string {
-  return `${cell.y}-${String(cell.m).padStart(2, "0")}-${String(cell.d).padStart(2, "0")}`;
-}
-
-function monthCells(year: number, month: number): Array<Ymd & { inMonth: boolean }> {
-  const startWeekday = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const cells: Array<Ymd & { inMonth: boolean }> = [];
-  for (let i = 0; i < startWeekday; i++) {
-    const date = new Date(Date.UTC(year, month - 1, 1 - (startWeekday - i)));
-    cells.push({
-      y: date.getUTCFullYear(),
-      m: date.getUTCMonth() + 1,
-      d: date.getUTCDate(),
-      inMonth: false,
-    });
-  }
-  for (let d = 1; d <= daysInMonth; d++) cells.push({ y: year, m: month, d, inMonth: true });
-  while (cells.length % 7 !== 0) {
-    const last = cells[cells.length - 1];
-    const date = new Date(Date.UTC(last.y, last.m - 1, last.d + 1));
-    cells.push({
-      y: date.getUTCFullYear(),
-      m: date.getUTCMonth() + 1,
-      d: date.getUTCDate(),
-      inMonth: false,
-    });
-  }
-  return cells;
-}
-
-function shiftMonth(cursor: Ymd, delta: number): Ymd {
-  const date = new Date(Date.UTC(cursor.y, cursor.m - 1 + delta, 1));
-  return { y: date.getUTCFullYear(), m: date.getUTCMonth() + 1, d: 1 };
-}
-
-function monthTitle(cursor: Ymd): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(cursor.y, cursor.m - 1, 1)));
-}
-
-function dayTitle(key: string, timeZone: string): string {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone,
-  }).format(new Date(Date.UTC(y, m - 1, d, 12)));
-}
-
-function timeLabel(slot: string, timeZone: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    timeZone,
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(slot));
-}
-
-function whenLabel(slot: string, timeZone: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    timeZone,
-    dateStyle: "full",
-    timeStyle: "short",
-  }).format(new Date(slot));
-}
-
-function Frame({ children }: { children: ReactNode }) {
+function Page({ children }: { children: ReactNode }) {
   return (
-    <main className="flex min-h-dvh justify-center bg-background text-foreground sm:px-6 lg:items-center lg:py-8">
-      <div className="flex w-full max-w-6xl flex-col bg-card sm:rounded-lg sm:border sm:border-border lg:h-[calc(100dvh-4rem)] lg:overflow-hidden">
+    <main className="flex min-h-dvh flex-col bg-background text-foreground">
+      <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-4 pt-8 pb-6 sm:gap-10 sm:px-10 sm:pt-16 lg:pt-24">
         {children}
       </div>
+      <footer className="mx-auto w-full max-w-4xl px-4 pb-8 sm:px-10">
+        <a
+          href="https://moduo.app"
+          target="_blank"
+          rel="noopener"
+          className="inline-flex items-center gap-2 font-sans text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ModuoMark aria-hidden className="size-icon-sm text-current" />
+          Scheduled with Moduo
+        </a>
+      </footer>
     </main>
   );
 }
 
-function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+/** The big type every sentence on this page is set in. */
+const SENTENCE =
+  "max-w-4xl font-sans text-3xl leading-snug font-light tracking-tight text-pretty text-foreground sm:text-4xl lg:text-5xl";
+
+function Host({ preview }: { preview: BookingPreview }) {
   return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={id} className="font-display text-sm text-foreground">
-        {label}
-      </label>
-      {children}
-    </div>
+    <header className="flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <Avatar className="size-10">
+          {preview.hostAvatarUrl ? <AvatarImage src={preview.hostAvatarUrl} alt="" /> : null}
+          <AvatarFallback>{initials(preview.hostName)}</AvatarFallback>
+        </Avatar>
+        <h1 className="min-w-0 font-display text-md text-foreground">
+          {preview.name}
+          <span className="text-muted-foreground"> with {preview.hostName}</span>
+        </h1>
+      </div>
+      {preview.description ? (
+        <p className="max-w-prose font-sans text-base whitespace-pre-wrap text-muted-foreground">
+          {preview.description}
+        </p>
+      ) : null}
+    </header>
+  );
+}
+
+function Notice({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-4">
+      <p className={SENTENCE}>{title}</p>
+      <p className="max-w-prose font-sans text-md text-muted-foreground">{body}</p>
+      {action}
+    </section>
   );
 }
 
@@ -180,18 +149,29 @@ export function BookPage() {
   const { slug } = useParams({ from: "/book/$slug" });
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [zone, setZone] = useState(detectedZone);
-  const [cursor, setCursor] = useState<Ymd | null>(null);
   const [dayKey, setDayKey] = useState<string | null>(null);
   const [start, setStart] = useState<string | null>(null);
+  const [tray, setTray] = useState<TrayKind | null>("day");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
+  const [noteOpen, setNoteOpen] = useState(false);
   const [guests, setGuests] = useState<{ id: string; email: string }[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const timesRef = useRef<HTMLDivElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
+  const dayBlank = useRef<HTMLButtonElement>(null);
+  const timeBlank = useRef<HTMLButtonElement>(null);
+  const zoneBlank = useRef<HTMLButtonElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const emailInput = useRef<HTMLInputElement>(null);
+  const trayRef = useRef<HTMLDivElement>(null);
+  const focusTrayOnOpen = useRef(false);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` re-runs the load on "Try again".
   useEffect(() => {
     let active = true;
     setPhase({ kind: "loading" });
@@ -211,47 +191,198 @@ export function BookPage() {
     return () => {
       active = false;
     };
-  }, [slug]);
+  }, [slug, attempt]);
 
-  const zones = useMemo(() => {
-    return GUEST_ZONES.includes(zone) ? GUEST_ZONES : [zone, ...GUEST_ZONES];
-  }, [zone]);
-
-  const byDay = useMemo(() => {
-    const map = new Map<string, string[]>();
-    if (phase.kind !== "ready") return map;
-    for (const slot of phase.preview.slots) {
-      const key = zoneKey(new Date(slot), zone);
-      const list = map.get(key) ?? [];
-      list.push(slot);
-      map.set(key, list);
-    }
-    return map;
-  }, [phase, zone]);
-
-  const firstKey = byDay.keys().next().value as string | undefined;
-  const firstMonth = firstKey
-    ? {
-        y: Number(firstKey.slice(0, 4)),
-        m: Number(firstKey.slice(5, 7)),
-        d: 1,
-      }
-    : phase.kind === "ready"
-      ? zoneYmd(new Date(), zone)
-      : { y: 2026, m: 1, d: 1 };
-  const view = cursor ?? firstMonth;
-  const cells = monthCells(view.y, view.m);
-  const monthKeys = cells.filter((cell) => cell.inMonth && byDay.has(cellKey(cell))).map(cellKey);
-  const activeKey = dayKey && byDay.has(dayKey) ? dayKey : (monthKeys[0] ?? null);
-  const times = activeKey ? (byDay.get(activeKey) ?? []) : [];
+  const preview = phase.kind === "ready" || phase.kind === "booked" ? phase.preview : null;
+  const slots = preview?.slots ?? [];
+  const byDay = useMemo(() => groupByDay(slots, zone), [slots, zone]);
+  const picks = useMemo(() => quickPicks(slots, zone), [slots, zone]);
+  const zones = useMemo(
+    () => (GUEST_ZONES.includes(zone) ? GUEST_ZONES : [zone, ...GUEST_ZONES]),
+    [zone],
+  );
   const todayKey = zoneKey(new Date(), zone);
+  const activeDay = start ? zoneKey(new Date(start), zone) : dayKey;
+  const dayTimes = activeDay ? (byDay.get(activeDay) ?? []) : [];
+
+  // Move focus into a tray the guest opened by picking (not by clicking its blank).
+  useEffect(() => {
+    if (!tray || !focusTrayOnOpen.current) return;
+    focusTrayOnOpen.current = false;
+    trayRef.current
+      ?.querySelector<HTMLElement>("[aria-pressed='true'], [data-first]")
+      ?.focus({ preventScroll: true });
+  }, [tray]);
+
+  if (phase.kind === "loading") {
+    return (
+      <Page>
+        <div className="flex items-center gap-3">
+          <div className="size-10 rounded-full bg-muted" />
+          <div className="h-4 w-48 rounded-md bg-muted" />
+        </div>
+        <div className="flex flex-col gap-4" aria-label="Loading open times" role="status">
+          <div className="h-10 w-full max-w-2xl rounded-md bg-muted sm:h-12" />
+          <div className="h-10 w-3/4 max-w-xl rounded-md bg-muted sm:h-12" />
+          <div className="mt-4 h-32 rounded-lg bg-muted" />
+        </div>
+      </Page>
+    );
+  }
+
+  if (phase.kind === "missing") {
+    return (
+      <Page>
+        <Notice
+          title="This booking link isn't available."
+          body="It may have been turned off or replaced. Ask the person who sent it for a new link."
+        />
+      </Page>
+    );
+  }
+
+  if (phase.kind === "error") {
+    return (
+      <Page>
+        <Notice
+          title="We couldn't load the open times."
+          body="Check your connection and try again."
+          action={
+            <Button
+              type="button"
+              size="lg"
+              className="w-fit"
+              onClick={() => setAttempt((n) => n + 1)}
+            >
+              Try again
+            </Button>
+          }
+        />
+      </Page>
+    );
+  }
+
+  if (!preview) return null;
+  const host = firstName(preview.hostName);
+  const echo = (slot: string) =>
+    zone === preview.hostTimeZone
+      ? null
+      : `That's ${timeLabel(slot, preview.hostTimeZone)} for ${host} in ${zonePlace(preview.hostTimeZone)}.`;
+
+  if (phase.kind === "booked") {
+    const key = zoneKey(new Date(phase.start), zone);
+    return (
+      <Page>
+        <Host preview={preview} />
+        <section className="flex animate-in flex-col gap-6 fade-in-0 duration-[var(--motion-slow)]">
+          <p className={SENTENCE} role="status">
+            You're meeting {host} on <Fixed>{dayLong(key)}</Fixed> at{" "}
+            <Fixed>{timeLabel(phase.start, zone)}</Fixed>.
+          </p>
+          <div className="flex max-w-prose flex-col gap-2 font-sans text-md text-muted-foreground">
+            <p>
+              {durationPhrase(preview.durationMinutes)} on Google Meet. A calendar invite and a
+              short email with a way to cancel are on their way to {email.trim()}.
+            </p>
+            {echo(phase.start) ? <p>{echo(phase.start)}</p> : null}
+            {phase.guests.length > 0 ? <p>Also invited: {phase.guests.join(", ")}.</p> : null}
+          </div>
+          {phase.meetLink ? (
+            <Button asChild size="lg" className="w-full sm:w-fit">
+              <a href={phase.meetLink} target="_blank" rel="noopener">
+                Join Google Meet
+              </a>
+            </Button>
+          ) : null}
+        </section>
+      </Page>
+    );
+  }
+
+  if (preview.paused || slots.length === 0) {
+    return (
+      <Page>
+        <Host preview={preview} />
+        <Notice
+          title={
+            preview.paused
+              ? `${host} isn't taking bookings on this link right now.`
+              : `${host} has no open times in the next few weeks.`
+          }
+          body={
+            preview.paused
+              ? "Try again later, or reach out to them directly."
+              : "New times open up as the calendar changes. Check back soon."
+          }
+        />
+      </Page>
+    );
+  }
+
+  const questions = (preview.questions ?? []).filter((question) => question.id && question.label);
+  const unanswered = questions.find(
+    (question) => question.required === true && !(answers[question.id as string] ?? "").trim(),
+  );
+  const nameOk = name.trim().length > 0;
+  const emailOk = EMAIL.test(email.trim());
+
+  const openTray = (next: TrayKind | null, focusInside = false) => {
+    focusTrayOnOpen.current = focusInside;
+    setTray(next);
+  };
+  const toggle = (kind: TrayKind) => openTray(tray === kind ? null : kind);
+  const closeTray = () => {
+    const back = tray === "day" ? dayBlank : tray === "time" ? timeBlank : zoneBlank;
+    setTray(null);
+    back.current?.focus();
+  };
+
+  const pickDay = (key: string) => {
+    setDayKey(key);
+    setStart(null);
+    setFormError(null);
+    openTray("time", true);
+  };
+
+  const pickSlot = (slot: string) => {
+    setStart(slot);
+    setDayKey(zoneKey(new Date(slot), zone));
+    setFormError(null);
+    setTray(null);
+    requestAnimationFrame(() => {
+      if (!nameOk) nameInput.current?.focus();
+      else if (!emailOk) emailInput.current?.focus();
+    });
+  };
+
+  const pickZone = (next: string) => {
+    setZone(next);
+    if (!start) setDayKey(null);
+    setTray(null);
+    zoneBlank.current?.focus();
+  };
+
+  // What the book button does next: the first missing thing, or book.
+  const nextStep: { label: string; go: () => void } | null = !activeDay
+    ? { label: "Pick a day", go: () => openTray("day", true) }
+    : !start
+      ? { label: "Pick a time", go: () => openTray("time", true) }
+      : !nameOk
+        ? { label: "Add your name", go: () => nameInput.current?.focus() }
+        : !emailOk
+          ? { label: "Add your email", go: () => emailInput.current?.focus() }
+          : unanswered
+            ? {
+                label: `Answer ${host}'s question`,
+                go: () => document.getElementById(`book-q-${unanswered.id}`)?.focus(),
+              }
+            : null;
 
   const book = async () => {
-    if (phase.kind !== "ready" || !start) return;
+    if (!start) return;
     setSubmitting(true);
     setFormError(null);
-    const questions = phase.preview.questions ?? [];
-    const invited = phase.preview.guestsEnabled
+    const invited = preview.guestsEnabled
       ? parseGuestEmails(
           guests.map((guest) => guest.email),
           email,
@@ -262,401 +393,404 @@ export function BookPage() {
       setFormError("Each guest needs their own email address, up to 10.");
       return;
     }
-    const res = await bookingRequest({
-      action: "book",
-      slug,
-      start,
-      timeZone: zone,
-      name,
-      email,
-      note,
-      guests: invited.emails,
-      origin: bookingPublicOrigin(window.location),
-      answers: questions.map((question) => ({
-        id: question.id,
-        value: question.id ? (answers[question.id] ?? "") : "",
-      })),
-    });
+    let res: Awaited<ReturnType<typeof bookingRequest>>;
+    try {
+      res = await bookingRequest({
+        action: "book",
+        slug,
+        start,
+        timeZone: zone,
+        name: name.trim(),
+        email: email.trim(),
+        note: noteOpen ? note : "",
+        guests: invited.emails,
+        origin: bookingPublicOrigin(window.location),
+        answers: questions.map((question) => ({
+          id: question.id,
+          value: answers[question.id as string] ?? "",
+        })),
+      });
+    } catch {
+      setSubmitting(false);
+      setFormError("Couldn't reach the server. Check your connection and try again.");
+      return;
+    }
     setSubmitting(false);
     if (!res.ok) {
+      if (res.json.error === "slot_taken") {
+        const taken = start;
+        setPhase({
+          kind: "ready",
+          preview: { ...preview, slots: preview.slots.filter((slot) => slot !== taken) },
+        });
+        setStart(null);
+        setFormError(`Someone just took ${timeLabel(taken, zone)}. Pick another time.`);
+        openTray("time", true);
+        return;
+      }
       setFormError(
-        res.json.error === "slot_taken"
-          ? "That time was just taken. Pick another."
-          : res.json.error === "bad_guest"
-            ? "Each guest needs their own email address, up to 10."
-            : "Could not book that time. Try again.",
+        res.json.error === "bad_guest"
+          ? "Each guest needs their own email address, up to 10."
+          : "Couldn't book that time. Try again.",
       );
-      if (res.json.error === "slot_taken") setStart(null);
       return;
     }
     setPhase({
       kind: "booked",
+      preview,
       start: String(res.json.start ?? start),
       meetLink: String(res.json.meetLink ?? ""),
       guests: invited.emails,
     });
+    window.scrollTo({ top: 0 });
   };
 
-  if (phase.kind === "loading") {
-    return (
-      <Frame>
-        <div className="flex flex-col gap-4 p-6 sm:p-10">
-          <div className="size-16 rounded-full bg-muted" />
-          <div className="h-8 w-56 rounded-md bg-muted" />
-          <div className="h-4 w-40 rounded-md bg-muted" />
-          <div className="mt-6 h-64 rounded-lg bg-muted" />
-        </div>
-      </Frame>
-    );
-  }
+  const addGuest = () => {
+    const id = crypto.randomUUID();
+    setGuests((current) => [...current, { id, email: "" }]);
+    requestAnimationFrame(() => document.getElementById(`book-guest-${id}`)?.focus());
+  };
 
-  if (phase.kind === "missing" || phase.kind === "error") {
-    return (
-      <Frame>
-        <div className="flex flex-col gap-3 p-6 sm:p-10">
-          <h1 className="font-display text-3xl text-foreground">
-            {phase.kind === "missing" ? "This link is not available" : "Could not load times"}
-          </h1>
-          <p className="text-base text-muted-foreground">
-            {phase.kind === "missing"
-              ? "Ask the host for a new booking link."
-              : "Refresh the page and try again."}
-          </p>
-        </div>
-      </Frame>
-    );
-  }
-
-  if (phase.kind === "booked") {
-    return (
-      <Frame>
-        <div className="mx-auto flex w-full max-w-lg flex-col gap-6 p-6 sm:p-10">
-          <h1 className="font-display text-3xl text-foreground">You're booked</h1>
-          <p className="font-sans text-lg text-foreground tabular-nums">
-            {whenLabel(phase.start, zone)}
-          </p>
-          {phase.meetLink ? (
-            <Button asChild size="lg" className="w-full sm:w-fit">
-              <a href={phase.meetLink}>Join Google Meet</a>
-            </Button>
-          ) : null}
-          <p className="text-base text-muted-foreground">
-            A short email with the Meet link and a way to cancel is on its way. Google will also
-            send the calendar invite.
-          </p>
-          {phase.guests.length > 0 ? (
-            <p className="text-base text-foreground">Also invited: {phase.guests.join(", ")}.</p>
-          ) : null}
-        </div>
-      </Frame>
-    );
-  }
-
-  const preview = phase.preview;
-  const picking = !preview.paused && byDay.size > 0 && !start;
+  const days = [...byDay.entries()].map(([key, list]) => ({ key, count: list.length }));
 
   return (
-    <Frame>
-      <div
-        className={cn(
-          "flex flex-1 flex-col lg:grid lg:min-h-0",
-          picking
-            ? "lg:grid-cols-[22rem_minmax(0,1fr)_20rem]"
-            : "lg:grid-cols-[22rem_minmax(0,1fr)]",
-        )}
+    <Page>
+      <Host preview={preview} />
+
+      <form
+        noValidate
+        className="flex flex-1 flex-col gap-8"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setTouched(true);
+          if (nextStep) nextStep.go();
+          else void book();
+        }}
       >
-        <aside
-          className={cn(
-            "flex flex-col gap-6 border-border p-6 sm:p-8 lg:overflow-y-auto lg:border-r",
-            start && "max-lg:hidden",
-          )}
-        >
-          <div className="flex items-center gap-4">
-            <Avatar className="size-16">
-              {preview.hostAvatarUrl ? <AvatarImage src={preview.hostAvatarUrl} alt="" /> : null}
-              <AvatarFallback className="text-lg">{initials(preview.hostName)}</AvatarFallback>
-            </Avatar>
-            <p className="min-w-0 font-sans text-md text-foreground">{preview.hostName}</p>
-          </div>
-          <h1 className="font-display text-3xl text-balance text-foreground">{preview.name}</h1>
-          <div className="flex flex-col gap-2 font-sans text-base text-foreground">
-            <p className="flex items-center gap-2">
-              <Clock className="size-icon text-muted-foreground" aria-hidden />
-              {preview.durationMinutes} min
-            </p>
-            <p className="flex items-center gap-2">
-              <Video className="size-icon text-muted-foreground" aria-hidden />
-              Google Meet
-            </p>
-          </div>
-          {preview.description ? (
-            <p className="whitespace-pre-wrap font-sans text-base text-muted-foreground">
-              {preview.description}
-            </p>
-          ) : null}
-          <Field id="book-timezone" label="Timezone">
-            <Select
-              value={zone}
-              onValueChange={(value) => {
-                setZone(value);
-                setCursor(null);
-                setDayKey(null);
-                setStart(null);
-              }}
-            >
-              <SelectTrigger id="book-timezone" aria-label="Your timezone" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {zones.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {zoneLabel(item)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        </aside>
+        <p className={SENTENCE}>
+          Let's talk for <Fixed>{durationPhrase(preview.durationMinutes)}</Fixed> on{" "}
+          <Blank
+            ref={dayBlank}
+            label="Day"
+            value={activeDay ? dayLong(activeDay) : null}
+            placeholder="which day"
+            open={tray === "day"}
+            controls="book-tray"
+            onToggle={() => toggle("day")}
+          />{" "}
+          at{" "}
+          <Blank
+            ref={timeBlank}
+            label="Time"
+            value={start ? timeLabel(start, zone) : null}
+            placeholder="what time"
+            open={tray === "time"}
+            disabled={!activeDay}
+            controls="book-tray"
+            onToggle={() => toggle("time")}
+          />{" "}
+          <Blank
+            ref={zoneBlank}
+            label="Timezone"
+            value={`${zonePlace(zone)} time`}
+            placeholder=""
+            open={tray === "zone"}
+            controls="book-tray"
+            onToggle={() => toggle("zone")}
+          />
+          .
+        </p>
 
-        {preview.paused || byDay.size === 0 ? (
-          <div className="flex flex-1 items-center p-6 sm:p-10">
-            <p className="font-sans text-base text-foreground">
-              {preview.paused ? "This link is paused." : "No open times in this range."}
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className={cn("flex flex-col gap-4 p-6 sm:p-8", start && "hidden")}>
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-display text-xl text-foreground">{monthTitle(view)}</h2>
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Previous month"
-                    onClick={() => {
-                      setCursor(shiftMonth(view, -1));
-                      setDayKey(null);
-                      setStart(null);
-                    }}
-                  >
-                    <ChevronLeft aria-hidden />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Next month"
-                    onClick={() => {
-                      setCursor(shiftMonth(view, 1));
-                      setDayKey(null);
-                      setStart(null);
-                    }}
-                  >
-                    <ChevronRight aria-hidden />
-                  </Button>
-                </div>
-              </div>
-              <div className="grid grid-cols-7 gap-1">
-                {WEEKDAY_HEAD.map((label) => (
-                  <div
-                    key={label}
-                    className="py-1 text-center font-sans text-xs text-muted-foreground"
-                  >
-                    {label}
+        {tray ? (
+          <div ref={trayRef}>
+            {tray === "day" ? (
+              <Tray
+                id="book-tray"
+                label="Choose a day"
+                heading="Choose a day"
+                aside={`${days.length} open ${days.length === 1 ? "day" : "days"}`}
+                onClose={closeTray}
+              >
+                {picks.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <Eyebrow as="p">Soonest</Eyebrow>
+                    <div className="flex flex-wrap gap-2">
+                      {picks.map((slot, index) => (
+                        <Chip
+                          key={slot}
+                          data-first={index === 0 ? "" : undefined}
+                          aria-label={`${dayLong(zoneKey(new Date(slot), zone))} at ${timeLabel(slot, zone)}`}
+                          onClick={() => pickSlot(slot)}
+                        >
+                          <span className="text-muted-foreground">
+                            {relativeDay(zoneKey(new Date(slot), zone), todayKey)}
+                          </span>
+                          {timeLabel(slot, zone)}
+                        </Chip>
+                      ))}
+                    </div>
                   </div>
-                ))}
-                {cells.map((cell) => {
-                  const key = cellKey(cell);
-                  const open = cell.inMonth && byDay.has(key);
-                  const selected = key === activeKey && cell.inMonth;
-                  const today = key === todayKey && cell.inMonth;
-                  return (
-                    <button
-                      key={`${key}-${cell.inMonth ? "in" : "out"}`}
-                      type="button"
-                      disabled={!open}
-                      aria-label={open ? dayTitle(key, zone) : undefined}
-                      aria-pressed={selected}
-                      onClick={() => {
-                        setDayKey(key);
-                        setStart(null);
-                        timesRef.current?.scrollIntoView({ block: "nearest" });
-                      }}
-                      className={cn(
-                        "flex aspect-square w-full items-center justify-center rounded-md font-sans text-base tabular-nums",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        !cell.inMonth && "text-transparent",
-                        cell.inMonth && !open && "text-muted-foreground",
-                        open && !selected && "font-medium text-foreground hover:bg-accent",
-                        today && !selected && "ring-1 ring-border",
-                        selected && "bg-[var(--selected-bg)] font-medium text-foreground",
-                      )}
-                    >
-                      {cell.inMonth ? cell.d : ""}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                ) : null}
+                <div className="flex flex-col gap-2">
+                  <Eyebrow as="p">Every open day</Eyebrow>
+                  <DayStrip days={days} selected={activeDay} onPick={pickDay} />
+                </div>
+              </Tray>
+            ) : null}
 
-            <div
-              ref={timesRef}
-              className={cn("flex min-h-0 flex-col gap-3 p-6 sm:p-8", start && "hidden")}
-            >
-              <h2 className="font-display text-xl text-foreground">
-                {activeKey ? dayTitle(activeKey, zone) : "No times this month"}
-              </h2>
-              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-                {times.map((slot) => (
-                  <Button
-                    key={slot}
+            {tray === "time" && activeDay ? (
+              <Tray
+                id="book-tray"
+                label={`Times on ${dayLong(activeDay)}`}
+                heading={dayLong(activeDay)}
+                aside={
+                  <button
                     type="button"
-                    variant="outline"
-                    size="lg"
-                    className="w-full tabular-nums"
-                    onClick={() => setStart(slot)}
+                    className="underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => openTray("day", true)}
                   >
-                    {timeLabel(slot, zone)}
-                  </Button>
-                ))}
-              </div>
-            </div>
+                    Another day
+                  </button>
+                }
+                onClose={closeTray}
+              >
+                <div className="flex flex-col gap-3">
+                  {groupByPart(dayTimes, zone).map((group, groupIndex) => (
+                    <div
+                      key={group.part}
+                      className="grid gap-2 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-start"
+                    >
+                      <p className="font-sans text-sm text-muted-foreground sm:pt-2.5">
+                        {PART_LABEL[group.part]}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {group.slots.map((slot, index) => (
+                          <Chip
+                            key={slot}
+                            selected={slot === start}
+                            data-first={groupIndex === 0 && index === 0 ? "" : undefined}
+                            onClick={() => pickSlot(slot)}
+                          >
+                            {timeLabel(slot, zone)}
+                          </Chip>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Tray>
+            ) : null}
 
-            {start ? (
-              <form
-                className="flex min-h-0 flex-col gap-5 overflow-y-auto p-6 sm:p-8"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void book();
+            {tray === "zone" ? (
+              <Tray
+                id="book-tray"
+                label="Choose your timezone"
+                heading="Show times in"
+                aside="Your timezone was detected from this device."
+                onClose={closeTray}
+              >
+                <div className="flex flex-wrap gap-2">
+                  {zones.map((item) => (
+                    <Chip key={item} selected={item === zone} onClick={() => pickZone(item)}>
+                      {zonePlace(item)}
+                      <span className="text-muted-foreground">{clockIn(item)}</span>
+                    </Chip>
+                  ))}
+                </div>
+              </Tray>
+            ) : null}
+          </div>
+        ) : null}
+
+        <p className={SENTENCE}>
+          I'm{" "}
+          <BlankInput
+            ref={nameInput}
+            id="book-name"
+            label="Your name"
+            placeholder="your name"
+            autoComplete="name"
+            enterKeyHint="next"
+            value={name}
+            aria-invalid={touched && !nameOk ? true : undefined}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                emailInput.current?.focus();
+              }
+            }}
+          />
+          , and you can reach me at{" "}
+          <BlankInput
+            ref={emailInput}
+            id="book-email"
+            type="email"
+            inputMode="email"
+            label="Your email"
+            placeholder="you@email.com"
+            autoComplete="email"
+            enterKeyHint="go"
+            value={email}
+            aria-invalid={touched && !emailOk ? true : undefined}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          .
+        </p>
+
+        {preview.guestsEnabled && guests.length > 0 ? (
+          <p className={SENTENCE}>
+            I'm also bringing{" "}
+            {guests.map((guest, index) => (
+              <span key={guest.id}>
+                {index === 0 ? "" : index === guests.length - 1 ? " and " : ", "}
+                <span className="inline-flex items-baseline whitespace-nowrap">
+                  <BlankInput
+                    id={`book-guest-${guest.id}`}
+                    type="email"
+                    inputMode="email"
+                    label={`Guest ${index + 1} email`}
+                    placeholder="their@email.com"
+                    autoComplete="off"
+                    value={guest.email}
+                    onChange={(event) =>
+                      setGuests((current) =>
+                        current.map((item) =>
+                          item.id === guest.id ? { ...item, email: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                  {index === guests.length - 1 ? "." : ""}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove guest ${index + 1}`}
+                    className="mx-1 self-center text-muted-foreground"
+                    onClick={() =>
+                      setGuests((current) => current.filter((item) => item.id !== guest.id))
+                    }
+                  >
+                    <X aria-hidden className="size-icon" />
+                  </Button>
+                </span>
+              </span>
+            ))}
+          </p>
+        ) : null}
+
+        {questions.length > 0 ? (
+          <section className="flex max-w-xl flex-col gap-5">
+            <Eyebrow as="p">{host} also asks</Eyebrow>
+            {questions.map((question) => (
+              <div key={question.id} className="flex flex-col gap-2">
+                <label
+                  htmlFor={`book-q-${question.id}`}
+                  className="font-display text-md text-foreground"
+                >
+                  {question.label}
+                  {question.required ? null : (
+                    <span className="text-muted-foreground"> (optional)</span>
+                  )}
+                </label>
+                <Input
+                  id={`book-q-${question.id}`}
+                  value={answers[question.id as string] ?? ""}
+                  aria-invalid={
+                    touched &&
+                    question.required === true &&
+                    !(answers[question.id as string] ?? "").trim()
+                      ? true
+                      : undefined
+                  }
+                  onChange={(event) =>
+                    setAnswers((current) => ({
+                      ...current,
+                      [question.id as string]: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            ))}
+          </section>
+        ) : null}
+
+        {noteOpen ? (
+          <div className="flex max-w-xl animate-in flex-col gap-2 fade-in-0 duration-[var(--motion-base)]">
+            <label htmlFor="book-note" className="font-display text-md text-foreground">
+              Anything {host} should know?
+            </label>
+            <Textarea
+              id="book-note"
+              rows={3}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </div>
+        ) : null}
+
+        {(preview.guestsEnabled && guests.length < MAX_BOOKING_GUESTS) ||
+        (preview.noteEnabled && !noteOpen) ? (
+          <div className="-ml-2 flex flex-wrap gap-1">
+            {preview.guestsEnabled && guests.length < MAX_BOOKING_GUESTS ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-muted-foreground"
+                onClick={addGuest}
+              >
+                <Plus aria-hidden />
+                {guests.length === 0 ? "Bring someone" : "Bring someone else"}
+              </Button>
+            ) : null}
+            {preview.noteEnabled && !noteOpen ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-muted-foreground"
+                onClick={() => {
+                  setNoteOpen(true);
+                  requestAnimationFrame(() => document.getElementById("book-note")?.focus());
                 }}
               >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-fit justify-start px-0"
-                  onClick={() => setStart(null)}
-                >
-                  <ChevronLeft aria-hidden />
-                  Choose another time
-                </Button>
-                <div className="flex flex-col gap-1">
-                  <p className="font-sans text-lg text-foreground tabular-nums">
-                    {timeLabel(start, zone)}
-                  </p>
-                  <p className="font-sans text-base text-muted-foreground">
-                    {dayTitle(zoneKey(new Date(start), zone), zone)} · {preview.durationMinutes} min
-                  </p>
-                </div>
-                <Field id="book-name" label="Name">
-                  <Input
-                    id="book-name"
-                    value={name}
-                    required
-                    autoComplete="name"
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </Field>
-                <Field id="book-email" label="Email">
-                  <Input
-                    id="book-email"
-                    type="email"
-                    value={email}
-                    required
-                    autoComplete="email"
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </Field>
-                {preview.guestsEnabled ? (
-                  <div className="flex flex-col gap-2">
-                    {guests.length > 0 ? (
-                      <p className="font-display text-sm text-foreground">Guests</p>
-                    ) : null}
-                    {guests.map((guest, index) => (
-                      <div key={guest.id} className="flex items-center gap-2">
-                        <Input
-                          type="email"
-                          value={guest.email}
-                          placeholder="name@email.com"
-                          aria-label={`Guest ${index + 1} email`}
-                          autoComplete="off"
-                          onChange={(e) =>
-                            setGuests((current) =>
-                              current.map((item) =>
-                                item.id === guest.id ? { ...item, email: e.target.value } : item,
-                              ),
-                            )
-                          }
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() =>
-                            setGuests((current) => current.filter((item) => item.id !== guest.id))
-                          }
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ))}
-                    {guests.length < MAX_BOOKING_GUESTS ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="w-fit justify-start px-0"
-                        onClick={() =>
-                          setGuests((current) => [
-                            ...current,
-                            { id: crypto.randomUUID(), email: "" },
-                          ])
-                        }
-                      >
-                        {guests.length === 0 ? "Add guests" : "Add another guest"}
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
-                {preview.noteEnabled ? (
-                  <Field id="book-note" label="Note">
-                    <Textarea
-                      id="book-note"
-                      value={note}
-                      rows={4}
-                      onChange={(e) => setNote(e.target.value)}
-                    />
-                  </Field>
-                ) : null}
-                {(preview.questions ?? []).map((question) =>
-                  question.id && question.label ? (
-                    <Field key={question.id} id={`book-q-${question.id}`} label={question.label}>
-                      <Input
-                        id={`book-q-${question.id}`}
-                        required={question.required === true}
-                        value={answers[question.id] ?? ""}
-                        onChange={(e) =>
-                          setAnswers((current) => ({
-                            ...current,
-                            [question.id as string]: e.target.value,
-                          }))
-                        }
-                      />
-                    </Field>
-                  ) : null,
-                )}
-                {formError ? (
-                  <p role="alert" className="text-base text-destructive">
-                    {formError}
-                  </p>
-                ) : null}
-                <Button type="submit" size="lg" className="w-full sm:w-fit" disabled={submitting}>
-                  {submitting ? "Booking…" : "Schedule meeting"}
-                </Button>
-              </form>
+                <Plus aria-hidden />
+                Add a note
+              </Button>
             ) : null}
-          </>
-        )}
-      </div>
-    </Frame>
+          </div>
+        ) : null}
+
+        <div
+          className={cn(
+            "sticky bottom-0 z-10 -mx-4 mt-auto flex flex-col gap-3 border-t border-border bg-background px-4 pt-4",
+            "pb-[max(1rem,env(safe-area-inset-bottom))] sm:static sm:mx-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:px-0",
+          )}
+        >
+          <Button type="submit" size="lg" className="w-full sm:w-fit" disabled={submitting}>
+            {submitting
+              ? "Booking…"
+              : nextStep
+                ? nextStep.label
+                : `Book ${start ? `${dayShort(zoneKey(new Date(start), zone))} at ${timeLabel(start, zone)}` : ""}`}
+          </Button>
+          <div
+            className="flex min-w-0 flex-col gap-1 font-sans text-sm text-muted-foreground"
+            aria-live="polite"
+          >
+            {formError ? (
+              <p role="alert" className="text-destructive">
+                {formError}
+              </p>
+            ) : (
+              <p>
+                {start && echo(start) ? `${echo(start)} ` : ""}
+                Google Meet link arrives by email.
+              </p>
+            )}
+          </div>
+        </div>
+      </form>
+    </Page>
   );
 }
