@@ -153,6 +153,7 @@ Things that have bitten us, so they don't bite again. **Read before debugging; a
 
 ## Calendar / booking links
 
+- **`user_integrations.provider` only allows `zoom`, `google_meet`, and `google_calendar`.** A new provider that skips this check inserts nothing and the connect callback returns `save_failed` on a blank page. Extend `user_integrations_provider_check` in the same change.
 - **A public booking only works after the migration and two edge functions are deployed with `verify_jwt=false`.** `booking-public` and `booking-google-connect` have no guest JWT (the Google callback is a browser redirect). They need `MODUO_TOKEN_ENCRYPTION_SECRET` (same value as the desktop app). `GOOGLE_CALENDAR_CLIENT_ID` / `GOOGLE_CALENDAR_CLIENT_SECRET` are the **Desktop** OAuth client (no redirect field; desktop Connect copies the keychain token). `GOOGLE_CALENDAR_WEB_CLIENT_ID` / `GOOGLE_CALENDAR_WEB_CLIENT_SECRET` are a separate **Web application** client whose Authorized redirect URI is this function's URL. A refresh token only works with the client that issued it, so booking refresh tries the desktop client first, then the web client. Google's own invite email is `sendUpdates=all`. The short Moduo email needs `RESEND_API_KEY`; if it is missing the booking still succeeds and the Meet link is on the confirmation page.
 
 ## Calendar / CalDAV + ICS (CAL-8)
