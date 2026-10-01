@@ -17,7 +17,7 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 
 - [ ] Scrolling keeps the stage pinned; steps advance 01 → 05; the stage is empty ("Listening for new mail") until you reach it
 - [ ] 01: a "New mail · Tomasz" pill drops in, then unfolds into the email card; the words fade in one by one
-- [ ] 02: a light sweeps across the email; "demo on Thursday", "the 15th", "Kowalska Phase 2" highlight and fly out as chips to the Calendar and Project cards; lines draw behind them
+- [ ] 02: a light sweeps across the email; "demo on Thursday", "the 15th", "Carter Phase 2" highlight and fly out as chips to the Calendar and Project cards; lines draw behind them
 - [ ] 03: the Project card expands: progress ring 4 of 7, three open subtasks. Ticking one strikes it, moves the ring and updates the status line
 - [ ] 04: Client card (Anna, a Jun → Sep → Thu history that draws in) and the Deal "Phase 1 · Won"
 - [ ] 05: Time card bars grow and hours count up to 38h 20m; the invoice suggestion builds line by line, total counts to €4,600
@@ -40,7 +40,7 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 
 ## AI over MCP
 
-- [ ] Scrolling to it auto-runs "What's left before the Kowalska demo?"
+- [ ] Scrolling to it auto-runs "What's left before the Carter demo?"
 - [ ] Each prompt: user bubble → tool calls spin then tick with a result → answer streams in
 - [ ] Switching prompt mid-run cancels the previous run cleanly
 - [ ] Bottom row shows allowed permissions ("Send email · asks first")
