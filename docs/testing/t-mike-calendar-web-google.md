@@ -19,6 +19,9 @@
 - [ ] **Do:** Edit a booking link and turn **Add guests** on. Save. Open the link. → **Expect:** under Email, an **Add guests** button. Links with the toggle off do not show it. _(web)_
 - [ ] **Do:** Add one or two other email addresses and book a time. → **Expect:** confirmation says those addresses get the invite. Each guest receives a Google Calendar invite with the Meet link. Cancelling the booking cancels that invite for them too. _(web)_
 
+## Booking page
+- [ ] **Do:** Open a booking link on a laptop, then on a phone. → **Expect:** on a laptop, the host, the month, and the times sit side by side in a large card. On a phone, you pick a day, then see the times, then the form. Each step fills the screen, and Back returns to the previous step. _(web)_
+
 ## Who the booking page shows
 - [ ] **Do:** Change your name or profile photo in Settings, then open a booking link you already created (private window is fine). → **Expect:** the page shows the new name and the new photo, without editing the link. If you have no photo, your initials show. _(web)_
 
