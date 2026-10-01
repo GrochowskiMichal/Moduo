@@ -151,7 +151,7 @@ A full multi-account Spark replacement on a cloud-first web app would mean build
 
 - **Shared-workspace *async* multiplayer**, NOT real-time collaborative editing. Built on Supabase RLS + `workspace_members`; changes appear on refresh/poll. Enough to build Moduo with a partner. No live cursors / simultaneous block-editing at alpha (that is the expensive trap).
 - Consequence: **every new module is Supabase-first**, and **Notes must move to Supabase** (cloud-sync) — notes are the one kept module still local-CRDT, and shared design notes require it. The Notes rebuild is where this lands.
-- In-app chat is **out of scope** (keep Slack). Coordination = comments + @mentions + notifications on entities.
+- In-app chat was **out of scope** (keep Slack) — **reversed 2026-10-02:** a chat + calls module is planned for the Duo/Team plans, specced later ([ROADMAP](./ROADMAP.md)); its real-time path is that spec's call. Coordination on entities stays comments + @mentions + notifications.
 
 ---
 

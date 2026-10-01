@@ -91,7 +91,7 @@ Carried from the original brief, sharpened by research:
 - **Decisions live with the designer, not the user.** Opinionated defaults; hide configurability. (This is the direct antidote to "system-building as procrastination," the #1 behavioral failure mode of flexible all-in-ones.)
 - **Design for graceful slippage, not robotic adherence.** Falling behind is the *normal* case. One-tap "reflow my day," a gentle overdue queue (never a wall of red), a simple "day-fullness" signal. The category's biggest *emotional* pain is guilt.
 - **Links feel like a side-effect of work, never a schema task.** (See §4.)
-- **Notifications: quiet, grouped-by-entity, digest-by-default.** Cross-module notifications are central to the moat — and uncurated notifications are a top incumbent complaint. Get curation right from day one or the moat poisons itself. "Light multiplayer" = ambient glanceable shared state, **not a chat tier**.
+- **Notifications: quiet, grouped-by-entity, digest-by-default.** Cross-module notifications are central to the moat — and uncurated notifications are a top incumbent complaint. Get curation right from day one or the moat poisons itself. "Light multiplayer" = ambient glanceable shared state, **not a chat tier**. *(Amended 2026-10-02: the Duo/Team plans will add a chat + calls module — see §9. This ambient layer stays as it is, and the chat spec has to keep chat inside this quiet-notification bar.)*
 - **AI stays quiet and connective.** MCP-only, no built-in model; never sprinkle AI styling across modules (hold the single deliberate pink "AI disc"). Market "bring your own AI, we never train on your data" as a **trust** feature. (AI-everywhere currently reads as a data-harvesting tell.)
 - **Capture is frictionless and destination-free.** A bare title is a complete task; metadata is optional enrichment, never a gate. Global sub-second quick-capture into an inbox; route/link later.
 
@@ -111,7 +111,7 @@ Carried from the original brief, sharpened by research:
 - **No Notion-style databases / relation schemas.** "Nothing to over-engineer" is a feature.
 - **No abstract "generic entity" / graph view** the user must learn. (Anytype trap.)
 - **No zero-based / envelope budgeting, no guilt-coded red "overspent" states.** Be the retrospective-clarity tool, not the discipline enforcer. (YNAB's red is "soul-crushing.")
-- **No chat module.** Keep Slack. Coordination = comments + @mentions + notifications + ambient state.
+- **"No chat module, keep Slack" — reversed 2026-10-02 (Maciej + Mike).** A communication module (chat + calls) is planned for the Duo (2 seats) and Team (3+ seats) plans, built to solve Slack/Discord's problems and to compete with Slack on features — specced and built later ([ROADMAP](./ROADMAP.md), Q14). What still holds: coordination *on the work* stays async — comments + @mentions + notifications + ambient state. *(Tension, kept on purpose: the 2026-06-24 alpha strategy said async-only multiplayer; chat/calls is the deliberate real-time exception, for its spec to reconcile.)*
 - **No AI-everywhere sparkle.** MCP-only.
 - **No auto-seizing scheduler.** If scheduling assistance ships, it's suggestion-based, reversible, and reason-annotated ("moved because your 2pm ran over") — "we schedule *with* you, not *at* you." (Motion's opaque auto-reshuffle is its #1 churn cause.)
 - **No fake integration.** Email/calendar are first-class in-app panes, never iframes or "opens in a new tab" (Notion's current failure), never oversold one-way sync marketed as two-way (Akiflow complaint).

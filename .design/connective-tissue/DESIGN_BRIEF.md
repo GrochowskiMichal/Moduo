@@ -226,7 +226,7 @@ This is a desktop Tauri app (min 1024×700); no mobile.
 - **A generic-entity model or schema editor in the UI.** No "define your object type" step; `entity_type` set is code-owned at alpha.
 - **User-defined `relation_kind`.** Closed set at alpha; revisit post-alpha.
 - **The dedicated Universal Inbox screen.** Deferred to Wave 5 (Email); Wave 0 routes unrouted captures to the Tasks Inbox bucket.
-- **Real-time collaborative editing / live cursors / a chat module.** Async multiplayer only; coordination = comments + @mentions + notifications.
+- **Real-time collaborative editing / live cursors / a chat module in the spine.** Async multiplayer only; coordination = comments + @mentions + notifications. *(Chat + calls is now a separate module planned for the Duo/Team plans — decided 2026-10-02, not yet specced — so it is out of the spine's scope, not the product's. See [decisions.md](../../docs/decisions.md).)*
 - **A built-in LLM or AI-styled suggestion UI.** AI is MCP-only; auto-suggest is a plain deterministic strip, no sparkle/gradient.
 - **A separate `attachments` table.** Attachments are `entity_links` with `relation_kind='attachment'`.
 - **Per-type chip colors / a per-entity-type accent palette.** Chips are neutral; color stays reserved for tags + status.
