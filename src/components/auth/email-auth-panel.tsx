@@ -141,7 +141,12 @@ export function EmailAuthPanel({ priceId = null }: Props) {
     const { error: otpErr } = await runtime.auth.sendOtp({ email });
     setBusy(false);
     if (otpErr) {
-      setError(otpErr.message);
+      // Sign-ups are closed on the project: only existing or invited people get a code.
+      setError(
+        /signups? not allowed/i.test(otpErr.message)
+          ? "Moduo is invite-only right now. Ask the person who invited you to use the email they invited."
+          : otpErr.message,
+      );
       return;
     }
     setOtpSentAt(sentAt);
