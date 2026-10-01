@@ -50,6 +50,7 @@ export {
   manageIntegrationBodySchema,
   manageIntegrationQuerySchema,
   notesPublicTokenSchema,
+  waitlistJoinBodySchema,
   workspaceInviteWebhookBodySchema,
 } from "./http-bodies.ts";
 
@@ -115,6 +116,8 @@ export {
   RELATION_KINDS,
   SYNCABLE_PROVIDERS,
   TASK_STATUSES,
+  WAITLIST_SOURCES,
+  WAITLIST_STATUSES,
   WORKSPACE_ROLES,
   activityActorTypeSchema,
   calendarAccountStatusSchema,
@@ -131,6 +134,7 @@ export {
   isPlanTier,
   isRelationKind,
   isTaskStatus,
+  isWaitlistSource,
   isWorkspaceRole,
   knownSubscriptionStatusSchema,
   linkOriginSchema,
@@ -151,6 +155,8 @@ export {
   relationKindSchema,
   syncableProviderSchema,
   taskStatusSchema,
+  waitlistSourceSchema,
+  waitlistStatusSchema,
   workspaceRoleSchema,
   type ActivityActorType,
   type CalendarAccountStatus,
@@ -172,5 +178,7 @@ export {
   type RelationKind,
   type SyncableProvider,
   type TaskStatus,
+  type WaitlistSource,
+  type WaitlistStatus,
   type WorkspaceRole,
 } from "./vocabularies.ts";

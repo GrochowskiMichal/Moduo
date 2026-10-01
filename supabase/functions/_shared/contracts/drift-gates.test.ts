@@ -16,6 +16,8 @@ import {
   MEMBER_DB_ROLES,
   PLAN_TIERS,
   TASK_STATUSES,
+  WAITLIST_SOURCES,
+  WAITLIST_STATUSES,
 } from "./vocabularies.ts";
 
 const MIGRATIONS_DIR = resolve(
@@ -42,6 +44,17 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`provider IN (${inList(CALENDAR_PROVIDERS)})`);
     expect(sql).toContain(`status IN (${inList(CALENDAR_ACCOUNT_STATUSES)})`);
     expect(sql).toContain("founder");
+  });
+
+  it("waitlist migration CHECKs + join function list the canonical IN-lists", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261001160000_waitlist_secure_join.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`source IN (${inList(WAITLIST_SOURCES)})`);
+    expect(sql).toContain(`p_source NOT IN (${inList(WAITLIST_SOURCES)})`);
+    expect(sql).toContain(`status IN (${inList(WAITLIST_STATUSES)})`);
   });
 
   it("task statuses stay the closed set used by MCP parsers", () => {

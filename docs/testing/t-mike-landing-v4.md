@@ -52,7 +52,23 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 ## Close
 
 - [ ] No "Things we will never build" section; nav has How it connects · Make it yours · AI
-- [ ] "Get started" / "Sign in" open https://app.moduo.app/auth
+- [ ] Close section shows the email field + "Join the waitlist" (no "Get started" / "Sign in"); note reads "Early access opens in waves…"
+
+## Waitlist (Supabase `waitlist-join`)
+
+- [ ] Nav: one "Join waitlist" button (no "Sign in") → opens a dialog with the mark, title, email field; focus lands in the field
+- [ ] Dialog closes with Esc, the × button and a click on the dimmed backdrop; clicking inside the card does not close it
+- [ ] Footer "Join the waitlist" link opens the same dialog; https://www.moduo.app/#waitlist opens it on load
+- [ ] Hero: email field + "Join the waitlist", note "One email when your invite is ready. No spam.", then "See how it connects ⌄"
+- [ ] Submit empty → red outline + "Enter your email to join."; type → error clears
+- [ ] Submit `anna@carter` → "That email doesn’t look right — check it and try again."
+- [ ] Submit a real address → spinner on the button, then green "You’re on the list. We’ll email <address>…" in hero, close AND dialog; nav button turns into "✓ You’re on the list"
+- [ ] Reload → still shows "You’re on the list" everywhere (remembered on this browser)
+- [ ] "Use a different email" → every form back to empty; the waitlist row is NOT deleted
+- [ ] Submit the same address again → still "You’re on the list" (no "already registered" message — by design)
+- [ ] Supabase dashboard → Table editor → `waitlist`: the row has lowercase email, `source` = hero/close/nav, `status` = pending, `ip_hash` (64 hex chars), no raw IP
+- [ ] DevTools offline → submit → "Couldn’t reach the server. Check your connection and try again."
+- [ ] 9+ submits from one network within an hour → "Too many tries from this network…"
 
 ## Edge cases
 
@@ -63,3 +79,5 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 
 - Relations, widget store, budgets, invoicing, time tracking, goals and per-workspace modules are vision ahead of the product (copy says "on the way", no "Soon" tags).
 - Still `noindex, nofollow`; no og:image.
+- Waitlist sends no confirmation email to the signer and no notification to the team (rows are read in the Supabase dashboard). No double-opt-in yet — `status` stays `pending` until that exists.
+- The live endpoint only accepts moduo.app, www.moduo.app, `moduo*.vercel.app` and the local preview (127.0.0.1/localhost:8765). Another preview domain needs adding to `ALLOWED_ORIGINS`.

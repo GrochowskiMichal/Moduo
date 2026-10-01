@@ -2088,8 +2088,9 @@ export type Database = {
           created_at: string
           email: string
           id: string
-          ip_address: string | null
+          ip_hash: string | null
           referrer: string | null
+          source: string | null
           status: string
           updated_at: string
           user_agent: string | null
@@ -2098,8 +2099,9 @@ export type Database = {
           created_at?: string
           email: string
           id?: string
-          ip_address?: string | null
+          ip_hash?: string | null
           referrer?: string | null
+          source?: string | null
           status?: string
           updated_at?: string
           user_agent?: string | null
@@ -2108,11 +2110,30 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
-          ip_address?: string | null
+          ip_hash?: string | null
           referrer?: string | null
+          source?: string | null
           status?: string
           updated_at?: string
           user_agent?: string | null
+        }
+        Relationships: []
+      }
+      waitlist_attempts: {
+        Row: {
+          created_at: string
+          id: number
+          ip_hash: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          ip_hash: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          ip_hash?: string
         }
         Relationships: []
       }
@@ -4555,6 +4576,16 @@ export type Database = {
       user_is_workspace_owner: {
         Args: { p_workspace_id: string }
         Returns: boolean
+      }
+      waitlist_join: {
+        Args: {
+          p_email: string
+          p_ip_hash: string
+          p_referrer?: string
+          p_source: string
+          p_user_agent?: string
+        }
+        Returns: string
       }
       workspace_api_keys_can_manage: {
         Args: { p_workspace_id: string }

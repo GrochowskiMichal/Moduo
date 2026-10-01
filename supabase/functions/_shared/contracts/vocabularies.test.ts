@@ -23,6 +23,8 @@ import {
   RELATION_KINDS,
   SYNCABLE_PROVIDERS,
   TASK_STATUSES,
+  WAITLIST_SOURCES,
+  WAITLIST_STATUSES,
   WORKSPACE_ROLES,
   inviteStatusSchema,
   isCalendarProvider,
@@ -32,6 +34,7 @@ import {
   isPlanTier,
   isRelationKind,
   isTaskStatus,
+  isWaitlistSource,
   isWorkspaceRole,
   normalizeCalendarProvider,
   normalizeEmailProvider,
@@ -103,6 +106,14 @@ describe("vocabulary value sets", () => {
     expect(INVITE_STATUSES).toEqual(["pending", "accepted", "revoked", "expired"]);
     expect(inviteStatusSchema.safeParse("pending").success).toBe(true);
     expect(inviteStatusSchema.safeParse("declined").success).toBe(false);
+  });
+
+  it("waitlist vocabularies pin the landing CTA sources and row statuses", () => {
+    expect(WAITLIST_SOURCES).toEqual(["nav", "hero", "close"]);
+    expect(WAITLIST_STATUSES).toEqual(["pending", "confirmed", "cancelled"]);
+    expect(isWaitlistSource("hero")).toBe(true);
+    expect(isWaitlistSource("footer")).toBe(false);
+    expect(isWaitlistSource(undefined)).toBe(false);
   });
 
   it("email vocabularies pin the code spellings (not the stale migration comment)", () => {

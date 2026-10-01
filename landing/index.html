@@ -82,6 +82,7 @@
         --selected-bg: color-mix(in oklab, var(--primary) 14%, var(--card));
 
         --success: oklch(0.74 0.16 145);
+        --destructive: oklch(0.66 0.22 25);
         --warning: oklch(0.82 0.15 75);
         --info: oklch(0.7 0.14 230);
         --ai: oklch(0.71 0.2 350);
@@ -303,6 +304,238 @@
       }
       .btn:hover .arrow {
         transform: translateX(2px);
+      }
+
+      /* ─── Waitlist ──────────────────────────────────────────────────────── */
+      .wl {
+        display: grid;
+        justify-items: center;
+        gap: 0.75rem;
+        width: 100%;
+      }
+      .wl-row {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.75rem;
+        width: 100%;
+      }
+      .wl-field {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        width: min(100%, 26rem);
+        height: var(--ctrl-h-lg);
+        padding: 0.25rem 0.25rem 0.25rem 0.875rem;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-lg);
+        background: var(--card);
+        transition:
+          border-color var(--motion-base) var(--ease-out),
+          box-shadow var(--motion-base) var(--ease-out);
+      }
+      .wl-field:hover {
+        border-color: color-mix(in oklab, var(--border-strong) 60%, var(--muted-foreground));
+      }
+      .wl-field:focus-within {
+        border-color: var(--muted-foreground);
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 14%, transparent);
+      }
+      .wl-input {
+        flex: 1;
+        min-width: 0;
+        height: 100%;
+        background: transparent;
+        border: 0;
+        color: var(--foreground);
+        font-size: var(--text-base);
+      }
+      .wl-input::placeholder {
+        color: var(--faint-foreground);
+      }
+      .wl-input:focus-visible {
+        outline: none;
+      }
+      .wl-btn {
+        position: relative;
+        flex-shrink: 0;
+        height: var(--ctrl-h);
+        padding-inline: 0.875rem;
+      }
+      .wl-spin {
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid color-mix(in oklab, var(--primary-foreground) 25%, transparent);
+        border-top-color: var(--primary-foreground);
+        border-radius: var(--radius-full);
+        opacity: 0;
+        animation: wl-spin 700ms linear infinite;
+      }
+      @keyframes wl-spin {
+        to {
+          transform: rotate(1turn);
+        }
+      }
+      .wl[data-state="loading"] .wl-label {
+        visibility: hidden;
+      }
+      .wl[data-state="loading"] .wl-spin {
+        opacity: 1;
+      }
+      .wl[data-state="loading"] .wl-btn {
+        cursor: progress;
+      }
+      .wl[data-state="error"] .wl-field {
+        border-color: var(--destructive);
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive) 16%, transparent);
+      }
+      .wl-msg {
+        min-height: 1.25rem;
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .wl[data-state="error"] .wl-msg {
+        color: var(--destructive);
+      }
+      .wl-hp {
+        position: absolute;
+        left: -10000px;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+      }
+      .wl-done {
+        display: none;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.625rem 0.875rem 0.625rem 0.625rem;
+        border: 1px solid color-mix(in oklab, var(--success) 35%, var(--border));
+        border-radius: var(--radius-lg);
+        background: color-mix(in oklab, var(--success) 8%, var(--card));
+        text-align: left;
+      }
+      .wl-done:focus {
+        outline: none;
+      }
+      .wl-tick {
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--radius-full);
+        background: color-mix(in oklab, var(--success) 22%, transparent);
+        color: var(--success);
+      }
+      .wl-done strong {
+        display: block;
+        font-size: var(--text-base);
+        font-weight: 600;
+        color: var(--foreground);
+      }
+      .wl-done span {
+        font-size: var(--text-sm);
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
+      }
+      .wl-done b {
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .wl-again {
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .wl-again:hover {
+        color: var(--foreground);
+      }
+      .wl[data-state="done"] .wl-field,
+      .wl[data-state="done"] .wl-msg {
+        display: none;
+      }
+      .wl[data-state="done"] .wl-done {
+        display: flex;
+        animation: wl-in var(--motion-slow) var(--ease-spring) both;
+      }
+      .wl[data-state="done"] .wl-tick svg {
+        animation: wl-pop var(--motion-slower) var(--ease-spring) 80ms both;
+      }
+      @keyframes wl-in {
+        from {
+          opacity: 0;
+          transform: translateY(4px) scale(0.97);
+        }
+      }
+      @keyframes wl-pop {
+        from {
+          opacity: 0;
+          transform: scale(0.4);
+        }
+      }
+      .nav-wl.is-joined {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .nav-wl .icon {
+        color: var(--success);
+      }
+
+      .wl-dialog {
+        width: min(27rem, calc(100vw - 2rem));
+        margin: auto;
+        padding: 2rem 1.5rem 1.5rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        background: var(--popover);
+        color: var(--foreground);
+        box-shadow: var(--shadow-overlay);
+        text-align: center;
+      }
+      .wl-dialog[open] {
+        display: grid;
+        justify-items: center;
+        gap: 0.75rem;
+        animation: wl-in var(--motion-slow) var(--ease-out) both;
+      }
+      .wl-dialog::backdrop {
+        background: color-mix(in oklab, var(--background) 72%, transparent);
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+      }
+      .wl-dialog .mark {
+        width: 2.25rem;
+        height: 2.25rem;
+      }
+      .wl-dialog h2 {
+        font-size: var(--text-xl);
+        font-weight: 600;
+        letter-spacing: -0.015em;
+      }
+      .wl-dialog p.wl-sub {
+        max-width: 22rem;
+        margin-bottom: 0.5rem;
+        font-size: var(--text-base);
+        color: var(--muted-foreground);
+      }
+      .wl-dialog .wl-field {
+        width: 100%;
+      }
+      .wl-x {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        width: var(--ctrl-h);
+        padding: 0;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .wl-spin {
+          animation-duration: 1.4s;
+        }
       }
 
       /* ─── Nav ───────────────────────────────────────────────────────────── */
@@ -606,6 +839,12 @@
         flex-wrap: wrap;
         justify-content: center;
         gap: 0.75rem;
+      }
+      .hero-cta .wl + .hero-more {
+        margin-top: -0.25rem;
+      }
+      .btn.hero-more:hover .arrow {
+        transform: translateY(2px);
       }
       .hero-note {
         font-size: var(--text-sm);
@@ -3302,8 +3541,9 @@
           <a class="btn btn-ghost" href="#ai">AI</a>
         </nav>
         <div class="nav-actions">
-          <a class="btn btn-ghost" href="https://app.moduo.app/auth">Sign in</a>
-          <a class="btn btn-primary" href="https://app.moduo.app/auth">Get started</a>
+          <button class="btn btn-primary nav-wl" type="button" data-wl-open aria-haspopup="dialog">
+            <span class="nav-wl-label">Join waitlist</span>
+          </button>
         </div>
       </div>
     </header>
@@ -3321,11 +3561,45 @@
             goals and more on the way. Switch on what you need. <span class="fg">Moduo connects all of it.</span>
           </p>
           <div class="hero-cta hero-fade" style="--d: 640ms">
-            <a class="btn btn-primary btn-lg" href="https://app.moduo.app/auth">
-              Get started
-              <svg class="icon icon-sm arrow" aria-hidden="true"><use href="#i-arrow" /></svg>
+          <form class="wl" data-source="hero" novalidate>
+            <div class="wl-row">
+              <div class="wl-field">
+                <label class="sr-only" for="wl-email-hero">Email address</label>
+                <input
+                  class="wl-input"
+                  id="wl-email-hero"
+                  name="email"
+                  type="email"
+                  inputmode="email"
+                  autocomplete="email"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  maxlength="254"
+                  placeholder="you@company.com"
+                  required
+                  aria-describedby="wl-msg-hero"
+                />
+                <input class="wl-hp" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" />
+                <button class="btn btn-primary wl-btn" type="submit">
+                  <span class="wl-label">Join the waitlist</span>
+                  <span class="wl-spin" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
+            <p class="wl-msg" id="wl-msg-hero" aria-live="polite">One email when your invite is ready. No spam.</p>
+            <div class="wl-done" role="status" tabindex="-1">
+              <span class="wl-tick"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check" /></svg></span>
+              <div>
+                <strong>You’re on the list.</strong>
+                <span>We’ll email <b class="wl-addr"></b> when your invite is ready.</span>
+                <button class="wl-again" type="button" data-wl-reset>Use a different email</button>
+              </div>
+            </div>
+          </form>
+            <a class="btn btn-ghost hero-more" href="#story">
+              See how it connects
+              <svg class="icon icon-sm arrow" aria-hidden="true"><use href="#i-chev" /></svg>
             </a>
-            <a class="btn btn-outline btn-lg" href="#story">See how it connects</a>
           </div>
         </div>
 
@@ -3599,14 +3873,88 @@
         <h2 class="h-section" id="close-title">Your whole working life.<br /><span class="soft">One app that connects it.</span></h2>
         <p class="lead">Free to start. Switch on the modules you need today and add the rest when you need them. Leave whenever you like — your data comes with you.</p>
         <div class="hero-cta">
-          <a class="btn btn-primary btn-lg" href="https://app.moduo.app/auth">
-            Get started
-            <svg class="icon icon-sm arrow" aria-hidden="true"><use href="#i-arrow" /></svg>
-          </a>
-          <a class="btn btn-ghost btn-lg" href="https://app.moduo.app/auth">Sign in</a>
+          <form class="wl" data-source="close" novalidate>
+            <div class="wl-row">
+              <div class="wl-field">
+                <label class="sr-only" for="wl-email-close">Email address</label>
+                <input
+                  class="wl-input"
+                  id="wl-email-close"
+                  name="email"
+                  type="email"
+                  inputmode="email"
+                  autocomplete="email"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  maxlength="254"
+                  placeholder="you@company.com"
+                  required
+                  aria-describedby="wl-msg-close"
+                />
+                <input class="wl-hp" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" />
+                <button class="btn btn-primary wl-btn" type="submit">
+                  <span class="wl-label">Join the waitlist</span>
+                  <span class="wl-spin" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
+            <p class="wl-msg" id="wl-msg-close" aria-live="polite">Early access opens in waves. One email when it’s your turn.</p>
+            <div class="wl-done" role="status" tabindex="-1">
+              <span class="wl-tick"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check" /></svg></span>
+              <div>
+                <strong>You’re on the list.</strong>
+                <span>We’ll email <b class="wl-addr"></b> when your invite is ready.</span>
+                <button class="wl-again" type="button" data-wl-reset>Use a different email</button>
+              </div>
+            </div>
+          </form>
         </div>
       </section>
     </main>
+
+    <dialog class="wl-dialog" id="wl-dialog" aria-labelledby="wl-d-title">
+      <button class="btn btn-ghost wl-x" type="button" data-wl-close aria-label="Close">
+        <svg class="icon" aria-hidden="true"><use href="#i-x" /></svg>
+      </button>
+      <svg class="mark" aria-hidden="true"><use href="#mark" /></svg>
+      <h2 id="wl-d-title">Join the waitlist</h2>
+      <p class="wl-sub">Moduo opens in waves. Leave your email and we’ll send your invite as soon as there’s room.</p>
+      <form class="wl" data-source="nav" novalidate>
+            <div class="wl-row">
+              <div class="wl-field">
+                <label class="sr-only" for="wl-email-nav">Email address</label>
+                <input
+                  class="wl-input"
+                  id="wl-email-nav"
+                  name="email"
+                  type="email"
+                  inputmode="email"
+                  autocomplete="email"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  maxlength="254"
+                  placeholder="you@company.com"
+                  required
+                  aria-describedby="wl-msg-nav"
+                />
+                <input class="wl-hp" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" />
+                <button class="btn btn-primary wl-btn" type="submit">
+                  <span class="wl-label">Join the waitlist</span>
+                  <span class="wl-spin" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
+            <p class="wl-msg" id="wl-msg-nav" aria-live="polite">One email when your invite is ready. No spam.</p>
+            <div class="wl-done" role="status" tabindex="-1">
+              <span class="wl-tick"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check" /></svg></span>
+              <div>
+                <strong>You’re on the list.</strong>
+                <span>We’ll email <b class="wl-addr"></b> when your invite is ready.</span>
+                <button class="wl-again" type="button" data-wl-reset>Use a different email</button>
+              </div>
+            </div>
+          </form>
+    </dialog>
 
     <footer class="footer">
       <div class="container footer-inner">
@@ -3618,7 +3966,7 @@
         <nav aria-label="Footer">
           <a href="#story">How it connects</a>
           <a href="#yours">Make it yours</a>
-          <a href="https://app.moduo.app/auth">Sign in</a>
+          <a href="#waitlist" data-wl-open>Join the waitlist</a>
         </nav>
       </div>
     </footer>
@@ -5469,6 +5817,199 @@
           { threshold: 0.4 }
         );
         mcpIo.observe(chat);
+      })();
+    </script>
+
+    <script>
+      (function () {
+        "use strict";
+        var ENDPOINT = "https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/waitlist-join";
+        var STORE_KEY = "moduo:waitlist";
+        var EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+        var MSG = {
+          empty: "Enter your email to join.",
+          invalid: "That email doesn’t look right — check it and try again.",
+          rate: "Too many tries from this network. Give it a few minutes and try again.",
+          offline: "Couldn’t reach the server. Check your connection and try again.",
+          server: "Something went wrong on our side. Please try again in a moment.",
+        };
+        var forms = document.querySelectorAll("form.wl");
+        var dialog = document.getElementById("wl-dialog");
+        var openers = document.querySelectorAll("[data-wl-open]");
+        var navBtn = document.querySelector(".nav-wl");
+        var each = function (list, fn) {
+          Array.prototype.forEach.call(list, fn);
+        };
+
+        var readStored = function () {
+          var v;
+          try {
+            v = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+            return v && typeof v.email === "string" ? v : null;
+          } catch (e) {
+            return null;
+          }
+        };
+        var writeStored = function (email) {
+          try {
+            if (email) localStorage.setItem(STORE_KEY, JSON.stringify({ email: email, at: Date.now() }));
+            else localStorage.removeItem(STORE_KEY);
+          } catch (e) {}
+        };
+
+        var setState = function (form, state, message) {
+          var msg = form.querySelector(".wl-msg");
+          var input = form.querySelector(".wl-input");
+          var btn = form.querySelector(".wl-btn");
+          if (!msg.hasAttribute("data-note")) msg.setAttribute("data-note", msg.textContent);
+          form.setAttribute("data-state", state);
+          msg.textContent = message || msg.getAttribute("data-note");
+          input.setAttribute("aria-invalid", state === "error" ? "true" : "false");
+          input.readOnly = state === "loading";
+          btn.disabled = state === "loading";
+          btn.setAttribute("aria-busy", state === "loading" ? "true" : "false");
+        };
+
+        var syncNav = function (email) {
+          if (!navBtn) return;
+          var label = navBtn.querySelector(".nav-wl-label");
+          var tick = navBtn.querySelector(".icon");
+          navBtn.classList.toggle("is-joined", !!email);
+          label.textContent = email ? "You’re on the list" : "Join waitlist";
+          if (email && !tick) {
+            navBtn.insertAdjacentHTML(
+              "afterbegin",
+              '<svg class="icon icon-sm" aria-hidden="true"><use href="#i-check" /></svg>'
+            );
+          } else if (!email && tick) {
+            tick.remove();
+          }
+        };
+
+        var markAll = function (email) {
+          each(forms, function (f) {
+            if (email) {
+              f.querySelector(".wl-addr").textContent = email;
+              setState(f, "done");
+            } else {
+              f.querySelector(".wl-input").value = "";
+              setState(f, "idle");
+            }
+          });
+          syncNav(email);
+        };
+
+        var submit = function (form) {
+          if (form.getAttribute("data-state") === "loading") return;
+          var input = form.querySelector(".wl-input");
+          var email = input.value.trim().toLowerCase();
+          if (!email) {
+            setState(form, "error", MSG.empty);
+            input.focus();
+            return;
+          }
+          if (email.length > 254 || !EMAIL_RE.test(email)) {
+            setState(form, "error", MSG.invalid);
+            input.focus();
+            return;
+          }
+          setState(form, "loading", "Adding you to the list…");
+
+          var ctrl = typeof AbortController === "function" ? new AbortController() : null;
+          var timer = setTimeout(function () {
+            if (ctrl) ctrl.abort();
+          }, 12000);
+
+          fetch(ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: email,
+              source: form.getAttribute("data-source"),
+              website: form.querySelector(".wl-hp").value,
+              elapsedMs: Math.round(window.performance ? performance.now() : 5000),
+            }),
+            signal: ctrl ? ctrl.signal : undefined,
+            credentials: "omit",
+            referrerPolicy: "strict-origin-when-cross-origin",
+          })
+            .then(function (res) {
+              var done = form.querySelector(".wl-done");
+              clearTimeout(timer);
+              if (res.ok) {
+                writeStored(email);
+                markAll(email);
+                if (done) done.focus();
+                return;
+              }
+              setState(
+                form,
+                "error",
+                res.status === 400 ? MSG.invalid : res.status === 429 ? MSG.rate : MSG.server
+              );
+              input.focus();
+            })
+            .catch(function () {
+              clearTimeout(timer);
+              setState(form, "error", MSG.offline);
+            });
+        };
+
+        each(forms, function (form) {
+          setState(form, "idle");
+          form.addEventListener("submit", function (e) {
+            e.preventDefault();
+            submit(form);
+          });
+          form.querySelector(".wl-input").addEventListener("input", function () {
+            if (form.getAttribute("data-state") === "error") setState(form, "idle");
+          });
+          form.querySelector("[data-wl-reset]").addEventListener("click", function () {
+            writeStored(null);
+            markAll(null);
+            form.querySelector(".wl-input").focus();
+          });
+        });
+
+        var openDialog = function () {
+          var form = dialog.querySelector("form.wl");
+          var hero = document.getElementById("wl-email-hero");
+          if (typeof dialog.showModal !== "function") {
+            if (hero) {
+              hero.scrollIntoView({ block: "center" });
+              hero.focus();
+            }
+            return;
+          }
+          if (!dialog.open) dialog.showModal();
+          var target =
+            form.getAttribute("data-state") === "done"
+              ? form.querySelector(".wl-done")
+              : form.querySelector(".wl-input");
+          target.focus();
+        };
+
+        each(openers, function (el) {
+          el.addEventListener("click", function (e) {
+            e.preventDefault();
+            openDialog();
+          });
+        });
+        if (dialog) {
+          dialog.querySelector("[data-wl-close]").addEventListener("click", function () {
+            dialog.close();
+          });
+          dialog.addEventListener("click", function (e) {
+            if (e.target !== dialog) return;
+            var r = dialog.getBoundingClientRect();
+            var inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+            if (!inside) dialog.close();
+          });
+        }
+
+        var saved = readStored();
+        if (saved) markAll(saved.email);
+        if (location.hash === "#waitlist") openDialog();
       })();
     </script>
   </body>
