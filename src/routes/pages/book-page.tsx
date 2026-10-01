@@ -1,12 +1,12 @@
 /**
  * Public booking page (/book/$slug). No account. The guest picks a day, then
- * a time, then confirms. On a phone those are three full-width steps. On a
- * wide screen the day and the times sit side by side.
+ * a time, then confirms. The calendar stays on screen when the day changes.
+ * The hours for that day sit beside it on a wide screen and under it on a phone.
  */
 
 import { useParams } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Clock, Video } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -182,13 +182,13 @@ export function BookPage() {
   const [zone, setZone] = useState(detectedZone);
   const [cursor, setCursor] = useState<Ymd | null>(null);
   const [dayKey, setDayKey] = useState<string | null>(null);
-  const [showTimes, setShowTimes] = useState(false);
   const [start, setStart] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
   const [guests, setGuests] = useState<{ id: string; email: string }[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const timesRef = useRef<HTMLDivElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -354,7 +354,6 @@ export function BookPage() {
 
   const preview = phase.preview;
   const picking = !preview.paused && byDay.size > 0 && !start;
-  const onPhoneTimes = showTimes && !start;
 
   return (
     <Frame>
@@ -369,7 +368,7 @@ export function BookPage() {
         <aside
           className={cn(
             "flex flex-col gap-6 border-border p-6 sm:p-8 lg:overflow-y-auto lg:border-r",
-            (onPhoneTimes || start) && "max-lg:hidden",
+            start && "max-lg:hidden",
           )}
         >
           <div className="flex items-center gap-4">
@@ -402,7 +401,6 @@ export function BookPage() {
                 setZone(value);
                 setCursor(null);
                 setDayKey(null);
-                setShowTimes(false);
                 setStart(null);
               }}
             >
@@ -428,9 +426,7 @@ export function BookPage() {
           </div>
         ) : (
           <>
-            <div
-              className={cn("flex flex-col gap-4 p-6 sm:p-8", (onPhoneTimes || start) && "hidden")}
-            >
+            <div className={cn("flex flex-col gap-4 p-6 sm:p-8", start && "hidden")}>
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-display text-xl text-foreground">{monthTitle(view)}</h2>
                 <div className="flex items-center gap-1">
@@ -486,7 +482,7 @@ export function BookPage() {
                       onClick={() => {
                         setDayKey(key);
                         setStart(null);
-                        setShowTimes(true);
+                        timesRef.current?.scrollIntoView({ block: "nearest" });
                       }}
                       className={cn(
                         "flex aspect-square w-full items-center justify-center rounded-md font-sans text-base tabular-nums",
@@ -506,21 +502,9 @@ export function BookPage() {
             </div>
 
             <div
-              className={cn(
-                "flex min-h-0 flex-col gap-3 p-6 sm:p-8",
-                start && "hidden",
-                !showTimes && "max-lg:hidden",
-              )}
+              ref={timesRef}
+              className={cn("flex min-h-0 flex-col gap-3 p-6 sm:p-8", start && "hidden")}
             >
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-fit justify-start px-0 lg:hidden"
-                onClick={() => setShowTimes(false)}
-              >
-                <ChevronLeft aria-hidden />
-                Calendar
-              </Button>
               <h2 className="font-display text-xl text-foreground">
                 {activeKey ? dayTitle(activeKey, zone) : "No times this month"}
               </h2>
