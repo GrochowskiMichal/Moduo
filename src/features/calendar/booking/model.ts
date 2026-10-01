@@ -1,19 +1,13 @@
 // Host-side booking link. Guest name and email are always collected; everything
 // else is chosen while setting the link up.
 
+import type { VideoSetting } from "./video";
+
 export type GuestQuestion = {
   id: string;
   label: string;
   required: boolean;
 };
-
-export type VideoChoice = "google_meet" | "zoom" | "moduo_video";
-
-export const VIDEO_CHOICES: { id: VideoChoice; label: string; enabled: boolean }[] = [
-  { id: "google_meet", label: "Google Meet", enabled: true },
-  { id: "zoom", label: "Zoom", enabled: false },
-  { id: "moduo_video", label: "Moduo video", enabled: false },
-];
 
 export type BookingLink = {
   id: string;
@@ -33,7 +27,7 @@ export type BookingLink = {
   guestsEnabled: boolean;
   questions: GuestQuestion[];
   paused: boolean;
-  videoProvider: VideoChoice;
+  videoProvider: VideoSetting;
 };
 
 export function newQuestionId(): string {

@@ -125,7 +125,11 @@ export function Blank({
 
 /** A fixed word in the sentence that looks like a filled blank but can't change. */
 export function Fixed({ children }: { children: ReactNode }) {
-  return <span className={cn(blankBase, "border-foreground/40 text-foreground")}>{children}</span>;
+  return (
+    <span className={cn(blankBase, "border-foreground/40 whitespace-nowrap text-foreground")}>
+      {children}
+    </span>
+  );
 }
 
 type BlankInputProps = Omit<ComponentProps<"input">, "size"> & { label: string };
