@@ -6,6 +6,7 @@
 import { useParams } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import {
@@ -38,6 +39,14 @@ const WEEKDAY_HEAD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function detectedZone(): string {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   return GUEST_ZONES.includes(zone) ? zone : zone;
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
+  return (first + last).toUpperCase() || "?";
 }
 
 function zoneKey(date: Date, timeZone: string): string {
@@ -296,8 +305,16 @@ export function BookPage() {
     <Frame>
       <div className="grid grid-cols-1 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <aside className="flex flex-col gap-4 border-border p-6 lg:border-r">
-          <div className="flex flex-col gap-1">
-            <p className="text-sm text-muted-foreground">{preview.hostName}</p>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <Avatar size="lg">
+                {preview.hostAvatarUrl ? <AvatarImage src={preview.hostAvatarUrl} alt="" /> : null}
+                <AvatarFallback>{initials(preview.hostName)}</AvatarFallback>
+              </Avatar>
+              <p className="min-w-0 truncate text-sm font-medium text-foreground">
+                {preview.hostName}
+              </p>
+            </div>
             <h1 className="font-display text-xl text-foreground">{preview.name}</h1>
           </div>
           <p className="text-sm text-foreground">{preview.durationMinutes} min · Google Meet</p>
