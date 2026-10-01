@@ -1,6 +1,6 @@
 // Booking links on the calendar rail. Several named links, weekly hours, which
-// calendars count as busy, and the guest questions. Google Meet is the only
-// video option that works; Zoom and Moduo video stay visible and disabled.
+// calendars count as busy, and the guest questions. Video is Google Meet,
+// Zoom, or the guest's choice of the two; Moduo video stays visible, disabled.
 
 import { Copy, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -12,6 +12,7 @@ import { supabaseClient } from "../../../lib/runtime.web";
 import { busyIdsFromJson, questionsFromJson, slugFor } from "../booking/model";
 import { bookingPublicUrl } from "../booking/public-origin";
 import { DEFAULT_WEEKLY_HOURS, normalizeWeeklyHours } from "../booking/slots";
+import { videoSetting } from "../booking/video";
 import type { CalendarAccountModel } from "../events";
 import { startWebGoogleConnect } from "../google-web";
 import { BookingLinkDialog, type LinkDraft } from "./booking-link-dialog";
@@ -41,7 +42,28 @@ type LinkRow = {
   guests_enabled: boolean;
   questions_json: unknown;
   paused: boolean;
+  video_provider: string | null;
 };
+
+export type ZoomState = { configured: boolean; connected: boolean };
+
+/** Where Zoom sends the host back. The desktop app hands off to the web app. */
+function connectOrigin(): string {
+  return isTauriRuntime() ? "https://app.moduo.app" : window.location.origin;
+}
+
+async function zoomRequest(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { data, error } = await supabaseClient.functions.invoke("booking-zoom-connect", { body });
+  if (error) throw new Error(error.message || "Zoom is unavailable.");
+  return (data ?? {}) as Record<string, unknown>;
+}
+
+function linkReady(row: LinkRow, googleOn: boolean, zoomOn: boolean): boolean {
+  const setting = videoSetting(row.video_provider);
+  if (setting === "zoom") return zoomOn;
+  if (setting === "guest_choice") return googleOn || zoomOn;
+  return googleOn;
+}
 
 type Draft = LinkDraft;
 
@@ -64,6 +86,7 @@ function emptyDraft(): Draft {
     guestsEnabled: true,
     questions: [],
     paused: false,
+    video: "google_meet",
   };
 }
 
@@ -86,6 +109,7 @@ function draftFromRow(row: LinkRow): Draft {
     guestsEnabled: row.guests_enabled,
     questions: questionsFromJson(row.questions_json),
     paused: row.paused,
+    video: videoSetting(row.video_provider),
   };
 }
 
@@ -105,6 +129,7 @@ function errorText(error: unknown, fallback: string): string {
 export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) {
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [googleOn, setGoogleOn] = useState(false);
+  const [zoom, setZoom] = useState<ZoomState>({ configured: false, connected: false });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,11 +147,71 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
     ]);
     if (!rows.error && rows.data) setLinks(rows.data as LinkRow[]);
     if (!connected.error) setGoogleOn(Boolean(connected.data));
+    try {
+      const status = await zoomRequest({ action: "status" });
+      setZoom({ configured: status.configured === true, connected: status.connected === true });
+    } catch {
+      setZoom({ configured: false, connected: false });
+    }
   }, [userId, workspaceId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Back from Zoom (web), or back in the desktop window after connecting in the browser.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("zoom");
+    if (result) {
+      if (result === "failed") setError("Zoom didn't connect. Try again.");
+      params.delete("zoom");
+      const query = params.toString();
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+      );
+    }
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refresh]);
+
+  const connectZoom = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = await zoomRequest({ action: "start", origin: connectOrigin() });
+      const url = typeof payload.url === "string" ? payload.url : "";
+      if (!url) {
+        throw new Error(
+          payload.error === "zoom_not_configured"
+            ? "Zoom isn't set up for Moduo yet."
+            : "Zoom didn't return a sign-in page.",
+        );
+      }
+      if (isTauriRuntime() && runtime) await runtime.window.openExternalUrl(url);
+      else window.location.href = url;
+    } catch (e) {
+      setError(errorText(e, "Could not connect Zoom."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnectZoom = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await zoomRequest({ action: "disconnect" });
+      await refresh();
+    } catch (e) {
+      setError(errorText(e, "Could not disconnect Zoom."));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const connectGoogle = async () => {
     setBusy(true);
@@ -171,6 +256,10 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
       setError("Give the link a name.");
       return;
     }
+    if (draft.video === "zoom" && !zoom.connected) {
+      setError("Connect Zoom first, or pick another video option.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -197,7 +286,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         guests_enabled: draft.guestsEnabled,
         questions_json: draft.questions.filter((question) => question.label.trim()),
         paused: draft.paused,
-        video_provider: "google_meet",
+        video_provider: draft.video,
         location_type: "video",
         schedule_type: "weekly",
         conflict_calendars: JSON.stringify(draft.busyCalendarIds),
@@ -260,7 +349,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
             type="button"
             variant="ghost"
             size="sm"
-            disabled={!googleOn || link.paused}
+            disabled={!linkReady(link, googleOn, zoom.connected) || link.paused}
             onClick={() => void copy(link.slug)}
           >
             <Copy aria-hidden />
@@ -286,6 +375,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         draft={draft}
         accounts={accounts}
         googleOn={googleOn}
+        zoom={zoom}
         busy={busy}
         error={error}
         onOpenChange={(open) => {
@@ -293,6 +383,8 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         }}
         onChange={setDraft}
         onConnect={() => void connectGoogle()}
+        onConnectZoom={() => void connectZoom()}
+        onDisconnectZoom={() => void disconnectZoom()}
         onSave={() => void save()}
       />
     </div>

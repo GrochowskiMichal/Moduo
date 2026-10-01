@@ -112,9 +112,12 @@ export async function createGoogleMeetEvent(input: {
   guestName: string;
   guestEmails?: string[];
   requestId: string;
+  /** A meeting made elsewhere (Zoom). The event points at it instead of adding a Meet. */
+  externalLink?: string;
 }): Promise<{ eventId: string; meetLink: string }> {
-  const url =
-    "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all";
+  const url = input.externalLink
+    ? "https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all"
+    : "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all";
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -139,12 +142,16 @@ export async function createGoogleMeetEvent(input: {
           )
           .map((email) => ({ email })),
       ],
-      conferenceData: {
-        createRequest: {
-          requestId: input.requestId,
-          conferenceSolutionKey: { type: "hangoutsMeet" },
-        },
-      },
+      ...(input.externalLink
+        ? { location: input.externalLink }
+        : {
+            conferenceData: {
+              createRequest: {
+                requestId: input.requestId,
+                conferenceSolutionKey: { type: "hangoutsMeet" },
+              },
+            },
+          }),
     }),
   });
   const json = (await res.json()) as {
@@ -157,6 +164,7 @@ export async function createGoogleMeetEvent(input: {
     throw new Error(json.error?.message || "google_event_failed");
   }
   const meet =
+    input.externalLink ||
     json.hangoutLink ||
     json.conferenceData?.entryPoints?.find((point) => point.entryPointType === "video")?.uri ||
     "";
