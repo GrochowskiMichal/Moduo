@@ -10,8 +10,10 @@ import { isTauriRuntime } from "../../../lib/runtime";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web";
 import { busyIdsFromJson, questionsFromJson, slugFor } from "../booking/model";
+import { bookingPublicUrl } from "../booking/public-origin";
 import { DEFAULT_WEEKLY_HOURS, normalizeWeeklyHours } from "../booking/slots";
 import type { CalendarAccountModel } from "../events";
+import { startWebGoogleConnect } from "../google-web";
 import { BookingLinkDialog, type LinkDraft } from "./booking-link-dialog";
 
 type Props = {
@@ -85,7 +87,7 @@ function draftFromRow(row: LinkRow): Draft {
 }
 
 function publicUrl(slug: string): string {
-  return `${window.location.origin}/book/${slug}`;
+  return bookingPublicUrl(slug, window.location);
 }
 
 function errorText(error: unknown, fallback: string): string {
@@ -150,14 +152,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         await invoke("calendar_google_publish_booking_token", { accountId });
         await refresh();
       } else {
-        const { data, error: fnError } = await supabaseClient.functions.invoke(
-          "booking-google-connect",
-          { body: { origin: window.location.origin } },
-        );
-        if (fnError) throw fnError;
-        const url = (data as { url?: string } | null)?.url;
-        if (!url) throw new Error("Google connect did not return a sign-in page.");
-        window.location.href = url;
+        await startWebGoogleConnect();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not connect Google.");

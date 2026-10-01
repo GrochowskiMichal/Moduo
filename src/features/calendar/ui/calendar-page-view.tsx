@@ -48,6 +48,7 @@ import type { CalendarAccountModel } from "../events";
 import { type EventChip, eventChipsInRange } from "../events";
 import { canFocusBlock, loggedMessage } from "../focus";
 import { type BusyInterval, findNextGap } from "../gap-finder";
+import { ensureGoogleCalendarAccounts, pushGoogleWebEvent } from "../google-web";
 import { dayGeometry } from "../grid-layout";
 import { useBlockFocus } from "../hooks/use-block-focus";
 import { type CalendarModuleApi, useCalendarModule } from "../hooks/use-calendar-module";
@@ -66,6 +67,7 @@ import {
   taskBlocks,
   visibleRange,
 } from "../lens";
+import { mapGoogleEvent } from "../mirror";
 import {
   type CalendarViewState,
   type PanelVariantId,
@@ -167,15 +169,43 @@ export function CalendarPageView({
     },
     [updatePrefs],
   );
-  // Desktop-only: fetch → map → mirror each account's provider events (CAL-6b).
+  // Google syncs on the web. Outlook, CalDAV, and ICS still sync from the desktop app.
   const { syncNow } = useCalendarSync({
     runtime,
     workspaceId,
     accounts: calendar.accounts,
     events: calendar.events,
-    enabled: IS_DESKTOP,
+    enabled: Boolean(runtime && workspaceId),
     onSynced: () => void calendar.reload(),
   });
+
+  const accountKey = calendar.accounts
+    .map((account) => `${account.externalId}:${account.deletedAt ?? ""}`)
+    .join("|");
+  const accountsRef = useRef(calendar.accounts);
+  useEffect(() => {
+    accountsRef.current = calendar.accounts;
+  }, [calendar.accounts]);
+  useEffect(() => {
+    if (!runtime || !workspaceId || calendar.loading) return;
+    void accountKey;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const added = await ensureGoogleCalendarAccounts({
+          runtime,
+          workspaceId,
+          accounts: accountsRef.current,
+        });
+        if (!cancelled && added) await calendar.reload();
+      } catch (err) {
+        console.warn("[calendar] google link", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, workspaceId, calendar.loading, calendar.reload, accountKey]);
 
   const setAccountColor = useCallback(
     (accountId: string, hue: string) => {
@@ -407,11 +437,52 @@ export function CalendarPageView({
     setTaskPopover({ block, rect });
   }, []);
 
+  const createCalendars = useMemo(
+    () => [
+      { id: "moduo", label: "Moduo" },
+      ...calendar.accounts
+        .filter((account) => account.provider === "google" && !account.deletedAt)
+        .map((account) => ({
+          id: account.id,
+          label: account.displayLabel || "Google",
+        })),
+    ],
+    [calendar.accounts],
+  );
+
   const onCreateEvent = useCallback(
     (draft: QuickCreateDraft) => {
-      void calendar.createEvent(draft);
+      const target = calendar.accounts.find((account) => account.id === draft.calendarId);
+      if (!target || target.provider !== "google" || !runtime || !workspaceId) {
+        void calendar.createEvent(draft);
+        return;
+      }
+      void (async () => {
+        try {
+          const raw = await pushGoogleWebEvent({
+            externalAccountId: target.externalId,
+            title: draft.title,
+            startsAt: draft.startsAt,
+            endsAt: draft.endsAt,
+            allDay: draft.allDay,
+            rrule: draft.rrule,
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+          });
+          const mapped = mapGoogleEvent(raw);
+          if (!mapped) throw new Error("Google did not return the event.");
+          await runtime.calendar.mirrorEvents({
+            workspaceId,
+            accountId: target.id,
+            events: [mapped],
+            deletedExternalIds: [],
+          });
+          await calendar.reload();
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Couldn't save the event on Google.");
+        }
+      })();
     },
-    [calendar],
+    [calendar, runtime, workspaceId],
   );
 
   const onMoveEvent = useCallback(
@@ -973,6 +1044,7 @@ export function CalendarPageView({
               canEdit={api.canEdit && calendar.canEdit}
               onToggleDone={onToggleDone}
               onCreateEvent={onCreateEvent}
+              createCalendars={createCalendars}
               onMoveEvent={onMoveEvent}
               onMoveTask={onMoveTask}
               onEventClick={onEventClick}

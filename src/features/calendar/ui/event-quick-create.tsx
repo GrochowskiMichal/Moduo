@@ -19,18 +19,23 @@ import { Switch } from "../../../components/ui/switch";
 import { RepeatPicker } from "./repeat-picker";
 import { formatTimeOfDay } from "./time-format";
 
+export type QuickCreateCalendar = { id: string; label: string };
+
 export type QuickCreateDraft = {
   title: string;
   startsAt: string;
   endsAt: string;
   allDay: boolean;
   rrule: string | null;
+  /** "moduo" or a connected account id. */
+  calendarId: string;
 };
 
 type Props = {
   /** The drawn span as real instants (already snapped by the grid). */
   startMs: number;
   endMs: number;
+  calendars: QuickCreateCalendar[];
   onCommit: (draft: QuickCreateDraft) => void;
   onCancel: () => void;
   /** Time edits in the popover move the ghost chip (the consent gesture). */
@@ -49,12 +54,20 @@ function atWallClock(anchorMs: number, time: string): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h || 0, m || 0);
 }
 
-export function EventQuickCreate({ startMs, endMs, onCommit, onCancel, onTimesChange }: Props) {
+export function EventQuickCreate({
+  startMs,
+  endMs,
+  calendars,
+  onCommit,
+  onCancel,
+  onTimesChange,
+}: Props) {
   const [title, setTitle] = useState("");
   const [startTime, setStartTime] = useState(() => toTimeInput(startMs));
   const [endTime, setEndTime] = useState(() => toTimeInput(endMs));
   const [allDay, setAllDay] = useState(false);
   const [rrule, setRrule] = useState<string | null>(null);
+  const [calendarId, setCalendarId] = useState("moduo");
   const inputRef = useRef<HTMLInputElement>(null);
   /** Guards double-firing when several dismiss paths run for one gesture. */
   const settledRef = useRef(false);
@@ -109,6 +122,7 @@ export function EventQuickCreate({ startMs, endMs, onCommit, onCancel, onTimesCh
       endsAt: times.end.toISOString(),
       allDay,
       rrule,
+      calendarId,
     });
   };
 
@@ -207,13 +221,20 @@ export function EventQuickCreate({ startMs, endMs, onCommit, onCancel, onTimesCh
             <Switch id="qc-all-day" checked={allDay} onCheckedChange={setAllDay} />
           </div>
 
-          {/* Moduo-only in v1 — the picker seeds the v2 default-target seat. */}
-          <Select value="moduo" disabled>
+          <Select
+            value={calendars.some((calendar) => calendar.id === calendarId) ? calendarId : "moduo"}
+            onValueChange={setCalendarId}
+            disabled={calendars.length < 2}
+          >
             <SelectTrigger className="w-full" aria-label="Calendar">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="moduo">Moduo</SelectItem>
+              {calendars.map((calendar) => (
+                <SelectItem key={calendar.id} value={calendar.id}>
+                  {calendar.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 

@@ -108,6 +108,8 @@ async function googleAccess(
     .select("refresh_token_enc, access_token_enc, token_expiry")
     .eq("user_id", userId)
     .eq("provider", "google_calendar")
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   const refreshEnc = row.data?.refresh_token_enc as string | null | undefined;
   if (!refreshEnc) return null;

@@ -8,6 +8,7 @@ import { useWorkspace } from "../../../providers/workspace-provider";
 import { groupRailAccounts, providerLabel } from "../../calendar/accounts";
 import { cleanupCredentialsForRemoval } from "../../calendar/caldav-connect";
 import type { CalendarAccountModel } from "../../calendar/events";
+import { ensureGoogleCalendarAccounts, startWebGoogleConnect } from "../../calendar/google-web";
 import { CalendarConnectDialog, IcsFeedDialog } from "../../calendar/ui/calendar-connect-dialog";
 import {
   asHistoryDepth,
@@ -23,7 +24,7 @@ import { dispatchOpenSettings } from "../settings-events";
 
 import { SettingsSectionShell } from "./section-shell";
 
-/** Desktop-only OAuth: on web the connect buttons explain where to go. */
+/** Outlook, CalDAV, and ICS still use the desktop keychain. Google works on the web. */
 const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 type OAuthResult = {
@@ -72,7 +73,21 @@ export function IntegrationsSection() {
     if (!runtime || !workspaceId) return;
     try {
       const bundle = await runtime.calendar.listModule(workspaceId);
-      setCalAccounts(bundle.accounts.filter((a) => a.provider !== "moduo"));
+      let accounts = bundle.accounts.filter((a) => a.provider !== "moduo");
+      try {
+        const added = await ensureGoogleCalendarAccounts({
+          runtime,
+          workspaceId,
+          accounts,
+        });
+        if (added) {
+          const again = await runtime.calendar.listModule(workspaceId);
+          accounts = again.accounts.filter((a) => a.provider !== "moduo");
+        }
+      } catch (err) {
+        console.warn("[integrations] google link", err);
+      }
+      setCalAccounts(accounts);
     } catch (e) {
       setCalError(e instanceof Error ? e.message : String(e));
     }
@@ -107,7 +122,19 @@ export function IntegrationsSection() {
   }, [loadAccounts, loadEmailAccounts, loadMcpKeys]);
 
   const handleConnect = async (provider: "google" | "microsoft", command: string) => {
-    if (!IS_DESKTOP || !runtime || !workspaceId) return;
+    if (!runtime || !workspaceId) return;
+    if (!IS_DESKTOP && provider === "google") {
+      setCalBusy(provider);
+      setCalError(null);
+      try {
+        await startWebGoogleConnect();
+      } catch (e) {
+        setCalError(e instanceof Error ? e.message : String(e));
+        setCalBusy(null);
+      }
+      return;
+    }
+    if (!IS_DESKTOP) return;
     setCalBusy(provider);
     setCalError(null);
     try {
@@ -266,13 +293,14 @@ export function IntegrationsSection() {
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-base text-foreground">Calendar</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Connected calendars are read-only in Moduo — your events appear here and on the web, but
-          edits stay in the source calendar.
+          Google Calendar is a two-way copy — events you add on a linked Google calendar are created
+          in Google too. Outlook and CalDAV still connect from the desktop app.
         </p>
 
         <div className="mt-4 flex flex-col gap-2">
           {CAL_PROVIDERS.map(({ key, label, command }) => {
             const connected = calAccounts.filter((a) => a.provider === key);
+            const canConnect = IS_DESKTOP || key === "google";
             return (
               <div key={key} className="rounded-md border border-border bg-muted/40 p-4">
                 <div className="flex items-center justify-between gap-4">
@@ -285,13 +313,13 @@ export function IntegrationsSection() {
                       <span className="text-xs text-muted-foreground">
                         {connected.length > 0
                           ? `${connected.length} account${connected.length === 1 ? "" : "s"} connected`
-                          : IS_DESKTOP
+                          : canConnect
                             ? "Not connected"
                             : "Connect from the desktop app"}
                       </span>
                     </div>
                   </div>
-                  {IS_DESKTOP ? (
+                  {canConnect ? (
                     <Button
                       type="button"
                       variant="outline"
@@ -321,7 +349,9 @@ export function IntegrationsSection() {
                           </p>
                           {acc.status === "error" ? (
                             <p className="truncate text-xs text-warning">
-                              Sync error — reconnect from the desktop app
+                              {acc.provider === "google"
+                                ? "Sync error — reconnect"
+                                : "Sync error — reconnect from the desktop app"}
                             </p>
                           ) : null}
                         </div>

@@ -1,14 +1,14 @@
-// Desktop calendar sync (CAL-6b) — the sync WRITER loop. On the desktop app it
-// fetches each connected account's raw provider events via the Tauri OAuth
-// engine, maps them with the pure mirror mapper, and pushes them to Supabase
-// through the mirror op; on failure it flips the account to `error` (the rail
-// surfaces Reconnect). Web is a no-op (it renders the mirror, never writes it).
+// Calendar sync — the sync WRITER loop. Fetches each connected account's raw
+// provider events, maps them, and pushes them through the mirror op. Desktop
+// reads the OS keychain. Web reads Google through the stored refresh token and
+// skips Outlook, CalDAV, and ICS (those credentials stay on the desktop).
 // Runs on the calendar page: mount + tab-wake + every 15 min + manual refresh.
 
 import { useCallback, useEffect, useRef } from "react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { CalendarAccountModel, CalendarEventModel } from "../events";
+import { fetchGoogleWebEvents } from "../google-web";
 import { deletedExternalIds, mapProviderEvents } from "../mirror";
 import type { SyncableProvider } from "../sync";
 import { isIcsProvider, isSyncableProvider, syncWindow } from "../sync";
@@ -26,7 +26,16 @@ function isLocalCredentialAbsence(err: unknown): boolean {
   return (
     msg.includes("caldav_missing_credentials") ||
     msg.includes("caldav_missing_descriptor") ||
-    msg.includes("ics_feed_missing")
+    msg.includes("ics_feed_missing") ||
+    msg.includes("web_provider_sync_skipped")
+  );
+}
+
+function isMissingGoogleKeychain(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return (
+    msg.includes("google_calendar_missing_tokens") ||
+    msg.includes("google_calendar_missing_access_token")
   );
 }
 
@@ -36,7 +45,7 @@ export function useCalendarSync(opts: {
   accounts: CalendarAccountModel[];
   /** The currently-mirrored events — used to diff provider-side deletions. */
   events: CalendarEventModel[];
-  /** Desktop only — web returns [] from fetchExternalEvents, so never runs. */
+  /** Web syncs Google only. Other providers throw and are left untouched. */
   enabled: boolean;
   /** Reload the module bundle after a sync actually changed rows. */
   onSynced: () => void;
@@ -57,13 +66,29 @@ export function useCalendarSync(opts: {
       for (const acc of syncable) {
         const provider = acc.provider as SyncableProvider;
         try {
-          const raw = await runtime.calendar.fetchExternalEvents({
-            provider,
-            externalAccountId: acc.externalId,
-            timeMin,
-            timeMax,
-            syncToken: acc.syncToken ?? null,
-          });
+          let raw: Record<string, unknown>[];
+          try {
+            raw = await runtime.calendar.fetchExternalEvents({
+              provider,
+              externalAccountId: acc.externalId,
+              timeMin,
+              timeMax,
+              syncToken: acc.syncToken ?? null,
+            });
+          } catch (err) {
+            // Connected on the web: the token is in Supabase, not this
+            // machine's keychain. Read it from there instead of marking the
+            // shared account as broken.
+            if (provider === "google" && isMissingGoogleKeychain(err)) {
+              raw = await fetchGoogleWebEvents({
+                externalAccountId: acc.externalId,
+                timeMin,
+                timeMax,
+              });
+            } else {
+              throw err;
+            }
+          }
           // CalDAV/ICS raws are ICS text; ical.js loads lazily (desktop-only
           // path) so the web bundle never carries the parser.
           const mapped = isIcsProvider(provider)
@@ -124,8 +149,17 @@ export function useCalendarSync(opts: {
     if (changed) onSynced();
   }, []);
 
+  const accountKey = opts.accounts
+    .filter((account) => !account.deletedAt)
+    .map((account) => account.externalId)
+    .sort()
+    .join("|");
+
   useEffect(() => {
     if (!opts.enabled) return;
+    // accountKey is the trigger: a calendar that just appeared must sync now,
+    // not on the next 15-minute tick. syncNow itself reads the live list.
+    void accountKey;
     void syncNow();
     const id = window.setInterval(() => void syncNow(), SYNC_INTERVAL_MS);
     const onWake = () => {
@@ -136,7 +170,7 @@ export function useCalendarSync(opts: {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onWake);
     };
-  }, [opts.enabled, syncNow]);
+  }, [opts.enabled, syncNow, accountKey]);
 
   return { syncNow };
 }

@@ -18,7 +18,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
-import { exchangeGoogleCode } from "../_shared/google-calendar.ts";
+import { exchangeGoogleCode, googleUserEmail } from "../_shared/google-calendar.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import { encryptToken } from "../_shared/token-cipher.ts";
 
@@ -152,22 +152,37 @@ Deno.serve(async (req: Request) => {
     const db = createClient(SUPABASE_URL, SECRET, { auth: { persistSession: false } });
     const accessEnc = await encryptToken(tokens.accessToken, ENC, state.uid);
     const refreshEnc = await encryptToken(tokens.refreshToken, ENC, state.uid);
-    const existing = await db
-      .from("user_integrations")
-      .select("id")
-      .eq("user_id", state.uid)
-      .eq("provider", "google_calendar")
-      .maybeSingle();
+    const email = ((await googleUserEmail(tokens.accessToken)) ?? "").toLowerCase();
+    const keyed = email
+      ? await db
+          .from("user_integrations")
+          .select("id")
+          .eq("user_id", state.uid)
+          .eq("provider", "google_calendar")
+          .eq("account_key", email)
+          .maybeSingle()
+      : { data: null };
+    const legacy = keyed.data
+      ? { data: null }
+      : await db
+          .from("user_integrations")
+          .select("id")
+          .eq("user_id", state.uid)
+          .eq("provider", "google_calendar")
+          .eq("account_key", "")
+          .maybeSingle();
+    const existingId = (keyed.data?.id ?? legacy.data?.id) as string | undefined;
     const row = {
       user_id: state.uid,
       provider: "google_calendar",
+      account_key: email,
       access_token_enc: accessEnc,
       refresh_token_enc: refreshEnc,
       token_expiry: tokens.expiresAt,
       updated_at: new Date().toISOString(),
     };
-    const saved = existing.data
-      ? await db.from("user_integrations").update(row).eq("user_id", state.uid).eq("provider", "google_calendar")
+    const saved = existingId
+      ? await db.from("user_integrations").update(row).eq("id", existingId)
       : await db.from("user_integrations").insert(row);
     if (saved.error) return json({ error: "save_failed" }, 500);
     return Response.redirect(`${state.origin}/calendar`, 302);

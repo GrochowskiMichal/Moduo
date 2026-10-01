@@ -4,6 +4,26 @@
   "buildCommand": "node scripts/vercel-build.mjs",
   "outputDirectory": "dist/web",
   "rewrites": [
-    { "source": "/((?!assets|favicon|manifest|sw\\.).*)", "destination": "/index.html" }
+    {
+      "source": "/book",
+      "has": [{ "type": "host", "value": "staging.moduo.app" }],
+      "destination": "/app.html"
+    },
+    {
+      "source": "/book/:path*",
+      "has": [{ "type": "host", "value": "staging.moduo.app" }],
+      "destination": "/app.html"
+    },
+    {
+      "source": "/book",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/app.html"
+    },
+    {
+      "source": "/book/:path*",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/app.html"
+    },
+    { "source": "/((?!assets|favicon|manifest|sw\\.|app\\.html).*)", "destination": "/index.html" }
   ]
 }
