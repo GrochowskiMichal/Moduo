@@ -69,6 +69,7 @@ type LinkRow = {
   owner_user_id: string;
   owner_email: string | null;
   owner_display_name: string | null;
+  owner_avatar_url: string | null;
   workspace_id: string | null;
 };
 
@@ -239,13 +240,43 @@ function openSlots(link: LinkRow, busy: Interval[], now: Date): Date[] {
   });
 }
 
-function publicLink(link: LinkRow) {
+function publicAvatar(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const url = value.trim();
+  if (url.startsWith("https://")) return url;
+  if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost")) return url;
+  return null;
+}
+
+/** The name and photo on the profile right now, not the copy saved with the link. */
+async function hostIdentity(
+  db: SupabaseClient,
+  link: LinkRow,
+): Promise<{ name: string; avatarUrl: string | null }> {
+  const fallbackName = link.owner_display_name?.trim() || "Moduo";
+  const fallbackAvatar = publicAvatar(link.owner_avatar_url);
+  if (!link.owner_user_id) return { name: fallbackName, avatarUrl: fallbackAvatar };
+  const profile = await db
+    .from("profiles")
+    .select("display_name, avatar_url")
+    .eq("id", link.owner_user_id)
+    .maybeSingle();
+  const liveName =
+    typeof profile.data?.display_name === "string" ? profile.data.display_name.trim() : "";
+  return {
+    name: liveName || fallbackName,
+    avatarUrl: publicAvatar(profile.data?.avatar_url) || fallbackAvatar,
+  };
+}
+
+function publicLink(link: LinkRow, host: { name: string; avatarUrl: string | null }) {
   return {
     slug: link.slug,
     name: link.name,
     description: link.description,
     durationMinutes: link.duration_minutes,
-    hostName: link.owner_display_name || "Moduo",
+    hostName: host.name,
+    hostAvatarUrl: host.avatarUrl,
     hostTimeZone: link.host_timezone || "UTC",
     noteEnabled: link.note_enabled,
     questions: Array.isArray(link.questions_json) ? link.questions_json : [],
@@ -320,12 +351,13 @@ Deno.serve(async (req: Request) => {
       .eq("slot_id", row.slot_id)
       .maybeSingle();
     const link = (linkRes.data as LinkRow | null) ?? null;
+    const host = link ? await hostIdentity(db, link) : { name: "Moduo", avatarUrl: null };
     if (action === "cancel-preview") {
       return json({
         status: row.status,
         start: row.start_at,
         end: row.end_at,
-        hostName: link?.owner_display_name || "Moduo",
+        hostName: host.name,
         name: link?.name || "Meeting",
       });
     }
@@ -351,7 +383,8 @@ Deno.serve(async (req: Request) => {
   const slug = typeof body.slug === "string" ? body.slug.trim() : "";
   const link = slug ? await loadLink(db, slug) : null;
   if (!link || !link.workspace_id) return json({ error: "not_found" }, 404);
-  if (link.paused) return json({ ...publicLink(link), slots: [] });
+  const host = await hostIdentity(db, link);
+  if (link.paused) return json({ ...publicLink(link, host), slots: [] });
 
   const now = new Date();
   const horizonEnd = new Date(now.getTime() + Math.max(1, link.date_range_days) * 86_400_000);
@@ -368,7 +401,7 @@ Deno.serve(async (req: Request) => {
 
   if (action === "preview") {
     return json({
-      ...publicLink(link),
+      ...publicLink(link, host),
       slots: slots.map((slot) => slot.toISOString()),
     });
   }
@@ -510,7 +543,7 @@ Deno.serve(async (req: Request) => {
   if (cancelUrl) {
     await sendGuestEmail({
       to: email,
-      hostName: link.owner_display_name || hostEmail,
+      hostName: host.name,
       when,
       meetLink: meet.meetLink,
       cancelUrl,

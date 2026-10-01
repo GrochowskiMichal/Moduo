@@ -15,6 +15,9 @@
 - [ ] **Do:** Draw a new event and, in the popover, choose one of the Google calendars, then press Enter. → **Expect:** the event shows on the Moduo grid and in that calendar on Google. _(web)_
 - [ ] **Do:** Connect another Google account from Settings → Integrations, or from + Connect calendar…. → **Expect:** you stay in the app, Google’s sign-in opens, and the new calendars appear in both lists. _(web)_
 
+## Who the booking page shows
+- [ ] **Do:** Change your name or profile photo in Settings, then open a booking link you already created (private window is fine). → **Expect:** the page shows the new name and the new photo, without editing the link. If you have no photo, your initials show. _(web)_
+
 ## Still desktop
 - [ ] **Do:** On the web, look at Outlook and CalDAV in Settings → Integrations. → **Expect:** those two still say Desktop only. Google does not. _(web)_
 
