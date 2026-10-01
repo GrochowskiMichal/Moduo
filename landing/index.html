@@ -1075,64 +1075,8 @@
       }
       .studio-body {
         display: grid;
-        grid-template-columns: 12.5rem minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
         min-height: 31rem;
-      }
-      .side {
-        display: flex;
-        flex-direction: column;
-        padding: 0.875rem 0.75rem;
-        border-right: 1px solid var(--border);
-      }
-      .side-ws {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.25rem 0.5rem 0.875rem;
-        font-size: var(--text-sm);
-        font-weight: 500;
-      }
-      .side-ws .sq {
-        display: grid;
-        place-items: center;
-        width: 1.25rem;
-        height: 1.25rem;
-        border-radius: var(--radius-sm);
-        background: var(--primary);
-        color: var(--primary-foreground);
-        font-size: var(--text-2xs);
-        font-weight: 600;
-      }
-      .side-item {
-        display: grid;
-        grid-template-rows: 1fr;
-        transition:
-          grid-template-rows var(--motion-slow) var(--ease-out),
-          opacity var(--motion-base) var(--ease-out);
-      }
-      .side-item > div {
-        min-height: 0;
-        overflow: hidden;
-      }
-      .side-item .in {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        height: 2rem;
-        margin-bottom: 2px;
-        padding-inline: 0.5rem;
-        border-radius: var(--radius-md);
-        font-size: var(--text-sm);
-        color: var(--muted-foreground);
-      }
-      .side-item.is-home .in {
-        background: var(--selected-bg);
-        box-shadow: inset 2px 0 0 var(--primary);
-        color: var(--foreground);
-      }
-      .side-item.is-off {
-        grid-template-rows: 0fr;
-        opacity: 0;
       }
       .board-wrap {
         padding: 1.25rem;
@@ -1404,15 +1348,6 @@
         }
         .stage {
           height: min(40rem, 64svh);
-        }
-        .studio-body {
-          grid-template-columns: 1fr;
-        }
-        .side {
-          display: none;
-        }
-        .mods {
-          margin-left: 0;
         }
         .board {
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2199,85 +2134,7 @@
       }
       .studio-body {
         position: relative;
-        grid-template-columns: 14rem minmax(0, 1fr);
         min-height: 33rem;
-      }
-      .side-label {
-        padding: 0.25rem 0.5rem 0.5rem;
-        font-size: var(--text-2xs);
-        font-weight: 500;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--faint-foreground);
-      }
-      .sw-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        width: 100%;
-        height: 2.125rem;
-        padding-inline: 0.5rem;
-        border-radius: var(--radius-md);
-        font-size: var(--text-sm);
-        color: var(--faint-foreground);
-        text-align: left;
-        transition:
-          color var(--motion-base) var(--ease-out),
-          background-color var(--motion-fade) var(--ease-out);
-      }
-      .sw-row:hover {
-        background: var(--accent);
-      }
-      .sw-row[aria-checked="true"] {
-        color: var(--foreground);
-      }
-      .sw-row .nm {
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .sw {
-        position: relative;
-        width: 1.75rem;
-        height: 1rem;
-        border-radius: var(--radius-full);
-        background: var(--accent);
-        flex-shrink: 0;
-        transition: background-color var(--motion-base) var(--ease-out);
-      }
-      .sw::after {
-        content: "";
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 0.75rem;
-        height: 0.75rem;
-        border-radius: var(--radius-full);
-        background: var(--subtle-foreground);
-        transition:
-          transform var(--motion-slow) var(--ease-spring),
-          background-color var(--motion-base) var(--ease-out);
-      }
-      .sw-row[aria-checked="true"] .sw {
-        background: var(--primary);
-      }
-      .sw-row[aria-checked="true"] .sw::after {
-        transform: translateX(0.75rem);
-        background: var(--primary-foreground);
-      }
-      .sw-row.is-denied {
-        animation: shake 360ms var(--ease-out);
-      }
-      .side-more {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-top: auto;
-        padding: 0.75rem 0.5rem 0.25rem;
-        font-size: var(--text-xs);
-        color: var(--faint-foreground);
       }
       .board-head .btn + .btn {
         margin-left: 0;
@@ -2347,6 +2204,529 @@
       @keyframes rec {
         50% {
           opacity: 0.25;
+        }
+      }
+
+      /* ─── Board: installed modules, resizable + customisable widgets ───── */
+      .board-wrap {
+        position: relative;
+      }
+      .board-head {
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .board-head .btn {
+        margin-left: 0;
+      }
+      .mod-strip {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin-left: auto;
+      }
+      .mod-strip .lbl {
+        margin-right: 0.25rem;
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .mchip {
+        display: grid;
+        place-items: center;
+        width: var(--ctrl-h-sm);
+        height: var(--ctrl-h-sm);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--muted-foreground);
+        transition:
+          background-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out),
+          border-color var(--motion-fade) var(--ease-out);
+        animation: pv-in var(--motion-slow) var(--ease-out) both;
+      }
+      .mchip:hover {
+        background: var(--accent);
+        border-color: var(--border-strong);
+        color: var(--foreground);
+      }
+      .mchip.is-more {
+        border-style: dashed;
+        color: var(--subtle-foreground);
+      }
+      .mod-strip + .btn {
+        margin-left: 0.5rem;
+      }
+
+      .wd[data-cw="2"] {
+        grid-column: span 2;
+      }
+      .wd[data-cw="3"] {
+        grid-column: span 3;
+      }
+      .wd[data-ch="2"] {
+        grid-row: span 2;
+      }
+      .wd-head .wd-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wd-body {
+        overflow: hidden;
+      }
+      .wd-body:has(.trow) {
+        justify-content: flex-start;
+        padding-top: 0.5rem;
+        -webkit-mask-image: linear-gradient(black calc(100% - 1.25rem), transparent);
+        mask-image: linear-gradient(black calc(100% - 1.25rem), transparent);
+      }
+      .spark {
+        display: none;
+        align-items: flex-end;
+        gap: 4px;
+        height: 3.75rem;
+        margin-bottom: auto;
+        padding-top: 0.75rem;
+      }
+      .wd[data-ch="2"] .spark {
+        display: flex;
+      }
+      .spark i {
+        flex: 1;
+        height: calc(var(--h) * 1%);
+        border-radius: 2px 2px 0 0;
+        background: color-mix(in oklab, var(--foreground) 14%, transparent);
+        transform-origin: bottom;
+        animation: spark-up var(--motion-slower) var(--ease-out) both;
+      }
+      .spark i:last-child {
+        background: var(--foreground);
+      }
+      .wd.has-tone .spark i {
+        background: color-mix(in oklab, var(--tone) 30%, transparent);
+      }
+      .wd.has-tone .spark i:last-child {
+        background: var(--tone);
+      }
+      @keyframes spark-up {
+        from {
+          transform: scaleY(0);
+        }
+      }
+      .wd[data-ch="2"] .big {
+        font-size: 3.25rem;
+      }
+      .wd[data-ch="2"] .focus {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1.25rem;
+      }
+      .wd[data-ch="2"] .ring {
+        width: 5.5rem;
+        height: 5.5rem;
+      }
+      .wd[data-ch="2"] .focus .big {
+        font-size: 2.5rem;
+      }
+      .wd[data-ch="2"] .wd-note {
+        font-size: var(--text-md);
+      }
+      .wd.no-sub .sub {
+        display: none;
+      }
+      .wd.has-tone {
+        background: color-mix(in oklab, var(--tone) 9%, var(--card));
+        border-color: color-mix(in oklab, var(--tone) 30%, var(--border));
+      }
+      .wd.has-tone:hover {
+        border-color: color-mix(in oklab, var(--tone) 50%, var(--border));
+      }
+      .wd.has-tone .big,
+      .wd.has-tone .wd-head > .icon {
+        color: var(--tone);
+      }
+      .wd.has-tone .ring-fg {
+        stroke: var(--tone);
+      }
+      .wd.has-tone .meter i {
+        background: var(--tone);
+      }
+      .wd.has-tone .meter {
+        background: color-mix(in oklab, var(--tone) 18%, transparent);
+      }
+
+      .wd-cfg {
+        display: grid;
+        place-items: center;
+        width: 1.25rem;
+        height: 1.25rem;
+        margin-left: auto;
+        border-radius: var(--radius-sm);
+        color: var(--faint-foreground);
+        opacity: 0;
+        transition:
+          opacity var(--motion-fade) var(--ease-out),
+          background-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out);
+      }
+      .wd-cfg:hover,
+      .wd-cfg[aria-expanded="true"] {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .wd-cfg + .wd-x {
+        margin-left: 0;
+      }
+      .wd:hover .wd-cfg,
+      .wd:focus-within .wd-cfg,
+      .wd-cfg[aria-expanded="true"] {
+        opacity: 1;
+      }
+      .wd-rs {
+        position: absolute;
+        right: 2px;
+        bottom: 2px;
+        display: grid;
+        place-items: center;
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: var(--radius-sm);
+        color: var(--faint-foreground);
+        cursor: nwse-resize;
+        opacity: 0;
+        touch-action: none;
+        transition:
+          opacity var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out);
+      }
+      .wd-rs svg {
+        width: 0.625rem;
+        height: 0.625rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+      }
+      .wd-rs:hover {
+        color: var(--foreground);
+      }
+      .wd:hover .wd-rs,
+      .wd:focus-within .wd-rs,
+      .wd.is-resizing .wd-rs {
+        opacity: 1;
+      }
+      @media (hover: none) {
+        .wd-cfg,
+        .wd-rs {
+          opacity: 1;
+        }
+      }
+      .wd.is-resizing {
+        z-index: 4;
+        border-color: var(--border-strong);
+        box-shadow:
+          var(--shadow-lg),
+          0 0 0 4px color-mix(in oklab, var(--foreground) 6%, transparent);
+      }
+      .wd.is-resizing::after {
+        content: attr(data-size-label);
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        padding: 0.25rem 0.5rem;
+        border-radius: var(--radius-md);
+        background: var(--primary);
+        color: var(--primary-foreground);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+      }
+      .is-resizing-page,
+      .is-resizing-page * {
+        cursor: nwse-resize !important;
+        user-select: none;
+      }
+
+      .wd-pop {
+        position: absolute;
+        z-index: 7;
+        display: grid;
+        gap: 0.75rem;
+        width: 15.5rem;
+        padding: 0.875rem;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-lg);
+        background: var(--popover);
+        box-shadow: var(--shadow-overlay);
+        animation: pv-in var(--motion-slow) var(--ease-out);
+      }
+      .wd-pop[hidden] {
+        display: none;
+      }
+      .pop-h {
+        display: flex;
+        align-items: center;
+        font-size: var(--text-sm);
+        font-weight: 600;
+      }
+      .pop-h .pop-sz {
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        font-weight: 400;
+        color: var(--subtle-foreground);
+      }
+      .pop-l {
+        display: grid;
+        gap: 0.375rem;
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .pop-name {
+        height: var(--ctrl-h-sm);
+        padding-inline: 0.5rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--background);
+        outline: 0;
+        font: inherit;
+        font-size: var(--text-sm);
+        letter-spacing: 0;
+        text-transform: none;
+        color: var(--foreground);
+      }
+      .pop-name:focus {
+        border-color: var(--border-strong);
+      }
+      .pop-sizes {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.25rem;
+      }
+      .pop-sizes button {
+        display: grid;
+        justify-items: center;
+        gap: 0.25rem;
+        padding: 0.375rem 0 0.3rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        font-size: var(--text-2xs);
+        color: var(--subtle-foreground);
+        transition:
+          background-color var(--motion-fade) var(--ease-out),
+          border-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out);
+      }
+      .pop-sizes button:hover {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .pop-sizes button[aria-pressed="true"] {
+        border-color: var(--foreground);
+        color: var(--foreground);
+      }
+      .sz-g {
+        display: grid;
+        grid-template-columns: repeat(2, 0.5rem);
+        grid-auto-rows: 0.5rem;
+        gap: 2px;
+      }
+      .sz-g i {
+        border-radius: 1.5px;
+        background: var(--accent);
+      }
+      .sz-g i.on {
+        background: currentColor;
+      }
+      .pop-tones {
+        display: flex;
+        gap: 0.5rem;
+      }
+      .pop-tones button {
+        width: 1.375rem;
+        height: 1.375rem;
+        border-radius: var(--radius-full);
+        background: var(--tone);
+        box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 12%, transparent);
+        transition: transform var(--motion-base) var(--ease-spring);
+      }
+      .pop-tones button:hover {
+        transform: scale(1.12);
+      }
+      .pop-tones button[data-tone=""] {
+        background:
+          linear-gradient(135deg, transparent 46%, var(--subtle-foreground) 46% 54%, transparent 54%),
+          var(--card);
+      }
+      .pop-tones button[aria-pressed="true"] {
+        box-shadow:
+          0 0 0 2px var(--popover),
+          0 0 0 3.5px var(--foreground);
+      }
+      .pop-sw {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: var(--text-sm);
+        color: var(--muted-foreground);
+      }
+      .pop-rm {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding-top: 0.625rem;
+        border-top: 1px solid var(--border);
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .pop-rm:hover {
+        color: var(--foreground);
+      }
+
+      .sw {
+        position: relative;
+        width: 1.75rem;
+        height: 1rem;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        flex-shrink: 0;
+        transition: background-color var(--motion-base) var(--ease-out);
+      }
+      .sw::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: var(--radius-full);
+        background: var(--subtle-foreground);
+        transition:
+          transform var(--motion-slow) var(--ease-spring),
+          background-color var(--motion-base) var(--ease-out);
+      }
+      [aria-checked="true"] > .sw {
+        background: var(--primary);
+      }
+      [aria-checked="true"] > .sw::after {
+        transform: translateX(0.75rem);
+        background: var(--primary-foreground);
+      }
+
+      .store-tabs {
+        margin: 0 1rem 0.75rem;
+        align-self: flex-start;
+      }
+      .store-cats[hidden] {
+        display: none;
+      }
+      .store-cats button.is-in::after {
+        content: "";
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        margin-left: 0.375rem;
+        border-radius: var(--radius-full);
+        background: var(--success);
+        vertical-align: 1px;
+      }
+      .store-cats button[aria-pressed="true"].is-in::after {
+        background: var(--primary-foreground);
+      }
+      .store-search {
+        margin-bottom: 0;
+      }
+      .store-grid.is-list {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.375rem;
+        padding-top: 0.75rem;
+      }
+      .mgroup {
+        padding: 0.5rem 0.25rem 0.125rem;
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint-foreground);
+      }
+      .mrow {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.625rem 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--background);
+        animation: pv-in var(--motion-slow) var(--ease-out) both;
+        animation-delay: calc(var(--k, 0) * 18ms);
+      }
+      .mrow.is-on {
+        border-color: var(--border-strong);
+      }
+      .mrow.is-denied {
+        animation: shake 360ms var(--ease-out);
+      }
+      .mrow-ic {
+        display: grid;
+        place-items: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--radius-md);
+        background: var(--accent);
+        color: var(--muted-foreground);
+        flex-shrink: 0;
+      }
+      .mrow.is-on .mrow-ic {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .mrow-t {
+        display: grid;
+        flex: 1;
+        min-width: 0;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .mrow-t b {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .mrow .btn {
+        flex-shrink: 0;
+      }
+      .sc-add .inst {
+        color: var(--faint-foreground);
+      }
+      @media (max-width: 900px) {
+        .wd[data-cw="3"] {
+          grid-column: span 2;
+        }
+        .mod-strip .lbl {
+          display: none;
+        }
+        .mod-strip {
+          order: 5;
+          width: 100%;
+          margin-left: 0;
+          flex-wrap: wrap;
+        }
+      }
+      @media (max-width: 720px) {
+        .wd[data-ch="2"] .big {
+          font-size: 2rem;
+        }
+        .wd .wd-x {
+          display: none;
+        }
+        .wd-cfg {
+          margin-left: auto;
         }
       }
 
@@ -2724,31 +3104,6 @@
       }
 
       @media (max-width: 900px) {
-        .studio-body {
-          grid-template-columns: 1fr;
-        }
-        .side.side {
-          display: flex;
-          flex-direction: row;
-          align-items: center;
-          gap: 0.25rem;
-          padding: 0.625rem;
-          border-right: 0;
-          border-bottom: 1px solid var(--border);
-          overflow-x: auto;
-          scrollbar-width: none;
-        }
-        .side-ws,
-        .side-label,
-        .side-more {
-          display: none;
-        }
-        .sw-row {
-          width: auto;
-          flex-shrink: 0;
-          border: 1px solid var(--border);
-          border-radius: var(--radius-full);
-        }
         .studio-note {
           display: none;
         }
@@ -2886,6 +3241,12 @@
         </symbol>
         <symbol id="i-x" viewBox="0 0 24 24">
           <path d="M6 6l12 12M18 6 6 18" />
+        </symbol>
+        <symbol id="i-tune" viewBox="0 0 24 24">
+          <path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" />
+        </symbol>
+        <symbol id="i-resize" viewBox="0 0 24 24">
+          <path d="M20 10 10 20M20 15l-5 5" /><path d="M4 9V4h5M15 4h5v5M4 15v5h5" />
         </symbol>
         <symbol id="i-grip" viewBox="0 0 24 24">
           <g fill="currentColor" stroke="none">
@@ -3134,7 +3495,7 @@
         <div class="section-head center reveal">
           <div class="eyebrow">Make it yours</div>
           <h2 class="h-section" id="yours-title">Your home is a board.<br /><span class="soft">Fill it with anything.</span></h2>
-          <p class="lead">Switch on the modules a workspace needs, then pin widgets from any of them — like the widgets on your desktop. A timer next to a budget next to today’s tasks. Your board, your rules.</p>
+          <p class="lead">Install the modules a workspace needs from the store, then pin, resize and recolor widgets from any of them — like the widgets on your desktop. A timer next to a budget next to today’s tasks.</p>
         </div>
 
         <div class="studio reveal" style="--d: 100ms">
@@ -3148,11 +3509,11 @@
             <span class="studio-note">Every workspace keeps its own modules and its own board.</span>
           </div>
           <div class="studio-body" id="studio-body">
-            <aside class="side" id="side" aria-label="Modules in this workspace"></aside>
             <div class="board-wrap">
               <div class="board-head">
                 <h3>Home</h3>
                 <span class="muted" id="board-count"></span>
+                <div class="mod-strip" id="mod-strip" role="group" aria-label="Installed modules"></div>
                 <button class="btn btn-secondary btn-sm" type="button" id="store-open">
                   <svg class="icon icon-xs" aria-hidden="true"><use href="#i-plus" /></svg>Add widget
                 </button>
@@ -3161,21 +3522,28 @@
               <div class="board" id="board" aria-label="Home widgets"></div>
               <div class="board-hint">
                 <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-grip" /></svg>Drag to rearrange</span>
-                <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-x" /></svg>Remove</span>
-                <span><span class="kbd">⌥</span><span class="kbd">←</span><span class="kbd">→</span>Move with the keyboard</span>
+                <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-resize" /></svg>Drag the corner to resize</span>
+                <span><svg class="icon icon-xs" aria-hidden="true"><use href="#i-tune" /></svg>Customize</span>
+                <span><span class="kbd">⌥</span><span class="kbd">⇧</span><span class="kbd">→</span>Resize with the keyboard</span>
               </div>
+              <div class="wd-pop" id="wd-pop" role="dialog" aria-label="Customize widget" hidden></div>
             </div>
 
             <div class="store-scrim" id="store-scrim"></div>
             <aside class="store-panel" id="store-panel" role="dialog" aria-modal="false" aria-labelledby="store-title">
               <div class="store-head">
                 <div>
-                  <h3 id="store-title">Widget store</h3>
+                  <h3 id="store-title">Store</h3>
                   <span class="muted" id="store-count"></span>
                 </div>
                 <button class="icon-btn" type="button" id="store-close" aria-label="Close the widget store">
                   <svg class="icon icon-sm" aria-hidden="true"><use href="#i-x" /></svg>
                 </button>
+              </div>
+              <div class="seg store-tabs" id="store-tabs" role="group" aria-label="Store sections">
+                <span class="seg-ind" id="store-ind" aria-hidden="true"></span>
+                <button type="button" data-tab="widgets" aria-pressed="true">Widgets</button>
+                <button type="button" data-tab="modules" aria-pressed="false">Modules</button>
               </div>
               <label class="store-search">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-search" /></svg>
@@ -3184,7 +3552,7 @@
               </label>
               <div class="store-cats" id="store-cats" role="group" aria-label="Categories"></div>
               <div class="store-grid" id="store-grid"></div>
-              <div class="store-foot">New widgets ship with every module. Adding one switches its module on.</div>
+              <div class="store-foot" id="store-foot" aria-live="polite">Adding a widget installs its module. Removing a module takes its widgets off the board.</div>
             </aside>
           </div>
         </div>
@@ -4085,25 +4453,14 @@
         renderProg();
         storyFrame();
 
-        // ── Make it yours: module switches, a widget store, a draggable board ──
-        var MODS = [
-          { id: "tasks", name: "Tasks", icon: "i-tasks" },
-          { id: "notes", name: "Notes", icon: "i-notes" },
-          { id: "email", name: "Email", icon: "i-mail" },
-          { id: "calendar", name: "Calendar", icon: "i-calendar" },
-          { id: "mindmap", name: "Mindmap", icon: "i-mindmap" },
-          { id: "time", name: "Time tracking", icon: "i-timer" },
-          { id: "invoices", name: "Invoicing", icon: "i-invoice" },
-          { id: "budget", name: "Budgets", icon: "i-wallet" },
-          { id: "goals", name: "Goals", icon: "i-target" },
-        ];
+        // ── Make it yours: a widget store that installs modules, a resizable board ──
         var CATS = {
           tasks: ["Tasks", "i-tasks"],
           notes: ["Notes", "i-notes"],
           email: ["Email", "i-mail"],
           calendar: ["Calendar", "i-calendar"],
           mindmap: ["Mindmap", "i-mindmap"],
-          time: ["Time", "i-timer"],
+          time: ["Time tracking", "i-timer"],
           invoices: ["Invoicing", "i-invoice"],
           budget: ["Budgets", "i-wallet"],
           goals: ["Goals", "i-target"],
@@ -4113,14 +4470,23 @@
           contacts: ["Contacts", "i-contact"],
           general: ["General", "i-home"],
         };
-        var isMod = {};
-        MODS.forEach(function (m) {
-          isMod[m.id] = true;
+        var MOD_IDS = Object.keys(CATS).filter(function (c) {
+          return c !== "general";
         });
 
+        var spark = function (seed) {
+          var h = 7;
+          for (var i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 9973;
+          var bars = "";
+          for (var k = 0; k < 12; k++) {
+            h = (h * 71 + 13) % 9973;
+            bars += '<i style="--h:' + (28 + (h % 72)) + '"></i>';
+          }
+          return '<div class="spark" aria-hidden="true">' + bars + "</div>";
+        };
         var gen = function (big, sub) {
           return function () {
-            return '<div class="big">' + big + '</div><div class="sub">' + sub + "</div>";
+            return spark(big + sub) + '<div class="big">' + big + '</div><div class="sub">' + sub + "</div>";
           };
         };
         var mapSvg = function () {
@@ -4155,6 +4521,9 @@
               ["Send Anna the revised brand deck", true],
               ["Final logo exports", false],
               ["Prep notes for the studio call", false],
+              ["Book the print proofs", false],
+              ["Reply to Maya about SVGs", false],
+              ["Review the demo deck", false],
             ].map(function (r) {
               return '<div class="trow' + (r[1] ? " is-done" : "") + '"><button type="button" class="ck" aria-pressed="' + r[1] + '" aria-label="Complete: ' + r[0] + '">' + CHECK + "</button><span>" + r[0] + "</span></div>";
             }).join("");
@@ -4175,7 +4544,7 @@
           ["free-slot", "calendar", "Free time", 1, "15:30", gen("15:30", "next free hour")],
           ["map", "mindmap", "Autumn launch", 2, "6 branches", mapSvg],
           ["timer", "time", "Timer", 1, "00:42:13", function () {
-            return '<div class="big" data-timer>00:42:13</div><div class="sub"><span class="rec"></span>Demo deck · Carter</div>';
+            return spark("timer") + '<div class="big" data-timer>00:42:13</div><div class="sub"><span class="rec"></span>Demo deck · Carter</div>';
           }],
           ["week-hours", "time", "Tracked", 1, "31h 40m", gen("31h 40m", "this week · 82% billable")],
           ["to-invoice", "invoices", "Ready to invoice", 1, "€4,600", gen("€4,600", "38h 20m on Phase 1")],
@@ -4199,33 +4568,65 @@
         ];
         var WIDGETS = {};
         LIST.forEach(function (w) {
-          WIDGETS[w[0]] = { id: w[0], cat: w[1], mod: isMod[w[1]] ? w[1] : null, title: w[2], span: w[3], peek: w[4], html: w[5], icon: w[6] || CATS[w[1]][1] };
+          WIDGETS[w[0]] = { id: w[0], cat: w[1], mod: w[1] === "general" ? null : w[1], title: w[2], span: w[3], peek: w[4], html: w[5], icon: w[6] || CATS[w[1]][1] };
         });
-        var DEFAULT_FOR = { tasks: "today", notes: "note", email: "unread", calendar: "next", mindmap: "map", time: "timer", invoices: "to-invoice", budget: "budget-bar", goals: "goal-ring" };
+        var DEFAULT_FOR = { tasks: "today", notes: "note", email: "unread", calendar: "next", mindmap: "map", time: "timer", invoices: "to-invoice", budget: "budget-bar", goals: "goal-ring", planning: "roadmap", forms: "responses", docs: "shared-docs", contacts: "reconnect" };
         var PRESETS = {
-          studio: { name: "North Studio", mods: ["tasks", "notes", "email", "calendar", "time", "invoices"], order: ["today", "timer", "next", "unread", "to-invoice", "note"] },
-          personal: { name: "Personal", mods: ["tasks", "calendar", "notes", "goals", "budget"], order: ["focus", "goal-ring", "next", "budget-bar", "streak", "today"] },
-          side: { name: "Autumn launch", mods: ["notes", "mindmap", "tasks", "goals"], order: ["map", "focus", "note", "goal-ring"] },
+          studio: {
+            name: "North Studio",
+            mods: ["tasks", "notes", "email", "calendar", "time", "invoices"],
+            order: ["today", "timer", "next", "unread", "to-invoice", "note"],
+            cfg: { today: { w: 2 }, "to-invoice": { h: 2, tone: "success" }, note: { w: 2 } },
+          },
+          personal: {
+            name: "Personal",
+            mods: ["tasks", "calendar", "notes", "goals", "budget"],
+            order: ["focus", "goal-ring", "next", "budget-bar", "streak", "today"],
+            cfg: { focus: { h: 2, tone: "ai" }, "goal-ring": { tone: "info" }, "budget-bar": { w: 2 }, today: { w: 2 } },
+          },
+          side: {
+            name: "Autumn launch",
+            mods: ["notes", "mindmap", "tasks", "goals"],
+            order: ["map", "focus", "goal-ring", "note"],
+            cfg: { map: { w: 2, h: 2 }, "goal-ring": { tone: "warning" }, note: { w: 3 } },
+          },
         };
+        var SIZES = [
+          [1, 1, "Small"],
+          [2, 1, "Wide"],
+          [1, 2, "Tall"],
+          [2, 2, "Large"],
+        ];
+        var TONES = [
+          ["", "No color"],
+          ["success", "Green"],
+          ["info", "Blue"],
+          ["warning", "Amber"],
+          ["ai", "Pink"],
+        ];
         var clone = function (o) {
           return JSON.parse(JSON.stringify(o));
         };
         var WS = clone(PRESETS);
         var ws = "studio";
+        var cfgOf = function (id) {
+          var all = WS[ws].cfg;
+          var c = all[id] || (all[id] = {});
+          if (!c.w) c.w = WIDGETS[id].span || 1;
+          if (!c.h) c.h = 1;
+          if (c.tone === undefined) c.tone = "";
+          if (c.sub === undefined) c.sub = true;
+          if (c.name === undefined) c.name = "";
+          return c;
+        };
 
         var board = $("board");
-        var side = $("side");
         var seg = $("ws-seg");
         var segInd = $("seg-ind");
         var body = $("studio-body");
+        var strip = $("mod-strip");
+        var pop = $("wd-pop");
         var drag = { el: null, cand: null };
-
-        side.innerHTML =
-          '<div class="side-ws"><span class="sq" id="side-sq">N</span><span id="side-name">North Studio</span></div><div class="side-label">Modules</div>' +
-          MODS.map(function (m) {
-            return '<button type="button" class="sw-row" role="switch" aria-checked="false" data-mod="' + m.id + '">' + icon(m.icon) + '<span class="nm">' + m.name + '</span><span class="sw" aria-hidden="true"></span></button>';
-          }).join("") +
-          '<div class="side-more">' + icon("i-plus", "icon-xs") + "Planning, forms, docs &amp; more</div>";
 
         var visibleOrder = function () {
           var st = WS[ws];
@@ -4234,19 +4635,34 @@
             return !m || st.mods.indexOf(m) >= 0;
           });
         };
+        var applyCfg = function (el) {
+          var id = el.dataset.w;
+          var c = cfgOf(id);
+          var name = c.name || WIDGETS[id].title;
+          el.dataset.cw = c.w;
+          el.dataset.ch = c.h;
+          el.dataset.sizeLabel = c.w + " × " + c.h;
+          el.classList.toggle("has-tone", !!c.tone);
+          if (c.tone) el.style.setProperty("--tone", "var(--" + c.tone + ")");
+          else el.style.removeProperty("--tone");
+          el.classList.toggle("no-sub", !c.sub);
+          el.querySelector(".wd-title").textContent = name;
+          el.setAttribute("aria-label", name + " widget, " + c.w + " by " + c.h + " — Alt + arrows to move, Alt + Shift + arrows to resize");
+        };
         var makeWidget = function (id) {
           var w = WIDGETS[id];
           var el = document.createElement("article");
           el.className = "wd";
           el.dataset.w = id;
           el.tabIndex = 0;
-          el.style.setProperty("--span", w.span || 1);
-          el.setAttribute("aria-label", w.title + " widget — Alt + arrow keys to move");
           el.innerHTML =
-            '<header class="wd-head">' + icon(w.icon, "icon-xs") + w.title +
-            '<button type="button" class="wd-x" data-remove aria-label="Remove ' + w.title + '">' + icon("i-x", "icon-xs") + "</button>" +
+            '<header class="wd-head">' + icon(w.icon, "icon-xs") + '<span class="wd-title"></span>' +
+            '<button type="button" class="wd-cfg" data-cfg aria-label="Customize" aria-expanded="false">' + icon("i-tune", "icon-xs") + "</button>" +
+            '<button type="button" class="wd-x" data-remove aria-label="Remove">' + icon("i-x", "icon-xs") + "</button>" +
             '<span class="wd-grip" aria-hidden="true">' + icon("i-grip", "icon-xs") + "</span></header>" +
-            '<div class="wd-body">' + w.html() + "</div>";
+            '<div class="wd-body">' + w.html() + "</div>" +
+            '<button type="button" class="wd-rs" aria-label="Resize — click to cycle sizes, or drag"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M9 3 3 9M9 6.5 6.5 9" /></svg></button>';
+          applyCfg(el);
           return el;
         };
         var flip = function (mutate) {
@@ -4263,53 +4679,133 @@
             var l = el.getBoundingClientRect();
             var dx = f.left - l.left;
             var dy = f.top - l.top;
-            if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
-            el.animate([{ transform: "translate(" + dx + "px, " + dy + "px)" }, { transform: "none" }], { duration: 560, easing: EASE });
+            var sx = f.width / l.width;
+            var sy = f.height / l.height;
+            if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) return;
+            el.animate(
+              [
+                { transformOrigin: "top left", transform: "translate(" + dx + "px, " + dy + "px) scale(" + sx + ", " + sy + ")" },
+                { transformOrigin: "top left", transform: "none" },
+              ],
+              { duration: 520, easing: EASE }
+            );
           });
         };
 
+        // Store: widgets + modules
         var storeQ = $("store-q");
         var storeGrid = $("store-grid");
         var storeCats = $("store-cats");
+        var storeTabs = $("store-tabs");
+        var storeInd = $("store-ind");
+        var storeFoot = $("store-foot");
+        var FOOT = "Adding a widget installs its module. Removing a module takes its widgets off the board.";
         var storeCat = "all";
+        var storeTab = "widgets";
         storeCats.innerHTML =
           '<button type="button" data-cat="all" aria-pressed="true">All</button>' +
-          Object.keys(CATS)
-            .filter(function (c) {
-              return c !== "general";
-            })
-            .map(function (c) {
-              return '<button type="button" data-cat="' + c + '" aria-pressed="false">' + CATS[c][0] + "</button>";
-            })
-            .join("");
+          MOD_IDS.map(function (c) {
+            return '<button type="button" data-cat="' + c + '" aria-pressed="false">' + CATS[c][0] + "</button>";
+          }).join("");
+        var installed = function (m) {
+          return WS[ws].mods.indexOf(m) >= 0;
+        };
+        var renderTabs = function () {
+          each(storeTabs.querySelectorAll("[data-tab]"), function (b) {
+            var on = b.dataset.tab === storeTab;
+            b.setAttribute("aria-pressed", String(on));
+            if (on) {
+              storeInd.style.width = b.offsetWidth + "px";
+              storeInd.style.transform = "translateX(" + b.offsetLeft + "px)";
+            }
+          });
+          each(storeCats.children, function (c) {
+            c.setAttribute("aria-pressed", String(c.dataset.cat === storeCat));
+            c.classList.toggle("is-in", c.dataset.cat !== "all" && installed(c.dataset.cat));
+          });
+          storeCats.hidden = storeTab !== "widgets";
+          storeQ.placeholder = storeTab === "widgets" ? "Search widgets" : "Search modules";
+        };
+        var moduleRow = function (id, k) {
+          var on = installed(id);
+          var total = LIST.filter(function (w) {
+            return w[1] === id;
+          }).length;
+          var onBoard = visibleOrder().filter(function (w) {
+            return WIDGETS[w].mod === id;
+          }).length;
+          return (
+            '<div class="mrow' + (on ? " is-on" : "") + '" data-mod="' + id + '" style="--k:' + k + '">' +
+            '<span class="mrow-ic">' + icon(CATS[id][1], "icon-sm") + "</span>" +
+            '<span class="mrow-t"><b>' + CATS[id][0] + "</b><span>" +
+            (on ? onBoard + " on your board · " + total + " widgets" : total + (total === 1 ? " widget" : " widgets")) +
+            "</span></span>" +
+            (on
+              ? '<button type="button" class="btn btn-outline btn-sm" data-uninstall="' + id + '">Remove</button>'
+              : '<button type="button" class="btn btn-secondary btn-sm" data-install="' + id + '">' + icon("i-plus", "icon-xs") + "Install</button>") +
+            "</div>"
+          );
+        };
         var renderStore = function () {
+          renderTabs();
           var q = storeQ.value.trim().toLowerCase();
+          var st = WS[ws];
+          storeGrid.classList.toggle("is-list", storeTab === "modules");
+          if (storeTab === "modules") {
+            var ids = MOD_IDS.filter(function (m) {
+              return !q || CATS[m][0].toLowerCase().indexOf(q) >= 0;
+            });
+            var inst = ids.filter(installed);
+            var avail = ids.filter(function (m) {
+              return !installed(m);
+            });
+            $("store-count").textContent = st.mods.length + " of " + MOD_IDS.length + " modules in " + st.name;
+            var k = 0;
+            storeGrid.innerHTML = ids.length
+              ? (inst.length ? '<div class="mgroup">Installed · ' + inst.length + "</div>" : "") +
+                inst.map(function (m) {
+                  return moduleRow(m, k++);
+                }).join("") +
+                (avail.length ? '<div class="mgroup">Available · ' + avail.length + "</div>" : "") +
+                avail.map(function (m) {
+                  return moduleRow(m, k++);
+                }).join("")
+              : '<div class="store-empty">No module called “' + esc(storeQ.value.trim()) + "” yet.</div>";
+            return;
+          }
           var onBoard = visibleOrder();
           var items = LIST.map(function (w) {
             return WIDGETS[w[0]];
           }).filter(function (w) {
             return (storeCat === "all" || w.cat === storeCat) && (!q || (w.title + " " + CATS[w.cat][0]).toLowerCase().indexOf(q) >= 0);
           });
-          $("store-count").textContent = LIST.length + " widgets across " + (Object.keys(CATS).length - 1) + " modules";
+          $("store-count").textContent = LIST.length + " widgets across " + MOD_IDS.length + " modules";
           storeGrid.innerHTML = items.length
             ? items
                 .map(function (w, k) {
                   var on = onBoard.indexOf(w.id) >= 0;
+                  var needs = w.mod && !installed(w.mod);
                   return (
                     '<button type="button" class="sc" style="--k:' + k + '" data-add="' + w.id + '"' + (on ? " disabled" : "") + ">" +
                     '<span class="sc-top">' + icon(CATS[w.cat][1], "icon-xs") + CATS[w.cat][0] + '<span class="sc-size">' + (w.span || 1) + "×1</span></span>" +
                     '<span class="sc-title">' + w.title + "</span>" +
                     '<span class="sc-peek">' + w.peek + "</span>" +
-                    '<span class="sc-add">' + (on ? icon("i-check", "icon-xs") + "On your board" : icon("i-plus", "icon-xs") + "Add") + "</span></button>"
+                    '<span class="sc-add">' +
+                    (on ? icon("i-check", "icon-xs") + "On your board" : icon("i-plus", "icon-xs") + "Add" + (needs ? '<span class="inst">· installs ' + CATS[w.mod][0] + "</span>" : "")) +
+                    "</span></button>"
                   );
                 })
                 .join("")
             : '<div class="store-empty">No widget for “' + esc(storeQ.value.trim()) + "” yet.</div>";
         };
-        var openStore = function () {
+        var openStore = function (tab, cat) {
+          closePop();
+          storeTab = tab || "widgets";
+          storeCat = cat || "all";
           storeQ.value = "";
-          renderStore();
+          storeFoot.textContent = FOOT;
           body.classList.add("is-store");
+          renderStore();
           setTimeout(function () {
             storeQ.focus({ preventScroll: true });
           }, 50);
@@ -4317,30 +4813,84 @@
         var closeStore = function () {
           body.classList.remove("is-store");
         };
-        $("store-open").addEventListener("click", openStore);
+        $("store-open").addEventListener("click", function () {
+          openStore("widgets");
+        });
         $("store-close").addEventListener("click", closeStore);
         $("store-scrim").addEventListener("click", closeStore);
         body.addEventListener("keydown", function (e) {
-          if (e.key === "Escape" && body.classList.contains("is-store")) {
+          if (e.key !== "Escape") return;
+          if (!pop.hidden) {
+            var owner = board.querySelector('[data-w="' + pop.dataset.for + '"] .wd-cfg');
+            closePop();
+            if (owner) owner.focus();
+          } else if (body.classList.contains("is-store")) {
             closeStore();
             $("store-open").focus();
           }
         });
         storeQ.addEventListener("input", renderStore);
+        storeTabs.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-tab]");
+          if (!b || b.dataset.tab === storeTab) return;
+          storeTab = b.dataset.tab;
+          storeQ.value = "";
+          renderStore();
+        });
         storeCats.addEventListener("click", function (e) {
           var b = e.target.closest("[data-cat]");
           if (!b) return;
           storeCat = b.dataset.cat;
-          each(storeCats.children, function (c) {
-            c.setAttribute("aria-pressed", String(c === b));
-          });
           renderStore();
         });
+        var flashRow = function (id) {
+          var row = storeGrid.querySelector('.mrow[data-mod="' + id + '"]');
+          if (row) row.scrollIntoView({ block: "nearest" });
+        };
         storeGrid.addEventListener("click", function (e) {
+          var st = WS[ws];
+          var ins = e.target.closest("[data-install]");
+          var un = e.target.closest("[data-uninstall]");
+          if (ins) {
+            var m = ins.dataset.install;
+            st.mods.push(m);
+            var has = st.order.some(function (w) {
+              return WIDGETS[w].mod === m;
+            });
+            if (!has) st.order.push(DEFAULT_FOR[m]);
+            storeFoot.textContent = CATS[m][0] + " installed — its widget is on your board.";
+            sync();
+            renderStore();
+            flashRow(m);
+            return;
+          }
+          if (un) {
+            var u = un.dataset.uninstall;
+            if (st.mods.length === 1) {
+              var row = un.closest(".mrow");
+              row.classList.remove("is-denied");
+              void row.offsetWidth;
+              row.classList.add("is-denied");
+              storeFoot.textContent = "A workspace needs at least one module.";
+              return;
+            }
+            var gone = visibleOrder().filter(function (w) {
+              return WIDGETS[w].mod === u;
+            }).length;
+            st.mods = st.mods.filter(function (x) {
+              return x !== u;
+            });
+            st.order = st.order.filter(function (w) {
+              return WIDGETS[w].mod !== u;
+            });
+            storeFoot.textContent = "Removed " + CATS[u][0] + (gone ? " and " + gone + (gone === 1 ? " widget" : " widgets") + " from the board." : ".");
+            sync();
+            renderStore();
+            return;
+          }
           var b = e.target.closest("[data-add]");
           if (!b || b.disabled) return;
           var w = WIDGETS[b.dataset.add];
-          var st = WS[ws];
           if (w.mod && st.mods.indexOf(w.mod) < 0) st.mods.push(w.mod);
           st.order = st.order.filter(function (x) {
             return x !== w.id;
@@ -4361,15 +4911,28 @@
               segInd.style.transform = "translateX(" + b.offsetLeft + "px)";
             }
           });
-          each(side.querySelectorAll("[data-mod]"), function (b) {
-            b.setAttribute("aria-checked", String(st.mods.indexOf(b.dataset.mod) >= 0));
-          });
-          $("side-name").textContent = st.name;
-          $("side-sq").textContent = st.name.charAt(0);
+          var sig = st.mods.join(",");
+          if (strip.dataset.sig !== sig) {
+            strip.dataset.sig = sig;
+            strip.innerHTML =
+              '<span class="lbl">Modules</span>' +
+              st.mods
+                .map(function (m) {
+                  return '<button type="button" class="mchip" data-strip="' + m + '" title="' + CATS[m][0] + '" aria-label="' + CATS[m][0] + ' widgets">' + icon(CATS[m][1], "icon-xs") + "</button>";
+                })
+                .join("") +
+              '<button type="button" class="mchip is-more" data-strip-more title="Install modules" aria-label="Install modules">' + icon("i-plus", "icon-xs") + "</button>";
+          }
           var n = board.children.length;
           $("board-count").textContent = n + (n === 1 ? " widget" : " widgets");
+          if (body.classList.contains("is-store")) renderTabs();
           tickLive();
         };
+        strip.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-strip]");
+          if (b) openStore("widgets", b.dataset.strip);
+          else if (e.target.closest("[data-strip-more]")) openStore("modules");
+        });
 
         var syncGen = 0;
         var sync = function (fly) {
@@ -4379,6 +4942,7 @@
           each(board.children, function (el) {
             if (target.indexOf(el.dataset.w) < 0) leaving.push(el);
           });
+          if (pop.dataset.for && target.indexOf(pop.dataset.for) < 0) closePop();
           var apply = function () {
             if (gen !== syncGen) return;
             var order = visibleOrder();
@@ -4390,10 +4954,12 @@
             flip(function () {
               Object.keys(existing).forEach(function (id) {
                 if (order.indexOf(id) < 0) existing[id].remove();
-                else
+                else {
                   existing[id].getAnimations().forEach(function (a) {
                     a.cancel();
                   });
+                  applyCfg(existing[id]);
+                }
               });
               order.forEach(function (id) {
                 var el = existing[id];
@@ -4457,39 +5023,155 @@
         seg.addEventListener("click", function (e) {
           var b = e.target.closest("[data-ws]");
           if (!b || b.dataset.ws === ws) return;
+          closePop();
           ws = b.dataset.ws;
-          sync();
-        });
-        side.addEventListener("click", function (e) {
-          var b = e.target.closest("[data-mod]");
-          if (!b) return;
-          var st = WS[ws];
-          var id = b.dataset.mod;
-          var on = st.mods.indexOf(id) >= 0;
-          if (on && st.mods.length === 1) {
-            b.classList.remove("is-denied");
-            void b.offsetWidth;
-            b.classList.add("is-denied");
-            return;
-          }
-          if (on) {
-            st.mods = st.mods.filter(function (m) {
-              return m !== id;
-            });
-          } else {
-            st.mods.push(id);
-            var has = st.order.some(function (w) {
-              return WIDGETS[w].mod === id;
-            });
-            if (!has) st.order.push(DEFAULT_FOR[id]);
-          }
+          strip.dataset.sig = "";
           sync();
         });
         $("board-reset").addEventListener("click", function () {
+          closePop();
           WS[ws] = clone(PRESETS[ws]);
+          strip.dataset.sig = "";
           sync();
         });
+
+        // Customize popover
+        var cellsFor = function (w, h) {
+          var out = "";
+          for (var r = 0; r < 2; r++) for (var c = 0; c < 2; c++) out += '<i class="' + (c < w && r < h ? "on" : "") + '"></i>';
+          return '<span class="sz-g" aria-hidden="true">' + out + "</span>";
+        };
+        var renderPop = function (id) {
+          var c = cfgOf(id);
+          pop.innerHTML =
+            '<div class="pop-h">Customize<span class="pop-sz">' + c.w + " × " + c.h + "</span></div>" +
+            '<label class="pop-l">Name<input class="pop-name" type="text" maxlength="24" spellcheck="false" value="' + esc(c.name || WIDGETS[id].title) + '" /></label>' +
+            '<div class="pop-l">Size<div class="pop-sizes">' +
+            SIZES.map(function (s) {
+              return '<button type="button" data-size="' + s[0] + "," + s[1] + '" aria-pressed="' + (c.w === s[0] && c.h === s[1]) + '" aria-label="' + s[2] + " — " + s[0] + " by " + s[1] + '">' + cellsFor(s[0], s[1]) + s[2] + "</button>";
+            }).join("") +
+            "</div></div>" +
+            '<div class="pop-l">Color<div class="pop-tones">' +
+            TONES.map(function (t) {
+              return '<button type="button" data-tone="' + t[0] + '" aria-pressed="' + (c.tone === t[0]) + '" aria-label="' + t[1] + '" title="' + t[1] + '"' + (t[0] ? ' style="--tone: var(--' + t[0] + ')"' : "") + "></button>";
+            }).join("") +
+            "</div></div>" +
+            '<button type="button" class="pop-sw" role="switch" aria-checked="' + c.sub + '" data-sub>Show details<span class="sw" aria-hidden="true"></span></button>' +
+            '<button type="button" class="pop-rm" data-pop-remove>' + icon("i-x", "icon-xs") + "Remove from board</button>";
+        };
+        var placePop = function () {
+          var el = board.querySelector('[data-w="' + pop.dataset.for + '"]');
+          if (!el) return;
+          var wrap = pop.offsetParent;
+          var pw = pop.offsetWidth;
+          var ph = pop.offsetHeight;
+          var left = el.offsetLeft + el.offsetWidth - pw - 6;
+          left = Math.max(6, Math.min(wrap.clientWidth - pw - 6, left));
+          var top = el.offsetTop + 36;
+          top = Math.max(6, Math.min(wrap.clientHeight - ph - 6, top));
+          pop.style.left = left + "px";
+          pop.style.top = top + "px";
+        };
+        var openPop = function (el) {
+          var id = el.dataset.w;
+          closePop();
+          pop.dataset.for = id;
+          renderPop(id);
+          pop.hidden = false;
+          placePop();
+          el.querySelector(".wd-cfg").setAttribute("aria-expanded", "true");
+          el.classList.add("is-cfg");
+        };
+        var closePop = function () {
+          if (pop.hidden) return;
+          var el = board.querySelector('[data-w="' + pop.dataset.for + '"]');
+          if (el) {
+            el.querySelector(".wd-cfg").setAttribute("aria-expanded", "false");
+            el.classList.remove("is-cfg");
+          }
+          pop.hidden = true;
+          pop.dataset.for = "";
+        };
+        var setSize = function (el, w, h) {
+          var c = cfgOf(el.dataset.w);
+          if (c.w === w && c.h === h) return;
+          c.w = w;
+          c.h = h;
+          flip(function () {
+            applyCfg(el);
+          });
+        };
+        pop.addEventListener("click", function (e) {
+          var id = pop.dataset.for;
+          var el = board.querySelector('[data-w="' + id + '"]');
+          if (!el) return;
+          var c = cfgOf(id);
+          var sz = e.target.closest("[data-size]");
+          var tone = e.target.closest("[data-tone]");
+          if (sz) {
+            var p = sz.dataset.size.split(",");
+            setSize(el, Number(p[0]), Number(p[1]));
+          } else if (tone) {
+            c.tone = tone.dataset.tone;
+            applyCfg(el);
+          } else if (e.target.closest("[data-sub]")) {
+            c.sub = !c.sub;
+            applyCfg(el);
+          } else if (e.target.closest("[data-pop-remove]")) {
+            closePop();
+            WS[ws].order = WS[ws].order.filter(function (w) {
+              return w !== id;
+            });
+            sync();
+            return;
+          } else return;
+          renderPop(id);
+          placePop();
+        });
+        pop.addEventListener("input", function (e) {
+          if (!e.target.classList.contains("pop-name")) return;
+          var id = pop.dataset.for;
+          var c = cfgOf(id);
+          var v = e.target.value.trim();
+          c.name = v && v !== WIDGETS[id].title ? v : "";
+          var el = board.querySelector('[data-w="' + id + '"]');
+          if (el) applyCfg(el);
+        });
+        document.addEventListener("pointerdown", function (e) {
+          if (pop.hidden || pop.contains(e.target) || e.target.closest(".wd-cfg")) return;
+          closePop();
+        });
+        window.addEventListener("resize", function () {
+          if (!pop.hidden) placePop();
+        });
+
         board.addEventListener("click", function (e) {
+          var cfgBtn = e.target.closest("[data-cfg]");
+          if (cfgBtn) {
+            var owner = cfgBtn.closest(".wd");
+            if (pop.dataset.for === owner.dataset.w && !pop.hidden) closePop();
+            else openPop(owner);
+            return;
+          }
+          var rsBtn = e.target.closest(".wd-rs");
+          if (rsBtn) {
+            if (rsMoved) {
+              rsMoved = false;
+              return;
+            }
+            var wEl = rsBtn.closest(".wd");
+            var c = cfgOf(wEl.dataset.w);
+            var at = SIZES.findIndex(function (s) {
+              return s[0] === c.w && s[1] === c.h;
+            });
+            var next = SIZES[(at + 1) % SIZES.length];
+            setSize(wEl, next[0], next[1]);
+            if (pop.dataset.for === wEl.dataset.w) {
+              renderPop(wEl.dataset.w);
+              placePop();
+            }
+            return;
+          }
           var x = e.target.closest("[data-remove]");
           if (x) {
             var id = x.closest(".wd").dataset.w;
@@ -4504,6 +5186,59 @@
           var done = ck.parentElement.classList.toggle("is-done");
           ck.setAttribute("aria-pressed", String(done));
         });
+
+        // Resize from the corner: snaps to the grid as you drag.
+        var rs = null;
+        var rsMoved = false;
+        board.addEventListener("pointerdown", function (e) {
+          var h = e.target.closest(".wd-rs");
+          if (!h || e.button !== 0) return;
+          var el = h.closest(".wd");
+          var cs = getComputedStyle(board);
+          var cols = cs.gridTemplateColumns.split(" ").length;
+          var gap = parseFloat(cs.columnGap) || 12;
+          rs = {
+            el: el,
+            pid: e.pointerId,
+            x: e.clientX,
+            y: e.clientY,
+            w0: el.offsetWidth,
+            h0: el.offsetHeight,
+            cols: cols,
+            gap: gap,
+            colW: (board.clientWidth - gap * (cols - 1)) / cols,
+            rowH: parseFloat(cs.gridAutoRows) || 140,
+            moved: false,
+          };
+          rsMoved = false;
+        });
+        window.addEventListener("pointermove", function (e) {
+          if (!rs || e.pointerId !== rs.pid) return;
+          var dx = e.clientX - rs.x;
+          var dy = e.clientY - rs.y;
+          if (!rs.moved) {
+            if (Math.abs(dx) + Math.abs(dy) < 4) return;
+            rs.moved = true;
+            closePop();
+            rs.el.classList.add("is-resizing");
+            document.body.classList.add("is-resizing-page");
+          }
+          e.preventDefault();
+          var w = Math.max(1, Math.min(rs.cols, Math.round((rs.w0 + dx + rs.gap) / (rs.colW + rs.gap))));
+          var h = Math.max(1, Math.min(2, Math.round((rs.h0 + dy + rs.gap) / (rs.rowH + rs.gap))));
+          setSize(rs.el, w, h);
+        });
+        var endResize = function () {
+          if (!rs) return;
+          if (rs.moved) {
+            rsMoved = true;
+            rs.el.classList.remove("is-resizing");
+            document.body.classList.remove("is-resizing-page");
+          }
+          rs = null;
+        };
+        window.addEventListener("pointerup", endResize);
+        window.addEventListener("pointercancel", endResize);
 
         // Drag to rearrange (mouse anywhere on a widget; touch via the grip).
         var setDragTransform = function (x, y) {
@@ -4522,6 +5257,7 @@
           if (!drag.cand || e.pointerId !== drag.pid) return;
           if (!drag.el) {
             if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 5) return;
+            closePop();
             drag.el = drag.cand;
             drag.el.getAnimations().forEach(function (a) {
               a.cancel();
@@ -4584,6 +5320,15 @@
           var fwd = e.key === "ArrowRight" || e.key === "ArrowDown";
           if (!back && !fwd) return;
           e.preventDefault();
+          if (e.shiftKey) {
+            var c = cfgOf(el.dataset.w);
+            var horiz = e.key === "ArrowLeft" || e.key === "ArrowRight";
+            var cols = getComputedStyle(board).gridTemplateColumns.split(" ").length;
+            if (horiz) setSize(el, Math.max(1, Math.min(cols, c.w + (fwd ? 1 : -1))), c.h);
+            else setSize(el, c.w, Math.max(1, Math.min(2, c.h + (fwd ? 1 : -1))));
+            el.focus();
+            return;
+          }
           var sib = back ? el.previousElementSibling : el.nextElementSibling;
           if (!sib) return;
           flip(function () {

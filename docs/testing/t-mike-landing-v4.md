@@ -28,15 +28,19 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 - [ ] Bottom bar: status types itself; "Connections" ticks up to 8 with a bump; "Tagged by you" stays 0
 - [ ] Clicking a step scrolls to it; scrolling back up removes cards quickly, scrolling down replays
 
-## Make it yours (board + widget store)
+## Make it yours (board + store)
 
-- [ ] Studio / Personal / Side project → highlight slides, modules and board change with smooth reflow
-- [ ] Turn a module off → its widgets fade out; back on → they return; last module can't be turned off (shake)
-- [ ] "Add widget" opens the store: 26 widgets across 13 modules, search + category chips filter it
-- [ ] Widgets already on the board say "On your board"; adding one from a switched-off module turns the module on
-- [ ] Added widget flies from its store card to the board and glows briefly; × removes a widget
-- [ ] Drag to rearrange (phone: via grip dots); Tab-focus + ⌥ ← / → moves; Reset restores the workspace
-- [ ] Timer counts up, Focus counts down, Clock shows local time
+- [ ] No module sidebar; the board header shows the installed modules as small icons, plus a "+"
+- [ ] Clicking a module icon opens the store on Widgets, filtered to that module; "+" opens the store on Modules
+- [ ] Store → Modules: Installed and Available lists. Install adds the module and its default widget to the board; Remove takes the module and its widgets off (footer says how many)
+- [ ] Removing the last module shakes the row and says a workspace needs at least one module
+- [ ] Store → Widgets: search + category chips (green dot = installed). Widgets from uninstalled modules say "Add · installs …"; adding one flies it onto the board and installs the module
+- [ ] Drag a widget's bottom-right corner → it snaps between sizes (up to 3 wide × 2 tall) with a size badge; neighbours reflow smoothly
+- [ ] Click the corner (or Enter on it) → cycles Small → Wide → Tall → Large; ⌥ ⇧ arrows resize from the keyboard
+- [ ] Tall number widgets show a small trend chart; the Today list fades out at the bottom instead of cutting a row
+- [ ] Customize (sliders icon): rename live, pick a size, pick a color (number, chart, ring and meter take the color), toggle "Show details", "Remove from board"; Escape or clicking outside closes it
+- [ ] Studio / Personal / Side project each keep their own modules, sizes and colors; Reset restores the preset
+- [ ] Drag to rearrange still works (phone: via the grip dots); Timer counts up, Focus counts down
 
 ## AI over MCP
 
