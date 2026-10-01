@@ -1,5 +1,7 @@
 // Guest-side calls to the public booking function. No session.
 
+import type { VideoProvider } from "./video";
+
 const SUPABASE_URL: string =
   (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) || "http://127.0.0.1:54321";
 const SUPABASE_KEY: string =
@@ -18,6 +20,9 @@ export type BookingPreview = {
   questions: { id?: string; label?: string; required?: boolean }[];
   paused: boolean;
   slots: string[];
+  /** The default platform, and every platform the guest may pick from. */
+  video?: VideoProvider | null;
+  videoOptions?: VideoProvider[];
 };
 
 export async function bookingRequest(body: Record<string, unknown>): Promise<{

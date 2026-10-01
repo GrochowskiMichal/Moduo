@@ -4,7 +4,10 @@
  * service_role and booking_op_commit / booking_op_release.
  *
  * POST { action: "preview", slug, timeZone }
- * POST { action: "book", slug, start, timeZone, name, email, note, guests, answers }
+ * POST { action: "book", slug, start, timeZone, name, email, note, guests, answers, video }
+ *
+ * A link's video_provider is google_meet, zoom, or guest_choice. The guest only
+ * ever sees platforms the host has connected (Google refresh token / Zoom login).
  * POST { action: "cancel-preview", token }
  * POST { action: "cancel", token }
  */
@@ -19,6 +22,14 @@ import {
   refreshGoogleAccess,
 } from "../_shared/google-calendar.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
+import {
+  createZoomMeeting,
+  deleteZoomMeeting,
+  zoomAccess,
+  zoomConfigured,
+  zoomConnected,
+  zoomMeetingIdFromLink,
+} from "../_shared/zoom.ts";
 import { decryptToken, encryptToken } from "../_shared/token-cipher.ts";
 import { parseGuestEmails } from "../../../src/features/calendar/booking/guests.ts";
 import {
@@ -26,6 +37,13 @@ import {
   normalizeWeeklyHours,
   type Interval,
 } from "../../../src/features/calendar/booking/slots.ts";
+import {
+  pickVideo,
+  VIDEO_LABEL,
+  type VideoProvider,
+  videoOptions,
+  videoSetting,
+} from "../../../src/features/calendar/booking/video.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SECRET = getDefaultSecretKey();
@@ -271,7 +289,11 @@ async function hostIdentity(
   };
 }
 
-function publicLink(link: LinkRow, host: { name: string; avatarUrl: string | null }) {
+function publicLink(
+  link: LinkRow,
+  host: { name: string; avatarUrl: string | null },
+  video: VideoProvider[],
+) {
   return {
     slug: link.slug,
     name: link.name,
@@ -283,8 +305,9 @@ function publicLink(link: LinkRow, host: { name: string; avatarUrl: string | nul
     noteEnabled: link.note_enabled,
     guestsEnabled: link.guests_enabled === true,
     questions: Array.isArray(link.questions_json) ? link.questions_json : [],
-    video: "google_meet",
-    paused: link.paused,
+    video: video[0] ?? null,
+    videoOptions: video,
+    paused: link.paused || video.length === 0,
   };
 }
 
@@ -293,6 +316,7 @@ async function sendGuestEmail(input: {
   hostName: string;
   when: string;
   meetLink: string;
+  platform: string;
   cancelUrl: string;
 }): Promise<void> {
   if (!RESEND_API_KEY) return;
@@ -309,7 +333,7 @@ async function sendGuestEmail(input: {
       text: [
         `You're booked with ${input.hostName}.`,
         input.when,
-        `Google Meet: ${input.meetLink}`,
+        `${input.platform}: ${input.meetLink}`,
         `Cancel: ${input.cancelUrl}`,
       ].join("\n"),
     }),
@@ -345,6 +369,7 @@ Deno.serve(async (req: Request) => {
       end_at: string;
       slot_id: string;
       meeting_id: string | null;
+      meeting_link: string | null;
       calendar_event_id: string | null;
       attendee_name: string;
     };
@@ -369,6 +394,11 @@ Deno.serve(async (req: Request) => {
     if (access && row.meeting_id) {
       await deleteGoogleEvent(access.accessToken, row.meeting_id).catch(() => {});
     }
+    const zoomId = zoomMeetingIdFromLink(row.meeting_link);
+    if (link && zoomId) {
+      const zoomToken = await zoomAccess(db, link.owner_user_id, ENC).catch(() => null);
+      if (zoomToken) await deleteZoomMeeting(zoomToken, zoomId).catch(() => {});
+    }
     if (link?.workspace_id && row.calendar_event_id) {
       await db.rpc("booking_op_release", {
         p_workspace_id: link.workspace_id,
@@ -387,7 +417,8 @@ Deno.serve(async (req: Request) => {
   const link = slug ? await loadLink(db, slug) : null;
   if (!link || !link.workspace_id) return json({ error: "not_found" }, 404);
   const host = await hostIdentity(db, link);
-  if (link.paused) return json({ ...publicLink(link, host), slots: [] });
+  const setting = videoSetting(link.video_provider);
+  if (link.paused) return json({ ...publicLink(link, host, []), paused: true, slots: [] });
 
   const now = new Date();
   const horizonEnd = new Date(now.getTime() + Math.max(1, link.date_range_days) * 86_400_000);
@@ -399,18 +430,25 @@ Deno.serve(async (req: Request) => {
     .lt("updated_at", new Date(now.getTime() - 5 * 60_000).toISOString());
 
   const access = await googleAccess(db, link.owner_user_id).catch(() => null);
+  const zoomOn =
+    setting === "google_meet" || !zoomConfigured()
+      ? false
+      : await zoomConnected(db, link.owner_user_id).catch(() => false);
+  const video = videoOptions(setting, { google_meet: access != null, zoom: zoomOn });
+  if (video.length === 0) return json({ ...publicLink(link, host, video), slots: [] });
   const busy = await busyIntervals(db, link, now, horizonEnd, access?.accessToken ?? null);
   const slots = openSlots(link, busy, now);
 
   if (action === "preview") {
     return json({
-      ...publicLink(link, host),
+      ...publicLink(link, host, video),
       slots: slots.map((slot) => slot.toISOString()),
     });
   }
 
   if (action !== "book") return json({ error: "unknown_action" }, 400);
-  if (!access) return json({ error: "host_unavailable" }, 409);
+  const platform = pickVideo(video, body.video);
+  if (!platform) return json({ error: "host_unavailable" }, 409);
 
   const startRaw = typeof body.start === "string" ? body.start : "";
   const start = new Date(startRaw);
@@ -426,7 +464,7 @@ Deno.serve(async (req: Request) => {
     ? parseGuestEmails(body.guests, email)
     : { ok: true as const, emails: [] as string[] };
   if (!guests.ok) return json({ error: "bad_guest" }, 400);
-  const hostAddress = (access.email || link.owner_email || "").trim().toLowerCase();
+  const hostAddress = (access?.email || link.owner_email || "").trim().toLowerCase();
   const invitedEmails = guests.emails.filter((address) => address !== hostAddress);
   const answersIn = Array.isArray(body.answers) ? body.answers : [];
   const questions = Array.isArray(link.questions_json)
@@ -476,33 +514,66 @@ Deno.serve(async (req: Request) => {
     return json({ error }, status);
   };
 
-  const hostEmail = access.email || link.owner_email || "";
+  const hostEmail = access?.email || link.owner_email || "";
   if (!hostEmail) return fail("host_unavailable", 409);
+  const lines = [
+    `Guest: ${name} <${email}>`,
+    invitedEmails.length > 0 ? `Also invited: ${invitedEmails.join(", ")}` : "",
+    note ? `Note: ${note}` : "",
+    ...answers.map((answer) => `${answer.label}: ${answer.value}`),
+  ].filter(Boolean);
 
-  let meet: { eventId: string; meetLink: string };
-  try {
-    const lines = [
-      `Guest: ${name} <${email}>`,
-      invitedEmails.length > 0 ? `Also invited: ${invitedEmails.join(", ")}` : "",
-      note ? `Note: ${note}` : "",
-      ...answers.map((answer) => `${answer.label}: ${answer.value}`),
-    ].filter(Boolean);
-    meet = await createGoogleMeetEvent({
-      accessToken: access.accessToken,
-      summary: link.name || "Meeting",
-      description: lines.join("\n"),
-      start: start.toISOString(),
-      end: end.toISOString(),
-      timeZone: link.host_timezone || "UTC",
-      hostEmail,
-      guestEmail: email,
-      guestName: name,
-      guestEmails: invitedEmails,
-      requestId: bookingId,
-    });
-  } catch {
-    return fail("meet_failed", 502);
+  // Zoom first (when chosen), then the Google event that invites everyone.
+  let zoom: { token: string; meetingId: string; joinUrl: string } | null = null;
+  if (platform === "zoom") {
+    const zoomToken = await zoomAccess(db, link.owner_user_id, ENC).catch(() => null);
+    if (!zoomToken) return fail("host_unavailable", 409);
+    try {
+      const created = await createZoomMeeting({
+        accessToken: zoomToken,
+        topic: `${link.name || "Meeting"} with ${name}`,
+        agenda: lines.join("\n"),
+        start: start.toISOString(),
+        durationMinutes: link.duration_minutes,
+        timeZone: link.host_timezone || "UTC",
+      });
+      zoom = { token: zoomToken, ...created };
+    } catch {
+      return fail("zoom_failed", 502);
+    }
   }
+
+  let meet: { eventId: string | null; meetLink: string };
+  if (access) {
+    try {
+      meet = await createGoogleMeetEvent({
+        accessToken: access.accessToken,
+        summary: link.name || "Meeting",
+        description: lines.join("\n"),
+        start: start.toISOString(),
+        end: end.toISOString(),
+        timeZone: link.host_timezone || "UTC",
+        hostEmail,
+        guestEmail: email,
+        guestName: name,
+        guestEmails: invitedEmails,
+        requestId: bookingId,
+        externalLink: zoom?.joinUrl,
+      });
+    } catch {
+      if (!zoom) return fail("meet_failed", 502);
+      // The Zoom meeting stands; the guest still gets it by email.
+      meet = { eventId: null, meetLink: zoom.joinUrl };
+    }
+  } else if (zoom) {
+    meet = { eventId: null, meetLink: zoom.joinUrl };
+  } else {
+    return fail("host_unavailable", 409);
+  }
+  const undoMeeting = async () => {
+    if (access && meet.eventId) await deleteGoogleEvent(access.accessToken, meet.eventId).catch(() => {});
+    if (zoom) await deleteZoomMeeting(zoom.token, zoom.meetingId).catch(() => {});
+  };
 
   const answerHtml = answers
     .map((answer) => `<p><strong>${escapeHtml(answer.label)}</strong><br>${escapeHtml(answer.value)}</p>`)
@@ -512,7 +583,7 @@ Deno.serve(async (req: Request) => {
     invitedEmails.length > 0
       ? `<p>Also invited: ${invitedEmails.map((address) => escapeHtml(address)).join(", ")}</p>`
       : "",
-    `<p><a href="${escapeHtml(meet.meetLink)}">Join Google Meet</a></p>`,
+    `<p><a href="${escapeHtml(meet.meetLink)}">Join ${VIDEO_LABEL[platform]}</a></p>`,
     note ? `<p>${escapeHtml(note)}</p>` : "",
     answerHtml,
   ].join("");
@@ -530,7 +601,7 @@ Deno.serve(async (req: Request) => {
     p_host_email: hostEmail,
   });
   if (committed.error || !committed.data) {
-    await deleteGoogleEvent(access.accessToken, meet.eventId).catch(() => {});
+    await undoMeeting();
     return fail("book_failed");
   }
   const ids = committed.data as { event_id?: string; contact_id?: string };
@@ -561,6 +632,7 @@ Deno.serve(async (req: Request) => {
       hostName: host.name,
       when,
       meetLink: meet.meetLink,
+      platform: VIDEO_LABEL[platform],
       cancelUrl,
     }).catch(() => {});
   }
@@ -570,6 +642,7 @@ Deno.serve(async (req: Request) => {
     start: start.toISOString(),
     end: end.toISOString(),
     meetLink: meet.meetLink,
+    video: platform,
     guests: invitedEmails,
     cancelToken,
   });
