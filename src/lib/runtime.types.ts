@@ -185,6 +185,8 @@ export type ModuoRuntime = {
     unlockWithPin(pin: string): RuntimeResult<{ session: RuntimeSession | null }>;
     removePin(): Promise<{ error: { message: string } | null }>;
     updateDisplayName(displayName: string): RuntimeResult<{ displayName: string }>;
+    /** Writes `profiles.avatar_url`. Pass null to clear the picture. */
+    updateAvatarUrl(avatarUrl: string | null): RuntimeResult<{ avatarUrl: string | null }>;
     getStoredMnemonic(): RuntimeResult<{ phrase: string | null }>;
     getSession(): RuntimeResult<{ session: RuntimeSession | null }>;
     refreshSession(): RuntimeResult<{
@@ -222,6 +224,11 @@ export type ModuoRuntime = {
     list(): Promise<any[]>;
     create(name: string): Promise<any>;
     rename(workspaceId: string, name: string): Promise<any>;
+    /** Owner-only. `icon` and `logoUrl` are alternatives — one of them is null. */
+    updateBranding(
+      workspaceId: string,
+      branding: { icon: string | null; logoUrl: string | null },
+    ): Promise<any>;
     leave(workspaceId: string): Promise<void>;
     softDelete(workspaceId: string): Promise<void>;
     issueInvite(

@@ -72,6 +72,8 @@ export function mapWorkspace(row: any, currentUserId?: string): WorkspaceSummary
   return {
     id: row.id,
     name: row.name,
+    icon: typeof row.icon === "string" && row.icon.trim() ? row.icon : null,
+    logoUrl: row.logo_url ?? row.logoUrl ?? null,
     role: isOwner ? "owner" : normalizeMemberRole(mine?.role ?? row.role ?? "owner"),
     permissions: {
       notes: mine

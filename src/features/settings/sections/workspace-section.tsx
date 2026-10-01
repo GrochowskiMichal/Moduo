@@ -12,12 +12,11 @@ import {
   User,
   UserMinus,
   UserPlus,
-  Users,
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import {
@@ -43,6 +42,9 @@ import type { WorkspaceMember, WorkspaceRole } from "../../../features/workspace
 import { useEntitlement } from "../../../hooks/use-entitlement";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
+import { normalizeWorkspaceIcon } from "../../branding/image-asset";
+import { clearWorkspaceLogo, uploadWorkspaceLogo } from "../../branding/upload-image";
+import { WorkspaceMark, WorkspaceMarkPicker } from "../../workspaces/ui/workspace-mark";
 
 import { SettingsSectionShell } from "./section-shell";
 
@@ -106,10 +108,19 @@ function RolePicker({
   );
 }
 
-function MemberAvatar({ name, email }: { name?: string; email?: string }) {
+function MemberAvatar({
+  name,
+  email,
+  avatarUrl,
+}: {
+  name?: string;
+  email?: string;
+  avatarUrl?: string | null;
+}) {
   const letter = (name ?? email ?? "?").trim().slice(0, 1).toUpperCase();
   return (
     <Avatar size="sm" className="shrink-0">
+      {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
       <AvatarFallback>{letter}</AvatarFallback>
     </Avatar>
   );
@@ -145,6 +156,7 @@ export function WorkspaceSection() {
     transferOwnership,
     leaveWorkspace,
     renameWorkspace,
+    updateWorkspaceBranding,
     softDeleteWorkspace,
     createWorkspace,
     selectWorkspace,
@@ -180,6 +192,7 @@ export function WorkspaceSection() {
   const [upgradeAddOpen, setUpgradeAddOpen] = useState(false);
   const [newName, setNewName] = useState("New Workspace");
   const [addSubmitting, setAddSubmitting] = useState(false);
+  const [markBusy, setMarkBusy] = useState(false);
 
   // Refresh the roster when the section mounts (parity with the retired modal's
   // on-open refresh), and reset transient link/confirm state on workspace change.
@@ -216,6 +229,56 @@ export function WorkspaceSection() {
   const canLeave = callerRole !== "owner" && workspaces.length > 1;
   const canDelete = isOwner && workspaces.length > 1;
   const nameChanged = nameDraft.trim().length > 0 && nameDraft.trim() !== selectedWorkspace?.name;
+
+  const applyBranding = async (branding: { icon: string | null; logoUrl: string | null }) => {
+    if (!selectedWorkspaceId || markBusy) return;
+    setMarkBusy(true);
+    try {
+      await updateWorkspaceBranding(selectedWorkspaceId, branding);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't update the workspace icon.");
+    } finally {
+      setMarkBusy(false);
+    }
+  };
+
+  const handlePickIcon = (raw: string) => {
+    const icon = normalizeWorkspaceIcon(raw);
+    if (!icon) {
+      toast.error("Use a single emoji.");
+      return;
+    }
+    if (selectedWorkspaceId && selectedWorkspace?.logoUrl) {
+      void clearWorkspaceLogo(selectedWorkspaceId).catch(() => {});
+    }
+    void applyBranding({ icon, logoUrl: null });
+  };
+
+  const handlePickLogo = async (file: File) => {
+    if (!selectedWorkspaceId || markBusy) return;
+    setMarkBusy(true);
+    try {
+      const logoUrl = await uploadWorkspaceLogo(selectedWorkspaceId, file);
+      await updateWorkspaceBranding(selectedWorkspaceId, { icon: null, logoUrl });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't upload the logo.");
+    } finally {
+      setMarkBusy(false);
+    }
+  };
+
+  const handleClearMark = async () => {
+    if (!selectedWorkspaceId || markBusy) return;
+    setMarkBusy(true);
+    try {
+      await clearWorkspaceLogo(selectedWorkspaceId).catch(() => {});
+      await updateWorkspaceBranding(selectedWorkspaceId, { icon: null, logoUrl: null });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't remove the workspace icon.");
+    } finally {
+      setMarkBusy(false);
+    }
+  };
 
   const handleRename = async () => {
     if (!selectedWorkspaceId || !nameChanged || renaming) return;
@@ -383,9 +446,26 @@ export function WorkspaceSection() {
           {/* Identity + rename */}
           <WsGroup label="Workspace">
             <div className="flex items-start gap-4">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-border bg-muted text-muted-foreground">
-                <Users className="size-5" aria-hidden />
-              </span>
+              {isOwner ? (
+                <WorkspaceMarkPicker
+                  name={selectedWorkspace.name}
+                  icon={selectedWorkspace.icon}
+                  logoUrl={selectedWorkspace.logoUrl}
+                  busy={markBusy}
+                  className="size-10"
+                  onPickIcon={handlePickIcon}
+                  onPickLogo={(file) => void handlePickLogo(file)}
+                  onInvalidLogo={(message) => toast.error(message)}
+                  onClear={() => void handleClearMark()}
+                />
+              ) : (
+                <WorkspaceMark
+                  name={selectedWorkspace.name}
+                  icon={selectedWorkspace.icon}
+                  logoUrl={selectedWorkspace.logoUrl}
+                  className="size-10"
+                />
+              )}
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 {/* Only the owner can rename — the `workspaces` UPDATE RLS is
                     owner-only (`owner_id = auth.uid()`), so an admin's client-side
@@ -584,7 +664,11 @@ export function WorkspaceSection() {
                     className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2 transition-colors hover:bg-muted/60"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <MemberAvatar name={member.displayName ?? undefined} email={member.userId} />
+                      <MemberAvatar
+                        name={member.displayName ?? undefined}
+                        email={member.userId}
+                        avatarUrl={member.avatarUrl}
+                      />
                       <div className="min-w-0">
                         <p className="truncate text-sm text-foreground">
                           {label}

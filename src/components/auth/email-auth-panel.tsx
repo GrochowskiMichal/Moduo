@@ -104,7 +104,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
   }, [runtime, cloudAuth]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !avatarDataUrl) return;
     void writeStoredAvatar(runtime, avatarDataUrl).then(() => notifyProfileUpdated());
   }, [avatarDataUrl, runtime]);
 
