@@ -5,7 +5,7 @@
 
 import { useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, MoreHorizontal, Plus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { LABEL_COLORS } from "../../../components/tag-colors";
 import { Button } from "../../../components/ui/button";
 import { Calendar } from "../../../components/ui/calendar";
@@ -27,6 +27,8 @@ import { parseDayKey } from "../lens";
 import type { CalendarPrefs } from "../prefs";
 
 type Props = {
+  /** Booking links, rendered under the calendar list. */
+  footer?: ReactNode;
   /** The grid's anchor day (local day start). */
   anchor: Date;
   onSelectDate: (day: Date) => void;
@@ -64,6 +66,7 @@ export function CalendarRail({
   onRecolorAccount,
   onRemoveAccount,
   onReconnectAccount,
+  footer,
 }: Props) {
   const navigate = useNavigate();
   const [month, setMonth] = useState<Date>(anchor);
@@ -231,6 +234,7 @@ export function CalendarRail({
           Connect calendar…
         </Button>
       </div>
+      {footer}
     </div>
   );
 }

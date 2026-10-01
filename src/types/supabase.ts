@@ -799,76 +799,94 @@ export type Database = {
         Row: {
           buffer_after_minutes: number
           buffer_before_minutes: number
+          busy_calendar_ids: Json
           conflict_calendars: string
           created_at: string
           date_range_days: number
           description: string
           duration_minutes: number
+          host_timezone: string
           id: string
           link_name: string
           location_type: string
+          min_notice_minutes: number
           name: string
+          note_enabled: boolean
           owner_avatar_url: string | null
           owner_display_name: string | null
           owner_email: string | null
           owner_handle: string
           owner_user_id: string
+          paused: boolean
           questions_json: Json
           schedule_type: string
           slot_id: string
           slug: string
           updated_at: string
           video_provider: string | null
+          weekly_hours: Json
           workspace_id: string | null
         }
         Insert: {
           buffer_after_minutes?: number
           buffer_before_minutes?: number
+          busy_calendar_ids?: Json
           conflict_calendars?: string
           created_at?: string
           date_range_days?: number
           description?: string
           duration_minutes?: number
+          host_timezone?: string
           id?: string
           link_name?: string
           location_type?: string
+          min_notice_minutes?: number
           name?: string
+          note_enabled?: boolean
           owner_avatar_url?: string | null
           owner_display_name?: string | null
           owner_email?: string | null
           owner_handle?: string
           owner_user_id: string
+          paused?: boolean
           questions_json?: Json
           schedule_type?: string
           slot_id: string
           slug: string
           updated_at?: string
           video_provider?: string | null
+          weekly_hours?: Json
           workspace_id?: string | null
         }
         Update: {
           buffer_after_minutes?: number
           buffer_before_minutes?: number
+          busy_calendar_ids?: Json
           conflict_calendars?: string
           created_at?: string
           date_range_days?: number
           description?: string
           duration_minutes?: number
+          host_timezone?: string
           id?: string
           link_name?: string
           location_type?: string
+          min_notice_minutes?: number
           name?: string
+          note_enabled?: boolean
           owner_avatar_url?: string | null
           owner_display_name?: string | null
           owner_email?: string | null
           owner_handle?: string
           owner_user_id?: string
+          paused?: boolean
           questions_json?: Json
           schedule_type?: string
           slot_id?: string
           slug?: string
           updated_at?: string
           video_provider?: string | null
+          weekly_hours?: Json
           workspace_id?: string | null
         }
         Relationships: []
@@ -1391,10 +1409,14 @@ export type Database = {
       }
       slot_bookings: {
         Row: {
+          answers_json: Json
           attendee_email: string
           attendee_name: string
           attendee_notes: string | null
+          calendar_event_id: string | null
           calendar_synced: boolean
+          cancel_token: string | null
+          contact_id: string | null
           created_at: string
           end_at: string
           id: string
@@ -1408,10 +1430,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          answers_json?: Json
           attendee_email?: string
           attendee_name?: string
           attendee_notes?: string | null
+          calendar_event_id?: string | null
           calendar_synced?: boolean
+          cancel_token?: string | null
+          contact_id?: string | null
           created_at?: string
           end_at: string
           id?: string
@@ -1425,10 +1451,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          answers_json?: Json
           attendee_email?: string
           attendee_name?: string
           attendee_notes?: string | null
+          calendar_event_id?: string | null
           calendar_synced?: boolean
+          cancel_token?: string | null
+          contact_id?: string | null
           created_at?: string
           end_at?: string
           id?: string
@@ -4248,6 +4278,10 @@ export type Database = {
       spine_pair_key: {
         Args: { a_id: string; a_type: string; b_id: string; b_type: string }
         Returns: string
+      }
+      booking_google_connected: {
+        Args: never
+        Returns: boolean
       }
       tasks_module_can_access_workspace: {
         Args: { p_workspace_id: string }

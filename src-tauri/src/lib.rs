@@ -377,6 +377,7 @@ pub fn run() {
             commands::email::search::email_search_bodies,
             commands::email::search::email_search_server,
             commands::calendar::calendar_google_oauth_start,
+            commands::calendar::calendar_google_publish_booking_token,
             commands::calendar::calendar_outlook_oauth_start,
             commands::calendar::calendar_apple_oauth_start,
             commands::calendar::calendar_google_events_sync,
