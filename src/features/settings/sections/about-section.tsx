@@ -1,5 +1,6 @@
-import { RefreshCw } from "lucide-react";
+import { Apple, MonitorDown, RefreshCw } from "lucide-react";
 
+import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { useAuth } from "../../../providers/auth-provider";
 import { UpdateBanner } from "../../updater/update-banner";
@@ -10,6 +11,8 @@ import {
   ABOUT_STORAGE_LINE,
   ABOUT_TAGLINE,
   IS_DESKTOP,
+  IS_STAGING_PORTAL,
+  STAGING_DESKTOP_DOWNLOADS,
   versionLabel,
 } from "../about";
 import { SettingsSectionShell } from "./section-shell";
@@ -77,6 +80,35 @@ export function AboutSection() {
             <dd className="mt-1 text-foreground">{ABOUT_RUNTIME_LINE}</dd>
           </div>
         </dl>
+
+        {IS_STAGING_PORTAL ? (
+          <div className="mt-6 border-t border-border pt-4">
+            <Eyebrow className="mb-2">Desktop app</Eyebrow>
+            <p className="mb-3 text-sm text-muted-foreground">
+              Current staging installers. The same browser must be signed into GitHub to download
+              them.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {STAGING_DESKTOP_DOWNLOADS.map((download) => (
+                <Button key={download.href} asChild variant="outline" size="sm">
+                  <a
+                    href={download.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={openExternal(download.href)}
+                  >
+                    {download.platform === "mac" ? (
+                      <Apple aria-hidden />
+                    ) : (
+                      <MonitorDown aria-hidden />
+                    )}
+                    {download.label}
+                  </a>
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <nav
           aria-label="About links"

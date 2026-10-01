@@ -1,11 +1,10 @@
 // The calendar left rail: mini-month navigator + the calendar list. The list is
 // the account map (CAL-6, §3a): native Moduo first, then each connected account
 // with its hue swatch + a visibility toggle. Hiding an account drops its
-// mirrored events from the grid. "+ Connect calendar…" routes to Settings.
+// mirrored events from the grid. "+ Connect calendar…" opens Integrations.
 
-import { useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, MoreHorizontal, Plus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { LABEL_COLORS } from "../../../components/tag-colors";
 import { Button } from "../../../components/ui/button";
 import { Calendar } from "../../../components/ui/calendar";
@@ -21,12 +20,15 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
+import { dispatchOpenSettings } from "../../settings/settings-events";
 import { groupRailAccounts, providerLabel } from "../accounts";
 import type { CalendarAccountModel } from "../events";
 import { parseDayKey } from "../lens";
 import type { CalendarPrefs } from "../prefs";
 
 type Props = {
+  /** Booking links, rendered under the calendar list. */
+  footer?: ReactNode;
   /** The grid's anchor day (local day start). */
   anchor: Date;
   onSelectDate: (day: Date) => void;
@@ -64,8 +66,8 @@ export function CalendarRail({
   onRecolorAccount,
   onRemoveAccount,
   onReconnectAccount,
+  footer,
 }: Props) {
-  const navigate = useNavigate();
   const [month, setMonth] = useState<Date>(anchor);
   useEffect(() => {
     setMonth(anchor);
@@ -195,7 +197,7 @@ export function CalendarRail({
           Calendars
         </Eyebrow>
 
-        {/* Native Moduo — always on (the only writable calendar). */}
+        {/* Native Moduo — always on. */}
         <div
           className="flex items-center gap-2 rounded-md px-1"
           style={{ minHeight: "var(--row-h-sm)" }}
@@ -204,9 +206,8 @@ export function CalendarRail({
           <span className="min-w-0 flex-1 truncate text-sm text-foreground">Moduo</span>
         </div>
 
-        {/* Connected accounts (mirrored, read-only) — the account map. OAuth
-            accounts are flat rows; CalDAV calendars group under their account
-            header, ICS feeds under "Feeds". */}
+        {/* Connected accounts. Google calendars are a two-way copy; CalDAV
+            and ICS stay read-only mirrors. */}
         {railGroups.map((group) => {
           if (group.kind === "flat") {
             return renderAccountRow(group.row.account, group.row.label);
@@ -225,12 +226,13 @@ export function CalendarRail({
           variant="ghost"
           size="sm"
           className="justify-start text-muted-foreground"
-          onClick={() => void navigate({ to: "/settings" })}
+          onClick={() => dispatchOpenSettings({ section: "integrations" })}
         >
           <Plus aria-hidden />
           Connect calendar…
         </Button>
       </div>
+      {footer}
     </div>
   );
 }

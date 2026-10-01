@@ -255,6 +255,15 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     [refreshWorkspaces, runtime],
   );
 
+  const updateWorkspaceBranding = useCallback(
+    async (workspaceId: string, branding: { icon: string | null; logoUrl: string | null }) => {
+      if (!runtime) return;
+      await runtime.workspace.updateBranding(workspaceId, branding);
+      await refreshWorkspaces();
+    },
+    [refreshWorkspaces, runtime],
+  );
+
   const leaveWorkspace = useCallback(
     async (workspaceId: string) => {
       if (!runtime) return;
@@ -518,6 +527,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       refreshAccessData,
       createWorkspace,
       renameWorkspace,
+      updateWorkspaceBranding,
       leaveWorkspace,
       softDeleteWorkspace,
       sendInvite,
@@ -552,6 +562,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       refreshNotifications,
       refreshWorkspaces,
       renameWorkspace,
+      updateWorkspaceBranding,
       revokeInvite,
       selectedWorkspace,
       selectedWorkspaceId,

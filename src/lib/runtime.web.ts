@@ -381,6 +381,24 @@ export const webRuntime: ModuoRuntime = {
       }
     },
 
+    async updateAvatarUrl(avatarUrl: string | null) {
+      try {
+        const user = await getAuthedUser();
+        if (!user) return { data: { avatarUrl }, error: { message: "Not authenticated" } };
+        const { error } = await supabaseClient
+          .from("profiles")
+          .update({ avatar_url: avatarUrl })
+          .eq("id", user.id)
+          .select("avatar_url")
+          .single();
+        if (error) return { data: { avatarUrl }, error: toError(error) };
+        bootReads.invalidate(`profile:${user.id}`);
+        return { data: { avatarUrl }, error: null };
+      } catch (error) {
+        return { data: { avatarUrl }, error: toError(error) };
+      }
+    },
+
     async getStoredMnemonic() {
       return { data: { phrase: null }, error: desktopOnly() };
     },
@@ -552,6 +570,16 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
       return data;
     },
+    async updateBranding(workspaceId, branding) {
+      const { data, error } = await supabaseClient
+        .from("workspaces")
+        .update({ icon: branding.icon, logo_url: branding.logoUrl })
+        .eq("id", workspaceId)
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+      return data;
+    },
     async leave(workspaceId) {
       const user = await getAuthedUser();
       if (!user) throw new Error("Not authenticated");
@@ -587,42 +615,22 @@ export const webRuntime: ModuoRuntime = {
       return data;
     },
     async joinInvite(token) {
-      const { data: invite, error: inviteError } = await supabaseClient
-        .from("workspace_invites")
-        .select("*")
-        .eq("token", token)
-        .eq("status", "pending")
-        .single();
-      if (inviteError || !invite) throw new Error("Invalid or expired invite");
-      const user = await getAuthedUser();
-      if (!user) throw new Error("Not authenticated");
-      // The invite stores the rich app vocabulary (role `editor`; perms
-      // view/edit/admin), but `workspace_members` CHECK constraints only accept
-      // the legacy vocabularies — role ∈ {owner,admin,member,viewer}, perms ∈
-      // {read,write,none}. Copying the invite verbatim made EVERY real redemption
-      // fail a CHECK. Normalize at the member-insert boundary. DF-24.
-      const { error: memberError } = await supabaseClient.from("workspace_members").insert({
-        workspace_id: invite.workspace_id,
-        user_id: user.id,
-        role: toMemberRole(invite.role),
-        permissions_notes: toMemberPerm(invite.permissions_notes),
-        permissions_tasks: toMemberPerm(invite.permissions_tasks),
+      // The invite row is invisible to the recipient (SELECT is owner/admin
+      // only). Redemption goes through a definer function that checks the token.
+      const { data, error } = await supabaseClient.rpc("workspace_op_accept_invite", {
+        p_token: token.trim(),
       });
-      if (memberError) {
-        // Duplicate membership → a friendlier message than the raw PG unique error.
-        if (
-          memberError.code === "23505" ||
-          /duplicate key|already exists/i.test(memberError.message)
-        ) {
+      if (error) {
+        const message = error.message ?? "";
+        if (/already a member/i.test(message)) {
           throw new Error("You're already a member of this workspace.");
         }
-        throw new Error(memberError.message);
+        if (/invalid or expired|not authenticated/i.test(message)) {
+          throw new Error("Invalid or expired invite");
+        }
+        throw new Error(message);
       }
-      await supabaseClient
-        .from("workspace_invites")
-        .update({ status: "accepted" })
-        .eq("id", invite.id);
-      return invite;
+      return data;
     },
     async listMembers(workspaceId) {
       const { data, error } = await supabaseClient
@@ -1863,9 +1871,14 @@ export const webRuntime: ModuoRuntime = {
         removed: Number(data?.removed ?? 0),
       };
     },
-    // Web is not the sync writer — the desktop app fetches from providers.
-    async fetchExternalEvents() {
-      return [];
+    // Outlook, CalDAV, and ICS still sync from the desktop keychain. Google
+    // uses the refresh token stored at connect, so the web app can mirror it.
+    // Throwing (rather than returning []) keeps the sync loop from tombstoning
+    // a provider this runtime cannot read.
+    async fetchExternalEvents({ provider, externalAccountId, timeMin, timeMax }) {
+      if (provider !== "google") throw new Error("web_provider_sync_skipped");
+      const { fetchGoogleWebEvents } = await import("../features/calendar/google-web");
+      return fetchGoogleWebEvents({ externalAccountId, timeMin, timeMax });
     },
   },
 
@@ -3385,6 +3398,7 @@ function calendarEventRowToModel(raw: unknown): CalendarEventModel {
     allDay: Boolean(r.all_day),
     rrule: r.recurrence_rule ?? null,
     status: r.status ?? "confirmed",
+    location: r.location ?? null,
     color: r.color ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,

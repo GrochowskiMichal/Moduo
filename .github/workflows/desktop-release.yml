@@ -63,6 +63,13 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
+      # GitHub's macOS image already has stable for Apple Silicon. `toolchain install
+      # --target` then no-ops and never adds the Intel stdlib, so universal builds fail.
+      - name: Ensure Intel macOS target is installed
+        run: |
+          rustup target add x86_64-apple-darwin
+          rustup target list --installed | grep -qx x86_64-apple-darwin
+
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -108,7 +115,7 @@ jobs:
           PUBLIC_STRIPE_PRICE_PRO_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_YEARLY }}
           PUBLIC_STRIPE_PRICE_TEAM_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_MONTHLY }}
           PUBLIC_STRIPE_PRICE_TEAM_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_YEARLY }}
-          PUBLIC_WEB_ORIGIN: "https://staging.moduo.app"
+          PUBLIC_WEB_ORIGIN: "https://app.staging.moduo.app"
           PUBLIC_STAGING_PORTAL: "true"
 
       - name: Notarise the .dmg
@@ -191,7 +198,7 @@ jobs:
           PUBLIC_STRIPE_PRICE_PRO_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_YEARLY }}
           PUBLIC_STRIPE_PRICE_TEAM_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_MONTHLY }}
           PUBLIC_STRIPE_PRICE_TEAM_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_YEARLY }}
-          PUBLIC_WEB_ORIGIN: "https://staging.moduo.app"
+          PUBLIC_WEB_ORIGIN: "https://app.staging.moduo.app"
           PUBLIC_STAGING_PORTAL: "true"
 
       # Rename to stable filename

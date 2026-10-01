@@ -35,6 +35,8 @@ const mockWorkspace: WorkspaceContextValue = {
     {
       id: "w1",
       name: "Storybook Workspace",
+      icon: null,
+      logoUrl: null,
       role: "owner",
       permissions: { notes: "edit", tasks: "edit" },
       isDeleted: false,
@@ -46,6 +48,8 @@ const mockWorkspace: WorkspaceContextValue = {
   selectedWorkspace: {
     id: "w1",
     name: "Storybook Workspace",
+    icon: null,
+    logoUrl: null,
     role: "owner",
     permissions: { notes: "edit", tasks: "edit" },
     isDeleted: false,
@@ -67,6 +71,7 @@ const mockWorkspace: WorkspaceContextValue = {
   refreshAccessData: async () => {},
   createWorkspace: async () => null,
   renameWorkspace: async () => {},
+  updateWorkspaceBranding: async () => {},
   leaveWorkspace: async () => {},
   softDeleteWorkspace: async () => {},
   sendInvite: async () => {},

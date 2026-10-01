@@ -185,6 +185,8 @@ export type ModuoRuntime = {
     unlockWithPin(pin: string): RuntimeResult<{ session: RuntimeSession | null }>;
     removePin(): Promise<{ error: { message: string } | null }>;
     updateDisplayName(displayName: string): RuntimeResult<{ displayName: string }>;
+    /** Writes `profiles.avatar_url`. Pass null to clear the picture. */
+    updateAvatarUrl(avatarUrl: string | null): RuntimeResult<{ avatarUrl: string | null }>;
     getStoredMnemonic(): RuntimeResult<{ phrase: string | null }>;
     getSession(): RuntimeResult<{ session: RuntimeSession | null }>;
     refreshSession(): RuntimeResult<{
@@ -222,6 +224,11 @@ export type ModuoRuntime = {
     list(): Promise<any[]>;
     create(name: string): Promise<any>;
     rename(workspaceId: string, name: string): Promise<any>;
+    /** Owner-only. `icon` and `logoUrl` are alternatives — one of them is null. */
+    updateBranding(
+      workspaceId: string,
+      branding: { icon: string | null; logoUrl: string | null },
+    ): Promise<any>;
     leave(workspaceId: string): Promise<void>;
     softDelete(workspaceId: string): Promise<void>;
     issueInvite(
@@ -725,11 +732,11 @@ export type ModuoRuntime = {
     }): Promise<{ upserted: number; removed: number }>;
 
     /**
-     * Desktop only (CAL-6b): fetch a connected account's RAW provider events
-     * for a window via the Tauri OAuth engine. The frontend maps them
-     * (mirror.ts) and pushes them through {@link mirrorEvents}. Web returns []
-     * (the sync writer is the desktop app). `externalAccountId` is the provider
-     * account id (the keychain key / the cloud account's `externalId`).
+     * Fetch a connected account's RAW provider events for a window. Desktop
+     * uses the Tauri OAuth engine. Web fetches Google through the stored
+     * refresh token and throws for providers it cannot read (so the sync
+     * loop does not treat "unsupported" as "this calendar is empty").
+     * `externalAccountId` is the provider account id.
      */
     fetchExternalEvents(input: {
       provider: "google" | "microsoft" | "caldav" | "ics";
