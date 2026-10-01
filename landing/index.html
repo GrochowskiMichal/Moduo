@@ -3086,7 +3086,7 @@
             <div class="container story-grid">
               <div class="story-copy">
                 <ol class="steps">
-                  <li><button class="step" type="button"><span class="n">01</span><span class="h">A message lands.</span><span class="p"><span class="pi"><span class="pt">Tomasz passes on the client’s ask: demo on Thursday, and the 15th still stands.</span></span></span></button></li>
+                  <li><button class="step" type="button"><span class="n">01</span><span class="h">A message lands.</span><span class="p"><span class="pi"><span class="pt">Anna asks for a demo on Thursday — and the 15th still stands.</span></span></span></button></li>
                   <li><button class="step" type="button"><span class="n">02</span><span class="h">Moduo reads it.</span><span class="p"><span class="pi"><span class="pt">It spots the meeting, the deadline and the project, and links each one. Nobody tagged anything.</span></span></span></button></li>
                   <li><button class="step" type="button"><span class="n">03</span><span class="h">It finds what’s left.</span><span class="p"><span class="pi"><span class="pt">Three subtasks are still open before the 15th. Tick one off right here.</span></span></span></button></li>
                   <li><button class="step" type="button"><span class="n">04</span><span class="h">It remembers the client.</span><span class="p"><span class="pi"><span class="pt">Anna signed Phase 1 in June. Same client, same thread, the whole history one hop away.</span></span></span></button></li>
@@ -3105,12 +3105,12 @@
                   <div class="rel" id="rel">
                     <svg class="rel-edges" id="rel-edges" aria-hidden="true"></svg>
 
-                    <div class="rel-toast" id="rel-toast" aria-hidden="true"><span class="av">TW</span><span>New mail · <b>Tomasz Wiśniewski</b></span></div>
+                    <div class="rel-toast" id="rel-toast" aria-hidden="true"><span class="av">AC</span><span>New mail · <b>Anna Carter</b></span></div>
 
                     <article class="rn rn-mail" data-id="mail" data-s="0" style="--d: 750ms">
-                      <div class="who"><span class="av">TW</span><b>Tomasz</b><span class="tag">Team</span><span class="t">9:41</span></div>
-                      <div class="subj">Re: Carter demo</div>
-                      <p class="rn-body" id="rel-body">Client wants the <mark data-to="cal" style="--d: 350ms">demo on Thursday</mark>. Can we still hit <mark data-to="due" style="--d: 600ms">the 15th</mark> for <mark data-to="proj" style="--d: 850ms">Carter Phase 2</mark>?<span class="beam" id="rel-beam"></span></p>
+                      <div class="who"><span class="av">AC</span><b>Anna Carter</b><span class="tag">Client</span><span class="t">9:41</span></div>
+                      <div class="subj">Phase 2 demo</div>
+                      <p class="rn-body" id="rel-body">Could we do the <mark data-to="cal" style="--d: 350ms">demo on Thursday</mark>? Can you still hit <mark data-to="due" style="--d: 600ms">the 15th</mark> for <mark data-to="proj" style="--d: 850ms">Carter Phase 2</mark>?<span class="beam" id="rel-beam"></span></p>
                     </article>
 
                     <article class="rn" data-id="proj" data-s="1" style="--d: 1450ms">
@@ -3136,7 +3136,7 @@
                       <div class="rn-kind"><svg class="icon icon-xs" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</div>
                       <div class="rn-title">Demo with Anna</div>
                       <div class="rn-sub">Thursday · 14:00 – 15:00</div>
-                      <div class="avs"><span class="av">AC</span><span class="av">TW</span><span class="av">MG</span><span>3 attending</span></div>
+                      <div class="avs"><span class="av">AC</span><span class="av">JR</span><span class="av">MG</span><span>3 attending</span></div>
                     </article>
 
                     <article class="rn" data-id="contact" data-s="3" style="--d: 150ms">
@@ -3402,13 +3402,13 @@
         var GROUPS = ["contacts", "tasks", "mail", "notes", "calendar", "deals", "time", "invoices", "goals", "mindmap"];
         var ITEMS = [
           { id: "p1", mod: "contacts", title: "Anna Carter", meta: "Carter Studio · 14 linked", body: "Every email, task, note and meeting with Anna — in one place. Nobody logged any of it.", links: ["e1", "t1", "d1", "c1"] },
-          { id: "p2", mod: "contacts", title: "Marta Nowak", meta: "Print & logo files · 6 linked", body: "Owns the logo files. Promised final SVGs by Friday — and Moduo remembers she did.", links: ["e2", "t2", "n1"] },
+          { id: "p2", mod: "contacts", title: "Maya Brooks", meta: "Print & logo files · 6 linked", body: "Owns the logo files. Promised final SVGs by Friday — and Moduo remembers she did.", links: ["e2", "t2", "n1"] },
           { id: "t1", mod: "tasks", title: "Send Anna the revised brand deck", meta: "Today · Carter rebrand", body: "Made from Anna’s email with one key. The email is still attached; so is Anna.", links: ["e1", "c1", "p1"] },
-          { id: "t2", mod: "tasks", title: "Get final SVGs from Marta", meta: "Friday · from the kickoff note", body: "Was a checkbox in a meeting note. Now it’s a real task with a date — in both places.", links: ["n1", "e2", "p2"] },
+          { id: "t2", mod: "tasks", title: "Get final SVGs from Maya", meta: "Friday · from the kickoff note", body: "Was a checkbox in a meeting note. Now it’s a real task with a date — in both places.", links: ["n1", "e2", "p2"] },
           { id: "t3", mod: "tasks", title: "Write the launch landing copy", meta: "Next week · from the launch map", body: "Was a branch on the launch map. One click turned it into a task.", links: ["m1", "n2"] },
           { id: "e1", mod: "mail", title: "Brief: Carter rebrand", meta: "Anna Carter · 9:12", body: "“Attaching the brief — we want the new identity live before the autumn launch.”", links: ["t1", "n1", "p1"] },
-          { id: "e2", mod: "mail", title: "Re: logo files", meta: "Marta Nowak · Yesterday", body: "“Final SVGs Friday morning, promise.”", links: ["t2", "p2"] },
-          { id: "n1", mod: "notes", title: "Kickoff — Carter rebrand", meta: "Edited 2 min ago", body: "Anna wants it live before the launch. Marta owns the logo files; print needs SVGs by Friday.", links: ["e1", "t2", "p1", "p2"] },
+          { id: "e2", mod: "mail", title: "Re: logo files", meta: "Maya Brooks · Yesterday", body: "“Final SVGs Friday morning, promise.”", links: ["t2", "p2"] },
+          { id: "n1", mod: "notes", title: "Kickoff — Carter rebrand", meta: "Edited 2 min ago", body: "Anna wants it live before the launch. Maya owns the logo files; print needs SVGs by Friday.", links: ["e1", "t2", "p1", "p2"] },
           { id: "n2", mod: "notes", title: "Launch brainstorm", meta: "14 September", body: "Everything we said at the whiteboard, typed up and linked to the plan.", links: ["m1", "t3"] },
           { id: "c1", mod: "calendar", title: "Brand deck review", meta: "Friday 11:00–12:30", body: "Anna’s on the invite. The deck task and the kickoff note are one click away.", links: ["t1", "n1", "p1"] },
           { id: "c2", mod: "calendar", title: "Launch go / no-go", meta: "Friday 16:30", body: "The launch map is attached, so the room sees the whole plan.", links: ["m1", "n2"] },
@@ -3659,7 +3659,7 @@
           { a: "mail", b: "proj", s: 1, d: 850, t: 650, why: "the project" },
           { a: "proj", b: "cal", s: 2, d: 900, t: 800, why: "due before demo" },
           { a: "cal", b: "contact", s: 3, d: 250, t: 600, why: "attendee" },
-          { a: "mail", b: "contact", s: 3, d: 400, t: 650, why: "same client" },
+          { a: "mail", b: "contact", s: 3, d: 400, t: 650, why: "sender" },
           { a: "contact", b: "deal", s: 3, d: 750, t: 600, why: "signed" },
           { a: "time", b: "inv", s: 4, d: 950, t: 700, why: "38h 20m" },
           { a: "deal", b: "inv", s: 4, d: 1100, t: 700, why: "not billed" },
@@ -3840,7 +3840,7 @@
 
         var STATUS = [
           ["Listening for new mail", ""],
-          ["New mail from Tomasz", ""],
+          ["New mail from Anna Carter", ""],
           ["Linked a meeting, a deadline and a project", "ok"],
           ["3 subtasks still open before the 15th", "ok"],
           ["Matched the client: Carter Studio", "ok"],
@@ -4236,7 +4236,7 @@
           ["week-done", "tasks", "This week", 1, "18/24", gen("18/24", "tasks done")],
           ["slipped", "tasks", "Slipped", 1, "2", gen("2", "moved to tomorrow, no drama")],
           ["note", "notes", "Pinned note", 2, "Kickoff", function () {
-            return '<p class="wd-note">Anna wants Phase 2 live before the launch. Marta owns the logo files — print needs SVGs by Friday.</p><div class="sub">Kickoff — Carter Phase 2</div>';
+            return '<p class="wd-note">Anna wants Phase 2 live before the launch. Maya owns the logo files — print needs SVGs by Friday.</p><div class="sub">Kickoff — Carter Phase 2</div>';
           }],
           ["recent-notes", "notes", "Recent notes", 1, "5", gen("5", "edited today")],
           ["unread", "email", "Inbox", 1, "12", gen("12", "3 need a reply · 2 became tasks")],
@@ -4263,7 +4263,7 @@
           ["milestone", "planning", "Next milestone", 1, "15 Oct", gen("15 Oct", "Phase 2 handoff")],
           ["responses", "forms", "Form responses", 1, "48", gen("48", "new from the launch survey")],
           ["shared-docs", "docs", "Shared docs", 1, "5", gen("5", "shared with you this week")],
-          ["reconnect", "contacts", "Reconnect", 1, "Tomasz", gen("Tomasz", "no message in 3 weeks")],
+          ["reconnect", "contacts", "Reconnect", 1, "Jordan", gen("Jordan", "no message in 3 weeks")],
           ["clock", "general", "Clock", 1, "--:--", function () {
             return '<div class="big" data-clock>--:--</div><div class="sub">Local time</div>';
           }, "i-today"],

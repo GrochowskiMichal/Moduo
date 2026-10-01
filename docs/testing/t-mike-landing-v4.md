@@ -16,7 +16,7 @@ Surface: **web**. Preview with `bun run preview:landing` → http://127.0.0.1:87
 ## How it connects (smart relations scroll story)
 
 - [ ] Scrolling keeps the stage pinned; steps advance 01 → 05; the stage is empty ("Listening for new mail") until you reach it
-- [ ] 01: a "New mail · Tomasz" pill drops in, then unfolds into the email card; the words fade in one by one
+- [ ] 01: a "New mail · Anna Carter" pill drops in, then unfolds into the email card; the words fade in one by one
 - [ ] 02: a light sweeps across the email; "demo on Thursday", "the 15th", "Carter Phase 2" highlight and fly out as chips to the Calendar and Project cards; lines draw behind them
 - [ ] 03: the Project card expands: progress ring 4 of 7, three open subtasks. Ticking one strikes it, moves the ring and updates the status line
 - [ ] 04: Client card (Anna, a Jun → Sep → Thu history that draws in) and the Deal "Phase 1 · Won"
