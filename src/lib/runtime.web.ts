@@ -1871,9 +1871,14 @@ export const webRuntime: ModuoRuntime = {
         removed: Number(data?.removed ?? 0),
       };
     },
-    // Web is not the sync writer — the desktop app fetches from providers.
-    async fetchExternalEvents() {
-      return [];
+    // Outlook, CalDAV, and ICS still sync from the desktop keychain. Google
+    // uses the refresh token stored at connect, so the web app can mirror it.
+    // Throwing (rather than returning []) keeps the sync loop from tombstoning
+    // a provider this runtime cannot read.
+    async fetchExternalEvents({ provider, externalAccountId, timeMin, timeMax }) {
+      if (provider !== "google") throw new Error("web_provider_sync_skipped");
+      const { fetchGoogleWebEvents } = await import("../features/calendar/google-web");
+      return fetchGoogleWebEvents({ externalAccountId, timeMin, timeMax });
     },
   },
 

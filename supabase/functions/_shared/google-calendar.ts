@@ -154,6 +154,85 @@ export async function createGoogleMeetEvent(input: {
   return { eventId: json.id, meetLink: meet };
 }
 
+export type GoogleCalendarInfo = { id: string; summary: string; primary: boolean };
+
+export async function listGoogleCalendars(accessToken: string): Promise<GoogleCalendarInfo[]> {
+  const res = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("google_calendars_failed");
+  const json = (await res.json()) as {
+    items?: { id?: string; summary?: string; primary?: boolean }[];
+  };
+  return (json.items ?? [])
+    .filter((item) => typeof item.id === "string" && item.id.length > 0)
+    .map((item) => ({
+      id: item.id as string,
+      summary: item.summary?.trim() || (item.id as string),
+      primary: Boolean(item.primary),
+    }));
+}
+
+export async function listGoogleEvents(input: {
+  accessToken: string;
+  calendarId: string;
+  timeMin: string;
+  timeMax: string;
+}): Promise<Record<string, unknown>[]> {
+  const events: Record<string, unknown>[] = [];
+  let pageToken = "";
+  for (let page = 0; page < 20; page++) {
+    const url = new URL(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events`,
+    );
+    url.searchParams.set("timeMin", input.timeMin);
+    url.searchParams.set("timeMax", input.timeMax);
+    url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("orderBy", "startTime");
+    url.searchParams.set("maxResults", "250");
+    url.searchParams.set("showDeleted", "false");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const res = await fetch(url, { headers: { authorization: `Bearer ${input.accessToken}` } });
+    if (!res.ok) throw new Error("google_events_failed");
+    const json = (await res.json()) as { items?: Record<string, unknown>[]; nextPageToken?: string };
+    events.push(...(json.items ?? []));
+    pageToken = json.nextPageToken ?? "";
+    if (!pageToken) break;
+  }
+  return events;
+}
+
+export async function insertGoogleEvent(input: {
+  accessToken: string;
+  calendarId: string;
+  summary: string;
+  description: string;
+  start: { date?: string; dateTime?: string; timeZone?: string };
+  end: { date?: string; dateTime?: string; timeZone?: string };
+  recurrence?: string[];
+}): Promise<Record<string, unknown>> {
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${input.accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      summary: input.summary,
+      description: input.description,
+      start: input.start,
+      end: input.end,
+      recurrence: input.recurrence,
+    }),
+  });
+  const json = (await res.json()) as Record<string, unknown> & { error?: { message?: string } };
+  if (!res.ok || typeof json.id !== "string") {
+    throw new Error(json.error?.message || "google_event_failed");
+  }
+  return json;
+}
+
 export async function deleteGoogleEvent(accessToken: string, eventId: string): Promise<void> {
   const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?sendUpdates=all`;
   await fetch(url, { method: "DELETE", headers: { authorization: `Bearer ${accessToken}` } });

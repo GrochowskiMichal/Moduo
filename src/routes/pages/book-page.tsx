@@ -21,6 +21,7 @@ import {
   bookingRequest,
   GUEST_ZONES,
 } from "../../features/calendar/booking/public-client";
+import { bookingPublicOrigin } from "../../features/calendar/booking/public-origin";
 import { cn } from "../../lib/utils";
 
 type Phase =
@@ -211,7 +212,7 @@ export function BookPage() {
       name,
       email,
       note,
-      origin: window.location.origin,
+      origin: bookingPublicOrigin(window.location),
       answers: questions.map((question) => ({
         id: question.id,
         value: question.id ? (answers[question.id] ?? "") : "",
