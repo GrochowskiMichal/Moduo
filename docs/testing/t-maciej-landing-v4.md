@@ -2,7 +2,9 @@
 
 Mike's v5 look, rebuilt section by section to match the real app. Round 3 (2 October) covers Maciej's 24-point list on top of v7 (`9ff4407`). Round 4 (the same day) is the final polish: a quieter hero, richer widgets, the Moduo stage in the AI demo, the tax entrance, the new Yours and the values fixes. Round 5 (3 October) trims the hero further and polishes the details.
 
-Surface: **web, localhost only**. Run `PORT=8766 bun scripts/preview-landing.ts`, then open http://127.0.0.1:8766.
+Surface: **web**. Locally, run `PORT=8766 bun scripts/preview-landing.ts`, then open http://127.0.0.1:8766.
+
+Staging: the work is merged into `staging-landing` (c2d8687). Staging keeps its portal at `/`, so the landing is published for review at **https://staging.moduo.app/landing.html** (noindex). The first deploy was blocked by Vercel because the commit author (En5hi) isn't a member of Mike's Vercel project; it goes live once Mike redeploys that commit or adds Maciej to the project. Production (`moduo.app`) changes only when `staging-landing` is promoted to `prod-landing`.
 
 ⚠ Waitlist forms post to the **production** Supabase. They return 403 from localhost:8766 (that origin isn't allowlisted). Don't add it.
 
