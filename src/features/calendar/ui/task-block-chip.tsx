@@ -9,12 +9,11 @@
 // longer) dims with a clock glyph, no strike, still open. CAL-5 adds the live
 // focus treatment: a leading progress edge + elapsed readout while focusing.
 
-import type { ReactNode } from "react";
 import { Clock } from "lucide-react";
-
+import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import { formatTimeOfDay } from "./time-format";
 
 type Props = {

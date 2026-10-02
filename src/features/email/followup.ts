@@ -23,9 +23,7 @@ export function followUpClearedByReply(args: {
   /** When the follow-up was set; a reply must be newer. Null = any reply clears. */
   armedAtMs: number | null;
 }): boolean {
-  const self = new Set(
-    args.selfAddresses.map((a) => a.trim().toLowerCase()).filter(Boolean),
-  );
+  const self = new Set(args.selfAddresses.map((a) => a.trim().toLowerCase()).filter(Boolean));
   return args.messages.some((m) => {
     const from = m.fromEmail.trim().toLowerCase();
     if (!from || self.has(from)) return false; // self-reply never clears (AC7)

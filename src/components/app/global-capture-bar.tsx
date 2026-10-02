@@ -5,26 +5,30 @@
 // three siblings through their own create ops (see features/spine/capture-command).
 // Opened by ⌘⇧K from anywhere (incl. text inputs) and by the bottom-bar button.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Calendar as CalendarIcon, CheckSquare, Contact as ContactIcon, FileText } from "lucide-react";
+import {
+  Calendar as CalendarIcon,
+  CheckSquare,
+  Contact as ContactIcon,
+  FileText,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
-import { CommandDialog } from "../ui/command";
-import { cn } from "../../lib/utils";
-import { onShortcut } from "../../lib/shortcuts";
-import { useAuth } from "../../providers/auth-provider";
-import { useWorkspace } from "../../providers/workspace-provider";
 import { requestDashboardDataRefresh } from "../../features/dashboard/context/dashboard-data-context";
 import {
   CAPTURE_ROUTES,
+  type CaptureRoute,
+  type CaptureTarget,
   canWriteRoute,
   createCapturedEntity,
   isPermissionError,
   parseCaptureCommand,
-  type CaptureRoute,
-  type CaptureTarget,
 } from "../../features/spine/capture-command";
+import { onShortcut } from "../../lib/shortcuts";
+import { cn } from "../../lib/utils";
+import { useAuth } from "../../providers/auth-provider";
+import { useWorkspace } from "../../providers/workspace-provider";
+import { CommandDialog } from "../ui/command";
 import { announceOverlayOpen, onOtherOverlayOpen } from "./global-overlay-events";
 
 const OVERLAY_ID = "capture";

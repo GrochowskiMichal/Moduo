@@ -22,8 +22,12 @@ describe("spineActorName", () => {
   });
 
   it("falls back quietly per actor type", () => {
-    expect(spineActorName({ actorType: "user", actorId: null, actorLabel: null }, "u1")).toBe("Someone");
-    expect(spineActorName({ actorType: "agent", actorId: null, actorLabel: null }, "u1")).toBe("An agent");
+    expect(spineActorName({ actorType: "user", actorId: null, actorLabel: null }, "u1")).toBe(
+      "Someone",
+    );
+    expect(spineActorName({ actorType: "agent", actorId: null, actorLabel: null }, "u1")).toBe(
+      "An agent",
+    );
     expect(spineActorName({ actorType: "api_key", actorId: null, actorLabel: null }, "u1")).toBe(
       "An API client",
     );
@@ -32,9 +36,15 @@ describe("spineActorName", () => {
 
 describe("spineActivityLine", () => {
   it("renders link creation, by kind", () => {
-    expect(spineActivityLine(entry("links.create", { relation_kind: "references" }))).toBe("linked this");
-    expect(spineActivityLine(entry("links.create", { relation_kind: "follow-up" }))).toBe("added a follow-up");
-    expect(spineActivityLine(entry("links.create", { relation_kind: "attachment" }))).toBe("attached this");
+    expect(spineActivityLine(entry("links.create", { relation_kind: "references" }))).toBe(
+      "linked this",
+    );
+    expect(spineActivityLine(entry("links.create", { relation_kind: "follow-up" }))).toBe(
+      "added a follow-up",
+    );
+    expect(spineActivityLine(entry("links.create", { relation_kind: "attachment" }))).toBe(
+      "attached this",
+    );
     expect(spineActivityLine(entry("links.create", { relation_kind: "blocks" }))).toBe(
       "linked this (blocks)",
     );

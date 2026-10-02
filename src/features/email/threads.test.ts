@@ -26,8 +26,22 @@ function env(over: Partial<EmailEnvelope>): EmailEnvelope {
 }
 
 const accounts: SavedAccount[] = [
-  { id: "gmail:a@x.com", provider: "gmail", email: "a@x.com", lastSyncAt: null, status: "active", lastError: null },
-  { id: "icloud:b@me.com", provider: "icloud", email: "b@me.com", lastSyncAt: null, status: "active", lastError: null },
+  {
+    id: "gmail:a@x.com",
+    provider: "gmail",
+    email: "a@x.com",
+    lastSyncAt: null,
+    status: "active",
+    lastError: null,
+  },
+  {
+    id: "icloud:b@me.com",
+    provider: "icloud",
+    email: "b@me.com",
+    lastSyncAt: null,
+    status: "active",
+    lastError: null,
+  },
 ];
 
 describe("shapeInboxThreads", () => {
@@ -35,8 +49,23 @@ describe("shapeInboxThreads", () => {
     const threads = shapeInboxThreads(
       [
         env({ uid: 1, threadId: "t1", read: true, date: "2026-07-01T10:00:00Z", sender: "Alice" }),
-        env({ uid: 2, threadId: "t1", read: false, date: "2026-07-01T12:00:00Z", sender: "Bob", subject: "Re: Hello", preview: "reply" }),
-        env({ uid: 3, threadId: "t2", read: true, starred: true, date: "2026-07-01T09:00:00Z", subject: "Pinned" }),
+        env({
+          uid: 2,
+          threadId: "t1",
+          read: false,
+          date: "2026-07-01T12:00:00Z",
+          sender: "Bob",
+          subject: "Re: Hello",
+          preview: "reply",
+        }),
+        env({
+          uid: 3,
+          threadId: "t2",
+          read: true,
+          starred: true,
+          date: "2026-07-01T09:00:00Z",
+          subject: "Pinned",
+        }),
       ],
       accounts,
     );
@@ -110,8 +139,8 @@ describe("resolveAccountHues", () => {
     // A valid override wins.
     expect(resolveAccountHues(accounts, { "gmail:a@x.com": "pink" })["gmail:a@x.com"]).toBe("pink");
     // An invalid override is ignored (falls back to the deterministic hue).
-    expect(resolveAccountHues(accounts, { "gmail:a@x.com": "chartreuse" })["gmail:a@x.com"]).not.toBe(
-      "chartreuse",
-    );
+    expect(
+      resolveAccountHues(accounts, { "gmail:a@x.com": "chartreuse" })["gmail:a@x.com"],
+    ).not.toBe("chartreuse");
   });
 });

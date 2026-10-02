@@ -6,20 +6,18 @@
  * Tokens-only.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
+  type DragEndEvent,
   DragOverlay,
+  type DragStartEvent,
   PointerSensor,
   pointerWithin,
   useDndMonitor,
   useDraggable,
   useSensor,
   useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
 } from "@dnd-kit/core";
-import { entityDrag } from "@/lib/drag-payload";
 import {
   Archive,
   ArchiveRestore,
@@ -40,6 +38,16 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,24 +58,16 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
 import { Toolbar } from "@/components/ui/toolbar";
+import { entityDrag } from "@/lib/drag-payload";
 import { cn } from "@/lib/utils";
 import type { Note } from "../model";
 import { trashDaysLeft } from "../model";
+import type { NoteSearchResult } from "../search";
 import { displayTitle } from "../title";
 import type { DropZone, NoteSections, NoteTreeNode } from "../tree";
-import type { NoteSearchResult } from "../search";
 
 const ICON_CHOICES = ["📝", "📒", "📌", "💡", "🗂️", "🎯", "🧠", "📚", "🛠️", "🧾", "🌱", "🎨"];
 
@@ -167,9 +167,7 @@ export function NoteTreeSidebar(props: Props) {
     const onMove = (e: PointerEvent) => {
       pointerRef.current = { x: e.clientX, y: e.clientY };
       const next = resolveHover(e.clientX, e.clientY);
-      setHover((prev) =>
-        prev?.id === next?.id && prev?.zone === next?.zone ? prev : next,
-      );
+      setHover((prev) => (prev?.id === next?.id && prev?.zone === next?.zone ? prev : next));
     };
     document.addEventListener("pointermove", onMove, { capture: true });
     return () => document.removeEventListener("pointermove", onMove, { capture: true });
@@ -265,7 +263,10 @@ export function NoteTreeSidebar(props: Props) {
                   >
                     {/* selected marker — the app-wide R5 recipe: quiet accent bar + tint */}
                     {r.id === props.selectedId ? (
-                      <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
+                      <span
+                        className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary"
+                        aria-hidden
+                      />
                     ) : null}
                     <span className="flex w-full items-center gap-1.5">
                       <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -277,7 +278,9 @@ export function NoteTreeSidebar(props: Props) {
                       ) : null}
                     </span>
                     {r.snippet ? (
-                      <span className="line-clamp-2 pl-5 text-xs text-muted-foreground">{r.snippet}</span>
+                      <span className="line-clamp-2 pl-5 text-xs text-muted-foreground">
+                        {r.snippet}
+                      </span>
                     ) : null}
                   </button>
                 </li>
@@ -286,63 +289,78 @@ export function NoteTreeSidebar(props: Props) {
           )
         ) : (
           <>
-        {sections.pinned.length > 0 ? (
-          <Section title="Pinned">
-            {sections.pinned.map((n) => (
-              <NoteRow key={`pin-${n.id}`} note={n} depth={0} childrenNodes={[]} ctx={rowCtx} variant="live" flat />
-            ))}
-          </Section>
-        ) : null}
+            {sections.pinned.length > 0 ? (
+              <Section title="Pinned">
+                {sections.pinned.map((n) => (
+                  <NoteRow
+                    key={`pin-${n.id}`}
+                    note={n}
+                    depth={0}
+                    childrenNodes={[]}
+                    ctx={rowCtx}
+                    variant="live"
+                    flat
+                  />
+                ))}
+              </Section>
+            ) : null}
 
-        <Section title="Inbox">
-          {sections.inbox.length === 0 ? (
-            <div className="px-2 py-1 text-xs text-muted-foreground">Nothing captured yet</div>
-          ) : (
-            sections.inbox.map((n) => (
-              <NoteRow key={n.id} note={n} depth={0} childrenNodes={[]} ctx={rowCtx} variant="live" />
-            ))
-          )}
-        </Section>
+            <Section title="Inbox">
+              {sections.inbox.length === 0 ? (
+                <div className="px-2 py-1 text-xs text-muted-foreground">Nothing captured yet</div>
+              ) : (
+                sections.inbox.map((n) => (
+                  <NoteRow
+                    key={n.id}
+                    note={n}
+                    depth={0}
+                    childrenNodes={[]}
+                    ctx={rowCtx}
+                    variant="live"
+                  />
+                ))
+              )}
+            </Section>
 
-        {sections.tree.length > 0 ? (
-          <Section title="Workspace">
-            {sections.tree.map((t) => (
-              <TreeRows key={t.note.id} node={t} depth={0} ctx={rowCtx} variant="live" />
-            ))}
-          </Section>
-        ) : null}
+            {sections.tree.length > 0 ? (
+              <Section title="Workspace">
+                {sections.tree.map((t) => (
+                  <TreeRows key={t.note.id} node={t} depth={0} ctx={rowCtx} variant="live" />
+                ))}
+              </Section>
+            ) : null}
 
-        {sections.published.length > 0 ? (
-          <Section title="Published">
-            {sections.published.map((n) => (
-              <button
-                key={`pub-${n.id}`}
-                type="button"
-                onClick={() => props.onSelect(n.id)}
-                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Globe className="size-3.5 shrink-0" />
-                <span className="truncate">{displayTitle(n.title)}</span>
-              </button>
-            ))}
-          </Section>
-        ) : null}
+            {sections.published.length > 0 ? (
+              <Section title="Published">
+                {sections.published.map((n) => (
+                  <button
+                    key={`pub-${n.id}`}
+                    type="button"
+                    onClick={() => props.onSelect(n.id)}
+                    className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Globe className="size-3.5 shrink-0" />
+                    <span className="truncate">{displayTitle(n.title)}</span>
+                  </button>
+                ))}
+              </Section>
+            ) : null}
 
-        {sections.archive.length > 0 ? (
-          <Section title="Archive">
-            {sections.archive.map((t) => (
-              <TreeRows key={t.note.id} node={t} depth={0} ctx={rowCtx} variant="archive" />
-            ))}
-          </Section>
-        ) : null}
+            {sections.archive.length > 0 ? (
+              <Section title="Archive">
+                {sections.archive.map((t) => (
+                  <TreeRows key={t.note.id} node={t} depth={0} ctx={rowCtx} variant="archive" />
+                ))}
+              </Section>
+            ) : null}
 
-        {sections.trash.length > 0 ? (
-          <Section title="Trash">
-            {sections.trash.map((t) => (
-              <TreeRows key={t.note.id} node={t} depth={0} ctx={rowCtx} variant="trash" />
-            ))}
-          </Section>
-        ) : null}
+            {sections.trash.length > 0 ? (
+              <Section title="Trash">
+                {sections.trash.map((t) => (
+                  <TreeRows key={t.note.id} node={t} depth={0} ctx={rowCtx} variant="trash" />
+                ))}
+              </Section>
+            ) : null}
           </>
         )}
       </div>
@@ -472,7 +490,13 @@ function TreeRows({
   const isExpanded = ctx.expanded.has(node.note.id);
   return (
     <>
-      <NoteRow note={node.note} depth={depth} childrenNodes={node.children} ctx={ctx} variant={variant} />
+      <NoteRow
+        note={node.note}
+        depth={depth}
+        childrenNodes={node.children}
+        ctx={ctx}
+        variant={variant}
+      />
       {isExpanded
         ? node.children.map((c) => (
             <TreeRows key={c.note.id} node={c} depth={depth + 1} ctx={ctx} variant={variant} />
@@ -549,7 +573,10 @@ function NoteRow({
         )}
       >
         <ChevronRight
-          className={cn("size-3.5 transition-transform motion-reduce:transition-none", isExpanded && "rotate-90")}
+          className={cn(
+            "size-3.5 transition-transform motion-reduce:transition-none",
+            isExpanded && "rotate-90",
+          )}
         />
       </button>
 
@@ -559,7 +586,9 @@ function NoteRow({
         className="flex min-w-0 flex-1 items-center gap-1.5 text-left focus-visible:ring-2 focus-visible:ring-ring rounded"
       >
         <RowIcon note={note} />
-        <span className={cn("truncate", note.title.trim() === "" && "italic text-muted-foreground")}>
+        <span
+          className={cn("truncate", note.title.trim() === "" && "italic text-muted-foreground")}
+        >
           {displayTitle(note.title)}
         </span>
         {note.isPinned && !flat ? <Pin className="size-3 shrink-0 text-muted-foreground" /> : null}
@@ -754,7 +783,8 @@ function resolveHover(x: number, y: number): HoverTarget {
   if (!id) return null;
   const rect = el.getBoundingClientRect();
   const quarter = rect.height / 4;
-  const zone: DropZone = y < rect.top + quarter ? "before" : y > rect.bottom - quarter ? "after" : "into";
+  const zone: DropZone =
+    y < rect.top + quarter ? "before" : y > rect.bottom - quarter ? "after" : "into";
   return { id, zone };
 }
 

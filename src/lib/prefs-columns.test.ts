@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  PREFS_COLS_BASE,
   missingOptionalPrefsDomain,
   optionalPrefsAvailable,
+  PREFS_COLS_BASE,
   prefsSelectCols,
 } from "./prefs-columns";
 

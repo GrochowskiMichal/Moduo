@@ -27,7 +27,8 @@ const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
 // Bare URL / domain token (with or without scheme). Used only to reject a line
 // from name consideration, never extracted as a value.
-const URL_RE = /\b(?:https?:\/\/|www\.)\S+|\b[A-Za-z0-9-]+\.(?:com|org|net|io|co|dev|app|ai|xyz|me|us|uk)\b/i;
+const URL_RE =
+  /\b(?:https?:\/\/|www\.)\S+|\b[A-Za-z0-9-]+\.(?:com|org|net|io|co|dev|app|ai|xyz|me|us|uk)\b/i;
 
 // A phone-like token: a run of digits and the usual separators, with a leading
 // '+' allowed. We accept it only after counting >= 7 actual digits (below).
@@ -116,7 +117,13 @@ function dedup(values: string[]): string[] {
  * - title/company: best-effort from the first line carrying a known splitter.
  */
 export function parseContactText(text: string): ParsedContactInput {
-  const empty: ParsedContactInput = { name: null, emails: [], phones: [], title: null, company: null };
+  const empty: ParsedContactInput = {
+    name: null,
+    emails: [],
+    phones: [],
+    title: null,
+    company: null,
+  };
   if (typeof text !== "string" || !text.trim()) return empty;
 
   // Emails — run the global matcher over the whole blob, then normalise.

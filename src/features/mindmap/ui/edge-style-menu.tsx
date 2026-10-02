@@ -1,9 +1,9 @@
 import type { RefObject } from "react";
 import {
   EDGE_SHAPE_OPTIONS,
-  normalizeHexColor,
   type EdgeMenuPanel,
   type EdgeMenuState,
+  normalizeHexColor,
 } from "./edge-style";
 import type { EdgePattern, EdgeStyle, MindmapEdgeData } from "./types";
 
@@ -90,13 +90,17 @@ export function EdgeStyleMenu({
           className={`h-8 w-10 rounded-lg text-[13px] font-semibold transition-all duration-200 hover:scale-105 ${
             edgeData.animated ? "bg-[#262626] text-[#f1f1f1]" : "bg-[#1a1a1a] text-[#cfcfcf]"
           }`}
-          aria-label={edgeData.animated ? "Disable connection animation" : "Enable connection animation"}
+          aria-label={
+            edgeData.animated ? "Disable connection animation" : "Enable connection animation"
+          }
         >
           ◍
         </button>
       </div>
 
-      <div className={`overflow-hidden transition-all duration-200 ease-out ${menu.panel ? "mt-2 max-h-20 opacity-100" : "max-h-0 opacity-0"}`}>
+      <div
+        className={`overflow-hidden transition-all duration-200 ease-out ${menu.panel ? "mt-2 max-h-20 opacity-100" : "max-h-0 opacity-0"}`}
+      >
         {menu.panel === "text" ? (
           <input
             value={edgeData.label}
@@ -150,7 +154,9 @@ export function EdgeStyleMenu({
               <button
                 key={option.value}
                 className={`flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-all duration-200 hover:scale-[1.03] ${
-                  edgeData.style === option.value ? "bg-[#262626] text-[#f1f1f1]" : "bg-[#1a1a1a] text-[#cfcfcf]"
+                  edgeData.style === option.value
+                    ? "bg-[#262626] text-[#f1f1f1]"
+                    : "bg-[#1a1a1a] text-[#cfcfcf]"
                 }`}
                 onClick={() => onApplyShape(option.value)}
                 aria-label={`Set connection style ${option.label}`}
@@ -167,7 +173,9 @@ export function EdgeStyleMenu({
               <button
                 key={option.value}
                 className={`flex items-center justify-center rounded-md px-2 py-1.5 text-[11px] font-medium transition-all duration-200 hover:scale-[1.03] ${
-                  edgeData.pattern === option.value ? "bg-[#262626] text-[#f1f1f1]" : "bg-[#1a1a1a] text-[#cfcfcf]"
+                  edgeData.pattern === option.value
+                    ? "bg-[#262626] text-[#f1f1f1]"
+                    : "bg-[#1a1a1a] text-[#cfcfcf]"
                 }`}
                 onClick={() => onApplyPattern(option.value)}
                 aria-label={`Set connection line ${option.label}`}

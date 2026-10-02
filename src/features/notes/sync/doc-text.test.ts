@@ -19,7 +19,11 @@ describe("deriveBody (derived body_text / body_md, NO-2)", () => {
     list.setAttribute("listType", "check" as any);
     const item = el("listitem", { checked: true }, "buy milk");
     list.insert(0, [item]);
-    root.insert(0, [el("heading", { tag: "h1" }, "Plan"), el("paragraph", {}, "Some intro."), list]);
+    root.insert(0, [
+      el("heading", { tag: "h1" }, "Plan"),
+      el("paragraph", {}, "Some intro."),
+      list,
+    ]);
 
     const { text, md } = deriveBody(doc);
     expect(md).toBe("# Plan\nSome intro.\n- [x] buy milk");

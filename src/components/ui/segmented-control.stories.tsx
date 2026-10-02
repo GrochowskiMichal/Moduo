@@ -1,6 +1,6 @@
-import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import { Columns3, List } from "lucide-react";
+import { useState } from "react";
 
 import { SegmentedControl } from "./segmented-control";
 

@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  isTrialing,
-  planLabel,
-  subscriptionLine,
-  type EntitlementsRow,
-} from "./billing";
+import { type EntitlementsRow, isTrialing, planLabel, subscriptionLine } from "./billing";
 
 const row = (overrides: Partial<EntitlementsRow>): EntitlementsRow => ({
   plan_tier: null,

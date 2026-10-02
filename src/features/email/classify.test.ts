@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  type ClassifySignals,
   classifyThread,
   flattenSections,
   groupThreadsBySection,
-  type ClassifySignals,
 } from "./classify";
 import type { EmailThread } from "./model/email-types";
 
@@ -22,7 +22,9 @@ describe("classifyThread", () => {
   it("routes bulk precedence and no-reply/auto senders to Notifications", () => {
     expect(classifyThread(signals({ precedence: "bulk" }))).toBe("notifications");
     expect(classifyThread(signals({ fromEmail: "no-reply@service.com" }))).toBe("notifications");
-    expect(classifyThread(signals({ fromEmail: "notifications@github.com" }))).toBe("notifications");
+    expect(classifyThread(signals({ fromEmail: "notifications@github.com" }))).toBe(
+      "notifications",
+    );
     expect(classifyThread(signals({ autoSubmitted: "auto-generated" }))).toBe("notifications");
   });
 

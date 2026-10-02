@@ -43,7 +43,10 @@ const PATTERNS: Pattern[] = [
   // dark mode). Use `bg-background` / `text-foreground` / `bg-foreground/10`.
   {
     name: "color-absolute",
-    regex: new RegExp(`\\b(?:${COLOR_UTILS})${COLOR_UTIL_SIDES}-(?:white|black)(?:\\/\\d{1,3})?\\b`, "g"),
+    regex: new RegExp(
+      `\\b(?:${COLOR_UTILS})${COLOR_UTIL_SIDES}-(?:white|black)(?:\\/\\d{1,3})?\\b`,
+      "g",
+    ),
   },
   // Raw hex in any color utility: bg-[#fff], text-[#d4d8e1], border-t-[#222]…
   {
@@ -65,12 +68,16 @@ const PATTERNS: Pattern[] = [
   // Arbitrary spacing: padding / margin / gap / space — NOT geometry (h/w/top/…).
   {
     name: "spacing-[size]",
-    regex: /\b(?:p|px|py|pt|pr|pb|pl|ps|pe|m|mx|my|mt|mr|mb|ml|ms|me|gap|gap-x|gap-y|space-x|space-y)-\[\d+(?:\.\d+)?(?:px|rem|em)\]/g,
+    regex:
+      /\b(?:p|px|py|pt|pr|pb|pl|ps|pe|m|mx|my|mt|mr|mb|ml|ms|me|gap|gap-x|gap-y|space-x|space-y)-\[\d+(?:\.\d+)?(?:px|rem|em)\]/g,
   },
   // Arbitrary shadow with a RAW color (#/rgb/hsl/oklch). Token-colored shadows
   // (e.g. an active-tab underline `shadow-[inset_0_-2px_0_0_var(--primary)]`)
   // are allowed — the violation is the hardcoded color, not the geometry.
-  { name: "shadow-[rawcolor]", regex: /\bshadow-\[[^\]]*(?:#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(|okl(?:ch|ab)\()[^\]]*\]/g },
+  {
+    name: "shadow-[rawcolor]",
+    regex: /\bshadow-\[[^\]]*(?:#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(|okl(?:ch|ab)\()[^\]]*\]/g,
+  },
   // Custom font family/weight — use font-display/-sans/-mono.
   { name: "font-[name]", regex: /\bfont-\[(?!var\()[^\]\s]+\]/g },
   // Motion-token bypass — use duration-[var(--motion-*)] / the motion tokens.
@@ -81,7 +88,8 @@ const PATTERNS: Pattern[] = [
   // `color: priority.color` are not quoted hex, so they don't match).
   {
     name: "style hex literal",
-    regex: /\b(?:color|background|backgroundColor|border(?:Top|Right|Bottom|Left)?Color|outlineColor|fill|stroke|caretColor|boxShadow|textShadow)\s*:\s*["'`]#[0-9a-fA-F]{3,8}/g,
+    regex:
+      /\b(?:color|background|backgroundColor|border(?:Top|Right|Bottom|Left)?Color|outlineColor|fill|stroke|caretColor|boxShadow|textShadow)\s*:\s*["'`]#[0-9a-fA-F]{3,8}/g,
   },
 ];
 
@@ -187,6 +195,7 @@ function scanFile(content: string, file: string): Hit[] {
     for (const { name, regex } of PATTERNS) {
       regex.lastIndex = 0;
       let match: RegExpExecArray | null;
+      // biome-ignore lint/suspicious/noAssignInExpressions: regex-drain idiom
       while ((match = regex.exec(line))) {
         hits.push({
           file,
@@ -227,7 +236,7 @@ async function main() {
 
   const fileCount = byFile.size;
   console.error(
-    `lint:tw — ${allHits.length} arbitrary Tailwind value(s) across ${fileCount} file(s):`
+    `lint:tw — ${allHits.length} arbitrary Tailwind value(s) across ${fileCount} file(s):`,
   );
   const sortedFiles = [...byFile.keys()].sort();
   for (const file of sortedFiles) {
@@ -237,15 +246,13 @@ async function main() {
       console.error(`    ${hit.line}:${hit.column}  ${hit.pattern}  ${hit.match}`);
     }
   }
-  console.error(
-    `\nlint:tw — design-system properties must use semantic tokens (see AGENTS.md).`
-  );
+  console.error(`\nlint:tw — design-system properties must use semantic tokens (see AGENTS.md).`);
   process.exit(1);
 }
 
 // Exported so the patterns are unit-testable (src/components/design-lint.test.ts)
 // — a silently-broken regex here reads exactly like a clean codebase.
-export { PATTERNS, scanFile, isIgnored, type Hit };
+export { type Hit, isIgnored, PATTERNS, scanFile };
 
 // `import.meta.main` under Bun (how `lint:tw` runs); the argv fallback keeps the
 // gate alive under any runner that lacks it. A silent no-op here would report a

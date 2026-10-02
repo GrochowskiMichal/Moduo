@@ -31,17 +31,20 @@ export const calendarModuleManifest: ModuleManifest = {
     {
       op: "calendar.update_event",
       rpc: "calendar_op_event_update",
-      summary: "Edit a native event via a camelCase JSON patch (title/times/allDay/rrule). External events are rejected.",
+      summary:
+        "Edit a native event via a camelCase JSON patch (title/times/allDay/rrule). External events are rejected.",
       args: {
         p_workspace_id: "workspace uuid",
         p_event_id: "event uuid",
-        p_patch: "jsonb of only-present camelCase keys: title, description, startsAt, endsAt, allDay, rrule",
+        p_patch:
+          "jsonb of only-present camelCase keys: title, description, startsAt, endsAt, allDay, rrule",
       },
     },
     {
       op: "calendar.delete_event",
       rpc: "calendar_op_event_delete",
-      summary: "Delete a native event (tombstoned; registry cascade cleans spine links). External events are rejected.",
+      summary:
+        "Delete a native event (tombstoned; registry cascade cleans spine links). External events are rejected.",
       args: {
         p_workspace_id: "workspace uuid",
         p_event_id: "event uuid",
@@ -50,7 +53,8 @@ export const calendarModuleManifest: ModuleManifest = {
     {
       op: "calendar.schedule_task",
       rpc: "tasks_op_reschedule",
-      summary: "Place a task on the calendar at a clock time — it renders as a task block (the lens).",
+      summary:
+        "Place a task on the calendar at a clock time — it renders as a task block (the lens).",
       args: {
         p_workspace_id: "workspace uuid",
         p_task_id: "task uuid",
@@ -72,7 +76,8 @@ export const calendarModuleManifest: ModuleManifest = {
     {
       op: "calendar.complete_block",
       rpc: "tasks_op_set_status",
-      summary: "Complete a task from its block (recurrence pointer advances) — identical to completing in Tasks.",
+      summary:
+        "Complete a task from its block (recurrence pointer advances) — identical to completing in Tasks.",
       args: {
         p_workspace_id: "workspace uuid",
         p_task_id: "task uuid",
@@ -84,7 +89,8 @@ export const calendarModuleManifest: ModuleManifest = {
     {
       op: "calendar.roll_forward",
       rpc: "tasks_op_reschedule",
-      summary: "The strip's Move-to-today: reschedule each unfinished-from-earlier task onto today (one attributed reschedule per task).",
+      summary:
+        "The strip's Move-to-today: reschedule each unfinished-from-earlier task onto today (one attributed reschedule per task).",
       args: {
         p_workspace_id: "workspace uuid",
         p_task_id: "task uuid (called once per rolled task)",
@@ -96,11 +102,13 @@ export const calendarModuleManifest: ModuleManifest = {
   resources: [
     {
       name: "calendar.list_events",
-      summary: "Events in a date range — both native and mirrored-external, with source attribution.",
+      summary:
+        "Events in a date range — both native and mirrored-external, with source attribution.",
     },
     {
       name: "calendar.day",
-      summary: "The composed day: native + external events, scheduled task blocks, and the unfinished-from-earlier strip.",
+      summary:
+        "The composed day: native + external events, scheduled task blocks, and the unfinished-from-earlier strip.",
     },
   ],
 };

@@ -9,11 +9,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useDomainSync } from "../../../lib/prefs-sync";
 import {
+  type CalendarPrefs,
   DEFAULT_CALENDAR_PREFS,
   readCalendarPrefs,
   sanitizeCalendarPrefs,
   writeCalendarPrefs,
-  type CalendarPrefs,
 } from "../prefs";
 
 type Patch = Partial<CalendarPrefs> | ((prev: CalendarPrefs) => Partial<CalendarPrefs>);

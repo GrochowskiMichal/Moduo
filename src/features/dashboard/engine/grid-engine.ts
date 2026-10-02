@@ -22,13 +22,7 @@
 // acceptable-by-design (reject == snap-back); correctness/termination/no-overlap
 // are the guarantees, not maximal packing.
 
-import type {
-  DashboardLayout,
-  DashboardPage,
-  Rect,
-  WidgetInstance,
-  WidgetSize,
-} from "./types";
+import type { DashboardLayout, DashboardPage, Rect, WidgetInstance, WidgetSize } from "./types";
 import { GRID_COLS, GRID_ROWS, SIZE_SPANS, WIDGET_TYPES } from "./types";
 
 // ── Primitives ──────────────────────────────────────────────────────────────
@@ -175,8 +169,7 @@ function placeNearest(
       const candidate: Rect = { x, y, w: span.w, h: span.h };
       if (!fitsAgainst(candidate, settled)) continue;
       // Distance first, then reading order — a stable, deterministic pick.
-      const score =
-        (Math.abs(x - start.x) + Math.abs(y - start.y)) * 100 + y * GRID_COLS + x;
+      const score = (Math.abs(x - start.x) + Math.abs(y - start.y)) * 100 + y * GRID_COLS + x;
       if (score < bestScore) {
         bestScore = score;
         best = candidate;
@@ -249,10 +242,7 @@ export function addWidget(
 }
 
 /** Remove a widget and close the gap it left (full compaction). Never fails. */
-export function removeWidget(
-  widgets: readonly WidgetInstance[],
-  id: string,
-): WidgetInstance[] {
+export function removeWidget(widgets: readonly WidgetInstance[], id: string): WidgetInstance[] {
   return compact(widgets.filter((w) => w.id !== id));
 }
 

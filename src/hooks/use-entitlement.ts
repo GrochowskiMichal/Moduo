@@ -10,10 +10,11 @@
  * the product grows; components only need to call useEntitlement(featureName).
  */
 
+import { normalizePlanTier } from "@contracts/vocabularies";
 import { useCallback } from "react";
-import { useAuth, type PlanTier } from "../providers/auth-provider";
 import { getRuntime } from "../lib/runtime";
 import { SUPABASE_URL } from "../lib/runtime.web";
+import { type PlanTier, useAuth } from "../providers/auth-provider";
 
 export type FeatureGate =
   | "cloud_sync"
@@ -27,9 +28,13 @@ export type FeatureGate =
 const TIER_RANK: Record<PlanTier, number> = {
   free: 0,
   pro: 1,
-  founders: 2,
+  founder: 2,
   team: 3,
 };
+
+function tierRankFor(tier: string): number {
+  return TIER_RANK[normalizePlanTier(tier)];
+}
 
 /** Minimum tier required to access each feature gate. */
 const FEATURE_GATES: Record<FeatureGate, PlanTier> = {
@@ -80,10 +85,7 @@ export async function openStripeUrl(url: string) {
  * Opens Stripe Checkout via `create-checkout-session` using plan + interval
  * so the edge function resolves price IDs from Supabase secrets (not client env).
  */
-async function redirectToCheckout(
-  accessToken: string | null,
-  tier: "pro" | "team"
-) {
+async function redirectToCheckout(accessToken: string | null, tier: "pro" | "team") {
   if (!accessToken) {
     await openStripeUrl("https://moduo.app/#pricing");
     return;
@@ -115,7 +117,7 @@ async function redirectToCheckout(
 export function useEntitlement(feature: FeatureGate): EntitlementResult {
   const { planTier, accessToken } = useAuth();
   const requiredTier = FEATURE_GATES[feature];
-  const allowed = TIER_RANK[planTier] >= TIER_RANK[requiredTier];
+  const allowed = tierRankFor(planTier) >= tierRankFor(requiredTier);
 
   const upgrade = useCallback(() => {
     const targetTier = requiredTier === "team" ? "team" : "pro";

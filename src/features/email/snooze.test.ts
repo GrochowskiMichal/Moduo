@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  formatSnoozeUntil,
-  normalizeSnoozeAt,
-  snoozePresets,
-} from "./snooze";
+import { formatSnoozeUntil, normalizeSnoozeAt, snoozePresets } from "./snooze";
 
 // Local-time constructor + local-getter assertions → timezone-agnostic.
 const wed = new Date(2026, 6, 8, 14, 30, 0); // Wed 2026-07-08 14:30

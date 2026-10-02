@@ -2,14 +2,7 @@
 // position generation (Lexorank-lite), label maps, datetime formatting, and the
 // grouping logic for the List view. No React, no IO — easy to unit-test.
 
-import type {
-  Bucket,
-  EnergyLevel,
-  PriorityLevel,
-  Task,
-  TaskRelation,
-  TaskStatus,
-} from "./model";
+import type { Bucket, EnergyLevel, PriorityLevel, Task, TaskRelation, TaskStatus } from "./model";
 
 // ── Position (fractional indexing) ───────────────────────────────────────────
 // Order keys are base-36 digit strings compared lexicographically (see
@@ -112,8 +105,7 @@ export function positionsAfter(count: number, existing: Array<string> = []): str
   // A non-clean key (legacy width, or a subdivided variable-width key) decodes
   // past float precision, where `+ POS_STEP` is absorbed — the same trap
   // `endPosition` documents. Fall back to extending precision, then stepping.
-  const base =
-    maxStr === "" ? 0 : maxStr.length === POS_WIDTH ? decodePos(maxStr) : null;
+  const base = maxStr === "" ? 0 : maxStr.length === POS_WIDTH ? decodePos(maxStr) : null;
   if (base === null) {
     const out: string[] = [];
     let prefix = maxStr;
@@ -400,7 +392,8 @@ function groupLabel(by: GroupBy, key: string, ctx: GroupContext): string {
   if (by === "status") return STATUS_LABELS[key as TaskStatus] ?? key;
   if (by === "bucket") return ctx.bucketName(key);
   if (by === "energy") return key === "unset" ? UNSET_LABEL : ENERGY_LABELS[key as EnergyLevel];
-  if (by === "priority") return key === "unset" ? UNSET_LABEL : PRIORITY_LABELS[key as PriorityLevel];
+  if (by === "priority")
+    return key === "unset" ? UNSET_LABEL : PRIORITY_LABELS[key as PriorityLevel];
   return key;
 }
 
@@ -553,11 +546,7 @@ export function blockedTaskIds(tasks: Task[], relations: TaskRelation[]): Set<st
  * set keeps the walk safe even if a cycle sneaks past the guards. Results in
  * first-encountered order (nearest blockers first).
  */
-export function frontierTasks(
-  taskId: string,
-  tasks: Task[],
-  relations: TaskRelation[],
-): Task[] {
+export function frontierTasks(taskId: string, tasks: Task[], relations: TaskRelation[]): Task[] {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const blockersOf = new Map<string, string[]>();
   for (const rel of relations) {
@@ -619,7 +608,10 @@ export function wouldCreateCycle(
  * or it carries at least one of them. Union is the intuitive "show me #x or #y";
  * the dominant single-tag case is identical under either rule.
  */
-export function taskMatchesTagFilter(taskTagIds: Iterable<string>, filterTagIds: string[]): boolean {
+export function taskMatchesTagFilter(
+  taskTagIds: Iterable<string>,
+  filterTagIds: string[],
+): boolean {
   if (filterTagIds.length === 0) return true;
   const wanted = new Set(filterTagIds);
   for (const id of taskTagIds) {

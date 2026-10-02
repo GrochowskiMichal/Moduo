@@ -53,9 +53,7 @@ export function CalendarToolbar({
       <Toolbar.Group>
         {onRefresh ? (
           <Toolbar.Group gap="snug">
-            {syncLabel ? (
-              <span className="text-2xs text-muted-foreground">{syncLabel}</span>
-            ) : null}
+            {syncLabel ? <span className="text-2xs text-muted-foreground">{syncLabel}</span> : null}
             <IconButton
               icon={RefreshCw}
               label="Refresh calendars"

@@ -16,27 +16,28 @@
  * everything is saved locally and will sync.
  */
 
-import * as Y from "yjs";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { Awareness } from "y-protocols/awareness";
+import * as Y from "yjs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
 import { deriveBody } from "./doc-text";
 import {
+  type DocOutboxEntry,
   deleteDocOutboxEntries,
   deleteMetaOutboxEntries,
   enqueueDocUpdate,
   enqueueMetaOp,
   listDocOutboxNoteIds,
-  readDocOutbox,
-  readNoteState,
-  writeNoteState,
-  openNotesDb,
-  type DocOutboxEntry,
   type MetaOutboxEntry,
   type NoteSyncState,
+  openNotesDb,
+  readDocOutbox,
   readMetaOutbox,
+  readNoteState,
+  writeNoteState,
 } from "./idb";
+import { isNetworkError, replayDecision, replayOrder } from "./meta-outbox";
 import {
   ackedKeys,
   advanceCursor,
@@ -46,7 +47,6 @@ import {
   shouldCompact,
   toPushPayload,
 } from "./outbox";
-import { isNetworkError, replayDecision, replayOrder } from "./meta-outbox";
 
 export type NotesSyncStatusV2 = "synced" | "pending" | "offline";
 
@@ -501,7 +501,10 @@ export class NotesSyncEngineV2 {
   /** Run a metadata intent op with offline queueing: online → straight
    * through; network-dead → queue + resolve (the caller applied it
    * optimistically); server rejection → rethrow (honest toast). */
-  async runMetaOp(kind: MetaOutboxEntry["kind"], args: Record<string, unknown>): Promise<"applied" | "queued"> {
+  async runMetaOp(
+    kind: MetaOutboxEntry["kind"],
+    args: Record<string, unknown>,
+  ): Promise<"applied" | "queued"> {
     if (!this.runtime) throw new Error("Runtime unavailable.");
     try {
       await this.callMetaOp(kind, args);

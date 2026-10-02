@@ -28,8 +28,21 @@ function env(over: Partial<EmailEnvelope>): EmailEnvelope {
 describe("searchEnvelopes", () => {
   const corpus = [
     env({ uid: 1, sender: "Alice Nguyen", senderEmail: "alice@acme.com", subject: "Q3 planning" }),
-    env({ uid: 2, sender: "Bob Ito", senderEmail: "bob@globex.com", subject: "Invoice #42", preview: "attached" }),
-    env({ uid: 3, sender: "Carol", senderEmail: "carol@acme.com", subject: "Lunch?", preview: "free friday?", to: "me@x.com, alice@acme.com" }),
+    env({
+      uid: 2,
+      sender: "Bob Ito",
+      senderEmail: "bob@globex.com",
+      subject: "Invoice #42",
+      preview: "attached",
+    }),
+    env({
+      uid: 3,
+      sender: "Carol",
+      senderEmail: "carol@acme.com",
+      subject: "Lunch?",
+      preview: "free friday?",
+      to: "me@x.com, alice@acme.com",
+    }),
   ];
 
   it("matches over sender, address, recipients, subject and preview", () => {
@@ -37,7 +50,11 @@ describe("searchEnvelopes", () => {
     expect(searchEnvelopes(corpus, "globex").map((e) => e.uid)).toEqual([2]);
     expect(searchEnvelopes(corpus, "roadmap").map((e) => e.uid)).toEqual([1]);
     // A recipient address hit (Carol's To line carries alice@).
-    expect(searchEnvelopes(corpus, "alice@acme.com").map((e) => e.uid).sort()).toEqual([1, 3]);
+    expect(
+      searchEnvelopes(corpus, "alice@acme.com")
+        .map((e) => e.uid)
+        .sort(),
+    ).toEqual([1, 3]);
   });
 
   it("requires every token to match (AND), case-insensitively", () => {

@@ -9,15 +9,14 @@
  * the pure selection/link-arg logic lives in ../linked-notes.ts (tested).
  */
 
-import { useMemo, useState } from "react";
 import { FileText, Loader2, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import { cn } from "@/lib/utils";
 import { Eyebrow } from "@/components/ui/eyebrow";
+import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
+import { cn } from "@/lib/utils";
 import { newLinkedNoteLinkArgs, selectLinkedNotes } from "../linked-notes";
 
 type Props = {
@@ -88,9 +87,7 @@ export function LinkedNotesPanel({
   if (!focus) {
     return (
       <div className="grid h-full place-content-center px-3 text-center">
-        <span className="text-sm text-muted-foreground">
-          Select something to see its notes.
-        </span>
+        <span className="text-sm text-muted-foreground">Select something to see its notes.</span>
       </div>
     );
   }
@@ -106,7 +103,11 @@ export function LinkedNotesPanel({
             disabled={creating}
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
           >
-            {creating ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+            {creating ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Plus className="size-3.5" />
+            )}
             New linked note
           </button>
         ) : null}

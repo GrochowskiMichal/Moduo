@@ -4,8 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveCalendarDeepLink, validateCalendarSearch } from "./search";
 
-const ev = (id: string, startsAt: string) =>
-  ({ id, startsAt }) as { id: string; startsAt: string };
+const ev = (id: string, startsAt: string) => ({ id, startsAt }) as { id: string; startsAt: string };
 
 describe("validateCalendarSearch", () => {
   it("keeps a non-empty event id", () => {
@@ -30,13 +29,17 @@ describe("resolveCalendarDeepLink", () => {
   });
 
   it("returns none for an unknown id", () => {
-    expect(resolveCalendarDeepLink("nope", { events: [ev("ev1", "2026-07-15T09:00:00.000Z")] })).toEqual({
+    expect(
+      resolveCalendarDeepLink("nope", { events: [ev("ev1", "2026-07-15T09:00:00.000Z")] }),
+    ).toEqual({
       kind: "none",
     });
   });
 
   it("returns none for an empty id or a startless event", () => {
-    expect(resolveCalendarDeepLink("", { events: [ev("ev1", "2026-07-15T09:00:00.000Z")] })).toEqual({
+    expect(
+      resolveCalendarDeepLink("", { events: [ev("ev1", "2026-07-15T09:00:00.000Z")] }),
+    ).toEqual({
       kind: "none",
     });
     expect(resolveCalendarDeepLink("ev1", { events: [ev("ev1", "")] })).toEqual({ kind: "none" });

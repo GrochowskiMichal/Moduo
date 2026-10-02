@@ -2,8 +2,8 @@
 // hosts the type's ConfigForm. Renders nothing for types without one. Used both in
 // the edit-mode control cluster and as a hover-revealed button in normal mode.
 
-import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
+import { useState } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -29,11 +29,7 @@ export function WidgetConfigButton({
       <PopoverTrigger asChild>
         <IconButton icon={MoreHorizontal} label="Widget settings" className={className} />
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        className="w-64 p-3"
-        onPointerDown={(e) => e.stopPropagation()}
-      >
+      <PopoverContent align="end" className="w-64 p-3" onPointerDown={(e) => e.stopPropagation()}>
         <ConfigForm widget={widget} updateConfig={updateConfig} onClose={() => setOpen(false)} />
       </PopoverContent>
     </Popover>

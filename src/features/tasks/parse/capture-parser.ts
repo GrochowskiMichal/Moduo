@@ -7,7 +7,7 @@
 // it can't understand, it does not guess — it flags it so the UI can say so.
 
 import * as chrono from "chrono-node";
-import { RRule, Weekday } from "rrule";
+import { RRule, type Weekday } from "rrule";
 
 import type { RecurrenceRule } from "../model";
 
@@ -31,13 +31,23 @@ export type ParsedCapture = {
 };
 
 const WEEKDAYS: Record<string, Weekday> = {
-  monday: RRule.MO, mon: RRule.MO,
-  tuesday: RRule.TU, tue: RRule.TU, tues: RRule.TU,
-  wednesday: RRule.WE, wed: RRule.WE,
-  thursday: RRule.TH, thu: RRule.TH, thur: RRule.TH, thurs: RRule.TH,
-  friday: RRule.FR, fri: RRule.FR,
-  saturday: RRule.SA, sat: RRule.SA,
-  sunday: RRule.SU, sun: RRule.SU,
+  monday: RRule.MO,
+  mon: RRule.MO,
+  tuesday: RRule.TU,
+  tue: RRule.TU,
+  tues: RRule.TU,
+  wednesday: RRule.WE,
+  wed: RRule.WE,
+  thursday: RRule.TH,
+  thu: RRule.TH,
+  thur: RRule.TH,
+  thurs: RRule.TH,
+  friday: RRule.FR,
+  fri: RRule.FR,
+  saturday: RRule.SA,
+  sat: RRule.SA,
+  sunday: RRule.SU,
+  sun: RRule.SU,
 };
 
 type RecurrenceMatch = {
@@ -56,7 +66,10 @@ function detectRecurrence(text: string): RecurrenceMatch | null {
   if (m) {
     return {
       span: [m.index!, m.index! + m[0].length],
-      options: { freq: RRule.WEEKLY, byweekday: [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR] },
+      options: {
+        freq: RRule.WEEKLY,
+        byweekday: [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR],
+      },
     };
   }
 
@@ -70,7 +83,9 @@ function detectRecurrence(text: string): RecurrenceMatch | null {
   }
 
   // "every 2 weeks" / "every 3 days" / "every other week"
-  m = lower.match(/\b(?:every|each)\s+(other\s+|(\d+)\s+)?(day|days|week|weeks|month|months|year|years)\b/);
+  m = lower.match(
+    /\b(?:every|each)\s+(other\s+|(\d+)\s+)?(day|days|week|weeks|month|months|year|years)\b/,
+  );
   if (m) {
     const interval = m[1] ? (m[2] ? parseInt(m[2], 10) : 2) : 1;
     const unit = m[3];
@@ -88,9 +103,13 @@ function detectRecurrence(text: string): RecurrenceMatch | null {
   m = lower.match(/\b(daily|weekly|monthly|yearly|annually)\b/);
   if (m) {
     const freq =
-      m[1] === "daily" ? RRule.DAILY :
-      m[1] === "weekly" ? RRule.WEEKLY :
-      m[1] === "monthly" ? RRule.MONTHLY : RRule.YEARLY;
+      m[1] === "daily"
+        ? RRule.DAILY
+        : m[1] === "weekly"
+          ? RRule.WEEKLY
+          : m[1] === "monthly"
+            ? RRule.MONTHLY
+            : RRule.YEARLY;
     return { span: [m.index!, m.index! + m[0].length], options: { freq } };
   }
 
@@ -114,13 +133,15 @@ function stripSpans(text: string, spans: Array<[number, number]>): string {
   for (const [start, end] of ordered) {
     out = out.slice(0, start) + " " + out.slice(end);
   }
-  return out
-    .replace(/\s+/g, " ")
-    .replace(/\s+([,.])/g, "$1")
-    // drop dangling connective words left behind ("at", "on", "by", "every")
-    .replace(/\b(at|on|by|every|each|due|starting)\s*$/i, "")
-    .replace(/^\s*(at|on|by)\b/i, "")
-    .trim();
+  return (
+    out
+      .replace(/\s+/g, " ")
+      .replace(/\s+([,.])/g, "$1")
+      // drop dangling connective words left behind ("at", "on", "by", "every")
+      .replace(/\b(at|on|by|every|each|due|starting)\s*$/i, "")
+      .replace(/^\s*(at|on|by)\b/i, "")
+      .trim()
+  );
 }
 
 export function parseCapture(input: string, refDate: Date = new Date()): ParsedCapture {
@@ -205,9 +226,17 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
 }
 
 const LABEL_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const LABEL_DATE = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" });
+const LABEL_DATE = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
 const LABEL_DATETIME = new Intl.DateTimeFormat(undefined, {
-  weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
 });
 
 function chronoLabel(date: Date, withTime: boolean): string {
@@ -216,6 +245,7 @@ function chronoLabel(date: Date, withTime: boolean): string {
     date.getFullYear() === now.getFullYear() &&
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate();
-  if (withTime) return isToday ? `today at ${LABEL_TIME.format(date)}` : LABEL_DATETIME.format(date);
+  if (withTime)
+    return isToday ? `today at ${LABEL_TIME.format(date)}` : LABEL_DATETIME.format(date);
   return isToday ? "today" : LABEL_DATE.format(date);
 }

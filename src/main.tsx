@@ -1,15 +1,15 @@
-import ReactDOM from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
+import ReactDOM from "react-dom/client";
 import "@fontsource/nunito/400.css";
 import "@fontsource/nunito/600.css";
 import "@fontsource/nunito/700.css";
-import { router } from "./router";
 import { RootErrorBoundary } from "./components/app/root-error-boundary";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { applyAppearance, readLocalAppearance } from "./lib/appearance";
-import { applyMotion, readLocalPreferences, usePreferences } from "./lib/preferences";
 import { useConfirmBeforeQuit } from "./lib/confirm-before-quit";
+import { applyMotion, readLocalPreferences, usePreferences } from "./lib/preferences";
+import { router } from "./router";
 import "./global.css";
 
 // Pre-paint: synchronously apply the cached appearance + motion override to <html>
@@ -50,5 +50,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <Toaster />
     <PreferencesSync />
     <ConfirmBeforeQuit />
-  </RootErrorBoundary>
+  </RootErrorBoundary>,
 );

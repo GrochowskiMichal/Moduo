@@ -6,6 +6,8 @@
  * DF-19 (Settings overhaul) will grow this into the section's real model.
  */
 
+import { normalizePlanTier } from "@contracts/vocabularies";
+
 export type EntitlementsRow = {
   plan_tier: string | null;
   subscription_status: string | null;
@@ -18,13 +20,12 @@ export const ENTITLEMENTS_COLUMNS =
   "plan_tier,subscription_status,trial_days_remaining,trial_ends_at,current_period_end";
 
 export function planLabel(tier: string | null | undefined): string {
-  switch (tier) {
+  switch (normalizePlanTier(tier)) {
     case "pro":
       return "Pro";
     case "team":
       return "Team";
     case "founder":
-    case "founders":
       return "Founders";
     default:
       return "Free";
@@ -58,9 +59,7 @@ export function subscriptionLine(row: EntitlementsRow | null): string {
   switch (status) {
     case "trialing": {
       const days =
-        row.trial_days_remaining === null
-          ? null
-          : Math.max(0, Math.ceil(row.trial_days_remaining));
+        row.trial_days_remaining === null ? null : Math.max(0, Math.ceil(row.trial_days_remaining));
       const ends = row.trial_ends_at ? formatDate(row.trial_ends_at) : null;
       if (days === null) return ends ? `Trial active (ends ${ends})` : "Trial active";
       const base =

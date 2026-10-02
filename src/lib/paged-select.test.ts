@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   collectTruncations,
   describeTruncation,
+  type PageResult,
   PGRST_MAX_ROWS,
   readPaged,
-  type PageResult,
 } from "./paged-select";
 
 /** A fake table of `total` rows that honours offset/limit like PostgREST does. */
@@ -79,7 +79,12 @@ describe("readPaged", () => {
 
   it("treats cap+1 rows as truncated", async () => {
     const t = fakeTable(101);
-    const res = await readPaged({ scope: "tasks", cap: 100, page: t.page, countTotal: async () => 101 });
+    const res = await readPaged({
+      scope: "tasks",
+      cap: 100,
+      page: t.page,
+      countTotal: async () => 101,
+    });
     expect(res.rows).toHaveLength(100);
     expect(res.truncation?.total).toBe(101);
   });
@@ -106,11 +111,7 @@ describe("readPaged", () => {
 
   it("dedupes rows re-emitted by a shifting offset (concurrent insert)", async () => {
     // Page 2 repeats page 1's last row — what an insert before the cursor does.
-    const pages = [
-      [1, 2, 3],
-      [3, 4, 5],
-      [] as number[],
-    ];
+    const pages = [[1, 2, 3], [3, 4, 5], [] as number[]];
     let i = 0;
     const res = await readPaged<number, string>({
       scope: "tasks",

@@ -13,8 +13,8 @@
 import {
   DEFAULT_RELATION_KIND,
   deriveLinkKey,
-  isSameEntity,
   type EntityRef,
+  isSameEntity,
   type RelationKind,
 } from "../../lib/entity-links";
 

@@ -55,10 +55,7 @@ export function asHistoryDepth(raw: unknown): EmailHistoryDepth {
  * deeper backfills in the background, going shallower is **not** destructive. A
  * picker that doesn't say so reads like it might delete mail.
  */
-export function describeDepthChange(
-  from: EmailHistoryDepth,
-  to: EmailHistoryDepth,
-): string | null {
+export function describeDepthChange(from: EmailHistoryDepth, to: EmailHistoryDepth): string | null {
   if (from === to) return null;
   const deeper = EMAIL_HISTORY_DEPTHS.indexOf(to) > EMAIL_HISTORY_DEPTHS.indexOf(from);
   return deeper

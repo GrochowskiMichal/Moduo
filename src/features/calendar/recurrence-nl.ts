@@ -59,9 +59,7 @@ function extractTime(input: string): {
   rest: string;
   time: { hour: number; minute: number } | null;
 } {
-  const m = /\s+(?:at|@)\s+(noon|midnight|(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)\s*$/i.exec(
-    input,
-  );
+  const m = /\s+(?:at|@)\s+(noon|midnight|(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)\s*$/i.exec(input);
   if (!m) return { rest: input.trim(), time: null };
   const rest = input.slice(0, m.index).trim();
   const word = m[1].toLowerCase();
@@ -141,12 +139,20 @@ export function parseRecurrenceNL(input: string): ParsedNLRecurrence | null {
   m = /^every other (\w+)$/.exec(rest);
   if (m && WEEKDAYS[m[1]]) {
     const wd = WEEKDAYS[m[1]];
-    const full = wd.label === "Mon" ? "Monday"
-      : wd.label === "Tue" ? "Tuesday"
-      : wd.label === "Wed" ? "Wednesday"
-      : wd.label === "Thu" ? "Thursday"
-      : wd.label === "Fri" ? "Friday"
-      : wd.label === "Sat" ? "Saturday" : "Sunday";
+    const full =
+      wd.label === "Mon"
+        ? "Monday"
+        : wd.label === "Tue"
+          ? "Tuesday"
+          : wd.label === "Wed"
+            ? "Wednesday"
+            : wd.label === "Thu"
+              ? "Thursday"
+              : wd.label === "Fri"
+                ? "Friday"
+                : wd.label === "Sat"
+                  ? "Saturday"
+                  : "Sunday";
     return done(`FREQ=WEEKLY;INTERVAL=2;BYDAY=${wd.code}`, `every other ${full}`);
   }
 
@@ -169,10 +175,7 @@ export function parseRecurrenceNL(input: string): ParsedNLRecurrence | null {
         labels.length === 1
           ? labels[0]
           : `${labels.slice(0, -1).join(", ")} & ${labels[labels.length - 1]}`;
-      return done(
-        `FREQ=WEEKLY;BYDAY=${days.map((d) => d.code).join(",")}`,
-        `weekly on ${phrase}`,
-      );
+      return done(`FREQ=WEEKLY;BYDAY=${days.map((d) => d.code).join(",")}`, `weekly on ${phrase}`);
     }
   }
 

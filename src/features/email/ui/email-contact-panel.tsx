@@ -8,8 +8,8 @@ import { UserPlus } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
-import { EntityHub } from "../../../features/spine/ui/entity-hub";
 import { useEntityHub } from "../../../features/spine/hooks/use-entity-hub";
+import { EntityHub } from "../../../features/spine/ui/entity-hub";
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Contact } from "../../contacts/model";

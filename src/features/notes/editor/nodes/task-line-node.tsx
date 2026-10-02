@@ -17,8 +17,8 @@
 import {
   $applyNodeReplacement,
   $createParagraphNode,
-  ElementNode,
   type EditorConfig,
+  ElementNode,
   type LexicalNode,
   type NodeKey,
   type RangeSelection,
@@ -115,7 +115,9 @@ export class TaskLineNode extends ElementNode {
   collapseAtStart(): boolean {
     const paragraph = $createParagraphNode();
     const children = this.getChildren();
-    children.forEach((child) => paragraph.append(child));
+    children.forEach((child) => {
+      paragraph.append(child);
+    });
     this.replace(paragraph);
     return true;
   }
@@ -133,8 +135,6 @@ export function $createTaskLineNode(taskId: string | null, done = false): TaskLi
   return $applyNodeReplacement(new TaskLineNode(taskId, done));
 }
 
-export function $isTaskLineNode(
-  node: LexicalNode | null | undefined,
-): node is TaskLineNode {
+export function $isTaskLineNode(node: LexicalNode | null | undefined): node is TaskLineNode {
   return node instanceof TaskLineNode;
 }

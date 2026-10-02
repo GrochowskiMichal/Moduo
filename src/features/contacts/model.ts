@@ -12,7 +12,10 @@
 // addressable by `(entity_type, entity_id)` and immediately linkable/mentionable
 // (specs/contacts.md AC1).
 
+import type { ContactFieldType } from "@contracts/vocabularies";
 import type { Truncation } from "../../lib/paged-select";
+
+export type { ContactFieldType } from "@contracts/vocabularies";
 
 /**
  * A contact's flat status. Stored as a lowercase id; the default set
@@ -42,8 +45,6 @@ export type ContactDateEntry = {
 
 /** Custom-field value: scalar, or an array for multi-select. */
 export type ContactCustomValue = string | string[];
-
-export type ContactFieldType = "text" | "number" | "date" | "select" | "multi_select" | "url" | "checkbox";
 
 /** A user-defined custom-field definition (workspace-scoped; values live on the row). */
 export type ContactFieldDef = {

@@ -56,10 +56,7 @@ export function useBlockFocus(
 
   /** Whole seconds worked this session so far (wall-clock, throttle-immune). */
   const sessionSeconds = useCallback((): number => {
-    const live =
-      sinceRef.current != null
-        ? Math.floor((Date.now() - sinceRef.current) / 1000)
-        : 0;
+    const live = sinceRef.current != null ? Math.floor((Date.now() - sinceRef.current) / 1000) : 0;
     return bankedRef.current + Math.max(0, live);
   }, []);
 

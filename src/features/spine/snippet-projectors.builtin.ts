@@ -8,13 +8,13 @@
 // well-known type); a module can still override its own via
 // registerSnippetProjector. Import this module for its registration side effect.
 
-import { registerSnippetProjector, type HubSnippetMeta } from "./snippet-projectors";
 import {
   formatEmailSnippet,
   formatEventSnippet,
   formatNoteSnippet,
   formatTaskSnippet,
 } from "./snippet-format";
+import { type HubSnippetMeta, registerSnippetProjector } from "./snippet-projectors";
 
 /** Narrow the polymorphic meta bag to the projector's own kind (defensive). */
 function metaOf<K extends HubSnippetMeta["kind"]>(

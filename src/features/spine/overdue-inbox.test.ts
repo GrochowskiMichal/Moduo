@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { selectOverdueTasks, type OverdueTaskInput } from "./overdue-inbox";
+import { type OverdueTaskInput, selectOverdueTasks } from "./overdue-inbox";
 
 const NOW = new Date("2026-07-14T12:00:00Z");
 const past = "2026-07-13T09:00:00Z";

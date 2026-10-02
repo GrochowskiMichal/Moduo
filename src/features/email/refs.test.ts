@@ -57,17 +57,29 @@ describe("email tissue-ref shaping (AC14)", () => {
 
   it("follow-up: awaiting until cleared; due when past deadline and uncleared", () => {
     const now = Date.parse("2026-07-04T12:00:00Z");
-    expect(isAwaitingFollowUp({ followUpAt: "2026-07-05T00:00:00Z", followUpClearedAt: null })).toBe(true);
     expect(
-      isAwaitingFollowUp({ followUpAt: "2026-07-05T00:00:00Z", followUpClearedAt: "2026-07-04T09:00:00Z" }),
+      isAwaitingFollowUp({ followUpAt: "2026-07-05T00:00:00Z", followUpClearedAt: null }),
+    ).toBe(true);
+    expect(
+      isAwaitingFollowUp({
+        followUpAt: "2026-07-05T00:00:00Z",
+        followUpClearedAt: "2026-07-04T09:00:00Z",
+      }),
     ).toBe(false);
     expect(isAwaitingFollowUp({ followUpAt: null, followUpClearedAt: null })).toBe(false);
 
-    expect(isFollowUpDue({ followUpAt: "2026-07-04T11:00:00Z", followUpClearedAt: null }, now)).toBe(true);
-    expect(isFollowUpDue({ followUpAt: "2026-07-04T13:00:00Z", followUpClearedAt: null }, now)).toBe(false);
+    expect(
+      isFollowUpDue({ followUpAt: "2026-07-04T11:00:00Z", followUpClearedAt: null }, now),
+    ).toBe(true);
+    expect(
+      isFollowUpDue({ followUpAt: "2026-07-04T13:00:00Z", followUpClearedAt: null }, now),
+    ).toBe(false);
     // A counterpart reply cleared it → never fires, even past the deadline.
     expect(
-      isFollowUpDue({ followUpAt: "2026-07-04T11:00:00Z", followUpClearedAt: "2026-07-04T10:30:00Z" }, now),
+      isFollowUpDue(
+        { followUpAt: "2026-07-04T11:00:00Z", followUpClearedAt: "2026-07-04T10:30:00Z" },
+        now,
+      ),
     ).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
 import { Clock, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import type { EntitlementsRow } from "../features/settings/billing";
 import { dispatchOpenSettings } from "../features/settings/settings-events";

@@ -66,7 +66,10 @@ describe("publish — subtree selection (AC10)", () => {
     const live = [note({ id: "root", ...published }), note({ id: "c1", parentId: "root" })];
     expect(selectPublishSubtree("root", live)).toHaveLength(2);
 
-    const revoked = [note({ id: "root", publishedAt: null, publishToken: null }), note({ id: "c1", parentId: "root" })];
+    const revoked = [
+      note({ id: "root", publishedAt: null, publishToken: null }),
+      note({ id: "c1", parentId: "root" }),
+    ];
     expect(selectPublishSubtree("root", revoked)).toEqual([]);
     expect(publishedChildCount("root", revoked)).toBe(0);
     expect(buildPublishTree("root", revoked)).toBeNull();
@@ -98,7 +101,10 @@ describe("publish — subtree selection (AC10)", () => {
 
   it("orphaned deep cycles can't hang the walk (depth-capped)", () => {
     // A pathological self-parent chain shouldn't matter, but guard anyway.
-    const notes = [note({ id: "root", ...published }), note({ id: "loop", parentId: "loop", position: "a" })];
+    const notes = [
+      note({ id: "root", ...published }),
+      note({ id: "loop", parentId: "loop", position: "a" }),
+    ];
     expect(() => selectPublishSubtree("root", notes)).not.toThrow();
   });
 });

@@ -7,8 +7,9 @@
 // Screenshots land in OUT (default /tmp/density-snaps), one per
 // story × (density, text-size) combo, and the resolved token values are
 // printed so regressions in the cascade are visible without opening images.
-import { chromium } from "playwright";
+
 import { mkdirSync } from "node:fs";
+import { chromium } from "playwright";
 
 const PORT = process.env.SB_PORT ?? "6106";
 const OUT = process.env.OUT ?? "/tmp/density-snaps";

@@ -32,10 +32,7 @@ export function loggedMessage(totalSeconds: number, title: string): string {
  * already elapsed/started, or starting within the next hour. Never for done
  * blocks or far-future ones (focusing a block hours ahead is a mis-click).
  */
-export function canFocusBlock(
-  block: { startMs: number; done: boolean },
-  nowMs: number,
-): boolean {
+export function canFocusBlock(block: { startMs: number; done: boolean }, nowMs: number): boolean {
   if (block.done) return false;
   return block.startMs <= nowMs + FOCUS_LEAD_MINUTES * 60_000;
 }

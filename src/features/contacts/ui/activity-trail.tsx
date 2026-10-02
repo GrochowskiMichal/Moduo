@@ -39,7 +39,9 @@ export function ActivityTrail({
               <span className="text-foreground">{spineActorName(entry, currentUserId)}</span>{" "}
               {spineActivityLine(entry)}
             </span>
-            <span className="shrink-0 text-2xs text-muted-foreground/70">{timeAgo(entry.createdAt, now)}</span>
+            <span className="shrink-0 text-2xs text-muted-foreground/70">
+              {timeAgo(entry.createdAt, now)}
+            </span>
           </li>
         ))}
       </ul>

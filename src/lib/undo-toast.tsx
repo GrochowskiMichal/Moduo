@@ -4,7 +4,7 @@
 // success feedback is the neutral toast() voice, never toast.success, and the
 // undo window never drifts from UNDO_TOAST_MS. Hard-destructive actions
 // (API-key revoke, company delete) confirm first instead — see the callers.
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 /** The one undo window. Don't inline 8000 — drift is how grammars die. */

@@ -22,7 +22,8 @@ export type EdgeMenuState = {
 };
 
 function edgeStyleFromType(typeValue: string | undefined): EdgeStyle {
-  if (typeValue === "straight" || typeValue === "step" || typeValue === "smoothstep") return typeValue;
+  if (typeValue === "straight" || typeValue === "step" || typeValue === "smoothstep")
+    return typeValue;
   return "bezier";
 }
 
@@ -32,18 +33,31 @@ export function edgeTypeFromStyle(style: EdgeStyle): string {
 }
 
 export function normalizeEdgeData(edge: MindmapEdge, fallbackColor: string): MindmapEdgeData {
-  const color = typeof edge.data?.color === "string" ? edge.data.color : String(edge.style?.stroke ?? fallbackColor);
-  const thicknessRaw = Number(edge.data?.thickness ?? edge.style?.strokeWidth ?? DEFAULT_EDGE_THICKNESS);
-  const thickness = Number.isFinite(thicknessRaw) && thicknessRaw > 0 ? thicknessRaw : DEFAULT_EDGE_THICKNESS;
-  const label = typeof edge.data?.label === "string" ? edge.data.label : typeof edge.label === "string" ? edge.label : "";
+  const color =
+    typeof edge.data?.color === "string"
+      ? edge.data.color
+      : String(edge.style?.stroke ?? fallbackColor);
+  const thicknessRaw = Number(
+    edge.data?.thickness ?? edge.style?.strokeWidth ?? DEFAULT_EDGE_THICKNESS,
+  );
+  const thickness =
+    Number.isFinite(thicknessRaw) && thicknessRaw > 0 ? thicknessRaw : DEFAULT_EDGE_THICKNESS;
+  const label =
+    typeof edge.data?.label === "string"
+      ? edge.data.label
+      : typeof edge.label === "string"
+        ? edge.label
+        : "";
   const styleCandidate = edge.data?.style;
   const style =
-    styleCandidate === "bezier" || styleCandidate === "straight" || styleCandidate === "step" || styleCandidate === "smoothstep"
+    styleCandidate === "bezier" ||
+    styleCandidate === "straight" ||
+    styleCandidate === "step" ||
+    styleCandidate === "smoothstep"
       ? styleCandidate
       : edgeStyleFromType(edge.type);
   const dashRaw = edge.style?.strokeDasharray;
-  const patternFromStroke =
-    dashRaw === "7 6" ? "dashed" : dashRaw === "1 10" ? "dotted" : "solid";
+  const patternFromStroke = dashRaw === "7 6" ? "dashed" : dashRaw === "1 10" ? "dotted" : "solid";
   const patternCandidate = edge.data?.pattern;
   const pattern: EdgePattern =
     patternCandidate === "solid" || patternCandidate === "dashed" || patternCandidate === "dotted"

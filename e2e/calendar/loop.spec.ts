@@ -3,7 +3,7 @@
 // one Undo restores it. Uses Playwright's clock API so "elapsed" is
 // deterministic. Not part of `bun run verify`; needs a running app + authed
 // session with at least one open task scheduled earlier today.
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const APP = process.env.E2E_APP_URL;
 

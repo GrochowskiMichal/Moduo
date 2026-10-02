@@ -1,8 +1,8 @@
 // Contacts module — dedupe heuristics tests.
 
-import { describe, it, expect } from "vitest";
-import type { Contact, ContactChannel } from "./model";
+import { describe, expect, it } from "vitest";
 import { findDuplicateGroups, probeDuplicate } from "./dedupe";
+import type { Contact, ContactChannel } from "./model";
 
 /** Minimal Contact factory — only the dedupe-relevant fields matter. */
 function contact(overrides: Partial<Contact> & Pick<Contact, "id">): Contact {

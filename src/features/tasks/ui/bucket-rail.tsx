@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -8,10 +7,7 @@ import {
   MoreHorizontal,
   Plus,
 } from "lucide-react";
-
-import { Eyebrow } from "../../../components/ui/eyebrow";
-import { Input } from "../../../components/ui/input";
-import { SegmentedControl } from "../../../components/ui/segmented-control";
+import { useEffect, useRef, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,17 +20,12 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../components/ui/tooltip";
+import { Eyebrow } from "../../../components/ui/eyebrow";
+import { Input } from "../../../components/ui/input";
+import { SegmentedControl } from "../../../components/ui/segmented-control";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
-import {
-  TIME_BLOCK_LABELS,
-  TIME_BLOCK_SLOTS,
-  type TimeBlockSlot,
-} from "../default-view";
+import { TIME_BLOCK_LABELS, TIME_BLOCK_SLOTS, type TimeBlockSlot } from "../default-view";
 import { bucketSections } from "../helpers";
 import type { Bucket } from "../model";
 
@@ -486,9 +477,7 @@ function BucketRow({
               <DropdownMenuSubContent>
                 <DropdownMenuRadioGroup
                   value={timeBlock ?? "none"}
-                  onValueChange={(v) =>
-                    onSetTimeBlock(v === "none" ? null : (v as TimeBlockSlot))
-                  }
+                  onValueChange={(v) => onSetTimeBlock(v === "none" ? null : (v as TimeBlockSlot))}
                 >
                   <DropdownMenuRadioItem value="none">No default</DropdownMenuRadioItem>
                   {TIME_BLOCK_SLOTS.map((slot) => (
@@ -562,7 +551,8 @@ function BucketAddInput({
         placeholder="Bucket name — Enter to add"
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") commit(true); // instant, keep open for rapid adds
+          if (e.key === "Enter")
+            commit(true); // instant, keep open for rapid adds
           else if (e.key === "Escape") {
             setValue("");
             onClose();

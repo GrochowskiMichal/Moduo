@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shapeRecentNotes, timeAgo, type RecentNoteRow } from "./recent";
+import { type RecentNoteRow, shapeRecentNotes, timeAgo } from "./recent";
 
 const NOW = new Date("2026-07-04T12:00:00Z");
 
@@ -27,7 +27,13 @@ describe("recent-notes widget shaper (AC13)", () => {
 
   it("derives a one-line snippet from the body, dropping the echoed title line", () => {
     const out = shapeRecentNotes(
-      [row({ id: "n", title: "Roadmap", bodyText: "Roadmap\nShip NO-9 then NO-10\n\nPublish flow" })],
+      [
+        row({
+          id: "n",
+          title: "Roadmap",
+          bodyText: "Roadmap\nShip NO-9 then NO-10\n\nPublish flow",
+        }),
+      ],
       { now: NOW },
     );
     expect(out[0].title).toBe("Roadmap");
@@ -35,13 +41,18 @@ describe("recent-notes widget shaper (AC13)", () => {
   });
 
   it("gives an empty snippet when the body is only the title", () => {
-    const out = shapeRecentNotes([row({ id: "n", title: "Just a title", bodyText: "Just a title" })], { now: NOW });
+    const out = shapeRecentNotes(
+      [row({ id: "n", title: "Just a title", bodyText: "Just a title" })],
+      { now: NOW },
+    );
     expect(out[0].snippet).toBe("");
   });
 
   it("truncates a long snippet with an ellipsis", () => {
     const long = "word ".repeat(60);
-    const out = shapeRecentNotes([row({ id: "n", title: "T", bodyText: `T\n${long}` })], { now: NOW });
+    const out = shapeRecentNotes([row({ id: "n", title: "T", bodyText: `T\n${long}` })], {
+      now: NOW,
+    });
     expect(out[0].snippet.length).toBeLessThanOrEqual(121);
     expect(out[0].snippet.endsWith("…")).toBe(true);
   });

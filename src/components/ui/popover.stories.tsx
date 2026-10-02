@@ -30,9 +30,7 @@ export const Default: Story = {
       <PopoverContent>
         <PopoverHeader>
           <PopoverTitle>Dimensions</PopoverTitle>
-          <PopoverDescription>
-            Set the size used for the print preview.
-          </PopoverDescription>
+          <PopoverDescription>Set the size used for the print preview.</PopoverDescription>
         </PopoverHeader>
         <div className="mt-4 grid gap-3">
           <div className="grid grid-cols-3 items-center gap-2">

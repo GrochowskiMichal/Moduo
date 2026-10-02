@@ -9,9 +9,9 @@
 // read), and its registry label is already the subject; a desktop follow-up can
 // register email meta the same way.
 
+import { allTimeCalendarWindow } from "@/features/calendar/window";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { allTimeCalendarWindow } from "@/features/calendar/window";
 import { entityRefKey } from "../../spine/rollup";
 import type { HubSnippetMeta } from "../../spine/snippet-projectors";
 

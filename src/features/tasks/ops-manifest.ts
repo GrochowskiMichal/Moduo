@@ -8,8 +8,7 @@ import type { ModuleManifest } from "../../lib/module-manifest";
 
 export const tasksModuleManifest: ModuleManifest = {
   module: "tasks",
-  summary:
-    "Buckets, tasks, today's commit queue, subtasks, dependencies, recurrence.",
+  summary: "Buckets, tasks, today's commit queue, subtasks, dependencies, recurrence.",
   permissionKey: "tasks",
   activityEntityTypes: ["task"],
   ops: [
@@ -88,7 +87,8 @@ export const tasksModuleManifest: ModuleManifest = {
         "Batched recurrence catch-up on app open: reopen arrived done tasks, collapse missed occurrences forward.",
       args: {
         p_workspace_id: "workspace uuid",
-        p_items: "engine results: [{task_id, kind, status?, scheduled_at?, recurrence, clear_commit}]",
+        p_items:
+          "engine results: [{task_id, kind, status?, scheduled_at?, recurrence, clear_commit}]",
       },
     },
   ],

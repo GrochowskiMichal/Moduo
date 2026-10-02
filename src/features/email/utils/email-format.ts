@@ -3,9 +3,7 @@ export function formatEmailDate(raw: string) {
   if (Number.isNaN(parsed.getTime())) return raw;
 
   const day = String(parsed.getDate());
-  const month = parsed
-    .toLocaleString("en-US", { month: "short" })
-    .replace(".", "");
+  const month = parsed.toLocaleString("en-US", { month: "short" }).replace(".", "");
   const currentYear = new Date().getFullYear();
   if (parsed.getFullYear() === currentYear) {
     return `${day}${month}`;

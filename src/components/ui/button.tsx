@@ -1,6 +1,6 @@
-import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -56,11 +56,7 @@ function Button({
   const Comp = asChild ? Slot.Root : "button";
 
   const sizeVar =
-    size === "sm"
-      ? "var(--ctrl-h-sm)"
-      : size === "lg"
-        ? "var(--ctrl-h-lg)"
-        : "var(--ctrl-h)";
+    size === "sm" ? "var(--ctrl-h-sm)" : size === "lg" ? "var(--ctrl-h-lg)" : "var(--ctrl-h)";
 
   return (
     <Comp
@@ -74,5 +70,5 @@ function Button({
   );
 }
 
-export { Button, buttonVariants };
 export type { ButtonProps };
+export { Button, buttonVariants };

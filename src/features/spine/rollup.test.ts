@@ -74,7 +74,11 @@ describe("rollupSections (AC6)", () => {
     const payment: EntityRef = { type: "payment", id: "p1" };
     // Deliberately out of section order: note, payment, task.
     const links = [link(note, "references"), link(payment, "paid-by"), link(task, "blocks")];
-    const recs = registry(record(task, "Ship launch"), record(note, "Spec"), record(payment, "Invoice #1043"));
+    const recs = registry(
+      record(task, "Ship launch"),
+      record(note, "Spec"),
+      record(payment, "Invoice #1043"),
+    );
 
     const sections = rollupSections(FOCUS, links, recs);
     expect(sections.map((s) => s.key)).toEqual(["open-work", "money", "notes"]);
@@ -83,7 +87,11 @@ describe("rollupSections (AC6)", () => {
 
   it("projects the registry label as the row title and carries the relation kind", () => {
     const task: EntityRef = { type: "task", id: "t1" };
-    const sections = rollupSections(FOCUS, [link(task, "blocks")], registry(record(task, "Ship launch")));
+    const sections = rollupSections(
+      FOCUS,
+      [link(task, "blocks")],
+      registry(record(task, "Ship launch")),
+    );
     const row = sections[0].rows[0];
     expect(row.title).toBe("Ship launch");
     expect(row.relationKind).toBe("blocks");
@@ -94,7 +102,11 @@ describe("rollupSections (AC6)", () => {
   it("resolves the OTHER endpoint whether the focus is the source or the target", () => {
     const task: EntityRef = { type: "task", id: "t1" };
     const asSource = rollupSections(FOCUS, [link(task)], registry(record(task, "A")));
-    const asTarget = rollupSections(FOCUS, [link(task, "references", { focusAsTarget: true })], registry(record(task, "A")));
+    const asTarget = rollupSections(
+      FOCUS,
+      [link(task, "references", { focusAsTarget: true })],
+      registry(record(task, "A")),
+    );
     expect(asSource[0].rows[0].other).toEqual(task);
     expect(asTarget[0].rows[0].other).toEqual(task);
   });
@@ -128,7 +140,11 @@ describe("rollupSections (AC6)", () => {
   it("omits empty sections and counts rows per section", () => {
     const t1: EntityRef = { type: "task", id: "t1" };
     const t2: EntityRef = { type: "task", id: "t2" };
-    const sections = rollupSections(FOCUS, [link(t1), link(t2)], registry(record(t1, "A"), record(t2, "B")));
+    const sections = rollupSections(
+      FOCUS,
+      [link(t1), link(t2)],
+      registry(record(t1, "A"), record(t2, "B")),
+    );
     expect(sections).toHaveLength(1);
     expect(sections[0].key).toBe("open-work");
     expect(sections[0].count).toBe(2);
@@ -138,7 +154,10 @@ describe("rollupSections (AC6)", () => {
 
 describe("section capping (Show all N)", () => {
   it("truncates a section past the cap but keeps the full count", () => {
-    const refs = Array.from({ length: SECTION_ROW_CAP + 3 }, (_, i): EntityRef => ({ type: "task", id: `t${i}` }));
+    const refs = Array.from(
+      { length: SECTION_ROW_CAP + 3 },
+      (_, i): EntityRef => ({ type: "task", id: `t${i}` }),
+    );
     const links = refs.map((r) => link(r));
     const recs = registry(...refs.map((r, i) => record(r, `Task ${i}`)));
     const [section] = rollupSections(FOCUS, links, recs);
@@ -163,6 +182,12 @@ describe("section capping (Show all N)", () => {
 
 describe("HUB_SECTIONS", () => {
   it("locks the fixed section order", () => {
-    expect(HUB_SECTIONS.map((s) => s.key)).toEqual(["open-work", "money", "conversations", "notes", "other"]);
+    expect(HUB_SECTIONS.map((s) => s.key)).toEqual([
+      "open-work",
+      "money",
+      "conversations",
+      "notes",
+      "other",
+    ]);
   });
 });

@@ -45,10 +45,9 @@ describe("bucketSections", () => {
   });
 
   it("exposes section names for the move-to-section menu", () => {
-    expect(bucketGroupNames([bucket("a", "Work"), bucket("b", "Life"), bucket("c", "Work")])).toEqual([
-      "Work",
-      "Life",
-    ]);
+    expect(
+      bucketGroupNames([bucket("a", "Work"), bucket("b", "Life"), bucket("c", "Work")]),
+    ).toEqual(["Work", "Life"]);
   });
 });
 

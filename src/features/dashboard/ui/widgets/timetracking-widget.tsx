@@ -4,8 +4,8 @@
 // worst case it degrades to the calm empty state, never a crash. A richer,
 // schema-exact summary is a follow-up once verifiable on the desktop build.
 
-import { useMemo } from "react";
 import { Timer } from "lucide-react";
+import { useMemo } from "react";
 
 import { todayStr } from "@/features/tasks/helpers";
 

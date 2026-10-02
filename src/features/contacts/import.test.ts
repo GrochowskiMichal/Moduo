@@ -3,8 +3,6 @@
 // file), malformed-row skip, and payload shaping. Server round-trip is manual.
 
 import { describe, expect, it } from "vitest";
-
-import type { Company, Contact } from "./model";
 import {
   buildImportRows,
   guessColumnMapping,
@@ -12,6 +10,7 @@ import {
   planImport,
   toImportPayload,
 } from "./import";
+import type { Company, Contact } from "./model";
 
 function contact(over: Partial<Contact>): Contact {
   return {
@@ -96,7 +95,15 @@ describe("parseCsv", () => {
 describe("guessColumnMapping", () => {
   it("maps common headers and resolves compound headers by priority", () => {
     expect(
-      guessColumnMapping(["Full Name", "E-mail Address", "Company Name", "Mobile", "Job Title", "Status", "Notes"]),
+      guessColumnMapping([
+        "Full Name",
+        "E-mail Address",
+        "Company Name",
+        "Mobile",
+        "Job Title",
+        "Status",
+        "Notes",
+      ]),
     ).toEqual(["name", "email", "company", "phone", "title", "status", "ignore"]);
   });
 
@@ -127,10 +134,25 @@ describe("buildImportRows", () => {
 
 describe("planImport — dedupe email first, then name+company", () => {
   it("merges on an existing email match (reason email)", () => {
-    const existing = [contact({ id: "c1", name: "Old Name", email: "dana@acme.com", emails: [{ label: "other", value: "dana@acme.com", primary: true }] })];
-    const rows = buildImportRows(["name", "email"], [["Dana Lee", "DANA@acme.com"]], ["name", "email"]);
+    const existing = [
+      contact({
+        id: "c1",
+        name: "Old Name",
+        email: "dana@acme.com",
+        emails: [{ label: "other", value: "dana@acme.com", primary: true }],
+      }),
+    ];
+    const rows = buildImportRows(
+      ["name", "email"],
+      [["Dana Lee", "DANA@acme.com"]],
+      ["name", "email"],
+    );
     const plan = planImport(rows, existing, []);
-    expect(plan.entries[0]).toMatchObject({ action: "merge", matchedContactId: "c1", reason: "email" });
+    expect(plan.entries[0]).toMatchObject({
+      action: "merge",
+      matchedContactId: "c1",
+      reason: "email",
+    });
   });
 
   it("merges on name+company when there is no email match", () => {
@@ -138,11 +160,22 @@ describe("planImport — dedupe email first, then name+company", () => {
     const companies = [company({ id: "co1", name: "Acme" })];
     const rows = buildImportRows(["name", "company"], [["dana lee", "ACME"]], ["name", "company"]);
     const plan = planImport(rows, existing, companies);
-    expect(plan.entries[0]).toMatchObject({ action: "merge", matchedContactId: "c2", reason: "name+company" });
+    expect(plan.entries[0]).toMatchObject({
+      action: "merge",
+      matchedContactId: "c2",
+      reason: "name+company",
+    });
   });
 
   it("flags a second row matching the same existing contact as a duplicate, not a second merge", () => {
-    const existing = [contact({ id: "c1", name: "Dana", email: "dana@acme.com", emails: [{ label: "other", value: "dana@acme.com", primary: true }] })];
+    const existing = [
+      contact({
+        id: "c1",
+        name: "Dana",
+        email: "dana@acme.com",
+        emails: [{ label: "other", value: "dana@acme.com", primary: true }],
+      }),
+    ];
     const rows = buildImportRows(
       ["name", "email"],
       [
@@ -156,7 +189,16 @@ describe("planImport — dedupe email first, then name+company", () => {
     expect(plan.entries[1]).toMatchObject({ action: "duplicate" });
     // Only ONE merge reaches the op — never a double-write into the same contact.
     expect(toImportPayload(plan)).toEqual([
-      { op: "merge", contactId: "c1", name: "Dana One", email: "dana@acme.com", phone: null, title: null, company: null, status: null },
+      {
+        op: "merge",
+        contactId: "c1",
+        name: "Dana One",
+        email: "dana@acme.com",
+        phone: null,
+        title: null,
+        company: null,
+        status: null,
+      },
     ]);
   });
 
@@ -196,7 +238,13 @@ describe("planImport — dedupe email first, then name+company", () => {
 
 describe("toImportPayload", () => {
   it("emits create + merge rows only, dropping duplicates and errors, normalizing status", () => {
-    const existing = [contact({ id: "c1", email: "dana@acme.com", emails: [{ label: "other", value: "dana@acme.com", primary: true }] })];
+    const existing = [
+      contact({
+        id: "c1",
+        email: "dana@acme.com",
+        emails: [{ label: "other", value: "dana@acme.com", primary: true }],
+      }),
+    ];
     const rows = buildImportRows(
       ["name", "email", "status"],
       [
@@ -210,8 +258,25 @@ describe("toImportPayload", () => {
     const plan = planImport(rows, existing, []);
     const payload = toImportPayload(plan);
     expect(payload).toEqual([
-      { op: "merge", contactId: "c1", name: "Dana", email: "dana@acme.com", phone: null, title: null, company: null, status: null },
-      { op: "create", name: "Fresh", email: "fresh@x.io", phone: null, title: null, company: null, status: "lead" },
+      {
+        op: "merge",
+        contactId: "c1",
+        name: "Dana",
+        email: "dana@acme.com",
+        phone: null,
+        title: null,
+        company: null,
+        status: null,
+      },
+      {
+        op: "create",
+        name: "Fresh",
+        email: "fresh@x.io",
+        phone: null,
+        title: null,
+        company: null,
+        status: "lead",
+      },
     ]);
   });
 });

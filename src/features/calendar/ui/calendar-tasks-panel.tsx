@@ -9,20 +9,19 @@
 // curation section pins to the top — untick to exclude, "Move N to today",
 // rows drag onto the grid, per-row Remove. The normal groups stay below.
 
-import { useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CalendarCheck, GripVertical, Search, X } from "lucide-react";
-
+import { useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
-import { cn } from "@/lib/utils";
-import { taskDrag } from "../../tasks/ui/dnd/task-dnd";
 import { formatDue, formatScheduled } from "../../tasks/helpers";
 import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
 import type { Task } from "../../tasks/model";
+import { taskDrag } from "../../tasks/ui/dnd/task-dnd";
 import { groupPanelTasks } from "../panel";
 import type { StripItem } from "../strip";
 import { formatDayLabel, formatTimeOfDay } from "./time-format";
@@ -54,8 +53,7 @@ export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture, review }
     [api.tasks, api.committedTasks, query],
   );
 
-  const total =
-    groups.today.length + groups.dueSoon.length + groups.backlog.length;
+  const total = groups.today.length + groups.dueSoon.length + groups.backlog.length;
 
   return (
     <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
@@ -106,14 +104,14 @@ export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture, review }
 function ReviewSection({ review, canEdit }: { review: ReviewController; canEdit: boolean }) {
   // Excluded ids (unticked). Default: everything included.
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(() => new Set());
-  const includedIds = review.items
-    .map((i) => i.taskId)
-    .filter((id) => !excluded.has(id));
+  const includedIds = review.items.map((i) => i.taskId).filter((id) => !excluded.has(id));
 
   return (
     <div className="shrink-0 rounded-lg border border-border bg-card/40 p-2">
       <div className="flex items-center gap-2 px-1">
-        <Eyebrow className="min-w-0 flex-1">Unfinished from earlier ({review.items.length})</Eyebrow>
+        <Eyebrow className="min-w-0 flex-1">
+          Unfinished from earlier ({review.items.length})
+        </Eyebrow>
         <IconButton icon={X} label="Close review" onClick={review.onClose} />
       </div>
 
@@ -189,11 +187,7 @@ function ReviewRow({
         aria-label={included ? `Exclude ${item.title}` : `Include ${item.title}`}
         className="size-3.5 shrink-0 accent-primary"
       />
-      <div
-        {...listeners}
-        {...attributes}
-        className="flex min-w-0 flex-1 cursor-grab flex-col"
-      >
+      <div {...listeners} {...attributes} className="flex min-w-0 flex-1 cursor-grab flex-col">
         <span className="truncate text-sm text-foreground">{item.title}</span>
         <span className="truncate text-2xs text-muted-foreground">{origin}</span>
       </div>
@@ -274,9 +268,7 @@ function PanelTaskRow({
       />
       <span className="min-w-0 flex-1 truncate text-sm text-foreground">{task.title}</span>
       {task.durationMinutes ? (
-        <span className="shrink-0 text-2xs text-muted-foreground">
-          {task.durationMinutes}m
-        </span>
+        <span className="shrink-0 text-2xs text-muted-foreground">{task.durationMinutes}m</span>
       ) : null}
       {scheduled ? (
         <span

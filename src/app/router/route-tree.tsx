@@ -1,25 +1,29 @@
-import { createRootRoute, createRoute, Outlet, redirect } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  lazyRouteComponent,
+  Outlet,
+  redirect,
+} from "@tanstack/react-router";
+import { validateCalendarSearch } from "../../features/calendar/search";
+import { validateContactsSearch } from "../../features/contacts/search";
+import { validateEmailSearch } from "../../features/email/url-search";
+import { validateNotesSearch } from "../../features/notes/search";
+import { validateTasksSearch } from "../../features/tasks/search";
+import { consumeLandingRedirect } from "../../lib/preferences";
 import { AuthProvider } from "../../providers/auth-provider";
 import { AppGate } from "../../routes/layouts/app-gate";
 import { AuthPage } from "../../routes/pages/auth-page";
-import { OnboardingPage } from "../../routes/pages/onboarding-page";
-import { HomePage } from "../../routes/pages/home-page";
-import { NotesPage } from "../../routes/pages/notes-page";
-import { TasksPage } from "../../routes/pages/tasks-page";
+import { BookCancelPage } from "../../routes/pages/book-cancel-page";
+import { BookPage } from "../../routes/pages/book-page";
 import { CalendarPage } from "../../routes/pages/calendar-page";
-import { MindmapPage } from "../../routes/pages/mindmap-page";
-import { EmailPage } from "../../routes/pages/email-page";
 import { ContactsPage } from "../../routes/pages/contacts-page";
-import { validateContactsSearch } from "../../features/contacts/search";
-import { validateNotesSearch } from "../../features/notes/search";
-import { validateTasksSearch } from "../../features/tasks/search";
-import { validateCalendarSearch } from "../../features/calendar/search";
-import { validateEmailSearch } from "../../features/email/url-search";
-import { SettingsPage } from "../../routes/pages/settings-page";
-import { PaywallPage } from "../../routes/pages/paywall-page";
-import { PublishedNotePage } from "../../routes/pages/published-note-page";
+import { HomePage } from "../../routes/pages/home-page";
 import { JoinPage } from "../../routes/pages/join-page";
-import { consumeLandingRedirect } from "../../lib/preferences";
+import { OnboardingPage } from "../../routes/pages/onboarding-page";
+import { PaywallPage } from "../../routes/pages/paywall-page";
+import { SettingsPage } from "../../routes/pages/settings-page";
+import { TasksPage } from "../../routes/pages/tasks-page";
 
 function RootLayout() {
   return (
@@ -40,7 +44,7 @@ function RootLayout() {
  * these surfaces got inconsistent before. `display: contents` adds no box, so
  * layout is untouched while custom properties still inherit through it.
  */
-function preWorkspace(Component: () => React.ReactNode) {
+function preWorkspace(Component: React.ComponentType) {
   return function PreWorkspaceRoute() {
     return (
       <div data-accent="mono" className="contents">
@@ -78,11 +82,29 @@ const paywallRoute = createRoute({
 const publishedNoteRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/p/$token",
-  component: preWorkspace(PublishedNotePage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/published-note-page"), "PublishedNotePage"),
+  ),
   validateSearch: (search: Record<string, unknown>): { note?: string } => {
     const note = typeof search.note === "string" && search.note ? search.note : undefined;
     return note ? { note } : {};
   },
+});
+
+const bookCancelRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/book/cancel",
+  component: preWorkspace(BookCancelPage),
+  validateSearch: (search: Record<string, unknown>): { token?: string } => {
+    const token = typeof search.token === "string" && search.token ? search.token : undefined;
+    return token ? { token } : {};
+  },
+});
+
+const bookRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/book/$slug",
+  component: preWorkspace(BookPage),
 });
 
 // Workspace invite accept surface (DF-24). Sibling of /auth, OUTSIDE the app
@@ -123,14 +145,16 @@ const homeRoute = createRoute({
 const legacyGridRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/product-demo",
-  beforeLoad: () => { throw redirect({ to: "/", replace: true }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/", replace: true });
+  },
   component: () => null,
 });
 
 const notesRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/notes",
-  component: NotesPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/notes-page"), "NotesPage"),
   validateSearch: validateNotesSearch,
 });
 
@@ -155,13 +179,13 @@ const calendarRoute = createRoute({
 const mindmapRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/mindmap",
-  component: MindmapPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/mindmap-page"), "MindmapPage"),
 });
 
 const emailRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/email",
-  component: EmailPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/email-page"), "EmailPage"),
   // `?thread=` deep link → select + scroll the thread (desktop) / tissue card (web) (DF-2).
   validateSearch: validateEmailSearch,
 });
@@ -179,7 +203,9 @@ const contactsRoute = createRoute({
 const legacyCrmRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/crm",
-  beforeLoad: () => { throw redirect({ to: "/contacts", replace: true }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/contacts", replace: true });
+  },
   component: () => null,
 });
 
@@ -194,6 +220,8 @@ export const routeTree = rootRoute.addChildren([
   onboardingRoute,
   paywallRoute,
   publishedNoteRoute,
+  bookCancelRoute,
+  bookRoute,
   joinRoute,
   appGateRoute.addChildren([
     homeRoute,

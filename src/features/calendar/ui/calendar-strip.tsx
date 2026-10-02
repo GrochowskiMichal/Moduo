@@ -22,9 +22,7 @@ export function CalendarStrip({ count, canEdit, reviewing, onMoveToToday, onRevi
       data-slot="chrome-fade-in"
       className="flex shrink-0 items-center gap-3 px-1 py-1.5 text-sm text-muted-foreground"
     >
-      <span>
-        · {count} unfinished from earlier
-      </span>
+      <span>· {count} unfinished from earlier</span>
       {canEdit ? (
         <div className="ml-auto flex items-center gap-1">
           <Button size="sm" variant="ghost" onClick={onMoveToToday}>

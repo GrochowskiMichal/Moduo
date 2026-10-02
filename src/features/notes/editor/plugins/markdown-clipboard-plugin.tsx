@@ -13,7 +13,8 @@
  * Moduo stays rich and paste-elsewhere gets md.
  */
 
-import { useEffect } from "react";
+import { $getHtmlContent, $getLexicalContent } from "@lexical/clipboard";
+import { $convertFromMarkdownString } from "@lexical/markdown";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getRoot,
@@ -23,8 +24,7 @@ import {
   COPY_COMMAND,
   PASTE_COMMAND,
 } from "lexical";
-import { $getHtmlContent, $getLexicalContent } from "@lexical/clipboard";
-import { $convertFromMarkdownString } from "@lexical/markdown";
+import { useEffect } from "react";
 import {
   $nodeToMdJson,
   $selectionTopBlocks,

@@ -134,7 +134,18 @@ export function useMentionSearch({
     }, debounceMs);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, runtime, workspaceId, trigger, query, typesKey, currentUserId, includePeople, includeEntities, debounceMs]);
+  }, [
+    enabled,
+    runtime,
+    workspaceId,
+    trigger,
+    query,
+    typesKey,
+    currentUserId,
+    includePeople,
+    includeEntities,
+    debounceMs,
+  ]);
 
   const candidates = useMemo(
     () => buildMentionCandidates({ trigger, query, entities, people, createType, canCreate }),

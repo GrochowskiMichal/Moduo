@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
+import { DEFAULT_FOCUS_PREFS } from "../../lib/focus-prefs";
 import {
   __resetFocusSessionForTest,
   bindFocusTask,
@@ -14,7 +14,6 @@ import {
   toggleFocusPomodoro,
   toggleFocusRunning,
 } from "./focus-session-store";
-import { DEFAULT_FOCUS_PREFS } from "../../lib/focus-prefs";
 
 // Drive the pomodoro intervals the store reads from persisted Focus prefs.
 function setPrefs(patch: Partial<typeof DEFAULT_FOCUS_PREFS>): void {

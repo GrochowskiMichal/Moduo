@@ -63,7 +63,11 @@ describe("recurrenceOnStatusChange (advance-on-done)", () => {
   });
 
   it("un-completing refreshes the pointer; non-done transitions don't", () => {
-    const t = task({ recurrence: daily(), status: "done", scheduledAt: "2026-06-12T08:00:00.000Z" });
+    const t = task({
+      recurrence: daily(),
+      status: "done",
+      scheduledAt: "2026-06-12T08:00:00.000Z",
+    });
     expect(recurrenceOnStatusChange(t, "todo", NOW)?.nextOccurrence).toBe(
       "2026-06-13T08:00:00.000Z",
     );
@@ -212,9 +216,7 @@ describe("skipOccurrencePatch", () => {
   });
 
   it("never offered on done tasks; null when the rule is exhausted", () => {
-    expect(
-      skipOccurrencePatch(task({ recurrence: daily(), status: "done" }), NOW),
-    ).toBeNull();
+    expect(skipOccurrencePatch(task({ recurrence: daily(), status: "done" }), NOW)).toBeNull();
     const exhausted = daily({ rrule: "FREQ=DAILY;COUNT=2" });
     expect(
       skipOccurrencePatch(

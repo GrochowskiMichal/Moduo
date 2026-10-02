@@ -4,8 +4,8 @@
 // this is the shell: file intake, the mapping editor, the preview, and the single
 // op call. Tokens + shadcn primitives only (R4/R7/R10); sentence case (R8).
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, FileUp, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,19 +26,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import type { Company, Contact } from "../model";
 import {
   buildImportRows,
+  type ContactImportResult,
+  type ContactImportRow,
   guessColumnMapping,
   IMPORT_FIELDS,
+  type ImportAction,
+  type ImportField,
   parseCsv,
   planImport,
   toImportPayload,
-  type ContactImportResult,
-  type ContactImportRow,
-  type ImportAction,
-  type ImportField,
 } from "../import";
+import type { Company, Contact } from "../model";
 
 type Step = "drop" | "map" | "preview";
 
@@ -62,7 +62,10 @@ type Props = {
   seed?: ImportDialogSeed;
 };
 
-const ACTION_BADGE: Record<ImportAction, { label: string; variant: "success" | "info" | "secondary" | "destructive" }> = {
+const ACTION_BADGE: Record<
+  ImportAction,
+  { label: string; variant: "success" | "info" | "secondary" | "destructive" }
+> = {
   create: { label: "New", variant: "success" },
   merge: { label: "Merge", variant: "info" },
   duplicate: { label: "Duplicate", variant: "secondary" },
@@ -198,7 +201,9 @@ export function ContactImportDialog({
             >
               <FileUp className="size-icon text-muted-foreground" aria-hidden />
               <span className="text-sm text-foreground">Drop a CSV here, or click to choose</span>
-              <span className="text-xs text-muted-foreground">First row is treated as column headers</span>
+              <span className="text-xs text-muted-foreground">
+                First row is treated as column headers
+              </span>
             </button>
             <input
               ref={fileInputRef}
@@ -218,9 +223,14 @@ export function ContactImportDialog({
           <ScrollArea className="max-h-80">
             <div className="space-y-1 pr-3">
               {parsed.headers.map((header, idx) => (
-                <div key={`${header}-${idx}`} className="flex items-center gap-3 rounded-md px-1 py-1">
+                <div
+                  key={`${header}-${idx}`}
+                  className="flex items-center gap-3 rounded-md px-1 py-1"
+                >
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm text-foreground">{header || `Column ${idx + 1}`}</div>
+                    <div className="truncate text-sm text-foreground">
+                      {header || `Column ${idx + 1}`}
+                    </div>
                     <div className="truncate text-xs text-muted-foreground">
                       {parsed.rows[0]?.[idx]?.trim() || "—"}
                     </div>
@@ -228,7 +238,9 @@ export function ContactImportDialog({
                   <Select
                     value={mapping[idx] ?? "ignore"}
                     onValueChange={(value) =>
-                      setMapping((prev) => prev.map((m, i) => (i === idx ? (value as ImportField) : m)))
+                      setMapping((prev) =>
+                        prev.map((m, i) => (i === idx ? (value as ImportField) : m)),
+                      )
                     }
                   >
                     <SelectTrigger className="w-40" aria-label={`Map column ${header || idx + 1}`}>
@@ -252,7 +264,9 @@ export function ContactImportDialog({
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
               <Badge variant="success">{plan.summary.create} new</Badge>
-              {plan.summary.merge > 0 ? <Badge variant="info">{plan.summary.merge} merge</Badge> : null}
+              {plan.summary.merge > 0 ? (
+                <Badge variant="info">{plan.summary.merge} merge</Badge>
+              ) : null}
               {plan.summary.duplicate > 0 ? (
                 <Badge variant="secondary">{plan.summary.duplicate} duplicate</Badge>
               ) : null}
@@ -270,7 +284,9 @@ export function ContactImportDialog({
                       className="flex items-center gap-2 rounded-md px-1 py-1 text-sm"
                     >
                       <span className="min-w-0 flex-1 truncate text-foreground">
-                        {entry.name.trim() || <span className="text-muted-foreground">(no name)</span>}
+                        {entry.name.trim() || (
+                          <span className="text-muted-foreground">(no name)</span>
+                        )}
                         {entry.email ? (
                           <span className="ml-2 text-xs text-muted-foreground">{entry.email}</span>
                         ) : null}
@@ -308,7 +324,9 @@ export function ContactImportDialog({
               </Button>
               <Button onClick={() => void handleImport()} disabled={importCount === 0 || importing}>
                 <Upload className="size-icon-sm" aria-hidden />
-                {importing ? "Importing…" : `Import ${importCount} ${importCount === 1 ? "contact" : "contacts"}`}
+                {importing
+                  ? "Importing…"
+                  : `Import ${importCount} ${importCount === 1 ? "contact" : "contacts"}`}
               </Button>
             </>
           ) : (

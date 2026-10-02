@@ -6,7 +6,6 @@
 // activity trail. Edit toggles inline editing; Save sends one patch. Tokens +
 // shadcn only; status is color+label and optional.
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Building2,
   Cake,
@@ -27,16 +26,11 @@ import {
   Star,
   X,
 } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DetailTitle, detailTitleVariants } from "@/components/ui/detail-title";
-import { Eyebrow } from "@/components/ui/eyebrow";
-import { IconButton } from "@/components/ui/icon-button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,25 +38,42 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { IconButton } from "@/components/ui/icon-button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
-import type { ModuoRuntime, ContactDetailsPatch } from "@/lib/runtime.types";
+import type { ContactDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
+import { cn } from "@/lib/utils";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
-import { LinkSuggestionStrip } from "../../spine/ui/link-suggestion-strip";
 import type { MentionCandidate } from "../../spine/mention";
+import { LinkSuggestionStrip } from "../../spine/ui/link-suggestion-strip";
 import type { ActivityEntry } from "../../tasks/model";
-import type { Contact, ContactChannel, ContactDateEntry, ContactFieldDef, ContactFieldType } from "../model";
-import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";
-import { lastTouchLine, type ContactRollup } from "../rollup";
 import { birthdayCountdown } from "../dates";
 import { parseFieldOptions, selectOptionsFor } from "../field-defs";
 import { useContactSuggestions } from "../hooks/use-contact-suggestions";
-import { initials } from "./contact-directory";
+import type {
+  Contact,
+  ContactChannel,
+  ContactDateEntry,
+  ContactFieldDef,
+  ContactFieldType,
+} from "../model";
+import { type ContactRollup, lastTouchLine } from "../rollup";
+import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";
 import { ActivityTrail } from "./activity-trail";
+import { initials } from "./contact-directory";
 import { ContactStatusBadge, ContactStatusDot } from "./contact-status-badge";
+import { EntityLinkPicker } from "./entity-link-picker";
 import { EntityTagRow } from "./entity-tag-row";
 import { LinkedSections } from "./linked-sections";
-import { EntityLinkPicker } from "./entity-link-picker";
 
 // Radix Select forbids an empty-string item value, so "No status" rides a sentinel.
 const NO_STATUS = "__none__";
@@ -115,7 +126,10 @@ function draftFrom(c: Contact): Draft {
     addresses: c.addresses.map((e) => ({ ...e })),
     dates: c.dates.map((d) => ({ ...d })),
     custom: Object.fromEntries(
-      Object.entries(c.custom).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : String(v ?? "")]),
+      Object.entries(c.custom).map(([k, v]) => [
+        k,
+        Array.isArray(v) ? v.join(", ") : String(v ?? ""),
+      ]),
     ),
   };
 }
@@ -216,13 +230,23 @@ type DetailRow = { label: string; value: ReactNode; wrap?: boolean; copy?: strin
 type DetailGroup = { key: string; icon: typeof Mail; rows: DetailRow[] };
 
 /** Multi-value channel → labelled rows; email/phone/url values act on click. */
-function channelRows(rows: ContactChannel[], kind: "email" | "phone" | "url" | "address"): DetailRow[] {
+function channelRows(
+  rows: ContactChannel[],
+  kind: "email" | "phone" | "url" | "address",
+): DetailRow[] {
   const href = (v: string) =>
-    kind === "email" ? `mailto:${v}` : kind === "phone" ? `tel:${v}` : kind === "url" ? v : undefined;
+    kind === "email"
+      ? `mailto:${v}`
+      : kind === "phone"
+        ? `tel:${v}`
+        : kind === "url"
+          ? v
+          : undefined;
   return rows.map((r) => {
     const h = href(r.value);
     // Display URLs without the protocol noise; the href keeps it.
-    const display = kind === "url" ? r.value.replace(/^https?:\/\//, "").replace(/\/$/, "") : r.value;
+    const display =
+      kind === "url" ? r.value.replace(/^https?:\/\//, "").replace(/\/$/, "") : r.value;
     return {
       label: r.label || kind,
       // Copy the raw value (email/phone/url); addresses have no one-tap channel.
@@ -257,13 +281,27 @@ function DetailsGroup({ icon: Icon, rows }: { icon: typeof Mail; rows: DetailRow
   return (
     <div className="px-3 py-2">
       {rows.map((r, i) => (
-        <div key={i} className={cn("group/row flex gap-3 py-1 text-sm", r.wrap ? "items-start" : "items-center")}>
+        <div
+          key={i}
+          className={cn(
+            "group/row flex gap-3 py-1 text-sm",
+            r.wrap ? "items-start" : "items-center",
+          )}
+        >
           <Icon
-            className={cn("size-icon-sm shrink-0 text-muted-foreground/70", r.wrap && "mt-0.5", i > 0 && "invisible")}
+            className={cn(
+              "size-icon-sm shrink-0 text-muted-foreground/70",
+              r.wrap && "mt-0.5",
+              i > 0 && "invisible",
+            )}
             aria-hidden
           />
           <span className="w-16 shrink-0 truncate text-xs text-muted-foreground">{r.label}</span>
-          <span className={cn("min-w-0 flex-1 text-foreground", r.wrap ? "break-words" : "truncate")}>{r.value}</span>
+          <span
+            className={cn("min-w-0 flex-1 text-foreground", r.wrap ? "break-words" : "truncate")}
+          >
+            {r.value}
+          </span>
           {r.copy ? (
             // opacity-0 (not hidden) reserves the column so the value never shifts.
             <IconButton
@@ -293,10 +331,20 @@ function ContactSuggestions({
   onLinked: () => void;
 }) {
   const focus: EntityRef = { type: "contact", id: contactId };
-  const { current, busy, accept, dismiss } = useContactSuggestions(runtime, workspaceId, focus, onLinked);
+  const { current, busy, accept, dismiss } = useContactSuggestions(
+    runtime,
+    workspaceId,
+    focus,
+    onLinked,
+  );
   if (!current) return null;
   return (
-    <LinkSuggestionStrip suggestion={current} busy={busy} onAccept={() => void accept()} onDismiss={() => void dismiss()} />
+    <LinkSuggestionStrip
+      suggestion={current}
+      busy={busy}
+      onAccept={() => void accept()}
+      onDismiss={() => void dismiss()}
+    />
   );
 }
 
@@ -343,7 +391,11 @@ export function ContactHub(props: ContactHubProps) {
     setDraft(draftFrom(contact));
   }, [contact.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const primaryEmail = contact.email ?? contact.emails.find((e) => e.primary)?.value ?? contact.emails[0]?.value ?? null;
+  const primaryEmail =
+    contact.email ??
+    contact.emails.find((e) => e.primary)?.value ??
+    contact.emails[0]?.value ??
+    null;
 
   // The read-mode field groups (only non-empty ones render; the card hides
   // entirely when the record has no details yet — progressive disclosure).
@@ -356,6 +408,7 @@ export function ContactHub(props: ContactHubProps) {
       const value: ReactNode =
         f.type === "url" ? (
           <a
+            key={f.key}
             href={text}
             target="_blank"
             rel="noreferrer"
@@ -384,7 +437,9 @@ export function ContactHub(props: ContactHubProps) {
             value: (
               <span className="inline-flex items-baseline gap-2">
                 {formatDateValue(d.value)}
-                {countdown ? <span className="text-xs text-muted-foreground">{countdown}</span> : null}
+                {countdown ? (
+                  <span className="text-xs text-muted-foreground">{countdown}</span>
+                ) : null}
               </span>
             ),
           };
@@ -399,11 +454,19 @@ export function ContactHub(props: ContactHubProps) {
   // by id: a pair can hold two edges of different kinds (references + mentions),
   // which would otherwise render the same person twice with a duplicate key.
   const linkedPeople = useMemo(() => {
-    const byId = new Map<string, { id: string; name: string; status: string; avatarUrl: string | null }>();
+    const byId = new Map<
+      string,
+      { id: string; name: string; status: string; avatarUrl: string | null }
+    >();
     for (const r of rollup.sections.flatMap((s) => s.rows)) {
       if (r.other.type !== "contact" || r.tombstoned || byId.has(r.other.id)) continue;
       const c = contactsById?.get(r.other.id);
-      byId.set(r.other.id, { id: r.other.id, name: c?.name || r.title, status: c?.status ?? "", avatarUrl: c?.avatarUrl ?? null });
+      byId.set(r.other.id, {
+        id: r.other.id,
+        name: c?.name || r.title,
+        status: c?.status ?? "",
+        avatarUrl: c?.avatarUrl ?? null,
+      });
     }
     return [...byId.values()];
   }, [rollup.sections, contactsById]);
@@ -417,7 +480,8 @@ export function ContactHub(props: ContactHubProps) {
         ...s,
         rows: s.rows.filter(
           (r) =>
-            !(r.other.type === "company" && r.other.id === contact.companyId) && r.other.type !== "contact",
+            !(r.other.type === "company" && r.other.id === contact.companyId) &&
+            r.other.type !== "contact",
         ),
       }))
       .map((s) => ({ ...s, count: s.rows.length }))
@@ -425,7 +489,13 @@ export function ContactHub(props: ContactHubProps) {
   }, [rollup.sections, contact.companyId]);
 
   function clean(rows: ContactChannel[]): ContactChannel[] {
-    return rows.filter((r) => r.value.trim() !== "").map((r) => ({ label: r.label.trim() || "other", value: r.value.trim(), primary: r.primary }));
+    return rows
+      .filter((r) => r.value.trim() !== "")
+      .map((r) => ({
+        label: r.label.trim() || "other",
+        value: r.value.trim(),
+        primary: r.primary,
+      }));
   }
 
   function save() {
@@ -437,7 +507,9 @@ export function ContactHub(props: ContactHubProps) {
       phones: clean(draft.phones),
       urls: clean(draft.urls),
       addresses: clean(draft.addresses),
-      dates: draft.dates.filter((d) => d.value.trim() !== "").map((d) => ({ label: d.label.trim() || "date", value: d.value })),
+      dates: draft.dates
+        .filter((d) => d.value.trim() !== "")
+        .map((d) => ({ label: d.label.trim() || "date", value: d.value })),
       custom: Object.fromEntries(Object.entries(draft.custom).filter(([, v]) => v.trim() !== "")),
     };
     onSaveDetails(patch);
@@ -455,303 +527,388 @@ export function ContactHub(props: ContactHubProps) {
 
   return (
     <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
-    <div className="mx-auto flex max-w-2xl flex-col gap-5 p-6">
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <Avatar size="lg" className="shrink-0">
-          {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt="" /> : null}
-          <AvatarFallback>{initials(contact.name)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1 space-y-1">
-          {editing ? (
-            <Input
-              variant="bare"
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              aria-label="Contact name"
-              style={{ height: "auto" }}
-              className={cn(detailTitleVariants({ size: "page" }), "focus-visible:ring-0")}
-            />
-          ) : (
-            <DetailTitle size="page">{contact.name || "Unnamed"}</DetailTitle>
-          )}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            {contact.title ? <span className="truncate">{contact.title}</span> : null}
-            {companyName ? (
-              <button
-                type="button"
-                onClick={() => contact.companyId && onOpenEntity?.({ type: "company", id: contact.companyId })}
-                className="inline-flex items-center gap-1 truncate hover:text-foreground hover:underline"
-              >
-                <Building2 className="size-icon-sm shrink-0" aria-hidden />
-                {companyName}
-              </button>
-            ) : null}
-            {!editing ? (
-              <HeaderStatus contact={contact} canEdit={canEdit} onSetStatus={onSetStatus} />
-            ) : contact.status ? (
-              <ContactStatusBadge status={contact.status} />
-            ) : null}
-          </div>
-          {!editing ? (
-            // key: remount per entity so tag state can never leak across a
-            // focus switch (stale chips / late-mutation writes).
-            <EntityTagRow
-              key={`contact:${contact.id}`}
-              runtime={runtime}
-              workspaceId={workspaceId}
-              focus={{ type: "contact", id: contact.id }}
-              canEdit={canEdit}
-            />
-          ) : null}
-        </div>
-        {canEdit ? (
-          <div className="flex shrink-0 items-center gap-0.5">
+      <div className="mx-auto flex max-w-2xl flex-col gap-5 p-6">
+        {/* Header */}
+        <div className="flex items-start gap-3">
+          <Avatar size="lg" className="shrink-0">
+            {contact.avatarUrl ? <AvatarImage src={contact.avatarUrl} alt="" /> : null}
+            <AvatarFallback>{initials(contact.name)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1 space-y-1">
             {editing ? (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setDraft(draftFrom(contact)); }}>
-                  Cancel
-                </Button>
-                <Button size="sm" onClick={save}>Done</Button>
-              </>
+              <Input
+                variant="bare"
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                aria-label="Contact name"
+                style={{ height: "auto" }}
+                className={cn(detailTitleVariants({ size: "page" }), "focus-visible:ring-0")}
+              />
             ) : (
-              <>
-                <IconButton
-                  icon={Star}
-                  label={contact.isFavorite ? "Remove from favorites" : "Add to favorites"}
-                  size="sm"
-                  variant="ghost"
-                  className={cn(contact.isFavorite && "text-warning")}
-                  onClick={onToggleFavorite}
-                />
-                <IconButton icon={Pencil} label="Edit contact" size="sm" variant="ghost" onClick={() => setEditing(true)} />
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <IconButton icon={MoreHorizontal} label="More actions" size="sm" variant="ghost" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={onShare}>Share as vCard…</DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-                      Delete contact
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
+              <DetailTitle size="page">{contact.name || "Unnamed"}</DetailTitle>
             )}
-          </div>
-        ) : null}
-      </div>
-
-      {/* Action row */}
-      {!editing ? (
-        <div className="flex flex-wrap gap-1.5">
-          {primaryEmail ? (
-            <Button variant="secondary" size="sm" className="gap-1.5" asChild>
-              <a href={`mailto:${primaryEmail}`}>
-                <Mail className="size-icon-sm" aria-hidden />
-                Email
-              </a>
-            </Button>
-          ) : (
-            <Button variant="secondary" size="sm" className="gap-1.5" disabled>
-              <Mail className="size-icon-sm" aria-hidden />
-              Email
-            </Button>
-          )}
-          {canEdit ? (
-            <>
-              <Button variant="secondary" size="sm" className="gap-1.5" onClick={onAddFollowup}>
-                <CalendarPlus className="size-icon-sm" aria-hidden />Add task
-              </Button>
-              <EntityLinkPicker
-                runtime={runtime}
-                workspaceId={workspaceId}
-                types={["note"]}
-                placeholder="Attach a note…"
-                emptyLabel="No notes."
-                trigger={<Button variant="secondary" size="sm" className="gap-1.5"><Plus className="size-icon-sm" aria-hidden />Note</Button>}
-                onPick={onLink}
-              />
-              <EntityLinkPicker
-                runtime={runtime}
-                workspaceId={workspaceId}
-                types={["task", "note", "event", "contact", "company"]}
-                placeholder="Link a task, note, contact…"
-                emptyLabel="Nothing to link."
-                trigger={<Button variant="secondary" size="sm" className="gap-1.5"><Link2 className="size-icon-sm" aria-hidden />Link</Button>}
-                onPick={onLink}
-              />
-            </>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Last touch */}
-      <p className="text-sm text-muted-foreground">{lastTouchLine(rollup, now)}</p>
-
-      {/* Details */}
-      {editing ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="c-title">Title</Label>
-              <Input id="c-title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Head of ops" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="c-status">Status</Label>
-              <Select
-                value={contactStatusMeta(draft.status).id || NO_STATUS}
-                onValueChange={(v) => setDraft({ ...draft, status: v === NO_STATUS ? "" : v })}
-              >
-                <SelectTrigger id="c-status"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((s) => (
-                    <SelectItem key={s.id || "none"} value={s.id || NO_STATUS}>
-                      <span className="flex items-center gap-1.5">
-                        {s.id ? <ContactStatusDot status={s.id} /> : null}
-                        {s.label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Company</Label>
-            <div className="flex items-center gap-1">
-              <EntityLinkPicker
-                runtime={runtime}
-                workspaceId={workspaceId}
-                types={["company"]}
-                canCreate
-                createType="company"
-                placeholder="Find or create a company…"
-                emptyLabel="No companies."
-                trigger={
-                  <Button variant="outline" size="sm" className="gap-1.5">
-                    <Building2 className="size-icon-sm" aria-hidden />
-                    {companyName ?? "Set company"}
-                  </Button>
-                }
-                onPick={onSetCompany}
-              />
-              {companyName && onClearCompany ? (
-                <IconButton
-                  icon={X}
-                  label="Remove company"
-                  size="sm"
-                  variant="ghost"
-                  onClick={onClearCompany}
-                />
-              ) : null}
-            </div>
-          </div>
-          <ChannelEditor label="Email" placeholder="name@example.com" rows={draft.emails} onChange={(r) => setDraft({ ...draft, emails: r })} />
-          <ChannelEditor label="Phone" placeholder="+1 555 0100" rows={draft.phones} onChange={(r) => setDraft({ ...draft, phones: r })} />
-          <ChannelEditor label="URL" placeholder="https://…" rows={draft.urls} onChange={(r) => setDraft({ ...draft, urls: r })} />
-          <ChannelEditor label="Address" placeholder="123 Main St, City" rows={draft.addresses} onChange={(r) => setDraft({ ...draft, addresses: r })} />
-          <DatesEditor rows={draft.dates} onChange={(r) => setDraft({ ...draft, dates: r })} />
-          <div className="space-y-1.5">
-            <Label>Custom fields</Label>
-            {fieldDefs.map((f) => (
-              <div key={f.id} className="flex items-center gap-1.5">
-                <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">{f.label}</span>
-                {f.type === "select" ? (
-                  <Select
-                    value={(draft.custom[f.key] ?? "") || NO_STATUS}
-                    onValueChange={(v) =>
-                      setDraft({ ...draft, custom: { ...draft.custom, [f.key]: v === NO_STATUS ? "" : v } })
-                    }
-                  >
-                    <SelectTrigger className="min-w-0 flex-1" aria-label={f.label}>
-                      <SelectValue placeholder="—" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NO_STATUS}>
-                        <span className="text-muted-foreground">None</span>
-                      </SelectItem>
-                      {selectOptionsFor(f, draft.custom[f.key] ?? "").map((opt) => (
-                        <SelectItem key={opt} value={opt}>
-                          {opt}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
-                    value={draft.custom[f.key] ?? ""}
-                    onChange={(e) => setDraft({ ...draft, custom: { ...draft.custom, [f.key]: e.target.value } })}
-                    className="min-w-0 flex-1"
-                    aria-label={f.label}
-                  />
-                )}
-                {onDeleteField ? (
-                  <IconButton icon={X} label={`Remove ${f.label} field`} size="sm" variant="ghost" onClick={() => onDeleteField(f.id)} />
-                ) : null}
-              </div>
-            ))}
-            {onAddField ? <AddFieldInline onAdd={onAddField} /> : null}
-          </div>
-        </div>
-      ) : detailGroups.length > 0 ? (
-        <div className="divide-y divide-border rounded-lg border border-border bg-card">
-          {detailGroups.map((g) => (
-            <DetailsGroup key={g.key} icon={g.icon} rows={g.rows} />
-          ))}
-        </div>
-      ) : null}
-
-      {/* Suggested links (moved onto the page from the old right panel) */}
-      {canEdit && !editing ? (
-        <ContactSuggestions runtime={runtime} workspaceId={workspaceId} contactId={contact.id} onLinked={onLinked} />
-      ) : null}
-
-      {/* Linked people — person↔person links get their own quiet section (FX-5) */}
-      {!editing && linkedPeople.length > 0 ? (
-        <section className="space-y-1">
-          <Eyebrow as="h3">People</Eyebrow>
-          <ul className="space-y-0.5">
-            {linkedPeople.map((p) => (
-              <li key={p.id}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              {contact.title ? <span className="truncate">{contact.title}</span> : null}
+              {companyName ? (
                 <button
                   type="button"
-                  onClick={() => onOpenEntity?.({ type: "contact", id: p.id })}
-                  className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() =>
+                    contact.companyId && onOpenEntity?.({ type: "company", id: contact.companyId })
+                  }
+                  className="inline-flex items-center gap-1 truncate hover:text-foreground hover:underline"
                 >
-                  <Avatar size="sm">
-                    {p.avatarUrl ? <AvatarImage src={p.avatarUrl} alt="" /> : null}
-                    <AvatarFallback>{initials(p.name)}</AvatarFallback>
-                  </Avatar>
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{p.name}</span>
-                  {p.status ? <ContactStatusDot status={p.status} /> : null}
+                  <Building2 className="size-icon-sm shrink-0" aria-hidden />
+                  {companyName}
                 </button>
-              </li>
+              ) : null}
+              {!editing ? (
+                <HeaderStatus contact={contact} canEdit={canEdit} onSetStatus={onSetStatus} />
+              ) : contact.status ? (
+                <ContactStatusBadge status={contact.status} />
+              ) : null}
+            </div>
+            {!editing ? (
+              // key: remount per entity so tag state can never leak across a
+              // focus switch (stale chips / late-mutation writes).
+              <EntityTagRow
+                key={`contact:${contact.id}`}
+                runtime={runtime}
+                workspaceId={workspaceId}
+                focus={{ type: "contact", id: contact.id }}
+                canEdit={canEdit}
+              />
+            ) : null}
+          </div>
+          {canEdit ? (
+            <div className="flex shrink-0 items-center gap-0.5">
+              {editing ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(false);
+                      setDraft(draftFrom(contact));
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={save}>
+                    Done
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <IconButton
+                    icon={Star}
+                    label={contact.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                    size="sm"
+                    variant="ghost"
+                    className={cn(contact.isFavorite && "text-warning")}
+                    onClick={onToggleFavorite}
+                  />
+                  <IconButton
+                    icon={Pencil}
+                    label="Edit contact"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditing(true)}
+                  />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <IconButton
+                        icon={MoreHorizontal}
+                        label="More actions"
+                        size="sm"
+                        variant="ghost"
+                      />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={onShare}>Share as vCard…</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                        Delete contact
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Action row */}
+        {!editing ? (
+          <div className="flex flex-wrap gap-1.5">
+            {primaryEmail ? (
+              <Button variant="secondary" size="sm" className="gap-1.5" asChild>
+                <a href={`mailto:${primaryEmail}`}>
+                  <Mail className="size-icon-sm" aria-hidden />
+                  Email
+                </a>
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" className="gap-1.5" disabled>
+                <Mail className="size-icon-sm" aria-hidden />
+                Email
+              </Button>
+            )}
+            {canEdit ? (
+              <>
+                <Button variant="secondary" size="sm" className="gap-1.5" onClick={onAddFollowup}>
+                  <CalendarPlus className="size-icon-sm" aria-hidden />
+                  Add task
+                </Button>
+                <EntityLinkPicker
+                  runtime={runtime}
+                  workspaceId={workspaceId}
+                  types={["note"]}
+                  placeholder="Attach a note…"
+                  emptyLabel="No notes."
+                  trigger={
+                    <Button variant="secondary" size="sm" className="gap-1.5">
+                      <Plus className="size-icon-sm" aria-hidden />
+                      Note
+                    </Button>
+                  }
+                  onPick={onLink}
+                />
+                <EntityLinkPicker
+                  runtime={runtime}
+                  workspaceId={workspaceId}
+                  types={["task", "note", "event", "contact", "company"]}
+                  placeholder="Link a task, note, contact…"
+                  emptyLabel="Nothing to link."
+                  trigger={
+                    <Button variant="secondary" size="sm" className="gap-1.5">
+                      <Link2 className="size-icon-sm" aria-hidden />
+                      Link
+                    </Button>
+                  }
+                  onPick={onLink}
+                />
+              </>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Last touch */}
+        <p className="text-sm text-muted-foreground">{lastTouchLine(rollup, now)}</p>
+
+        {/* Details */}
+        {editing ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="c-title">Title</Label>
+                <Input
+                  id="c-title"
+                  value={draft.title}
+                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                  placeholder="Head of ops"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="c-status">Status</Label>
+                <Select
+                  value={contactStatusMeta(draft.status).id || NO_STATUS}
+                  onValueChange={(v) => setDraft({ ...draft, status: v === NO_STATUS ? "" : v })}
+                >
+                  <SelectTrigger id="c-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((s) => (
+                      <SelectItem key={s.id || "none"} value={s.id || NO_STATUS}>
+                        <span className="flex items-center gap-1.5">
+                          {s.id ? <ContactStatusDot status={s.id} /> : null}
+                          {s.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Company</Label>
+              <div className="flex items-center gap-1">
+                <EntityLinkPicker
+                  runtime={runtime}
+                  workspaceId={workspaceId}
+                  types={["company"]}
+                  canCreate
+                  createType="company"
+                  placeholder="Find or create a company…"
+                  emptyLabel="No companies."
+                  trigger={
+                    <Button variant="outline" size="sm" className="gap-1.5">
+                      <Building2 className="size-icon-sm" aria-hidden />
+                      {companyName ?? "Set company"}
+                    </Button>
+                  }
+                  onPick={onSetCompany}
+                />
+                {companyName && onClearCompany ? (
+                  <IconButton
+                    icon={X}
+                    label="Remove company"
+                    size="sm"
+                    variant="ghost"
+                    onClick={onClearCompany}
+                  />
+                ) : null}
+              </div>
+            </div>
+            <ChannelEditor
+              label="Email"
+              placeholder="name@example.com"
+              rows={draft.emails}
+              onChange={(r) => setDraft({ ...draft, emails: r })}
+            />
+            <ChannelEditor
+              label="Phone"
+              placeholder="+1 555 0100"
+              rows={draft.phones}
+              onChange={(r) => setDraft({ ...draft, phones: r })}
+            />
+            <ChannelEditor
+              label="URL"
+              placeholder="https://…"
+              rows={draft.urls}
+              onChange={(r) => setDraft({ ...draft, urls: r })}
+            />
+            <ChannelEditor
+              label="Address"
+              placeholder="123 Main St, City"
+              rows={draft.addresses}
+              onChange={(r) => setDraft({ ...draft, addresses: r })}
+            />
+            <DatesEditor rows={draft.dates} onChange={(r) => setDraft({ ...draft, dates: r })} />
+            <div className="space-y-1.5">
+              <Label>Custom fields</Label>
+              {fieldDefs.map((f) => (
+                <div key={f.id} className="flex items-center gap-1.5">
+                  <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">
+                    {f.label}
+                  </span>
+                  {f.type === "select" ? (
+                    <Select
+                      value={(draft.custom[f.key] ?? "") || NO_STATUS}
+                      onValueChange={(v) =>
+                        setDraft({
+                          ...draft,
+                          custom: { ...draft.custom, [f.key]: v === NO_STATUS ? "" : v },
+                        })
+                      }
+                    >
+                      <SelectTrigger className="min-w-0 flex-1" aria-label={f.label}>
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_STATUS}>
+                          <span className="text-muted-foreground">None</span>
+                        </SelectItem>
+                        {selectOptionsFor(f, draft.custom[f.key] ?? "").map((opt) => (
+                          <SelectItem key={opt} value={opt}>
+                            {opt}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
+                      value={draft.custom[f.key] ?? ""}
+                      onChange={(e) =>
+                        setDraft({ ...draft, custom: { ...draft.custom, [f.key]: e.target.value } })
+                      }
+                      className="min-w-0 flex-1"
+                      aria-label={f.label}
+                    />
+                  )}
+                  {onDeleteField ? (
+                    <IconButton
+                      icon={X}
+                      label={`Remove ${f.label} field`}
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onDeleteField(f.id)}
+                    />
+                  ) : null}
+                </div>
+              ))}
+              {onAddField ? <AddFieldInline onAdd={onAddField} /> : null}
+            </div>
+          </div>
+        ) : detailGroups.length > 0 ? (
+          <div className="divide-y divide-border rounded-lg border border-border bg-card">
+            {detailGroups.map((g) => (
+              <DetailsGroup key={g.key} icon={g.icon} rows={g.rows} />
             ))}
-          </ul>
-        </section>
-      ) : null}
+          </div>
+        ) : null}
 
-      {/* Linked work — one fixed section per module relation, always present */}
-      {!editing ? (
-        <LinkedSections
-          status={hubStatus}
-          sections={sections}
-          canEdit={canEdit}
-          onOpen={onOpenEntity}
-          onChangeKind={onChangeKind}
-          onUnlink={onUnlink}
-          onRetry={onRetry}
-        />
-      ) : null}
+        {/* Suggested links (moved onto the page from the old right panel) */}
+        {canEdit && !editing ? (
+          <ContactSuggestions
+            runtime={runtime}
+            workspaceId={workspaceId}
+            contactId={contact.id}
+            onLinked={onLinked}
+          />
+        ) : null}
 
-      {/* Activity (delete moved to the header ⋯ menu — no destructive control on the page body) */}
-      {!editing ? (
-        <ActivityTrail activity={activity} currentUserId={currentUserId} now={now} entityId={contact.id} />
-      ) : null}
-    </div>
+        {/* Linked people — person↔person links get their own quiet section (FX-5) */}
+        {!editing && linkedPeople.length > 0 ? (
+          <section className="space-y-1">
+            <Eyebrow as="h3">People</Eyebrow>
+            <ul className="space-y-0.5">
+              {linkedPeople.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenEntity?.({ type: "contact", id: p.id })}
+                    className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Avatar size="sm">
+                      {p.avatarUrl ? <AvatarImage src={p.avatarUrl} alt="" /> : null}
+                      <AvatarFallback>{initials(p.name)}</AvatarFallback>
+                    </Avatar>
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                      {p.name}
+                    </span>
+                    {p.status ? <ContactStatusDot status={p.status} /> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {/* Linked work — one fixed section per module relation, always present */}
+        {!editing ? (
+          <LinkedSections
+            status={hubStatus}
+            sections={sections}
+            canEdit={canEdit}
+            onOpen={onOpenEntity}
+            onChangeKind={onChangeKind}
+            onUnlink={onUnlink}
+            onRetry={onRetry}
+          />
+        ) : null}
+
+        {/* Activity (delete moved to the header ⋯ menu — no destructive control on the page body) */}
+        {!editing ? (
+          <ActivityTrail
+            activity={activity}
+            currentUserId={currentUserId}
+            now={now}
+            entityId={contact.id}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -781,7 +938,8 @@ function HeaderStatus({
       ...DEFAULT_CONTACT_STATUSES.map((s) => ({ id: s.id, label: s.label })),
     ];
     const meta = contactStatusMeta(status);
-    if (meta.id && !opts.some((o) => o.id === meta.id)) opts.push({ id: meta.id, label: meta.label });
+    if (meta.id && !opts.some((o) => o.id === meta.id))
+      opts.push({ id: meta.id, label: meta.label });
     return opts;
   }, [status]);
 
@@ -818,7 +976,10 @@ function HeaderStatus({
               {o.id ? (
                 <ContactStatusDot status={o.id} />
               ) : (
-                <span className="inline-block size-2 shrink-0 rounded-full border border-border" aria-hidden />
+                <span
+                  className="inline-block size-2 shrink-0 rounded-full border border-border"
+                  aria-hidden
+                />
               )}
               {o.label}
               {contactStatusMeta(status).id === o.id ? (
@@ -832,7 +993,13 @@ function HeaderStatus({
   );
 }
 
-function DatesEditor({ rows, onChange }: { rows: ContactDateEntry[]; onChange: (rows: ContactDateEntry[]) => void }) {
+function DatesEditor({
+  rows,
+  onChange,
+}: {
+  rows: ContactDateEntry[];
+  onChange: (rows: ContactDateEntry[]) => void;
+}) {
   const set = (i: number, patch: Partial<ContactDateEntry>) =>
     onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   return (
@@ -840,12 +1007,35 @@ function DatesEditor({ rows, onChange }: { rows: ContactDateEntry[]; onChange: (
       <Label>Dates</Label>
       {rows.map((r, i) => (
         <div key={i} className="flex items-center gap-1.5">
-          <Input value={r.label} onChange={(e) => set(i, { label: e.target.value })} placeholder="birthday" className="w-24 shrink-0" aria-label="Date label" />
-          <Input type="date" value={r.value} onChange={(e) => set(i, { value: e.target.value })} className="min-w-0 flex-1" aria-label="Date" />
-          <IconButton icon={X} label="Remove" size="sm" variant="ghost" onClick={() => onChange(rows.filter((_, idx) => idx !== i))} />
+          <Input
+            value={r.label}
+            onChange={(e) => set(i, { label: e.target.value })}
+            placeholder="birthday"
+            className="w-24 shrink-0"
+            aria-label="Date label"
+          />
+          <Input
+            type="date"
+            value={r.value}
+            onChange={(e) => set(i, { value: e.target.value })}
+            className="min-w-0 flex-1"
+            aria-label="Date"
+          />
+          <IconButton
+            icon={X}
+            label="Remove"
+            size="sm"
+            variant="ghost"
+            onClick={() => onChange(rows.filter((_, idx) => idx !== i))}
+          />
         </div>
       ))}
-      <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => onChange([...rows, { label: "birthday", value: "" }])}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="gap-1.5 text-muted-foreground"
+        onClick={() => onChange([...rows, { label: "birthday", value: "" }])}
+      >
         <Plus className="size-icon-sm" aria-hidden />
         Add date
       </Button>
@@ -861,7 +1051,11 @@ const FIELD_TYPES: ContactFieldType[] = ["text", "number", "url", "select"];
 /** Inline "add a custom field" control (defines a workspace field def). A
  * `select` field asks for its options inline (comma-separated) before it can be
  * added (FX-8). */
-function AddFieldInline({ onAdd }: { onAdd: (label: string, type: ContactFieldType, options?: string[]) => void }) {
+function AddFieldInline({
+  onAdd,
+}: {
+  onAdd: (label: string, type: ContactFieldType, options?: string[]) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [type, setType] = useState<ContactFieldType>("text");
@@ -878,7 +1072,12 @@ function AddFieldInline({ onAdd }: { onAdd: (label: string, type: ContactFieldTy
 
   if (!open) {
     return (
-      <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => setOpen(true)}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="gap-1.5 text-muted-foreground"
+        onClick={() => setOpen(true)}
+      >
         <Plus className="size-icon-sm" aria-hidden />
         Add field
       </Button>
@@ -887,16 +1086,34 @@ function AddFieldInline({ onAdd }: { onAdd: (label: string, type: ContactFieldTy
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-1.5">
-        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Field name" className="min-w-0 flex-1" aria-label="New field name" autoFocus />
+        <Input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Field name"
+          className="min-w-0 flex-1"
+          aria-label="New field name"
+          autoFocus
+        />
         <Select value={type} onValueChange={(v) => setType(v as ContactFieldType)}>
-          <SelectTrigger className="w-24" aria-label="Field type"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-24" aria-label="Field type">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             {FIELD_TYPES.map((t) => (
-              <SelectItem key={t} value={t}>{t}</SelectItem>
+              <SelectItem key={t} value={t}>
+                {t}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Button size="sm" disabled={!canAdd} onClick={() => { onAdd(label.trim(), type, type === "select" ? parsedOptions : undefined); reset(); }}>
+        <Button
+          size="sm"
+          disabled={!canAdd}
+          onClick={() => {
+            onAdd(label.trim(), type, type === "select" ? parsedOptions : undefined);
+            reset();
+          }}
+        >
           Add
         </Button>
         <IconButton icon={X} label="Cancel" size="sm" variant="ghost" onClick={reset} />

@@ -30,7 +30,9 @@ export const Required: Story = {
   render: () => (
     <Label>
       Email
-      <span aria-hidden className="text-destructive">*</span>
+      <span aria-hidden className="text-destructive">
+        *
+      </span>
     </Label>
   ),
 };

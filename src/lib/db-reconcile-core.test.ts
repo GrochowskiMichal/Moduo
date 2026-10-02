@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,12 +17,17 @@ import {
 // something — so a silently-broken extractor is worse than no tool at all: fewer
 // declared objects means fewer MISSING rows, i.e. a BETTER-looking report.
 // These cases pin the behaviour that makes the output trustworthy.
-const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../supabase/migrations");
+const MIGRATIONS_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../supabase/migrations",
+);
 
 describe("normalizeBody", () => {
   it("erases the cosmetic spacing that made 19 of 110 functions look drifted", () => {
     expect(normalizeBody("SET x = now(), y = 1;")).toBe(normalizeBody("SET x=now(),y=1;"));
-    expect(normalizeBody("NOT IN ('edit', 'admin')")).toBe(normalizeBody("NOT IN ('edit','admin')"));
+    expect(normalizeBody("NOT IN ('edit', 'admin')")).toBe(
+      normalizeBody("NOT IN ('edit','admin')"),
+    );
   });
 
   it("strips comments and collapses newlines, so comment-only edits are not drift", () => {
@@ -55,7 +60,9 @@ describe("parseDeclarations", () => {
       CREATE POLICY "quoted pol" ON public.tbl_a FOR SELECT USING (true);
       CREATE OR REPLACE VIEW public.view_a AS SELECT 1;`;
     const byKind = (k: string) =>
-      parseDeclarations(sql, "f.sql").filter((d) => d.kind === k).map((d) => d.name);
+      parseDeclarations(sql, "f.sql")
+        .filter((d) => d.kind === k)
+        .map((d) => d.name);
     expect(byKind("function")).toEqual(["fn_a"]);
     expect(byKind("table")).toEqual(["tbl_a"]);
     expect(byKind("column")).toEqual(["tbl_a.col_a", "tbl_a.col_b"]);
@@ -85,7 +92,9 @@ describe("sqlQuote", () => {
 });
 
 describe("against the real migrations directory", () => {
-  const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
   const decls = dedupeDecls(
     files.flatMap((f) => parseDeclarations(readFileSync(`${MIGRATIONS_DIR}/${f}`, "utf8"), f)),
   );
@@ -109,7 +118,9 @@ describe("against the real migrations directory", () => {
         .flatMap((f) => parseFunctionBodies(readFileSync(`${MIGRATIONS_DIR}/${f}`, "utf8"), f))
         .map((b) => b.name),
     );
-    const missing = decls.filter((d) => d.kind === "function" && !bodies.has(d.name)).map((d) => d.name);
+    const missing = decls
+      .filter((d) => d.kind === "function" && !bodies.has(d.name))
+      .map((d) => d.name);
     expect(missing).toEqual([]);
   });
 

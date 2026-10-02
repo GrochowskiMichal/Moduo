@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 /**
  * Add follow-up (CO-4, AC4). Env-gated like the other contacts e2e specs. Opens a
@@ -15,7 +15,10 @@ test.describe("Contacts add follow-up (CO-4, AC4)", () => {
 
   test("adding a follow-up appears as a linked task under Open work", async ({ page }) => {
     await page.goto(`${APP}/contacts`);
-    await page.getByRole("button", { name: new RegExp(CONTACT_NAME as string) }).first().click();
+    await page
+      .getByRole("button", { name: new RegExp(CONTACT_NAME as string) })
+      .first()
+      .click();
 
     await page.getByRole("button", { name: /add follow-up/i }).click();
 
@@ -23,6 +26,8 @@ test.describe("Contacts add follow-up (CO-4, AC4)", () => {
     await expect(page.getByText(/follow-up added/i)).toBeVisible();
     // …and the roll-up now shows an Open work group with the follow-up task.
     await expect(page.getByText(/Open work/i).first()).toBeVisible();
-    await expect(page.getByText(new RegExp(`Follow up with ${CONTACT_NAME}`, "i")).first()).toBeVisible();
+    await expect(
+      page.getByText(new RegExp(`Follow up with ${CONTACT_NAME}`, "i")).first(),
+    ).toBeVisible();
   });
 });

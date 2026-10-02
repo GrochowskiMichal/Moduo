@@ -575,6 +575,52 @@ pub async fn calendar_outlook_events_sync(
     Ok(results)
 }
 
+/// Copy the desktop Google Calendar refresh token into `user_integrations`
+/// (`provider = google_calendar`) so a guest can book while this app is closed.
+#[tauri::command]
+pub async fn calendar_google_publish_booking_token(
+    state: State<'_, AppState>,
+    account_id: String,
+) -> Result<(), String> {
+    let user_id = current_user_id(&state);
+    if user_id == "local" {
+        return Err("sign_in_required".to_string());
+    }
+    let stored = load_calendar_tokens_from_keychain(
+        &state.config.keychain_service,
+        "google",
+        &user_id,
+        &account_id,
+    )
+    .ok_or_else(|| "google_calendar_not_connected".to_string())?;
+    let refresh = stored
+        .refresh_token
+        .clone()
+        .filter(|token| !token.is_empty())
+        .ok_or_else(|| "google_calendar_needs_reconnect".to_string())?;
+    let enc_secret = state
+        .config
+        .token_encryption_secret
+        .as_deref()
+        .ok_or_else(|| "missing_token_enc_secret:set MODUO_TOKEN_ENCRYPTION_SECRET".to_string())?;
+    let expires_at = stored
+        .expires_in
+        .map(|secs| chrono::Utc::now().timestamp() + secs);
+    crate::commands::integrations::upsert_integration_in_supabase(
+        &state.config.supabase_url,
+        enc_secret,
+        &user_id,
+        "google_calendar",
+        &crate::commands::integrations::IntegrationTokens {
+            access_token: stored.access_token,
+            refresh_token: Some(refresh),
+            expires_at,
+        },
+        enc_secret,
+    )
+    .await
+}
+
 #[tauri::command]
 pub async fn calendar_apple_oauth_start() -> Result<CalendarOAuthStartResult, String> {
     Err("apple_calendar_oauth_not_supported: iCloud Calendar uses CalDAV/app-specific-password flow".to_string())

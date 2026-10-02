@@ -56,4 +56,4 @@ export interface WidgetDefinition extends WidgetMeta {
   Component: WidgetComponent;
 }
 
-export type { WidgetType, WidgetSize };
+export type { WidgetSize, WidgetType };

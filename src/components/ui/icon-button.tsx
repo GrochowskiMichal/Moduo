@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { Button, type ButtonProps } from "./button";
@@ -55,5 +55,5 @@ function IconButton({
   );
 }
 
-export { IconButton };
 export type { IconButtonProps };
+export { IconButton };

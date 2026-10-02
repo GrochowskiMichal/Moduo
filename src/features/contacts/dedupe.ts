@@ -136,7 +136,9 @@ export function findDuplicateGroups(contacts: Contact[]): DuplicateGroup[] {
   }
 
   // Deterministic output: sort by key (then reason as a tiebreak for stability).
-  groups.sort((a, b) => (a.key === b.key ? a.reason.localeCompare(b.reason) : a.key < b.key ? -1 : 1));
+  groups.sort((a, b) =>
+    a.key === b.key ? a.reason.localeCompare(b.reason) : a.key < b.key ? -1 : 1,
+  );
   return groups;
 }
 

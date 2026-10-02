@@ -12,9 +12,9 @@
 // external-mirror data (which also flows through here) cannot inject markup.
 // Relative imports only (no `@/` value imports — this file is test-reachable).
 
-import { useMemo, type ReactNode } from "react";
-import { cn } from "../../../lib/utils";
+import { type ReactNode, useMemo } from "react";
 import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
+import { cn } from "../../../lib/utils";
 import { looksLikeRichHtml } from "../editor/entity-rich-html";
 import { EntityRefChip } from "./entity-ref-chip";
 

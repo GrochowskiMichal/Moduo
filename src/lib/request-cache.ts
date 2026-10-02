@@ -61,7 +61,8 @@ export function createRequestCache(now: () => number = Date.now): RequestCache {
         const value = await fetcher();
         // Retain only a successful read that wasn't invalidated mid-flight. A
         // rejection falls through the `finally` un-cached so the next caller retries.
-        if (ttlMs > 0 && epoch === startEpoch) entries.set(key, { value, expiresAt: now() + ttlMs });
+        if (ttlMs > 0 && epoch === startEpoch)
+          entries.set(key, { value, expiresAt: now() + ttlMs });
         return value;
       } finally {
         inflight.delete(key);

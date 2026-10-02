@@ -8,14 +8,13 @@
  * imports relative, never `@/`.
  */
 
-import type { ElementNode, LexicalNode } from "lexical";
 import {
   CHECK_LIST,
   ELEMENT_TRANSFORMERS,
+  type ElementTransformer,
   MULTILINE_ELEMENT_TRANSFORMERS,
   TEXT_FORMAT_TRANSFORMERS,
   TEXT_MATCH_TRANSFORMERS,
-  type ElementTransformer,
   type TextMatchTransformer,
   type Transformer,
 } from "@lexical/markdown";
@@ -24,18 +23,12 @@ import {
   $isHorizontalRuleNode,
   HorizontalRuleNode,
 } from "@lexical/react/LexicalHorizontalRuleNode";
+import type { ElementNode, LexicalNode } from "lexical";
 import { $createParagraphNode, $isTextNode } from "lexical";
-import {
-  $createEntityRefNode,
-  EntityRefNode,
-} from "../../spine/editor/entity-ref-node";
-import { $createPageRowNode, $isPageRowNode, PageRowNode } from "./nodes/page-row-node";
+import { $createEntityRefNode, EntityRefNode } from "../../spine/editor/entity-ref-node";
 import { $createEmbedNode, $isEmbedNode, EmbedNode } from "./nodes/EmbedNode";
-import {
-  $createTaskLineNode,
-  $isTaskLineNode,
-  TaskLineNode,
-} from "./nodes/task-line-node";
+import { $createPageRowNode, $isPageRowNode, PageRowNode } from "./nodes/page-row-node";
+import { $createTaskLineNode, $isTaskLineNode, TaskLineNode } from "./nodes/task-line-node";
 
 const MODUO_URI = /moduo:\/\/([a-z][a-z-]*)\/([A-Za-z0-9-]+)/;
 
@@ -63,7 +56,9 @@ export const TASK_LINE_TRANSFORMER: ElementTransformer = {
   regExp: /^- \[( |x|X)\] (?=.*<!--\s*moduo:task:[A-Za-z0-9-]+\s*-->\s*$)/,
   replace: (parentNode, children, match) => {
     const line = $createTaskLineNode(null, match[1] !== " ");
-    children.forEach((child) => line.append(child));
+    children.forEach((child) => {
+      line.append(child);
+    });
     // The id rides the last text run — extract it, strip the comment.
     const last = line.getLastChild();
     if ($isTextNode(last)) {

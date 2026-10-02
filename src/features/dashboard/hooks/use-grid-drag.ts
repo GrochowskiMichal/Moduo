@@ -18,11 +18,11 @@ import { commitLayout, resolveDrag } from "../engine/grid-engine";
 import type { WidgetInstance } from "../engine/types";
 import {
   activeTransform,
-  cellMetrics,
-  pointerToTargetCell,
   type Cell,
+  cellMetrics,
   type GridMetrics,
   type Point,
+  pointerToTargetCell,
 } from "../grid-geometry";
 
 /** Travel past which a press becomes a drag (and, in normal mode, cancels the long-press). */
@@ -105,13 +105,15 @@ export function useGridDrag({
   // Keep the live inputs in refs so the window listeners (attached once per press)
   // never read a stale closure (the calendar/timeline pattern).
   const widgetsRef = useRef(widgets);
-  widgetsRef.current = widgets;
   const editingRef = useRef(editing);
-  editingRef.current = editing;
   const onCommitRef = useRef(onCommit);
-  onCommitRef.current = onCommit;
   const onLongPressRef = useRef(onLongPress);
-  onLongPressRef.current = onLongPress;
+  useEffect(() => {
+    widgetsRef.current = widgets;
+    editingRef.current = editing;
+    onCommitRef.current = onCommit;
+    onLongPressRef.current = onLongPress;
+  });
 
   // Stable listener identities so add/removeEventListener pair up correctly.
   const handlersRef = useRef<{

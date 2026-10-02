@@ -1,7 +1,9 @@
-import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import { EmailAuthPanel } from "@/components/auth/email-auth-panel";
+import { IS_STAGING_PORTAL } from "@/features/settings/about";
+import { checkoutRedirectUrl } from "@/lib/checkout-redirect";
 import { useAuth } from "@/providers/auth-provider";
 
 function getSearchParam(key: string): string | null {
@@ -10,7 +12,7 @@ function getSearchParam(key: string): string | null {
 }
 
 export function AuthPage() {
-  const { isSignedIn, loading } = useAuth();
+  const { isSignedIn, loading, accessToken } = useAuth();
   const navigate = useNavigate();
 
   const priceId = getSearchParam("price_id");
@@ -22,10 +24,7 @@ export function AuthPage() {
     const pendingPriceId = priceId ?? window.localStorage.getItem("moduo:pending_price_id");
     if (pendingPriceId) {
       window.localStorage.removeItem("moduo:pending_price_id");
-      const supabaseUrl =
-        (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-        "https://wtoonrvuqumihpkbvwvs.supabase.co";
-      window.location.href = `${supabaseUrl}/functions/v1/create-checkout-session?price_id=${encodeURIComponent(pendingPriceId)}`;
+      window.location.href = checkoutRedirectUrl(pendingPriceId, accessToken);
       return;
     }
 
@@ -38,7 +37,7 @@ export function AuthPage() {
     }
 
     void navigate({ to: "/", replace: true });
-  }, [isSignedIn, loading, navigate, priceId]);
+  }, [isSignedIn, loading, navigate, priceId, accessToken]);
 
   if (loading) {
     return (
@@ -54,7 +53,20 @@ export function AuthPage() {
     <div className="relative min-h-screen overflow-hidden bg-background">
       <div className="pointer-events-none absolute left-1/2 top-[-260px] h-[520px] w-[620px] -translate-x-1/2 rounded-full bg-foreground/5 blur-3xl" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[480px] items-center justify-center px-5 py-8">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[480px] flex-col items-center justify-center gap-3 px-5 py-8">
+        {IS_STAGING_PORTAL && (
+          <div className="w-full">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                STAGING
+              </span>
+              <span className="text-xs text-muted-foreground">
+                app.staging.moduo.app · invite-only
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="w-full rounded-xl border border-border bg-card px-6 py-7 shadow-xl sm:px-7 sm:py-8">
           <EmailAuthPanel priceId={priceId} />
         </div>

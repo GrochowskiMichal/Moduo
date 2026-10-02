@@ -8,9 +8,9 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   asDragPayload,
-  targetAccepts,
   type DragPayload,
   type DropLinkTarget,
+  targetAccepts,
 } from "@/lib/drag-payload";
 
 /** Make an element an entity drag source. Spread `listeners`+`attributes` on it. */

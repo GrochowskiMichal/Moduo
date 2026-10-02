@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-
-import { planRollForward, rollForwardMessage, undoRollForward, type RollContext } from "./roll-forward";
 import type { BusyInterval } from "./gap-finder";
+import {
+  planRollForward,
+  type RollContext,
+  rollForwardMessage,
+  undoRollForward,
+} from "./roll-forward";
 import type { StripItem } from "./strip";
 
 const dayStartMs = new Date(2026, 6, 10).getTime();
@@ -29,10 +33,7 @@ function ctx(over: Partial<RollContext> = {}): RollContext {
 
 describe("roll-forward — placement plan + undo plan (AC9)", () => {
   it("places queued items in order into real gaps after now", () => {
-    const plan = planRollForward(
-      [item("a", 9, 60), item("b", 10, 30)],
-      ctx({ nowMs: at(10, 0) }),
-    );
+    const plan = planRollForward([item("a", 9, 60), item("b", 10, 30)], ctx({ nowMs: at(10, 0) }));
     expect(plan.notPlaced).toEqual([]);
     // a → 10:00–11:00, then b avoids it → 11:00–11:30.
     expect(plan.placements.map((p) => p.toMs)).toEqual([at(10, 0), at(11, 0)]);

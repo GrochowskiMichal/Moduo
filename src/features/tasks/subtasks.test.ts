@@ -51,7 +51,11 @@ describe("subtasksByParent", () => {
 describe("subtaskProgress", () => {
   it("counts done over total", () => {
     expect(
-      subtaskProgress([task("a", { status: "done" }), task("b"), task("c", { status: "in_progress" })]),
+      subtaskProgress([
+        task("a", { status: "done" }),
+        task("b"),
+        task("c", { status: "in_progress" }),
+      ]),
     ).toEqual({ done: 1, total: 3 });
   });
 

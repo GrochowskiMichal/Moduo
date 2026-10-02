@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Compile the macOS 26 "Liquid Glass" app icon.
  *
@@ -20,10 +21,10 @@
  * builds still work.
  */
 
-import { mkdtempSync, copyFileSync, rmSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 
 /** Icon set name — must match CFBundleIconName in src-tauri/Info.plist. */
 const ICON_NAME = "Moduo";
@@ -56,17 +57,28 @@ const compile = spawnSync(
   [
     "actool",
     iconSource,
-    "--compile", workDir,
-    "--app-icon", ICON_NAME,
-    "--output-partial-info-plist", join(workDir, "partial.plist"),
-    "--minimum-deployment-target", MIN_TARGET,
-    "--platform", "macosx",
-    "--target-device", "mac",
-    "--output-format", "human-readable-text",
-    "--notices", "--warnings", "--errors",
+    "--compile",
+    workDir,
+    "--app-icon",
+    ICON_NAME,
+    "--output-partial-info-plist",
+    join(workDir, "partial.plist"),
+    "--minimum-deployment-target",
+    MIN_TARGET,
+    "--platform",
+    "macosx",
+    "--target-device",
+    "mac",
+    "--output-format",
+    "human-readable-text",
+    "--notices",
+    "--warnings",
+    "--errors",
     "--include-all-app-icons",
-    "--enable-on-demand-resources", "NO",
-    "--development-region", "en",
+    "--enable-on-demand-resources",
+    "NO",
+    "--development-region",
+    "en",
   ],
   { stdio: "inherit" },
 );

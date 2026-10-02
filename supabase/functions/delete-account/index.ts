@@ -2,7 +2,10 @@
  * Edge Function: delete-account (DF-19h)
  *
  * Permanently deletes the caller's account. A client can't delete its own auth
- * user or cascade safely, so this runs with the service-role key.
+ * user or cascade safely, so this runs with the project's default secret key
+ * (service-role credentials).
+ *
+ * Deploy with verify_jwt = false — the caller's JWT is verified in code (getUser).
  *
  * Guard (ratified): if the caller SOLELY owns a workspace that still has other
  * members, deletion is BLOCKED (would orphan teammates) — the response lists the
@@ -19,6 +22,8 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
+
+import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -44,7 +49,7 @@ Deno.serve(async (req: Request) => {
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      getDefaultSecretKey(),
       { auth: { persistSession: false } },
     );
 

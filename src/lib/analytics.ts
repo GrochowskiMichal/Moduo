@@ -12,7 +12,8 @@
 type Properties = Record<string, string | number | boolean | null | undefined>;
 
 const PH_KEY = (import.meta.env.PUBLIC_POSTHOG_KEY as string | undefined) ?? "";
-const PH_HOST = (import.meta.env.PUBLIC_POSTHOG_HOST as string | undefined) ?? "https://app.posthog.com";
+const PH_HOST =
+  (import.meta.env.PUBLIC_POSTHOG_HOST as string | undefined) ?? "https://app.posthog.com";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _ph: any = null;
@@ -31,7 +32,9 @@ async function getPostHog(): Promise<any | null> {
         capture_pageleave: false,
         autocapture: false,
         persistence: "localStorage",
-        loaded: (ph: unknown) => { _ph = ph; },
+        loaded: (ph: unknown) => {
+          _ph = ph;
+        },
       });
       _ph = posthog;
     });
@@ -73,11 +76,9 @@ export const Analytics = {
   billing: {
     upgradeClicked: (feature: string, tier: string) =>
       track("billing_upgrade_clicked", { feature, tier }),
-    checkoutRedirected: (tier: string) =>
-      track("billing_checkout_redirected", { tier }),
+    checkoutRedirected: (tier: string) => track("billing_checkout_redirected", { tier }),
     portalOpened: () => track("billing_portal_opened"),
-    tierChanged: (from: string, to: string) =>
-      track("billing_tier_changed", { from, to }),
+    tierChanged: (from: string, to: string) => track("billing_tier_changed", { from, to }),
   },
   app: {
     signedIn: (method: "local" | "cloud") => track("app_signed_in", { method }),

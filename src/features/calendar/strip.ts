@@ -5,7 +5,7 @@
 // quiet line above the grid. Older-than-window items quietly drop off — the
 // task always survives in Tasks. Events are never candidates (only tasks pass).
 
-import { DEFAULT_BLOCK_MINUTES, addDays, type LensTask } from "./lens";
+import { addDays, DEFAULT_BLOCK_MINUTES, type LensTask } from "./lens";
 
 /** How far back the strip looks (today + the previous 7 days). */
 export const STRIP_LOOKBACK_DAYS = 7;
@@ -20,9 +20,7 @@ export type StripItem = {
 };
 
 function blockDuration(t: LensTask): number {
-  return t.durationMinutes && t.durationMinutes > 0
-    ? t.durationMinutes
-    : DEFAULT_BLOCK_MINUTES;
+  return t.durationMinutes && t.durationMinutes > 0 ? t.durationMinutes : DEFAULT_BLOCK_MINUTES;
 }
 
 function isOpen(t: LensTask): boolean {
@@ -56,7 +54,5 @@ export function stripItems(
     if (endMs > nowMs) continue; // not yet elapsed — not unfinished-from-earlier
     out.push({ taskId: t.id, title: t.title, scheduledAtMs: startMs, durationMinutes });
   }
-  return out.sort(
-    (a, b) => a.scheduledAtMs - b.scheduledAtMs || a.taskId.localeCompare(b.taskId),
-  );
+  return out.sort((a, b) => a.scheduledAtMs - b.scheduledAtMs || a.taskId.localeCompare(b.taskId));
 }

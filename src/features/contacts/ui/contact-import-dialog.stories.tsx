@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
-
-import type { Company, Contact } from "../model";
 import type { ContactImportResult } from "../import";
+import type { Company, Contact } from "../model";
 import { ContactImportDialog, type ImportDialogSeed } from "./contact-import-dialog";
 
 // One existing contact so the preview shows a real email-match merge.

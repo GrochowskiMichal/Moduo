@@ -141,32 +141,54 @@ async function withStore<T>(
 
 // ── metaCache ────────────────────────────────────────────────────────────────
 
-export function readMetaCache(workspaceId: string): Promise<{ notes: unknown[]; savedAt: number } | null> {
-  return withStore("metaCache", "readonly", async (s) => {
-    const v = await req(s.get(workspaceId));
-    return (v as any) ?? null;
-  }, null);
+export function readMetaCache(
+  workspaceId: string,
+): Promise<{ notes: unknown[]; savedAt: number } | null> {
+  return withStore(
+    "metaCache",
+    "readonly",
+    async (s) => {
+      const v = await req(s.get(workspaceId));
+      return (v as any) ?? null;
+    },
+    null,
+  );
 }
 
 export function writeMetaCache(workspaceId: string, notes: unknown[]): Promise<void> {
-  return withStore("metaCache", "readwrite", async (s) => {
-    await req(s.put({ notes, savedAt: Date.now() }, workspaceId));
-  }, undefined);
+  return withStore(
+    "metaCache",
+    "readwrite",
+    async (s) => {
+      await req(s.put({ notes, savedAt: Date.now() }, workspaceId));
+    },
+    undefined,
+  );
 }
 
 // ── noteState ────────────────────────────────────────────────────────────────
 
 export function readNoteState(noteId: string): Promise<NoteSyncState | null> {
-  return withStore("noteState", "readonly", async (s) => {
-    const v = await req(s.get(noteId));
-    return (v as NoteSyncState) ?? null;
-  }, null);
+  return withStore(
+    "noteState",
+    "readonly",
+    async (s) => {
+      const v = await req(s.get(noteId));
+      return (v as NoteSyncState) ?? null;
+    },
+    null,
+  );
 }
 
 export function writeNoteState(state: NoteSyncState): Promise<void> {
-  return withStore("noteState", "readwrite", async (s) => {
-    await req(s.put(state));
-  }, undefined);
+  return withStore(
+    "noteState",
+    "readwrite",
+    async (s) => {
+      await req(s.put(state));
+    },
+    undefined,
+  );
 }
 
 // ── docOutbox ────────────────────────────────────────────────────────────────
@@ -175,80 +197,115 @@ export function writeNoteState(state: NoteSyncState): Promise<void> {
  * failing) — the caller must fall back to an in-memory queue, never assume
  * durability. */
 export function enqueueDocUpdate(entry: DocOutboxEntry): Promise<boolean> {
-  return withStore("docOutbox", "readwrite", async (s) => {
-    await req(s.add(entry));
-    return true;
-  }, false);
+  return withStore(
+    "docOutbox",
+    "readwrite",
+    async (s) => {
+      await req(s.add(entry));
+      return true;
+    },
+    false,
+  );
 }
 
 export function readDocOutbox(noteId: string): Promise<DocOutboxEntry[]> {
-  return withStore("docOutbox", "readonly", async (s) => {
-    const idx = s.index("byNote");
-    const out: DocOutboxEntry[] = [];
-    await new Promise<void>((resolve, reject) => {
-      const cur = idx.openCursor(IDBKeyRange.only(noteId));
-      cur.onsuccess = () => {
-        const c = cur.result;
-        if (!c) {
-          resolve();
-          return;
-        }
-        out.push({ ...(c.value as DocOutboxEntry), key: c.primaryKey as number });
-        c.continue();
-      };
-      cur.onerror = () => reject(cur.error);
-    });
-    return out;
-  }, []);
+  return withStore(
+    "docOutbox",
+    "readonly",
+    async (s) => {
+      const idx = s.index("byNote");
+      const out: DocOutboxEntry[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const cur = idx.openCursor(IDBKeyRange.only(noteId));
+        cur.onsuccess = () => {
+          const c = cur.result;
+          if (!c) {
+            resolve();
+            return;
+          }
+          out.push({ ...(c.value as DocOutboxEntry), key: c.primaryKey as number });
+          c.continue();
+        };
+        cur.onerror = () => reject(cur.error);
+      });
+      return out;
+    },
+    [],
+  );
 }
 
 export function deleteDocOutboxEntries(keys: number[]): Promise<void> {
   if (keys.length === 0) return Promise.resolve();
-  return withStore("docOutbox", "readwrite", async (s) => {
-    for (const k of keys) await req(s.delete(k));
-  }, undefined);
+  return withStore(
+    "docOutbox",
+    "readwrite",
+    async (s) => {
+      for (const k of keys) await req(s.delete(k));
+    },
+    undefined,
+  );
 }
 
 /** Note ids that still have queued updates (wake-up flush after a reload). */
 export function listDocOutboxNoteIds(workspaceId: string): Promise<string[]> {
-  return withStore("docOutbox", "readonly", async (s) => {
-    const all = (await req(s.getAll())) as DocOutboxEntry[];
-    return [...new Set(all.filter((e) => e.workspaceId === workspaceId).map((e) => e.noteId))];
-  }, []);
+  return withStore(
+    "docOutbox",
+    "readonly",
+    async (s) => {
+      const all = (await req(s.getAll())) as DocOutboxEntry[];
+      return [...new Set(all.filter((e) => e.workspaceId === workspaceId).map((e) => e.noteId))];
+    },
+    [],
+  );
 }
 
 // ── metaOutbox ───────────────────────────────────────────────────────────────
 
 export function enqueueMetaOp(entry: MetaOutboxEntry): Promise<void> {
-  return withStore("metaOutbox", "readwrite", async (s) => {
-    await req(s.add(entry));
-  }, undefined);
+  return withStore(
+    "metaOutbox",
+    "readwrite",
+    async (s) => {
+      await req(s.add(entry));
+    },
+    undefined,
+  );
 }
 
 export function readMetaOutbox(workspaceId: string): Promise<MetaOutboxEntry[]> {
-  return withStore("metaOutbox", "readonly", async (s) => {
-    const idx = s.index("byWorkspace");
-    const out: MetaOutboxEntry[] = [];
-    await new Promise<void>((resolve, reject) => {
-      const cur = idx.openCursor(IDBKeyRange.only(workspaceId));
-      cur.onsuccess = () => {
-        const c = cur.result;
-        if (!c) {
-          resolve();
-          return;
-        }
-        out.push({ ...(c.value as MetaOutboxEntry), key: c.primaryKey as number });
-        c.continue();
-      };
-      cur.onerror = () => reject(cur.error);
-    });
-    return out;
-  }, []);
+  return withStore(
+    "metaOutbox",
+    "readonly",
+    async (s) => {
+      const idx = s.index("byWorkspace");
+      const out: MetaOutboxEntry[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const cur = idx.openCursor(IDBKeyRange.only(workspaceId));
+        cur.onsuccess = () => {
+          const c = cur.result;
+          if (!c) {
+            resolve();
+            return;
+          }
+          out.push({ ...(c.value as MetaOutboxEntry), key: c.primaryKey as number });
+          c.continue();
+        };
+        cur.onerror = () => reject(cur.error);
+      });
+      return out;
+    },
+    [],
+  );
 }
 
 export function deleteMetaOutboxEntries(keys: number[]): Promise<void> {
   if (keys.length === 0) return Promise.resolve();
-  return withStore("metaOutbox", "readwrite", async (s) => {
-    for (const k of keys) await req(s.delete(k));
-  }, undefined);
+  return withStore(
+    "metaOutbox",
+    "readwrite",
+    async (s) => {
+      for (const k of keys) await req(s.delete(k));
+    },
+    undefined,
+  );
 }

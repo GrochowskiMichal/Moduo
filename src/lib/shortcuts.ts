@@ -104,9 +104,7 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
     mac: "⌘⇧W",
     other: "Ctrl Shift W",
     match: (event, isMac) =>
-      (isMac ? event.metaKey : event.ctrlKey) &&
-      event.shiftKey &&
-      event.key.toLowerCase() === "w",
+      (isMac ? event.metaKey : event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "w",
   },
   {
     id: "notifications",

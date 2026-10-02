@@ -3,9 +3,8 @@
 // simply doesn't offer tags); reload() refreshes after tagging elsewhere.
 
 import { useCallback, useEffect, useState } from "react";
-
-import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Truncation } from "../../../lib/paged-select";
+import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Tag, TagLink } from "../../tasks/model";
 import { CONTACT_TAGS_CHANGED_EVENT } from "../tags";
 

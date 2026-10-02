@@ -11,11 +11,19 @@ function edgeDashFromPattern(pattern: "solid" | "dashed" | "dotted"): string | u
 }
 
 function edgeClassName(pattern: "solid" | "dashed" | "dotted", animated: boolean): string {
-  const base = pattern === "solid" ? "mindmap-edge-solid-animated" : pattern === "dashed" ? "mindmap-edge-dashed" : "mindmap-edge-dotted";
+  const base =
+    pattern === "solid"
+      ? "mindmap-edge-solid-animated"
+      : pattern === "dashed"
+        ? "mindmap-edge-dashed"
+        : "mindmap-edge-dotted";
   return `${base}${animated ? "" : " mindmap-edge-no-anim"}`.trim();
 }
 
-export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; edges: MindmapEdge[] } {
+export function parseMermaidToMindmap(source: string): {
+  nodes: MindmapNode[];
+  edges: MindmapEdge[];
+} {
   type ParsedStyle = { bg?: string; border?: string; text?: string };
   type ParsedNodeMeta = { label?: string; className?: string; style?: ParsedStyle };
 
@@ -36,8 +44,11 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
   function cleanEdgeLabel(raw: string): string {
     const trimmed = raw.trim();
     if (!trimmed) return "";
-    if ((trimmed.startsWith("\"") && trimmed.endsWith("\"")) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-      return trimmed.slice(1, -1).replace(/\\"/g, "\"").replace(/\\n/g, "\n");
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\n/g, "\n");
     }
     return trimmed.replace(/\\n/g, "\n");
   }
@@ -51,7 +62,7 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
     const quotedLabelMatch = trimmed.match(/"([\s\S]*?)"/);
     let label = quotedLabelMatch?.[1];
     if (typeof label === "string") {
-      label = label.replace(/\\"/g, "\"").replace(/\\n/g, "\n");
+      label = label.replace(/\\"/g, '"').replace(/\\n/g, "\n");
     }
     return { id, label, className: classMatch?.[1] };
   }
@@ -106,7 +117,10 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
 
     const classAssignMatch = line.match(/^class\s+(.+)\s+([A-Za-z][\w-]*)$/);
     if (classAssignMatch) {
-      const idList = classAssignMatch[1]!.split(",").map((s) => s.trim()).filter(Boolean);
+      const idList = classAssignMatch[1]!
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       const className = classAssignMatch[2]!;
       for (const id of idList) {
         registerNode(id, { className });
@@ -126,9 +140,19 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
       const sourceParsed = parseEndpoint(edgePiped[1]!);
       const targetParsed = parseEndpoint(edgePiped[3]!);
       if (!sourceParsed || !targetParsed) continue;
-      registerNode(sourceParsed.id, { label: sourceParsed.label, className: sourceParsed.className });
-      registerNode(targetParsed.id, { label: targetParsed.label, className: targetParsed.className });
-      parsedEdges.push({ source: sourceParsed.id, target: targetParsed.id, label: cleanEdgeLabel(edgePiped[2]!) });
+      registerNode(sourceParsed.id, {
+        label: sourceParsed.label,
+        className: sourceParsed.className,
+      });
+      registerNode(targetParsed.id, {
+        label: targetParsed.label,
+        className: targetParsed.className,
+      });
+      parsedEdges.push({
+        source: sourceParsed.id,
+        target: targetParsed.id,
+        label: cleanEdgeLabel(edgePiped[2]!),
+      });
       continue;
     }
 
@@ -137,9 +161,19 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
       const sourceParsed = parseEndpoint(edgeLabeled[1]!);
       const targetParsed = parseEndpoint(edgeLabeled[3]!);
       if (!sourceParsed || !targetParsed) continue;
-      registerNode(sourceParsed.id, { label: sourceParsed.label, className: sourceParsed.className });
-      registerNode(targetParsed.id, { label: targetParsed.label, className: targetParsed.className });
-      parsedEdges.push({ source: sourceParsed.id, target: targetParsed.id, label: cleanEdgeLabel(edgeLabeled[2]!) });
+      registerNode(sourceParsed.id, {
+        label: sourceParsed.label,
+        className: sourceParsed.className,
+      });
+      registerNode(targetParsed.id, {
+        label: targetParsed.label,
+        className: targetParsed.className,
+      });
+      parsedEdges.push({
+        source: sourceParsed.id,
+        target: targetParsed.id,
+        label: cleanEdgeLabel(edgeLabeled[2]!),
+      });
       continue;
     }
 
@@ -148,8 +182,14 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
       const sourceParsed = parseEndpoint(edgeSimple[1]!);
       const targetParsed = parseEndpoint(edgeSimple[2]!);
       if (!sourceParsed || !targetParsed) continue;
-      registerNode(sourceParsed.id, { label: sourceParsed.label, className: sourceParsed.className });
-      registerNode(targetParsed.id, { label: targetParsed.label, className: targetParsed.className });
+      registerNode(sourceParsed.id, {
+        label: sourceParsed.label,
+        className: sourceParsed.className,
+      });
+      registerNode(targetParsed.id, {
+        label: targetParsed.label,
+        className: targetParsed.className,
+      });
       parsedEdges.push({ source: sourceParsed.id, target: targetParsed.id, label: "" });
       continue;
     }
@@ -164,7 +204,7 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
   }
 
   if (ids.size === 0) {
-    throw new Error("No Mermaid nodes found. Expected lines like A[\"Label\"] and A --> B.");
+    throw new Error('No Mermaid nodes found. Expected lines like A["Label"] and A --> B.');
   }
 
   const nodeIds = Array.from(ids);
@@ -198,7 +238,9 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
     return false;
   };
 
-  const dagEdges = parsedEdges.filter((edge) => edge.source !== edge.target && !hasPath(edge.target, edge.source));
+  const dagEdges = parsedEdges.filter(
+    (edge) => edge.source !== edge.target && !hasPath(edge.target, edge.source),
+  );
   const dagAdj = new Map<string, string[]>();
   const dagIndegree = new Map<string, number>(nodeIds.map((id) => [id, 0]));
   for (const id of nodeIds) dagAdj.set(id, []);
@@ -241,7 +283,13 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
     if (upper.startsWith("ST_") || upper === "STORAGE") return "storage";
     if (upper.startsWith("CS") || upper === "APPSTART" || upper === "APPEND") return "cold";
     if (upper.startsWith("IL_") || upper === "IDLE_LOOP") return "idle";
-    if (upper.startsWith("RC_") || upper === "RECONN" || upper.startsWith("OL_") || upper === "POLL_LOOP") return "reconnect";
+    if (
+      upper.startsWith("RC_") ||
+      upper === "RECONN" ||
+      upper.startsWith("OL_") ||
+      upper === "POLL_LOOP"
+    )
+      return "reconnect";
     if (upper.startsWith("UA_") || upper === "UA_TRIGGER") return "user";
     return "misc";
   };
@@ -288,7 +336,9 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
   for (const id of nodeIds) nodeSize.set(id, estimateNodeSize(id));
 
   // Storage: pinned horizontal top strip.
-  const storageNodes = nodeIds.filter((id) => sectionById.get(id) === "storage").sort((a, b) => a.localeCompare(b));
+  const storageNodes = nodeIds
+    .filter((id) => sectionById.get(id) === "storage")
+    .sort((a, b) => a.localeCompare(b));
   const storagePadding = 88;
   const storageTotal = storageNodes.reduce((sum, id) => sum + (nodeSize.get(id)?.width ?? 260), 0);
   const storageFull = storageTotal + Math.max(0, storageNodes.length - 1) * storagePadding;
@@ -309,7 +359,10 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
   };
   const sections: Section[] = ["cold", "idle", "reconnect", "user", "misc"];
   const sectionOrder: Section[] = ["user", "idle", "cold", "reconnect", "misc"];
-  const sectionRows = new Map<Section, { sortedLevels: number[]; orderByLevel: Map<number, string[]> }>();
+  const sectionRows = new Map<
+    Section,
+    { sortedLevels: number[]; orderByLevel: Map<number, string[]> }
+  >();
   const sectionWidths = new Map<Section, number>();
 
   for (const section of sections) {
@@ -320,13 +373,24 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
     const localAdj = new Map<string, string[]>();
     const localRev = new Map<string, string[]>();
     for (const id of members) {
-      localAdj.set(id, (dagAdj.get(id) ?? []).filter((n) => memberSet.has(n)));
-      localRev.set(id, (reverseAdjacency.get(id) ?? []).filter((n) => memberSet.has(n)));
+      localAdj.set(
+        id,
+        (dagAdj.get(id) ?? []).filter((n) => memberSet.has(n)),
+      );
+      localRev.set(
+        id,
+        (reverseAdjacency.get(id) ?? []).filter((n) => memberSet.has(n)),
+      );
     }
 
     const preferredRoots = (rootBySection[section] ?? []).filter((id) => memberSet.has(id));
     const inferredRoots = members.filter((id) => (localRev.get(id)?.length ?? 0) === 0);
-    const rootsLocal = preferredRoots.length > 0 ? preferredRoots : inferredRoots.length > 0 ? inferredRoots : [members[0]!];
+    const rootsLocal =
+      preferredRoots.length > 0
+        ? preferredRoots
+        : inferredRoots.length > 0
+          ? inferredRoots
+          : [members[0]!];
 
     const localLevel = new Map<string, number>();
     const q = [...rootsLocal];
@@ -358,7 +422,11 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
     }
     const sortedLevels = Array.from(groups.keys()).sort((a, b) => a - b);
     const orderByLevel = new Map<number, string[]>();
-    for (const level of sortedLevels) orderByLevel.set(level, [...(groups.get(level) ?? [])].sort((a, b) => a.localeCompare(b)));
+    for (const level of sortedLevels)
+      orderByLevel.set(
+        level,
+        [...(groups.get(level) ?? [])].sort((a, b) => a.localeCompare(b)),
+      );
 
     const idx = (level: number, id: string): number => (orderByLevel.get(level) ?? []).indexOf(id);
     for (let pass = 0; pass < 3; pass += 1) {
@@ -368,11 +436,17 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
         const row = orderByLevel.get(level) ?? [];
         const scored = row.map((id, j) => {
           const neigh = (localRev.get(id) ?? []).filter((n) => (localLevel.get(n) ?? 0) === prev);
-          const score = neigh.length === 0 ? j : neigh.reduce((s, n) => s + Math.max(0, idx(prev, n)), 0) / neigh.length;
+          const score =
+            neigh.length === 0
+              ? j
+              : neigh.reduce((s, n) => s + Math.max(0, idx(prev, n)), 0) / neigh.length;
           return { id, score, j };
         });
         scored.sort((a, b) => a.score - b.score || a.j - b.j);
-        orderByLevel.set(level, scored.map((x) => x.id));
+        orderByLevel.set(
+          level,
+          scored.map((x) => x.id),
+        );
       }
       for (let i = sortedLevels.length - 2; i >= 0; i -= 1) {
         const level = sortedLevels[i]!;
@@ -380,11 +454,17 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
         const row = orderByLevel.get(level) ?? [];
         const scored = row.map((id, j) => {
           const neigh = (localAdj.get(id) ?? []).filter((n) => (localLevel.get(n) ?? 0) === next);
-          const score = neigh.length === 0 ? j : neigh.reduce((s, n) => s + Math.max(0, idx(next, n)), 0) / neigh.length;
+          const score =
+            neigh.length === 0
+              ? j
+              : neigh.reduce((s, n) => s + Math.max(0, idx(next, n)), 0) / neigh.length;
           return { id, score, j };
         });
         scored.sort((a, b) => a.score - b.score || a.j - b.j);
-        orderByLevel.set(level, scored.map((x) => x.id));
+        orderByLevel.set(
+          level,
+          scored.map((x) => x.id),
+        );
       }
     }
 
@@ -513,41 +593,40 @@ export function parseMermaidToMindmap(source: string): { nodes: MindmapNode[]; e
     const crossSection = sectionById.get(edge.source) !== sectionById.get(edge.target);
     const handles = crossSection
       ? Math.abs(dx) >= Math.abs(dy)
-        ? (dx >= 0
-            ? { sourceHandle: "right-source", targetHandle: "left-target" }
-            : { sourceHandle: "left-source", targetHandle: "right-target" })
-        : (dy >= 0
-            ? { sourceHandle: "bottom-source", targetHandle: "top-target" }
-            : { sourceHandle: "top-source", targetHandle: "bottom-target" })
+        ? dx >= 0
+          ? { sourceHandle: "right-source", targetHandle: "left-target" }
+          : { sourceHandle: "left-source", targetHandle: "right-target" }
+        : dy >= 0
+          ? { sourceHandle: "bottom-source", targetHandle: "top-target" }
+          : { sourceHandle: "top-source", targetHandle: "bottom-target" }
       : dy >= 0
         ? { sourceHandle: "bottom-source", targetHandle: "top-target" }
         : { sourceHandle: "top-source", targetHandle: "bottom-target" };
     return {
       ...handles,
-    id: `edge-import-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`,
-    source: edge.source,
-    target: edge.target,
-    type: "default",
-    label: edge.label,
-    animated: true,
-    className: edgeClassName("solid", true),
-    style: {
-      strokeWidth: DEFAULT_EDGE_THICKNESS,
-      stroke: DEFAULT_EDGE_COLOR,
-      strokeDasharray: edgeDashFromPattern("solid"),
-      strokeLinecap: "butt",
-    },
-    data: {
+      id: `edge-import-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`,
+      source: edge.source,
+      target: edge.target,
+      type: "default",
       label: edge.label,
-      style: "bezier",
-      pattern: "solid",
-      color: DEFAULT_EDGE_COLOR,
       animated: true,
-      thickness: DEFAULT_EDGE_THICKNESS,
-    },
-  };
+      className: edgeClassName("solid", true),
+      style: {
+        strokeWidth: DEFAULT_EDGE_THICKNESS,
+        stroke: DEFAULT_EDGE_COLOR,
+        strokeDasharray: edgeDashFromPattern("solid"),
+        strokeLinecap: "butt",
+      },
+      data: {
+        label: edge.label,
+        style: "bezier",
+        pattern: "solid",
+        color: DEFAULT_EDGE_COLOR,
+        animated: true,
+        thickness: DEFAULT_EDGE_THICKNESS,
+      },
+    };
   });
 
   return { nodes, edges };
 }
-

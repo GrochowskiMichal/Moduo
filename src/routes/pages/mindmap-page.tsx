@@ -3,12 +3,12 @@ import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
 export function MindmapPage() {
-    const { selectedWorkspaceId } = useWorkspace();
-    const { runtime } = useAuth();
+  const { selectedWorkspaceId } = useWorkspace();
+  const { runtime } = useAuth();
 
-    if (!selectedWorkspaceId || !runtime) {
-        return null;
-    }
+  if (!selectedWorkspaceId || !runtime) {
+    return null;
+  }
 
-    return <MindmapWorkspace workspaceId={selectedWorkspaceId} runtime={runtime} />;
+  return <MindmapWorkspace workspaceId={selectedWorkspaceId} runtime={runtime} />;
 }

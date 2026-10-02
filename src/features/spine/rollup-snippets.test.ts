@@ -84,7 +84,17 @@ describe("rollupSections snippet enrichment (DF-7)", () => {
 
   it("never shows a snippet for a tombstoned row even with meta present", () => {
     const recs = new Map([
-      [entityRefKey(task), { workspaceId: "w1", type: "task", id: "t1", label: "Gone", icon: null, deletedAt: dayOffset(-1) }],
+      [
+        entityRefKey(task),
+        {
+          workspaceId: "w1",
+          type: "task",
+          id: "t1",
+          label: "Gone",
+          icon: null,
+          deletedAt: dayOffset(-1),
+        },
+      ],
     ]);
     const [section] = rollupSections(FOCUS, [link(task)], recs, {
       snippetMeta: metaMap([task, { kind: "task", status: "todo", dueDate: dayOffset(1) }]),

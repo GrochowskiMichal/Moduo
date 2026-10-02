@@ -10,10 +10,10 @@ import { useDomainSync } from "../../../lib/prefs-sync";
 import type { EmailSection } from "../classify";
 import {
   DEFAULT_EMAIL_PREFS,
+  type EmailPrefs,
   readEmailPrefs,
   sanitizeEmailPrefs,
   writeEmailPrefs,
-  type EmailPrefs,
 } from "../prefs";
 
 export function useEmailPrefs(userId: string): {
@@ -25,9 +25,11 @@ export function useEmailPrefs(userId: string): {
 } {
   const [prefs, setPrefs] = useState<EmailPrefs>(() => readEmailPrefs(userId));
   const prefsRef = useRef(prefs);
-  prefsRef.current = prefs;
   const userIdRef = useRef(userId);
-  userIdRef.current = userId;
+  useEffect(() => {
+    prefsRef.current = prefs;
+    userIdRef.current = userId;
+  });
 
   useEffect(() => {
     setPrefs(readEmailPrefs(userId));

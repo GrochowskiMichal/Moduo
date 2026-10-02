@@ -10,8 +10,8 @@
 // follow-up-due has no IMAP side effect (it only writes a one-shot notification), so
 // it is safe to generate anywhere. See use-email-due-web-sweep.ts.
 
-import { isFollowUpDue } from "./refs";
 import type { EmailThreadRef } from "@/lib/runtime.types";
+import { isFollowUpDue } from "./refs";
 
 /**
  * The ref ids a web sweep should call `email_op_follow_up_due` for: MY awaiting

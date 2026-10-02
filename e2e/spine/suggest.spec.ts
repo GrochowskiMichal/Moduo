@@ -18,28 +18,28 @@
  *
  * Env:
  *   E2E_SUPABASE_URL          — project REST URL
- *   E2E_SUPABASE_ANON_KEY     — anon apikey
+ *   E2E_SUPABASE_PUBLISHABLE_KEY — publishable apikey
  *   E2E_ACCESS_TOKEN          — an authenticated *editor* session JWT
  *   E2E_SUGGEST_WORKSPACE     — workspace uuid
  *   E2E_SUGGEST_FOCUS_TYPE    — focus entity type (e.g. "contact")
  *   E2E_SUGGEST_FOCUS_ID      — focus entity uuid
  */
 
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { type APIRequestContext, expect, test } from "@playwright/test";
 
 const URL = process.env.E2E_SUPABASE_URL;
-const ANON = process.env.E2E_SUPABASE_ANON_KEY;
+const PUBLISHABLE = process.env.E2E_SUPABASE_PUBLISHABLE_KEY;
 const TOKEN = process.env.E2E_ACCESS_TOKEN;
 const WORKSPACE = process.env.E2E_SUGGEST_WORKSPACE;
 const FOCUS_TYPE = process.env.E2E_SUGGEST_FOCUS_TYPE;
 const FOCUS_ID = process.env.E2E_SUGGEST_FOCUS_ID;
 
-const ready = Boolean(URL && ANON && TOKEN && WORKSPACE && FOCUS_TYPE && FOCUS_ID);
+const ready = Boolean(URL && PUBLISHABLE && TOKEN && WORKSPACE && FOCUS_TYPE && FOCUS_ID);
 
 function rpc(request: APIRequestContext, fn: string, body: Record<string, unknown>) {
   return request.post(`${URL}/rest/v1/rpc/${fn}`, {
     headers: {
-      apikey: ANON!,
+      apikey: PUBLISHABLE!,
       Authorization: `Bearer ${TOKEN!}`,
       "Content-Type": "application/json",
       Prefer: "return=representation",
@@ -66,7 +66,10 @@ test.describe("Spine auto-suggest (CT-6, AC11)", () => {
   test("suggest → accept stamps origin=suggest → decline is remembered", async ({ request }) => {
     const candidates = await suggest(request);
     expect(Array.isArray(candidates)).toBeTruthy();
-    test.skip(candidates.length < 2, "needs >= 2 seeded candidates to accept one and decline another");
+    test.skip(
+      candidates.length < 2,
+      "needs >= 2 seeded candidates to accept one and decline another",
+    );
 
     // 1. Accept the top candidate → a link with origin='suggest'.
     const accepted = candidates[0];

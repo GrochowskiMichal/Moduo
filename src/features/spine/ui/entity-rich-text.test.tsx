@@ -1,8 +1,9 @@
 // DF-23 — the read-only renderer must (a) show foreign/legacy plain text
 // verbatim (never parse untrusted mirror data as markup), and (b) turn our html
 // into clickable chips that deep-link via `moduo:entity:open`.
-import { afterEach, describe, expect, it, vi } from "vitest";
+
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EntityRichText } from "./entity-rich-text";
 
 afterEach(cleanup);
@@ -34,9 +35,7 @@ describe("EntityRichText", () => {
   });
 
   it("drops disallowed elements instead of rendering their source as text", () => {
-    render(
-      <EntityRichText html={"<p>safe<script>alert(1)</script></p>"} />,
-    );
+    render(<EntityRichText html={"<p>safe<script>alert(1)</script></p>"} />);
     expect(screen.queryByText(/alert\(1\)/)).toBeNull();
     expect(screen.getByText("safe")).toBeTruthy();
   });

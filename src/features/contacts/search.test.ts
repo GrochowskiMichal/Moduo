@@ -6,8 +6,14 @@ import { validateContactsSearch } from "./search";
 
 describe("validateContactsSearch", () => {
   it("keeps a well-formed selection pair", () => {
-    expect(validateContactsSearch({ type: "contact", id: "c1" })).toEqual({ type: "contact", id: "c1" });
-    expect(validateContactsSearch({ type: "company", id: "co1" })).toEqual({ type: "company", id: "co1" });
+    expect(validateContactsSearch({ type: "contact", id: "c1" })).toEqual({
+      type: "contact",
+      id: "c1",
+    });
+    expect(validateContactsSearch({ type: "company", id: "co1" })).toEqual({
+      type: "company",
+      id: "co1",
+    });
   });
 
   it("drops a bare id, a bare type, and unknown types", () => {
@@ -24,10 +30,12 @@ describe("validateContactsSearch", () => {
   });
 
   it("passes selection and action through together", () => {
-    expect(validateContactsSearch({ type: "contact", id: "c1", action: "new", junk: "x" })).toEqual({
-      type: "contact",
-      id: "c1",
-      action: "new",
-    });
+    expect(validateContactsSearch({ type: "contact", id: "c1", action: "new", junk: "x" })).toEqual(
+      {
+        type: "contact",
+        id: "c1",
+        action: "new",
+      },
+    );
   });
 });

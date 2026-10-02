@@ -1,5 +1,6 @@
 import {
   BarChart2,
+  Bell,
   Calendar,
   CheckSquare,
   Clock3,
@@ -19,12 +20,21 @@ import {
   Settings,
   Tag,
   Trash2,
-  Bell,
   UserPlus,
 } from "lucide-react";
 import type { CSSProperties } from "react";
 
-function GroundRootsIcon({ size = 16, color = "currentColor", className, style }: { size?: number; color?: string; className?: string; style?: CSSProperties }) {
+function GroundRootsIcon({
+  size = 16,
+  color = "currentColor",
+  className,
+  style,
+}: {
+  size?: number;
+  color?: string;
+  className?: string;
+  style?: CSSProperties;
+}) {
   return (
     <svg
       width={size}
@@ -37,9 +47,36 @@ function GroundRootsIcon({ size = 16, color = "currentColor", className, style }
       aria-hidden="true"
     >
       <path d="M12 4V11.8" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
-      <rect x="3.2" y="11.8" width="17.6" height="2.8" rx="1.4" stroke={color} strokeWidth="1.8" fill="none" />
-      <rect x="5.4" y="16.6" width="13.2" height="2.6" rx="1.3" stroke={color} strokeWidth="1.8" fill="none" />
-      <rect x="7.6" y="21" width="8.8" height="2.2" rx="1.1" stroke={color} strokeWidth="1.8" fill="none" />
+      <rect
+        x="3.2"
+        y="11.8"
+        width="17.6"
+        height="2.8"
+        rx="1.4"
+        stroke={color}
+        strokeWidth="1.8"
+        fill="none"
+      />
+      <rect
+        x="5.4"
+        y="16.6"
+        width="13.2"
+        height="2.6"
+        rx="1.3"
+        stroke={color}
+        strokeWidth="1.8"
+        fill="none"
+      />
+      <rect
+        x="7.6"
+        y="21"
+        width="8.8"
+        height="2.2"
+        rx="1.1"
+        stroke={color}
+        strokeWidth="1.8"
+        fill="none"
+      />
     </svg>
   );
 }

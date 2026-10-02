@@ -8,7 +8,6 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
-import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Dialog,
   DialogContent,
@@ -17,17 +16,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { EmailHistoryDepthSelect } from "./email-history-depth-select";
-import {
-  asHistoryDepth,
-  DEFAULT_HISTORY_DEPTH,
-  type EmailHistoryDepth,
-} from "../history-depth";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
+import { asHistoryDepth, DEFAULT_HISTORY_DEPTH, type EmailHistoryDepth } from "../history-depth";
 import type { MailboxProvider, SavedAccount } from "../model/email-types";
+import { EmailHistoryDepthSelect } from "./email-history-depth-select";
 
 /** The three connectable providers in EM-2 (Outlook deferred). */
 type ConnectProvider = Exclude<MailboxProvider, "outlook">;
@@ -46,19 +42,12 @@ type Props = {
   onConnected?: (account: SavedAccount) => void;
 };
 
-export function EmailConnectDialog({
-  open,
-  onOpenChange,
-  isReconnect,
-  onConnected,
-}: Props) {
+export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnected }: Props) {
   const { runtime } = useAuth();
   const { selectedWorkspaceId: workspaceId } = useWorkspace();
 
   const reconnectProvider = isReconnect?.provider as ConnectProvider | undefined;
-  const [provider, setProvider] = useState<ConnectProvider>(
-    reconnectProvider ?? "gmail",
-  );
+  const [provider, setProvider] = useState<ConnectProvider>(reconnectProvider ?? "gmail");
   const [email, setEmail] = useState(isReconnect?.email ?? "");
   const [password, setPassword] = useState("");
   const [imapHost, setImapHost] = useState(isReconnect?.imapHost ?? "");
@@ -114,8 +103,7 @@ export function EmailConnectDialog({
   const passwordValid =
     email.trim().length > 0 &&
     password.trim().length > 0 &&
-    (provider !== "custom" ||
-      (imapHost.trim().length > 0 && smtpHost.trim().length > 0));
+    (provider !== "custom" || (imapHost.trim().length > 0 && smtpHost.trim().length > 0));
 
   const handlePasswordConnect = async () => {
     if (!runtime || busy || !passwordValid) return;
@@ -204,8 +192,8 @@ export function EmailConnectDialog({
                 {busy === "oauth" ? "Opening browser…" : "Sign in with Google"}
               </Button>
               <p className="text-2xs text-muted-foreground">
-                Early-access app — Google may ask you to re-approve every 7 days
-                until it&rsquo;s verified.
+                Early-access app — Google may ask you to re-approve every 7 days until it&rsquo;s
+                verified.
               </p>
               <div className="flex items-center gap-3 py-1">
                 <span className="h-px flex-1 bg-border" />
@@ -242,9 +230,8 @@ export function EmailConnectDialog({
                 disabled={Boolean(busy)}
               />
               <p className="text-xs text-muted-foreground">
-                Applies to your inbox — archived mail isn&rsquo;t synced yet. Recent mail
-                arrives first; older mail fills in as you use Mail. Changeable later per
-                account.
+                Applies to your inbox — archived mail isn&rsquo;t synced yet. Recent mail arrives
+                first; older mail fills in as you use Mail. Changeable later per account.
               </p>
             </div>
           ) : null}
@@ -357,11 +344,7 @@ export function EmailConnectDialog({
             onClick={() => void handlePasswordConnect()}
             disabled={!passwordValid || busy !== null}
           >
-            {busy === "password"
-              ? "Connecting…"
-              : isReconnect
-                ? "Reconnect"
-                : "Connect"}
+            {busy === "password" ? "Connecting…" : isReconnect ? "Reconnect" : "Connect"}
           </Button>
         </DialogFooter>
       </DialogContent>

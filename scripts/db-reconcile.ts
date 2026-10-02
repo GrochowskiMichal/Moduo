@@ -21,40 +21,53 @@
  * explicit DROP to avoid PostgREST ambiguity) reads as present in query 1 and
  * drift-free in query 2. Query 3 exists to catch precisely that.
  */
-import { readFileSync, readdirSync } from "node:fs";
+
 import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  UNCHECKED,
   dedupeByLastDefiner,
   dedupeDecls,
   normalizeBody,
   parseDeclarations,
   parseFunctionBodies,
   sqlQuote,
+  UNCHECKED,
 } from "../src/lib/db-reconcile-core";
 
 const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../supabase/migrations");
-const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
+const files = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith(".sql"))
+  .sort();
 const read = (f: string) => readFileSync(`${MIGRATIONS_DIR}/${f}`, "utf8");
 
 const decls = dedupeDecls(files.flatMap((f) => parseDeclarations(read(f), f)));
 const bodies = dedupeByLastDefiner(files.flatMap((f) => parseFunctionBodies(read(f), f)));
 const list = (kind: string) =>
-  sqlQuote(decls.filter((d) => d.kind === kind).map((d) => d.name).sort().join(","));
+  sqlQuote(
+    decls
+      .filter((d) => d.kind === kind)
+      .map((d) => d.name)
+      .sort()
+      .join(","),
+  );
 
 const NORM =
   `regexp_replace(btrim(regexp_replace(regexp_replace(regexp_replace(p.prosrc,'/\\*.*?\\*/',' ','g'),` +
   `'--[^\\n]*',' ','g'),'\\s+',' ','g')),'\\s*([(),;=])\\s*','\\1','g')`;
 
 const filesDeclaring = new Set(decls.map((d) => d.file)).size;
-console.log(`-- ${files.length} migration files (${filesDeclaring} declare objects) -> ${decls.length} objects, ${bodies.length} function bodies`);
+console.log(
+  `-- ${files.length} migration files (${filesDeclaring} declare objects) -> ${decls.length} objects, ${bodies.length} function bodies`,
+);
 console.log(`--`);
 console.log(`-- NOT CHECKED by any query below:`);
 for (const u of UNCHECKED) console.log(`--   * ${u}`);
-console.log(`-- An empty result means "nothing in the checked categories drifted", NOT "the schema is verified".`);
+console.log(
+  `-- An empty result means "nothing in the checked categories drifted", NOT "the schema is verified".`,
+);
 
 console.log(`\n\n-- ===== QUERY 1: declared in migrations, MISSING from prod =====\n`);
 console.log(`with d_fn(name) as (select unnest(string_to_array(${list("function")},','))),
@@ -84,7 +97,10 @@ union all select 'MISSING view', name from d_view v where not exists (
 order by 1,2;`);
 
 const values = bodies
-  .map((b) => `(${sqlQuote(b.name)},'${createHash("md5").update(normalizeBody(b.body)).digest("hex")}')`)
+  .map(
+    (b) =>
+      `(${sqlQuote(b.name)},'${createHash("md5").update(normalizeBody(b.body)).digest("hex")}')`,
+  )
   .join(",");
 
 console.log(`\n\n-- ===== QUERY 2: function BODY DRIFT + prod-only functions =====\n`);

@@ -83,7 +83,10 @@ export function stripLeadingTitle(md: string, title: string): string {
   let i = 0;
   while (i < lines.length && lines[i].trim() === "") i++;
   if (i >= lines.length) return md ?? "";
-  const first = lines[i].replace(/^#{1,6}\s*/, "").trim().toLowerCase();
+  const first = lines[i]
+    .replace(/^#{1,6}\s*/, "")
+    .trim()
+    .toLowerCase();
   if (first !== t) return md ?? "";
   lines.splice(0, i + 1);
   while (lines.length && lines[0].trim() === "") lines.shift();

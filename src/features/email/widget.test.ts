@@ -88,7 +88,11 @@ describe("shapeEmailInbox", () => {
         refs: [
           ref({ id: "b", followUpAt: "2026-07-10T09:00:00Z" }),
           ref({ id: "a", followUpAt: "2026-07-08T09:00:00Z" }),
-          ref({ id: "cleared", followUpAt: "2026-07-08T09:00:00Z", followUpClearedAt: "2026-07-07T08:00:00Z" }),
+          ref({
+            id: "cleared",
+            followUpAt: "2026-07-08T09:00:00Z",
+            followUpClearedAt: "2026-07-07T08:00:00Z",
+          }),
         ],
       }),
       { now: NOW },
@@ -107,7 +111,16 @@ describe("shapeEmailInbox", () => {
 
   it("falls back to the sender address / (No subject) for sparse refs", () => {
     const view = shapeEmailInbox(
-      bundle({ refs: [ref({ fromName: "", fromAddr: "x@y.com", subject: "", followUpAt: "2026-07-08T09:00:00Z" })] }),
+      bundle({
+        refs: [
+          ref({
+            fromName: "",
+            fromAddr: "x@y.com",
+            subject: "",
+            followUpAt: "2026-07-08T09:00:00Z",
+          }),
+        ],
+      }),
       { now: NOW },
     );
     expect(view.awaitingFollowUp[0]!.fromName).toBe("x@y.com");

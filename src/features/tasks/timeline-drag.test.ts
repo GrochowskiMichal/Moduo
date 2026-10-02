@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TaskRelation } from "./model";
 import { resolveBarDrag, resolveConnectorDrop, resolveTrayDrop } from "./timeline-drag";
-import { dayAtX, axisWindow } from "./timeline-geometry";
+import { axisWindow, dayAtX } from "./timeline-geometry";
 
 function localIso(y: number, m: number, d: number, h = 0, min = 0): string {
   return new Date(y, m, d, h, min).toISOString();

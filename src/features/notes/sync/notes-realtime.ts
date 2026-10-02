@@ -75,10 +75,7 @@ export function nameFromEmail(email: string | null | undefined): string {
  * de-duplicate by userId (two tabs of one person = one avatar), keep the
  * earliest join time, and sort stably by name then id.
  */
-export function presenceViewers(
-  state: PresenceState,
-  selfUserId: string | null,
-): NoteViewer[] {
+export function presenceViewers(state: PresenceState, selfUserId: string | null): NoteViewer[] {
   const byUser = new Map<string, NotePresence>();
   for (const metas of Object.values(state)) {
     for (const meta of metas) {

@@ -7,16 +7,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Truncation } from "../../../lib/paged-select";
+import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
-import type { Note } from "../model";
-import { descendantIds, siblingsOf, wouldCreateCycle } from "../tree";
 import { endPosition } from "../../tasks/helpers";
+import type { Note } from "../model";
+import { repairNote, repairUnmaterializedNotes } from "../repair";
 import { NotesSyncEngineV2, type NotesSyncStatusV2 } from "../sync/engine-v2";
 import { readMetaCache, writeMetaCache } from "../sync/idb";
 import { runRedbImportOnce } from "../sync/redb-import";
-import { repairNote, repairUnmaterializedNotes } from "../repair";
+import { descendantIds, siblingsOf, wouldCreateCycle } from "../tree";
 
 const WELCOME_FLAG_PREFIX = "moduo:notes:welcome-seeded:v1:";
 
@@ -47,17 +47,20 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
    * bundle so a concurrent load() can't clobber a just-captured note. */
   const pendingCreatesRef = useRef(new Map<string, Note>());
   const notesRef = useRef<Note[]>([]);
-  notesRef.current = notes;
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
 
   const ready = Boolean(runtime && userId && workspaceId && canRead);
 
   // ── the sync engine (one per workspace) ────────────────────────────────────
   const refreshRef = useRef<() => void>(() => {});
+  const fireRefresh = useCallback(() => refreshRef.current(), []);
   const engine = useMemo(() => {
     if (!ready) return null;
-    return new NotesSyncEngineV2(runtime, workspaceId!, () => refreshRef.current());
+    return new NotesSyncEngineV2(runtime, workspaceId!, fireRefresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, runtime, workspaceId]);
+  }, [ready, runtime, workspaceId, fireRefresh]);
 
   useEffect(() => {
     if (!engine) return;
@@ -144,9 +147,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
 
     void runRedbImportOnce(runtime, workspaceId!).then((r) => {
       if (r && r.imported > 0) {
-        toast(
-          `Imported ${r.imported} note${r.imported === 1 ? "" : "s"} from this device.`,
-        );
+        toast(`Imported ${r.imported} note${r.imported === 1 ? "" : "s"} from this device.`);
         void load();
       }
     });
@@ -327,7 +328,9 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     (noteId: string, icon: string | null) => {
       if (!engine || !workspaceId) return;
       patchLocal(noteId, { icon });
-      guard(() => engine.runMetaOp("setMeta", { workspaceId, noteId, patch: { icon: icon ?? "" } }));
+      guard(() =>
+        engine.runMetaOp("setMeta", { workspaceId, noteId, patch: { icon: icon ?? "" } }),
+      );
     },
     [engine, workspaceId, patchLocal, guard],
   );
@@ -379,7 +382,8 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       );
       setNotes((prev) =>
         prev.map((n) => {
-          if (n.id === noteId) return { ...n, isArchived: true, publishedAt: null, publishToken: null };
+          if (n.id === noteId)
+            return { ...n, isArchived: true, publishedAt: null, publishToken: null };
           if (descendants.has(n.id)) return { ...n, publishedAt: null, publishToken: null };
           return n;
         }),

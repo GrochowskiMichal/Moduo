@@ -3,14 +3,13 @@
 // the exact seed (HTML → nodes) + export (nodes → HTML / plain text) the plugins do,
 // without a browser, so a dropped node (bold/list/link/quote) is caught in CI.
 
-import { describe, expect, it } from "vitest";
-
 import { createHeadlessEditor } from "@lexical/headless";
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
 import { AutoLinkNode, LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { $createParagraphNode, $getRoot, $insertNodes } from "lexical";
+import { describe, expect, it } from "vitest";
 
 function roundTrip(html: string): { html: string; text: string } {
   const editor = createHeadlessEditor({
@@ -50,7 +49,7 @@ function roundTrip(html: string): { html: string; text: string } {
 describe("compose editor HTML round-trip", () => {
   it("preserves bold, a bulleted list, and a link", () => {
     const { html, text } = roundTrip(
-      '<p>Hi <strong>there</strong></p><ul><li>one</li><li>two</li></ul>' +
+      "<p>Hi <strong>there</strong></p><ul><li>one</li><li>two</li></ul>" +
         '<p><a href="https://example.com">a link</a></p>',
     );
     // Lexical exports bold as `<b><strong style=…>there</strong></b>` — a valid

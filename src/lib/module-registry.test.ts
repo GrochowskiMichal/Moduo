@@ -3,9 +3,8 @@
 // ModuleManifest, without dropping the Tasks manifest.
 
 import { describe, expect, it } from "vitest";
-
-import { moduleManifests } from "./module-registry";
 import type { ModuleManifest } from "./module-manifest";
+import { moduleManifests } from "./module-registry";
 
 function manifest(module: string): ModuleManifest {
   const found = moduleManifests.find((m) => m.module === module);

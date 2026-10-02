@@ -3,15 +3,14 @@
 // to its target. A neutral dot marks unread (accent is reserved, R5).
 
 import { useMemo } from "react";
-
-import { cn } from "@/lib/utils";
-import { isNotificationEnabled, usePreferencesValue } from "@/lib/preferences";
 import { timeAgo } from "@/features/notes/recent";
 import {
   groupNotifications,
   notificationDeepLink,
   notificationSummary,
 } from "@/features/spine/notifications";
+import { isNotificationEnabled, usePreferencesValue } from "@/lib/preferences";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
 import { useDashboardData } from "../../context/dashboard-data-context";

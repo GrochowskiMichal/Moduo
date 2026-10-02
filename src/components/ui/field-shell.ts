@@ -49,6 +49,4 @@ export const fieldShellVariants = cva(
   },
 );
 
-export type FieldShellVariant = NonNullable<
-  VariantProps<typeof fieldShellVariants>["variant"]
->;
+export type FieldShellVariant = NonNullable<VariantProps<typeof fieldShellVariants>["variant"]>;

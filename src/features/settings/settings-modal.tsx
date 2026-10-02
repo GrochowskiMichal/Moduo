@@ -1,10 +1,9 @@
-import { useEffect, useState, type ComponentType } from "react";
-import { Dialog as DialogPrimitive } from "radix-ui";
 import {
   Building2,
   CreditCard,
   Info,
   KeyRound,
+  type LucideIcon,
   Palette,
   Plug,
   Sliders,
@@ -12,13 +11,14 @@ import {
   Timer,
   User,
   X,
-  type LucideIcon,
 } from "lucide-react";
+import { Dialog as DialogPrimitive } from "radix-ui";
+import { type ComponentType, useEffect, useState } from "react";
 
-import { cn } from "../../lib/utils";
 import { Eyebrow } from "../../components/ui/eyebrow";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useShortcut } from "../../lib/shortcuts";
+import { cn } from "../../lib/utils";
 
 import { AboutSection } from "./sections/about-section";
 import { AccountSection } from "./sections/account-section";
@@ -31,11 +31,11 @@ import { IntegrationsSection } from "./sections/integrations-section";
 import { PreferencesSection } from "./sections/preferences-section";
 import { WorkspaceSection } from "./sections/workspace-section";
 import {
-  SETTINGS_GROUPS,
-  SETTINGS_OPEN_EVENT,
   clearPendingOpenSettings,
   isSettingsSectionId,
   pendingOpenSettings,
+  SETTINGS_GROUPS,
+  SETTINGS_OPEN_EVENT,
   type SettingsOpenDetail,
   type SettingsSectionId,
 } from "./settings-events";
@@ -201,11 +201,7 @@ export function SettingsModal() {
 
             <div className="min-h-0 overflow-y-auto px-2 py-4">
               {SECTIONS.map(({ id, Component }) => (
-                <TabsContent
-                  key={id}
-                  value={id}
-                  className="data-[state=inactive]:hidden"
-                >
+                <TabsContent key={id} value={id} className="data-[state=inactive]:hidden">
                   {id === section ? <Component /> : null}
                 </TabsContent>
               ))}

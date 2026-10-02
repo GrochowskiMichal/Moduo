@@ -33,7 +33,9 @@ const task = (over: Partial<TaskSnippetMeta>): TaskSnippetMeta => ({
 
 describe("formatTaskSnippet", () => {
   it("shows status + a due caption", () => {
-    expect(formatTaskSnippet(task({ status: "todo", dueDate: dayOffset(1) }), NOW)).toBe("To do · due tomorrow");
+    expect(formatTaskSnippet(task({ status: "todo", dueDate: dayOffset(1) }), NOW)).toBe(
+      "To do · due tomorrow",
+    );
     expect(formatTaskSnippet(task({ status: "in_progress", dueDate: dayOffset(0) }), NOW)).toBe(
       "In progress · due today",
     );
@@ -46,7 +48,9 @@ describe("formatTaskSnippet", () => {
 
   it("suppresses the due caption on finished tasks", () => {
     expect(formatTaskSnippet(task({ status: "done", dueDate: dayOffset(-2) }), NOW)).toBe("Done");
-    expect(formatTaskSnippet(task({ status: "archived", dueDate: dayOffset(3) }), NOW)).toBe("Archived");
+    expect(formatTaskSnippet(task({ status: "archived", dueDate: dayOffset(3) }), NOW)).toBe(
+      "Archived",
+    );
   });
 
   it("returns null when there is nothing to say (unknown status, no due)", () => {
@@ -101,11 +105,15 @@ describe("formatEmailSnippet", () => {
   const email = (over: Partial<EmailSnippetMeta>): EmailSnippetMeta => ({ kind: "email", ...over });
 
   it("prefers a body preview", () => {
-    expect(formatEmailSnippet(email({ preview: "Quick question about Q3" }), NOW)).toBe("Quick question about Q3");
+    expect(formatEmailSnippet(email({ preview: "Quick question about Q3" }), NOW)).toBe(
+      "Quick question about Q3",
+    );
   });
 
   it("falls back to received recency", () => {
-    expect(formatEmailSnippet(email({ receivedAt: dayOffset(-1) }), NOW)).toBe("Received 1 day ago");
+    expect(formatEmailSnippet(email({ receivedAt: dayOffset(-1) }), NOW)).toBe(
+      "Received 1 day ago",
+    );
   });
 
   it("returns null when the module supplied nothing (desktop-only on web)", () => {
@@ -138,7 +146,11 @@ describe("relativeDayLabel", () => {
 describe("relativeTimeAgo", () => {
   it("reads recent / past / future", () => {
     expect(relativeTimeAgo(new Date(NOW.getTime() - 10_000).toISOString(), NOW)).toBe("just now");
-    expect(relativeTimeAgo(new Date(NOW.getTime() - 2 * 3_600_000).toISOString(), NOW)).toBe("2 hours ago");
-    expect(relativeTimeAgo(new Date(NOW.getTime() + 3 * 3_600_000).toISOString(), NOW)).toBe("in 3 hours");
+    expect(relativeTimeAgo(new Date(NOW.getTime() - 2 * 3_600_000).toISOString(), NOW)).toBe(
+      "2 hours ago",
+    );
+    expect(relativeTimeAgo(new Date(NOW.getTime() + 3 * 3_600_000).toISOString(), NOW)).toBe(
+      "in 3 hours",
+    );
   });
 });

@@ -147,9 +147,7 @@ export class EntityRefNode extends DecoratorNode<ReactNode> {
         icon={icon}
         onClick={() => {
           if (typeof window === "undefined") return;
-          window.dispatchEvent(
-            new CustomEvent("moduo:entity:open", { detail: { type, id } }),
-          );
+          window.dispatchEvent(new CustomEvent("moduo:entity:open", { detail: { type, id } }));
         }}
       />
     );

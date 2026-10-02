@@ -11,13 +11,12 @@ import type { TasksModuleBundle } from "@/features/tasks/model";
 import type { HabitRow } from "@/lib/runtime.types";
 
 import {
+  type DashboardData,
   DashboardDataContext,
   loadedSource,
   makeMockDashboardData,
-  type DashboardData,
 } from "../../context/dashboard-data-context";
-import type { WidgetInstance, WidgetSize } from "../../engine/types";
-import type { WidgetType } from "../../engine/types";
+import type { WidgetInstance, WidgetSize, WidgetType } from "../../engine/types";
 import type { WidgetDensity } from "../../widget-density";
 import { WidgetFrame } from "../widget-frame";
 
@@ -47,8 +46,20 @@ const SAMPLE_LINKS = [
 ] as unknown as RecentLinkItem[];
 
 const SAMPLE_NEEDS_ATTENTION = [
-  { contactId: "c1", name: "Jane Rivera", status: "active", reason: "overdue-followup", detail: "2 days overdue" },
-  { contactId: "c2", name: "Sam Okafor", status: "lead", reason: "stale-lead", detail: "no touch 31 days" },
+  {
+    contactId: "c1",
+    name: "Jane Rivera",
+    status: "active",
+    reason: "overdue-followup",
+    detail: "2 days overdue",
+  },
+  {
+    contactId: "c2",
+    name: "Sam Okafor",
+    status: "lead",
+    reason: "stale-lead",
+    detail: "no touch 31 days",
+  },
   { contactId: "c3", name: "Priya Patel", status: "active", reason: "no-touch", detail: "18 days" },
 ] as unknown as NeedsAttentionItem[];
 
@@ -58,8 +69,22 @@ const SAMPLE_RECONNECT: ReconnectItem[] = [
 ];
 
 const SAMPLE_NOTES: RecentNoteRow[] = [
-  { id: "n1", title: "DB-5 spec", bodyText: "Registry + widgets…", updatedAt: ISO, isArchived: false, publishedAt: ISO },
-  { id: "n2", title: "Weekly sync", bodyText: "Agenda and notes", updatedAt: ISO, isArchived: false, publishedAt: null },
+  {
+    id: "n1",
+    title: "DB-5 spec",
+    bodyText: "Registry + widgets…",
+    updatedAt: ISO,
+    isArchived: false,
+    publishedAt: ISO,
+  },
+  {
+    id: "n2",
+    title: "Weekly sync",
+    bodyText: "Agenda and notes",
+    updatedAt: ISO,
+    isArchived: false,
+    publishedAt: null,
+  },
 ];
 
 const SAMPLE_NOTIFICATIONS = [
@@ -85,16 +110,67 @@ const SAMPLE_TASKS = {
   taskRelations: [],
   truncated: [],
   tasks: [
-    { id: "t1", title: "Ship the dashboard", status: "todo", committedFor: null, commitOrder: 0, position: "a0", deletedAt: null },
-    { id: "t2", title: "Review the widget PR", status: "todo", committedFor: null, commitOrder: 1, position: "a1", deletedAt: null },
-    { id: "t3", title: "Write the test checklist", status: "in_progress", committedFor: null, commitOrder: 2, position: "a2", deletedAt: null },
+    {
+      id: "t1",
+      title: "Ship the dashboard",
+      status: "todo",
+      committedFor: null,
+      commitOrder: 0,
+      position: "a0",
+      deletedAt: null,
+    },
+    {
+      id: "t2",
+      title: "Review the widget PR",
+      status: "todo",
+      committedFor: null,
+      commitOrder: 1,
+      position: "a1",
+      deletedAt: null,
+    },
+    {
+      id: "t3",
+      title: "Write the test checklist",
+      status: "in_progress",
+      committedFor: null,
+      commitOrder: 2,
+      position: "a2",
+      deletedAt: null,
+    },
   ],
 } as unknown as TasksModuleBundle;
 
 const SAMPLE_HABITS: HabitRow[] = [
-  { id: "h1", workspaceId: "ws-mock", name: "Meditate", emoji: "🧘", position: "a0000", checks: ["2026-07-07", "2026-07-08", "2026-07-09"], createdAt: ISO, updatedAt: ISO },
-  { id: "h2", workspaceId: "ws-mock", name: "Read", emoji: "📚", position: "a0001", checks: ["2026-07-08"], createdAt: ISO, updatedAt: ISO },
-  { id: "h3", workspaceId: "ws-mock", name: "Run", emoji: "🏃", position: "a0002", checks: [], createdAt: ISO, updatedAt: ISO },
+  {
+    id: "h1",
+    workspaceId: "ws-mock",
+    name: "Meditate",
+    emoji: "🧘",
+    position: "a0000",
+    checks: ["2026-07-07", "2026-07-08", "2026-07-09"],
+    createdAt: ISO,
+    updatedAt: ISO,
+  },
+  {
+    id: "h2",
+    workspaceId: "ws-mock",
+    name: "Read",
+    emoji: "📚",
+    position: "a0001",
+    checks: ["2026-07-08"],
+    createdAt: ISO,
+    updatedAt: ISO,
+  },
+  {
+    id: "h3",
+    workspaceId: "ws-mock",
+    name: "Run",
+    emoji: "🏃",
+    position: "a0002",
+    checks: [],
+    createdAt: ISO,
+    updatedAt: ISO,
+  },
 ];
 
 const MOCK_DATA: DashboardData = makeMockDashboardData({
@@ -154,7 +230,10 @@ function Gallery({ density }: { density: WidgetDensity }) {
       <DashboardDataContext.Provider value={MOCK_DATA}>
         <div className="flex flex-wrap items-start gap-3 bg-background p-4">
           {items.map(([type, size]) => (
-            <div key={`${type}-${size}`} style={{ width: CELL[size].width, height: CELL[size].height }}>
+            <div
+              key={`${type}-${size}`}
+              style={{ width: CELL[size].width, height: CELL[size].height }}
+            >
               <WidgetFrame widget={frame(type, size)} />
             </div>
           ))}

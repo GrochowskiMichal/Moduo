@@ -5,7 +5,8 @@
 // follow the user; density/textSize/tabs stay per-device. The reconcile/LWW
 // engine lives in prefs-sync.ts. The paused redb local store is not used.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { z } from "zod";
 import { useDomainSync } from "./prefs-sync";
 
 export type Theme = "dark" | "light";
@@ -71,19 +72,26 @@ const VALID_VALUES: Record<keyof Appearance, ReadonlyArray<string>> = {
   tabs: ["auto", "icons"],
 };
 
+const appearanceSchema = z.object({
+  theme: z.enum(["dark", "light"]).catch(DEFAULT_APPEARANCE.theme),
+  shade: z
+    .enum(["black", "warm", "cool", "slate", "plum", "forest"])
+    .catch(DEFAULT_APPEARANCE.shade),
+  accent: z
+    .enum(["pink", "violet", "blue", "green", "amber", "red", "teal", "mono"])
+    .catch(DEFAULT_APPEARANCE.accent),
+  density: z.enum(["comfortable", "compact", "dense"]).catch(DEFAULT_APPEARANCE.density),
+  radius: z.enum(["sharp", "soft", "round"]).catch(DEFAULT_APPEARANCE.radius),
+  font: z
+    .enum(["geist", "inter", "pilat", "cal", "fraunces", "serif", "mono"])
+    .catch(DEFAULT_APPEARANCE.font),
+  textSize: z.enum(["small", "normal", "large"]).catch(DEFAULT_APPEARANCE.textSize),
+  tabs: z.enum(["auto", "icons"]).catch(DEFAULT_APPEARANCE.tabs),
+});
+
 function sanitize(raw: unknown): Appearance {
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_APPEARANCE };
-  const candidate = raw as Record<string, unknown>;
-  const result = { ...DEFAULT_APPEARANCE };
-  for (const key of Object.keys(VALID_VALUES) as (keyof Appearance)[]) {
-    const value = candidate[key];
-    if (typeof value === "string" && VALID_VALUES[key].includes(value)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (result as any)[key] = value;
-    }
-  }
-  // Migrate the retired two-font model (fontDisplay/fontBody) to the single
-  // font axis: prefer the old body font, then the old display font.
+  const candidate = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const result = appearanceSchema.parse(candidate);
   const hasValidFont =
     typeof candidate.font === "string" && VALID_VALUES.font.includes(candidate.font);
   if (!hasValidFont) {
@@ -141,6 +149,10 @@ export function applyAppearance(appearance: Appearance): void {
   }
 }
 
+function syncsField(patch: Partial<Appearance>): boolean {
+  return Object.keys(patch).some((key) => SYNCED_KEY_SET.has(key));
+}
+
 function writeLocalMirror(appearance: Appearance): void {
   if (typeof localStorage === "undefined") return;
   try {
@@ -167,7 +179,9 @@ export interface UseAppearance {
 export function useAppearance(): UseAppearance {
   const [appearance, setAppearanceState] = useState<Appearance>(readLocalAppearance);
   const appearanceRef = useRef(appearance);
-  appearanceRef.current = appearance;
+  useEffect(() => {
+    appearanceRef.current = appearance;
+  }, [appearance]);
 
   // Merge a cloud-won synced subset over local state, preserving the per-device
   // fields (density/textSize/tabs), then apply to the DOM + localStorage mirror.
@@ -188,9 +202,6 @@ export function useAppearance(): UseAppearance {
     apply: applyFromCloud,
   });
 
-  const syncsField = (patch: Partial<Appearance>) =>
-    Object.keys(patch).some((key) => SYNCED_KEY_SET.has(key));
-
   const update = useCallback(
     (patch: Partial<Appearance>) => {
       setAppearanceState((prev) => {
@@ -202,7 +213,7 @@ export function useAppearance(): UseAppearance {
         return next;
       });
     },
-    [pushLocalChange]
+    [pushLocalChange],
   );
 
   return {

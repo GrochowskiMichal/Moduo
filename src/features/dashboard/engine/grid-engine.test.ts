@@ -4,9 +4,6 @@
 // input untouched) rather than exact positions — the robust way to test physics.
 
 import { describe, expect, it } from "vitest";
-
-import type { WidgetInstance, WidgetSize, WidgetType } from "./types";
-import { GRID_COLS, GRID_ROWS, SIZE_SPANS } from "./types";
 import {
   addWidget,
   canPlace,
@@ -23,14 +20,10 @@ import {
   sanitizeWidget,
   spanOf,
 } from "./grid-engine";
+import type { WidgetInstance, WidgetSize, WidgetType } from "./types";
+import { GRID_COLS, GRID_ROWS, SIZE_SPANS } from "./types";
 
-function w(
-  id: string,
-  type: WidgetType,
-  size: WidgetSize,
-  x: number,
-  y: number,
-): WidgetInstance {
+function w(id: string, type: WidgetType, size: WidgetSize, x: number, y: number): WidgetInstance {
   return { id, type, size, x, y, config: {} };
 }
 
@@ -118,20 +111,14 @@ describe("compact", () => {
   });
 
   it("closes gaps up-then-left and stays valid", () => {
-    const result = compact([
-      w("a", "clock", "S", 2, 0),
-      w("b", "clock", "S", 6, 2),
-    ]);
+    const result = compact([w("a", "clock", "S", 2, 0), w("b", "clock", "S", 6, 2)]);
     expect(isValidPlacement(result)).toBe(true);
     // Everything hugs the top-left; no widget floats away from row/col 0 lanes.
     expect(result.find((r) => r.id === "a")).toMatchObject({ x: 0, y: 0 });
   });
 
   it("preserves input array order (only positions change)", () => {
-    const result = compact([
-      w("z", "clock", "S", 6, 2),
-      w("a", "clock", "S", 2, 0),
-    ]);
+    const result = compact([w("z", "clock", "S", 6, 2), w("a", "clock", "S", 2, 0)]);
     expect(result.map((r) => r.id)).toEqual(["z", "a"]);
   });
 
@@ -256,10 +243,7 @@ describe("addWidget", () => {
 
 describe("removeWidget", () => {
   it("removes and compacts the survivors", () => {
-    const result = removeWidget(
-      [w("a", "clock", "S", 0, 0), w("b", "clock", "S", 2, 0)],
-      "a",
-    );
+    const result = removeWidget([w("a", "clock", "S", 0, 0), w("b", "clock", "S", 2, 0)], "a");
     expect(result).toEqual([w("b", "clock", "S", 0, 0)]);
   });
 
@@ -341,7 +325,13 @@ describe("sanitizeLayout", () => {
     const out = sanitizeLayout({
       version: 1,
       pages: [
-        { id: "dup", widgets: [{ id: "a", type: "tasks", size: "S", x: 0, y: 0, config: {} }, { id: "a", type: "notes", size: "S", x: 2, y: 0, config: {} }] },
+        {
+          id: "dup",
+          widgets: [
+            { id: "a", type: "tasks", size: "S", x: 0, y: 0, config: {} },
+            { id: "a", type: "notes", size: "S", x: 2, y: 0, config: {} },
+          ],
+        },
         { id: "dup", widgets: [] },
       ],
     });

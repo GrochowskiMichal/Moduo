@@ -9,11 +9,19 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@contracts": fileURLToPath(
+        new URL("./supabase/functions/_shared/contracts", import.meta.url),
+      ),
     },
   },
   test: {
     environment: "jsdom",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "supabase/functions/_shared/contracts/**/*.test.ts",
+      "supabase/functions/_shared/*.test.ts",
+    ],
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
   },

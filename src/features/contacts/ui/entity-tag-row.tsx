@@ -3,11 +3,11 @@
 // hue + name (color never the only signal); removing detaches, never deletes;
 // the picker is the shared workspace TagPicker Tasks uses.
 
-import { cn } from "@/lib/utils";
 import { TagChip } from "@/components/tag-chip";
 import { TagPicker } from "@/components/tag-picker";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { cn } from "@/lib/utils";
 import { useEntityTags } from "../hooks/use-entity-tags";
 
 export function EntityTagRow({
@@ -23,7 +23,11 @@ export function EntityTagRow({
   canEdit: boolean;
   className?: string;
 }) {
-  const { tags, attached, toggle, create, recolor, remove } = useEntityTags(runtime, workspaceId, focus);
+  const { tags, attached, toggle, create, recolor, remove } = useEntityTags(
+    runtime,
+    workspaceId,
+    focus,
+  );
 
   // Read-only with nothing attached → render nothing (no empty affordance).
   if (!canEdit && attached.length === 0) return null;

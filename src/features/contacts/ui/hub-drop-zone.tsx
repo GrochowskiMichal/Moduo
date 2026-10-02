@@ -6,10 +6,9 @@
 // the page's <DndContext>. Tokens only.
 
 import type { ReactNode } from "react";
-
-import { cn } from "@/lib/utils";
-import type { EntityRef } from "@/lib/entity-links";
 import { linkTarget } from "@/lib/drag-payload";
+import type { EntityRef } from "@/lib/entity-links";
+import { cn } from "@/lib/utils";
 import { useDropLinkTarget } from "../../spine/hooks/use-drag-payload";
 
 export function HubDropZone({
@@ -21,7 +20,10 @@ export function HubDropZone({
   disabled?: boolean;
   children: ReactNode;
 }) {
-  const { setNodeRef, isOver } = useDropLinkTarget(linkTarget({ type: target.type, id: target.id }), { disabled });
+  const { setNodeRef, isOver } = useDropLinkTarget(
+    linkTarget({ type: target.type, id: target.id }),
+    { disabled },
+  );
   return (
     <div
       ref={setNodeRef}

@@ -9,9 +9,9 @@
  * existing task = `references`. VALUE imports stay relative (vitest gotcha).
  */
 
-import type { EntityRef, RelationKind, LinkOrigin } from "../../../lib/entity-links";
-import type { Task } from "../../tasks/model";
+import type { EntityRef, LinkOrigin, RelationKind } from "../../../lib/entity-links";
 import type { NewTaskFields } from "../../tasks/helpers";
+import type { Task } from "../../tasks/model";
 
 /** Fields for minting a note-born task: Inbox bucket, todo, nothing scheduled. */
 export function buildMintTaskFields(input: {
@@ -80,9 +80,7 @@ export function applyTaskRename(
 
 /** A task is offerable in the `/task` picker while it's still open work. */
 export function isLinkableTask(task: Task): boolean {
-  return (
-    task.deletedAt === null && task.status !== "done" && task.status !== "archived"
-  );
+  return task.deletedAt === null && task.status !== "done" && task.status !== "archived";
 }
 
 /**
@@ -93,11 +91,8 @@ export function isLinkableTask(task: Task): boolean {
 export function filterTaskCandidates(tasks: Task[], query: string, limit = 8): Task[] {
   const q = query.trim().toLowerCase();
   const linkable = tasks.filter(isLinkableTask);
-  const matches =
-    q === "" ? linkable : linkable.filter((t) => t.title.toLowerCase().includes(q));
-  return matches
-    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    .slice(0, limit);
+  const matches = q === "" ? linkable : linkable.filter((t) => t.title.toLowerCase().includes(q));
+  return matches.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, limit);
 }
 
 /** Offer "Create task '<text>'" as the top row unless an existing task

@@ -10,24 +10,15 @@
 // an open string (like TagLink.entityType) so new modules participate without a
 // code change — but the well-known set is enumerated below for the picker/search.
 
-/**
- * The closed set of link relation kinds, shared by every module (no
- * user-defined relations at alpha — the Anytype guardrail). The kind drives hub
- * grouping and roll-up phrasing. Hyphenated tokens are the wire format. Adding a
- * kind is a schema change (a migration), never a runtime/user action.
- */
-export const RELATION_KINDS = [
-  "references", // default — a gesture that implies no stronger kind
-  "spawned-from", // this was created out of that (email → task, task → note)
-  "blocks", // dependency edge (blocker → blocked); Tasks' blocked-by rides this
-  "attachment", // a file/email/payment attached to an entity
-  "mentions", // an @mention of an entity inside prose
-  "works-at", // person → company
-  "follow-up", // a follow-up owed on an entity
-  "paid-by", // an invoice/payment → the contact who paid it
-] as const;
+import {
+  LINK_ORIGINS,
+  type LinkOrigin,
+  RELATION_KINDS,
+  type RelationKind,
+} from "@contracts/vocabularies";
 
-export type RelationKind = (typeof RELATION_KINDS)[number];
+export type { LinkOrigin, RelationKind };
+export { LINK_ORIGINS, RELATION_KINDS };
 
 /** The default kind when a gesture implies no stronger relationship. */
 export const DEFAULT_RELATION_KIND: RelationKind = "references";
@@ -48,10 +39,6 @@ export const RELATION_KIND_LABELS: Record<RelationKind, string> = {
  * How a link came to exist — used for trust signals and dedupe. `manual` is the
  * default; `drag` / `mention` / `ref` / `suggest` record the originating gesture.
  */
-export const LINK_ORIGINS = ["manual", "drag", "mention", "ref", "suggest"] as const;
-
-export type LinkOrigin = (typeof LINK_ORIGINS)[number];
-
 /** The default origin when no originating gesture is recorded. */
 export const DEFAULT_LINK_ORIGIN: LinkOrigin = "manual";
 

@@ -3,7 +3,7 @@
 // DB-2 placeholder. Reads workspace permission + runtime capability defensively
 // (defaults when there's no provider, so a bare WidgetFrame story still renders).
 
-import { useContext, type ReactNode } from "react";
+import { type ReactNode, useContext } from "react";
 
 import { WorkspaceContext } from "@/features/workspaces/workspace-context";
 import { getRuntime } from "@/lib/runtime";
@@ -11,7 +11,12 @@ import type { RuntimeCapabilities } from "@/lib/runtime.types";
 
 import { useWidgetActions } from "../context/widget-actions-context";
 import type { WidgetInstance } from "../engine/types";
-import { isTypeAvailable, permissionFor, widgetMeta, type LanePermissions } from "../registry/catalog";
+import {
+  isTypeAvailable,
+  type LanePermissions,
+  permissionFor,
+  widgetMeta,
+} from "../registry/catalog";
 import { getWidgetComponent } from "../registry/widget-registry";
 import { WidgetErrorBoundary } from "./widget-error-boundary";
 

@@ -3,24 +3,22 @@
 // `readPanelVariant`/`writePanelVariant`). The "task" variant is transient
 // (driven by a focused task line, not persisted), so it's excluded here.
 
+import { z } from "zod";
+
 export type NotesPanelVariantId = "detail" | "comments" | "outline";
 
 const DEFAULT_VARIANT: NotesPanelVariantId = "detail";
-const VALID: readonly NotesPanelVariantId[] = ["detail", "comments", "outline"];
 
 function panelVariantKey(userId: string, workspaceId: string): string {
   return `moduo:notes:panel-variant:${userId}:${workspaceId}`;
 }
 
-export function readNotesPanelVariant(
-  userId: string,
-  workspaceId: string,
-): NotesPanelVariantId {
+const variantSchema = z.enum(["detail", "comments", "outline"]).catch(DEFAULT_VARIANT);
+
+export function readNotesPanelVariant(userId: string, workspaceId: string): NotesPanelVariantId {
   try {
     const raw = localStorage.getItem(panelVariantKey(userId, workspaceId));
-    return VALID.includes(raw as NotesPanelVariantId)
-      ? (raw as NotesPanelVariantId)
-      : DEFAULT_VARIANT;
+    return variantSchema.parse(raw ?? DEFAULT_VARIANT);
   } catch {
     return DEFAULT_VARIANT;
   }

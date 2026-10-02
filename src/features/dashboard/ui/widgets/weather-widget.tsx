@@ -2,9 +2,10 @@
 // Configured inline via a city search (no popover until DB-8); persisted via
 // updateConfig; refetched every 10 minutes. Degrades to a quiet retry on failure.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { parseOrError } from "@contracts/errors";
+import { openMeteoForecastSchema, openMeteoGeocodeSchema } from "@contracts/rows";
 import { MapPin, Pencil } from "lucide-react";
-
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import type { WidgetComponentProps } from "../../registry/types";
@@ -42,9 +43,14 @@ function CitySearch({ onPick }: { onPick: (r: GeoResult) => void }) {
         .then((r) => r.json())
         .then((data) => {
           if (mine !== seq.current) return;
-          const list = Array.isArray(data?.results) ? data.results : [];
+          const parsed = parseOrError(openMeteoGeocodeSchema, data);
+          if (!parsed.success) {
+            setResults([]);
+            return;
+          }
+          const list = parsed.data.results ?? [];
           setResults(
-            list.map((r: any) => ({
+            list.map((r) => ({
               name: r.name,
               country: r.country ?? "",
               latitude: r.latitude,
@@ -112,7 +118,8 @@ export function WeatherWidget({ widget, size, updateConfig }: WidgetComponentPro
       .then((r) => r.json())
       .then((data) => {
         if (mine !== seq.current) return;
-        const cw = data?.current_weather;
+        const parsed = parseOrError(openMeteoForecastSchema, data);
+        const cw = parsed.success ? parsed.data.current_weather : undefined;
         if (!cw || typeof cw.temperature !== "number") throw new Error("no data");
         setCurrent({ tempC: cw.temperature, code: cw.weathercode ?? 0, isDay: cw.is_day !== 0 });
         setState("ok");
@@ -193,7 +200,9 @@ export function WeatherWidget({ widget, size, updateConfig }: WidgetComponentPro
             {Math.round(cur.tempC)}°
           </p>
           <p className="text-xs text-muted-foreground">{weatherLabel(cur.code)}</p>
-          {city ? <p className="max-w-full truncate text-2xs text-muted-foreground/70">{city}</p> : null}
+          {city ? (
+            <p className="max-w-full truncate text-2xs text-muted-foreground/70">{city}</p>
+          ) : null}
         </div>
       </div>
     </div>

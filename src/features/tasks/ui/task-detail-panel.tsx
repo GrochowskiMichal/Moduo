@@ -4,7 +4,6 @@
 // no new write paths. Mirrors, never walls: ambient info is factual and quiet,
 // never red / alarming (spec §10 design principles 4 & 5).
 
-import { useEffect, useState } from "react";
 import {
   CalendarClock,
   CircleDashed,
@@ -19,13 +18,15 @@ import {
   SkipForward,
   X,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { EntityHub } from "@/features/spine/ui/entity-hub";
-import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
+import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-
+import { TagChip } from "../../../components/tag-chip";
+import { TagPicker } from "../../../components/tag-picker";
 import { Button } from "../../../components/ui/button";
 import {
   Command,
@@ -35,19 +36,15 @@ import {
   CommandItem,
   CommandList,
 } from "../../../components/ui/command";
-import { Input } from "../../../components/ui/input";
-import { Eyebrow } from "../../../components/ui/eyebrow";
-import { detailTitleVariants } from "../../../components/ui/detail-title";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../components/ui/popover";
-import { PropertyRow } from "../../../components/ui/property-row";
-import { Field, Mirror } from "../../../components/ui/field";
-import { TagChip } from "../../../components/tag-chip";
-import { TagPicker } from "../../../components/tag-picker";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { DateField } from "../../../components/ui/date-field";
+import { detailTitleVariants } from "../../../components/ui/detail-title";
+import { Eyebrow } from "../../../components/ui/eyebrow";
+import { Field, Mirror } from "../../../components/ui/field";
+import { Input } from "../../../components/ui/input";
+import { Kbd } from "../../../components/ui/kbd";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { PropertyRow } from "../../../components/ui/property-row";
 import {
   Select,
   SelectContent,
@@ -56,38 +53,27 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { Separator } from "../../../components/ui/separator";
-import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
-import {
-  formatTimestamp,
-  LEVEL_OPTIONS,
-  STATUS_LABELS,
-  wouldCreateCycle,
-} from "../helpers";
+import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
 import { activityActorName, activityLine } from "../activity";
+import { formatTimestamp, LEVEL_OPTIONS, STATUS_LABELS, wouldCreateCycle } from "../helpers";
+import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import {
-  isDrifted,
   type ActivityEntry,
   type Bucket,
   type EnergyLevel,
+  isDrifted,
   type PriorityLevel,
   type Task,
   type TaskStatus,
 } from "../model";
 import {
   RECURRENCE_PRESETS,
+  type RecurrencePreset,
   recurrenceFromPreset,
   recurrenceLabel,
-  type RecurrencePreset,
 } from "../parse/recurrence";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { CompleteToggle } from "../../../components/ui/complete-toggle";
-import { Kbd } from "../../../components/ui/kbd";
 
 type Props = {
   task: Task | null;
@@ -173,11 +159,15 @@ function DetailBody({
   onOpenEntity?: (ref: EntityRef) => void;
 }) {
   const [title, setTitle] = useState(task.title);
-  const [duration, setDuration] = useState(task.durationMinutes != null ? String(task.durationMinutes) : "");
+  const [duration, setDuration] = useState(
+    task.durationMinutes != null ? String(task.durationMinutes) : "",
+  );
   // Manual time-spent (minutes) — adjust the persisted total directly. The live
   // tracker lives only in Focus (locked decision 2026-06-16); here you just
   // type/correct the value. Stored as seconds; shown/edited in whole minutes.
-  const timeSpentDisplay = task.timeSpentSeconds ? String(Math.round(task.timeSpentSeconds / 60)) : "";
+  const timeSpentDisplay = task.timeSpentSeconds
+    ? String(Math.round(task.timeSpentSeconds / 60))
+    : "";
   // Draft only while the field is focused; otherwise the input mirrors the live
   // total (which Focus may accrue into in the background). Seeding the draft once
   // and leaving it would let a bare blur write a stale value over freshly-tracked
@@ -191,7 +181,7 @@ function DetailBody({
   const taskTags = api.tagsByTask.get(task.id) ?? [];
   // Subtasks, one level (spec §11): a live parent makes this a subtask; only
   // top-level tasks offer the subtask list / add affordance.
-  const parent = task.parentId ? api.tasks.find((t) => t.id === task.parentId) ?? null : null;
+  const parent = task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null;
   const subtasks = api.subtasksByParent.get(task.id) ?? [];
   // Blocked-by dependencies (spec §5c): edges, computed blocked state.
   const blockers = api.blockersByTask.get(task.id) ?? [];
@@ -223,11 +213,15 @@ function DetailBody({
   const openLinkedEntity =
     onOpenEntity ??
     ((ref: EntityRef) =>
-      window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } })));
+      window.dispatchEvent(
+        new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } }),
+      ));
   const onChangeLinkKind =
     canEdit && runtime && workspaceId
       ? (link: EntityLink, kind: RelationKind) =>
-          void runtime.spine.setLinkKind({ workspaceId, linkId: link.id, relationKind: kind }).then(hubReload)
+          void runtime.spine
+            .setLinkKind({ workspaceId, linkId: link.id, relationKind: kind })
+            .then(hubReload)
       : undefined;
   const onUnlink =
     canEdit && runtime && workspaceId
@@ -261,9 +255,9 @@ function DetailBody({
   // Recurrence (spec §5d): the current rule mapped back to a preset for the
   // picker; a parsed rule outside the vocabulary reads as "custom".
   const recurrencePreset: string = task.recurrence
-    ? RECURRENCE_PRESETS.find(
+    ? (RECURRENCE_PRESETS.find(
         (p) => recurrenceFromPreset(p.value, task.scheduledAt).rrule === task.recurrence?.rrule,
-      )?.value ?? "custom"
+      )?.value ?? "custom")
     : "none";
   const setRecurrencePreset = (v: string) => {
     if (v === "custom" || v === recurrencePreset) return;
@@ -381,7 +375,9 @@ function DetailBody({
                 {bucketOptions.map((b) => (
                   <SelectItem key={b.id} value={b.id}>
                     <span className="flex items-center gap-2">
-                      {b.isSystem ? <Inbox className="size-3.5 text-muted-foreground" aria-hidden /> : null}
+                      {b.isSystem ? (
+                        <Inbox className="size-3.5 text-muted-foreground" aria-hidden />
+                      ) : null}
                       {b.name}
                     </span>
                   </SelectItem>
@@ -507,7 +503,10 @@ function DetailBody({
                   </SelectContent>
                 </Select>
               </div>
-              {canEdit && task.recurrence && task.status !== "done" && task.status !== "archived" ? (
+              {canEdit &&
+              task.recurrence &&
+              task.status !== "done" &&
+              task.status !== "archived" ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -853,9 +852,7 @@ function SubtaskRow({
               <ListChecks className="size-3.5" aria-hidden />
             </button>
           </TooltipTrigger>
-          <TooltipContent>
-            {committed ? "Queued — click to remove" : "Add to queue"}
-          </TooltipContent>
+          <TooltipContent>{committed ? "Queued — click to remove" : "Add to queue"}</TooltipContent>
         </Tooltip>
       ) : null}
     </div>
@@ -1071,4 +1068,3 @@ function Meta({
     </div>
   );
 }
-

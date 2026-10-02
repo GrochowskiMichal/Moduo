@@ -5,7 +5,7 @@
 // (Weather city, Countdown target, Pinned entity) persist through it now; DB-8's
 // config popover reuses the same path. Defaults to a no-op (story-safe).
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 
 export interface WidgetActions {
   updateConfig: (widgetId: string, patch: Record<string, unknown>) => void;

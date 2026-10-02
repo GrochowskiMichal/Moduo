@@ -11,9 +11,9 @@
 // linked task/payment keys, keeping this reducer a pure count.
 
 import type { EntityLink, EntityRecord, EntityRef } from "../../lib/entity-links";
-import type { ActivityEntry } from "../tasks/model";
-import { entityRefKey, otherEndpoint, rollupSections, type HubSection } from "../spine/rollup";
+import { entityRefKey, type HubSection, otherEndpoint, rollupSections } from "../spine/rollup";
 import type { HubSnippetMeta } from "../spine/snippet-projectors";
+import type { ActivityEntry } from "../tasks/model";
 
 export type ContactRollupInput = {
   focus: EntityRef;
@@ -105,7 +105,8 @@ export function computeLastTouch(
   // Lexical compare is correct here: every timestamp is the same Postgres
   // timestamptz serialization (uniform ISO/UTC), so string order == time order.
   stamps.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
-  const interaction = stamps.find((s) => s.activity === null || !RECORD_EDIT_OPS.has(s.activity.op)) ?? null;
+  const interaction =
+    stamps.find((s) => s.activity === null || !RECORD_EDIT_OPS.has(s.activity.op)) ?? null;
   const latest = interaction ?? stamps[0] ?? null;
   return { lastTouchAt: latest?.at ?? null, lastTouchActivity: latest?.activity ?? null };
 }

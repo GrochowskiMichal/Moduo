@@ -78,9 +78,7 @@ export function isPermissionError(message: string | null | undefined): boolean {
   if (!message) return false;
   const m = message.toLowerCase();
   return (
-    m.includes("edit access") ||
-    m.includes("row-level security") ||
-    m.includes("permission denied")
+    m.includes("edit access") || m.includes("row-level security") || m.includes("permission denied")
   );
 }
 
@@ -202,7 +200,12 @@ export async function createCapturedEntity(input: {
       const title = parsed.title.trim() || trimmed;
       const { startsAt, endsAt, allDay } = eventTimes(parsed, now);
       await runtime.calendar.createEvent({ workspaceId, title, startsAt, endsAt, allDay });
-      return { target, title, description: eventDescription(startsAt, allDay), openTo: "/calendar" };
+      return {
+        target,
+        title,
+        description: eventDescription(startsAt, allDay),
+        openTo: "/calendar",
+      };
     }
     case "task":
     default: {

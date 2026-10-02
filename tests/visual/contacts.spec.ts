@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 /**
  * Contacts ContactHub — visual regression (CO-2, AC2/AC12). Snapshots the

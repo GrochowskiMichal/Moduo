@@ -74,3 +74,7 @@ ds-bundle/
 
 # Personal layer — private workflow notes, never committed (see AGENTS.md §Personal layer)
 docs/local/
+
+# Tool/agent run-state and stray build artifacts
+.omo/
+main.mjs

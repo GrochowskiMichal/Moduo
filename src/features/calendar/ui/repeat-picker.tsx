@@ -3,10 +3,10 @@
 // is the consent gesture; nothing saves until it reads right. Un-parseable →
 // the polite inline fallback, never a silent wrong guess.
 
-import { useMemo, useState } from "react";
 import { Repeat } from "lucide-react";
+import { useMemo, useState } from "react";
 import { RRule } from "rrule";
-
+import { cn } from "@/lib/utils";
 import { Button } from "../../../components/ui/button";
 import {
   DropdownMenu,
@@ -16,7 +16,6 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { Input } from "../../../components/ui/input";
-import { cn } from "@/lib/utils";
 import { parseRecurrenceNL } from "../recurrence-nl";
 
 const PRESETS: Array<{ label: string; rrule: string }> = [

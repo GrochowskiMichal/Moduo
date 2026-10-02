@@ -50,7 +50,11 @@ export function snoozePresets(now: Date): SnoozePreset[] {
   return [
     { id: "later_today", label: "Later today", at: laterToday },
     { id: "tomorrow", label: "Tomorrow", at: atLocalHour(now, 1, SNOOZE_MORNING_HOUR) },
-    { id: "this_weekend", label: "This weekend", at: atLocalHour(now, satOffset, SNOOZE_MORNING_HOUR) },
+    {
+      id: "this_weekend",
+      label: "This weekend",
+      at: atLocalHour(now, satOffset, SNOOZE_MORNING_HOUR),
+    },
     { id: "next_week", label: "Next week", at: atLocalHour(now, monOffset, SNOOZE_MORNING_HOUR) },
   ];
 }

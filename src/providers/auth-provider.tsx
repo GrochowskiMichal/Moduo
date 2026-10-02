@@ -1,8 +1,14 @@
-import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
-import { initRuntime, runtimeConfigError, type ModuoRuntime, type RuntimeSession } from "../lib/runtime";
+import { normalizePlanTier, type PlanTier } from "@contracts/vocabularies";
+import { createContext, type PropsWithChildren, useContext, useEffect, useState } from "react";
 import { Analytics, identify, resetIdentity } from "../lib/analytics";
+import {
+  initRuntime,
+  type ModuoRuntime,
+  type RuntimeSession,
+  runtimeConfigError,
+} from "../lib/runtime";
 
-export type PlanTier = "free" | "pro" | "team" | "founders";
+export type { PlanTier } from "@contracts/vocabularies";
 
 export type AuthContextValue = {
   userId: string | null;
@@ -65,7 +71,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (uid) {
         try {
           const { data: profile } = await client.workspace.getProfile(uid);
-          if (active && profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
+          if (active && profile?.plan_tier) setPlanTier(normalizePlanTier(profile.plan_tier));
         } catch {
           // ignore — keep "free" default
         }
@@ -73,7 +79,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
 
     void bootstrap();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Once runtime is available, subscribe to auth state changes.
@@ -97,9 +105,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       // Refresh plan tier on sign-in events.
       if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && nextSession?.user?.id) {
-        rt.workspace.getProfile(nextSession.user.id)
+        rt.workspace
+          .getProfile(nextSession.user.id)
           .then(({ data: profile }) => {
-            if (active && profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
+            if (active && profile?.plan_tier) setPlanTier(normalizePlanTier(profile.plan_tier));
           })
           .catch(() => {});
       }
@@ -128,14 +137,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!rt || !uid) return;
     try {
       const { data: profile } = await rt.workspace.getProfile(uid);
-      if (profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
-    } catch { /* ignore */ }
+      if (profile?.plan_tier) setPlanTier(normalizePlanTier(profile.plan_tier));
+    } catch {
+      /* ignore */
+    }
   };
 
   const syncSubscription = async (): Promise<PlanTier> => {
     const token = session?.access_token;
     if (!token) return planTier;
-    const SUPABASE_URL = (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ??
+    const SUPABASE_URL =
+      (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ??
       "https://wtoonrvuqumihpkbvwvs.supabase.co";
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-subscription`, {
@@ -144,8 +156,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       });
       const { plan_tier, error } = await res.json();
       if (error) throw new Error(error);
-      if (plan_tier) setPlanTier(plan_tier as PlanTier);
-      return (plan_tier as PlanTier) ?? planTier;
+      if (plan_tier) {
+        const normalized = normalizePlanTier(plan_tier);
+        setPlanTier(normalized);
+        return normalized;
+      }
+      return planTier;
     } catch (err) {
       console.error("[auth] syncSubscription failed:", err);
       return planTier;

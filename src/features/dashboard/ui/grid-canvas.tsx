@@ -4,12 +4,7 @@ import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
 import { spanOf } from "../engine/grid-engine";
-import {
-  GRID_COLS,
-  GRID_ROWS,
-  type WidgetInstance,
-  type WidgetSize,
-} from "../engine/types";
+import { GRID_COLS, GRID_ROWS, type WidgetInstance, type WidgetSize } from "../engine/types";
 import type { DragRender } from "../hooks/use-grid-drag";
 import { useGridMotion } from "../motion";
 import { WidgetFrame } from "./widget-frame";
@@ -110,7 +105,9 @@ export function GridCanvas({
                 ? { x: drag.transform.x, y: drag.transform.y, scale: ACTIVE_SCALE }
                 : { x: 0, y: 0, scale: editing ? EDIT_SCALE : 1 }
             }
-            transition={isActive ? INSTANT_FOLLOW : { duration: motionSpec.duration, ease: motionSpec.ease }}
+            transition={
+              isActive ? INSTANT_FOLLOW : { duration: motionSpec.duration, ease: motionSpec.ease }
+            }
             onPointerDown={(e) => onWidgetPointerDown?.(widget.id, e)}
             // A widget swallows its own wheel events so the pager only turns pages
             // over the grid BACKGROUND (spec assumption 11); DB-5 scrollable

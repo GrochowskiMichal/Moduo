@@ -65,13 +65,19 @@ export function parseDeclarations(rawSql: string, file: string): Decl[] {
   const out: Decl[] = [];
   const push = (kind: DeclKind, name: string) => out.push({ kind, name, file });
 
-  for (const m of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?"?(\w+)"?\s*\(/gi))
+  for (const m of sql.matchAll(
+    /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?"?(\w+)"?\s*\(/gi,
+  ))
     push("function", m[1]);
-  for (const m of sql.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?"?(\w+)"?/gi))
+  for (const m of sql.matchAll(
+    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?"?(\w+)"?/gi,
+  ))
     push("table", m[1]);
   for (const m of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?TRIGGER\s+"?(\w+)"?/gi))
     push("trigger", m[1]);
-  for (const m of sql.matchAll(/CREATE\s+POLICY\s+(?:"([^"]+)"|(\w+))\s+ON\s+(?:public\.)?"?(\w+)"?/gi))
+  for (const m of sql.matchAll(
+    /CREATE\s+POLICY\s+(?:"([^"]+)"|(\w+))\s+ON\s+(?:public\.)?"?(\w+)"?/gi,
+  ))
     push("policy", `${m[3]}::${m[1] ?? m[2]}`);
   for (const m of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+(?:public\.)?"?(\w+)"?/gi))
     push("view", m[1]);
@@ -94,8 +100,7 @@ export function parseFunctionBodies(rawSql: string, file: string): FnBody[] {
   const sql = stripComments(rawSql);
   const out: FnBody[] = [];
   const re = /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?"?(\w+)"?\s*\(/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(sql))) {
+  for (let m = re.exec(sql); m !== null; m = re.exec(sql)) {
     const rest = sql.slice(m.index);
     const as = /\bAS\s+(\$\w*\$)/i.exec(rest);
     if (!as) continue;
