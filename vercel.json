@@ -34,6 +34,6 @@
       "has": [{ "type": "host", "value": "www.moduo.app" }],
       "destination": "/app.html"
     },
-    { "source": "/((?!assets|favicon|manifest|sw\\.|app\\.html).*)", "destination": "/index.html" }
+    { "source": "/((?!assets|favicon|manifest|sw\\.|app\\.html|landing\\.html).*)", "destination": "/index.html" }
   ]
 }
