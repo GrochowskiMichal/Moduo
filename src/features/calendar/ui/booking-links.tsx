@@ -142,6 +142,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         .select("*")
         .eq("owner_user_id", userId)
         .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
         .order("created_at", { ascending: true }),
       supabaseClient.rpc("booking_google_connected"),
     ]);
@@ -321,6 +322,26 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
     }
   };
 
+  const remove = async () => {
+    if (!draft?.id) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // Soft delete: the slug stops working, cancel links for booked meetings keep working.
+      const { error: deleteError } = await supabaseClient
+        .from("exposed_slot_links")
+        .update({ deleted_at: new Date().toISOString(), paused: true })
+        .eq("id", draft.id);
+      if (deleteError) throw deleteError;
+      setDraft(null);
+      await refresh();
+    } catch (e) {
+      setError(errorText(e, "Could not delete the link."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const copy = async (slug: string) => {
     await navigator.clipboard.writeText(publicUrl(slug));
     setCopied(slug);
@@ -386,6 +407,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         onConnectZoom={() => void connectZoom()}
         onDisconnectZoom={() => void disconnectZoom()}
         onSave={() => void save()}
+        onDelete={() => void remove()}
       />
     </div>
   );

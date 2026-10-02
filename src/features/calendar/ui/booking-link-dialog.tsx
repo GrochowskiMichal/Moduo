@@ -1,3 +1,5 @@
+import { Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import {
@@ -97,6 +99,7 @@ type Props = {
   onConnectZoom: () => void;
   onDisconnectZoom: () => void;
   onSave: () => void;
+  onDelete: () => void;
 };
 
 type VideoRow = {
@@ -153,7 +156,12 @@ export function BookingLinkDialog({
   onConnectZoom,
   onDisconnectZoom,
   onSave,
+  onDelete,
 }: Props) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const draftId = draft?.id ?? null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when another link opens.
+  useEffect(() => setConfirmDelete(false), [draftId]);
   const needsGoogle =
     draft != null &&
     !googleOn &&
@@ -589,7 +597,8 @@ export function BookingLinkDialog({
                 <section className="flex flex-col gap-2">
                   <Eyebrow as="h2">Busy calendars</Eyebrow>
                   <p className="text-sm text-muted-foreground">
-                    Checked calendars hide times. The meeting still lands on Moduo and Google.
+                    Checked calendars hide times. Booked meetings go on your Google calendar, or on
+                    Moduo when Google isn't connected.
                   </p>
                   <label className="flex items-center gap-2 text-sm text-foreground">
                     <Checkbox
@@ -625,11 +634,55 @@ export function BookingLinkDialog({
                 </section>
               </div>
             </div>
-            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border px-6 py-4">
-              <p className="text-sm text-destructive">{error ?? ""}</p>
-              <Button type="button" disabled={busy} onClick={onSave}>
-                {busy ? "Saving…" : "Save link"}
-              </Button>
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-4">
+              {confirmDelete ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm text-foreground">
+                    Delete this link? Anyone who opens it will see it's no longer available.
+                    Meetings already booked stay.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={busy}
+                    onClick={onDelete}
+                  >
+                    Delete link
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => setConfirmDelete(false)}
+                  >
+                    Keep it
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex min-w-0 items-center gap-3">
+                  {draft.id ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5 text-destructive hover:bg-destructive/10"
+                      disabled={busy}
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      <Trash2 aria-hidden />
+                      Delete
+                    </Button>
+                  ) : null}
+                  <p className="text-sm text-destructive">{error ?? ""}</p>
+                </div>
+              )}
+              {confirmDelete ? null : (
+                <Button type="button" disabled={busy} onClick={onSave}>
+                  {busy ? "Saving…" : "Save link"}
+                </Button>
+              )}
             </div>
           </>
         ) : null}

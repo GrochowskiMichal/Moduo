@@ -23,3 +23,11 @@ Prerequisite: the Zoom app secrets are set (see docs/gotchas.md → "Zoom on boo
 
 ## Known gaps
 - Guest page verified on the dev server with mocked data (Their choice → Zoom → booked). Link editor not viewed live (no sign-in from the agent browser). Real Zoom API calls untested until the Zoom app exists.
+
+## Booking + calendar fixes (2026-10-02)
+- [ ] Book a new meeting on a link (Google connected) → the calendar shows it ONCE, on the Google calendar, not twice.
+- [ ] The existing "test" and two "Quick Sync" bookings on Oct 2 now show once each.
+- [ ] Click a booked event → the popover has "Join Google Meet" / "Join Zoom"; Open → the side panel shows the same Join button with the link under it.
+- [ ] A normal Google event that has a Meet link shows "Join Google Meet" after the next sync.
+- [ ] Link editor → Delete → confirm → the link disappears from the rail; opening its URL shows "This booking link isn't available."; the cancel link in an earlier booking email still works.
+- [ ] Busy calendars note reads "Booked meetings go on your Google calendar, or on Moduo when Google isn't connected."
