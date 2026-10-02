@@ -1,71 +1,105 @@
-# Manual test: landing v6 content pass (`t/maciej/landing-v4`)
+# Manual test: landing v7 (`t/maciej/landing-v4`)
 
-This keeps Mike's v5 look (blueprint frame, uppercase hero, ⌘K demo, sticky story, board, MCP chat, MOD+DUO footer) and replaces content that wasn't true or approved.
+Mike's v5 look, rebuilt section by section to match the real app and the 2 October decisions.
+
 Surface: **web, localhost only**. Run `PORT=8766 bun scripts/preview-landing.ts`, then open http://127.0.0.1:8766.
-⚠ The waitlist forms post to the **production** Supabase. Don't submit test emails.
 
-## Hero
-- [ ] Headline reads "FIRE FIVE APPS. / KEEP THE WORK." The subline names email, tasks, notes, calendar and contacts. No mind maps or invoicing.
-- [ ] On load, five windows (Mail, Docs, To-do app, Calendar, Contacts) are scattered, and the tab strip says "5 tabs".
-- [ ] About 2.4 s later they assemble into Moduo Home. The window has a top tab bar (Home active) and no side rail. The tab strip says "1 tab", and Apps, Logins and Search bars count 05 → 01.
-- [ ] The assembled view shows five widgets: Tasks, Calendar, Email, Notes, Contacts. Mindmap is gone.
-- [ ] Lines connect the Email row to the task and to the contact, the task to Friday's "Deck · Fri 10:00", and the task to the note.
-- [ ] The "Your stack today / With Moduo" toggle still works both ways.
+⚠ Waitlist forms post to the **production** Supabase. They return 403 from localhost:8766 (that origin isn't allowlisted). Don't add it.
 
-## ⌘K search demo
-- [ ] The idle tour types "anna", then "deck", then "friday". The Try chips match.
-- [ ] Results only come from People, Tasks, Email, Notes and Events. There are no Deals, Time, Invoices, Goals or Maps.
-- [ ] Anna's preview says "linked to Anna, on one page". It never says "nobody logged any of it".
+Check the page at three sizes: 1512 × 982 (laptop), 2560 × 1440 (4K at 150%) and 390 px (phone).
 
-## Module strip
-- [ ] The label reads "Five modules · one workspace · one search". The chips only list live things: Home, Tasks, Notes, Calendar, Email, Contacts, Links, One search, Quick capture, Focus timer, 16 widgets, Notion import.
+## Header
+- [ ] The logo reads "moduo" in lowercase, with a larger mark. The links sit in the centre with no numbers. The button reads "Join the waitlist", the same label as every form.
+- [ ] Over the hero the bar is transparent: only its content shows.
+- [ ] As the pane reaches the bar, the glass fades in smoothly and never jumps. Scroll slowly back and forth around that point to check.
+- [ ] When docked, the progress line runs edge to edge on the bottom edge as a gradient, and a soft light spreads up into the glass from its tip.
+- [ ] Phone, and any screen where the hero scrolls normally: the glass appears as soon as you scroll.
 
-## Story: "One thread through everything."
-- [ ] There are six steps: Anna writes / The note finds her / Press T / Hand it to Jamie / Give it a slot / See it all at home.
-- [ ] Scrolling through, cards arrive in order: email + contact, note, task, Jamie, Friday block, Home. Each step's line draws, and its label (sender, mentions, spawned from, task line, assigned, scheduled, today, tasks) pulses.
-- [ ] In step 2 "@Anna Carter" flies from the note to the contact. In step 3 the T key presses, the subject flies to the task and the task flies to the note. In step 4 the assignee flies to Jamie. In step 5 the task flies to the calendar.
-- [ ] The footer counters read "Links N" and "Copied 0". There is no "Tagged by you", no invoice and no "€".
-- [ ] Clicking the task's round checkbox strikes it through, and the status says Anna's contact, Jamie and Home all show it.
-- [ ] Dragging cards, hover tracing and Reset layout still work.
+## Hero stage
+- [ ] On desktop the hero holds still while the pane slides over it.
+- [ ] The frame is vertically centred, with air above and below. It's wider on 4K, and the header content lines up with its edges.
+- [ ] The top row has three quiet facts (private beta, platforms, founding price) in sentence case: no mono, no dots, no green pill.
+- [ ] The headline is sentence case on exactly two lines: "Fire ten apps. / Keep the work."
+- [ ] The form is the biggest control. The note under it reads "One email when your invite is ready. No spam."
+- [ ] Rulers run on the top and left edges. Inside the frame a notch and a number follow the pointer.
+- [ ] The windows drift with the pointer anywhere over the hero, not only over the mockup.
+- [ ] The counters band is compact: Apps 10 → 01, Subscriptions 06 → 01, Search bars 10 → 01.
 
-## Stack tax
-- [ ] The receipt lists Notion Plus 10.00, Todoist Pro 5.00, Fantastical Premium 4.75, Superhuman Starter 25.00 and folk Standard 24.00. The 68.75 total is struck through, followed by Moduo Pro $8 and the note with the 1 October 2026 date.
+## Hero assembly
+- [ ] The tab strip above the mockup shows ten crowded tabs and "10 tabs". On assembly it folds into one "moduo · Home" tab and "1 tab".
+- [ ] "Your stack today": ten windows pile around the centre, with no Moduo window behind them.
+- [ ] "With Moduo": a light, wireframe-like shell.
+  - Top bar: logo, module icons and an avatar placeholder.
+  - Bottom bar: one narrating line that changes as modules are traced.
+  - No bright outline around the bars, and no clipped corners.
+- [ ] Five links, none crossing. Hover the mockup, then click "With Moduo": no jump. The switch doesn't bounce.
+
+## Pane and lineup
+- [ ] The pane edge looks like a frosted sheet with square corners, no outline and no lighter slab. While it covers the hero, the hero shows blurred through its top.
+- [ ] The lineup starts a bit lower than before.
+  - Seven tiles; Chat is dashed and tagged "Coming".
+  - The hover arcs and the auto tour work.
+  - The feature strip loops without a jump and can be dragged.
+
+## How it connects
+- [ ] The heading reads "Open anything. See everything it touches."
+- [ ] Seven steps with no trailing periods, from "A message lands" to "See it all at home".
+- [ ] The stage is bigger. Each step frames only its cards (camera), and step 7 zooms out to the whole graph.
+- [ ] The window title follows the step: Inbox, Inbox · Anna Carter, Anna Carter, Task, Task · Jamie Ross, Calendar · Friday, Home.
+- [ ] No "Copied 0", no "Sam", no "Carter Studio". Jamie's card says "Assigned by you".
 
 ## Make it yours
-- [ ] The copy says 16 widgets, four sizes, and that every workspace keeps its own board. There's no store, no installing modules and no recolouring.
-- [ ] "Add widget" opens "Add a widget" with no Modules tab. The widgets have real names (Tasks, Needs attention, Habits, Quick capture, Pinned, Notes, Inbox, Today, Countdown, Time tracking, Reconnect, Recently linked, Activity, Pomodoro, Weather, Clock).
-- [ ] The widget popover only offers sizes S/M/L/XL plus Remove. The strip shows five module chips with no "+" install chip.
-- [ ] The Studio / Personal / Side project switch swaps boards.
+- [ ] The board shows more cards: four columns, 9 or 10 widgets per workspace.
+- [ ] The picker bar at the bottom changes the preview only.
+  - Settings: theme, 6 shades, 8 accents, font, density, corners.
+  - "Surprise me" mixes everything except light/dark.
+- [ ] Dark → Light fades inside the preview; the page stays dark.
+- [ ] The accent shows on done checkboxes, "Add widget" and the progress ring.
 
-## AI
-- [ ] The prompts are: what's left before the demo / link Maya's emails to the note / plan Thursday.
-- [ ] Tool calls use real MCP tool names (tasks_search, calendar_list_events, email_search, links_create, calendar_day, calendar_schedule_task).
-- [ ] The key row reads Tasks · edit, Calendar · edit, Notes · edit, Email · view only. There's no "Draft invoices" or "Send email".
+## Any AI
+- [ ] The model switch changes the assistant's name. "Local model" reads "Llama in LM Studio · runs on this Mac".
+- [ ] Set Email to None, then ask "Link Maya's emails…": the tool row turns amber, the Email row flashes, and the assistant says it can't see email.
+- [ ] Set it back to View: the link is made and the note tile updates.
+- [ ] The training note says we don't train models, plus the provider caveat.
 
-## New sections
-- [ ] "What we refuse to build": four struck uppercase lines, each with a short reason.
-- [ ] Pricing:
-  - Yearly is the default: $0 / $8 / $7.
-  - Monthly switches to $0 / $10 / $9.
-  - Each plan's "Join the waitlist" opens the waitlist dialog.
-  - The private-beta note sits under the cards.
-- [ ] FAQ: eight questions, the first one open, and the support@moduo.app link.
-- [ ] The nav shows 01–04 (Pricing added). The nav label changes through the sections (On purpose, Pricing, Questions, Early access).
+## Stack tax
+- [ ] Monthly prices.
+  - Just me: $85.99 vs Moduo Pro $12.
+  - Two of us: $189.48 vs Duo $20; Slack Pro appears.
+  - Team of 5: $473.70 vs Team $75.
+- [ ] The struck total is as big as the Moduo price.
 
-## Close and footer
-- [ ] The close copy has no "switch on modules".
-- [ ] The footer lede names the five modules. The only email is support@moduo.app. There's no "Switch from" column; it's now Modules.
-- [ ] The MOD+DUO wordmark and 3D mark still animate.
+## Fast
+- [ ] Eight shortcut rows taken from the app's real keys, plus the "and many more" line. Pressing T, J, K, E, S, R, ? or ⌘1–6 lights the matching row.
+- [ ] The ⌘K demo looks like the app's palette.
+  - Empty: Navigate and Actions.
+  - Typing: Tasks, Notes, Contacts, Email and Events, with type badges.
+  - No preview pane and no footer. The typing tour still runs.
 
-## Phone (390 px)
-- [ ] No sideways scroll anywhere.
-- [ ] The receipt, refuse lines, plan cards and FAQ stack in one column.
+## Yours, shipping, on purpose
+- [ ] "Yours" is a settings-style panel: Export, Import, AI keys, training "Never", Delete.
+- [ ] "Shipping every week" has five mock entries dated relatively (This week … Last month).
+- [ ] "What we won't build": the answers are larger than the struck lines.
+
+## Pricing
+- [ ] Four plans with module icons.
+  - Chat is dimmed on Free and Pro, dashed with a dot on Duo and Team.
+  - Prices: yearly $0 / $10 / $16 for two / $12 a seat; monthly $0 / $12 / $20 / $15.
+  - Founding price lines line up near the buttons.
+- [ ] "Save 20%" is a pill. "Compare every plan" opens a table.
+
+## Made by two, FAQ, close
+- [ ] The founders section shows placeholders: [Maker name], [Role] and photo frames.
+- [ ] The FAQ has ten questions, matching the decisions on platforms, offline, training and plans.
+- [ ] The close shows the platform chips (Mac and Web in beta, Windows next, phones later) and the large form.
+- [ ] After joining (on prod), the success box shows an unticked "Also send me build updates" box. It only shows "on" once the server confirms.
+
+## Share image
+- [ ] `/assets/og.png` loads (1200 × 630). The head has og:image and a large Twitter card.
 
 ## Known gaps
-- Social links, checked 1 Oct 2026:
-  - LinkedIn (`/company/moduo-app`) exists. It's the Moduo page with Mike listed, but the tagline is out of date.
-  - These don't exist: X `@moduoapp`, Product Hunt `/products/moduo`, GitHub `moduo-app` and YouTube `@moduoapp`.
-  - The Discord `discord.gg/moduo` invite says "Invite Invalid".
-  - Still to fix.
-- Privacy, Terms, About, Changelog and Download for Mac are "soon" placeholders, because those pages don't exist yet.
-- The calls to action stay on the waitlist (decided: private beta). Assignment is shown as live (it ships before launch).
+- **Waitlist opt-in backend is not live yet.** Needs `supabase/migrations/20261002120000_waitlist_updates_opt_in.sql`, then a redeploy of `waitlist-join`, in that order. Until then the checkbox shows "Couldn't save that."
+- Social links: LinkedIn exists but its tagline is outdated. The X, Product Hunt, GitHub and YouTube links 404, and the Discord invite is invalid. Waiting for the real links.
+- Privacy, Terms, About, Changelog and Download for Mac are "soon" placeholders.
+- Founders' names, photos and lines are placeholders.
+- The changelog entries are mock data.

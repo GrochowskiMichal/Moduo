@@ -26,6 +26,9 @@ if (target === "landing") {
   const outDir = path.join(root, "dist", "web");
   fs.mkdirSync(outDir, { recursive: true });
   fs.copyFileSync(path.join(root, "landing", file), path.join(outDir, "index.html"));
+  // Static assets (share image, …) go to /assets, which the SPA rewrite leaves alone.
+  const assets = path.join(root, "landing", "assets");
+  if (fs.existsSync(assets)) fs.cpSync(assets, path.join(outDir, "assets"), { recursive: true });
   console.log("[vercel-build] Landing build complete → dist/web/index.html");
 } else {
   console.log("[vercel-build] Building web app…");
