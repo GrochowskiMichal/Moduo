@@ -44,11 +44,7 @@ export type ChipSpan = {
 };
 
 /** Clamp a chip's real span into a day column. Null when fully outside. */
-export function chipSpanInDay(
-  startMs: number,
-  endMs: number,
-  geom: DayGeometry,
-): ChipSpan | null {
+export function chipSpanInDay(startMs: number, endMs: number, geom: DayGeometry): ChipSpan | null {
   const s = Math.max(startMs, geom.dayStartMs);
   const e = Math.min(endMs, geom.dayEndMs);
   if (e <= s) return null;
@@ -71,10 +67,7 @@ export function minutesIntoDay(ms: number, geom: DayGeometry): number | null {
  * geometry (washes, gap bounds) aligned with the real-instant chip layout.
  * Clamped to the day's real span.
  */
-export function wallClockToRealMinutes(
-  minuteOfDay: number,
-  geom: DayGeometry,
-): number {
+export function wallClockToRealMinutes(minuteOfDay: number, geom: DayGeometry): number {
   const start = new Date(geom.dayStartMs);
   const at = new Date(
     start.getFullYear(),
@@ -120,10 +113,7 @@ export function layoutDayChips(
 ): { placed: PlacedChip[]; overflow: OverflowChip[] } {
   const sorted = chips
     .slice()
-    .sort(
-      (a, b) =>
-        a.startMs - b.startMs || b.endMs - a.endMs || a.id.localeCompare(b.id),
-    );
+    .sort((a, b) => a.startMs - b.startMs || b.endMs - a.endMs || a.id.localeCompare(b.id));
 
   const placed: PlacedChip[] = [];
   const overflow: OverflowChip[] = [];

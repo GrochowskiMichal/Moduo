@@ -39,7 +39,9 @@ function liveChildrenMap(notes: Note[]): Map<string | null, Note[]> {
  * a token? (Archiving clears the token server-side; the `!isArchived` guard is
  * belt-and-suspenders against a stale in-flight state.) */
 export function isPublished(note: Note | undefined | null): boolean {
-  return Boolean(note && !note.deletedAt && !note.isArchived && note.publishedAt && note.publishToken);
+  return Boolean(
+    note && !note.deletedAt && !note.isArchived && note.publishedAt && note.publishToken,
+  );
 }
 
 /**

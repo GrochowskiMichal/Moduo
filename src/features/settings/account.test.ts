@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  MIN_PASSWORD_LENGTH,
   isPasswordProvider,
+  MIN_PASSWORD_LENGTH,
   providerLabel,
   validateNewPassword,
 } from "./account";

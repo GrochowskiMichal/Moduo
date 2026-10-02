@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 /**
  * Tasks Timeline view — visual regression (TL-1, AC1–AC4/AC7-render/AC9/AC10).

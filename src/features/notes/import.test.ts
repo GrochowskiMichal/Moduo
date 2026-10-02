@@ -1,14 +1,14 @@
-import { describe, expect, it } from "vitest";
 import { strToU8, zipSync } from "fflate";
+import { describe, expect, it } from "vitest";
 
 import {
   assignImportIds,
   buildImportRows,
   describeSkips,
+  type ImportFileEntry,
   importPositions,
   notionPageId,
   planMdZipImport,
-  type ImportFileEntry,
 } from "./import";
 import { readImportFiles } from "./import-zip";
 
@@ -265,7 +265,11 @@ describe("Notion export hardening (IM-1, AC1–AC5)", () => {
     const rowsFor = (f: Record<string, string>) => {
       const plan = planMdZipImport(planEntries(f));
       const ids = assignImportIds("ws-1", plan.nodes);
-      return buildImportRows(plan.nodes, (t) => ids.get(t)!, () => null);
+      return buildImportRows(
+        plan.nodes,
+        (t) => ids.get(t)!,
+        () => null,
+      );
     };
 
     const first = rowsFor(files);
@@ -288,7 +292,11 @@ describe("Notion export hardening (IM-1, AC1–AC5)", () => {
       (() => {
         const plan = planMdZipImport(planEntries(files));
         const ids = assignImportIds("ws-2", plan.nodes);
-        return buildImportRows(plan.nodes, (t) => ids.get(t)!, () => null).map((r) => r.id);
+        return buildImportRows(
+          plan.nodes,
+          (t) => ids.get(t)!,
+          () => null,
+        ).map((r) => r.id);
       })(),
     );
   });
@@ -343,7 +351,9 @@ describe("Notion export hardening (IM-1, AC1–AC5)", () => {
     };
     // A set-derived "longest common prefix" would re-key EVERY note the moment a
     // shallower entry appears, so a month-later re-export duplicates the workspace.
-    const narrow = idsOf({ [`Export-abc123def456abc123def456abc12345/Private & Shared/Home ${hex}.md`]: "x" });
+    const narrow = idsOf({
+      [`Export-abc123def456abc123def456abc12345/Private & Shared/Home ${hex}.md`]: "x",
+    });
     const wider = idsOf({
       [`Export-abc123def456abc123def456abc12345/Private & Shared/Home ${hex}.md`]: "x",
       "Teamspaces/Eng/Roadmap.md": "y",

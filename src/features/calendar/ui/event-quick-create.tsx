@@ -7,11 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "../../../components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "../../../components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -23,18 +19,23 @@ import { Switch } from "../../../components/ui/switch";
 import { RepeatPicker } from "./repeat-picker";
 import { formatTimeOfDay } from "./time-format";
 
+export type QuickCreateCalendar = { id: string; label: string };
+
 export type QuickCreateDraft = {
   title: string;
   startsAt: string;
   endsAt: string;
   allDay: boolean;
   rrule: string | null;
+  /** "moduo" or a connected account id. */
+  calendarId: string;
 };
 
 type Props = {
   /** The drawn span as real instants (already snapped by the grid). */
   startMs: number;
   endMs: number;
+  calendars: QuickCreateCalendar[];
   onCommit: (draft: QuickCreateDraft) => void;
   onCancel: () => void;
   /** Time edits in the popover move the ghost chip (the consent gesture). */
@@ -56,6 +57,7 @@ function atWallClock(anchorMs: number, time: string): Date {
 export function EventQuickCreate({
   startMs,
   endMs,
+  calendars,
   onCommit,
   onCancel,
   onTimesChange,
@@ -65,6 +67,7 @@ export function EventQuickCreate({
   const [endTime, setEndTime] = useState(() => toTimeInput(endMs));
   const [allDay, setAllDay] = useState(false);
   const [rrule, setRrule] = useState<string | null>(null);
+  const [calendarId, setCalendarId] = useState("moduo");
   const inputRef = useRef<HTMLInputElement>(null);
   /** Guards double-firing when several dismiss paths run for one gesture. */
   const settledRef = useRef(false);
@@ -80,7 +83,7 @@ export function EventQuickCreate({
       const end = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
       return { start, end };
     }
-    let start = atWallClock(startMs, startTime);
+    const start = atWallClock(startMs, startTime);
     let end = atWallClock(startMs, endTime);
     if (end.getTime() <= start.getTime()) end = new Date(start.getTime() + 15 * 60_000);
     return { start, end };
@@ -119,6 +122,7 @@ export function EventQuickCreate({
       endsAt: times.end.toISOString(),
       allDay,
       rrule,
+      calendarId,
     });
   };
 
@@ -180,7 +184,12 @@ export function EventQuickCreate({
           <div className="flex items-center gap-2">
             {allDay ? (
               <span className="flex-1 text-sm text-muted-foreground">
-                All day · {new Date(startMs).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                All day ·{" "}
+                {new Date(startMs).toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
               </span>
             ) : (
               <>
@@ -212,13 +221,20 @@ export function EventQuickCreate({
             <Switch id="qc-all-day" checked={allDay} onCheckedChange={setAllDay} />
           </div>
 
-          {/* Moduo-only in v1 — the picker seeds the v2 default-target seat. */}
-          <Select value="moduo" disabled>
+          <Select
+            value={calendars.some((calendar) => calendar.id === calendarId) ? calendarId : "moduo"}
+            onValueChange={setCalendarId}
+            disabled={calendars.length < 2}
+          >
             <SelectTrigger className="w-full" aria-label="Calendar">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="moduo">Moduo</SelectItem>
+              {calendars.map((calendar) => (
+                <SelectItem key={calendar.id} value={calendar.id}>
+                  {calendar.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 

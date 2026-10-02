@@ -5,7 +5,7 @@
 // per-event wall), derives unread/read from the read mark, and exposes a deep-
 // link target for each card. Never a red wall (Experience Principle 3).
 
-import { spineActivityLine, spineActorName, type SpineActorFields } from "./activity";
+import { type SpineActorFields, spineActivityLine, spineActorName } from "./activity";
 
 /**
  * One normalized notification row — the shape both the spine feed
@@ -91,7 +91,9 @@ export function groupNotifications(items: NotificationItem[]): NotificationGroup
     if (item.createdAt > g.latestAt) g.latestAt = item.createdAt;
     if (item.actorId && !g.actorIds.includes(item.actorId)) g.actorIds.push(item.actorId);
   }
-  return [...byKey.values()].sort((a, b) => (a.latestAt < b.latestAt ? 1 : a.latestAt > b.latestAt ? -1 : 0));
+  return [...byKey.values()].sort((a, b) =>
+    a.latestAt < b.latestAt ? 1 : a.latestAt > b.latestAt ? -1 : 0,
+  );
 }
 
 /** Total unread across a feed (the bell badge). */
@@ -156,7 +158,9 @@ export function deriveNotificationFeeds(
   opts: { workspaceId: string | null; isEnabled: (op: string) => boolean },
 ): NotificationFeeds {
   const { spine, workspace } = partitionBySource(items);
-  const wsEvents = spine.filter((item) => item.workspaceId === opts.workspaceId && opts.isEnabled(item.op));
+  const wsEvents = spine.filter(
+    (item) => item.workspaceId === opts.workspaceId && opts.isEnabled(item.op),
+  );
   const active = activeNotifications(wsEvents);
   return {
     active,
@@ -183,7 +187,10 @@ function humanizeVerb(op: string): string {
  * workspace event) is humanized instead of shown raw. The actor resolves to
  * You / a name / a quiet fallback. Never raw JSON.
  */
-export function notificationSummary(group: NotificationGroup, currentUserId: string | null): string {
+export function notificationSummary(
+  group: NotificationGroup,
+  currentUserId: string | null,
+): string {
   const latest = group.items.reduce((a, b) => (a.createdAt >= b.createdAt ? a : b));
   const actor = spineActorName(latest, currentUserId);
   const verbRaw = spineActivityLine(latest);

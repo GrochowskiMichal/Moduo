@@ -17,22 +17,22 @@
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { type PlanTier } from "../_shared/contracts/vocabularies.ts";
+import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
+import {
+  assertPlanTierForWrite,
+  buildPriceToTier,
+  TIER_RANK,
+  tierFromPriceId,
+} from "../_shared/stripe-tier.ts";
+
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
   apiVersion: "2023-10-16",
   httpClient: Stripe.createFetchHttpClient(),
 });
 
 const WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
-
-// Maps Stripe price ID → plan tier name stored in profiles.
-// Set these env vars in the Supabase Dashboard → Edge Functions → Secrets.
-const PRICE_TO_TIER: Record<string, string> = {
-  [Deno.env.get("STRIPE_PRICE_PRO_MONTHLY") ?? "price_pro_monthly"]: "pro",
-  [Deno.env.get("STRIPE_PRICE_PRO_YEARLY") ?? "price_pro_yearly"]: "pro",
-  [Deno.env.get("STRIPE_PRICE_TEAM_MONTHLY") ?? "price_team_monthly"]: "team",
-  [Deno.env.get("STRIPE_PRICE_TEAM_YEARLY") ?? "price_team_yearly"]: "team",
-  [Deno.env.get("STRIPE_PRICE_FOUNDERS") ?? "price_founders"]: "founders",
-};
+const PRICE_TO_TIER = buildPriceToTier("price_founders");
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -55,7 +55,7 @@ Deno.serve(async (req: Request) => {
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    getDefaultSecretKey(),
     { auth: { persistSession: false } }
   );
 
@@ -129,7 +129,7 @@ async function handleEvent(supabase: ReturnType<typeof createClient>, event: Str
       if (userId) {
         await supabase
           .from("profiles")
-          .update({ plan_tier: "free" })
+          .update({ plan_tier: assertPlanTierForWrite("free") })
           .eq("id", userId);
       }
       break;
@@ -137,23 +137,16 @@ async function handleEvent(supabase: ReturnType<typeof createClient>, event: Str
   }
 }
 
-// Tier rank — higher number = higher plan
-const TIER_RANK: Record<string, number> = { free: 0, pro: 1, founders: 2, team: 3 };
-
-function tierFromPriceId(priceId: string): string {
-  return PRICE_TO_TIER[priceId] ?? "free";
-}
-
-function tierFromSubscription(sub: Stripe.Subscription): string {
+function tierFromSubscription(sub: Stripe.Subscription): PlanTier {
   const priceId = sub.items.data[0]?.price?.id ?? "";
-  return tierFromPriceId(priceId);
+  return tierFromPriceId(priceId, PRICE_TO_TIER);
 }
 
 /**
  * Fetches ALL active/trialing subscriptions for a customer and returns the
  * highest tier among them, plus the subscription that provides it.
  */
-async function bestActiveTier(customerId: string): Promise<{ tier: string; subscription: Stripe.Subscription | null }> {
+async function bestActiveTier(customerId: string): Promise<{ tier: PlanTier; subscription: Stripe.Subscription | null }> {
   const subs = await stripe.subscriptions.list({
     customer: customerId,
     status: "all",
@@ -190,12 +183,12 @@ async function lookupUserByCustomer(
 async function updateProfileTier(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  tier: string,
+  tier: PlanTier,
   customerId: string,
   subscription: Stripe.Subscription
 ) {
   await supabase.from("profiles").update({
-    plan_tier: tier,
+    plan_tier: assertPlanTierForWrite(tier),
     stripe_customer_id: customerId,
     stripe_subscription_id: subscription.id,
     subscription_status: subscription.status,

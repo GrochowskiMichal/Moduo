@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 /**
  * Spine EntityHub — visual regression (AC6, AC14). Each entry points at a

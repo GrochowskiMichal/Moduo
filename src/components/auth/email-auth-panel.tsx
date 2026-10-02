@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, CircleHelp, CircleUserRound, Mail, UserPlus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { Input } from "@/components/ui/input";
 import { ModuoMark } from "@/components/ui/moduo-mark";
-import { useAuth } from "@/providers/auth-provider";
-import type { AuthMnemonic } from "@/lib/runtime";
 import { notifyProfileUpdated, writeStoredAvatar } from "@/features/profile/profile-storage";
+import { checkoutRedirectUrl } from "@/lib/checkout-redirect";
+import type { AuthMnemonic } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 import defaultProfilePic from "../../../assets/icon.png";
 
@@ -103,14 +104,11 @@ export function EmailAuthPanel({ priceId = null }: Props) {
   }, [runtime, cloudAuth]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !avatarDataUrl) return;
     void writeStoredAvatar(runtime, avatarDataUrl).then(() => notifyProfileUpdated());
   }, [avatarDataUrl, runtime]);
 
-  const avatarInitial = useMemo(
-    () => profileName.trim().slice(0, 1).toUpperCase(),
-    [profileName],
-  );
+  const avatarInitial = useMemo(() => profileName.trim().slice(0, 1).toUpperCase(), [profileName]);
 
   const handleSendOtp = async () => {
     if (!runtime || busy) return;
@@ -119,6 +117,23 @@ export function EmailAuthPanel({ priceId = null }: Props) {
       setError("Enter your email address.");
       return;
     }
+
+    // Staging invite-only allowlist guard. The allowlist is a comma-separated
+    // list of emails baked into the build via PUBLIC_STAGING_ALLOWLIST. When the
+    // list is non-empty, only listed emails may request an OTP — unknown addresses
+    // see a polite message and no OTP is sent to Supabase.
+    const rawAllowlist = (import.meta.env.PUBLIC_STAGING_ALLOWLIST as string | undefined)?.trim();
+    if (rawAllowlist) {
+      const allowed = rawAllowlist
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean);
+      if (allowed.length > 0 && !allowed.includes(email)) {
+        setError("This staging build is invite-only. Contact us to request access.");
+        return;
+      }
+    }
+
     setBusy(true);
     setError(null);
     setInfo(null);
@@ -126,7 +141,12 @@ export function EmailAuthPanel({ priceId = null }: Props) {
     const { error: otpErr } = await runtime.auth.sendOtp({ email });
     setBusy(false);
     if (otpErr) {
-      setError(otpErr.message);
+      // Sign-ups are closed on the project: only existing or invited people get a code.
+      setError(
+        /signups? not allowed/i.test(otpErr.message)
+          ? "Moduo is invite-only right now. Ask the person who invited you to use the email they invited."
+          : otpErr.message,
+      );
       return;
     }
     setOtpSentAt(sentAt);
@@ -197,12 +217,9 @@ export function EmailAuthPanel({ priceId = null }: Props) {
     const pendingPriceId = priceId ?? window.localStorage.getItem("moduo:pending_price_id");
     if (pendingPriceId) {
       window.localStorage.removeItem("moduo:pending_price_id");
-      const supabaseUrl =
-        (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-        "https://wtoonrvuqumihpkbvwvs.supabase.co";
       const session = await runtime.auth.getSession();
-      const token = session?.data?.session?.access_token;
-      window.location.href = `${supabaseUrl}/functions/v1/create-checkout-session?price_id=${encodeURIComponent(pendingPriceId)}${token ? `&access_token=${encodeURIComponent(token)}` : ""}`;
+      const token = session?.data?.session?.access_token ?? null;
+      window.location.href = checkoutRedirectUrl(pendingPriceId, token);
       return;
     }
 
@@ -403,10 +420,7 @@ export function EmailAuthPanel({ priceId = null }: Props) {
     <div className="relative z-10 w-full">
       <div className="mb-7 flex w-full flex-col items-center">
         <ModuoMark
-          className={cn(
-            "size-8 opacity-95",
-            cloudAuth && flow === "otp_sent" ? "mb-10" : "mb-6",
-          )}
+          className={cn("size-8 opacity-95", cloudAuth && flow === "otp_sent" ? "mb-10" : "mb-6")}
           aria-hidden="true"
         />
         {cloudAuth && flow === "otp_sent" ? (

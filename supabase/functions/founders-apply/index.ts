@@ -18,6 +18,9 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { foundersApplyBodySchema, parseJsonBody } from "../_shared/contracts/http-bodies.ts";
+import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
+
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const NOTIFY_EMAIL = Deno.env.get("FOUNDERS_NOTIFY_EMAIL") ?? "";
 
@@ -37,21 +40,25 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    let body: { email?: string; message?: string; name?: string };
+    let json: unknown;
     try {
-      body = await req.json();
+      json = await req.json();
     } catch {
       return Response.json({ error: "Invalid JSON body" }, { status: 400, headers: CORS_HEADERS });
     }
-
-    const email = (body.email ?? "").trim().toLowerCase();
+    const parsed = parseJsonBody(foundersApplyBodySchema, json);
+    if (!parsed.success) {
+      return Response.json({ error: "A valid email is required" }, { status: 400, headers: CORS_HEADERS });
+    }
+    const body = parsed.data;
+    const email = body.email.trim().toLowerCase();
     if (!email || !email.includes("@")) {
       return Response.json({ error: "Valid email is required" }, { status: 400, headers: CORS_HEADERS });
     }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      getDefaultSecretKey(),
       { auth: { persistSession: false } }
     );
 

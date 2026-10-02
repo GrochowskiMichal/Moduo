@@ -28,8 +28,12 @@ describe("blockedTaskIds", () => {
   });
 
   it("a done or archived blocker doesn't block (zero writes to unblock)", () => {
-    expect(blockedTaskIds([task("a", { status: "done" }), task("b")], [edge("a", "b")]).size).toBe(0);
-    expect(blockedTaskIds([task("a", { status: "archived" }), task("b")], [edge("a", "b")]).size).toBe(0);
+    expect(blockedTaskIds([task("a", { status: "done" }), task("b")], [edge("a", "b")]).size).toBe(
+      0,
+    );
+    expect(
+      blockedTaskIds([task("a", { status: "archived" }), task("b")], [edge("a", "b")]).size,
+    ).toBe(0);
   });
 
   it("an edge whose blocker doesn't resolve (deleted) is inert", () => {

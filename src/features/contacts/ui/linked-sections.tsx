@@ -10,17 +10,32 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
-import { EntityHubRow } from "../../spine/ui/entity-hub";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
-import { isSectionTruncated, visibleRows, type HubRow, type HubSection } from "../../spine/rollup";
+import { type HubRow, type HubSection, isSectionTruncated, visibleRows } from "../../spine/rollup";
+import { EntityHubRow } from "../../spine/ui/entity-hub";
 
 /** The fixed page sections, one per module relation. Order is the page order. */
 const MODULE_SECTIONS = [
   { key: "tasks", label: "Tasks", types: ["task", "project"], empty: "No linked tasks yet." },
   { key: "notes", label: "Notes", types: ["note"], empty: "No linked notes yet." },
-  { key: "emails", label: "Emails", types: ["email"], empty: "Fills automatically when Email syncs." },
-  { key: "events", label: "Events", types: ["event"], empty: "Fills from Calendar when events link here." },
-  { key: "payments", label: "Payments", types: ["payment", "invoice"], empty: "Invoices and payments land here when Finance ships." },
+  {
+    key: "emails",
+    label: "Emails",
+    types: ["email"],
+    empty: "Fills automatically when Email syncs.",
+  },
+  {
+    key: "events",
+    label: "Events",
+    types: ["event"],
+    empty: "Fills from Calendar when events link here.",
+  },
+  {
+    key: "payments",
+    label: "Payments",
+    types: ["payment", "invoice"],
+    empty: "Invoices and payments land here when Finance ships.",
+  },
 ] as const;
 
 export type LinkedSectionsProps = {
@@ -76,7 +91,9 @@ export function LinkedSections({
   const claimed = new Set<HubRow>();
   const buckets = MODULE_SECTIONS.map((def) => {
     const rows = all.filter((r) => (def.types as readonly string[]).includes(r.other.type));
-    rows.forEach((r) => claimed.add(r));
+    rows.forEach((r) => {
+      claimed.add(r);
+    });
     return { ...def, rows };
   });
   const other = all.filter((r) => !claimed.has(r));

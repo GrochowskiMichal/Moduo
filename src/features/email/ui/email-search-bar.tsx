@@ -4,8 +4,8 @@
 // (searching / N results / timed out / unsupported / failed) — local results
 // always stay visible above it. Presentational; the hook owns the search.
 
-import { forwardRef } from "react";
 import { Loader2, Search, ServerCog, X } from "lucide-react";
+import { forwardRef } from "react";
 
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
@@ -56,9 +56,7 @@ function escalationLine(state: ServerSearchState | undefined, email: string): st
     case "searching":
       return `Searching all mail on ${email}…`;
     case "ok":
-      return state.count > 0
-        ? `${state.count} more from ${email}`
-        : `No more matches on ${email}`;
+      return state.count > 0 ? `${state.count} more from ${email}` : `No more matches on ${email}`;
     case "timeout":
       return `${email} timed out — try again`;
     case "unsupported":

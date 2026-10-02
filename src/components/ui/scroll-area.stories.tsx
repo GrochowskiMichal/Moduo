@@ -21,7 +21,9 @@ export const Vertical: Story = {
       <Separator className="my-2" />
       <ul className="space-y-1 text-sm text-foreground">
         {TAGS.map((t) => (
-          <li key={t} className="text-muted-foreground">{t}</li>
+          <li key={t} className="text-muted-foreground">
+            {t}
+          </li>
         ))}
       </ul>
     </ScrollArea>

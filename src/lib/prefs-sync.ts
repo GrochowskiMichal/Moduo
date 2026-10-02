@@ -16,8 +16,9 @@
 // durable queue; the dirty flag + the `online` listener are the seam for that.
 
 import { useCallback, useEffect, useRef } from "react";
-import { getRuntime, initRuntime } from "./runtime";
+import { z } from "zod";
 import { createRequestCache } from "./request-cache";
+import { getRuntime, initRuntime } from "./runtime";
 import type { UserPreferences } from "./runtime.types";
 
 export type SyncDomain = "appearance" | "focus" | "calendar" | "email" | "preferences";
@@ -54,16 +55,23 @@ function toMillis(iso: string | null): number {
   return Number.isFinite(t) ? t : 0;
 }
 
+const syncMetaSchema = z.object({
+  userId: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+  dirty: z.boolean().optional(),
+});
+
 export function getSyncMeta(domain: SyncDomain): SyncMeta {
   if (typeof localStorage === "undefined") return { ...EMPTY_META };
   try {
     const raw = localStorage.getItem(META_KEY[domain]);
     if (!raw) return { ...EMPTY_META };
-    const c = JSON.parse(raw) as Partial<SyncMeta>;
+    const parsed = syncMetaSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) return { ...EMPTY_META };
     return {
-      userId: typeof c.userId === "string" ? c.userId : null,
-      updatedAt: typeof c.updatedAt === "string" ? c.updatedAt : null,
-      dirty: c.dirty === true,
+      userId: typeof parsed.data.userId === "string" ? parsed.data.userId : null,
+      updatedAt: typeof parsed.data.updatedAt === "string" ? parsed.data.updatedAt : null,
+      dirty: parsed.data.dirty === true,
     };
   } catch {
     return { ...EMPTY_META };
@@ -111,7 +119,10 @@ export function invalidateCloudPrefs(): void {
   prefsReads.clear();
 }
 
-function domainValue(prefs: UserPreferences | null, domain: SyncDomain): { value: Json | null; updatedAt: string | null } {
+function domainValue(
+  prefs: UserPreferences | null,
+  domain: SyncDomain,
+): { value: Json | null; updatedAt: string | null } {
   if (!prefs) return { value: null, updatedAt: null };
   switch (domain) {
     case "appearance":
@@ -128,7 +139,11 @@ function domainValue(prefs: UserPreferences | null, domain: SyncDomain): { value
 }
 
 /** Push one domain's syncable subset. Returns false when offline / errored / signed out. */
-export async function pushDomain(domain: SyncDomain, value: Json, updatedAt: string): Promise<boolean> {
+export async function pushDomain(
+  domain: SyncDomain,
+  value: Json,
+  updatedAt: string,
+): Promise<boolean> {
   const rt = getRuntime();
   if (!rt) return false;
   try {
@@ -228,7 +243,9 @@ export function useDomainSync(opts: {
   apply: (value: Json) => void;
 }): { pushLocalChange: (syncable: Json) => void } {
   const optsRef = useRef(opts);
-  optsRef.current = opts;
+  useEffect(() => {
+    optsRef.current = opts;
+  });
   const userIdRef = useRef<string | null>(null);
 
   const runReconcile = useCallback((userId: string) => {

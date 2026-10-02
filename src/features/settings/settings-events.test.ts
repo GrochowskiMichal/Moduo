@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  PENDING_OPEN_TTL_MS,
-  SETTINGS_SECTION_IDS,
   clearPendingOpenSettings,
   dispatchOpenSettings,
   isSettingsSectionId,
+  PENDING_OPEN_TTL_MS,
   pendingOpenSettings,
+  SETTINGS_SECTION_IDS,
 } from "./settings-events";
 
 describe("isSettingsSectionId", () => {

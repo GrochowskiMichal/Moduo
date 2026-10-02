@@ -4,15 +4,14 @@
 // remove has an Undo. Degrades to a calm empty state pre-migration (the table is
 // deploy-gated).
 
+import { Check, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, Plus, X } from "lucide-react";
-
-import { cn } from "@/lib/utils";
-import { getRuntime } from "@/lib/runtime";
-import { undoToast } from "@/lib/undo-toast";
 import { todayStr } from "@/features/tasks/helpers";
+import { getRuntime } from "@/lib/runtime";
 import type { HabitRow } from "@/lib/runtime.types";
+import { undoToast } from "@/lib/undo-toast";
+import { cn } from "@/lib/utils";
 
 import {
   requestDashboardDataRefresh,
@@ -168,7 +167,9 @@ export function HabitsWidget({ size }: WidgetComponentProps) {
   // and the override is cleared only after the server reflects it.
   const [pending, setPending] = useState<Record<string, string[]>>({});
   const pendingRef = useRef(pending);
-  pendingRef.current = pending;
+  useEffect(() => {
+    pendingRef.current = pending;
+  });
   const inflightRef = useRef<Set<string>>(new Set());
 
   const setHabitPending = useCallback((id: string, checks: string[] | undefined) => {
@@ -191,7 +192,7 @@ export function HabitsWidget({ size }: WidgetComponentProps) {
       try {
         // Write the latest desired checks until it stops changing, then reload and
         // clear the override (only if no newer tap superseded it meanwhile).
-        for (;;) {
+        while (true) {
           const target = pendingRef.current[id];
           if (target === undefined) break;
           await runtime.habits.setChecks({ id, checks: target });

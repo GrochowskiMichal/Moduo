@@ -1,0 +1,41 @@
+name: Sync develop → staging-app
+
+# Every push to develop is automatically mirrored to staging-app so
+# app.staging.moduo.app always reflects the latest development build.
+# Vercel watches staging-app and triggers a deploy on push.
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout (full history needed for merge)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge develop into staging-app
+        run: |
+          git fetch origin staging-app || true
+          # If staging-app exists on remote, checkout and merge
+          if git ls-remote --exit-code origin staging-app; then
+            git checkout -b staging-app origin/staging-app
+            git merge origin/develop --ff-only \
+              || git merge origin/develop --no-ff -m "chore: sync develop → staging-app [skip ci]"
+          else
+            # Branch doesn't exist yet — create it from develop
+            git checkout -b staging-app origin/develop
+          fi
+          git push origin staging-app

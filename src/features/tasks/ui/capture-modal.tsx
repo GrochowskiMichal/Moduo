@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   Check,
@@ -11,6 +10,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
@@ -31,27 +31,19 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { Input } from "../../../components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 import { cn } from "../../../lib/utils";
-import {
-  ENERGY_LABELS,
-  PRIORITY_LABELS,
-  type NewTaskFields,
-} from "../helpers";
+import { ENERGY_LABELS, type NewTaskFields, PRIORITY_LABELS } from "../helpers";
+import type { Bucket, EnergyLevel, PriorityLevel, RecurrenceRule } from "../model";
+import { parseCapture } from "../parse/capture-parser";
 import {
   RECURRENCE_PRESETS,
+  type RecurrencePreset,
   recurrenceFromPreset,
   recurrenceLabel,
-  type RecurrencePreset,
 } from "../parse/recurrence";
-import { parseCapture } from "../parse/capture-parser";
-import type { Bucket, EnergyLevel, PriorityLevel, RecurrenceRule } from "../model";
 
 type Props = {
   open: boolean;
@@ -74,7 +66,14 @@ const LEVELS: Array<{ value: "low" | "medium" | "high"; label: string }> = [
 ];
 const DURATION_PRESETS = [15, 30, 45, 60, 90];
 
-export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucketId, onCreate }: Props) {
+export function CaptureModal({
+  open,
+  onOpenChange,
+  buckets,
+  inbox,
+  defaultBucketId,
+  onCreate,
+}: Props) {
   const [raw, setRaw] = useState("");
   const [description, setDescription] = useState("");
   const [bucketId, setBucketId] = useState<string | null>(defaultBucketId);
@@ -83,7 +82,9 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
   const [duration, setDuration] = useState<number | null>(null);
   const [due, setDue] = useState<Override<string | null>>(auto<string>());
   const [scheduled, setScheduled] = useState<Override<string | null>>(auto<string>());
-  const [recurrence, setRecurrence] = useState<Override<RecurrenceRule | null>>(auto<RecurrenceRule>());
+  const [recurrence, setRecurrence] = useState<Override<RecurrenceRule | null>>(
+    auto<RecurrenceRule>(),
+  );
   const [createMore, setCreateMore] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -142,7 +143,9 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
       energyLevel: energy,
       durationMinutes: duration,
     });
-    toast(title, { description: summarize(effScheduled, effDue, effRecurrence, bucketName(bucketId)) });
+    toast(title, {
+      description: summarize(effScheduled, effDue, effRecurrence, bucketName(bucketId)),
+    });
     if (createMore) {
       resetFields(true);
       inputRef.current?.focus();
@@ -207,148 +210,169 @@ export function CaptureModal({ open, onOpenChange, buckets, inbox, defaultBucket
 
           {/* property pills — quiet, everything one click away (secondary font) */}
           <div className="flex flex-wrap items-center gap-2 pt-1">
-          {/* Bucket */}
-          <ListPill
-            active
-            icon={bucketId === inbox?.id ? <Inbox className="size-3.5" /> : null}
-            label={bucketName(bucketId)}
-          >
-            {bucketOptions.map((b) => (
-              <DropdownMenuItem key={b.id} onSelect={() => setBucketId(b.id)}>
-                {b.isSystem ? <Inbox className="size-3.5" /> : null}
-                <span className="truncate">{b.name}</span>
-                {b.id === bucketId ? <Check className="ml-auto size-3.5" /> : null}
-              </DropdownMenuItem>
-            ))}
-          </ListPill>
-
-          {/* Priority */}
-          <ListPill active={!!priority} icon={<Flag className="size-3.5" />} label={priority ? PRIORITY_LABELS[priority] : "Priority"}>
-            <DropdownMenuItem onSelect={() => setPriority(null)}>None</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {LEVELS.map((l) => (
-              <DropdownMenuItem key={l.value} onSelect={() => setPriority(l.value)}>
-                {l.label}
-                {priority === l.value ? <Check className="ml-auto size-3.5" /> : null}
-              </DropdownMenuItem>
-            ))}
-          </ListPill>
-
-          {/* Energy */}
-          <ListPill active={!!energy} icon={<Zap className="size-3.5" />} label={energy ? ENERGY_LABELS[energy] : "Energy"}>
-            <DropdownMenuItem onSelect={() => setEnergy(null)}>None</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {LEVELS.map((l) => (
-              <DropdownMenuItem key={l.value} onSelect={() => setEnergy(l.value)}>
-                {l.label}
-                {energy === l.value ? <Check className="ml-auto size-3.5" /> : null}
-              </DropdownMenuItem>
-            ))}
-          </ListPill>
-
-          {/* Scheduled — same pill as the others; token Calendar + time inside */}
-          <InputPill
-            active={!!effScheduled}
-            icon={<Clock className="size-3.5" />}
-            label={effScheduled ? scheduledLabel(effScheduled) : "Schedule"}
-            onClear={effScheduled ? () => setScheduled({ manual: true, value: null }) : undefined}
-          >
-            <Calendar
-              mode="single"
-              selected={effScheduled ? new Date(effScheduled) : undefined}
-              onSelect={(d) => {
-                if (!d) return setScheduled({ manual: true, value: null });
-                const base = effScheduled ? new Date(effScheduled) : null;
-                const next = new Date(d);
-                next.setHours(base ? base.getHours() : 9, base ? base.getMinutes() : 0, 0, 0);
-                setScheduled({ manual: true, value: next.toISOString() });
-              }}
-            />
-            <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
-              <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
-              <Input
-                type="time"
-                size="sm"
-                className="w-auto"
-                value={effScheduled ? new Date(effScheduled).toTimeString().slice(0, 5) : "09:00"}
-                onChange={(e) => {
-                  const [h, m] = e.target.value.split(":").map(Number);
-                  const base = effScheduled ? new Date(effScheduled) : new Date();
-                  base.setHours(h || 0, m || 0, 0, 0);
-                  setScheduled({ manual: true, value: base.toISOString() });
-                }}
-                aria-label="Scheduled time"
-              />
-            </div>
-          </InputPill>
-
-          {/* Due */}
-          <InputPill
-            active={!!effDue}
-            icon={<CalendarDays className="size-3.5" />}
-            label={effDue ? `Due ${dateLabel(effDue)}` : "Due"}
-            onClear={effDue ? () => setDue({ manual: true, value: null }) : undefined}
-          >
-            <Calendar
-              mode="single"
-              selected={effDue ? new Date(effDue) : undefined}
-              onSelect={(d) =>
-                setDue({
-                  manual: true,
-                  value: d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString() : null,
-                })
-              }
-            />
-          </InputPill>
-
-          {/* Recurrence */}
-          <ListPill
-            active={!!effRecurrence}
-            icon={<Repeat className="size-3.5" />}
-            label={effRecurrence ? recurrenceLabel(effRecurrence) : "Repeat"}
-          >
-            <DropdownMenuItem onSelect={() => setRecurrence({ manual: true, value: null })}>None</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {RECURRENCE_PRESETS.map((p) => (
-              <DropdownMenuItem
-                key={p.value}
-                onSelect={() => setRecurrence({ manual: true, value: recurrenceFromPreset(p.value as RecurrencePreset, effScheduled) })}
-              >
-                {p.label}
-              </DropdownMenuItem>
-            ))}
-          </ListPill>
-
-          {/* Duration */}
-          <InputPill
-            active={!!duration}
-            icon={<Timer className="size-3.5" />}
-            label={duration ? `${duration} min` : "Duration"}
-            onClear={duration ? () => setDuration(null) : undefined}
-          >
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Duration (minutes)</label>
-            <Input
-              type="number"
-              min={0}
-              step={5}
-              autoFocus
-              value={duration ?? ""}
-              className="h-8"
-              onChange={(e) => setDuration(e.target.value ? Math.max(0, parseInt(e.target.value, 10)) : null)}
-            />
-            <div className="mt-2 flex flex-wrap gap-1">
-              {DURATION_PRESETS.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setDuration(m)}
-                  className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  {m}m
-                </button>
+            {/* Bucket */}
+            <ListPill
+              active
+              icon={bucketId === inbox?.id ? <Inbox className="size-3.5" /> : null}
+              label={bucketName(bucketId)}
+            >
+              {bucketOptions.map((b) => (
+                <DropdownMenuItem key={b.id} onSelect={() => setBucketId(b.id)}>
+                  {b.isSystem ? <Inbox className="size-3.5" /> : null}
+                  <span className="truncate">{b.name}</span>
+                  {b.id === bucketId ? <Check className="ml-auto size-3.5" /> : null}
+                </DropdownMenuItem>
               ))}
-            </div>
-          </InputPill>
+            </ListPill>
+
+            {/* Priority */}
+            <ListPill
+              active={!!priority}
+              icon={<Flag className="size-3.5" />}
+              label={priority ? PRIORITY_LABELS[priority] : "Priority"}
+            >
+              <DropdownMenuItem onSelect={() => setPriority(null)}>None</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {LEVELS.map((l) => (
+                <DropdownMenuItem key={l.value} onSelect={() => setPriority(l.value)}>
+                  {l.label}
+                  {priority === l.value ? <Check className="ml-auto size-3.5" /> : null}
+                </DropdownMenuItem>
+              ))}
+            </ListPill>
+
+            {/* Energy */}
+            <ListPill
+              active={!!energy}
+              icon={<Zap className="size-3.5" />}
+              label={energy ? ENERGY_LABELS[energy] : "Energy"}
+            >
+              <DropdownMenuItem onSelect={() => setEnergy(null)}>None</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {LEVELS.map((l) => (
+                <DropdownMenuItem key={l.value} onSelect={() => setEnergy(l.value)}>
+                  {l.label}
+                  {energy === l.value ? <Check className="ml-auto size-3.5" /> : null}
+                </DropdownMenuItem>
+              ))}
+            </ListPill>
+
+            {/* Scheduled — same pill as the others; token Calendar + time inside */}
+            <InputPill
+              active={!!effScheduled}
+              icon={<Clock className="size-3.5" />}
+              label={effScheduled ? scheduledLabel(effScheduled) : "Schedule"}
+              onClear={effScheduled ? () => setScheduled({ manual: true, value: null }) : undefined}
+            >
+              <Calendar
+                mode="single"
+                selected={effScheduled ? new Date(effScheduled) : undefined}
+                onSelect={(d) => {
+                  if (!d) return setScheduled({ manual: true, value: null });
+                  const base = effScheduled ? new Date(effScheduled) : null;
+                  const next = new Date(d);
+                  next.setHours(base ? base.getHours() : 9, base ? base.getMinutes() : 0, 0, 0);
+                  setScheduled({ manual: true, value: next.toISOString() });
+                }}
+              />
+              <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
+                <Clock className="size-icon-sm text-muted-foreground" aria-hidden />
+                <Input
+                  type="time"
+                  size="sm"
+                  className="w-auto"
+                  value={effScheduled ? new Date(effScheduled).toTimeString().slice(0, 5) : "09:00"}
+                  onChange={(e) => {
+                    const [h, m] = e.target.value.split(":").map(Number);
+                    const base = effScheduled ? new Date(effScheduled) : new Date();
+                    base.setHours(h || 0, m || 0, 0, 0);
+                    setScheduled({ manual: true, value: base.toISOString() });
+                  }}
+                  aria-label="Scheduled time"
+                />
+              </div>
+            </InputPill>
+
+            {/* Due */}
+            <InputPill
+              active={!!effDue}
+              icon={<CalendarDays className="size-3.5" />}
+              label={effDue ? `Due ${dateLabel(effDue)}` : "Due"}
+              onClear={effDue ? () => setDue({ manual: true, value: null }) : undefined}
+            >
+              <Calendar
+                mode="single"
+                selected={effDue ? new Date(effDue) : undefined}
+                onSelect={(d) =>
+                  setDue({
+                    manual: true,
+                    value: d
+                      ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString()
+                      : null,
+                  })
+                }
+              />
+            </InputPill>
+
+            {/* Recurrence */}
+            <ListPill
+              active={!!effRecurrence}
+              icon={<Repeat className="size-3.5" />}
+              label={effRecurrence ? recurrenceLabel(effRecurrence) : "Repeat"}
+            >
+              <DropdownMenuItem onSelect={() => setRecurrence({ manual: true, value: null })}>
+                None
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {RECURRENCE_PRESETS.map((p) => (
+                <DropdownMenuItem
+                  key={p.value}
+                  onSelect={() =>
+                    setRecurrence({
+                      manual: true,
+                      value: recurrenceFromPreset(p.value as RecurrencePreset, effScheduled),
+                    })
+                  }
+                >
+                  {p.label}
+                </DropdownMenuItem>
+              ))}
+            </ListPill>
+
+            {/* Duration */}
+            <InputPill
+              active={!!duration}
+              icon={<Timer className="size-3.5" />}
+              label={duration ? `${duration} min` : "Duration"}
+              onClear={duration ? () => setDuration(null) : undefined}
+            >
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Duration (minutes)
+              </label>
+              <Input
+                type="number"
+                min={0}
+                step={5}
+                autoFocus
+                value={duration ?? ""}
+                className="h-8"
+                onChange={(e) =>
+                  setDuration(e.target.value ? Math.max(0, parseInt(e.target.value, 10)) : null)
+                }
+              />
+              <div className="mt-2 flex flex-wrap gap-1">
+                {DURATION_PRESETS.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setDuration(m)}
+                    className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </div>
+            </InputPill>
           </div>
         </div>
 
@@ -401,7 +425,11 @@ function ListPill({
         <span className="max-w-40 truncate">{label}</span>
       </DropdownMenuTrigger>
       {/* lift above the dialog (z-dialog 60); default dropdown z is below it */}
-      <DropdownMenuContent align="start" className="min-w-44" style={{ zIndex: "var(--z-popover)" }}>
+      <DropdownMenuContent
+        align="start"
+        className="min-w-44"
+        style={{ zIndex: "var(--z-popover)" }}
+      >
         {children}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -450,14 +478,26 @@ function InputPill({
 // ── labels ────────────────────────────────────────────────────────────────────
 
 const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const DATE_FMT = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" });
+const DATE_FMT = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
 const DATETIME_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
 });
 
 function isToday(d: Date): boolean {
   const n = new Date();
-  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  return (
+    d.getFullYear() === n.getFullYear() &&
+    d.getMonth() === n.getMonth() &&
+    d.getDate() === n.getDate()
+  );
 }
 function scheduledLabel(iso: string): string {
   const d = new Date(iso);

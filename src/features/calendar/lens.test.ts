@@ -4,13 +4,13 @@ import {
   addDays,
   blocksByDay,
   DEFAULT_BLOCK_MINUTES,
+  type LensTask,
   localDayKey,
   parseDayKey,
   rangeLabel,
   stepAnchor,
   taskBlocks,
   visibleRange,
-  type LensTask,
 } from "./lens";
 
 // Local-time fixtures: Tue 2026-06-30 anchors a Mon-start week Jun 29 – Jul 5.
@@ -160,9 +160,7 @@ describe("rangeLabel", () => {
     const nyWeek = visibleRange("week", new Date(2026, 11, 30), PREFS);
     expect(rangeLabel(nyWeek, "en-US", NOW_2026)).toBe("Dec 28 – Jan 3, 2027");
     // The same week viewed from 2027 marks the 2026 side instead.
-    expect(rangeLabel(nyWeek, "en-US", new Date(2027, 0, 10))).toBe(
-      "Dec 28, 2026 – Jan 3",
-    );
+    expect(rangeLabel(nyWeek, "en-US", new Date(2027, 0, 10))).toBe("Dec 28, 2026 – Jan 3");
   });
 });
 

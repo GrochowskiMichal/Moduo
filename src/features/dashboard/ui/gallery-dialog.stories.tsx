@@ -11,9 +11,7 @@ import { GalleryDialog } from "./gallery-dialog";
 // (gotchas), so this is the human-capture baseline for DB-8's visual pass.
 
 // Web availability: everything except the desktop-only email + time-tracking.
-const AVAILABLE: WidgetType[] = WIDGET_TYPES.filter(
-  (t) => t !== "email" && t !== "timetracking",
-);
+const AVAILABLE: WidgetType[] = WIDGET_TYPES.filter((t) => t !== "email" && t !== "timetracking");
 
 function Harness({ available }: { available: WidgetType[] }) {
   const [open, setOpen] = useState(true);

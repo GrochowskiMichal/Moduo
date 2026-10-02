@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import {
   CalendarDays,
   Check,
@@ -11,12 +11,10 @@ import {
   ListChecks,
   Repeat,
 } from "lucide-react";
-
-import type { DraggableSyntheticListeners } from "@dnd-kit/core";
-
+import { useEffect, useRef, useState } from "react";
+import { TagChipList } from "../../../components/tag-chip";
 import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
-import { TagChipList } from "../../../components/tag-chip";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -30,16 +28,8 @@ import {
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
 import { Input } from "../../../components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../components/ui/popover";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../../../components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import {
   formatDue,
@@ -48,10 +38,10 @@ import {
   toDateInputValue,
   toLocalInputValue,
 } from "../helpers";
-import { LevelDots } from "./level-icons";
-import { isDrifted, type EnergyLevel, type PriorityLevel, type Task } from "../model";
-import { recurrenceLabel } from "../parse/recurrence";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { type EnergyLevel, isDrifted, type PriorityLevel, type Task } from "../model";
+import { recurrenceLabel } from "../parse/recurrence";
+import { LevelDots } from "./level-icons";
 
 /** Which inline popover the keyboard asked to open on this row. */
 export type RowCommand = "bucket" | "schedule" | "due" | null;
@@ -217,7 +207,11 @@ export function TaskRow({
               // flex-1 so the title keeps priority; chips shrink/truncate first.
               // Body font (content, not chrome) at 15px — quiet, Linear/Todoist-ward.
               "min-w-0 flex-1 truncate text-left font-sans text-md",
-              done ? "text-muted-foreground line-through" : blocked ? "text-muted-foreground" : "text-foreground",
+              done
+                ? "text-muted-foreground line-through"
+                : blocked
+                  ? "text-muted-foreground"
+                  : "text-foreground",
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -350,7 +344,9 @@ export function TaskRow({
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => onRequestCommand("schedule")}>Schedule…</ContextMenuItem>
         <ContextMenuItem onSelect={() => onRequestCommand("due")}>Set due date…</ContextMenuItem>
-        <ContextMenuItem onSelect={() => onRequestCommand("bucket")}>Move to bucket…</ContextMenuItem>
+        <ContextMenuItem onSelect={() => onRequestCommand("bucket")}>
+          Move to bucket…
+        </ContextMenuItem>
         {task.parentId ? (
           <ContextMenuItem onSelect={() => api.setTaskParent(task.id, null)}>
             Detach from parent
@@ -394,10 +390,7 @@ export function TaskRow({
           </ContextMenuSubContent>
         </ContextMenuSub>
         <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
-          onSelect={() => api.deleteTask(task.id)}
-        >
+        <ContextMenuItem variant="destructive" onSelect={() => api.deleteTask(task.id)}>
           Delete
         </ContextMenuItem>
       </ContextMenuContent>
@@ -521,13 +514,19 @@ function SchedulePopover({
           // set/clear instead via right-click, the `s` key, or the detail panel.
           className={cn("items-center", label || open ? "flex" : "hidden")}
         >
-          <MetaChip active={!!label} drifted={drifted} icon={<Clock className="size-3.5" aria-hidden />}>
+          <MetaChip
+            active={!!label}
+            drifted={drifted}
+            icon={<Clock className="size-3.5" aria-hidden />}
+          >
             {label}
           </MetaChip>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-3" onClick={(e) => e.stopPropagation()} align="end">
-        <label className="mb-1 block text-xs font-medium text-muted-foreground">Scheduled time</label>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">
+          Scheduled time
+        </label>
         <Input
           type="datetime-local"
           autoFocus
@@ -636,10 +635,7 @@ function BucketPopover({
   api: TasksModuleApi;
 }) {
   const options = inboxId
-    ? [
-        { id: inboxId, name: "Inbox", isSystem: true },
-        ...buckets.filter((b) => b.id !== inboxId),
-      ]
+    ? [{ id: inboxId, name: "Inbox", isSystem: true }, ...buckets.filter((b) => b.id !== inboxId)]
     : buckets;
   return (
     <Popover open={open} onOpenChange={onOpenChange}>

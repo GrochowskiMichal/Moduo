@@ -1,33 +1,34 @@
-import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Bot, Calendar, Globe, Mail } from "lucide-react";
-
+import { useCallback, useEffect, useState } from "react";
+import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-import type { CalendarAccountModel } from "../../calendar/events";
-import { groupRailAccounts, providerLabel } from "../../calendar/accounts";
+import { connectedLoginCount, groupRailAccounts } from "../../calendar/accounts";
 import { cleanupCredentialsForRemoval } from "../../calendar/caldav-connect";
+import type { CalendarAccountModel } from "../../calendar/events";
 import {
-  CalendarConnectDialog,
-  IcsFeedDialog,
-} from "../../calendar/ui/calendar-connect-dialog";
-import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
-import type { SavedAccount } from "../../email/model/email-types";
-import { EmailHistoryDepthSelect } from "../../email/ui/email-history-depth-select";
+  disconnectGoogleLogin,
+  ensureGoogleCalendarAccounts,
+  startWebGoogleConnect,
+} from "../../calendar/google-web";
+import { CalendarConnectDialog, IcsFeedDialog } from "../../calendar/ui/calendar-connect-dialog";
 import {
   asHistoryDepth,
   describeDepthChange,
   EMAIL_HISTORY_DEPTHS,
   type EmailHistoryDepth,
 } from "../../email/history-depth";
-import { Button } from "../../../components/ui/button";
-import { Eyebrow } from "../../../components/ui/eyebrow";
-import { dispatchOpenSettings } from "../settings-events";
+import type { SavedAccount } from "../../email/model/email-types";
+import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
+import { EmailHistoryDepthSelect } from "../../email/ui/email-history-depth-select";
 import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
+import { dispatchOpenSettings } from "../settings-events";
 
 import { SettingsSectionShell } from "./section-shell";
 
-/** Desktop-only OAuth: on web the connect buttons explain where to go. */
+/** Outlook, CalDAV, and ICS still use the desktop keychain. Google works on the web. */
 const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 type OAuthResult = {
@@ -76,7 +77,21 @@ export function IntegrationsSection() {
     if (!runtime || !workspaceId) return;
     try {
       const bundle = await runtime.calendar.listModule(workspaceId);
-      setCalAccounts(bundle.accounts.filter((a) => a.provider !== "moduo"));
+      let accounts = bundle.accounts.filter((a) => a.provider !== "moduo");
+      try {
+        const added = await ensureGoogleCalendarAccounts({
+          runtime,
+          workspaceId,
+          accounts,
+        });
+        if (added) {
+          const again = await runtime.calendar.listModule(workspaceId);
+          accounts = again.accounts.filter((a) => a.provider !== "moduo");
+        }
+      } catch (err) {
+        console.warn("[integrations] google link", err);
+      }
+      setCalAccounts(accounts);
     } catch (e) {
       setCalError(e instanceof Error ? e.message : String(e));
     }
@@ -111,7 +126,19 @@ export function IntegrationsSection() {
   }, [loadAccounts, loadEmailAccounts, loadMcpKeys]);
 
   const handleConnect = async (provider: "google" | "microsoft", command: string) => {
-    if (!IS_DESKTOP || !runtime || !workspaceId) return;
+    if (!runtime || !workspaceId) return;
+    if (!IS_DESKTOP && provider === "google") {
+      setCalBusy(provider);
+      setCalError(null);
+      try {
+        await startWebGoogleConnect();
+      } catch (e) {
+        setCalError(e instanceof Error ? e.message : String(e));
+        setCalBusy(null);
+      }
+      return;
+    }
+    if (!IS_DESKTOP) return;
     setCalBusy(provider);
     setCalError(null);
     try {
@@ -148,6 +175,31 @@ export function IntegrationsSection() {
         allAccounts: calAccounts,
       });
       await runtime.calendar.removeAccount({ workspaceId, accountId: account.id });
+      await loadAccounts();
+    } catch (e) {
+      setCalError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCalBusy(null);
+    }
+  };
+
+  const handleDisconnectLogin = async (rows: CalendarAccountModel[]) => {
+    if (!runtime || !workspaceId || rows.length === 0) return;
+    setCalBusy(rows[0].id);
+    setCalError(null);
+    try {
+      const email = rows[0].externalId.startsWith("google:")
+        ? rows[0].externalId.slice("google:".length).split(":")[0]
+        : "";
+      if (email) await disconnectGoogleLogin(email);
+      for (const row of rows) {
+        await cleanupCredentialsForRemoval({
+          isDesktop: IS_DESKTOP,
+          removed: row,
+          allAccounts: calAccounts,
+        });
+        await runtime.calendar.removeAccount({ workspaceId, accountId: row.id });
+      }
       await loadAccounts();
     } catch (e) {
       setCalError(e instanceof Error ? e.message : String(e));
@@ -270,13 +322,16 @@ export function IntegrationsSection() {
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-base text-foreground">Calendar</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Connected calendars are read-only in Moduo — your events appear here and on the web,
-          but edits stay in the source calendar.
+          Google Calendar is a two-way copy — events you add on a linked Google calendar are created
+          in Google too. Outlook and CalDAV still connect from the desktop app.
         </p>
 
         <div className="mt-4 flex flex-col gap-2">
           {CAL_PROVIDERS.map(({ key, label, command }) => {
             const connected = calAccounts.filter((a) => a.provider === key);
+            const logins = groupRailAccounts(connected);
+            const loginCount = connectedLoginCount(connected);
+            const canConnect = IS_DESKTOP || key === "google";
             return (
               <div key={key} className="rounded-md border border-border bg-muted/40 p-4">
                 <div className="flex items-center justify-between gap-4">
@@ -287,15 +342,15 @@ export function IntegrationsSection() {
                     <div className="flex flex-col">
                       <span className="text-sm font-medium text-foreground">{label}</span>
                       <span className="text-xs text-muted-foreground">
-                        {connected.length > 0
-                          ? `${connected.length} account${connected.length === 1 ? "" : "s"} connected`
-                          : IS_DESKTOP
+                        {loginCount > 0
+                          ? `${loginCount} account${loginCount === 1 ? "" : "s"} connected`
+                          : canConnect
                             ? "Not connected"
                             : "Connect from the desktop app"}
                       </span>
                     </div>
                   </div>
-                  {IS_DESKTOP ? (
+                  {canConnect ? (
                     <Button
                       type="button"
                       variant="outline"
@@ -312,35 +367,84 @@ export function IntegrationsSection() {
                   )}
                 </div>
 
-                {connected.length > 0 ? (
+                {logins.length > 0 ? (
                   <ul className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
-                    {connected.map((acc) => (
-                      <li
-                        key={acc.id}
-                        className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm text-foreground">
-                            {acc.displayLabel || providerLabel(acc.provider)}
-                          </p>
-                          {acc.status === "error" ? (
-                            <p className="truncate text-xs text-warning">
-                              Sync error — reconnect from the desktop app
-                            </p>
-                          ) : null}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void handleDisconnect(acc)}
-                          disabled={calBusy === acc.id}
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    {logins.map((group) => {
+                      const rows = group.kind === "group" ? group.rows : [group.row];
+                      const mailbox = group.kind === "group" ? group.detail : null;
+                      const platform = group.kind === "group" ? group.header : label;
+                      return (
+                        <li
+                          key={group.kind === "group" ? group.key : group.row.account.id}
+                          className="rounded-md border border-border bg-card px-3 py-2"
                         >
-                          {calBusy === acc.id ? "Removing…" : "Disconnect"}
-                        </Button>
-                      </li>
-                    ))}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <Eyebrow as="p">{platform}</Eyebrow>
+                              <p className="truncate text-sm text-foreground">
+                                {mailbox || rows[0].label}
+                              </p>
+                            </div>
+                            {group.kind === "group" &&
+                            rows.some((row) => row.scope === "calendar") ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  void handleDisconnectLogin(rows.map((row) => row.account))
+                                }
+                                disabled={rows.some((row) => calBusy === row.account.id)}
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                Disconnect
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleDisconnect(rows[0].account)}
+                                disabled={calBusy === rows[0].account.id}
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                {calBusy === rows[0].account.id ? "Removing…" : "Disconnect"}
+                              </Button>
+                            )}
+                          </div>
+                          {group.kind === "group" &&
+                          rows.some((row) => row.scope === "calendar") ? (
+                            <ul className="mt-2 flex flex-col border-t border-border">
+                              {rows.map((row) => (
+                                <li
+                                  key={row.account.id}
+                                  className="flex items-center justify-between gap-3 py-1.5"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm text-foreground">{row.label}</p>
+                                    {row.account.status === "error" ? (
+                                      <p className="truncate text-xs text-warning">
+                                        Sync error — reconnect
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => void handleDisconnect(row.account)}
+                                    disabled={calBusy === row.account.id}
+                                    className="text-muted-foreground"
+                                  >
+                                    {calBusy === row.account.id ? "Removing…" : "Remove"}
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : null}
               </div>
@@ -564,8 +668,8 @@ export function IntegrationsSection() {
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-base text-foreground">AI &amp; MCP</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Connect Claude and other AI assistants to this workspace over MCP. They reach your
-          tasks and notes through a scoped API key you create and can revoke anytime.
+          Connect Claude and other AI assistants to this workspace over MCP. They reach your tasks
+          and notes through a scoped API key you create and can revoke anytime.
         </p>
 
         <div className="mt-4 flex flex-col gap-2">

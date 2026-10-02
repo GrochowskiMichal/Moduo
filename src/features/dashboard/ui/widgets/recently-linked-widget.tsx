@@ -5,10 +5,10 @@
 import { ArrowRight } from "lucide-react";
 
 import { Eyebrow } from "@/components/ui/eyebrow";
-import { RELATION_KIND_LABELS } from "@/lib/entity-links";
-import { cn } from "@/lib/utils";
 import { resolveEntityIcon } from "@/features/spine/icon-map";
 import type { RecentLinkEndpoint } from "@/features/spine/recent";
+import { RELATION_KIND_LABELS } from "@/lib/entity-links";
+import { cn } from "@/lib/utils";
 
 import { useDashboardData } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";

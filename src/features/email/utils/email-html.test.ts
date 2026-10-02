@@ -11,9 +11,7 @@ import {
 
 describe("buildEmailSrcDoc — remote blocking (default)", () => {
   it("strips remote img src and ships a data:/cid:-only CSP", () => {
-    const out = buildEmailSrcDoc(
-      `<p>Hi</p><img src="https://tracker.example/pixel.gif" alt="" />`,
-    );
+    const out = buildEmailSrcDoc(`<p>Hi</p><img src="https://tracker.example/pixel.gif" alt="" />`);
     expect(out).not.toContain("tracker.example");
     expect(out).toContain("img-src data: cid:");
     expect(out).not.toContain("img-src data: https:");

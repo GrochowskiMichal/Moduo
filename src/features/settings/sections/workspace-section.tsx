@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Check,
   Copy,
@@ -13,26 +12,13 @@ import {
   User,
   UserMinus,
   UserPlus,
-  Users,
   X,
 } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import { UpgradeModal } from "../../../components/upgrade-modal";
-import { useAuth } from "../../../providers/auth-provider";
-import { useWorkspace } from "../../../providers/workspace-provider";
-import { useEntitlement } from "../../../hooks/use-entitlement";
-import type { WorkspaceMember, WorkspaceRole } from "../../../features/workspaces/types";
-import {
-  assignableRolesFor,
-  canManageMember,
-  canTransferOwnership,
-  modulePermissionFor,
-} from "../../../features/workspaces/member-permissions";
-import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
-import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Dialog,
   DialogContent,
@@ -41,13 +27,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { UpgradeModal } from "../../../components/upgrade-modal";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../components/ui/popover";
+  assignableRolesFor,
+  canManageMember,
+  canTransferOwnership,
+  modulePermissionFor,
+} from "../../../features/workspaces/member-permissions";
+import type { WorkspaceMember, WorkspaceRole } from "../../../features/workspaces/types";
+import { useEntitlement } from "../../../hooks/use-entitlement";
+import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
+import { normalizeWorkspaceIcon } from "../../branding/image-asset";
+import { clearWorkspaceLogo, uploadWorkspaceLogo } from "../../branding/upload-image";
+import { WorkspaceMark, WorkspaceMarkPicker } from "../../workspaces/ui/workspace-mark";
 
 import { SettingsSectionShell } from "./section-shell";
 
@@ -111,10 +108,19 @@ function RolePicker({
   );
 }
 
-function MemberAvatar({ name, email }: { name?: string; email?: string }) {
+function MemberAvatar({
+  name,
+  email,
+  avatarUrl,
+}: {
+  name?: string;
+  email?: string;
+  avatarUrl?: string | null;
+}) {
   const letter = (name ?? email ?? "?").trim().slice(0, 1).toUpperCase();
   return (
     <Avatar size="sm" className="shrink-0">
+      {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
       <AvatarFallback>{letter}</AvatarFallback>
     </Avatar>
   );
@@ -150,6 +156,7 @@ export function WorkspaceSection() {
     transferOwnership,
     leaveWorkspace,
     renameWorkspace,
+    updateWorkspaceBranding,
     softDeleteWorkspace,
     createWorkspace,
     selectWorkspace,
@@ -185,6 +192,7 @@ export function WorkspaceSection() {
   const [upgradeAddOpen, setUpgradeAddOpen] = useState(false);
   const [newName, setNewName] = useState("New Workspace");
   const [addSubmitting, setAddSubmitting] = useState(false);
+  const [markBusy, setMarkBusy] = useState(false);
 
   // Refresh the roster when the section mounts (parity with the retired modal's
   // on-open refresh), and reset transient link/confirm state on workspace change.
@@ -221,6 +229,56 @@ export function WorkspaceSection() {
   const canLeave = callerRole !== "owner" && workspaces.length > 1;
   const canDelete = isOwner && workspaces.length > 1;
   const nameChanged = nameDraft.trim().length > 0 && nameDraft.trim() !== selectedWorkspace?.name;
+
+  const applyBranding = async (branding: { icon: string | null; logoUrl: string | null }) => {
+    if (!selectedWorkspaceId || markBusy) return;
+    setMarkBusy(true);
+    try {
+      await updateWorkspaceBranding(selectedWorkspaceId, branding);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't update the workspace icon.");
+    } finally {
+      setMarkBusy(false);
+    }
+  };
+
+  const handlePickIcon = (raw: string) => {
+    const icon = normalizeWorkspaceIcon(raw);
+    if (!icon) {
+      toast.error("Use a single emoji.");
+      return;
+    }
+    if (selectedWorkspaceId && selectedWorkspace?.logoUrl) {
+      void clearWorkspaceLogo(selectedWorkspaceId).catch(() => {});
+    }
+    void applyBranding({ icon, logoUrl: null });
+  };
+
+  const handlePickLogo = async (file: File) => {
+    if (!selectedWorkspaceId || markBusy) return;
+    setMarkBusy(true);
+    try {
+      const logoUrl = await uploadWorkspaceLogo(selectedWorkspaceId, file);
+      await updateWorkspaceBranding(selectedWorkspaceId, { icon: null, logoUrl });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't upload the logo.");
+    } finally {
+      setMarkBusy(false);
+    }
+  };
+
+  const handleClearMark = async () => {
+    if (!selectedWorkspaceId || markBusy) return;
+    setMarkBusy(true);
+    try {
+      await clearWorkspaceLogo(selectedWorkspaceId).catch(() => {});
+      await updateWorkspaceBranding(selectedWorkspaceId, { icon: null, logoUrl: null });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't remove the workspace icon.");
+    } finally {
+      setMarkBusy(false);
+    }
+  };
 
   const handleRename = async () => {
     if (!selectedWorkspaceId || !nameChanged || renaming) return;
@@ -388,9 +446,26 @@ export function WorkspaceSection() {
           {/* Identity + rename */}
           <WsGroup label="Workspace">
             <div className="flex items-start gap-4">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-border bg-muted text-muted-foreground">
-                <Users className="size-5" aria-hidden />
-              </span>
+              {isOwner ? (
+                <WorkspaceMarkPicker
+                  name={selectedWorkspace.name}
+                  icon={selectedWorkspace.icon}
+                  logoUrl={selectedWorkspace.logoUrl}
+                  busy={markBusy}
+                  className="size-10"
+                  onPickIcon={handlePickIcon}
+                  onPickLogo={(file) => void handlePickLogo(file)}
+                  onInvalidLogo={(message) => toast.error(message)}
+                  onClear={() => void handleClearMark()}
+                />
+              ) : (
+                <WorkspaceMark
+                  name={selectedWorkspace.name}
+                  icon={selectedWorkspace.icon}
+                  logoUrl={selectedWorkspace.logoUrl}
+                  className="size-10"
+                />
+              )}
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 {/* Only the owner can rename — the `workspaces` UPDATE RLS is
                     owner-only (`owner_id = auth.uid()`), so an admin's client-side
@@ -427,10 +502,18 @@ export function WorkspaceSection() {
                 )}
                 <p className="text-sm text-muted-foreground">
                   {members.length} member{members.length === 1 ? "" : "s"}
-                  {isOwner ? ` · ${pendingInvites.length} pending invite${pendingInvites.length === 1 ? "" : "s"}` : ""}
+                  {isOwner
+                    ? ` · ${pendingInvites.length} pending invite${pendingInvites.length === 1 ? "" : "s"}`
+                    : ""}
                 </p>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={openAddDialog} className="shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openAddDialog}
+                className="shrink-0"
+              >
                 <Plus className="size-4" aria-hidden />
                 Add workspace
               </Button>
@@ -482,7 +565,11 @@ export function WorkspaceSection() {
                         className="pl-9"
                       />
                     </div>
-                    <Button type="button" onClick={() => void handleSendInvite()} disabled={inviteDisabled}>
+                    <Button
+                      type="button"
+                      onClick={() => void handleSendInvite()}
+                      disabled={inviteDisabled}
+                    >
                       <UserPlus className="size-3.5" aria-hidden />
                       {sending ? "Creating…" : "Create invite"}
                     </Button>
@@ -490,7 +577,11 @@ export function WorkspaceSection() {
 
                   <div className="flex items-center gap-3">
                     <Label className="w-12 text-xs text-muted-foreground">Role</Label>
-                    <RolePicker value={inviteRole} onChange={setInviteRole} roles={invitableRoles} />
+                    <RolePicker
+                      value={inviteRole}
+                      onChange={setInviteRole}
+                      roles={invitableRoles}
+                    />
                   </div>
 
                   {lastIssuedToken ? (
@@ -522,7 +613,9 @@ export function WorkspaceSection() {
                           variant="ghost"
                           size="icon"
                           onClick={async () => {
-                            await navigator.clipboard.writeText(lastInviteUrl ?? "").catch(() => {});
+                            await navigator.clipboard
+                              .writeText(lastInviteUrl ?? "")
+                              .catch(() => {});
                             setCopiedNew("link");
                             setTimeout(() => setCopiedNew(null), 2000);
                           }}
@@ -571,12 +664,18 @@ export function WorkspaceSection() {
                     className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2 transition-colors hover:bg-muted/60"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <MemberAvatar name={member.displayName ?? undefined} email={member.userId} />
+                      <MemberAvatar
+                        name={member.displayName ?? undefined}
+                        email={member.userId}
+                        avatarUrl={member.avatarUrl}
+                      />
                       <div className="min-w-0">
                         <p className="truncate text-sm text-foreground">
                           {label}
                           {isSelf ? (
-                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">· You</span>
+                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                              · You
+                            </span>
                           ) : null}
                         </p>
                         {member.displayName ? null : (
@@ -612,7 +711,10 @@ export function WorkspaceSection() {
                                     >
                                       <span>{ROLE_META[role].label}</span>
                                       {active ? (
-                                        <Check className="size-3.5 text-muted-foreground" aria-hidden />
+                                        <Check
+                                          className="size-3.5 text-muted-foreground"
+                                          aria-hidden
+                                        />
                                       ) : null}
                                     </button>
                                   );
@@ -642,7 +744,9 @@ export function WorkspaceSection() {
                                 >
                                   <UserMinus className="size-3.5" aria-hidden />
                                   <span>
-                                    {removingMemberId === member.id ? "Removing…" : "Remove from workspace"}
+                                    {removingMemberId === member.id
+                                      ? "Removing…"
+                                      : "Remove from workspace"}
                                   </span>
                                 </button>
                               </>
@@ -686,7 +790,9 @@ export function WorkspaceSection() {
                           title="Copy invite link"
                           className="h-6 w-6"
                           onClick={async () => {
-                            await navigator.clipboard.writeText(inviteLinkFor(invite.token!)).catch(() => {});
+                            await navigator.clipboard
+                              .writeText(inviteLinkFor(invite.token!))
+                              .catch(() => {});
                             setCopiedInviteId(invite.id);
                             setTimeout(() => setCopiedInviteId(null), 2000);
                           }}
@@ -731,14 +837,24 @@ export function WorkspaceSection() {
                 ) : (
                   <div className="flex flex-col gap-2.5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5">
                     <p className="text-xs text-foreground">
-                      Leave <span className="font-semibold">{selectedWorkspace.name}</span>? You'll lose
-                      access until someone invites you again.
+                      Leave <span className="font-semibold">{selectedWorkspace.name}</span>? You'll
+                      lose access until someone invites you again.
                     </p>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setLeaveConfirm(false)} disabled={leaving}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setLeaveConfirm(false)}
+                        disabled={leaving}
+                      >
                         Cancel
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={() => void handleLeave()} disabled={leaving}>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => void handleLeave()}
+                        disabled={leaving}
+                      >
                         {leaving ? "Leaving…" : "Leave workspace"}
                       </Button>
                     </div>
@@ -759,8 +875,8 @@ export function WorkspaceSection() {
                 ) : (
                   <div className="flex flex-col gap-2.5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5">
                     <p className="text-xs text-foreground">
-                      Delete <span className="font-semibold">{selectedWorkspace.name}</span> for everyone?
-                      This can't be undone. Type the workspace name to confirm.
+                      Delete <span className="font-semibold">{selectedWorkspace.name}</span> for
+                      everyone? This can't be undone. Type the workspace name to confirm.
                     </p>
                     <Input
                       value={deleteConfirm}
@@ -811,12 +927,17 @@ export function WorkspaceSection() {
               Make {transferTarget?.displayName?.trim() || "this member"} the owner?
             </DialogTitle>
             <DialogDescription>
-              They get full control of this workspace and you become an admin. Only the new owner can
-              hand ownership back.
+              They get full control of this workspace and you become an admin. Only the new owner
+              can hand ownership back.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setTransferTarget(null)} disabled={transferring}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTransferTarget(null)}
+              disabled={transferring}
+            >
               Cancel
             </Button>
             <Button
@@ -844,8 +965,8 @@ export function WorkspaceSection() {
           <DialogHeader>
             <DialogTitle>Add workspace</DialogTitle>
             <DialogDescription>
-              Create a separate workspace to keep notes, projects, and integrations isolated from this
-              one.
+              Create a separate workspace to keep notes, projects, and integrations isolated from
+              this one.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -866,7 +987,13 @@ export function WorkspaceSection() {
               />
             </div>
             <DialogFooter>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setAddOpen(false)} disabled={addSubmitting}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setAddOpen(false)}
+                disabled={addSubmitting}
+              >
                 Cancel
               </Button>
               <Button type="submit" size="sm" disabled={addSubmitting}>
@@ -877,8 +1004,16 @@ export function WorkspaceSection() {
         </DialogContent>
       </Dialog>
 
-      <UpgradeModal visible={upgradeInviteOpen} feature="team_members" onClose={() => setUpgradeInviteOpen(false)} />
-      <UpgradeModal visible={upgradeAddOpen} feature="unlimited_workspaces" onClose={() => setUpgradeAddOpen(false)} />
+      <UpgradeModal
+        visible={upgradeInviteOpen}
+        feature="team_members"
+        onClose={() => setUpgradeInviteOpen(false)}
+      />
+      <UpgradeModal
+        visible={upgradeAddOpen}
+        feature="unlimited_workspaces"
+        onClose={() => setUpgradeAddOpen(false)}
+      />
     </SettingsSectionShell>
   );
 }

@@ -16,10 +16,12 @@ type Call = { workspaceId: string; fromIso: string; toIso: string };
 function fakeRuntime(calls: Call[]): ModuoRuntime {
   return {
     calendar: {
-      listModule: vi.fn(async (workspaceId: string, window?: { fromIso: string; toIso: string }) => {
-        calls.push({ workspaceId, fromIso: window!.fromIso, toIso: window!.toIso });
-        return { events: [], accounts: [], degraded: false, truncated: [] };
-      }),
+      listModule: vi.fn(
+        async (workspaceId: string, window?: { fromIso: string; toIso: string }) => {
+          calls.push({ workspaceId, fromIso: window!.fromIso, toIso: window!.toIso });
+          return { events: [], accounts: [], degraded: false, truncated: [] };
+        },
+      ),
     },
   } as unknown as ModuoRuntime;
 }

@@ -1,11 +1,11 @@
 // DF-18 — `role="toolbar"` is a promise (one tab stop, arrows move between the
 // controls). The primitive announced it for a long time without keeping it;
 // these lock the behaviour in.
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import { Toolbar } from "./toolbar";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SegmentedControl } from "./segmented-control";
+import { Toolbar } from "./toolbar";
 
 afterEach(cleanup);
 

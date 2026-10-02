@@ -58,11 +58,15 @@ export function relativeTimeAgo(iso: string, now: Date): string {
   if (abs < 60_000) return "just now";
   if (abs < 3_600_000) {
     const m = Math.floor(abs / 60_000);
-    return ms >= 0 ? `${m} ${m === 1 ? "minute" : "minutes"} ago` : `in ${m} ${m === 1 ? "minute" : "minutes"}`;
+    return ms >= 0
+      ? `${m} ${m === 1 ? "minute" : "minutes"} ago`
+      : `in ${m} ${m === 1 ? "minute" : "minutes"}`;
   }
   if (abs < DAY_MS) {
     const h = Math.floor(abs / 3_600_000);
-    return ms >= 0 ? `${h} ${h === 1 ? "hour" : "hours"} ago` : `in ${h} ${h === 1 ? "hour" : "hours"}`;
+    return ms >= 0
+      ? `${h} ${h === 1 ? "hour" : "hours"} ago`
+      : `in ${h} ${h === 1 ? "hour" : "hours"}`;
   }
   if (abs < 30 * DAY_MS) {
     const d = Math.floor(abs / DAY_MS);

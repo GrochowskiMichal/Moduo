@@ -41,23 +41,11 @@ export function WidgetEmpty({ children }: { children: ReactNode }) {
   );
 }
 
-export function WidgetList({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+export function WidgetList({ children, className }: { children: ReactNode; className?: string }) {
   return <ul className={cn("flex flex-col gap-0.5 p-1.5", className)}>{children}</ul>;
 }
 
-export function WidgetSectionLabel({
-  children,
-  count,
-}: {
-  children: ReactNode;
-  count?: number;
-}) {
+export function WidgetSectionLabel({ children, count }: { children: ReactNode; count?: number }) {
   return (
     <div className="flex items-center gap-2 px-2 pb-0.5 pt-2 first:pt-1">
       <Eyebrow>{children}</Eyebrow>
@@ -122,7 +110,8 @@ export function WidgetRow({
 
   const rowClass = cn(
     "flex min-h-[var(--row-h)] w-full items-center gap-2 rounded-md px-2 py-1 text-left",
-    interactive && "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    interactive &&
+      "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
     disabled && "opacity-60",
   );
 

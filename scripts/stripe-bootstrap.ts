@@ -131,9 +131,7 @@ async function getOrCreatePrice(row: PriceRow, productId: string): Promise<strin
 
 async function getOrCreateFoundersCoupon(): Promise<string> {
   const coupons = await stripe.coupons.list({ limit: 100 });
-  const existing = coupons.data.find(
-    (c) => c.metadata?.purpose === "founders" && c.valid
-  );
+  const existing = coupons.data.find((c) => c.metadata?.purpose === "founders" && c.valid);
   if (existing) {
     console.log(`  Reusing founders coupon: ${existing.id}`);
     return existing.id;

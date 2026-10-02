@@ -9,10 +9,7 @@
 import type { TaskBlock } from "./lens";
 
 /** True when this block's task is open and its end is at/behind `nowMs`. */
-export function isElapsedBlock(
-  block: Pick<TaskBlock, "done" | "endMs">,
-  nowMs: number,
-): boolean {
+export function isElapsedBlock(block: Pick<TaskBlock, "done" | "endMs">, nowMs: number): boolean {
   return !block.done && block.endMs <= nowMs;
 }
 

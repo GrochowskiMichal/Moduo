@@ -9,10 +9,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import { deriveLinkKey, type EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { scoreSuggestions, topSuggestion, type LinkSuggestion, type RawLinkSuggestion } from "../suggest";
+import { deriveLinkKey, type EntityRef } from "../../../lib/entity-links";
+import {
+  type LinkSuggestion,
+  type RawLinkSuggestion,
+  scoreSuggestions,
+  topSuggestion,
+} from "../suggest";
 
 export type LinkSuggestionsStatus = "loading" | "ready" | "error";
 

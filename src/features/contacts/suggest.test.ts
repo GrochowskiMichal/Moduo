@@ -2,10 +2,9 @@
 // (origin='suggest'); declining records the pair for the spine to remember.
 
 import { describe, expect, it } from "vitest";
-
-import { contactDeclineArgs, contactSuggestLinkArgs } from "./suggest-link";
 import type { EntityRef } from "../../lib/entity-links";
 import type { LinkSuggestion } from "../spine/suggest";
+import { contactDeclineArgs, contactSuggestLinkArgs } from "./suggest-link";
 
 const contact: EntityRef = { type: "contact", id: "c1" };
 const suggestion: LinkSuggestion = {

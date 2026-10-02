@@ -4,7 +4,7 @@ process.env.TZ = "Europe/Warsaw";
 
 import { describe, expect, it } from "vitest";
 
-import { expandEventOccurrences, type ExpandableEvent } from "./recurrence-expand";
+import { type ExpandableEvent, expandEventOccurrences } from "./recurrence-expand";
 
 function event(overrides: Partial<ExpandableEvent>): ExpandableEvent {
   return {
@@ -54,9 +54,7 @@ describe("expandEventOccurrences — range expansion (AC5)", () => {
 
   it("a one-off event yields one occurrence in range, none outside", () => {
     expect(expandEventOccurrences(event({}), WEEK_START, WEEK_END)).toHaveLength(1);
-    expect(
-      expandEventOccurrences(event({}), WEEK_END, WEEK_END + 7 * 86_400_000),
-    ).toHaveLength(0);
+    expect(expandEventOccurrences(event({}), WEEK_END, WEEK_END + 7 * 86_400_000)).toHaveLength(0);
   });
 
   it("keeps the wall-clock hour across a DST change (every Tuesday at 9 stays 9:00)", () => {
@@ -84,11 +82,7 @@ describe("expandEventOccurrences — range expansion (AC5)", () => {
   });
 
   it("a malformed rrule degrades to the one-off occurrence, never a crash", () => {
-    const occ = expandEventOccurrences(
-      event({ rrule: "FREQ=NONSENSE;;;" }),
-      WEEK_START,
-      WEEK_END,
-    );
+    const occ = expandEventOccurrences(event({ rrule: "FREQ=NONSENSE;;;" }), WEEK_START, WEEK_END);
     expect(occ).toHaveLength(1);
   });
 });

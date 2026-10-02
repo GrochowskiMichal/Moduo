@@ -35,9 +35,7 @@ function ClockConfig({ widget, updateConfig }: ConfigFormProps) {
     ? (widget.config.timezones as unknown[]).filter((z): z is string => typeof z === "string")
     : [];
   const toggle = (zone: string) => {
-    const next = selected.includes(zone)
-      ? selected.filter((z) => z !== zone)
-      : [...selected, zone];
+    const next = selected.includes(zone) ? selected.filter((z) => z !== zone) : [...selected, zone];
     updateConfig({ timezones: next });
   };
   return (
@@ -144,9 +142,7 @@ function TasksConfig({ widget, updateConfig }: ConfigFormProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <Eyebrow as="p">
-        Projects {selected.length === 0 ? "(all)" : `(${selected.length})`}
-      </Eyebrow>
+      <Eyebrow as="p">Projects {selected.length === 0 ? "(all)" : `(${selected.length})`}</Eyebrow>
       {buckets.length === 0 ? (
         <p className="text-xs text-muted-foreground">No projects yet.</p>
       ) : (

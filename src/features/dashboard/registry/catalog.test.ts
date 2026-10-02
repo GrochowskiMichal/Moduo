@@ -8,13 +8,13 @@ import type { RuntimeCapabilities } from "@/lib/runtime.types";
 
 import { WIDGET_TYPES } from "../engine/types";
 import {
-  WIDGET_CATALOG,
   allowedSizesFor,
   defaultSizeFor,
   galleryTypes,
   isTypeAvailable,
-  permissionFor,
   type LanePermissions,
+  permissionFor,
+  WIDGET_CATALOG,
 } from "./catalog";
 
 const ALL_EDIT: LanePermissions = { tasks: "edit", notes: "edit" };

@@ -9,9 +9,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import type { ActivityEntry } from "../../tasks/model";
-import { entityRefKey, otherEndpoint } from "../../spine/rollup";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
+import { entityRefKey, otherEndpoint } from "../../spine/rollup";
+import type { ActivityEntry } from "../../tasks/model";
 import { buildContactRollup, type ContactRollup } from "../rollup";
 import { enrichHubRows } from "./enrich-hub-rows";
 import "../../spine/snippet-projectors.builtin";
@@ -55,7 +55,12 @@ export function useContactHub(
       try {
         const [links, activityRows] = await Promise.all([
           runtime.spine.listLinks({ workspaceId, entityType: focusType, entityId: focusId }),
-          runtime.tasks.listActivity({ workspaceId, entityType: focusType, entityId: focusId, limit: 30 }),
+          runtime.tasks.listActivity({
+            workspaceId,
+            entityType: focusType,
+            entityId: focusId,
+            limit: 30,
+          }),
         ]);
         const others = links
           .map((l) => otherEndpoint(focusRef, l))

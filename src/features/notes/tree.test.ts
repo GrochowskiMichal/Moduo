@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Note } from "./model";
-import {
-  buildNoteSections,
-  byPosition,
-  descendantIds,
-  siblingsOf,
-  wouldCreateCycle,
-} from "./tree";
+import { buildNoteSections, byPosition, descendantIds, siblingsOf, wouldCreateCycle } from "./tree";
 
 let seq = 0;
 function note(partial: Partial<Note> & { id: string }): Note {

@@ -21,10 +21,14 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { jsonRpcRequestSchema } from "../_shared/contracts/rows.ts";
+import { listingJsonSchema, parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
+import { parseOrError } from "../_shared/contracts/errors.ts";
+import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import { connectorModules, moduleScope, toolsForKey, type KeyContext } from "./registry.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const DEFAULT_SECRET_KEY = getDefaultSecretKey();
 
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const SERVER_INFO = { name: "moduo-mcp", title: "Moduo", version: "1.0.0" };
@@ -113,12 +117,19 @@ async function handleToolCall(id: unknown, params: any, key: KeyContext) {
   // Per-request client: the x-moduo-key-id header is what Postgres uses to
   // attribute mutations to this key (module_api_key_id() trusts it only
   // under the service_role JWT this client carries).
-  const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+  const db = createClient(SUPABASE_URL, DEFAULT_SECRET_KEY, {
     auth: { persistSession: false },
     global: { headers: { "x-moduo-key-id": key.id } },
   });
+  const parsedArgs = parseToolArgs(name, params?.arguments ?? {});
+  if (!parsedArgs.success) {
+    return rpcResult(id, {
+      content: [{ type: "text", text: parsedArgs.message }],
+      isError: true,
+    });
+  }
   try {
-    const result = await tool.handler((params?.arguments ?? {}) as Record<string, unknown>, { key, db });
+    const result = await tool.handler(parsedArgs.data, { key, db });
     return rpcResult(id, {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     });
@@ -134,7 +145,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "moduo-mcp speaks MCP Streamable HTTP: POST JSON-RPC messages." }, { status: 405 });
   }
 
-  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const admin = createClient(SUPABASE_URL, DEFAULT_SECRET_KEY, { auth: { persistSession: false } });
   const key = await authenticate(req, admin);
   if (!key) {
     return json(
@@ -143,18 +154,21 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  let message: any;
+  let raw: unknown;
   try {
-    message = await req.json();
+    raw = await req.json();
   } catch {
     return rpcError(null, -32700, "Parse error: body must be JSON.");
   }
-  if (Array.isArray(message)) {
+  if (Array.isArray(raw)) {
     return rpcError(null, -32600, "Batch requests are not supported.");
   }
-  if (!message || message.jsonrpc !== "2.0" || typeof message.method !== "string") {
-    return rpcError(message?.id, -32600, "Invalid JSON-RPC request.");
+  const parsedMessage = parseOrError(jsonRpcRequestSchema, raw);
+  if (!parsedMessage.success) {
+    const id = raw && typeof raw === "object" && "id" in raw ? (raw as { id?: unknown }).id : null;
+    return rpcError(id, -32600, "Invalid JSON-RPC request.");
   }
+  const message = parsedMessage.data;
   // Notifications (and stray responses) are acknowledged, not answered.
   if (message.id === undefined || message.id === null) {
     return new Response(null, { status: 202, headers: CORS_HEADERS });
@@ -170,7 +184,7 @@ Deno.serve(async (req: Request) => {
         tools: toolsForKey(key).map((t) => ({
           name: t.name,
           description: t.description,
-          inputSchema: t.inputSchema,
+          inputSchema: listingJsonSchema(t.name, t.inputSchema),
         })),
       });
     case "tools/call":

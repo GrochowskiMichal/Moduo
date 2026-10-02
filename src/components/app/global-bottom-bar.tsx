@@ -2,11 +2,10 @@ import { Keyboard, Plus, Search, SquarePen } from "lucide-react";
 
 import { formatShortcut, SHORTCUTS } from "../../lib/shortcuts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-
-import { dispatchOpenPalette } from "./global-command-palette";
-import { dispatchOpenCapture } from "./global-capture-bar";
-import { dispatchOpenShortcuts } from "./global-shortcuts-dialog";
 import { dispatchCreateNew } from "./create-events";
+import { dispatchOpenCapture } from "./global-capture-bar";
+import { dispatchOpenPalette } from "./global-command-palette";
+import { dispatchOpenShortcuts } from "./global-shortcuts-dialog";
 
 function BarButton({
   onClick,
@@ -54,11 +53,7 @@ export function GlobalBottomBar() {
       role="toolbar"
       aria-label="Global actions"
     >
-      <BarButton
-        onClick={() => dispatchOpenShortcuts()}
-        label="Keyboard shortcuts"
-        hint={helpHint}
-      >
+      <BarButton onClick={() => dispatchOpenShortcuts()} label="Keyboard shortcuts" hint={helpHint}>
         <Keyboard className="size-4" aria-hidden />
       </BarButton>
       <BarButton onClick={() => dispatchOpenPalette()} label="Search" hint={searchHint}>

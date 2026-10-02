@@ -91,7 +91,14 @@ export function wallTimeToInstant(
   timeZone: string,
 ): Date | null {
   if (!isValidIanaZone(timeZone)) return null;
-  const utcGuess = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second);
+  const utcGuess = Date.UTC(
+    wall.year,
+    wall.month - 1,
+    wall.day,
+    wall.hour,
+    wall.minute,
+    wall.second,
+  );
   if (!Number.isFinite(utcGuess)) return null;
   const first = zoneOffsetAt(new Date(utcGuess), timeZone);
   let ts = utcGuess - first;
@@ -132,7 +139,14 @@ function timeToIso(t: ICAL.Time, fallbackIana: string | null): string | null {
   const zoneTzid = (t.zone as { tzid?: string } | null)?.tzid ?? "floating";
   if (zoneTzid === "floating" && fallbackIana) {
     const d = wallTimeToInstant(
-      { year: t.year, month: t.month, day: t.day, hour: t.hour, minute: t.minute, second: t.second },
+      {
+        year: t.year,
+        month: t.month,
+        day: t.day,
+        hour: t.hour,
+        minute: t.minute,
+        second: t.second,
+      },
       fallbackIana,
     );
     return d ? d.toISOString() : null;
@@ -268,11 +282,15 @@ function mapCalendarText(
   // emitted twice (master loop + backward-moved-override pass) is deduped.
   const seen = new Set<string>();
 
-  const emit = (id: string, comp: ICAL.Component, times: {
-    startIso: string;
-    endIso: string;
-    allDay: boolean;
-  }) => {
+  const emit = (
+    id: string,
+    comp: ICAL.Component,
+    times: {
+      startIso: string;
+      endIso: string;
+      allDay: boolean;
+    },
+  ) => {
     if (seen.has(id)) return;
     if (!overlapsWindow(times.startIso, times.endIso, win)) return;
     seen.add(id);
@@ -301,6 +319,7 @@ function mapCalendarText(
       let iterations = 0;
       let emitted = 0;
       let next: ICAL.Time | null;
+      // biome-ignore lint/suspicious/noAssignInExpressions: iterator-drain idiom (body uses continue/break)
       while ((next = iterator.next() ?? null)) {
         if (++iterations > MAX_ITERATIONS_PER_EVENT) break;
         if (emitted >= MAX_OCCURRENCES_PER_EVENT) break;
@@ -363,10 +382,7 @@ function isoToKey(iso: string): string {
  * case), we THROW — so the sync loop flips the account to `error` and keeps the
  * last mirror, instead of diffing against `[]` and tombstoning every event.
  */
-export function mapIcsEvents(
-  raws: RawProviderEvent[],
-  win: MapWindow,
-): CalendarMirrorEventInput[] {
+export function mapIcsEvents(raws: RawProviderEvent[], win: MapWindow): CalendarMirrorEventInput[] {
   const out: CalendarMirrorEventInput[] = [];
   let nonEmptyResources = 0;
   let parsedResources = 0;

@@ -44,7 +44,7 @@ export function positionForReorder(
   ordered: Array<Pick<Task, "position">>,
   toIndex: number,
 ): string {
-  const before = toIndex > 0 ? ordered[toIndex - 1]?.position ?? null : null;
+  const before = toIndex > 0 ? (ordered[toIndex - 1]?.position ?? null) : null;
   const after = ordered[toIndex + 1]?.position ?? null;
   return betweenPositions(before, after);
 }

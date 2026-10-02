@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { ChartGantt, Columns3, List, Plus } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
@@ -52,7 +52,9 @@ export function PlanViewHeader({
           </Button>
         </Toolbar.Primary>
       </Toolbar>
-      {activeFilters ? <div className="flex flex-wrap items-center gap-1.5">{activeFilters}</div> : null}
+      {activeFilters ? (
+        <div className="flex flex-wrap items-center gap-1.5">{activeFilters}</div>
+      ) : null}
     </div>
   );
 }

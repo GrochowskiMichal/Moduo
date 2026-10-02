@@ -18,7 +18,9 @@ export function NotePresenceAvatars({ viewers }: { viewers: NoteViewer[] }) {
   const overflow = hidden.length;
 
   return (
-    <AvatarGroup aria-label={`${viewers.length} ${viewers.length === 1 ? "person" : "people"} viewing`}>
+    <AvatarGroup
+      aria-label={`${viewers.length} ${viewers.length === 1 ? "person" : "people"} viewing`}
+    >
       {shown.map((v) => (
         <Tooltip key={v.userId}>
           <TooltipTrigger asChild>

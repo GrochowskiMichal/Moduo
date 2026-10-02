@@ -1,14 +1,14 @@
-import { useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
+import { type ReactNode, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { ModuoMark } from "@/components/ui/moduo-mark";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { useAuth } from "@/providers/auth-provider";
 import { supabaseClient } from "@/lib/runtime.web";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 const SUPABASE_URL =
   (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
@@ -127,7 +127,9 @@ export function PaywallPage() {
       }
 
       if (!confirmed) {
-        console.warn("[paywall] trial created but subscription_status not yet reflected — redirecting anyway");
+        console.warn(
+          "[paywall] trial created but subscription_status not yet reflected — redirecting anyway",
+        );
       }
 
       window.location.href = "/";
@@ -195,7 +197,9 @@ export function PaywallPage() {
             name="Pro"
             price={proPrice}
             priceSuffix="/mo"
-            caption={billing === "yearly" ? "billed as $96/yr · 7-day free trial" : "7-day free trial"}
+            caption={
+              billing === "yearly" ? "billed as $96/yr · 7-day free trial" : "7-day free trial"
+            }
             features={PRO_FEATURES}
             featured
             badge="Most popular"

@@ -5,12 +5,9 @@
 // but at alpha we assign a spread hue deterministically so accounts stay
 // visually distinct and theme-safe; a user override wins.
 
-import {
-  LABEL_COLORS,
-  normalizeLabelColor,
-  type LabelColor,
-} from "../../components/tag-colors";
+import { LABEL_COLORS, type LabelColor, normalizeLabelColor } from "../../components/tag-colors";
 import type { CalendarAccountModel, CalendarEventModel } from "./events";
+import { parseGoogleExternalId } from "./google-account";
 import { parseSyncDescriptor } from "./sync";
 
 /** Human provider name for attribution ("Personal — Google"). */
@@ -95,9 +92,7 @@ export function visibleEvents(
 ): CalendarEventModel[] {
   const hidden = new Set(hiddenAccountIds);
   if (hidden.size === 0) return events;
-  return events.filter(
-    (e) => e.sourceAccountId === null || !hidden.has(e.sourceAccountId),
-  );
+  return events.filter((e) => e.sourceAccountId === null || !hidden.has(e.sourceAccountId));
 }
 
 // ── rail grouping (CAL-8) ─────────────────────────────────────────────────────
@@ -110,11 +105,16 @@ export type RailAccountRow = {
   account: CalendarAccountModel;
   /** The calendar's own name within its account (falls back to the label). */
   label: string;
+  /**
+   * A row inside a login is one calendar. Removing it does not disconnect
+   * the mailbox. A flat row is the login itself.
+   */
+  scope: "calendar" | "account" | "feed";
 };
 
 export type RailGroup =
   | { kind: "flat"; row: RailAccountRow }
-  | { kind: "group"; key: string; header: string; rows: RailAccountRow[] };
+  | { kind: "group"; key: string; header: string; detail?: string; rows: RailAccountRow[] };
 
 /** A CalDAV account's group key + header (its server + username), or null. */
 function caldavGroupOf(
@@ -129,20 +129,45 @@ function caldavGroupOf(
   };
 }
 
+/** Google calendars that share a mailbox group under that login. */
+function googleGroupOf(account: CalendarAccountModel): {
+  key: string;
+  header: string;
+  detail: string;
+  calendarName: string;
+  scope: "calendar" | "account";
+} | null {
+  if (account.provider !== "google") return null;
+  const parsed = parseGoogleExternalId(account.externalId);
+  if (!parsed) return null;
+  return {
+    key: `google:${parsed.email}`,
+    header: "Google",
+    detail: parsed.email,
+    calendarName: account.displayLabel || parsed.email,
+    scope: parsed.calendarId ? "calendar" : "account",
+  };
+}
+
 /**
- * Order external accounts into rail groups: OAuth accounts stay flat rows in
- * their input order; CalDAV rows bucket under their (server, username) header;
- * every ICS feed collapses under one "Feeds" header. Groups appear in the input
+ * Order external accounts into rail groups. Google calendars that share a
+ * mailbox sit under that login (platform + address). CalDAV rows bucket under
+ * their (server, username) header. ICS feeds collapse under "Feeds". A single
+ * login with no inner calendars stays a flat row. Groups appear in the input
  * order of their first member, so the rail stays stable across reloads.
  */
 export function groupRailAccounts(accounts: CalendarAccountModel[]): RailGroup[] {
   const out: RailGroup[] = [];
   const groupIndex = new Map<string, number>(); // key → index in `out`
 
-  const ensureGroup = (key: string, header: string): RailGroup & { kind: "group" } => {
+  const ensureGroup = (
+    key: string,
+    header: string,
+    detail?: string,
+  ): RailGroup & { kind: "group" } => {
     const existing = groupIndex.get(key);
     if (existing !== undefined) return out[existing] as RailGroup & { kind: "group" };
-    const group: RailGroup & { kind: "group" } = { kind: "group", key, header, rows: [] };
+    const group: RailGroup & { kind: "group" } = { kind: "group", key, header, detail, rows: [] };
     groupIndex.set(key, out.length);
     out.push(group);
     return group;
@@ -153,6 +178,16 @@ export function groupRailAccounts(accounts: CalendarAccountModel[]): RailGroup[]
       ensureGroup("ics:feeds", "Feeds").rows.push({
         account,
         label: account.displayLabel || providerLabel(account.provider),
+        scope: "feed",
+      });
+      continue;
+    }
+    const google = googleGroupOf(account);
+    if (google) {
+      ensureGroup(google.key, google.header, google.detail).rows.push({
+        account,
+        label: google.calendarName,
+        scope: google.scope,
       });
       continue;
     }
@@ -161,15 +196,25 @@ export function groupRailAccounts(accounts: CalendarAccountModel[]): RailGroup[]
       ensureGroup(caldav.key, caldav.header).rows.push({
         account,
         label: caldav.calendarName,
+        scope: "calendar",
       });
       continue;
     }
     out.push({
       kind: "flat",
-      row: { account, label: account.displayLabel || providerLabel(account.provider) },
+      row: {
+        account,
+        label: account.displayLabel || providerLabel(account.provider),
+        scope: "account",
+      },
     });
   }
   return out;
+}
+
+/** How many logins are connected. Several calendars in one mailbox count as one. */
+export function connectedLoginCount(accounts: CalendarAccountModel[]): number {
+  return groupRailAccounts(accounts).length;
 }
 
 /** The freshest sync across accounts as a quiet age label, or null if none. */

@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-
-import { shapeToday } from "./today";
-import type { LensTask } from "./lens";
 import type { CalendarEventModel } from "./events";
+import type { LensTask } from "./lens";
+import { shapeToday } from "./today";
 
 const NOW = new Date(2026, 6, 2, 14, 0); // Thu Jul 2 2026, 14:00 local
 
@@ -44,7 +43,10 @@ function iso(h: number, m = 0): string {
 describe("today — the dashboard widget shaper (AC14)", () => {
   it("composes today's timed chips (events + blocks) sorted by start", () => {
     const view = shapeToday({
-      tasks: [task({ id: "morning", scheduledAt: iso(9) }), task({ id: "afternoon", scheduledAt: iso(16) })],
+      tasks: [
+        task({ id: "morning", scheduledAt: iso(9) }),
+        task({ id: "afternoon", scheduledAt: iso(16) }),
+      ],
       events: [event({ id: "mtg", startsAt: iso(15), endsAt: iso(15, 30) })],
       weekStartsOn: 1,
       now: NOW,

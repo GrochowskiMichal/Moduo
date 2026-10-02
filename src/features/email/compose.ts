@@ -92,10 +92,7 @@ export function htmlToPlainText(html: string): string {
 
 /** Escape + wrap plain text as minimal HTML (newlines → <br>). */
 export function plainToHtml(text: string): string {
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return escaped.replace(/\n/g, "<br>");
 }
 
@@ -104,10 +101,7 @@ function escapeHtml(text: string): string {
 }
 
 /** An attribution + blockquote of the message being replied to / forwarded. */
-function quotedOriginal(
-  anchor: EmailEnvelope | undefined,
-  mode: ComposeMode,
-): string {
+function quotedOriginal(anchor: EmailEnvelope | undefined, mode: ComposeMode): string {
   if (!anchor) return "";
   const who = escapeHtml(anchor.sender || anchor.senderEmail || "");
   const when = escapeHtml(anchor.date || "");
@@ -120,10 +114,7 @@ function quotedOriginal(
       `${bodyHtml}`
     );
   }
-  return (
-    `<br><br><div>On ${when}, ${who} wrote:</div>` +
-    `<blockquote>${bodyHtml}</blockquote>`
-  );
+  return `<br><br><div>On ${when}, ${who} wrote:</div>` + `<blockquote>${bodyHtml}</blockquote>`;
 }
 
 /** Prepend the account signature (if any) above a quoted original. */
@@ -154,8 +145,7 @@ export function buildComposeDraft(args: BuildArgs): ComposeDraft {
   const anchor = messages.length ? messages[messages.length - 1] : undefined;
   // Reply to the newest message NOT from you (fallback: the anchor).
   const target =
-    [...messages].reverse().find((m) => !selfSet.has(m.senderEmail.trim().toLowerCase())) ??
-    anchor;
+    [...messages].reverse().find((m) => !selfSet.has(m.senderEmail.trim().toLowerCase())) ?? anchor;
 
   const inReplyTo = anchor?.messageId ?? null;
   const references = uniq([...(anchor?.references ?? []), anchor?.messageId ?? ""]).slice(
@@ -169,10 +159,9 @@ export function buildComposeDraft(args: BuildArgs): ComposeDraft {
     if (mode === "reply-all") {
       // Keep everyone on the original To AND Cc lines, minus every address I own
       // and the reply target (who's already in To).
-      const others = uniq([
-        ...splitAddresses(target?.to),
-        ...splitAddresses(target?.cc),
-      ]).filter((a) => !selfSet.has(a) && !to.includes(a));
+      const others = uniq([...splitAddresses(target?.to), ...splitAddresses(target?.cc)]).filter(
+        (a) => !selfSet.has(a) && !to.includes(a),
+      );
       cc = others;
     }
   }

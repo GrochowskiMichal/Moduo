@@ -15,6 +15,7 @@
 // so it propagates to every instance exactly like a local edit.
 
 import { useCallback, useSyncExternalStore } from "react";
+import { z } from "zod";
 import { useDomainSync } from "./prefs-sync";
 
 export interface FocusPrefs {
@@ -54,18 +55,34 @@ function clampInt(value: unknown, lo: number, hi: number, fallback: number): num
   return Math.min(hi, Math.max(lo, Math.round(n)));
 }
 
+const focusPrefsSchema = z.object({
+  workMinutes: z.coerce.number().catch(DEFAULT_FOCUS_PREFS.workMinutes),
+  breakMinutes: z.coerce.number().catch(DEFAULT_FOCUS_PREFS.breakMinutes),
+  longBreakMinutes: z.coerce.number().catch(DEFAULT_FOCUS_PREFS.longBreakMinutes),
+  sessionsBeforeLongBreak: z.coerce.number().catch(DEFAULT_FOCUS_PREFS.sessionsBeforeLongBreak),
+  autoStartNext: z.boolean().catch(DEFAULT_FOCUS_PREFS.autoStartNext),
+  soundEnabled: z.boolean().catch(DEFAULT_FOCUS_PREFS.soundEnabled),
+});
+
 function sanitize(raw: unknown): FocusPrefs {
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_FOCUS_PREFS };
-  const c = raw as Record<string, unknown>;
+  const parsed = focusPrefsSchema.parse(raw && typeof raw === "object" ? raw : {});
   return {
-    workMinutes: clampInt(c.workMinutes, MIN_MIN, MAX_MIN, DEFAULT_FOCUS_PREFS.workMinutes),
-    breakMinutes: clampInt(c.breakMinutes, MIN_MIN, MAX_MIN, DEFAULT_FOCUS_PREFS.breakMinutes),
-    longBreakMinutes: clampInt(c.longBreakMinutes, MIN_MIN, MAX_MIN, DEFAULT_FOCUS_PREFS.longBreakMinutes),
-    sessionsBeforeLongBreak: clampInt(c.sessionsBeforeLongBreak, 1, 12, DEFAULT_FOCUS_PREFS.sessionsBeforeLongBreak),
-    autoStartNext:
-      typeof c.autoStartNext === "boolean" ? c.autoStartNext : DEFAULT_FOCUS_PREFS.autoStartNext,
-    soundEnabled:
-      typeof c.soundEnabled === "boolean" ? c.soundEnabled : DEFAULT_FOCUS_PREFS.soundEnabled,
+    workMinutes: clampInt(parsed.workMinutes, MIN_MIN, MAX_MIN, DEFAULT_FOCUS_PREFS.workMinutes),
+    breakMinutes: clampInt(parsed.breakMinutes, MIN_MIN, MAX_MIN, DEFAULT_FOCUS_PREFS.breakMinutes),
+    longBreakMinutes: clampInt(
+      parsed.longBreakMinutes,
+      MIN_MIN,
+      MAX_MIN,
+      DEFAULT_FOCUS_PREFS.longBreakMinutes,
+    ),
+    sessionsBeforeLongBreak: clampInt(
+      parsed.sessionsBeforeLongBreak,
+      1,
+      12,
+      DEFAULT_FOCUS_PREFS.sessionsBeforeLongBreak,
+    ),
+    autoStartNext: parsed.autoStartNext,
+    soundEnabled: parsed.soundEnabled,
   };
 }
 
@@ -164,7 +181,7 @@ export function useFocusPrefs(): UseFocusPrefs {
       writeLocalMirror(next);
       pushLocalChange(next as unknown as Record<string, unknown>);
     },
-    [pushLocalChange]
+    [pushLocalChange],
   );
 
   return {

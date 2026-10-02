@@ -9,15 +9,13 @@
 // keyboard handling mirror the notes slash menu (now slash-menu-plugin); only the
 // trigger (`@`) and the menu content/actions differ. Tokens-only (DESIGN_RULES).
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
+  $createTextNode,
   $getNodeByKey,
   $getSelection,
   $isRangeSelection,
   $isTextNode,
-  $createTextNode,
   COMMAND_PRIORITY_HIGH,
   KEY_ARROW_DOWN_COMMAND,
   KEY_ARROW_UP_COMMAND,
@@ -26,15 +24,17 @@ import {
   type LexicalEditor,
   type NodeKey,
 } from "lexical";
-import { toast } from "sonner";
 import { User } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { resolveEntityIcon } from "../icon-map";
-import { resolveMention, type MentionCandidate, type MentionTrigger } from "../mention";
-import { executeMention, type MentionContext } from "../mention-actions";
 import { useMentionSearch } from "../hooks/use-mention-search";
+import { resolveEntityIcon } from "../icon-map";
+import { type MentionCandidate, type MentionTrigger, resolveMention } from "../mention";
+import { executeMention, type MentionContext } from "../mention-actions";
 import { $createEntityRefNode } from "./entity-ref-node";
 
 type MentionMenuState = {
@@ -169,9 +169,11 @@ export function MentionMenuPlugin({
   const menuRef = useRef<MentionMenuState | null>(null);
   const candidatesRef = useRef<MentionCandidate[]>([]);
   const selectedIndexRef = useRef(0);
-  menuRef.current = menu;
-  candidatesRef.current = candidates;
-  selectedIndexRef.current = selectedIndex;
+  useEffect(() => {
+    menuRef.current = menu;
+    candidatesRef.current = candidates;
+    selectedIndexRef.current = selectedIndex;
+  });
 
   // Drive the search off the caret query.
   useEffect(() => {
@@ -217,9 +219,7 @@ export function MentionMenuPlugin({
     // or a `notify-person` with no host seam. On failure the chip/text stays and
     // Retry recovers the link — never silently lost.
     const needsWrite =
-      resolution.action === "notify-person"
-        ? Boolean(onMentionPerson)
-        : Boolean(source);
+      resolution.action === "notify-person" ? Boolean(onMentionPerson) : Boolean(source);
     if (!needsWrite) return;
 
     const ctx: MentionContext = {
@@ -232,9 +232,7 @@ export function MentionMenuPlugin({
       onMentionPerson,
     };
     const failCopy =
-      resolution.action === "notify-person"
-        ? "Couldn't send that mention."
-        : "Couldn't link that.";
+      resolution.action === "notify-person" ? "Couldn't send that mention." : "Couldn't link that.";
     void executeMention(runtime, ctx, resolution).catch(() => {
       toast.error(failCopy, {
         action: { label: "Retry", onClick: () => void executeMention(runtime, ctx, resolution) },
@@ -246,7 +244,9 @@ export function MentionMenuPlugin({
   // calls the latest `commit` (fresh runtime / workspace / context), not a stale
   // first-render closure.
   const commitRef = useRef(commit);
-  commitRef.current = commit;
+  useEffect(() => {
+    commitRef.current = commit;
+  });
 
   // ── caret detection ─────────────────────────────────────────────────────────
   // A people-only surface with no person handler has NOTHING to offer — never

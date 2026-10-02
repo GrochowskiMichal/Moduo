@@ -117,9 +117,7 @@ export async function runRedbImportOnce(
         const state = await runtime.notes.getDocState(workspaceId, meta.id);
         const merged = mergeLegacyDoc(
           state?.snapshotB64 ?? state?.snapshot_b64 ?? null,
-          ((state?.updates ?? []) as any[])
-            .map((u) => u.updateB64 ?? u.update_b64)
-            .filter(Boolean),
+          ((state?.updates ?? []) as any[]).map((u) => u.updateB64 ?? u.update_b64).filter(Boolean),
         );
         snapshotB64 = merged.snapshotB64;
         body = merged.body;

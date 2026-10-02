@@ -44,17 +44,16 @@ describe("calendar prefs domain — sane defaults + round-trip", () => {
   it("garbage and partial shapes fall back field-by-field", () => {
     expect(sanitizeCalendarPrefs(null)).toEqual(DEFAULT_CALENDAR_PREFS);
     expect(sanitizeCalendarPrefs("nope")).toEqual(DEFAULT_CALENDAR_PREFS);
-    expect(
-      sanitizeCalendarPrefs({ weekStartsOn: 6, workStartMinute: "9am" }),
-    ).toEqual({ ...DEFAULT_CALENDAR_PREFS, weekStartsOn: 6 });
+    expect(sanitizeCalendarPrefs({ weekStartsOn: 6, workStartMinute: "9am" })).toEqual({
+      ...DEFAULT_CALENDAR_PREFS,
+      weekStartsOn: 6,
+    });
     // Inverted working hours reset as a pair.
-    expect(
-      sanitizeCalendarPrefs({ workStartMinute: 1200, workEndMinute: 300 }),
-    ).toEqual(DEFAULT_CALENDAR_PREFS);
-    // Out-of-range minutes fall back.
-    expect(sanitizeCalendarPrefs({ workEndMinute: 9999 })).toEqual(
+    expect(sanitizeCalendarPrefs({ workStartMinute: 1200, workEndMinute: 300 })).toEqual(
       DEFAULT_CALENDAR_PREFS,
     );
+    // Out-of-range minutes fall back.
+    expect(sanitizeCalendarPrefs({ workEndMinute: 9999 })).toEqual(DEFAULT_CALENDAR_PREFS);
   });
 
   it("round-trips through localStorage per user", () => {

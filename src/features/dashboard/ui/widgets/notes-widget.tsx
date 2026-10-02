@@ -1,8 +1,8 @@
 // DB-5 — "Notes" widget (ports NO-10 `notes/recent.ts`). Recently-touched notes;
 // each row opens the note (NO-3 URL selection). A Globe marks a published note.
 
-import { useMemo } from "react";
 import { FileText, Globe } from "lucide-react";
+import { useMemo } from "react";
 
 import { shapeRecentNotes } from "@/features/notes/recent";
 
@@ -49,7 +49,10 @@ export function NotesWidget({ size }: WidgetComponentProps) {
               note.isPublished ? (
                 <span className="inline-flex min-w-0 items-center gap-1">
                   <span className="min-w-0 truncate">{note.title}</span>
-                  <Globe className="size-icon-xs shrink-0 text-muted-foreground/70" aria-label="Published" />
+                  <Globe
+                    className="size-icon-xs shrink-0 text-muted-foreground/70"
+                    aria-label="Published"
+                  />
                 </span>
               ) : (
                 note.title

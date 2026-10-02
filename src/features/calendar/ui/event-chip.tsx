@@ -35,9 +35,7 @@ export function EventChipView({
   allDay = false,
   colorLabel,
 }: Props) {
-  const timeLabel = allDay
-    ? "All day"
-    : `${formatTimeOfDay(startMs)} – ${formatTimeOfDay(endMs)}`;
+  const timeLabel = allDay ? "All day" : `${formatTimeOfDay(startMs)} – ${formatTimeOfDay(endMs)}`;
   return (
     <div
       data-chip="event"
@@ -46,9 +44,7 @@ export function EventChipView({
       className={cn(
         "flex h-full w-full flex-col overflow-hidden rounded-md border px-1.5 py-0.5 text-left",
         "transition-colors duration-(--motion-fast) ease-(--ease-out)",
-        external
-          ? "cal-chip-external"
-          : "border-primary/35 bg-primary/10 hover:bg-primary/15",
+        external ? "cal-chip-external" : "border-primary/35 bg-primary/10 hover:bg-primary/15",
         past && "opacity-60",
         selected && "ring-2 ring-ring",
         compact && "flex-row items-center gap-1.5 py-0",

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildExportBundle,
-  exportZipName,
   type ExportMeta,
+  exportZipName,
   type ModuleReadResult,
 } from "./advanced";
 
@@ -97,8 +97,6 @@ describe("exportZipName", () => {
 
   it("falls back to 'workspace' when the name is empty and strips unsafe chars", () => {
     expect(exportZipName({ ...META, workspaceName: null })).toBe("moduo-workspace-2026-07-11.zip");
-    expect(exportZipName({ ...META, workspaceName: "a/b:c*?" })).toBe(
-      "moduo-a-b-c-2026-07-11.zip",
-    );
+    expect(exportZipName({ ...META, workspaceName: "a/b:c*?" })).toBe("moduo-a-b-c-2026-07-11.zip");
   });
 });

@@ -19,8 +19,8 @@ import {
   asHistoryDepth,
   describeDepthChange,
   EMAIL_HISTORY_DEPTHS,
-  historyDepthLabel,
   type EmailHistoryDepth,
+  historyDepthLabel,
 } from "../history-depth";
 
 type Props = {
@@ -35,14 +35,7 @@ type Props = {
   id?: string;
 };
 
-export function EmailHistoryDepthSelect({
-  value,
-  onChange,
-  disabled,
-  committed,
-  note,
-  id,
-}: Props) {
+export function EmailHistoryDepthSelect({ value, onChange, disabled, committed, note, id }: Props) {
   const consequence = (committed ? describeDepthChange(committed, value) : null) ?? note ?? null;
 
   return (

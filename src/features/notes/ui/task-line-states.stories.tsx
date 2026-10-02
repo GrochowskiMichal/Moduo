@@ -8,8 +8,8 @@
  */
 
 import type { Meta, StoryObj } from "@storybook/react";
-import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { X } from "lucide-react";
+import { CompleteToggle } from "../../../components/ui/complete-toggle";
 
 function TaskLineMock({
   title,

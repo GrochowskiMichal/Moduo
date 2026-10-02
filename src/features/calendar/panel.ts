@@ -54,9 +54,7 @@ export function groupPanelTasks(input: {
 
   const horizonKey = localDayKey(addDays(now, 7));
 
-  const today = input.committedTasks.filter(
-    (t) => isOpen(t) && (!query || matches(t, query)),
-  );
+  const today = input.committedTasks.filter((t) => isOpen(t) && (!query || matches(t, query)));
   const inToday = new Set(today.map((t) => t.id));
   // Committed-but-filtered-out rows must not resurface in other groups.
   for (const t of input.committedTasks) inToday.add(t.id);
@@ -82,7 +80,6 @@ export function groupPanelTasks(input: {
     dueSoon: scheduledLast(dueSoon),
     backlog: backlog.slice(0, cap),
   };
-  const total =
-    grouped.today.length + grouped.dueSoon.length + grouped.backlog.length;
+  const total = grouped.today.length + grouped.dueSoon.length + grouped.backlog.length;
   return { ...grouped, emptyBySearch: query !== "" && total === 0 };
 }

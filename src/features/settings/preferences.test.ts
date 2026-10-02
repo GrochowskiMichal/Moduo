@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_NOTIFICATION_PREFS,
-  DEFAULT_PREFERENCES,
   applyMotion,
   consumeLandingRedirect,
+  DEFAULT_NOTIFICATION_PREFS,
+  DEFAULT_PREFERENCES,
   isNotificationEnabled,
   notificationTypeForOp,
   readLastRoute,
@@ -27,7 +27,13 @@ describe("DEFAULT_PREFERENCES", () => {
       reopenLastWorkspace: true,
       soundEnabled: true,
       motion: "system",
-      notifications: { mention: true, assigned: true, dueFollowUp: true, unblocked: true, overdueTasks: false },
+      notifications: {
+        mention: true,
+        assigned: true,
+        dueFollowUp: true,
+        unblocked: true,
+        overdueTasks: false,
+      },
       confirmBeforeQuit: false,
     });
   });
@@ -56,7 +62,13 @@ describe("sanitizePreferences", () => {
       soundEnabled: false,
       motion: "reduced",
       // overdueTasks absent from input → coerced to its opt-in default (off).
-      notifications: { mention: false, assigned: true, dueFollowUp: false, unblocked: true, overdueTasks: false },
+      notifications: {
+        mention: false,
+        assigned: true,
+        dueFollowUp: false,
+        unblocked: true,
+        overdueTasks: false,
+      },
       confirmBeforeQuit: true,
     });
   });
@@ -82,7 +94,13 @@ describe("sanitizePreferences", () => {
       sanitizePreferences({
         notifications: { mention: false, assigned: "nope", unblocked: false },
       }).notifications,
-    ).toEqual({ mention: false, assigned: true, dueFollowUp: true, unblocked: false, overdueTasks: false });
+    ).toEqual({
+      mention: false,
+      assigned: true,
+      dueFollowUp: true,
+      unblocked: false,
+      overdueTasks: false,
+    });
   });
 
   it("defaults confirmBeforeQuit false and coerces to boolean", () => {
@@ -110,7 +128,13 @@ describe("notificationTypeForOp", () => {
 
 describe("isNotificationEnabled", () => {
   it("honours the toggle for a known op", () => {
-    const prefs = { mention: true, assigned: false, dueFollowUp: true, unblocked: false, overdueTasks: false };
+    const prefs = {
+      mention: true,
+      assigned: false,
+      dueFollowUp: true,
+      unblocked: false,
+      overdueTasks: false,
+    };
     expect(isNotificationEnabled("comments.add", prefs)).toBe(true);
     expect(isNotificationEnabled("tasks.assigned", prefs)).toBe(false);
     expect(isNotificationEnabled("email.follow_up_due", prefs)).toBe(true);
@@ -118,7 +142,13 @@ describe("isNotificationEnabled", () => {
   });
 
   it("fails open for an unmapped op regardless of prefs", () => {
-    const allOff = { mention: false, assigned: false, dueFollowUp: false, unblocked: false, overdueTasks: false };
+    const allOff = {
+      mention: false,
+      assigned: false,
+      dueFollowUp: false,
+      unblocked: false,
+      overdueTasks: false,
+    };
     expect(isNotificationEnabled("workspace.invite_accepted", allOff)).toBe(true);
     expect(isNotificationEnabled("note_shared", allOff)).toBe(true);
   });

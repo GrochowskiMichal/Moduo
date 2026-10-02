@@ -48,9 +48,7 @@ export function resolveContactIdByAddress(
 ): string | null {
   const norm = (fromAddr ?? "").trim().toLowerCase();
   if (!norm) return null;
-  const hit = contacts.find((c) =>
-    c.emails.some((e) => e.trim().toLowerCase() === norm),
-  );
+  const hit = contacts.find((c) => c.emails.some((e) => e.trim().toLowerCase() === norm));
   return hit?.id ?? null;
 }
 

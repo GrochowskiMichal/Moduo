@@ -3,12 +3,11 @@
 // config (default 25/5; edited in the DB-8 popover). Running state is ephemeral —
 // a page switch resets it (a dashboard timer needn't survive navigation).
 
-import { useEffect, useState } from "react";
 import { Pause, Play, RotateCcw, SkipForward } from "lucide-react";
-
-import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
+import { cn } from "@/lib/utils";
 
 import type { WidgetComponentProps } from "../../registry/types";
 
@@ -88,9 +87,7 @@ export function PomodoroWidget({ widget }: WidgetComponentProps) {
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 px-3">
-      <Eyebrow>
-        {phase === "work" ? "Focus" : "Break"}
-      </Eyebrow>
+      <Eyebrow>{phase === "work" ? "Focus" : "Break"}</Eyebrow>
       <p className="font-display text-3xl font-semibold tabular-nums text-foreground">
         {formatMMSS(remaining)}
       </p>
@@ -117,7 +114,11 @@ export function PomodoroWidget({ widget }: WidgetComponentProps) {
           </button>
         )}
         <IconButton icon={RotateCcw} label="Reset" onClick={reset} />
-        <IconButton icon={SkipForward} label={phase === "work" ? "Skip to break" : "Skip to focus"} onClick={skip} />
+        <IconButton
+          icon={SkipForward}
+          label={phase === "work" ? "Skip to break" : "Skip to focus"}
+          onClick={skip}
+        />
       </div>
     </div>
   );

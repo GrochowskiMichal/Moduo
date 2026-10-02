@@ -72,9 +72,7 @@ export function expandEventOccurrences(
   const durationMs = Math.max(endMs - startMs, 0);
 
   const single = (): EventOccurrence[] =>
-    startMs < rangeEndMs && endMs > rangeStartMs
-      ? [{ eventId: event.id, startMs, endMs }]
-      : [];
+    startMs < rangeEndMs && endMs > rangeStartMs ? [{ eventId: event.id, startMs, endMs }] : [];
 
   if (!event.rrule) return single();
 

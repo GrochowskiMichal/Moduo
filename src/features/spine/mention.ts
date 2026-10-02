@@ -190,9 +190,7 @@ export function buildMentionCandidates(input: {
   }
 
   const trimmed = query.trim();
-  const hasExact = entities.some(
-    (e) => e.label.trim().toLowerCase() === trimmed.toLowerCase(),
-  );
+  const hasExact = entities.some((e) => e.label.trim().toLowerCase() === trimmed.toLowerCase());
   if (trigger === "ref" && canCreate && createType && trimmed.length > 0 && !hasExact) {
     candidates.push({ kind: "create", entityType: createType, label: trimmed });
   }

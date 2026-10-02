@@ -61,14 +61,24 @@ export function selectReconnect(input: SelectReconnectInput): ReconnectItem[] {
 
     // Never touched → always eligible, daysSince unknown.
     if (lastTouchAt === null) {
-      eligible.push({ contactId: contact.id, name: contact.name, lastTouchAt: null, daysSince: null });
+      eligible.push({
+        contactId: contact.id,
+        name: contact.name,
+        lastTouchAt: null,
+        daysSince: null,
+      });
       continue;
     }
 
     const touchMs = Date.parse(lastTouchAt);
     // Unparseable timestamps are treated as "never touched" (safe surfacing).
     if (Number.isNaN(touchMs)) {
-      eligible.push({ contactId: contact.id, name: contact.name, lastTouchAt: null, daysSince: null });
+      eligible.push({
+        contactId: contact.id,
+        name: contact.name,
+        lastTouchAt: null,
+        daysSince: null,
+      });
       continue;
     }
 

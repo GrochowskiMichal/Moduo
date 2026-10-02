@@ -1,31 +1,36 @@
-import path from "node:path";
-import fs from "node:fs";
 import { execSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
 
 function readLocalEnvValue(name: string): string {
   const localPath = path.resolve(__dirname, ".env.local");
-  if (!fs.existsSync(localPath)) return "";
-  const text = fs.readFileSync(localPath, "utf8");
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const idx = line.indexOf("=");
-    if (idx <= 0) continue;
-    const key = line.slice(0, idx).trim();
-    if (key !== name) continue;
-    const value = line.slice(idx + 1).trim().replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
-    return value;
+  if (fs.existsSync(localPath)) {
+    const text = fs.readFileSync(localPath, "utf8");
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const idx = line.indexOf("=");
+      if (idx <= 0) continue;
+      const key = line.slice(0, idx).trim();
+      if (key !== name) continue;
+      return line
+        .slice(idx + 1)
+        .trim()
+        .replace(/^"(.*)"$/, "$1")
+        .replace(/^'(.*)'$/, "$1");
+    }
   }
-  return "";
+  // Fall back to process.env so CI / Vercel builds work without .env.local
+  return process.env[name] ?? "";
 }
 
 const alphaVantageKey = readLocalEnvValue("PUBLIC_ALPHA_VANTAGE_API_KEY");
 const finnhubKey = readLocalEnvValue("PUBLIC_FINNHUB_API_KEY");
 const marketstackKey = readLocalEnvValue("PUBLIC_MARKETSTACK_API_KEY");
 const supabaseUrl = readLocalEnvValue("PUBLIC_SUPABASE_URL");
-const supabaseAnonKey = readLocalEnvValue("PUBLIC_SUPABASE_ANON_KEY");
+const supabasePublishableKey = readLocalEnvValue("PUBLIC_SUPABASE_PUBLISHABLE_KEY");
 const stripePublishableKey = readLocalEnvValue("PUBLIC_STRIPE_PUBLISHABLE_KEY");
 const stripePriceProMonthly = readLocalEnvValue("PUBLIC_STRIPE_PRICE_PRO_MONTHLY");
 const stripePriceProYearly = readLocalEnvValue("PUBLIC_STRIPE_PRICE_PRO_YEARLY");
@@ -38,6 +43,14 @@ const posthogHost = readLocalEnvValue("PUBLIC_POSTHOG_HOST");
 // .origin is used when unset; desktop (tauri://) needs this to point at the
 // deployed web app so a shared /p/<token> link resolves.
 const publicWebOrigin = readLocalEnvValue("PUBLIC_WEB_ORIGIN");
+
+// Staging portal — set to "true" in the Vercel moduo-staging env vars.
+// Adds download buttons (Mac .dmg / Windows .exe) to the auth page.
+const stagingPortal = readLocalEnvValue("PUBLIC_STAGING_PORTAL");
+
+// Comma-separated allowlist of emails that may sign in on staging.
+// Empty string = no restriction (dev / production). Staging Vercel sets this.
+const stagingAllowlist = readLocalEnvValue("PUBLIC_STAGING_ALLOWLIST");
 
 // MODUO_TARGET: "web" for web builds, "desktop" for Tauri builds (default).
 const target = (process.env.MODUO_TARGET as string | undefined) ?? "desktop";
@@ -80,7 +93,7 @@ const appBuild = readBuildId();
 const tauriStub = path.resolve(__dirname, "src/lib/tauri-api-stub.ts");
 
 export default defineConfig({
-  plugins: [pluginReact()],
+  plugins: [pluginReact({ reactCompiler: true })],
   source: {
     entry: {
       index: "./src/main.tsx",
@@ -90,7 +103,7 @@ export default defineConfig({
       "import.meta.env.PUBLIC_FINNHUB_API_KEY": JSON.stringify(finnhubKey),
       "import.meta.env.PUBLIC_MARKETSTACK_API_KEY": JSON.stringify(marketstackKey),
       "import.meta.env.PUBLIC_SUPABASE_URL": JSON.stringify(supabaseUrl),
-      "import.meta.env.PUBLIC_SUPABASE_ANON_KEY": JSON.stringify(supabaseAnonKey),
+      "import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
       "import.meta.env.MODUO_TARGET": JSON.stringify(target),
       "import.meta.env.MODUO_VERSION": JSON.stringify(appVersion),
       "import.meta.env.MODUO_BUILD": JSON.stringify(appBuild),
@@ -102,6 +115,8 @@ export default defineConfig({
       "import.meta.env.PUBLIC_POSTHOG_KEY": JSON.stringify(posthogKey),
       "import.meta.env.PUBLIC_POSTHOG_HOST": JSON.stringify(posthogHost),
       "import.meta.env.PUBLIC_WEB_ORIGIN": JSON.stringify(publicWebOrigin),
+      "import.meta.env.PUBLIC_STAGING_PORTAL": JSON.stringify(stagingPortal),
+      "import.meta.env.PUBLIC_STAGING_ALLOWLIST": JSON.stringify(stagingAllowlist),
       "globalThis.__PUBLIC_ALPHA_VANTAGE_API_KEY__": JSON.stringify(alphaVantageKey),
       "globalThis.__PUBLIC_FINNHUB_API_KEY__": JSON.stringify(finnhubKey),
       "globalThis.__PUBLIC_MARKETSTACK_API_KEY__": JSON.stringify(marketstackKey),
@@ -114,9 +129,22 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname),
-      // In web builds, replace @tauri-apps/api/core with a stub so the
-      // Tauri runtime is never bundled into the web output.
-      ...(isWeb ? { "@tauri-apps/api/core": tauriStub } : {}),
+      "@contracts": path.resolve(__dirname, "supabase/functions/_shared/contracts"),
+      // In web builds, replace Tauri packages with stubs so the runtime
+      // is never bundled into the web output.
+      ...(isWeb
+        ? {
+            "@tauri-apps/api/core": tauriStub,
+            "@tauri-apps/plugin-updater": path.resolve(
+              __dirname,
+              "src/lib/tauri-plugin-updater-stub.ts",
+            ),
+            "@tauri-apps/plugin-process": path.resolve(
+              __dirname,
+              "src/lib/tauri-plugin-process-stub.ts",
+            ),
+          }
+        : {}),
     },
   },
   server: {

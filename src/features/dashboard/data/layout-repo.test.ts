@@ -5,7 +5,12 @@ import type { ModuoRuntime, StoredDashboardLayout } from "@/lib/runtime.types";
 import type { DashboardLayout, WidgetInstance } from "../engine/types";
 import { createLayoutRepo, resolveLoad } from "./layout-repo";
 
-function widget(id: string, x: number, y: number, size: WidgetInstance["size"] = "S"): WidgetInstance {
+function widget(
+  id: string,
+  x: number,
+  y: number,
+  size: WidgetInstance["size"] = "S",
+): WidgetInstance {
   return { id, type: "clock", size, x, y, config: {} };
 }
 
@@ -18,7 +23,9 @@ function stored(l: DashboardLayout, updatedAt: string): StoredDashboardLayout {
 }
 
 /** A fake runtime with an in-memory localStore + a controllable cloud row. */
-function fakeRuntime(init: { cloud?: StoredDashboardLayout | null; throwGet?: boolean; throwSave?: boolean } = {}) {
+function fakeRuntime(
+  init: { cloud?: StoredDashboardLayout | null; throwGet?: boolean; throwSave?: boolean } = {},
+) {
   const ls = new Map<string, unknown>();
   const cloud = {
     row: init.cloud ?? null,
@@ -43,7 +50,14 @@ function fakeRuntime(init: { cloud?: StoredDashboardLayout | null; throwGet?: bo
         if (cloud.throwGet) throw new Error("offline");
         return cloud.row;
       },
-      async save({ layout: l, updatedAt }: { workspaceId: string; layout: DashboardLayout; updatedAt: string }) {
+      async save({
+        layout: l,
+        updatedAt,
+      }: {
+        workspaceId: string;
+        layout: DashboardLayout;
+        updatedAt: string;
+      }) {
         cloud.saveCount += 1;
         if (cloud.throwSave) throw new Error("upsert failed");
         cloud.row = { layout: l, updatedAt };
@@ -61,9 +75,12 @@ describe("resolveLoad", () => {
     expect(r.origin).toBe("seed");
     expect(r.updatedAt).toBe(NOW);
     // The seed is the 4-widget curated page.
-    expect(r.layout.pages[0].widgets.map((w) => w.type).sort()).toEqual(
-      ["calendar", "clock", "quick-capture", "tasks"],
-    );
+    expect(r.layout.pages[0].widgets.map((w) => w.type).sort()).toEqual([
+      "calendar",
+      "clock",
+      "quick-capture",
+      "tasks",
+    ]);
   });
 
   it("takes cloud when it's the only source", () => {
@@ -135,7 +152,9 @@ describe("createLayoutRepo", () => {
     const { runtime, cloud, ls } = fakeRuntime();
     const repo = createLayoutRepo(runtime, { now, debounceMs: 0 });
     await repo.save("w1", layout([widget("a", 0, 0)]));
-    expect((ls.get("dashboard:w1") as StoredDashboardLayout).layout.pages[0].widgets[0].id).toBe("a");
+    expect((ls.get("dashboard:w1") as StoredDashboardLayout).layout.pages[0].widgets[0].id).toBe(
+      "a",
+    );
     expect(cloud.saveCount).toBe(1);
     expect(cloud.row?.layout.pages[0].widgets[0].id).toBe("a");
   });

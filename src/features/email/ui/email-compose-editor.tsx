@@ -5,28 +5,22 @@
 // text } through a handle the compose dialog reads on Send. Tokens-only theme
 // (Tailwind utilities), so no bespoke CSS. Matches the notes editor's import style.
 
-import { useEffect, useMemo, useRef } from "react";
-import { Bold, Italic, Link2, List, Underline } from "lucide-react";
-
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
-import { LinkNode, AutoLinkNode, TOGGLE_LINK_COMMAND } from "@lexical/link";
+import { AutoLinkNode, LinkNode, TOGGLE_LINK_COMMAND } from "@lexical/link";
 import { INSERT_UNORDERED_LIST_COMMAND, ListItemNode, ListNode } from "@lexical/list";
-import { HeadingNode, QuoteNode } from "@lexical/rich-text";
+import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
-import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
-import { ListPlugin } from "@lexical/react/LexicalListPlugin";
-import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
-import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
-import {
-  $createParagraphNode,
-  $getRoot,
-  $insertNodes,
-  FORMAT_TEXT_COMMAND,
-} from "lexical";
+import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
+import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
+import { ListPlugin } from "@lexical/react/LexicalListPlugin";
+import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+import { HeadingNode, QuoteNode } from "@lexical/rich-text";
+import { $createParagraphNode, $getRoot, $insertNodes, FORMAT_TEXT_COMMAND } from "lexical";
+import { Bold, Italic, Link2, List, Underline } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { IconButton } from "../../../components/ui/icon-button";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -117,7 +111,11 @@ function SeedHtmlPlugin({ html }: { html: string }) {
 }
 
 /** Publish the read handle to the parent's ref. */
-function ExportPlugin({ handleRef }: { handleRef: React.MutableRefObject<ComposeEditorHandle | null> }) {
+function ExportPlugin({
+  handleRef,
+}: {
+  handleRef: React.MutableRefObject<ComposeEditorHandle | null>;
+}) {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
     handleRef.current = {
@@ -148,7 +146,15 @@ export function EmailComposeEditor({ initialHtml, handleRef, runtime, workspaceI
       onError: (error: Error) => {
         console.error("Compose editor error:", error);
       },
-      nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, AutoLinkNode, EntityRefNode],
+      nodes: [
+        HeadingNode,
+        QuoteNode,
+        ListNode,
+        ListItemNode,
+        LinkNode,
+        AutoLinkNode,
+        EntityRefNode,
+      ],
       theme: THEME,
     }),
     [],

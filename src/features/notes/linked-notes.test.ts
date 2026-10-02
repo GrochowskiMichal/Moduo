@@ -55,8 +55,16 @@ describe("selectLinkedNotes", () => {
   it("de-duplicates a note linked by two kinds, keeping the first (most recent) edge", () => {
     const sections: HubSection[] = [
       section("notes", [
-        row({ other: { type: "note", id: "n1" }, relationKind: "references", link: link({ id: "la" }) }),
-        row({ other: { type: "note", id: "n1" }, relationKind: "mentions", link: link({ id: "lb", relationKind: "mentions" }) }),
+        row({
+          other: { type: "note", id: "n1" },
+          relationKind: "references",
+          link: link({ id: "la" }),
+        }),
+        row({
+          other: { type: "note", id: "n1" },
+          relationKind: "mentions",
+          link: link({ id: "lb", relationKind: "mentions" }),
+        }),
       ]),
     ];
     const rows = selectLinkedNotes(sections);

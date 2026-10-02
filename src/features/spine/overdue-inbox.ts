@@ -35,7 +35,9 @@ export function selectOverdueTasks(
   if (!opts.enabled || !opts.userId) return [];
   const now = opts.now ?? new Date();
   return tasks
-    .filter((task) => task.ownerId === opts.userId && task.scheduledAt != null && isDrifted(task, now))
+    .filter(
+      (task) => task.ownerId === opts.userId && task.scheduledAt != null && isDrifted(task, now),
+    )
     .map((task) => ({ id: task.id, title: task.title, scheduledAt: task.scheduledAt as string }))
     .sort((a, b) => (a.scheduledAt < b.scheduledAt ? -1 : a.scheduledAt > b.scheduledAt ? 1 : 0));
 }

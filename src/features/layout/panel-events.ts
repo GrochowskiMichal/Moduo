@@ -84,12 +84,16 @@ export type LayoutPanelsApplyDetail = {
 
 export function dispatchLayoutPanelsApply(detail: LayoutPanelsApplyDetail) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_APPLY_EVENT, { detail }));
+  window.dispatchEvent(
+    new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_APPLY_EVENT, { detail }),
+  );
 }
 
 export function dispatchLayoutPanelsSet(detail: LayoutPanelsApplyDetail) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_SET_EVENT, { detail }));
+  window.dispatchEvent(
+    new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_SET_EVENT, { detail }),
+  );
 }
 
 /**

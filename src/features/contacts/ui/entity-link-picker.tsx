@@ -4,11 +4,11 @@
 // chosen candidate back to write through contacts.link. Search runs only while
 // the popover is open.
 
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import type { MentionCandidate } from "../../spine/mention";
 import { useMentionSearch } from "../../spine/hooks/use-mention-search";
+import type { MentionCandidate } from "../../spine/mention";
 import { MentionPicker } from "../../spine/ui/mention-picker";
 
 export type EntityLinkPickerProps = {

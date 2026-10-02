@@ -39,14 +39,10 @@ export function AppearancePickerRow({
             <span className="text-sm font-medium text-foreground">{title}</span>
           )}
           {tag ? (
-            <Eyebrow className="rounded-full border border-border px-1.5 py-0.5">
-              {tag}
-            </Eyebrow>
+            <Eyebrow className="rounded-full border border-border px-1.5 py-0.5">{tag}</Eyebrow>
           ) : null}
         </div>
-        {description ? (
-          <span className="text-xs text-muted-foreground">{description}</span>
-        ) : null}
+        {description ? <span className="text-xs text-muted-foreground">{description}</span> : null}
       </div>
       {children}
     </div>

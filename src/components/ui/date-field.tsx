@@ -1,6 +1,6 @@
-import * as React from "react";
-import { CalendarDays, Clock, X } from "lucide-react";
 import { addDays, format, startOfWeek } from "date-fns";
+import { CalendarDays, Clock, X } from "lucide-react";
+import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
@@ -85,7 +85,11 @@ function DateField({
           size="sm"
           disabled={disabled}
           aria-label={props["aria-label"] ?? "Set date"}
-          className={cn("justify-start gap-1.5 font-normal", !value && "text-muted-foreground", className)}
+          className={cn(
+            "justify-start gap-1.5 font-normal",
+            !value && "text-muted-foreground",
+            className,
+          )}
         >
           <CalendarDays aria-hidden />
           {label}
@@ -139,5 +143,5 @@ function DateField({
   );
 }
 
-export { DateField };
 export type { DateFieldProps };
+export { DateField };

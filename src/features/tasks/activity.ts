@@ -3,8 +3,7 @@
 // walls — no alarm, no judgment, newest first in the detail panel.
 
 import { formatScheduled, STATUS_LABELS } from "./helpers";
-import type { ActivityEntry } from "./model";
-import type { TaskStatus } from "./model";
+import type { ActivityEntry, TaskStatus } from "./model";
 
 /** Who did it — "You", the recorded display name, or a quiet fallback. */
 export function activityActorName(
@@ -68,8 +67,12 @@ export function activityLine(entry: Pick<ActivityEntry, "op" | "payload">): stri
     case "tasks.catch_up": {
       const to = formatScheduled(str(p.to));
       const kind = str(p.kind);
-      if (kind === "reopen") return to ? `reopened this for ${to} (recurrence)` : "reopened this (recurrence)";
-      if (kind === "adopt") return to ? `scheduled its occurrence, ${to} (recurrence)` : "adopted its occurrence (recurrence)";
+      if (kind === "reopen")
+        return to ? `reopened this for ${to} (recurrence)` : "reopened this (recurrence)";
+      if (kind === "adopt")
+        return to
+          ? `scheduled its occurrence, ${to} (recurrence)`
+          : "adopted its occurrence (recurrence)";
       return to ? `caught this up to ${to} (recurrence)` : "caught this up (recurrence)";
     }
     // ── DF-9 spine-generated task notifications, seen in the trail too ─────────

@@ -129,7 +129,11 @@ describe("buildComposeDraft", () => {
       thread,
       messages: [
         env({ senderEmail: "boss@corp.com", messageId: "<m1@corp.com>" }),
-        env({ senderEmail: "me@fastmail.com", messageId: "<m2@fastmail.com>", date: "2026-07-04T11:00:00.000Z" }),
+        env({
+          senderEmail: "me@fastmail.com",
+          messageId: "<m2@fastmail.com>",
+          date: "2026-07-04T11:00:00.000Z",
+        }),
       ],
       self,
       selfAddresses,

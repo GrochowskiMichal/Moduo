@@ -8,10 +8,10 @@ import { describe, expect, it } from "vitest";
 import {
   chipSpanInDay,
   dayGeometry,
+  type LayoutChip,
   layoutDayChips,
   minutesIntoDay,
   wallClockToRealMinutes,
-  type LayoutChip,
 } from "./grid-layout";
 
 function chip(id: string, startHour: number, endHour: number): LayoutChip {
@@ -72,11 +72,7 @@ describe("layoutDayChips — overlap clusters", () => {
   });
 
   it("separate clusters don't share width", () => {
-    const { placed } = layoutDayChips([
-      chip("a", 9, 10),
-      chip("b", 9, 10),
-      chip("c", 14, 15),
-    ]);
+    const { placed } = layoutDayChips([chip("a", 9, 10), chip("b", 9, 10), chip("c", 14, 15)]);
     const byId = Object.fromEntries(placed.map((p) => [p.id, p]));
     expect(byId.a.cols).toBe(2);
     expect(byId.c.cols).toBe(1);

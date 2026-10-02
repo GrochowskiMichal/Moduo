@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { groupByLetter, type LetterGroup } from "./letter-index";
 import type { Contact } from "./model";
@@ -16,10 +16,7 @@ describe("groupByLetter", () => {
   });
 
   it("buckets mixed names under their uppercased leading letter", () => {
-    const groups = groupByLetter(
-      [{ name: "Alice" }, { name: "bob" }, { name: "Carol" }],
-      byName,
-    );
+    const groups = groupByLetter([{ name: "Alice" }, { name: "bob" }, { name: "Carol" }], byName);
     expect(letters(groups)).toEqual(["A", "B", "C"]);
     expect(names(groups[0])).toEqual(["Alice"]);
     expect(names(groups[1])).toEqual(["bob"]);
@@ -34,18 +31,12 @@ describe("groupByLetter", () => {
   });
 
   it("sorts groups A→Z", () => {
-    const groups = groupByLetter(
-      [{ name: "Zed" }, { name: "Mona" }, { name: "Ada" }],
-      byName,
-    );
+    const groups = groupByLetter([{ name: "Zed" }, { name: "Mona" }, { name: "Ada" }], byName);
     expect(letters(groups)).toEqual(["A", "M", "Z"]);
   });
 
   it("places the '#' bucket last", () => {
-    const groups = groupByLetter(
-      [{ name: "9 Lives" }, { name: "Bea" }, { name: "Amy" }],
-      byName,
-    );
+    const groups = groupByLetter([{ name: "9 Lives" }, { name: "Bea" }, { name: "Amy" }], byName);
     expect(letters(groups)).toEqual(["A", "B", "#"]);
     expect(names(groups[2])).toEqual(["9 Lives"]);
   });
@@ -109,10 +100,7 @@ describe("groupByLetter", () => {
 
   it("works with the Contact model via a name selector", () => {
     const contact = (name: string): Pick<Contact, "name"> => ({ name });
-    const groups = groupByLetter(
-      [contact("Dana"), contact("dave"), contact("123")],
-      (c) => c.name,
-    );
+    const groups = groupByLetter([contact("Dana"), contact("dave"), contact("123")], (c) => c.name);
     expect(groups.map((g) => g.letter)).toEqual(["D", "#"]);
     expect(groups[0].items.map((c) => c.name)).toEqual(["Dana", "dave"]);
   });

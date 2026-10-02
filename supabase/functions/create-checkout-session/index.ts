@@ -16,12 +16,18 @@
  *
  * Returns: { url: string } — redirect to Stripe Checkout
  *
+ * Deploy with verify_jwt = false — the caller's JWT is verified in code
+ * (getUser); GET redirects pass access_token as a query param.
+ *
  * If the user already has an active/trialing subscription, redirects them to the
  * Stripe Billing Portal instead so they can manage their plan.
  */
 
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
+
+import { createCheckoutSessionBodySchema, parseJsonBody } from "../_shared/contracts/http-bodies.ts";
+import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
   apiVersion: "2023-10-16",
@@ -128,7 +134,7 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      getDefaultSecretKey(),
       { auth: { persistSession: false } }
     );
 
@@ -152,31 +158,34 @@ Deno.serve(async (req: Request) => {
       return Response.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
     }
 
-    // Parse params from either GET query string or POST JSON body.
-    let plan: string | undefined;
-    let interval: string | undefined;
-    let priceId: string | undefined;
-    let successUrl: string | undefined;
-    let cancelUrl: string | undefined;
-    let couponCode: string | undefined;
-
+    let rawInput: unknown;
     if (req.method === "GET") {
       const url = new URL(req.url);
-      plan = url.searchParams.get("plan") ?? undefined;
-      interval = url.searchParams.get("interval") ?? url.searchParams.get("billing") ?? undefined;
-      priceId = url.searchParams.get("price_id") ?? url.searchParams.get("priceId") ?? undefined;
-      successUrl = url.searchParams.get("successUrl") ?? undefined;
-      cancelUrl = url.searchParams.get("cancelUrl") ?? undefined;
-      couponCode = url.searchParams.get("coupon") ?? undefined;
+      rawInput = {
+        plan: url.searchParams.get("plan") ?? undefined,
+        interval: url.searchParams.get("interval") ?? url.searchParams.get("billing") ?? undefined,
+        priceId: url.searchParams.get("price_id") ?? url.searchParams.get("priceId") ?? undefined,
+        successUrl: url.searchParams.get("successUrl") ?? undefined,
+        cancelUrl: url.searchParams.get("cancelUrl") ?? undefined,
+        coupon: url.searchParams.get("coupon") ?? undefined,
+      };
     } else {
-      const body = await req.json().catch(() => ({}));
-      plan = body.plan;
-      interval = body.interval ?? body.billing_cycle ?? body.billing;
-      priceId = body.priceId ?? body.price_id;
-      successUrl = body.successUrl;
-      cancelUrl = body.cancelUrl;
-      couponCode = body.coupon ?? body.couponCode;
+      rawInput = await req.json().catch(() => ({}));
     }
+    const parsedInput = parseJsonBody(createCheckoutSessionBodySchema, rawInput);
+    if (!parsedInput.success) {
+      return Response.json(
+        { error: "Invalid request", details: parsedInput.errors },
+        { status: 400, headers: CORS_HEADERS },
+      );
+    }
+    const body = parsedInput.data;
+    let plan = body.plan;
+    let interval = body.interval ?? body.billing_cycle ?? body.billing;
+    let priceId = body.priceId ?? body.price_id;
+    let successUrl = body.successUrl;
+    let cancelUrl = body.cancelUrl;
+    const couponCode = body.coupon ?? body.couponCode;
 
     const resolved = resolveCheckoutPriceId({ plan, interval, priceId });
     if ("error" in resolved) {

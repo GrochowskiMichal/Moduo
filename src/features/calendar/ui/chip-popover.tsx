@@ -5,11 +5,7 @@
 
 import type { ReactNode } from "react";
 
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "../../../components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "../../../components/ui/popover";
 
 type Props = {
   anchorRect: DOMRect;

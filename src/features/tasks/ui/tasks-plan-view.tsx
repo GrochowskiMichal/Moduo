@@ -1,57 +1,52 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  DndContext,
+  type CollisionDetection,
   closestCenter,
   closestCorners,
-  pointerWithin,
-  type CollisionDetection,
+  DndContext,
   type DragEndEvent,
+  pointerWithin,
 } from "@dnd-kit/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
+import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { truncationNotice } from "../../../components/app/truncation-notice";
-import { onCreateNew } from "../../../components/app/create-events";
-import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
-import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
+import { Button } from "../../../components/ui/button";
 import {
   asDragPayload,
   asDropLinkTarget,
   isSelfDrop,
   targetAccepts,
 } from "../../../lib/drag-payload";
-import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import type { EntityRef } from "../../../lib/entity-links";
+import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import { Button } from "../../../components/ui/button";
-import {
-  resolveDefaultSelection,
-  timeBlockByBucket as invertTimeBlocks,
-} from "../default-view";
-import { takeEntityOpenIntent } from "../../../lib/entity-open";
+import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
+import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
+import { timeBlockByBucket as invertTimeBlocks, resolveDefaultSelection } from "../default-view";
 import {
   consumeFocusViewRequest,
-  flushFocusSession,
   FOCUS_VIEW_REQUEST_EVENT,
+  flushFocusSession,
   registerFocusFlushSink,
 } from "../focus-session-store";
-import { taskMatchesTagFilter, type GroupBy } from "../helpers";
+import { type GroupBy, taskMatchesTagFilter } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
 import { resolveTasksDeepLink } from "../search";
-import { pointerFirstCollision, useTaskDndSensors } from "./dnd/task-dnd";
+import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import { BucketRail, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
+import { pointerFirstCollision, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
 import { ExecuteView } from "./execute-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
-import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
 import type { PlanView } from "./plan-view-header";
-import { TaskBoardView, type BoardGroupBy } from "./task-board-view";
-import { TaskDetailPanel, TASK_DETAIL_REFRESH_EVENT } from "./task-detail-panel";
+import { type BoardGroupBy, TaskBoardView } from "./task-board-view";
+import { TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel";
 import { TaskListView } from "./task-list-view";
-import { TaskTimelineView } from "./task-timeline-view";
 import { ActiveTagFilters, TagFilterButton } from "./task-tag-filter";
+import { TaskTimelineView } from "./task-timeline-view";
 
 type Props = {
   api: TasksModuleApi;
@@ -91,8 +86,8 @@ function writeLS(workspaceId: string, part: string, value: string): void {
 export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskIdChange }: Props) {
   const { canEdit, buckets, inbox, tasks } = api;
 
-  const [mode, setMode] = useState<TasksMode>(
-    () => (readLS(workspaceId, "mode") === "execute" ? "execute" : "plan"),
+  const [mode, setMode] = useState<TasksMode>(() =>
+    readLS(workspaceId, "mode") === "execute" ? "execute" : "plan",
   );
   const [view, setView] = useState<PlanView>(() => {
     const stored = readLS(workspaceId, "view");
@@ -106,8 +101,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const [groupBy, setGroupBy] = useState<GroupBy>(
     () => (readLS(workspaceId, "groupBy") as GroupBy) ?? "none",
   );
-  const [boardGroupBy, setBoardGroupBy] = useState<BoardGroupBy>(
-    () => (readLS(workspaceId, "boardGroupBy") === "bucket" ? "bucket" : "status"),
+  const [boardGroupBy, setBoardGroupBy] = useState<BoardGroupBy>(() =>
+    readLS(workspaceId, "boardGroupBy") === "bucket" ? "bucket" : "status",
   );
   const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
     sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
@@ -175,7 +170,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // re-drain each render); registering once drains any backlog accrued while the
   // module was unmounted, and the cleanup banks accrued-so-far on navigation away.
   const apiRef = useRef(api);
-  apiRef.current = api;
+  useEffect(() => {
+    apiRef.current = api;
+  });
   useEffect(
     () => registerFocusFlushSink((taskId, seconds) => apiRef.current.addTimeSpent(taskId, seconds)),
     [],
@@ -294,8 +291,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     );
   }, [scopeTasksAll, liveFilterTagIds, api.tagsByTask]);
 
-  const scopeTitle =
-    isAll ? "All" : selection === "today" ? "Queue" : selection === "inbox" ? "Inbox" : bucketNameById(selection);
+  const scopeTitle = isAll
+    ? "All"
+    : selection === "today"
+      ? "Queue"
+      : selection === "inbox"
+        ? "Inbox"
+        : bucketNameById(selection);
 
   // The commit queue is inherently ordered, so Today List view is never grouped.
   const effectiveGroupBy = selection === "today" ? "none" : groupBy;
@@ -357,7 +359,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
 
   const frontierOfferTask = useMemo(
-    () => (frontierOfferTaskId ? tasks.find((t) => t.id === frontierOfferTaskId) ?? null : null),
+    () => (frontierOfferTaskId ? (tasks.find((t) => t.id === frontierOfferTaskId) ?? null) : null),
     [frontierOfferTaskId, tasks],
   );
   const frontierOffer = useMemo(
@@ -417,7 +419,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Resolve the selected task live from the bundle so the rail follows edits and
   // empties when the task is deleted.
   const selectedTask = useMemo(
-    () => (selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null),
+    () => (selectedTaskId ? (tasks.find((t) => t.id === selectedTaskId) ?? null) : null),
     [selectedTaskId, tasks],
   );
 
@@ -607,11 +609,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onBoardGroupByChange={setBoardGroupBy}
       />
     ) : view === "timeline" ? (
-      <TaskTimelineView
-        {...sharedViewProps}
-        zoom={timelineZoom}
-        onZoomChange={setTimelineZoom}
-      />
+      <TaskTimelineView {...sharedViewProps} zoom={timelineZoom} onZoomChange={setTimelineZoom} />
     ) : (
       <TaskListView
         {...sharedViewProps}
@@ -664,9 +662,11 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // Refs so the collision fn (stable, empty-deps) always reads the live surface;
   // neither can change mid-drag (switching view/scope remounts the body).
   const viewRef = useRef(view);
-  viewRef.current = view;
   const selectionRef = useRef(selection);
-  selectionRef.current = selection;
+  useEffect(() => {
+    viewRef.current = view;
+    selectionRef.current = selection;
+  });
   // One collision for every surface: the hub (a `link:*` droppable) wins whenever
   // the pointer is actually over it; otherwise each center view keeps its OWN
   // native strategy over its OWN droppables (link targets filtered out, so a card
@@ -678,9 +678,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // index); drag-onto-task nest = pointer-first (an expanded parent's `onto-task`
   // rect is taller than its row, so pointerWithin is required for precision).
   const appCollision = useCallback<CollisionDetection>((args) => {
-    const linkContainers = args.droppableContainers.filter((c) =>
-      String(c.id).startsWith("link:"),
-    );
+    const linkContainers = args.droppableContainers.filter((c) => String(c.id).startsWith("link:"));
     if (linkContainers.length > 0) {
       const hubHits = pointerWithin({ ...args, droppableContainers: linkContainers });
       if (hubHits.length > 0) return hubHits;
@@ -709,7 +707,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onUrlTaskIdChange(ref.id);
         return;
       }
-      window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } }));
+      window.dispatchEvent(
+        new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } }),
+      );
     },
     [onUrlTaskIdChange],
   );

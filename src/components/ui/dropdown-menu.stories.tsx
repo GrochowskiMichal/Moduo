@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Pin, Copy, FilePlus2, Pencil, FolderOpen, Trash2, Share2 } from "lucide-react";
+import { Copy, FilePlus2, FolderOpen, Pencil, Pin, Share2, Trash2 } from "lucide-react";
 
 import { Button } from "./button";
 import {

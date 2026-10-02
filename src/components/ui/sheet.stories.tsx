@@ -25,8 +25,8 @@ function ExampleBody() {
   return (
     <div className="flex-1 space-y-3 px-4 text-sm text-foreground">
       <p>
-        Right-anchored side drawer used by the notification center and the
-        collapsed-rail expansion in the responsive shell.
+        Right-anchored side drawer used by the notification center and the collapsed-rail expansion
+        in the responsive shell.
       </p>
       <p className="text-muted-foreground">
         Scrollable region. Esc closes; focus returns to the trigger.
@@ -44,9 +44,7 @@ export const RightSide: Story = {
       <SheetContent side="right">
         <SheetHeader>
           <SheetTitle>Notifications</SheetTitle>
-          <SheetDescription>
-            Recent activity across your workspaces.
-          </SheetDescription>
+          <SheetDescription>Recent activity across your workspaces.</SheetDescription>
         </SheetHeader>
         <ExampleBody />
         <SheetFooter>

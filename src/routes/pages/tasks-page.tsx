@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useCallback, useMemo } from "react";
 
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";

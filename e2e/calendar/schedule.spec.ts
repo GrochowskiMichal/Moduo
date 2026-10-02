@@ -1,7 +1,7 @@
 // AC6/AC7 — drag task → block → complete (specs/calendar.md). Pointer moves
 // are frame-stepped per the dnd gotcha (dnd-kit drops same-tick events).
 // Not part of `bun run verify`; needs a running app + authed session.
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const APP = process.env.E2E_APP_URL;
 

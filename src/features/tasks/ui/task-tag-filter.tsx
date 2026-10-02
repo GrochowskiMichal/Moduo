@@ -5,9 +5,9 @@
 // board only — rail bucket counts are unaffected.
 
 import { Check, ListFilter } from "lucide-react";
-
+import { TagChip } from "../../../components/tag-chip";
+import { normalizeLabelColor } from "../../../components/tag-colors";
 import { Button } from "../../../components/ui/button";
-import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
   Command,
   CommandEmpty,
@@ -16,14 +16,9 @@ import {
   CommandItem,
   CommandList,
 } from "../../../components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../components/ui/popover";
-import { TagChip } from "../../../components/tag-chip";
+import { Eyebrow } from "../../../components/ui/eyebrow";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { cn } from "../../../lib/utils";
-import { normalizeLabelColor } from "../../../components/tag-colors";
 import type { Tag } from "../model";
 
 export function TagFilterButton({
@@ -77,7 +72,10 @@ export function TagFilterButton({
                       {countByTag.get(tag.id) ?? 0}
                     </span>
                     <Check
-                      className={cn("size-4 shrink-0 text-foreground", isOn ? "opacity-100" : "opacity-0")}
+                      className={cn(
+                        "size-4 shrink-0 text-foreground",
+                        isOn ? "opacity-100" : "opacity-0",
+                      )}
                       aria-hidden
                     />
                   </CommandItem>
@@ -113,7 +111,13 @@ export function ActiveTagFilters({
     <>
       <Eyebrow tone="muted">Filter</Eyebrow>
       {active.map((tag) => (
-        <TagChip key={tag.id} name={tag.name} color={tag.color} active onRemove={() => onToggle(tag.id)} />
+        <TagChip
+          key={tag.id}
+          name={tag.name}
+          color={tag.color}
+          active
+          onRemove={() => onToggle(tag.id)}
+        />
       ))}
       <span className="font-sans text-xs tabular-nums text-muted-foreground/70">
         {matchCount} of {scopeCount}

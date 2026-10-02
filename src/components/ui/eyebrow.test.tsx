@@ -3,9 +3,8 @@
 // quietly reappear at the feature layer.
 import { promises as fs } from "node:fs";
 import path from "node:path";
-
-import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { Eyebrow, eyebrowVariants } from "./eyebrow";
 

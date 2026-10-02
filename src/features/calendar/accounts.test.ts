@@ -8,8 +8,8 @@ import {
   syncAgeLabel,
   visibleEvents,
 } from "./accounts";
-import { buildCaldavDescriptor, buildIcsDescriptor } from "./sync";
 import type { CalendarAccountModel, CalendarEventModel } from "./events";
+import { buildCaldavDescriptor, buildIcsDescriptor } from "./sync";
 
 function account(over: Partial<CalendarAccountModel>): CalendarAccountModel {
   return {
@@ -17,7 +17,7 @@ function account(over: Partial<CalendarAccountModel>): CalendarAccountModel {
     workspaceId: "w",
     ownerId: "u",
     provider: over.provider ?? "google",
-    externalId: "",
+    externalId: over.externalId ?? "",
     displayLabel: over.displayLabel ?? "Personal — me@gmail.com",
     isDefaultTarget: false,
     color: over.color ?? null,
@@ -55,9 +55,9 @@ describe("accounts — attribution (AC12)", () => {
     expect(providerLabel("microsoft")).toBe("Outlook");
     expect(providerLabel("caldav")).toBe("CalDAV");
     expect(providerLabel("ics")).toBe("ICS feed");
-    expect(accountSourceLabel(account({ displayLabel: "Work — a@co", provider: "microsoft" }))).toBe(
-      "Work — a@co — Outlook",
-    );
+    expect(
+      accountSourceLabel(account({ displayLabel: "Work — a@co", provider: "microsoft" })),
+    ).toBe("Work — a@co — Outlook");
   });
 
   it("honors an override, then a stored bounded name, then spreads distinct hues", () => {
@@ -116,8 +116,9 @@ describe("accounts — attribution (AC12)", () => {
     // Google flat first (input order), then the CalDAV group (first appearance),
     // then the Feeds group — c2 joins the EXISTING caldav group even though a
     // feed appeared between c1 and c2.
-    expect(groups.map((g) => (g.kind === "flat" ? `flat:${g.row.account.id}` : `group:${g.header}`)))
-      .toEqual(["flat:g1", "group:me@fastmail.com", "group:Feeds"]);
+    expect(
+      groups.map((g) => (g.kind === "flat" ? `flat:${g.row.account.id}` : `group:${g.header}`)),
+    ).toEqual(["flat:g1", "group:me@fastmail.com", "group:Feeds"]);
     const caldavGroup = groups[1];
     const feeds = groups[2];
     if (caldavGroup.kind !== "group" || feeds.kind !== "group") throw new Error("shape");
@@ -143,11 +144,48 @@ describe("accounts — attribution (AC12)", () => {
     expect(groups.every((g) => g.kind === "group")).toBe(true);
   });
 
+  it("groups Google calendars from one mailbox under that login", () => {
+    const groups = groupRailAccounts([
+      account({
+        id: "g1",
+        provider: "google",
+        externalId: "google:me@gmail.com:primary",
+        displayLabel: "Familijne",
+      }),
+      account({
+        id: "g2",
+        provider: "google",
+        externalId: "google:me@gmail.com:work",
+        displayLabel: "IT Events",
+      }),
+      account({
+        id: "o1",
+        provider: "google",
+        externalId: "google:other@gmail.com:primary",
+        displayLabel: "Other",
+      }),
+    ]);
+    expect(groups.map((g) => (g.kind === "group" ? g.detail : ""))).toEqual([
+      "me@gmail.com",
+      "other@gmail.com",
+    ]);
+    const first = groups[0];
+    if (first.kind !== "group") throw new Error("shape");
+    expect(first.header).toBe("Google");
+    expect(first.rows.map((row) => row.label)).toEqual(["Familijne", "IT Events"]);
+    expect(first.rows.every((row) => row.scope === "calendar")).toBe(true);
+  });
+
   it("falls back to a flat row for a caldav account with an unparseable descriptor", () => {
     const groups = groupRailAccounts([
       account({ id: "x", provider: "caldav", syncToken: null, displayLabel: "Legacy" }),
     ]);
-    expect(groups).toEqual([{ kind: "flat", row: { account: expect.anything(), label: "Legacy" } }]);
+    expect(groups).toEqual([
+      {
+        kind: "flat",
+        row: { account: expect.anything(), label: "Legacy", scope: "account" },
+      },
+    ]);
   });
 
   it("uses a plain ICS descriptor for feeds (no server fields needed)", () => {

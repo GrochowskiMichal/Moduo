@@ -1,17 +1,27 @@
+import { Apple, MonitorDown, RefreshCw } from "lucide-react";
+
+import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { useAuth } from "../../../providers/auth-provider";
+import { UpdateBanner } from "../../updater/update-banner";
+import { useUpdater } from "../../updater/use-updater";
 import {
   ABOUT_LINKS,
   ABOUT_RUNTIME_LINE,
   ABOUT_STORAGE_LINE,
   ABOUT_TAGLINE,
   IS_DESKTOP,
+  IS_STAGING_PORTAL,
+  STAGING_DESKTOP_DOWNLOADS,
   versionLabel,
 } from "../about";
 import { SettingsSectionShell } from "./section-shell";
 
 export function AboutSection() {
   const { runtime } = useAuth();
+  // checkOnMount=false: auto-check happens at app launch via the top-level
+  // mount in app-chrome; here the user explicitly presses "Check for updates".
+  const { state: updaterState, check, downloadAndInstall, relaunch } = useUpdater(false);
 
   const openExternal = (href: string) => (event: React.MouseEvent<HTMLAnchorElement>) => {
     // Desktop must hand off to the system browser (a webview target=_blank
@@ -32,10 +42,33 @@ export function AboutSection() {
           <div>
             <Eyebrow as="dt">Version</Eyebrow>
             <dd className="mt-1 text-foreground">{versionLabel()}</dd>
+
             {IS_DESKTOP ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Updates install when you download the latest build.
-              </p>
+              <>
+                {/* Check for updates button — only shown when not already in a
+                    downloading / ready / error state that the banner handles */}
+                {updaterState.phase === "idle" || updaterState.phase === "checking" ? (
+                  <button
+                    onClick={() => void check()}
+                    disabled={updaterState.phase === "checking"}
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline disabled:cursor-wait disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-sm"
+                  >
+                    {updaterState.phase === "checking" ? (
+                      <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />
+                    ) : (
+                      <RefreshCw className="h-3 w-3" aria-hidden />
+                    )}
+                    {updaterState.phase === "checking" ? "Checking…" : "Check for updates"}
+                  </button>
+                ) : null}
+
+                <UpdateBanner
+                  state={updaterState}
+                  onCheck={() => void check()}
+                  onDownload={() => void downloadAndInstall()}
+                  onRestart={() => void relaunch()}
+                />
+              </>
             ) : null}
           </div>
           <div>
@@ -47,6 +80,35 @@ export function AboutSection() {
             <dd className="mt-1 text-foreground">{ABOUT_RUNTIME_LINE}</dd>
           </div>
         </dl>
+
+        {IS_STAGING_PORTAL ? (
+          <div className="mt-6 border-t border-border pt-4">
+            <Eyebrow className="mb-2">Desktop app</Eyebrow>
+            <p className="mb-3 text-sm text-muted-foreground">
+              Current staging installers. The same browser must be signed into GitHub to download
+              them.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {STAGING_DESKTOP_DOWNLOADS.map((download) => (
+                <Button key={download.href} asChild variant="outline" size="sm">
+                  <a
+                    href={download.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={openExternal(download.href)}
+                  >
+                    {download.platform === "mac" ? (
+                      <Apple aria-hidden />
+                    ) : (
+                      <MonitorDown aria-hidden />
+                    )}
+                    {download.label}
+                  </a>
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <nav
           aria-label="About links"

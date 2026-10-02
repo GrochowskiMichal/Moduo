@@ -4,18 +4,14 @@
  */
 
 import type {
-  ActivityEntry,
-  Bucket,
-  RecurrenceRule,
-  Tag,
-  TagLink,
-  Task,
-  TaskRelation,
-  TasksCatchUpItem,
-  TasksModuleBundle,
-  TaskStatus,
-  TimeBlockMap,
-} from "../features/tasks/model";
+  CalendarAccountModel,
+  CalendarEventModel,
+  CalendarEventPatch,
+  CalendarMirrorEventInput,
+  CalendarModuleBundle,
+} from "../features/calendar/events";
+import type { CalendarWindow } from "../features/calendar/window";
+import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
 import type {
   Company,
   Contact,
@@ -26,35 +22,33 @@ import type {
   ContactFieldType,
   ContactsModuleBundle,
 } from "../features/contacts/model";
-import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
+import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
+import type { ReconnectItem } from "../features/contacts/reconnect";
+import type { DashboardLayout } from "../features/dashboard/engine/types";
 import type {
-  CalendarAccountModel,
-  CalendarEventModel,
-  CalendarEventPatch,
-  CalendarMirrorEventInput,
-  CalendarModuleBundle,
-} from "../features/calendar/events";
-import type { CalendarWindow } from "../features/calendar/window";
-import type { Truncation } from "./paged-select";
-import type {
-  Note as NoteV2,
   NoteDocPull,
   NotesImportRow,
   NotesV2Bundle,
+  Note as NoteV2,
 } from "../features/notes/model";
-import type { DashboardLayout } from "../features/dashboard/engine/types";
-import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
-import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { NotificationItem } from "../features/spine/notifications";
-import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type { RecentLinkItem } from "../features/spine/recent";
+import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type {
-  EntityLink,
-  EntityRecord,
-  EntityRef,
-  LinkOrigin,
-  RelationKind,
-} from "./entity-links";
+  ActivityEntry,
+  Bucket,
+  RecurrenceRule,
+  Tag,
+  TagLink,
+  Task,
+  TaskRelation,
+  TaskStatus,
+  TasksCatchUpItem,
+  TasksModuleBundle,
+  TimeBlockMap,
+} from "../features/tasks/model";
+import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
+import type { Truncation } from "./paged-select";
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -191,6 +185,8 @@ export type ModuoRuntime = {
     unlockWithPin(pin: string): RuntimeResult<{ session: RuntimeSession | null }>;
     removePin(): Promise<{ error: { message: string } | null }>;
     updateDisplayName(displayName: string): RuntimeResult<{ displayName: string }>;
+    /** Writes `profiles.avatar_url`. Pass null to clear the picture. */
+    updateAvatarUrl(avatarUrl: string | null): RuntimeResult<{ avatarUrl: string | null }>;
     getStoredMnemonic(): RuntimeResult<{ phrase: string | null }>;
     getSession(): RuntimeResult<{ session: RuntimeSession | null }>;
     refreshSession(): RuntimeResult<{
@@ -213,25 +209,33 @@ export type ModuoRuntime = {
     /** Send a magic OTP code to the given email (web primary auth). */
     sendOtp(args: { email: string }): RuntimeResult<{}>;
     /** Verify the OTP code received by email and sign the user in. */
-    verifyOtp(args: {
-      email: string;
-      token: string;
-      sentAt?: number;
-    }): RuntimeResult<{ user: RuntimeSession["user"] | null; session: RuntimeSession | null; isNewUser?: boolean }>;
+    verifyOtp(args: { email: string; token: string; sentAt?: number }): RuntimeResult<{
+      user: RuntimeSession["user"] | null;
+      session: RuntimeSession | null;
+      isNewUser?: boolean;
+    }>;
   };
 
   workspace: {
-    getProfile(userId: string): Promise<{ data: { plan_tier?: string; display_name?: string; avatar_url?: string } | null; error: any }>;
+    getProfile(userId: string): Promise<{
+      data: { plan_tier?: string; display_name?: string; avatar_url?: string } | null;
+      error: any;
+    }>;
     list(): Promise<any[]>;
     create(name: string): Promise<any>;
     rename(workspaceId: string, name: string): Promise<any>;
+    /** Owner-only. `icon` and `logoUrl` are alternatives — one of them is null. */
+    updateBranding(
+      workspaceId: string,
+      branding: { icon: string | null; logoUrl: string | null },
+    ): Promise<any>;
     leave(workspaceId: string): Promise<void>;
     softDelete(workspaceId: string): Promise<void>;
     issueInvite(
       workspaceId: string,
       email: string,
       role: string,
-      modulePermissions?: { notes?: string; tasks?: string }
+      modulePermissions?: { notes?: string; tasks?: string },
     ): Promise<any>;
     joinInvite(token: string): Promise<any>;
     listMembers(workspaceId: string): Promise<any[]>;
@@ -239,13 +243,13 @@ export type ModuoRuntime = {
     updateInvite(
       inviteId: string,
       role: string,
-      modulePermissions?: { notes?: string; tasks?: string }
+      modulePermissions?: { notes?: string; tasks?: string },
     ): Promise<void>;
     revokeInvite(inviteId: string): Promise<void>;
     updateMemberPermissions(
       memberId: string,
       role: string,
-      modulePermissions?: { notes?: string; tasks?: string }
+      modulePermissions?: { notes?: string; tasks?: string },
     ): Promise<void>;
     /**
      * Remove another member from the workspace (owner/admin only, never an
@@ -405,7 +409,13 @@ export type ModuoRuntime = {
     /** Full-text sidebar search (NO-8, AC8) over the server `search_tsv` GIN
      * index; trashed excluded, archived flagged. Degrades to [] pre-migration. */
     search(input: { workspaceId: string; query: string; limit?: number }): Promise<
-      { id: string; title: string; bodyText: string; isArchived: boolean; deletedAt: string | null }[]
+      {
+        id: string;
+        title: string;
+        bodyText: string;
+        isArchived: boolean;
+        deletedAt: string | null;
+      }[]
     >;
     /** `body_md` for a set of notes — the per-note / tree markdown export source. */
     fetchExportDocs(input: {
@@ -530,10 +540,7 @@ export type ModuoRuntime = {
     }): Promise<boolean>;
     /** Gmail "Sign in with Google" (EM-2, desktop-only): runs the PKCE flow,
      *  stores tokens in the OS keychain, registers the account. */
-    startGoogleOAuth(input: {
-      workspaceId?: string | null;
-      historyDepth?: string;
-    }): Promise<any>;
+    startGoogleOAuth(input: { workspaceId?: string | null; historyDepth?: string }): Promise<any>;
     /** All messages of a thread (EM-4), oldest→newest, across folders. */
     getThread(input: { accountId: string; threadId: string }): Promise<any>;
     /** LIST the account's server folders, delimiter-aware (EM-5). */
@@ -557,10 +564,7 @@ export type ModuoRuntime = {
     }): Promise<{ strategy: "server_move" | "local_hide"; mailbox: string | null }>;
     /** Restore a snoozed thread — move its messages from Moduo/Snoozed back to the
      *  inbox. Idempotent (0 when nothing matches / the folder is absent). */
-    snoozeRestore(input: {
-      accountId: string;
-      threadId: string;
-    }): Promise<{ restored: number }>;
+    snoozeRestore(input: { accountId: string; threadId: string }): Promise<{ restored: number }>;
     /** Send a message (reply/forward/new) — HTML+plain multipart, cc/bcc, reply
      *  headers, attachments from disk paths; copy to Sent (Gmail skips). EM-7. */
     sendMessage(input: EmailSendInput): Promise<{ messageId: string; savedToSent: boolean }>;
@@ -596,11 +600,11 @@ export type ModuoRuntime = {
     }): Promise<any[]>;
     /** Per-account server escalation (EM-9): Gmail X-GM-RAW / IMAP SEARCH with an
      *  honest status. Hits are upserted so a result's body fetches normally. */
-    searchServer(input: {
-      accountId: string;
-      query: string;
-      limit?: number;
-    }): Promise<{ status: "ok" | "timeout" | "unsupported" | "error"; message?: string | null; envelopes: any[] }>;
+    searchServer(input: { accountId: string; query: string; limit?: number }): Promise<{
+      status: "ok" | "timeout" | "unsupported" | "error";
+      message?: string | null;
+      envelopes: any[];
+    }>;
 
     // ── EM-3 cloud "tissue" surface (Supabase-first, both platforms) ────────
     // A thread reaches the cloud ONLY via a deliberate action (convert / link /
@@ -631,12 +635,20 @@ export type ModuoRuntime = {
       snippet?: string;
       sentAt?: string | null;
     }): Promise<EmailThreadRef>;
-    snooze(input: { workspaceId: string; refId: string; snoozeUntil: string }): Promise<EmailThreadRef>;
+    snooze(input: {
+      workspaceId: string;
+      refId: string;
+      snoozeUntil: string;
+    }): Promise<EmailThreadRef>;
     unsnooze(input: { workspaceId: string; refId: string }): Promise<EmailThreadRef>;
     /** A snooze became due: unsnooze the ref + write the owner-targeted due
      *  activity (→ one notification). Called by the restore scheduler (EM-6). */
     snoozeDue(input: { workspaceId: string; refId: string }): Promise<EmailThreadRef>;
-    followUp(input: { workspaceId: string; refId: string; followUpAt: string }): Promise<EmailThreadRef>;
+    followUp(input: {
+      workspaceId: string;
+      refId: string;
+      followUpAt: string;
+    }): Promise<EmailThreadRef>;
     clearFollowUp(input: { workspaceId: string; refId: string }): Promise<EmailThreadRef>;
     /** A follow-up deadline passed with no reply: one-shot due notification.
      *  Returns null when there's nothing to do (not awaiting / already notified). */
@@ -720,11 +732,11 @@ export type ModuoRuntime = {
     }): Promise<{ upserted: number; removed: number }>;
 
     /**
-     * Desktop only (CAL-6b): fetch a connected account's RAW provider events
-     * for a window via the Tauri OAuth engine. The frontend maps them
-     * (mirror.ts) and pushes them through {@link mirrorEvents}. Web returns []
-     * (the sync writer is the desktop app). `externalAccountId` is the provider
-     * account id (the keychain key / the cloud account's `externalId`).
+     * Fetch a connected account's RAW provider events for a window. Desktop
+     * uses the Tauri OAuth engine. Web fetches Google through the stored
+     * refresh token and throws for providers it cannot read (so the sync
+     * loop does not treat "unsupported" as "this calendar is empty").
+     * `externalAccountId` is the provider account id.
      */
     fetchExternalEvents(input: {
       provider: "google" | "microsoft" | "caldav" | "ics";
@@ -1081,11 +1093,23 @@ export type ModuoRuntime = {
      * lists (emails/phones/addresses/urls/dates) + custom. Derives the scalar
      * email/phone from each list's primary. (v2.)
      */
-    setContactDetails(input: { workspaceId: string; contactId: string; patch: ContactDetailsPatch }): Promise<Contact>;
+    setContactDetails(input: {
+      workspaceId: string;
+      contactId: string;
+      patch: ContactDetailsPatch;
+    }): Promise<Contact>;
     /** Toggle the per-workspace favorite flag. */
-    setFavorite(input: { workspaceId: string; contactId: string; value: boolean }): Promise<Contact>;
+    setFavorite(input: {
+      workspaceId: string;
+      contactId: string;
+      value: boolean;
+    }): Promise<Contact>;
     /** Apply a partial detail patch to a company (name/website/domains/notes/custom). */
-    setCompanyDetails(input: { workspaceId: string; companyId: string; patch: CompanyDetailsPatch }): Promise<Company>;
+    setCompanyDetails(input: {
+      workspaceId: string;
+      companyId: string;
+      patch: CompanyDetailsPatch;
+    }): Promise<Company>;
     /** Create/upsert a workspace custom-field definition (the "add field" picker). */
     addFieldDef(input: {
       workspaceId: string;

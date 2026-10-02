@@ -1,5 +1,5 @@
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
-import { type Font } from "../../../lib/appearance";
+import type { Font } from "../../../lib/appearance";
 
 import { AppearancePickerRow } from "./picker-row";
 

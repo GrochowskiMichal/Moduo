@@ -6,6 +6,7 @@ import {
   ABOUT_STORAGE_LINE,
   ABOUT_TAGLINE,
   APP_VERSION,
+  STAGING_DESKTOP_DOWNLOADS,
   versionLabel,
 } from "./about";
 
@@ -61,5 +62,14 @@ describe("About links (AC12)", () => {
     for (const link of ABOUT_LINKS) {
       expect(link.href).toMatch(/^https:\/\//);
     }
+  });
+});
+
+describe("Staging desktop downloads", () => {
+  it("points at the rolling staging release", () => {
+    expect(STAGING_DESKTOP_DOWNLOADS.map((d) => d.href)).toEqual([
+      "https://github.com/GrochowskiMichal/moduohyb/releases/download/staging-latest/Moduo_universal.dmg",
+      "https://github.com/GrochowskiMichal/moduohyb/releases/download/staging-latest/Moduo_x64-setup.exe",
+    ]);
   });
 });

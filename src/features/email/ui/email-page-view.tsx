@@ -5,45 +5,31 @@
 // (no desktop engine) it degrades to a calm read-only note + any linked-email
 // cards from the cloud tissue — no fake compose/triage.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { toast } from "sonner";
 import { AlertTriangle, Mail, PenSquare, RefreshCw } from "lucide-react";
-
-import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
-import { truncationNotice } from "../../../components/app/truncation-notice";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { onCreateNew } from "../../../components/app/create-events";
+import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import {
   RightPanelSwitcher,
   type RightPanelVariant,
 } from "../../../components/app/right-panel-switcher";
+import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
+import type { EntityRef } from "../../../lib/entity-links";
+import { takeEntityOpenIntent } from "../../../lib/entity-open";
+import type { EmailThreadRef } from "../../../lib/runtime.types";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-import {
-  TRIAGE_UNDO_MS,
-  useEmailModule,
-} from "../hooks/use-email-module";
-import { useEmailSnoozeRestore } from "../hooks/use-email-snooze-restore";
-import { useEmailCompose } from "../hooks/use-email-compose";
+import type { Contact } from "../../contacts/model";
+import { endPosition, makeTask } from "../../tasks/helpers";
 import { useTasksModule } from "../../tasks/hooks/use-tasks-module";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
-import { endPosition, makeTask } from "../../tasks/helpers";
 import { accountSyncHealth, resolveAccountHues } from "../accounts";
-import { threadsForAccount, unreadCount } from "../threads";
-import {
-  flattenSections,
-  groupThreadsBySection,
-  senderKey,
-  type EmailSection,
-} from "../classify";
-import { useEmailPrefs } from "../hooks/use-email-prefs";
-import { useEmailSearch } from "../hooks/use-email-search";
-import { EmailSearchFooter, EmailSearchInput } from "./email-search-bar";
-import { formatSnoozeUntil } from "../snooze";
-import { buildRefUpsertArgs } from "../refs";
+import { type EmailSection, flattenSections, groupThreadsBySection, senderKey } from "../classify";
 import { blankDraft, buildComposeDraft, type ComposeMode } from "../compose";
 import {
   buildConvertDescription,
@@ -51,33 +37,34 @@ import {
   resolveContactIdByAddress,
   spawnedFromLinkArgs,
 } from "../convert";
-import { formatEmailDate, formatEmailDetailDate } from "../utils/email-format";
-import { takeEntityOpenIntent } from "../../../lib/entity-open";
-import {
-  EMAIL_OPEN_THREAD_EVENT,
-  resolveEmailThreadTarget,
-} from "../url-search";
-import type { EmailThreadRef } from "../../../lib/runtime.types";
-import type { EntityRef } from "../../../lib/entity-links";
-import type { Contact } from "../../contacts/model";
+import { useEmailCompose } from "../hooks/use-email-compose";
+import { TRIAGE_UNDO_MS, useEmailModule } from "../hooks/use-email-module";
+import { useEmailPrefs } from "../hooks/use-email-prefs";
+import { useEmailSearch } from "../hooks/use-email-search";
+import { useEmailSnoozeRestore } from "../hooks/use-email-snooze-restore";
 import type { EmailFolderInfo, EmailThread, SavedAccount } from "../model/email-types";
+import { buildRefUpsertArgs } from "../refs";
+import { formatSnoozeUntil } from "../snooze";
+import { threadsForAccount, unreadCount } from "../threads";
+import { EMAIL_OPEN_THREAD_EVENT, resolveEmailThreadTarget } from "../url-search";
+import { formatEmailDate, formatEmailDetailDate } from "../utils/email-format";
 import { EmailCompose } from "./email-compose";
-import { EmailContactPanel } from "./email-contact-panel";
-import { EmailDetailPanel } from "./email-detail-panel";
 import { EmailConnectDialog } from "./email-connect-dialog";
-import { EmailRail, type EmailScope, type EmailView } from "./email-rail";
-import { EmailThreadList } from "./email-thread-list";
-import { EmailReader } from "./email-reader";
-import { EmailMovePopover } from "./email-move-popover";
-import { EmailSnoozePicker } from "./email-snooze-picker";
+import { EmailContactPanel } from "./email-contact-panel";
 import { EmailDestinationList } from "./email-destination-list";
+import { EmailDetailPanel } from "./email-detail-panel";
+import { EmailMovePopover } from "./email-move-popover";
+import { EmailRail, type EmailScope, type EmailView } from "./email-rail";
+import { EmailReader } from "./email-reader";
+import { EmailSearchFooter, EmailSearchInput } from "./email-search-bar";
 import { EmailShortcutsDialog } from "./email-shortcuts-dialog";
+import { EmailSnoozePicker } from "./email-snooze-picker";
+import { EmailThreadList } from "./email-thread-list";
 
 /** Fires on the window so the nav can badge the Email tab (AC3). */
 export const EMAIL_UNREAD_EVENT = "moduo:email:unread";
 
-const IS_DESKTOP =
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 /** Poll briefly for a deep-link target row/card (it renders after a scope reset
  * or the inbox load settles over a few frames), then scroll it into view.
@@ -110,9 +97,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
   if (el.isContentEditable) return true;
   const tag = el.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return Boolean(
-    el.closest("[role='dialog'], [role='menu'], [role='listbox'], [role='combobox']"),
-  );
+  return Boolean(el.closest("[role='dialog'], [role='menu'], [role='listbox'], [role='combobox']"));
 }
 
 /** One tissue email card for the web read-only view (AC15). Carries the ref +
@@ -140,7 +125,10 @@ function WebTissueCard({
           {thread.fromName?.trim() || thread.fromAddr || "Unknown sender"}
         </span>
         {thread.sentAt ? (
-          <time className="shrink-0 text-2xs tabular-nums text-muted-foreground" dateTime={thread.sentAt}>
+          <time
+            className="shrink-0 text-2xs tabular-nums text-muted-foreground"
+            dateTime={thread.sentAt}
+          >
             {formatEmailDate(thread.sentAt)}
           </time>
         ) : null}
@@ -227,17 +215,11 @@ export function EmailPageView({
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
-  const accountHues = useMemo(
-    () => resolveAccountHues(email.accounts),
-    [email.accounts],
-  );
+  const accountHues = useMemo(() => resolveAccountHues(email.accounts), [email.accounts]);
 
   // The scope's threads (Unified = all; else one account).
   const scopedThreads = useMemo(
-    () =>
-      selectedAccountId
-        ? threadsForAccount(email.threads, selectedAccountId)
-        : email.threads,
+    () => (selectedAccountId ? threadsForAccount(email.threads, selectedAccountId) : email.threads),
     [email.threads, selectedAccountId],
   );
 
@@ -316,9 +298,7 @@ export function EmailPageView({
   // The accounts in the current scope (Unified = all; else the one selected).
   const scopedAccounts = useMemo(
     () =>
-      selectedAccountId
-        ? email.accounts.filter((a) => a.id === selectedAccountId)
-        : email.accounts,
+      selectedAccountId ? email.accounts.filter((a) => a.id === selectedAccountId) : email.accounts,
     [email.accounts, selectedAccountId],
   );
 
@@ -448,9 +428,7 @@ export function EmailPageView({
   // Nav unread badge (AC3): broadcast the count whenever it changes.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.dispatchEvent(
-      new CustomEvent(EMAIL_UNREAD_EVENT, { detail: { count: unifiedUnread } }),
-    );
+    window.dispatchEvent(new CustomEvent(EMAIL_UNREAD_EVENT, { detail: { count: unifiedUnread } }));
   }, [unifiedUnread]);
 
   const openThread = useCallback(
@@ -560,8 +538,7 @@ export function EmailPageView({
   );
 
   const startNew = useCallback(() => {
-    const account =
-      email.accounts.find((a) => a.id === selectedAccountId) ?? email.accounts[0];
+    const account = email.accounts.find((a) => a.id === selectedAccountId) ?? email.accounts[0];
     if (!account) return;
     compose.openDraft(blankDraft(account.id, signatureFor(account.email)));
   }, [email.accounts, selectedAccountId, compose, signatureFor]);
@@ -686,14 +663,10 @@ export function EmailPageView({
         await runtime.tasks.deleteTask({ workspaceId, taskId: plan.taskId }).catch(() => {});
       }
       if (plan.spawnLinkId) {
-        await runtime.spine
-          .deleteLink({ workspaceId, linkId: plan.spawnLinkId })
-          .catch(() => {});
+        await runtime.spine.deleteLink({ workspaceId, linkId: plan.spawnLinkId }).catch(() => {});
       }
       if (plan.contactLinkId) {
-        await runtime.spine
-          .deleteLink({ workspaceId, linkId: plan.contactLinkId })
-          .catch(() => {});
+        await runtime.spine.deleteLink({ workspaceId, linkId: plan.contactLinkId }).catch(() => {});
       }
       if (plan.refId && plan.refCreated) {
         await runtime.email.removeRef({ workspaceId, refId: plan.refId }).catch((err) => {
@@ -965,9 +938,11 @@ export function EmailPageView({
   // order (sections-flattened or search results), tracked as a threadId so it
   // survives reordering. ────────────────────────────────────────────────────
   const scopedRef = useRef<EmailThread[]>(orderedThreads);
-  scopedRef.current = orderedThreads;
   const selectedIdRef = useRef<string | null>(selectedThreadId);
-  selectedIdRef.current = selectedThreadId;
+  useEffect(() => {
+    scopedRef.current = orderedThreads;
+    selectedIdRef.current = selectedThreadId;
+  });
 
   const moveSelection = useCallback((dir: 1 | -1) => {
     const list = scopedRef.current;
@@ -989,7 +964,7 @@ export function EmailPageView({
       if (isTypingTarget(e.target)) return;
       const list = scopedRef.current;
       const curId = selectedIdRef.current;
-      const current = curId ? list.find((t) => t.threadId === curId) ?? null : null;
+      const current = curId ? (list.find((t) => t.threadId === curId) ?? null) : null;
 
       switch (e.key) {
         case "j":
@@ -1210,11 +1185,7 @@ export function EmailPageView({
         {recentLinked.length > 0 ? (
           <WebTissueSection label="Recently linked">
             {recentLinked.map((ref) => (
-              <WebTissueCard
-                key={ref.id}
-                thread={ref}
-                highlighted={highlightedRefId === ref.id}
-              />
+              <WebTissueCard key={ref.id} thread={ref} highlighted={highlightedRefId === ref.id} />
             ))}
           </WebTissueSection>
         ) : null}
@@ -1307,17 +1278,16 @@ export function EmailPageView({
                     ? `${brokenAccounts[0].email} isn't syncing — new mail may be missing.`
                     : `${brokenAccounts.length} accounts aren't syncing — new mail may be missing.`}
                 </span>
-                {syncHealth.reconnectable
-                  .map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() => setReconnectTarget(a)}
-                      className="shrink-0 rounded-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      Reconnect{brokenAccounts.length > 1 ? ` ${a.email}` : ""}
-                    </button>
-                  ))}
+                {syncHealth.reconnectable.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => setReconnectTarget(a)}
+                    className="shrink-0 rounded-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    Reconnect{brokenAccounts.length > 1 ? ` ${a.email}` : ""}
+                  </button>
+                ))}
                 {brokenAccounts.some((a) => a.status === "error") ? (
                   <button
                     type="button"
@@ -1402,19 +1372,13 @@ export function EmailPageView({
                 if (selectedThread) runMove(selectedThread, folder);
               }}
             >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute left-1/2 top-2 h-0 w-0"
-              />
+              <span aria-hidden className="pointer-events-none absolute left-1/2 top-2 h-0 w-0" />
             </EmailMovePopover>
 
             {/* Snooze + follow-up pickers — anchored invisibly, opened by the `s`
                 key / a row action; each resolves a concrete instant on pick. */}
             <EmailSnoozePicker open={snoozeOpen} onOpenChange={setSnoozeOpen} onPick={doSnooze}>
-              <span
-                aria-hidden
-                className="pointer-events-none absolute left-1/3 top-2 h-0 w-0"
-              />
+              <span aria-hidden className="pointer-events-none absolute left-1/3 top-2 h-0 w-0" />
             </EmailSnoozePicker>
             <EmailSnoozePicker
               open={followUpOpen}
@@ -1423,10 +1387,7 @@ export function EmailPageView({
               title="Remind me if no reply"
               confirmLabel="Remind me"
             >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute left-2/3 top-2 h-0 w-0"
-              />
+              <span aria-hidden className="pointer-events-none absolute left-2/3 top-2 h-0 w-0" />
             </EmailSnoozePicker>
           </div>
         }

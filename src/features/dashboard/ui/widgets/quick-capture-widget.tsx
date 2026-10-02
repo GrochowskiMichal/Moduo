@@ -3,14 +3,13 @@
 // (a "view" member sees a disabled box). Refreshes the shared data so a Tasks
 // widget on the same board updates immediately.
 
+import { ArrowUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ArrowUp } from "lucide-react";
-
-import { cn } from "@/lib/utils";
-import { getRuntime } from "@/lib/runtime";
 import { onCreateNew } from "@/components/app/create-events";
 import { endPosition, makeTask } from "@/features/tasks/helpers";
+import { getRuntime } from "@/lib/runtime";
+import { cn } from "@/lib/utils";
 
 import {
   requestDashboardDataRefresh,
@@ -95,7 +94,9 @@ export function QuickCaptureWidget({ canWrite }: WidgetComponentProps) {
           </button>
         ) : null}
       </div>
-      <p className="px-0.5 text-2xs text-muted-foreground">Enter to add · Shift+Enter for a new line</p>
+      <p className="px-0.5 text-2xs text-muted-foreground">
+        Enter to add · Shift+Enter for a new line
+      </p>
     </div>
   );
 }

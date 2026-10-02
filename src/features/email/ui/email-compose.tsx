@@ -4,8 +4,8 @@
 // the native file picker. Send hands an EmailSendInput up to the 10s undo-send hold
 // (useEmailCompose). Tokens-only; the body is a Lexical editor (spec assumption 13).
 
-import { useRef, useState } from "react";
 import { Paperclip, X } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import {
@@ -25,16 +25,16 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import type { EmailSendInput, ModuoRuntime } from "../../../lib/runtime.types";
+import { stripEntityRefAttrs } from "../../spine/editor/entity-rich-html";
 import {
-  htmlToPlainText,
-  splitAddresses,
   type ComposeAttachmentDraft,
   type ComposeDraft,
   type ComposeMode,
+  htmlToPlainText,
+  splitAddresses,
 } from "../compose";
-import { stripEntityRefAttrs } from "../../spine/editor/entity-rich-html";
 import type { SavedAccount } from "../model/email-types";
-import { EmailComposeEditor, type ComposeEditorHandle } from "./email-compose-editor";
+import { type ComposeEditorHandle, EmailComposeEditor } from "./email-compose-editor";
 
 const MODE_TITLE: Record<ComposeMode, string> = {
   new: "New message",
@@ -191,11 +191,7 @@ export function EmailCompose({ draft, accounts, runtime, workspaceId, onSend, on
             <>
               <div className="flex items-center gap-2">
                 <span className="w-14 shrink-0 text-xs text-muted-foreground">Cc</span>
-                <Input
-                  value={cc}
-                  onChange={(e) => setCc(e.target.value)}
-                  className="h-9 flex-1"
-                />
+                <Input value={cc} onChange={(e) => setCc(e.target.value)} className="h-9 flex-1" />
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-14 shrink-0 text-xs text-muted-foreground">Bcc</span>

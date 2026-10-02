@@ -1,5 +1,5 @@
-import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -67,7 +67,11 @@ const OWNS_ARROWS = `${NESTED_ROVING},input,textarea,select,[contenteditable="tr
  * this row's business — if the toolbar renders at all, its controls are stops.
  */
 function isReachable(el: HTMLElement, root: HTMLElement) {
-  for (let node: HTMLElement | null = el; node && node !== root.parentElement; node = node.parentElement) {
+  for (
+    let node: HTMLElement | null = el;
+    node && node !== root.parentElement;
+    node = node.parentElement
+  ) {
     if (node.hasAttribute("hidden") || node.getAttribute("aria-hidden") === "true") return false;
   }
   const style = getComputedStyle(el);
@@ -116,7 +120,8 @@ function useRovingFocus(ref: React.RefObject<HTMLDivElement | null>) {
     if (list.length === 0) return;
     // If the remembered item unmounted or was disabled, fall back to the first —
     // a toolbar must never end up with zero tab stops.
-    const active = activeRef.current && list.includes(activeRef.current) ? activeRef.current : list[0];
+    const active =
+      activeRef.current && list.includes(activeRef.current) ? activeRef.current : list[0];
     activeRef.current = active;
     for (const el of list) {
       const next = el === active ? 0 : -1;
@@ -208,8 +213,7 @@ function useRovingFocus(ref: React.RefObject<HTMLDivElement | null>) {
       const inner = [...group.querySelectorAll<HTMLElement>(ITEM_SELECTOR)];
       const index = inner.findIndex((el) => el === target || el.contains(target));
       if (index === -1) return;
-      const exiting =
-        event.key === "ArrowRight" ? index === inner.length - 1 : index === 0;
+      const exiting = event.key === "ArrowRight" ? index === inner.length - 1 : index === 0;
       if (!exiting) return;
 
       event.preventDefault();
@@ -221,7 +225,12 @@ function useRovingFocus(ref: React.RefObject<HTMLDivElement | null>) {
 
   const onKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") {
+      if (
+        event.key !== "ArrowLeft" &&
+        event.key !== "ArrowRight" &&
+        event.key !== "Home" &&
+        event.key !== "End"
+      ) {
         return;
       }
       if (event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey) return;

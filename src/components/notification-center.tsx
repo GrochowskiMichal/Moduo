@@ -1,20 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import { useAuth } from "../providers/auth-provider";
-import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
-import { useWorkspace } from "../providers/workspace-provider";
-import { useShortcut } from "../lib/shortcuts";
-import { usePreferencesValue } from "../lib/preferences";
-import { undoToast } from "../lib/undo-toast";
 import {
   groupNotifications,
+  type NotificationGroup,
   notificationDeepLink,
   notificationDeepLinkNoun,
   notificationSummary,
-  type NotificationGroup,
 } from "../features/spine/notifications";
-import { selectOverdueTasks, type OverdueItem } from "../features/spine/overdue-inbox";
+import { type OverdueItem, selectOverdueTasks } from "../features/spine/overdue-inbox";
+import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
+import { usePreferencesValue } from "../lib/preferences";
+import { useShortcut } from "../lib/shortcuts";
+import { undoToast } from "../lib/undo-toast";
+import { useAuth } from "../providers/auth-provider";
+import { useWorkspace } from "../providers/workspace-provider";
 import { Card } from "./ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Eyebrow } from "./ui/eyebrow";
@@ -102,8 +101,14 @@ export function NotificationCenter() {
   const overdueItems = useOverdueInbox(notificationPrefs.overdueTasks, open);
 
   const groups = useMemo(() => groupNotifications(notifications), [notifications]);
-  const inviteGroups = useMemo(() => groupNotifications(workspaceInvitations), [workspaceInvitations]);
-  const historyGroups = useMemo(() => groupNotifications(notificationHistory), [notificationHistory]);
+  const inviteGroups = useMemo(
+    () => groupNotifications(workspaceInvitations),
+    [workspaceInvitations],
+  );
+  const historyGroups = useMemo(
+    () => groupNotifications(notificationHistory),
+    [notificationHistory],
+  );
   const badge = Math.min(unreadCountWorkspace, BADGE_CAP);
 
   const handleOpenChange = useCallback(
@@ -151,7 +156,9 @@ export function NotificationCenter() {
         undoToast("Notification dismissed", {
           // Restore + own error toast here (per undo-toast.tsx's contract).
           onUndo: () => {
-            void undismissNotifications(group.items).catch(() => toast("Couldn't undo — try again."));
+            void undismissNotifications(group.items).catch(() =>
+              toast("Couldn't undo — try again."),
+            );
           },
         });
       } catch {
@@ -166,7 +173,9 @@ export function NotificationCenter() {
   const openOverdue = useCallback((item: OverdueItem) => {
     setOpen(false);
     setHistoryOpen(false);
-    window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "task", id: item.id } }));
+    window.dispatchEvent(
+      new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "task", id: item.id } }),
+    );
   }, []);
 
   const renderOverdueItem = useCallback(
@@ -186,7 +195,9 @@ export function NotificationCenter() {
       >
         <p className="line-clamp-1 text-sm text-foreground">{item.title}</p>
         {/* Ambient, never red — "scheduled 3d ago" reads as context, not an alarm. */}
-        <p className="text-xs text-muted-foreground/70">scheduled {relativeTime(item.scheduledAt)}</p>
+        <p className="text-xs text-muted-foreground/70">
+          scheduled {relativeTime(item.scheduledAt)}
+        </p>
       </Card>
     ),
     [openOverdue],
@@ -215,13 +226,20 @@ export function NotificationCenter() {
           <div className="flex items-start gap-2">
             {/* Unread is signalled by fill + a dot + weight — never color alone. */}
             {unread ? (
-              <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground" aria-hidden />
+              <span
+                className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground"
+                aria-hidden
+              />
             ) : (
               <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0" aria-hidden />
             )}
-            <p className={`flex-1 text-sm ${unread ? "font-medium text-foreground" : "text-foreground"}`}>
+            <p
+              className={`flex-1 text-sm ${unread ? "font-medium text-foreground" : "text-foreground"}`}
+            >
               {notificationSummary(group, userId)}
-              {group.count > 1 ? <span className="ml-1 text-xs text-muted-foreground">×{group.count}</span> : null}
+              {group.count > 1 ? (
+                <span className="ml-1 text-xs text-muted-foreground">×{group.count}</span>
+              ) : null}
             </p>
             {opts.dismissable ? (
               <Tooltip>
@@ -246,7 +264,9 @@ export function NotificationCenter() {
           </div>
           <p className="flex items-center gap-1 pl-3.5 text-xs text-muted-foreground/70">
             {relativeTime(group.latestAt)}
-            {link ? <span aria-hidden>· opens {notificationDeepLinkNoun(link.entityType)}</span> : null}
+            {link ? (
+              <span aria-hidden>· opens {notificationDeepLinkNoun(link.entityType)}</span>
+            ) : null}
           </p>
         </Card>
       );
@@ -283,7 +303,11 @@ export function NotificationCenter() {
           <TooltipContent>Notifications</TooltipContent>
         </Tooltip>
 
-        <PopoverContent align="end" sideOffset={8} className="flex w-[380px] max-w-[92vw] flex-col gap-0 p-0">
+        <PopoverContent
+          align="end"
+          sideOffset={8}
+          className="flex w-[380px] max-w-[92vw] flex-col gap-0 p-0"
+        >
           <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
             <PopoverTitle>Notifications</PopoverTitle>
             <button
@@ -297,11 +321,15 @@ export function NotificationCenter() {
 
           <div className="max-h-[26rem] overflow-y-auto p-2">
             {notificationsLoading && nothingActive ? (
-              <p className="px-2 py-6 text-center text-sm text-muted-foreground">Loading notifications…</p>
+              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                Loading notifications…
+              </p>
             ) : nothingActive ? (
               <div className="flex flex-col items-center gap-1 px-2 py-8 text-center">
                 <p className="text-sm text-foreground">You're all caught up.</p>
-                <p className="text-xs text-muted-foreground">New mentions and activity will show here.</p>
+                <p className="text-xs text-muted-foreground">
+                  New mentions and activity will show here.
+                </p>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
@@ -323,7 +351,9 @@ export function NotificationCenter() {
                     {groups.map((group) => renderGroupCard(group, { dismissable: true }))}
                   </div>
                 ) : inviteGroups.length > 0 ? (
-                  <p className="px-2 py-1 text-center text-xs text-muted-foreground">No new activity.</p>
+                  <p className="px-2 py-1 text-center text-xs text-muted-foreground">
+                    No new activity.
+                  </p>
                 ) : null}
                 {/* DF-21e — the opt-in overdue section: passive, never red, never
                     badged. Only rendered when the user turned it on and has drift. */}
@@ -370,7 +400,9 @@ export function NotificationCenter() {
           </DialogHeader>
           <div className="max-h-[70vh] overflow-y-auto p-2">
             {historyGroups.length === 0 ? (
-              <p className="px-2 py-8 text-center text-sm text-muted-foreground">No notifications yet.</p>
+              <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+                No notifications yet.
+              </p>
             ) : (
               <div className="flex flex-col gap-2">
                 {historyGroups.map((group) => renderGroupCard(group, { dismissable: false }))}

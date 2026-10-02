@@ -20,8 +20,13 @@
  * gesture and its toast.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import {
+  $createListItemNode,
+  $createListNode,
+  $isListItemNode,
+  $isListNode,
+  type ListItemNode,
+} from "@lexical/list";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $addUpdateTag,
@@ -33,34 +38,25 @@ import {
   $isElementNode,
   $isRangeSelection,
   COLLABORATION_TAG,
+  type ElementNode,
   HISTORIC_TAG,
   HISTORY_MERGE_TAG,
-  type ElementNode,
   type LexicalEditor,
   type LexicalNode,
   type NodeKey,
 } from "lexical";
-import {
-  $createListItemNode,
-  $createListNode,
-  $isListItemNode,
-  $isListNode,
-  type ListItemNode,
-} from "@lexical/list";
 import { CalendarClock, CheckSquare, ExternalLink, Trash2, Unlink, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CompleteToggle } from "@/components/ui/complete-toggle";
-import { Popover, PopoverContent, PopoverAnchor } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DateField } from "@/components/ui/date-field";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDue, formatScheduled } from "@/features/tasks/helpers";
 import type { Task } from "@/features/tasks/model";
-import { useNotesEditorBridge, type NotesTaskBridge } from "../notes-editor-bridge";
-import {
-  $createTaskLineNode,
-  $isTaskLineNode,
-  TaskLineNode,
-} from "../nodes/task-line-node";
 import type { TaskLineSnapshot } from "../../tasks/detach";
+import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../nodes/task-line-node";
+import { type NotesTaskBridge, useNotesEditorBridge } from "../notes-editor-bridge";
 
 /** Our own programmatic updates — the deletion detector skips these. */
 export const TASK_LINE_TAG = "moduo-task-line";
@@ -104,7 +100,9 @@ function $collectTaskLines(): Map<NodeKey, LineData> {
       for (const child of (node as ElementNode).getChildren()) visit(child, rootIndex);
     }
   };
-  rootChildren.forEach((child, index) => visit(child, index));
+  rootChildren.forEach((child, index) => {
+    visit(child, index);
+  });
   return map;
 }
 
@@ -188,11 +186,7 @@ function $restoreLines(lines: TaskLineSnapshot[], tasksById: Map<string, Task | 
  * the create was in flight, the caller must revert the mint (no orphan task).
  * Returns whether the stamp landed.
  */
-export function stampMintedTask(
-  editor: LexicalEditor,
-  nodeKey: NodeKey,
-  task: Task,
-): boolean {
+export function stampMintedTask(editor: LexicalEditor, nodeKey: NodeKey, task: Task): boolean {
   // The editor unmounted while the create was in flight (note switch): the
   // detached state would still "accept" the stamp but it never reaches the
   // persisted doc — report not-landed so the caller reverts the mint
@@ -464,7 +458,9 @@ export function TaskLinePlugin({
   const bridge = useNotesEditorBridge();
   const tasks = bridge?.tasks ?? null;
   const noteIdRef = useRef(noteId);
-  noteIdRef.current = noteId;
+  useEffect(() => {
+    noteIdRef.current = noteId;
+  });
 
   // Mount sweep: a PENDING line in a freshly opened doc is an orphan (its
   // mint either reverted or died with a previous session) — degrade it to a
@@ -500,7 +496,9 @@ export function TaskLinePlugin({
 
   const [entries, setEntries] = useState<Map<NodeKey, LineEntry>>(new Map());
   const entriesRef = useRef(entries);
-  entriesRef.current = entries;
+  useEffect(() => {
+    entriesRef.current = entries;
+  });
 
   // The overlay lives OUTSIDE the contenteditable, inside the scroll
   // container, so Lexical's mutation observer never sees (and reclaims) it.
@@ -528,13 +526,19 @@ export function TaskLinePlugin({
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const tasksRef = useRef(tasks);
-  tasksRef.current = tasks;
+  useEffect(() => {
+    tasksRef.current = tasks;
+  });
 
   // Per-task rename debouncers; while one is pending, sync-IN skips the title.
   const renameTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   useEffect(() => {
     const timers = renameTimers.current;
-    return () => timers.forEach((t) => clearTimeout(t));
+    return () => {
+      timers.forEach((t) => {
+        clearTimeout(t);
+      });
+    };
   }, []);
 
   // Detach batching — every destroyed line within the window joins ONE plan.
@@ -562,7 +566,9 @@ export function TaskLinePlugin({
     });
   }, [editor]);
   const flushDetachRef = useRef(flushDetach);
-  flushDetachRef.current = flushDetach;
+  useEffect(() => {
+    flushDetachRef.current = flushDetach;
+  });
 
   // Unmount with a batch still pending (fast note switch) → flush now so the
   // links still detach; the toast's undo becomes link-restore only.
@@ -772,11 +778,7 @@ export function TaskLinePlugin({
   useEffect(() => {
     if (!editable) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.shiftKey &&
-        event.key.toLowerCase() === "t"
-      ) {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "t") {
         if (convertSelection()) event.preventDefault();
       }
     };
@@ -846,9 +848,7 @@ export function TaskLinePlugin({
       const lineEl = target?.closest<HTMLElement>("[data-task-line]");
       const li = lineEl
         ? null
-        : target?.closest<HTMLElement>(
-            ".notes-list-item-unchecked, .notes-list-item-checked",
-          );
+        : target?.closest<HTMLElement>(".notes-list-item-unchecked, .notes-list-item-checked");
       if (!lineEl && !li) return;
       const key = getNearestNodeKey(editor, lineEl ?? li!);
       if (!key) return;

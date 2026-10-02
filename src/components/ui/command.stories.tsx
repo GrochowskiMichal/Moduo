@@ -1,14 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
+import { Calendar, FilePlus2, Hash, Search, Settings, Sparkles, Users } from "lucide-react";
 import { useState } from "react";
-import {
-  Calendar,
-  FilePlus2,
-  Hash,
-  Search,
-  Settings,
-  Sparkles,
-  Users,
-} from "lucide-react";
 
 import { Button } from "./button";
 import {

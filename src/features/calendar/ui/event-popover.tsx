@@ -4,10 +4,11 @@
 // source attribution instead of edit affordances; read-only fields are
 // visibly static, never disabled-looking form controls.
 
-import { ExternalLink, Trash2 } from "lucide-react";
+import { ExternalLink, Trash2, Video } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import type { CalendarEventModel } from "../events";
+import { meetingLinkOf } from "../meeting-link";
 import { ChipPopover } from "./chip-popover";
 import { rruleSummary } from "./repeat-picker";
 import { formatDayLabel, formatTimeOfDay } from "./time-format";
@@ -38,15 +39,14 @@ export function EventPopover({
   onClose,
 }: Props) {
   const external = event.sourceAccountId !== null;
+  const meeting = meetingLinkOf(event);
   const timeLabel = event.allDay
     ? `${formatDayLabel(occStartMs)} · All day`
     : `${formatDayLabel(occStartMs)} · ${formatTimeOfDay(occStartMs)} – ${formatTimeOfDay(occEndMs)}`;
 
   return (
     <ChipPopover anchorRect={anchorRect} onClose={onClose}>
-      <span className="font-display text-sm font-medium text-foreground">
-        {event.title}
-      </span>
+      <span className="font-display text-sm font-medium text-foreground">{event.title}</span>
       <span className="text-xs text-muted-foreground">{timeLabel}</span>
       {event.rrule ? (
         <span className="text-xs text-muted-foreground">{rruleSummary(event.rrule)}</span>
@@ -56,6 +56,14 @@ export function EventPopover({
         {external ? " · read-only" : ""}
       </span>
       <div className="mt-1 flex items-center gap-1.5">
+        {meeting ? (
+          <Button asChild size="sm" className="gap-1.5">
+            <a href={meeting.url} target="_blank" rel="noreferrer">
+              <Video aria-hidden />
+              {meeting.label}
+            </a>
+          </Button>
+        ) : null}
         <Button size="sm" variant="outline" className="gap-1.5" onClick={onOpenDetail}>
           <ExternalLink aria-hidden />
           Open

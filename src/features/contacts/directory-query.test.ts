@@ -3,16 +3,16 @@
 // "title · company" secondary line.
 
 import { describe, expect, it } from "vitest";
+import type { TagLink } from "../tasks/model";
 import {
   filterCompanies,
   filterPeople,
   matchesCompany,
   matchesPerson,
   personSecondary,
-  sortRecent,
   STATUS_FILTER_NONE,
+  sortRecent,
 } from "./directory-query";
-import type { TagLink } from "../tasks/model";
 import type { Company, Contact } from "./model";
 
 function person(over: Partial<Contact>): Contact {
@@ -70,7 +70,12 @@ const JANE = person({
   status: "active",
 });
 const BEN = person({ id: "ben", name: "Ben Okafor", status: "" });
-const ACME = company({ id: "acme", name: "Acme Corp", domains: ["acme.com"], website: "https://acme.dev" });
+const ACME = company({
+  id: "acme",
+  name: "Acme Corp",
+  domains: ["acme.com"],
+  website: "https://acme.dev",
+});
 
 const NAMES = new Map([["acme", "Acme Corp"]]);
 
@@ -100,26 +105,61 @@ describe("matchesPerson / matchesCompany — the widened search field set", () =
 });
 
 describe("filterPeople — status + tag filters", () => {
-  const base = { query: "", status: "", tagId: "", tagLinks: [] as TagLink[], companyNameById: NAMES };
+  const base = {
+    query: "",
+    status: "",
+    tagId: "",
+    tagLinks: [] as TagLink[],
+    companyNameById: NAMES,
+  };
 
   it("filters by status id, and the sentinel matches only no-status contacts", () => {
-    expect(filterPeople([JANE, BEN], { ...base, status: "active" }).map((c) => c.id)).toEqual(["jane"]);
-    expect(filterPeople([JANE, BEN], { ...base, status: STATUS_FILTER_NONE }).map((c) => c.id)).toEqual(["ben"]);
+    expect(filterPeople([JANE, BEN], { ...base, status: "active" }).map((c) => c.id)).toEqual([
+      "jane",
+    ]);
+    expect(
+      filterPeople([JANE, BEN], { ...base, status: STATUS_FILTER_NONE }).map((c) => c.id),
+    ).toEqual(["ben"]);
   });
 
   it("filters by tag through contact-type links only", () => {
     const links: TagLink[] = [
-      { id: "l1", workspaceId: "w1", tagId: "t1", entityType: "contact", entityId: "jane", createdAt: "" },
-      { id: "l2", workspaceId: "w1", tagId: "t1", entityType: "company", entityId: "ben", createdAt: "" },
+      {
+        id: "l1",
+        workspaceId: "w1",
+        tagId: "t1",
+        entityType: "contact",
+        entityId: "jane",
+        createdAt: "",
+      },
+      {
+        id: "l2",
+        workspaceId: "w1",
+        tagId: "t1",
+        entityType: "company",
+        entityId: "ben",
+        createdAt: "",
+      },
     ];
-    expect(filterPeople([JANE, BEN], { ...base, tagId: "t1", tagLinks: links }).map((c) => c.id)).toEqual(["jane"]);
+    expect(
+      filterPeople([JANE, BEN], { ...base, tagId: "t1", tagLinks: links }).map((c) => c.id),
+    ).toEqual(["jane"]);
   });
 
   it("company-tag filter never leaks into people (and vice versa)", () => {
     const links: TagLink[] = [
-      { id: "l1", workspaceId: "w1", tagId: "t1", entityType: "company", entityId: "acme", createdAt: "" },
+      {
+        id: "l1",
+        workspaceId: "w1",
+        tagId: "t1",
+        entityType: "company",
+        entityId: "acme",
+        createdAt: "",
+      },
     ];
-    expect(filterCompanies([ACME], { query: "", tagId: "t1", tagLinks: links }).map((c) => c.id)).toEqual(["acme"]);
+    expect(
+      filterCompanies([ACME], { query: "", tagId: "t1", tagLinks: links }).map((c) => c.id),
+    ).toEqual(["acme"]);
     expect(filterPeople([JANE], { ...base, tagId: "t1", tagLinks: links })).toEqual([]);
   });
 });

@@ -10,17 +10,11 @@
 
 import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
-
-import {
-  emptyRepairSummary,
-  repairNote,
-  repairUnmaterializedNotes,
-  tallyRepair,
-} from "./repair";
-import { buildImportRows, planMdZipImport } from "./import";
 import { buildDocStateFromMarkdown, NOTES_DOC_ROOT } from "./editor/materialize";
-import { decodeBase64ToUint8 } from "./utils/base64";
+import { buildImportRows, planMdZipImport } from "./import";
+import { emptyRepairSummary, repairNote, repairUnmaterializedNotes, tallyRepair } from "./repair";
 import { deriveBody } from "./sync/doc-text";
+import { decodeBase64ToUint8 } from "./utils/base64";
 
 const WS = "11111111-2222-3333-4444-555555555555";
 const NOTE = "3f7c1b2e-6a4d-4b9e-8c11-0d2e5a7b9c44";
@@ -37,7 +31,11 @@ function renderStored(docStateB64: string | null): string {
 /** A fake `notes_op_seed_doc`: once-only PER NOTE, exactly like the SQL guard
  * (which decides under that note's row lock). */
 function fakeServer(initial: { docState?: string | null; hasUpdates?: boolean } = {}) {
-  const state = { docState: initial.docState ?? null, hasUpdates: initial.hasUpdates ?? false, writes: 0 };
+  const state = {
+    docState: initial.docState ?? null,
+    hasUpdates: initial.hasUpdates ?? false,
+    writes: 0,
+  };
   const perNote = new Map<string, string>();
   const bodies: Array<{ bodyMd: unknown; bodyText: unknown }> = [];
   const seedDoc = vi.fn(
@@ -72,11 +70,7 @@ describe("imported notes render without an in-memory seed (AC1)", () => {
       { path: "Plan/Detail.md", content: "## Detail\n\nBody text.\n" },
     ]);
     const ids = new Map(plan.nodes.map((n, i) => [n.tempId, `note-${i}`]));
-    const rows = buildImportRows(
-      plan.nodes,
-      (t) => ids.get(t)!,
-      buildDocStateFromMarkdown,
-    );
+    const rows = buildImportRows(plan.nodes, (t) => ids.get(t)!, buildDocStateFromMarkdown);
 
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
@@ -98,7 +92,11 @@ describe("imported notes render without an in-memory seed (AC1)", () => {
       { path: "B.md", content: "# B" },
       { path: "C.md", content: "# C" },
     ]);
-    const rows = buildImportRows(plan.nodes, (t) => t, () => null);
+    const rows = buildImportRows(
+      plan.nodes,
+      (t) => t,
+      () => null,
+    );
     const positions = rows.map((r) => r.position);
 
     expect(positions.every((p) => p !== "")).toBe(true);
@@ -108,9 +106,13 @@ describe("imported notes render without an in-memory seed (AC1)", () => {
 
   it("still imports a note whose markdown cannot be built", () => {
     const plan = planMdZipImport([{ path: "A.md", content: "# A\n\nbody" }]);
-    const rows = buildImportRows(plan.nodes, (t) => t, () => {
-      throw new Error("lexical said no");
-    });
+    const rows = buildImportRows(
+      plan.nodes,
+      (t) => t,
+      () => {
+        throw new Error("lexical said no");
+      },
+    );
     expect(rows[0]!.docStateB64).toBeNull();
     expect(rows[0]!.bodyMd).toContain("# A"); // content preserved, never dropped
   });
@@ -122,11 +124,7 @@ describe("imported notes render without an in-memory seed (AC1)", () => {
     // only faithful copy — and the sweep would do it to existing notes.
     const md = "Owner: **Anna**\nDue: 2026-09-30\n\nSee [pricing](https://x.test/p).\n";
     const plan = planMdZipImport([{ path: "A.md", content: md }]);
-    const rows = buildImportRows(
-      plan.nodes,
-      (t) => `id-${t}`,
-      buildDocStateFromMarkdown,
-    );
+    const rows = buildImportRows(plan.nodes, (t) => `id-${t}`, buildDocStateFromMarkdown);
 
     expect(rows[0]!.docStateB64).not.toBeNull(); // doc still built
     expect(rows[0]!.bodyMd).toBe(md); // …but the body is untouched

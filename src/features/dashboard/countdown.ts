@@ -33,7 +33,14 @@ export function parseLocalDateTime(value: string): number | null {
   const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (match) {
     const [, y, mo, d, h, mi, s] = match;
-    const date = new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s ?? "0"));
+    const date = new Date(
+      Number(y),
+      Number(mo) - 1,
+      Number(d),
+      Number(h),
+      Number(mi),
+      Number(s ?? "0"),
+    );
     return Number.isNaN(date.getTime()) ? null : date.getTime();
   }
   const fallback = new Date(raw);

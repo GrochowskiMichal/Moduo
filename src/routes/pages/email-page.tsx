@@ -1,5 +1,5 @@
-import { useCallback } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useCallback } from "react";
 
 import { EmailPageView } from "../../features/email/ui/email-page-view";
 import type { EmailSearch } from "../../features/email/url-search";
@@ -24,7 +24,5 @@ export function EmailPage() {
     });
   }, [navigate]);
 
-  return (
-    <EmailPageView urlThreadId={urlThreadId} onConsumeThreadDeepLink={clearThreadParam} />
-  );
+  return <EmailPageView urlThreadId={urlThreadId} onConsumeThreadDeepLink={clearThreadParam} />;
 }

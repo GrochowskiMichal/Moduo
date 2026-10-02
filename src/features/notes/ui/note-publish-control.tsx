@@ -5,15 +5,11 @@
  * quiet ghost. Tokens-only chrome.
  */
 
-import { useState } from "react";
 import { Check, Copy, Globe, Loader2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import type { Note } from "../model";
 import { publishedChildCount } from "../publish";
@@ -94,7 +90,9 @@ export function NotePublishControl({
               aria-label={isPublished ? "Published to web" : "Publish to web"}
             >
               <Globe
-                className={isPublished ? "size-icon-sm text-primary" : "size-icon-sm text-muted-foreground"}
+                className={
+                  isPublished ? "size-icon-sm text-primary" : "size-icon-sm text-muted-foreground"
+                }
                 aria-hidden
               />
               <span className={isPublished ? "text-foreground" : "text-muted-foreground"}>
@@ -129,8 +127,18 @@ export function NotePublishControl({
                 className="min-w-0 flex-1 rounded-md border border-border bg-muted px-2 py-1 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Public link"
               />
-              <Button type="button" size="sm" variant="secondary" onClick={copy} className="shrink-0 gap-1">
-                {copied ? <Check className="size-icon-sm text-success" aria-hidden /> : <Copy className="size-icon-sm" aria-hidden />}
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={copy}
+                className="shrink-0 gap-1"
+              >
+                {copied ? (
+                  <Check className="size-icon-sm text-success" aria-hidden />
+                ) : (
+                  <Copy className="size-icon-sm" aria-hidden />
+                )}
                 {copied ? "Copied" : "Copy"}
               </Button>
             </div>
@@ -152,7 +160,12 @@ export function NotePublishControl({
                   disabled={busy}
                   className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                 >
-                  {busy ? <Loader2 className="size-icon-sm animate-spin motion-reduce:animate-none" aria-hidden /> : null}
+                  {busy ? (
+                    <Loader2
+                      className="size-icon-sm animate-spin motion-reduce:animate-none"
+                      aria-hidden
+                    />
+                  ) : null}
                   Unpublish
                 </Button>
               ) : null}
@@ -163,13 +176,22 @@ export function NotePublishControl({
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium text-foreground">Publish to web</p>
               <p className="text-xs text-muted-foreground">
-                Create a read-only public link to this note{childCount > 0 ? " and its child pages" : ""}. You can
-                revoke it any time.
+                Create a read-only public link to this note
+                {childCount > 0 ? " and its child pages" : ""}. You can revoke it any time.
               </p>
             </div>
-            <Button type="button" size="sm" onClick={doPublish} disabled={busy || !canEdit} className="gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              onClick={doPublish}
+              disabled={busy || !canEdit}
+              className="gap-1.5"
+            >
               {busy ? (
-                <Loader2 className="size-icon-sm animate-spin motion-reduce:animate-none" aria-hidden />
+                <Loader2
+                  className="size-icon-sm animate-spin motion-reduce:animate-none"
+                  aria-hidden
+                />
               ) : (
                 <Globe className="size-icon-sm" aria-hidden />
               )}

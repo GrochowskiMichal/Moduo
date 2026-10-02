@@ -7,20 +7,20 @@
 // This is the only Tasks model. The legacy Linear-style types (TaskProject /
 // TaskWorkflowState / Task-as-issue) and the features/plan UI were removed.
 
+import type {
+  ActivityActorType,
+  EnergyLevel,
+  PriorityLevel,
+  TaskStatus,
+} from "@contracts/vocabularies";
 import type { Truncation } from "../../lib/paged-select";
 
-/** Fixed task lifecycle status. */
-export type TaskStatus = "todo" | "in_progress" | "done" | "archived";
-
-/** Optional per-task energy estimate — *how demanding* a task is to do. */
-export type EnergyLevel = "low" | "medium" | "high";
-
-/**
- * Optional per-task priority — *how important* a task is to get done. Distinct
- * from {@link EnergyLevel} (demand). Ambient only — never render as red/alarming
- * (design principles 4 & 5). An `"urgent"` tier is a future, non-breaking add.
- */
-export type PriorityLevel = "low" | "medium" | "high";
+export type {
+  ActivityActorType,
+  EnergyLevel,
+  PriorityLevel,
+  TaskStatus,
+} from "@contracts/vocabularies";
 
 /** Recurrence definition (rrule.js-compatible). Produced by the capture parser. */
 export type RecurrenceRule = {
@@ -140,10 +140,6 @@ export type TaskRelation = {
   blockedTaskId: string;
   createdAt: string;
 };
-
-/** Who performed an intent op (module contract Pillar 2). `agent` / `api_key`
- * arrive with the MCP connector's scoped keys (Session 9). */
-export type ActivityActorType = "user" | "agent" | "api_key";
 
 /**
  * One attributed intent-op record from the shared, append-only cross-module

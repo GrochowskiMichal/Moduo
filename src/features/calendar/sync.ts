@@ -4,8 +4,12 @@
 // mirror op. This file holds the pure pieces (the sync window); the effectful
 // loop is the `useCalendarSync` hook.
 
+import { parseOrError } from "@contracts/errors";
+import { calendarSyncDescriptorSchema } from "@contracts/rows";
+import type { SyncableProvider } from "@contracts/vocabularies";
+
 /** Providers the desktop engine can fetch. */
-export type SyncableProvider = "google" | "microsoft" | "caldav" | "ics";
+export type { SyncableProvider } from "@contracts/vocabularies";
 
 export function isSyncableProvider(p: string): p is SyncableProvider {
   return p === "google" || p === "microsoft" || p === "caldav" || p === "ics";
@@ -56,25 +60,21 @@ export function buildIcsDescriptor(): string {
 }
 
 /** Parse a row's sync_token; null = not a descriptor (legacy/OAuth/pre-deploy). */
-export function parseSyncDescriptor(syncToken: string | null | undefined): CalendarSyncDescriptor | null {
+export function parseSyncDescriptor(
+  syncToken: string | null | undefined,
+): CalendarSyncDescriptor | null {
   if (!syncToken) return null;
   try {
-    const v = JSON.parse(syncToken) as Record<string, unknown>;
-    if (v?.kind === "ics") return { kind: "ics" };
-    if (
-      v?.kind === "caldav" &&
-      typeof v.serverUrl === "string" &&
-      typeof v.username === "string"
-    ) {
-      return {
-        kind: "caldav",
-        serverUrl: v.serverUrl,
-        username: v.username,
-        calendarUrl: typeof v.calendarUrl === "string" ? v.calendarUrl : "",
-        calendarName: typeof v.calendarName === "string" ? v.calendarName : "",
-      };
-    }
-    return null;
+    const parsed = parseOrError(calendarSyncDescriptorSchema, JSON.parse(syncToken));
+    if (!parsed.success) return null;
+    if (parsed.data.kind === "ics") return { kind: "ics" };
+    return {
+      kind: "caldav",
+      serverUrl: parsed.data.serverUrl,
+      username: parsed.data.username,
+      calendarUrl: parsed.data.calendarUrl ?? "",
+      calendarName: parsed.data.calendarName ?? "",
+    };
   } catch {
     return null;
   }

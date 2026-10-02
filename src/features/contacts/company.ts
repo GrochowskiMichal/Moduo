@@ -10,11 +10,17 @@
 // company, a person↔a fellow member) — those are the People group, not "work".
 
 import type { EntityLink, EntityRecord, EntityRef } from "../../lib/entity-links";
-import { entityRefKey, HUB_SECTIONS, otherEndpoint, rollupSections, type HubSection } from "../spine/rollup";
+import {
+  entityRefKey,
+  HUB_SECTIONS,
+  type HubSection,
+  otherEndpoint,
+  rollupSections,
+} from "../spine/rollup";
 import type { HubSnippetMeta } from "../spine/snippet-projectors";
 import type { ActivityEntry } from "../tasks/model";
-import { computeLastTouch, lastTouchPhrase } from "./rollup";
 import type { Contact } from "./model";
+import { computeLastTouch, lastTouchPhrase } from "./rollup";
 
 /** A member shown in the company's People group. */
 export type CompanyPerson = {
@@ -67,14 +73,24 @@ export function buildCompanyRollup(input: CompanyRollupInput): CompanyRollup {
   // ── People: denormalized members ∪ works-at-linked contacts ─────────────────
   const peopleById = new Map<string, CompanyPerson>();
   for (const m of members) {
-    peopleById.set(m.id, { id: m.id, name: m.name || "Unnamed", status: m.status, avatarUrl: m.avatarUrl });
+    peopleById.set(m.id, {
+      id: m.id,
+      name: m.name || "Unnamed",
+      status: m.status,
+      avatarUrl: m.avatarUrl,
+    });
   }
   for (const link of companyLinks) {
     if (link.relationKind !== "works-at") continue;
     const other = otherEndpoint(company, link);
     if (!other || other.type !== "contact" || peopleById.has(other.id)) continue;
     const rec = records.get(entityRefKey(other));
-    peopleById.set(other.id, { id: other.id, name: rec?.label || "Unnamed", status: "", avatarUrl: null });
+    peopleById.set(other.id, {
+      id: other.id,
+      name: rec?.label || "Unnamed",
+      status: "",
+      avatarUrl: null,
+    });
   }
   const people = [...peopleById.values()].sort((a, b) => a.name.localeCompare(b.name));
   const memberIds = new Set(people.map((p) => p.id));
@@ -96,7 +112,12 @@ export function buildCompanyRollup(input: CompanyRollupInput): CompanyRollup {
         const dedupeKey = `${section.key}|${entityRefKey(row.other)}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
-        const acc = merged.get(section.key) ?? { key: section.key, label: section.label, rows: [], count: 0 };
+        const acc = merged.get(section.key) ?? {
+          key: section.key,
+          label: section.label,
+          rows: [],
+          count: 0,
+        };
         acc.rows.push({ ...row, via });
         merged.set(section.key, acc);
       }
@@ -116,7 +137,9 @@ export function buildCompanyRollup(input: CompanyRollupInput): CompanyRollup {
   // made from the other side never lands in the company's activity). Like the
   // contact hub, this does NOT read edits on the linked entities themselves
   // (the CO-2 cross-entity deferral) — it is a linking/interaction recency.
-  const linkStamps = [companyLinks, ...Object.values(memberLinks)].flatMap((ls) => ls.map((l) => l.createdAt));
+  const linkStamps = [companyLinks, ...Object.values(memberLinks)].flatMap((ls) =>
+    ls.map((l) => l.createdAt),
+  );
   const { lastTouchAt, lastTouchActivity } = computeLastTouch(activity, linkStamps);
 
   return { people, unionSections, lastTouchAt, lastTouchActivity };

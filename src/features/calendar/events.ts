@@ -3,7 +3,7 @@
 // chips on the grid. Mirrors the lens: selectors in, chips out, no state.
 
 import type { Truncation } from "../../lib/paged-select";
-import { localDayKey, addDays, startOfLocalDay, type VisibleRange } from "./lens";
+import { addDays, localDayKey, startOfLocalDay, type VisibleRange } from "./lens";
 import { expandEventOccurrences } from "./recurrence-expand";
 
 export type CalendarEventModel = {
@@ -21,6 +21,8 @@ export type CalendarEventModel = {
   allDay: boolean;
   rrule: string | null;
   status: string;
+  /** Join URL when the event was created from a booking link. */
+  location?: string | null;
   color: string | null;
   createdAt: string;
   updatedAt: string;
@@ -79,6 +81,8 @@ export type CalendarMirrorEventInput = {
   status?: string;
   description?: string;
   calendarId?: string;
+  /** The meeting link or place. Sent only when the provider has one. */
+  location?: string;
 };
 
 /** One rendered occurrence of an event (recurring events yield several). */
@@ -147,9 +151,7 @@ export function eventChipsInRange(
         // (a native 1-day event = [Jul 2 00:00, Jul 3 00:00) → Jul 2 only).
         // Provider all-day events arriving as UTC midnights still spill a day
         // east of UTC — CAL-6's mirror mapper normalizes them to local dates.
-        const lastCovered = startOfLocalDay(
-          new Date(Math.min(occ.endMs - 1, range.endMs - 1)),
-        );
+        const lastCovered = startOfLocalDay(new Date(Math.min(occ.endMs - 1, range.endMs - 1)));
         let day = startOfLocalDay(new Date(Math.max(occ.startMs, range.startMs)));
         while (day.getTime() <= lastCovered.getTime()) {
           push(allDay, localDayKey(day), { ...base, dayKey: localDayKey(day) });

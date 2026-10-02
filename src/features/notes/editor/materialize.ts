@@ -25,19 +25,18 @@
  * the FIRST writer's snapshot is ever stored, and everyone else pulls it.
  */
 
-import * as Y from "yjs";
 import { createHeadlessEditor } from "@lexical/headless";
+import { $convertFromMarkdownString } from "@lexical/markdown";
 import {
   createBindingV2__EXPERIMENTAL,
   syncLexicalUpdateToYjsV2__EXPERIMENTAL,
 } from "@lexical/yjs";
 import { Awareness } from "y-protocols/awareness";
-import { $convertFromMarkdownString } from "@lexical/markdown";
-
-import { NOTE_EDITOR_NODES } from "./note-nodes";
-import { NOTES_TRANSFORMERS } from "./markdown";
+import * as Y from "yjs";
 import { deriveBody } from "../sync/doc-text";
 import { encodeUint8ToBase64 } from "../utils/base64";
+import { NOTES_TRANSFORMERS } from "./markdown";
+import { NOTE_EDITOR_NODES } from "./note-nodes";
 
 /** The Yjs root the live editor's v2 collab binding uses (its default, and what
  * `engine-v2` pre-registers on every session doc). */
@@ -109,13 +108,14 @@ export function buildDocStateFromMarkdown(
   } as any;
 
   const unregister = editor.registerUpdateListener(
-    ({ prevEditorState, editorState, dirtyElements, normalizedNodes, tags }) => {
+    ({ prevEditorState, editorState, dirtyElements, dirtyLeaves, normalizedNodes, tags }) => {
       syncLexicalUpdateToYjsV2__EXPERIMENTAL(
         binding,
         provider,
         prevEditorState,
         editorState,
         dirtyElements,
+        dirtyLeaves,
         normalizedNodes,
         tags,
       );

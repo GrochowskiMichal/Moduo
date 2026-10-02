@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-
-import { stripItems } from "./strip";
 import type { LensTask } from "./lens";
+import { stripItems } from "./strip";
 
 const NOW = new Date(2026, 6, 10, 14, 0); // Fri Jul 10 2026, 14:00
 const nowMs = NOW.getTime();

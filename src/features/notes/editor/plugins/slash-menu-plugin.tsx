@@ -10,9 +10,13 @@
  * mirrors it as a page-row block; `/mindmap` inserts the legacy embed.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { $createCodeNode } from "@lexical/code";
+import { $insertList } from "@lexical/list";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { $createHorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
+import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
+import { $setBlocksType } from "@lexical/selection";
+import { $createTableNodeWithDimensions } from "@lexical/table";
 import {
   $createParagraphNode,
   $createTextNode,
@@ -29,21 +33,14 @@ import {
   type LexicalEditor,
   type NodeKey,
 } from "lexical";
-import { $setBlocksType } from "@lexical/selection";
-import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
-import { $createCodeNode } from "@lexical/code";
-import { $insertList } from "@lexical/list";
-import { $createHorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
-import { $createTableNodeWithDimensions } from "@lexical/table";
-import { toast } from "sonner";
 import {
+  Building2,
+  Calendar,
   CheckSquare,
   Code,
   Contact as ContactIcon,
-  Building2,
-  Calendar,
-  FileText,
   FilePlus2,
+  FileText,
   Heading1,
   Heading2,
   Heading3,
@@ -56,26 +53,25 @@ import {
   Table,
   Type,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
 import { Eyebrow } from "@/components/ui/eyebrow";
+import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
+import { useMentionSearch } from "@/features/spine/hooks/use-mention-search";
+import { type MentionCandidate, resolveMention } from "@/features/spine/mention";
+import { executeMention, type MentionContext } from "@/features/spine/mention-actions";
+import { MentionCommand } from "@/features/spine/ui/mention-picker";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { resolveMention, type MentionCandidate } from "@/features/spine/mention";
-import { executeMention, type MentionContext } from "@/features/spine/mention-actions";
-import { useMentionSearch } from "@/features/spine/hooks/use-mention-search";
-import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
-import { MentionCommand } from "@/features/spine/ui/mention-picker";
+import { filterTaskCandidates, shouldOfferCreate } from "../../tasks/task-line";
+import { displayTitle } from "../../title";
 import { $createEmbedNode } from "../nodes/EmbedNode";
 import { $createPageRowNode } from "../nodes/page-row-node";
 import { $createTaskLineNode } from "../nodes/task-line-node";
-import { degradePendingLine, stampMintedTask } from "./task-line-plugin";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
-import { displayTitle } from "../../title";
-import { filterTaskCandidates, shouldOfferCreate } from "../../tasks/task-line";
-import {
-  filterSlashCommands,
-  type SlashCommandDef,
-  type SlashCommandId,
-} from "../slash-commands";
+import { filterSlashCommands, type SlashCommandDef, type SlashCommandId } from "../slash-commands";
+import { degradePendingLine, stampMintedTask } from "./task-line-plugin";
 
 type SlashMenuState = {
   query: string;
@@ -224,7 +220,12 @@ function runBasicCommand(id: SlashCommandId): void {
   }
 }
 
-export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: SlashMenuPluginProps) {
+export function SlashMenuPlugin({
+  workspaceId,
+  runtime,
+  source,
+  sourceLabel,
+}: SlashMenuPluginProps) {
   const [editor] = useLexicalComposerContext();
   const bridge = useNotesEditorBridge();
   const [menu, setMenu] = useState<SlashMenuState | null>(null);
@@ -239,10 +240,12 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
   const pickerRef = useRef<PickerState | null>(null);
   const commandsRef = useRef<SlashCommandDef[]>(commands);
   const selectedIndexRef = useRef(0);
-  menuRef.current = menu;
-  pickerRef.current = picker;
-  commandsRef.current = commands;
-  selectedIndexRef.current = selectedIndex;
+  useEffect(() => {
+    menuRef.current = menu;
+    pickerRef.current = picker;
+    commandsRef.current = commands;
+    selectedIndexRef.current = selectedIndex;
+  });
 
   // Entity search for the picker stage. Create-and-link only where a creator
   // exists (contact/company — DESIGN_BRIEF §3c: event no at v1; /page creates
@@ -273,7 +276,12 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
             list.push({ kind: "create", entityType: "task", label: pickerQuery.trim() });
           }
           for (const t of matches) {
-            list.push({ kind: "entity", ref: { type: "task", id: t.id }, label: t.title, icon: null });
+            list.push({
+              kind: "entity",
+              ref: { type: "task", id: t.id },
+              label: t.title,
+              icon: null,
+            });
           }
           return list;
         })()
@@ -344,9 +352,7 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
   useEffect(() => {
     if (!picker) return;
     const id = setTimeout(() => {
-      pickerPortalRef.current
-        ?.querySelector<HTMLInputElement>("[cmdk-input]")
-        ?.focus();
+      pickerPortalRef.current?.querySelector<HTMLInputElement>("[cmdk-input]")?.focus();
     }, 30);
     return () => clearTimeout(id);
   }, [picker]);
@@ -362,8 +368,7 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
       closeAll();
     };
     document.addEventListener("pointerdown", onPointerDown, { capture: true });
-    return () =>
-      document.removeEventListener("pointerdown", onPointerDown, { capture: true });
+    return () => document.removeEventListener("pointerdown", onPointerDown, { capture: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picker]);
 
@@ -396,10 +401,7 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
       if (candidate.kind !== "entity") return;
       closeAll(true);
       editor.update(() => {
-        $insertNodes([
-          $createEmbedNode("mindmap", candidate.ref.id),
-          $createParagraphNode(),
-        ]);
+        $insertNodes([$createEmbedNode("mindmap", candidate.ref.id), $createParagraphNode()]);
       });
       return;
     }
@@ -416,10 +418,7 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
       if (candidate.kind === "entity") {
         const task = tasksBridge.getTask(candidate.ref.id);
         editor.update(() => {
-          const line = $createTaskLineNode(
-            candidate.ref.id,
-            task ? task.status === "done" : false,
-          );
+          const line = $createTaskLineNode(candidate.ref.id, task ? task.status === "done" : false);
           line.append($createTextNode(task?.title ?? candidate.label));
           $insertNodes([line]);
           line.selectEnd();
@@ -552,7 +551,9 @@ export function SlashMenuPlugin({ workspaceId, runtime, source, sourceLabel }: S
   };
 
   const runCommandRef = useRef(runCommand);
-  runCommandRef.current = runCommand;
+  useEffect(() => {
+    runCommandRef.current = runCommand;
+  });
 
   // ── caret detection ─────────────────────────────────────────────────────────
   useEffect(() => {

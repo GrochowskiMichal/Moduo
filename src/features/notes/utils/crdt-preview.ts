@@ -22,7 +22,12 @@ function applyUpdateSafe(doc: Y.Doc, updateB64: string | undefined) {
 }
 
 function normalizePreview(text: string, maxChars: number): string {
-  return text.replace(/\uFFFC/g, "").replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, maxChars);
+  return text
+    .replace(/\uFFFC/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, maxChars);
 }
 
 function extractFromXmlElement(node: Y.XmlElement): string {
@@ -31,7 +36,12 @@ function extractFromXmlElement(node: Y.XmlElement): string {
     if (child instanceof Y.XmlElement) {
       const chunk = extractFromXmlElement(child);
       if (chunk) parts.push(chunk);
-      if (child.nodeName === "paragraph" || child.nodeName === "quote" || child.nodeName === "heading" || child.nodeName === "listitem") {
+      if (
+        child.nodeName === "paragraph" ||
+        child.nodeName === "quote" ||
+        child.nodeName === "heading" ||
+        child.nodeName === "listitem"
+      ) {
         parts.push("\n");
       }
       continue;
@@ -39,7 +49,6 @@ function extractFromXmlElement(node: Y.XmlElement): string {
     if (child instanceof Y.XmlText) {
       const chunk = extractFromXmlText(child);
       if (chunk) parts.push(chunk);
-      continue;
     }
   }
   return parts.join("");

@@ -45,7 +45,9 @@ describe("lint:tw — named-palette coverage (DF-18)", () => {
   });
 
   it("still catches what it caught before", () => {
-    const hits = patternsFor('const c = "bg-[#161616] text-[13px] rounded-[6px] duration-200 gap-[7px]";');
+    const hits = patternsFor(
+      'const c = "bg-[#161616] text-[13px] rounded-[6px] duration-200 gap-[7px]";',
+    );
     // The hex pattern deliberately stops at the digits, not the closing bracket.
     expect(hits).toContain("color-[#hex]:bg-[#161616");
     expect(hits).toContain("text-[size]:text-[13px]");

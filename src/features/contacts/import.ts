@@ -16,6 +16,8 @@
 // Pure + relative imports only (no `@/lib/*` value imports) so it stays in the
 // vitest graph (docs/gotchas.md). The op is the single write; this is its plan.
 
+import { z } from "zod";
+
 import type { Company, Contact } from "./model";
 import { normalizeContactStatus } from "./status";
 
@@ -93,7 +95,10 @@ export function detectDelimiter(text: string): string {
  * and a leading BOM. Fully-blank lines are dropped. No external dependency — a
  * CSV import shouldn't pull a parser lib into the bundle.
  */
-export function parseCsv(input: string, delimiter?: string): { headers: string[]; rows: string[][] } {
+export function parseCsv(
+  input: string,
+  delimiter?: string,
+): { headers: string[]; rows: string[][] } {
   let text = input;
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); // strip BOM
   const delim = delimiter ?? detectDelimiter(text);
@@ -170,13 +175,52 @@ function normHeader(h: string): string {
 // "company name" → company (not name), "first name" → firstName (not name).
 const HEADER_RULES: { field: ImportField; match: (h: string) => boolean }[] = [
   { field: "email", match: (h) => h.includes("email") || h === "mail" },
-  { field: "firstName", match: (h) => h.includes("firstname") || h.includes("givenname") || h === "first" },
-  { field: "lastName", match: (h) => h.includes("lastname") || h.includes("surname") || h.includes("familyname") || h === "last" },
-  { field: "phone", match: (h) => h.includes("phone") || h.includes("mobile") || h.includes("cell") || h === "tel" || h.includes("telephone") },
-  { field: "company", match: (h) => h.includes("company") || h.includes("organization") || h.includes("organisation") || h.includes("employer") || h.includes("account") || h === "org" },
-  { field: "title", match: (h) => h.includes("jobtitle") || h.includes("title") || h.includes("role") || h.includes("position") || h === "job" },
+  {
+    field: "firstName",
+    match: (h) => h.includes("firstname") || h.includes("givenname") || h === "first",
+  },
+  {
+    field: "lastName",
+    match: (h) =>
+      h.includes("lastname") || h.includes("surname") || h.includes("familyname") || h === "last",
+  },
+  {
+    field: "phone",
+    match: (h) =>
+      h.includes("phone") ||
+      h.includes("mobile") ||
+      h.includes("cell") ||
+      h === "tel" ||
+      h.includes("telephone"),
+  },
+  {
+    field: "company",
+    match: (h) =>
+      h.includes("company") ||
+      h.includes("organization") ||
+      h.includes("organisation") ||
+      h.includes("employer") ||
+      h.includes("account") ||
+      h === "org",
+  },
+  {
+    field: "title",
+    match: (h) =>
+      h.includes("jobtitle") ||
+      h.includes("title") ||
+      h.includes("role") ||
+      h.includes("position") ||
+      h === "job",
+  },
   { field: "status", match: (h) => h.includes("status") || h.includes("stage") },
-  { field: "name", match: (h) => h.includes("fullname") || h.includes("displayname") || h.includes("name") || h.includes("contact") },
+  {
+    field: "name",
+    match: (h) =>
+      h.includes("fullname") ||
+      h.includes("displayname") ||
+      h.includes("name") ||
+      h.includes("contact"),
+  },
 ];
 
 /** Best-guess a target field for every header; unrecognized → "ignore". */
@@ -361,7 +405,12 @@ export function planImport(
     }
     if (byNameCompany.has(key)) {
       remember();
-      return { ...row, action: "merge", matchedContactId: byNameCompany.get(key), reason: "name+company" };
+      return {
+        ...row,
+        action: "merge",
+        matchedContactId: byNameCompany.get(key),
+        reason: "name+company",
+      };
     }
     // 3. A brand-new contact.
     remember();
@@ -408,32 +457,43 @@ export type ContactImportResult = {
  * `merge` (into an existing contact). `duplicate` and `error` rows are dropped —
  * the user already saw them in the preview.
  */
+const contactImportRowSchema = z.object({
+  op: z.enum(["create", "merge"]),
+  contactId: z.string().min(1).optional(),
+  name: z.string().trim().min(1),
+  email: z.union([z.string(), z.null()]),
+  phone: z.union([z.string(), z.null()]),
+  title: z.union([z.string(), z.null()]),
+  company: z.union([z.string(), z.null()]),
+  status: z.union([z.string(), z.null()]),
+});
+
 export function toImportPayload(plan: ImportPlan): ContactImportRow[] {
   const out: ContactImportRow[] = [];
   for (const e of plan.entries) {
     if (e.action === "create") {
-      out.push({
-        op: "create",
+      const row = {
+        op: "create" as const,
         name: e.name,
         email: e.email,
         phone: e.phone,
         title: e.title,
         company: e.company,
         status: e.status ? normalizeContactStatus(e.status) : null,
-      });
+      };
+      if (contactImportRowSchema.safeParse(row).success) out.push(row);
     } else if (e.action === "merge" && e.matchedContactId) {
-      out.push({
-        op: "merge",
+      const row = {
+        op: "merge" as const,
         contactId: e.matchedContactId,
         name: e.name,
         email: e.email,
         phone: e.phone,
         title: e.title,
         company: e.company,
-        // The op fills only gaps and never changes an existing contact's status,
-        // so a merge carries none.
         status: null,
-      });
+      };
+      if (contactImportRowSchema.safeParse(row).success) out.push(row);
     }
   }
   return out;

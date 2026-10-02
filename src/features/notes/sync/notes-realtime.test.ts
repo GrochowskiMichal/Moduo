@@ -5,8 +5,8 @@ import {
   initialsFor,
   nameFromEmail,
   noteChannelName,
-  presenceViewers,
   type PresenceState,
+  presenceViewers,
 } from "./notes-realtime";
 
 describe("coalesceUpdates", () => {

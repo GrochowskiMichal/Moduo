@@ -23,8 +23,7 @@ export function FocusReadout({ runningSinceMs, baseSeconds, className }: Props) 
   }, [runningSinceMs]);
 
   const seconds =
-    baseSeconds +
-    (runningSinceMs != null ? Math.floor((Date.now() - runningSinceMs) / 1000) : 0);
+    baseSeconds + (runningSinceMs != null ? Math.floor((Date.now() - runningSinceMs) / 1000) : 0);
   return (
     <span className={className} aria-label={`Focused ${formatFocusClock(seconds)}`}>
       {formatFocusClock(seconds)}

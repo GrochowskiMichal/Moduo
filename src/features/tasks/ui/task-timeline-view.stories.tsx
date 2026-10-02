@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { addDays } from "date-fns";
 
 import { makeTask } from "../helpers";
-import type { Bucket, Task, TaskRelation } from "../model";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { Bucket, Task, TaskRelation } from "../model";
 import { TaskTimelineView } from "./task-timeline-view";
 
 // Timeline baselines (specs/tasks-timeline.md TL-1: AC1–AC4, AC7 render, AC9,
@@ -56,7 +56,13 @@ const TASKS: Task[] = [
   task({ id: "build", title: "Build the landing page", scheduledAt: day(4), dueDate: day(9, 0) }),
   task({ id: "kickoff", title: "Kickoff prep — start known, end open", scheduledAt: day(1) }),
   task({ id: "review", title: "Review pass due", dueDate: day(7, 0) }),
-  task({ id: "shipped", title: "Already shipped", scheduledAt: day(-6), dueDate: day(-4, 0), status: "done" }),
+  task({
+    id: "shipped",
+    title: "Already shipped",
+    scheduledAt: day(-6),
+    dueDate: day(-4, 0),
+    status: "done",
+  }),
   task({ id: "overdue", title: "Slipping quietly", dueDate: day(-3, 0) }),
   task({ id: "admin-1", title: "Expense report", bucketId: "b-admin", scheduledAt: day(2) }),
   task({ id: "tray-1", title: "Someday: rewrite onboarding" }),

@@ -5,8 +5,8 @@
 // adds Start focus / pause · stop with the live readout. Quiet throughout —
 // never red, never a modal.
 
-import type { ReactNode } from "react";
 import { ExternalLink, Pause, Play, Square, Timer } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";

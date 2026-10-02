@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Task } from "../../tasks/model";
 import { makeTask } from "../../tasks/helpers";
+import type { Task } from "../../tasks/model";
 import {
   applyTaskRename,
   buildMintTaskFields,

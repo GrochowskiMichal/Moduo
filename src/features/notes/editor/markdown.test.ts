@@ -5,27 +5,27 @@
  * never mounted).
  */
 
-import { describe, expect, it } from "vitest";
-import { createHeadlessEditor } from "@lexical/headless";
-import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
 import { CodeHighlightNode, CodeNode } from "@lexical/code";
-import { LinkNode, AutoLinkNode } from "@lexical/link";
+import { createHeadlessEditor } from "@lexical/headless";
+import { AutoLinkNode, LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
-import { HeadingNode, QuoteNode } from "@lexical/rich-text";
+import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
 import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
+import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $getRoot } from "lexical";
+import { describe, expect, it } from "vitest";
 import { EntityRefNode } from "../../spine/editor/entity-ref-node";
-import { EmbedNode } from "./nodes/EmbedNode";
-import { PageRowNode } from "./nodes/page-row-node";
-import { TaskLineNode } from "./nodes/task-line-node";
 import {
   blocksToMarkdown,
   HR_TRANSFORMER,
   looksLikeMarkdown,
-  NOTES_TRANSFORMERS,
   type MdJsonNode,
+  NOTES_TRANSFORMERS,
 } from "./markdown";
+import { EmbedNode } from "./nodes/EmbedNode";
+import { PageRowNode } from "./nodes/page-row-node";
+import { TaskLineNode } from "./nodes/task-line-node";
 
 function makeEditor() {
   return createHeadlessEditor({
@@ -89,10 +89,9 @@ describe("markdown round-trip (AC11)", () => {
 
   it("checkboxes import as REAL check-list items, not literal-text bullets", () => {
     const editor = makeEditor();
-    editor.update(
-      () => $convertFromMarkdownString("- [x] done\n- [ ] open", NOTES_TRANSFORMERS),
-      { discrete: true },
-    );
+    editor.update(() => $convertFromMarkdownString("- [x] done\n- [ ] open", NOTES_TRANSFORMERS), {
+      discrete: true,
+    });
     editor.read(() => {
       const json = JSON.stringify(editor.getEditorState().toJSON());
       expect(json).toContain('"listType":"check"');
@@ -119,10 +118,7 @@ describe("markdown round-trip (AC11)", () => {
     const editor = makeEditor();
     editor.update(
       () =>
-        $convertFromMarkdownString(
-          "- [x] Ship it <!-- moduo:task:task-9 -->",
-          NOTES_TRANSFORMERS,
-        ),
+        $convertFromMarkdownString("- [x] Ship it <!-- moduo:task:task-9 -->", NOTES_TRANSFORMERS),
       { discrete: true },
     );
     editor.read(() => {

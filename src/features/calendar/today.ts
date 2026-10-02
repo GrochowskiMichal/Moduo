@@ -3,15 +3,15 @@
 // emphasis, and the strip count (unfinished-from-earlier) from raw inputs, so
 // the widget stays a thin renderer. Quiet by construction — never red.
 
+import { type CalendarEventModel, eventChipsInRange } from "./events";
 import {
   addDays,
+  type LensTask,
   localDayKey,
   startOfLocalDay,
   taskBlocks,
   visibleRange,
-  type LensTask,
 } from "./lens";
-import { eventChipsInRange, type CalendarEventModel } from "./events";
 import { stripItems } from "./strip";
 
 export type TodayChip = {
@@ -90,7 +90,10 @@ export function shapeToday(input: {
   return {
     dayStartMs,
     totalMinutes: Math.round((dayEndMs - dayStartMs) / 60_000),
-    nowMinutes: Math.min(Math.max((nowMs - dayStartMs) / 60_000, 0), (dayEndMs - dayStartMs) / 60_000),
+    nowMinutes: Math.min(
+      Math.max((nowMs - dayStartMs) / 60_000, 0),
+      (dayEndMs - dayStartMs) / 60_000,
+    ),
     chips,
     next: remaining[0] ?? null,
     remaining,

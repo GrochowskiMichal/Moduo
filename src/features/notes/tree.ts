@@ -61,7 +61,9 @@ function buildSubtree(
   const children =
     depth >= 100
       ? []
-      : (kids.get(root.id) ?? []).filter(include).map((c) => buildSubtree(c, kids, include, depth + 1));
+      : (kids.get(root.id) ?? [])
+          .filter(include)
+          .map((c) => buildSubtree(c, kids, include, depth + 1));
   return { note: root, children };
 }
 
@@ -71,8 +73,7 @@ export function buildNoteSections(notes: Note[]): NoteSections {
   const liveKids = childrenMap(live);
   const isLive = (n: Note) => !n.deletedAt;
 
-  const parentOf = (n: Note): Note | null =>
-    n.parentId ? (byId.get(n.parentId) ?? null) : null;
+  const parentOf = (n: Note): Note | null => (n.parentId ? (byId.get(n.parentId) ?? null) : null);
 
   // Live roots: no parent, or parent gone/trashed (re-rooted view).
   const liveRoots = live.filter((n) => {
@@ -111,13 +112,9 @@ export function buildNoteSections(notes: Note[]): NoteSections {
   }
   inbox.sort(byPosition);
 
-  const pinned = live
-    .filter((n) => n.isPinned && !archivedByAncestry(n))
-    .sort(byPosition);
+  const pinned = live.filter((n) => n.isPinned && !archivedByAncestry(n)).sort(byPosition);
 
-  const published = live
-    .filter((n) => n.publishedAt && n.publishToken)
-    .sort(byPosition);
+  const published = live.filter((n) => n.publishedAt && n.publishToken).sort(byPosition);
 
   // Archive roots = self-archived live notes whose ancestors aren't archived
   // (the gesture root), full live subtree nested.
@@ -208,17 +205,13 @@ export function resolveDrop(
     if (wouldCreateCycle(notes, dragId, targetId)) return null;
     const children = siblingsOf(notes, targetId).filter((n) => n.id !== dragId);
     // Already the last child of this target → true no-op.
-    if (
-      drag.parentId === targetId &&
-      children.every((c) => c.position <= drag.position)
-    ) {
+    if (drag.parentId === targetId && children.every((c) => c.position <= drag.position)) {
       return null;
     }
     return { parentId: targetId, position: pos.endPosition(children) };
   }
 
-  const parentId =
-    target.parentId && byId.has(target.parentId) ? target.parentId : null;
+  const parentId = target.parentId && byId.has(target.parentId) ? target.parentId : null;
   if (wouldCreateCycle(notes, dragId, parentId)) return null;
   const siblings = siblingsOf(notes, parentId).filter((n) => n.id !== dragId);
   const idx = siblings.findIndex((n) => n.id === targetId);

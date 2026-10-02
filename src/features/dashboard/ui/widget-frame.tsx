@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
 import { useWidgetActions } from "../context/widget-actions-context";
-import { type WidgetInstance, type WidgetSize } from "../engine/types";
+import type { WidgetInstance, WidgetSize } from "../engine/types";
 import { allowedSizesFor, widgetMeta } from "../registry/catalog";
 import { getConfigForm } from "../registry/config-forms";
 import { openModuleRoute } from "../widget-nav";

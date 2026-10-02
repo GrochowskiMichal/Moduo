@@ -58,9 +58,7 @@ function taskLineToString(taskId: unknown, done: unknown, title: string, mode: M
   if (mode === "text") return title.trim();
   const box = done ? "x" : " ";
   const id = typeof taskId === "string" && taskId !== "" ? taskId : null;
-  return id
-    ? `- [${box}] ${title.trim()} <!-- moduo:task:${id} -->`
-    : `- [${box}] ${title.trim()}`;
+  return id ? `- [${box}] ${title.trim()} <!-- moduo:task:${id} -->` : `- [${box}] ${title.trim()}`;
 }
 
 function walkXmlText(node: Y.XmlText, mode: Mode): string {
@@ -124,9 +122,7 @@ function walkXmlElement(node: Y.XmlElement, mode: Mode): string {
       } else if (childName === "horizontalrule") {
         if (mode === "md") parts.push("---");
       } else if (childName === "task-line") {
-        parts.push(
-          taskLineToString(prop(child, "taskId"), prop(child, "done"), childText, mode),
-        );
+        parts.push(taskLineToString(prop(child, "taskId"), prop(child, "done"), childText, mode));
       } else {
         if (childText) parts.push(childText);
       }

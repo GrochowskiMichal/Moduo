@@ -4,8 +4,8 @@ import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "@/lib/en
 import { entityRefKey } from "../../spine/rollup";
 import type { ActivityEntry } from "../../tasks/model";
 import "../projectors";
-import { buildContactRollup } from "../rollup";
 import type { Contact } from "../model";
+import { buildContactRollup } from "../rollup";
 import { ContactHub } from "./contact-hub";
 
 const NOW = new Date("2026-06-27T12:00:00Z");
@@ -53,7 +53,14 @@ function link(other: EntityRef, kind: RelationKind, createdAt: string): EntityLi
   };
 }
 function rec(ref: EntityRef, label: string, deleted = false): EntityRecord {
-  return { workspaceId: "w", type: ref.type, id: ref.id, label, icon: null, deletedAt: deleted ? "2026-06-26T00:00:00Z" : null };
+  return {
+    workspaceId: "w",
+    type: ref.type,
+    id: ref.id,
+    label,
+    icon: null,
+    deletedAt: deleted ? "2026-06-26T00:00:00Z" : null,
+  };
 }
 function activity(op: string, createdAt: string, label = "Mike"): ActivityEntry {
   return {
@@ -141,7 +148,13 @@ export const Populated: Story = {
 export const EmptyRollup: Story = {
   args: {
     contact: { ...CONTACT, status: "lead" },
-    rollup: buildContactRollup({ focus: FOCUS, links: [], records: new Map(), activity: [], openTaskKeys: new Set() }),
+    rollup: buildContactRollup({
+      focus: FOCUS,
+      links: [],
+      records: new Map(),
+      activity: [],
+      openTaskKeys: new Set(),
+    }),
     hubStatus: "ready",
     activity: [],
     canEdit: true,
@@ -150,12 +163,24 @@ export const EmptyRollup: Story = {
 
 /** Roll-up loading — skeleton rows; the header renders immediately from the cached row. */
 export const Loading: Story = {
-  args: { contact: CONTACT, rollup: ROLLUP, hubStatus: "loading", activity: ACTIVITY, canEdit: true },
+  args: {
+    contact: CONTACT,
+    rollup: ROLLUP,
+    hubStatus: "loading",
+    activity: ACTIVITY,
+    canEdit: true,
+  },
 };
 
 /** Read-only (no edit permission): header fields + link gestures are disabled. */
 export const PermissionDenied: Story = {
-  args: { contact: CONTACT, rollup: ROLLUP, hubStatus: "ready", activity: ACTIVITY, canEdit: false },
+  args: {
+    contact: CONTACT,
+    rollup: ROLLUP,
+    hubStatus: "ready",
+    activity: ACTIVITY,
+    canEdit: false,
+  },
 };
 
 /** A tombstoned linked entity renders dimmed as "Deleted [type]" with Remove link. */
@@ -164,7 +189,10 @@ export const Tombstone: Story = {
     contact: CONTACT,
     rollup: buildContactRollup({
       focus: FOCUS,
-      links: [link(gone, "references", "2026-06-23T09:00:00Z"), link(t1, "follow-up", "2026-06-24T09:00:00Z")],
+      links: [
+        link(gone, "references", "2026-06-23T09:00:00Z"),
+        link(t1, "follow-up", "2026-06-24T09:00:00Z"),
+      ],
       records: new Map([
         [entityRefKey(gone), rec(gone, "Removed task", true)],
         [entityRefKey(t1), rec(t1, "Send the proposal")],

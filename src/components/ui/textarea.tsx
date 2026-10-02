@@ -1,7 +1,7 @@
-import * as React from "react";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { fieldShellVariants, type FieldShellVariant } from "./field-shell";
+import { type FieldShellVariant, fieldShellVariants } from "./field-shell";
 
 type TextareaProps = React.ComponentProps<"textarea"> & {
   /** Surface treatment — see field-shell.ts. Default `filled`. */
@@ -23,5 +23,5 @@ function Textarea({ className, variant = "filled", ...props }: TextareaProps) {
   );
 }
 
-export { Textarea };
 export type { TextareaProps };
+export { Textarea };

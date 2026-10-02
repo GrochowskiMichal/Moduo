@@ -10,11 +10,14 @@
  * `noindex`. Tokens-only.
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { parseOrError } from "@contracts/errors";
+import { nonEmptyString } from "@contracts/primitives";
+import { publicNotePayloadSchema } from "@contracts/rows";
 import { Link, useParams, useSearch } from "@tanstack/react-router";
+import { ChevronDown } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronDown } from "lucide-react";
 import {
   comparePublicNotes,
   publicUrlTransform,
@@ -97,17 +100,23 @@ export function PublishedNotePage() {
     let active = true;
     setState({ status: "loading" });
     void (async () => {
+      const tokenParsed = parseOrError(nonEmptyString, token);
+      if (!tokenParsed.success) {
+        if (active) setState({ status: "not-found" });
+        return;
+      }
       try {
         const res = await fetch(
-          `${SUPABASE_URL}/functions/v1/notes-public?token=${encodeURIComponent(token)}`,
+          `${SUPABASE_URL}/functions/v1/notes-public?token=${encodeURIComponent(tokenParsed.data)}`,
         );
         if (!active) return;
         if (res.status === 404) return setState({ status: "not-found" });
         if (!res.ok) return setState({ status: "error" });
-        const data = (await res.json()) as PublicPayload;
+        const json: unknown = await res.json();
+        const parsed = parseOrError(publicNotePayloadSchema, json);
         if (!active) return;
-        if (!data?.notes?.length) return setState({ status: "not-found" });
-        setState({ status: "ok", data });
+        if (!parsed.success) return setState({ status: "not-found" });
+        setState({ status: "ok", data: parsed.data });
       } catch {
         if (active) setState({ status: "error" });
       }
@@ -161,8 +170,12 @@ export function PublishedNotePage() {
     return (
       <Shell>
         <div className="text-center">
-          <h1 className="font-display text-xl font-semibold text-foreground">Something went wrong</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Couldn't load this page. Try again shortly.</p>
+          <h1 className="font-display text-xl font-semibold text-foreground">
+            Something went wrong
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Couldn't load this page. Try again shortly.
+          </p>
         </div>
       </Shell>
     );

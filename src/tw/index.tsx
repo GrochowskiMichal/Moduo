@@ -1,4 +1,5 @@
-import React, { CSSProperties, forwardRef } from "react";
+import type React from "react";
+import { type CSSProperties, forwardRef } from "react";
 import { createPortal } from "react-dom";
 
 type BaseProps = {
@@ -31,7 +32,7 @@ export const View = forwardRef<HTMLDivElement, BaseProps & React.HTMLAttributes<
     <div ref={ref} className={className} style={style} {...rest}>
       {children}
     </div>
-  )
+  ),
 );
 View.displayName = "View";
 
@@ -40,7 +41,14 @@ type TextProps = BaseProps & {
   numberOfLines?: number;
 } & React.HTMLAttributes<HTMLElement>;
 
-export const Text = ({ as = "span", className, style, children, numberOfLines, ...rest }: TextProps) => {
+export const Text = ({
+  as = "span",
+  className,
+  style,
+  children,
+  numberOfLines,
+  ...rest
+}: TextProps) => {
   const Component = as;
   return (
     <Component className={className} style={{ ...toClampStyle(numberOfLines), ...style }} {...rest}>
@@ -54,7 +62,15 @@ type PressableProps = BaseProps & {
   disabled?: boolean;
 } & React.HTMLAttributes<HTMLDivElement>;
 
-export const Pressable = ({ onPress, onClick, disabled, className, style, children, ...rest }: PressableProps) => (
+export const Pressable = ({
+  onPress,
+  onClick,
+  disabled,
+  className,
+  style,
+  children,
+  ...rest
+}: PressableProps) => (
   <div
     role="button"
     tabIndex={disabled ? -1 : 0}
@@ -117,7 +133,13 @@ export const TextInput = ({
     );
   }
 
-  const type = secureTextEntry ? "password" : keyboardType === "email-address" ? "email" : keyboardType === "number-pad" || keyboardType === "numeric" ? "number" : "text";
+  const type = secureTextEntry
+    ? "password"
+    : keyboardType === "email-address"
+      ? "email"
+      : keyboardType === "number-pad" || keyboardType === "numeric"
+        ? "number"
+        : "text";
 
   return (
     <input
@@ -137,7 +159,14 @@ type ImageProps = BaseProps & {
   contentFit?: "contain" | "cover" | "fill";
 } & React.ImgHTMLAttributes<HTMLImageElement>;
 
-export const Image = ({ source, alt = "", contentFit = "cover", className, style, ...rest }: ImageProps) => (
+export const Image = ({
+  source,
+  alt = "",
+  contentFit = "cover",
+  className,
+  style,
+  ...rest
+}: ImageProps) => (
   <img
     src={resolveImageSource(source)}
     alt={alt}
@@ -186,7 +215,7 @@ export const ScrollView = ({
 };
 
 export const ActivityIndicator = ({ className }: { className?: string }) => (
-  <div className={className} aria-label="loading">
+  <div className={className} role="status" aria-label="loading">
     <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-[#9aa0aa] border-t-transparent" />
   </div>
 );

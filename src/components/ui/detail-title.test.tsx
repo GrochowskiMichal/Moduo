@@ -1,8 +1,9 @@
 // DF-18 — one detail-panel title scale. Before this, the same object (an
 // entity's own name) rendered at 13px / 14px / 15px / 24px / 30px across six
 // surfaces, half of them on the display face.
-import { afterEach, describe, expect, it } from "vitest";
+
 import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { DetailTitle, detailTitleVariants } from "./detail-title";
 import { Input } from "./input";

@@ -4,17 +4,13 @@
 // custom datetime. Picking resolves to a concrete instant and calls onPick — the
 // page owns the optimistic hide + cloud/IMAP writes (email.snooze).
 
-import { useMemo, useState } from "react";
 import { CalendarClock, Clock3 } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { normalizeSnoozeAt, snoozePresets } from "../snooze";
 
 type Props = {
