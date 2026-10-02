@@ -114,7 +114,12 @@ function busyIds(raw: unknown): string[] {
 }
 
 async function loadLink(db: SupabaseClient, slug: string): Promise<LinkRow | null> {
-  const res = await db.from("exposed_slot_links").select("*").eq("slug", slug).maybeSingle();
+  const res = await db
+    .from("exposed_slot_links")
+    .select("*")
+    .eq("slug", slug)
+    .is("deleted_at", null)
+    .maybeSingle();
   if (res.error || !res.data) return null;
   return res.data as LinkRow;
 }
@@ -244,6 +249,28 @@ async function busyIntervals(
     }
   }
   return intervals;
+}
+
+/** The host's calendar account row that mirrors their primary Google calendar. */
+async function googleMirrorAccount(
+  db: SupabaseClient,
+  link: LinkRow,
+  email: string,
+): Promise<{ id: string; calendarId: string } | null> {
+  if (!link.workspace_id) return null;
+  const address = email.toLowerCase();
+  const primary = `google:${address}:${address}`;
+  const res = await db
+    .from("calendar_accounts")
+    .select("id, external_id")
+    .eq("workspace_id", link.workspace_id)
+    .eq("owner_id", link.owner_user_id)
+    .eq("provider", "google")
+    .is("deleted_at", null)
+    .in("external_id", [primary, `google:${address}`]);
+  const rows = (res.data ?? []) as { id: string; external_id: string }[];
+  const row = rows.find((item) => item.external_id === primary) ?? rows[0];
+  return row ? { id: String(row.id), calendarId: primary } : null;
 }
 
 function openSlots(link: LinkRow, busy: Interval[], now: Date): Date[] {
@@ -588,6 +615,11 @@ Deno.serve(async (req: Request) => {
     answerHtml,
   ].join("");
 
+  // Saved as the Google event's own mirror row, so the next sync updates it
+  // instead of adding a second copy.
+  const mirror = meet.eventId && access?.email
+    ? await googleMirrorAccount(db, link, access.email)
+    : null;
   const committed = await db.rpc("booking_op_commit", {
     p_workspace_id: link.workspace_id,
     p_owner_id: link.owner_user_id,
@@ -599,6 +631,9 @@ Deno.serve(async (req: Request) => {
     p_attendee_name: name,
     p_attendee_email: email,
     p_host_email: hostEmail,
+    p_source_account_id: mirror?.id ?? null,
+    p_external_event_id: mirror ? meet.eventId : null,
+    p_calendar_id: mirror?.calendarId ?? null,
   });
   if (committed.error || !committed.data) {
     await undoMeeting();

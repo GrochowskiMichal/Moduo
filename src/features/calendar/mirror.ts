@@ -11,6 +11,7 @@
 // lands it on the right column.
 
 import type { CalendarMirrorEventInput } from "./events";
+import { googleMeetingLink, graphMeetingLink } from "./meeting-link";
 
 /** Loosely-typed provider JSON — we read only the fields we normalize. */
 export type RawProviderEvent = Record<string, unknown>;
@@ -72,6 +73,11 @@ function normalizeStatus(raw: string | null): "confirmed" | "cancelled" {
 // keeps rendering. Acceptable at alpha; a per-occurrence exception tombstone is
 // a follow-up (needs the op to accept occurrence keys).
 
+/** Only send `location` when there is one, so the sync never clears it by accident. */
+function withLocation(value: string | null): { location?: string } {
+  return value ? { location: value } : {};
+}
+
 // ── Google Calendar API v3 event → mirror input ──────────────────────────────
 
 /**
@@ -113,6 +119,7 @@ export function mapGoogleEvent(raw: RawProviderEvent): CalendarMirrorEventInput 
     status: normalizeStatus(str(raw.status)),
     description: str(raw.description) ?? "",
     calendarId: str(raw.calendarId) ?? undefined,
+    ...withLocation(googleMeetingLink(raw)),
   };
 }
 
@@ -190,6 +197,7 @@ export function mapOutlookEvent(raw: RawProviderEvent): CalendarMirrorEventInput
     status: cancelled ? "cancelled" : "confirmed",
     description: str(raw.bodyPreview) ?? "",
     calendarId: str(raw.calendarId) ?? undefined,
+    ...withLocation(graphMeetingLink(raw)),
   };
 }
 
