@@ -1,105 +1,134 @@
-# Manual test: landing v7 (`t/maciej/landing-v4`)
+# Manual test: landing (`t/maciej/landing-v4`), rounds 3–5
 
-Mike's v5 look, rebuilt section by section to match the real app and the 2 October decisions.
+Mike's v5 look, rebuilt section by section to match the real app. Round 3 (2 October) covers Maciej's 24-point list on top of v7 (`9ff4407`). Round 4 (the same day) is the final polish: a quieter hero, richer widgets, the Moduo stage in the AI demo, the tax entrance, the new Yours and the values fixes. Round 5 (3 October) trims the hero further and polishes the details.
 
 Surface: **web, localhost only**. Run `PORT=8766 bun scripts/preview-landing.ts`, then open http://127.0.0.1:8766.
 
 ⚠ Waitlist forms post to the **production** Supabase. They return 403 from localhost:8766 (that origin isn't allowlisted). Don't add it.
 
-Check the page at three sizes: 1512 × 982 (laptop), 2560 × 1440 (4K at 150%) and 390 px (phone).
+Check the page at three sizes: 1512 × 982 (laptop), 2560 × 1440 (4K at 150%) and 390 px (phone). Also check once with reduced motion turned on.
 
 ## Header
-- [ ] The logo reads "moduo" in lowercase, with a larger mark. The links sit in the centre with no numbers. The button reads "Join the waitlist", the same label as every form.
-- [ ] Over the hero the bar is transparent: only its content shows.
-- [ ] As the pane reaches the bar, the glass fades in smoothly and never jumps. Scroll slowly back and forth around that point to check.
-- [ ] When docked, the progress line runs edge to edge on the bottom edge as a gradient, and a soft light spreads up into the glass from its tip.
-- [ ] Phone, and any screen where the hero scrolls normally: the glass appears as soon as you scroll.
+- [ ] The glow at the progress tip is soft. There's no vertical cut above the tip, and the lit layer fades out before it.
+- [ ] Over the hero the bar is transparent. As the pane arrives, the glass fades in without a jump.
 
-## Hero stage
-- [ ] On desktop the hero holds still while the pane slides over it.
-- [ ] The frame is vertically centred, with air above and below. It's wider on 4K, and the header content lines up with its edges.
-- [ ] The top row has three quiet facts (private beta, platforms, founding price) in sentence case: no mono, no dots, no green pill.
-- [ ] The headline is sentence case on exactly two lines: "Fire ten apps. / Keep the work."
-- [ ] The form is the biggest control. The note under it reads "One email when your invite is ready. No spam."
-- [ ] Rulers run on the top and left edges. Inside the frame a notch and a number follow the pointer.
-- [ ] The windows drift with the pointer anywhere over the hero, not only over the mockup.
-- [ ] The counters band is compact: Apps 10 → 01, Subscriptions 06 → 01, Search bars 10 → 01.
+## Hero
+- [ ] No tab strip above the mockup and no top row grid. The frame holds only the copy, the mockup and the counters band.
+- [ ] Quiet at rest: no rulers on the edges and no pointer coordinates.
+  - The grid is faint and lights up only in a soft circle around the pointer.
+  - The counters band uses the UI font, not monospace.
+  - The mockup is larger than in round 3.
+- [ ] After the windows assemble, the auto tour highlights one module and its links without dimming the others. Hovering a module dims the rest only lightly.
+- [ ] Move the pointer far left and right: the windows never get clipped by the mockup box. The scatter isn't a regular 3-4-3 grid.
+- [ ] The link lines use the same thin stroke as the story, with no heavy end circles.
+- [ ] Chat appears as a module that already exists (no "Coming" anywhere). The top row says "Mac, Windows and web".
 
-## Hero assembly
-- [ ] The tab strip above the mockup shows ten crowded tabs and "10 tabs". On assembly it folds into one "moduo · Home" tab and "1 tab".
-- [ ] "Your stack today": ten windows pile around the centre, with no Moduo window behind them.
-- [ ] "With Moduo": a light, wireframe-like shell.
-  - Top bar: logo, module icons and an avatar placeholder.
-  - Bottom bar: one narrating line that changes as modules are traced.
-  - No bright outline around the bars, and no clipped corners.
-- [ ] Five links, none crossing. Hover the mockup, then click "With Moduo": no jump. The switch doesn't bounce.
-
-## Pane and lineup
-- [ ] The pane edge looks like a frosted sheet with square corners, no outline and no lighter slab. While it covers the hero, the hero shows blurred through its top.
-- [ ] The lineup starts a bit lower than before.
-  - Seven tiles; Chat is dashed and tagged "Coming".
-  - The hover arcs and the auto tour work.
-  - The feature strip loops without a jump and can be dragged.
-
-## How it connects
-- [ ] The heading reads "Open anything. See everything it touches."
-- [ ] Seven steps with no trailing periods, from "A message lands" to "See it all at home".
-- [ ] The stage is bigger. Each step frames only its cards (camera), and step 7 zooms out to the whole graph.
-- [ ] The window title follows the step: Inbox, Inbox · Anna Carter, Anna Carter, Task, Task · Jamie Ross, Calendar · Friday, Home.
-- [ ] No "Copied 0", no "Sam", no "Carter Studio". Jamie's card says "Assigned by you".
+## Lineup and story
+- [ ] There's clear space between "Everything your day runs on" and the tiles. The hover arcs never touch the heading.
+- [ ] Each arc has its own shape: it leaves from its own spot on the card, lands off-centre, and longer links arc higher so they nest. Hovering the same card twice gives the same shapes.
+- [ ] No widget count is stated anywhere on the page.
+- [ ] The story has six steps, ends on "Give it a slot", and the last step zooms out to the whole picture. The track is shorter than before.
+- [ ] No window chrome around the story. The cards are readable, and nothing says "See it all at home".
 
 ## Make it yours
-- [ ] The board shows more cards: four columns, 9 or 10 widgets per workspace.
-- [ ] The picker bar at the bottom changes the preview only.
-  - Settings: theme, 6 shades, 8 accents, font, density, corners.
-  - "Surprise me" mixes everything except light/dark.
-- [ ] Dark → Light fades inside the preview; the page stays dark.
-- [ ] The accent shows on done checkboxes, "Add widget" and the progress ring.
+- [ ] Corners nest. At 1512 px, the shell is 33 px = card 20 px + padding 13 px. Inputs and buttons inside cards use the card radius minus its padding.
+- [ ] Reconnect's ring sits exactly around the initials.
+- [ ] The analog clock has no grey face.
+- [ ] Weather looks like the other cards: no blue tint. Place and temperature are on top; conditions are at the bottom, with the rain kept inside its icon.
+- [ ] Notes and Recently linked have their picture centred and the text at the bottom. Countdown's segments sit at the bottom.
+- [ ] Phone: no dots button over the content; tapping a card opens its settings. Ticking a task doesn't.
+- [ ] Switching Studio, Personal and Side project plays a split-flap cascade: each tile turns away and the new one turns in, rippling from the top left.
+- [ ] Widgets show richer visuals:
+  - task progress ring and bar
+  - next-event card and an agenda with a "Now" line, on a fixed demo time of 11:20
+  - time split by project and a week chart
+  - a mini link graph
+  - activity sparkline
+  - age bars for things that drifted
+  - reconnect rings
+  - weather tint with falling rain, and an hourly line
+  - pomodoro ticks
+  - countdown segments
+  - capture that types and sends lines
+  - habit heatmaps
+  - a page stack for notes
+- [ ] Pick an accent: it shows in all of them. Mono shows white.
+- [ ] The preview and the dock are separate: a 16:9 Home on its own, with the dock below it.
+- [ ] The dock is one row and never wraps. On a phone it scrolls sideways and fades at the right edge.
+- [ ] Studio, Personal and Side project all use the same layout (M S S / S S M). Switching changes only what's inside it.
+- [ ] Theme, shade, accent, font, density and corners change only the insides of the cards. The Home never changes size; check the height before and after.
+- [ ] Dense shows more rows in the same cards. Light mode stays inside the preview and is a step dimmer than pure white.
+- [ ] Hover a widget and open the dots.
+  - The card turns over to its settings: Widget, Size (only the sizes that widget has in the app), Show, Move.
+  - Asking for a size that doesn't fit is refused with a shake and "No room for L…".
+  - Shrinking leaves an empty dashed slot.
+- [ ] Drag one widget onto another to swap them; the rest glide into place. On touch screens the page still scrolls, and the hint says to tap the dots.
+- [ ] Live details: the timer counts up, the pomodoro counts down, the clock hands move.
 
-## Any AI
-- [ ] The model switch changes the assistant's name. "Local model" reads "Llama in LM Studio · runs on this Mac".
-- [ ] Set Email to None, then ask "Link Maya's emails…": the tool row turns amber, the Email row flashes, and the assistant says it can't see email.
-- [ ] Set it back to View: the link is made and the note tile updates.
-- [ ] The training note says we don't train models, plus the provider caveat.
+## Bring any AI
+- [ ] The assistant and Moduo windows are the same size, and the windows sit a little closer together. Radii nest in the model switch, the key rows and their pills, and the input.
+- [ ] The signal is a small dot. It slips out from under one window and disappears under the next, and it never pops into view in the gap.
+- [ ] Where the signal touches a window, a short piece of that window's outline lights up. At the key it turns red when blocked.
+- [ ] Moduo has a dock of modules. On each call the right module comes up from the dock as a card:
+  - reads its lines with a light band sweeping across the words, like an assistant's "thinking" shimmer, cascading down the list; no highlight boxes
+  - adds a task, or links two cards with a drawn line and chips
+  - sends a packet back into the wire, then returns to the dock
+- [ ] Every prompt can be replayed as often as you like. With a module set to None, its dock icon flashes red and "Nothing reached Moduo".
+- [ ] Three windows joined by wires: the assistant, the Moduo key and Moduo.
+- [ ] The model switch shows the real Claude, OpenAI, Gemini and Ollama logos. The input placeholder follows the switch.
+- [ ] The auto tour (it stops as soon as you click anything in the demo):
+  1. Read the tasks and send them back.
+  2. Create "Invoice Anna · Fri".
+  3. Email switches to None, so the request stops at the key: the row flashes red and "Nothing reached Moduo".
+  4. Email goes back to View, and the link draws between the note and Maya's emails.
+- [ ] Set Tasks to View and ask for the invoice task. It's blocked at the key, and the assistant explains why.
+- [ ] Adding the task doesn't make the Moduo card grow.
+- [ ] On tablet and phone the windows stack, with vertical wires.
 
-## Stack tax
-- [ ] Monthly prices.
-  - Just me: $85.99 vs Moduo Pro $12.
-  - Two of us: $189.48 vs Duo $20; Slack Pro appears.
-  - Team of 5: $473.70 vs Team $75.
-- [ ] The struck total is as big as the Moduo price.
+## Stack tax and Fast
+- [ ] On first view the receipt adds itself up in about a second and a half: each line counts in, the total counts and gets struck, then Moduo's price lands and the savings count up.
+- [ ] Switching Just me, Two of us and Team of 5 never changes the receipt's height. The Slack line prints in and out, and the totals count to their new values.
+- [ ] Fast lists six shortcuts, with the last two fading. There's no J/K and no E/S/R. The two columns are balanced.
 
-## Fast
-- [ ] Eight shortcut rows taken from the app's real keys, plus the "and many more" line. Pressing T, J, K, E, S, R, ? or ⌘1–6 lights the matching row.
-- [ ] The ⌘K demo looks like the app's palette.
-  - Empty: Navigate and Actions.
-  - Typing: Tasks, Notes, Contacts, Email and Events, with type badges.
-  - No preview pane and no footer. The typing tour still runs.
+## Yours, values, pricing
+- [ ] "Yours." uses the same heading size as the other sections. The sentence underneath is lead-sized, with five promise pills on the text's baseline and their icons centred on the words.
+  - On first view the pills light up one after another.
+  - Hover, focus or tap a pill to open a small card: export progress, import sources, a revocable key, training locked off, and a hold-to-delete ring.
+  - On a phone a tap toggles the card.
+- [ ] "What we won't build" is the cards that turn over; the other layouts are gone.
+  - The refusal stays readable, with a clear but light strike drawn in after a moment.
+  - Hovering near a card's edge doesn't stutter: hover sits on the list item, which never moves.
+- [ ] The Free plan lists exactly what it has: tasks, notes, calendar, email and contacts, linked. Chat shows on Duo and Team only. The FAQ plan answer matches.
+- [ ] "Compare every plan" has a chevron with space after the label, and the four plan columns are the same width.
 
-## Yours, shipping, on purpose
-- [ ] "Yours" is a settings-style panel: Export, Import, AI keys, training "Never", Delete.
-- [ ] "Shipping every week" has five mock entries dated relatively (This week … Last month).
-- [ ] "What we won't build": the answers are larger than the struck lines.
+## Made by a duo, shipping, questions
+- [ ] "Made by a duo": Maciej Grzywacz (Product and design) and Mike Grochowski (Engineering) are equal in weight, each with a first-person quote.
+  - Mike's photo comes from `landing/assets/makers/mike.jpg`, cropped to the frame.
+  - Maciej's slot reads "Photo soon".
+- [ ] "Shipping every week" sits after the makers as its own section. It has seven entries, the last two fading, plus the line about building for over a year.
+- [ ] Questions: the lead invites a hello or a project chat at hello@moduo.app.
 
-## Pricing
-- [ ] Four plans with module icons.
-  - Chat is dimmed on Free and Pro, dashed with a dot on Duo and Team.
-  - Prices: yearly $0 / $10 / $16 for two / $12 a seat; monthly $0 / $12 / $20 / $15.
-  - Founding price lines line up near the buttons.
-- [ ] "Save 20%" is a pill. "Compare every plan" opens a table.
-
-## Made by two, FAQ, close
-- [ ] The founders section shows placeholders: [Maker name], [Role] and photo frames.
-- [ ] The FAQ has ten questions, matching the decisions on platforms, offline, training and plans.
-- [ ] The close shows the platform chips (Mac and Web in beta, Windows next, phones later) and the large form.
-- [ ] After joining (on prod), the success box shows an unticked "Also send me build updates" box. It only shows "on" once the server confirms.
-
-## Share image
-- [ ] `/assets/og.png` loads (1200 × 630). The head has og:image and a large Twitter card.
+## Footer
+- [ ] One footer, not two: no signup form. The statement is large and in sentence case.
+- [ ] Columns:
+  - Product
+  - Modules, including Chat and Home
+  - Company: About us, Changelog, Press kit soon, Contact
+  - Resources: Questions, plus Help center, MCP docs, Import guide, Security and Status, all soon
+  - Follow along
+  - Say hello
+- [ ] No monospace in the footer.
+- [ ] The wordmark is the real "moduo" (Pilat Extended outlines). Its guides are true to the letters:
+  - ascender, x-height, baseline and the overshoot bands
+  - the o built on a circle in its square
+  - the d's bowl circle meeting the stem
+  - the stem guides and the 71 stem dimension
+- [ ] Hover a letter: its real nodes and handles appear, and the mod or duo bracket shows. The coordinate readout is in font units, from the baseline.
+- [ ] The 3D lineart mark still follows the pointer.
 
 ## Known gaps
-- **Waitlist opt-in backend is not live yet.** Needs `supabase/migrations/20261002120000_waitlist_updates_opt_in.sql`, then a redeploy of `waitlist-join`, in that order. Until then the checkbox shows "Couldn't save that."
-- Social links: LinkedIn exists but its tagline is outdated. The X, Product Hunt, GitHub and YouTube links 404, and the Discord invite is invalid. Waiting for the real links.
-- Privacy, Terms, About, Changelog and Download for Mac are "soon" placeholders.
-- Founders' names, photos and lines are placeholders.
-- The changelog entries are mock data.
+- **The waitlist opt-in backend is not live yet.** It needs `supabase/migrations/20261002120000_waitlist_updates_opt_in.sql`, then a redeploy of `waitlist-join`, in that order. Until then the checkbox shows "Couldn't save that."
+- Social links: LinkedIn exists but its tagline is outdated. X, Product Hunt, GitHub and YouTube return 404, and the Discord invite is invalid.
+- Privacy, Terms, Cookies, Download, Press kit, Help center, MCP docs, Import guide, Security and Status are "soon" placeholders.
+- Maciej's photo is still a placeholder.
+- The changelog entries are mock data with relative dates.
