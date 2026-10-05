@@ -63,6 +63,10 @@ const isWeb = target === "web";
 // (CI may override with MODUO_BUILD) and degrades to "dev" when git isn't
 // available.
 function readPackageVersion(): string {
+  // CI release builds inject the same version they stamp into tauri.conf.json,
+  // so About and the updater compare like with like.
+  const injected = process.env.MODUO_VERSION?.trim();
+  if (injected) return injected;
   try {
     const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8")) as {
       version?: string;

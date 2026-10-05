@@ -25,6 +25,7 @@ import {
 import { PROFILE_UPDATED_EVENT } from "../../features/profile/profile-storage";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { SettingsModal } from "../../features/settings/settings-modal";
+import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
 import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
 import {
   formatShortcut,
@@ -514,6 +515,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         <div className="flex flex-row items-center justify-end gap-2">
           {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
           <EmailDueWebSweep />
+          <UpdateOnLaunch />
           <NotificationCenter />
           <UserMenu
             avatarDataUrl={avatarDataUrl}
