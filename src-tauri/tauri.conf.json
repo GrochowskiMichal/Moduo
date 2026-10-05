@@ -44,7 +44,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRFRUNCRUE5ODYyODlGRUQKUldUdG55aUdxYjdzVHUza1RiU05BdVNvM29lOFdXUER3eXJQWmpNbjlQZmRDa2dXdXZUbzh5b3IK",
       "endpoints": [
-        "https://github.com/GrochowskiMichal/moduohyb/releases/download/staging-latest/latest.json"
+        "https://github.com/GrochowskiMichal/moduo-releases/releases/download/staging-latest/latest.json"
       ],
       "windows": {
         "installMode": "passive"

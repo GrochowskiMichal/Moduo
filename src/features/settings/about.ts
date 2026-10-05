@@ -42,7 +42,8 @@ export const DESKTOP_CHANNEL: DesktopChannel | null = resolveDesktopChannel();
 /** Staging builds only — drives the STAGING badge on the login page. */
 export const IS_STAGING_PORTAL = DESKTOP_CHANNEL === "staging";
 
-const RELEASE_BASE = "https://github.com/GrochowskiMichal/moduohyb/releases/download";
+// Public releases-only repo (installers + auto-update manifests, no source) — no GitHub login needed.
+const RELEASE_BASE = "https://github.com/GrochowskiMichal/moduo-releases/releases/download";
 
 export type DesktopDownload = { platform: "mac" | "windows"; label: string; href: string };
 
