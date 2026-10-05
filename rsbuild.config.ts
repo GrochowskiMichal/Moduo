@@ -47,6 +47,8 @@ const publicWebOrigin = readLocalEnvValue("PUBLIC_WEB_ORIGIN");
 // Staging portal — set to "true" in the Vercel moduo-staging env vars.
 // Adds download buttons (Mac .dmg / Windows .exe) to the auth page.
 const stagingPortal = readLocalEnvValue("PUBLIC_STAGING_PORTAL");
+// Production desktop build — set to "production" to advertise the prod installers.
+const desktopChannel = readLocalEnvValue("PUBLIC_DESKTOP_CHANNEL");
 
 // Comma-separated allowlist of emails that may sign in on staging.
 // Empty string = no restriction (dev / production). Staging Vercel sets this.
@@ -116,6 +118,7 @@ export default defineConfig({
       "import.meta.env.PUBLIC_POSTHOG_HOST": JSON.stringify(posthogHost),
       "import.meta.env.PUBLIC_WEB_ORIGIN": JSON.stringify(publicWebOrigin),
       "import.meta.env.PUBLIC_STAGING_PORTAL": JSON.stringify(stagingPortal),
+      "import.meta.env.PUBLIC_DESKTOP_CHANNEL": JSON.stringify(desktopChannel),
       "import.meta.env.PUBLIC_STAGING_ALLOWLIST": JSON.stringify(stagingAllowlist),
       "globalThis.__PUBLIC_ALPHA_VANTAGE_API_KEY__": JSON.stringify(alphaVantageKey),
       "globalThis.__PUBLIC_FINNHUB_API_KEY__": JSON.stringify(finnhubKey),
