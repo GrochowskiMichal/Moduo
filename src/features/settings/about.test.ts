@@ -69,15 +69,15 @@ describe("About links (AC12)", () => {
 describe("Desktop downloads", () => {
   it("staging points at the rolling staging release", () => {
     expect(desktopDownloads("staging").map((d) => d.href)).toEqual([
-      "https://github.com/GrochowskiMichal/moduohyb/releases/download/staging-latest/Moduo_universal.dmg",
-      "https://github.com/GrochowskiMichal/moduohyb/releases/download/staging-latest/Moduo_x64-setup.exe",
+      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/staging-latest/Moduo_universal.dmg",
+      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/staging-latest/Moduo_x64-setup.exe",
     ]);
   });
 
   it("production points at the rolling prod release", () => {
     expect(desktopDownloads("production").map((d) => d.href)).toEqual([
-      "https://github.com/GrochowskiMichal/moduohyb/releases/download/prod-latest/Moduo_universal.dmg",
-      "https://github.com/GrochowskiMichal/moduohyb/releases/download/prod-latest/Moduo_x64-setup.exe",
+      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/prod-latest/Moduo_universal.dmg",
+      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/prod-latest/Moduo_x64-setup.exe",
     ]);
   });
 

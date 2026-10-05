@@ -85,8 +85,7 @@ export function AboutSection() {
           <div className="mt-6 border-t border-border pt-4">
             <Eyebrow className="mb-2">Desktop app</Eyebrow>
             <p className="mb-3 text-sm text-muted-foreground">
-              Current {DESKTOP_CHANNEL} installers. The same browser must be signed into GitHub to
-              download them.
+              Current {DESKTOP_CHANNEL} installers. Installed copies update themselves.
             </p>
             <div className="flex flex-wrap gap-2">
               {desktopDownloads(DESKTOP_CHANNEL).map((download) => (

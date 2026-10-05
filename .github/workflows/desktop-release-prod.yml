@@ -12,6 +12,7 @@ name: Desktop Release (production)
 #   APPLE_TEAM_ID                 10-character Apple team id
 #   APPLE_ID                      Apple ID email used for notarization
 #   APPLE_ID_PASSWORD             App-specific password for that Apple ID
+#   RELEASES_REPO_TOKEN           fine-grained PAT, contents:write on GrochowskiMichal/moduo-releases
 #   TAURI_SIGNING_PRIVATE_KEY     private key from `bunx tauri signer generate`
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  key password (empty string if none)
 #   MODUO_KEYCHAIN_SERVICE        value for the keychain service name in the app
@@ -42,6 +43,7 @@ jobs:
       contents: write
     env:
       MODUO_BUILD: ${{ github.sha }}
+      MODUO_VERSION: 1.0.${{ github.run_number }}
 
     steps:
       - name: Checkout
@@ -92,8 +94,21 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN
           rm /tmp/cert.p12
 
-      - name: Build universal macOS .dmg (signed)
-        run: bunx tauri build --target universal-apple-darwin --bundles dmg --config '{"plugins":{"updater":{"endpoints":["https://github.com/GrochowskiMichal/moduohyb/releases/download/prod-latest/latest.json"]}}}'
+      # Stamp a per-run version (the updater only offers builds newer than the installed one),
+      # turn on signed updater bundles, and point this channel's updater at the public releases repo.
+      - name: Write CI Tauri config
+        shell: bash
+        run: |
+          cat > ci-tauri-config.json <<EOF
+          {
+            "version": "1.0.${{ github.run_number }}",
+            "bundle": { "createUpdaterArtifacts": true },
+            "plugins": { "updater": { "endpoints": ["https://github.com/GrochowskiMichal/moduo-releases/releases/download/prod-latest/latest.json"] } }
+          }
+          EOF
+
+      - name: Build universal macOS .dmg + updater bundle (signed)
+        run: bunx tauri build --target universal-apple-darwin --bundles app,dmg --config ${{ github.workspace }}/ci-tauri-config.json
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -142,8 +157,10 @@ jobs:
           DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
           cp "$DMG" /tmp/Moduo_universal.dmg
           # Copy the updater signature file
-          SIG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg.sig" | head -1)
-          if [ -f "$SIG" ]; then cp "$SIG" /tmp/Moduo_universal.dmg.sig; fi
+          # Updater bundle (the macOS updater installs the .app.tar.gz, not the .dmg)
+          TGZ=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app.tar.gz" | head -1)
+          cp "$TGZ" /tmp/Moduo_universal.app.tar.gz
+          cp "$TGZ.sig" /tmp/Moduo_universal.app.tar.gz.sig
 
       - name: Upload Mac artifacts
         uses: actions/upload-artifact@v4
@@ -151,7 +168,8 @@ jobs:
           name: mac-dmg
           path: |
             /tmp/Moduo_universal.dmg
-            /tmp/Moduo_universal.dmg.sig
+            /tmp/Moduo_universal.app.tar.gz
+            /tmp/Moduo_universal.app.tar.gz.sig
 
   # ─────────────────────────────────────────────────────────────────
   # Windows — NSIS installer (unsigned; SmartScreen "Run anyway" for founders)
@@ -162,6 +180,7 @@ jobs:
       contents: write
     env:
       MODUO_BUILD: ${{ github.sha }}
+      MODUO_VERSION: 1.0.${{ github.run_number }}
 
     steps:
       - name: Checkout
@@ -185,8 +204,21 @@ jobs:
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
+      # Stamp a per-run version (the updater only offers builds newer than the installed one),
+      # turn on signed updater bundles, and point this channel's updater at the public releases repo.
+      - name: Write CI Tauri config
+        shell: bash
+        run: |
+          cat > ci-tauri-config.json <<EOF
+          {
+            "version": "1.0.${{ github.run_number }}",
+            "bundle": { "createUpdaterArtifacts": true },
+            "plugins": { "updater": { "endpoints": ["https://github.com/GrochowskiMichal/moduo-releases/releases/download/prod-latest/latest.json"] } }
+          }
+          EOF
+
       - name: Build Windows NSIS installer
-        run: bunx tauri build --bundles nsis --config '{"plugins":{"updater":{"endpoints":["https://github.com/GrochowskiMichal/moduohyb/releases/download/prod-latest/latest.json"]}}}'
+        run: bunx tauri build --bundles nsis --config ${{ github.workspace }}/ci-tauri-config.json
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -263,15 +295,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=$(cat src-tauri/tauri.conf.json | grep '"version"' | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
+          VERSION="1.0.${{ github.run_number }}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           REPO="GrochowskiMichal/moduohyb"
-          BASE_URL="https://github.com/${REPO}/releases/download/prod-latest"
+          BASE_URL="https://github.com/GrochowskiMichal/moduo-releases/releases/download/prod-latest"
 
           MAC_SIG=""
           WIN_SIG=""
-          if [ -f release-artifacts/Moduo_universal.dmg.sig ]; then
-            MAC_SIG=$(cat release-artifacts/Moduo_universal.dmg.sig)
+          if [ -f release-artifacts/Moduo_universal.app.tar.gz.sig ]; then
+            MAC_SIG=$(cat release-artifacts/Moduo_universal.app.tar.gz.sig)
           fi
           if [ -f release-artifacts/Moduo_x64-setup.exe.sig ]; then
             WIN_SIG=$(cat release-artifacts/Moduo_x64-setup.exe.sig)
@@ -285,11 +317,11 @@ jobs:
             "platforms": {
               "darwin-aarch64": {
                 "signature": "${MAC_SIG}",
-                "url": "${BASE_URL}/Moduo_universal.dmg"
+                "url": "${BASE_URL}/Moduo_universal.app.tar.gz"
               },
               "darwin-x86_64": {
                 "signature": "${MAC_SIG}",
-                "url": "${BASE_URL}/Moduo_universal.dmg"
+                "url": "${BASE_URL}/Moduo_universal.app.tar.gz"
               },
               "windows-x86_64": {
                 "signature": "${WIN_SIG}",
@@ -304,6 +336,8 @@ jobs:
       - name: Upsert rolling prod-latest GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          repository: GrochowskiMichal/moduo-releases
+          token: ${{ secrets.RELEASES_REPO_TOKEN }}
           tag_name: prod-latest
           name: "Production — latest build"
           prerelease: false
@@ -316,7 +350,8 @@ jobs:
             Download the desktop app or let the in-app updater install it automatically.
           files: |
             release-artifacts/Moduo_universal.dmg
+            release-artifacts/Moduo_universal.app.tar.gz
             release-artifacts/Moduo_x64-setup.exe
             release-artifacts/latest.json
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
