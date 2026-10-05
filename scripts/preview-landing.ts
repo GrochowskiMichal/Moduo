@@ -17,6 +17,13 @@ const server = Bun.serve({
   port,
   fetch(req) {
     const { pathname } = new URL(req.url);
+    // Static assets next to the page (share image etc.), shipped to /assets by vercel-build.
+    if (pathname.startsWith("/assets/") && !pathname.includes("..")) {
+      const asset = Bun.file(path.join(root, pathname));
+      return asset.exists().then((ok) =>
+        ok ? new Response(asset, { headers: { "cache-control": "no-store" } }) : new Response("Not found", { status: 404 }),
+      );
+    }
     const file = pathname.replace(/\/$/, "") === "/staging" ? "staging.html" : "index.html";
     return new Response(Bun.file(path.join(root, file)), {
       headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
