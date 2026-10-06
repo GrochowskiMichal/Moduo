@@ -14,19 +14,22 @@ export type EntitlementsRow = {
   trial_days_remaining: number | null;
   trial_ends_at: string | null;
   current_period_end: string | null;
+  stripe_subscription_id?: string | null;
 };
 
 export const ENTITLEMENTS_COLUMNS =
-  "plan_tier,subscription_status,trial_days_remaining,trial_ends_at,current_period_end";
+  "plan_tier,subscription_status,trial_days_remaining,trial_ends_at,current_period_end,stripe_subscription_id";
 
 export function planLabel(tier: string | null | undefined): string {
   switch (normalizePlanTier(tier)) {
     case "pro":
       return "Pro";
+    case "duo":
+      return "Duo";
     case "team":
       return "Team";
     case "founder":
-      return "Founders";
+      return "Founder";
     default:
       return "Free";
   }
@@ -54,7 +57,9 @@ export function isTrialing(row: EntitlementsRow | null): boolean {
 /** One-line subscription state rendered under the plan name. */
 export function subscriptionLine(row: EntitlementsRow | null): string {
   const status = row?.subscription_status;
-  if (!row || !status || status === "none") return "No subscription";
+  if (row && normalizePlanTier(row.plan_tier) === "founder")
+    return "Everything included — no charge";
+  if (!row || !status || status === "none" || status === "inactive") return "No subscription";
 
   switch (status) {
     case "trialing": {

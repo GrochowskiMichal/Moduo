@@ -152,7 +152,7 @@ describe("PLAN_TIERS drift guards", () => {
     // these labels in this order. Canonical label is `founder` (SINGULAR);
     // `founders` (plural) is the legacy app/Stripe spelling and is a
     // compatibility INPUT only — never emitted.
-    expect(PLAN_TIERS).toEqual(["free", "pro", "team", "founder"]);
+    expect(PLAN_TIERS).toEqual(["free", "pro", "team", "founder", "duo"]);
   });
 
   it("schema accepts canonical values and rejects the legacy spelling", () => {
