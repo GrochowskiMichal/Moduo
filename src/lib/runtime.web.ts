@@ -79,6 +79,7 @@ import {
   prefsSelectCols,
 } from "./prefs-columns";
 import { createRequestCache } from "./request-cache";
+import { webChatRuntime } from "./runtime.chat.web";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -291,6 +292,10 @@ export const webCapabilities: RuntimeCapabilities = {
 
 export const webRuntime: ModuoRuntime = {
   capabilities: webCapabilities,
+
+  // Chat (specs/chat.md): ops + RLS reads live in runtime.chat.web.ts. Only this
+  // file imports it — importing it first elsewhere would hit the module cycle.
+  chat: webChatRuntime,
 
   auth: {
     async getLocalAuthState() {

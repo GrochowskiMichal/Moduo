@@ -17,7 +17,7 @@
 export const ENTITY_OPEN_EVENT = "moduo:entity:open";
 
 export type EntityOpenTarget = {
-  to: "/contacts" | "/tasks" | "/notes" | "/email" | "/calendar";
+  to: "/contacts" | "/tasks" | "/notes" | "/email" | "/calendar" | "/chat";
   /** URL search params to navigate with (each page's own validated shape). */
   search?: Record<string, string>;
   /** The entity id to mark as an external "take me there" intent, so a page
@@ -67,6 +67,9 @@ export function entityOpenTarget(type: string, id: string): EntityOpenTarget | n
       return { to: "/notes", search: { id }, intentId: id };
     case "event":
       return { to: "/calendar", search: { event: id }, intentId: id };
+    // Chat notifications target the conversation (chat.mention / chat.reply).
+    case "chat_channel":
+      return { to: "/chat", search: { c: id }, intentId: id };
     default:
       return null;
   }

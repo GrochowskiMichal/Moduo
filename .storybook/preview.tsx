@@ -15,8 +15,11 @@ import "@fontsource/nunito/600.css";
 import "@fontsource/nunito/700.css";
 
 import { TooltipProvider } from "../src/components/ui/tooltip";
+import {
+  WorkspaceContext,
+  type WorkspaceContextValue,
+} from "../src/features/workspaces/workspace-context";
 import { AuthContext, type AuthContextValue } from "../src/providers/auth-provider";
-import { WorkspaceContext, type WorkspaceContextValue } from "../src/providers/workspace-provider";
 
 const mockAuth: AuthContextValue = {
   userId: "storybook-user",

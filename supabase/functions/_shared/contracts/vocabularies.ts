@@ -326,3 +326,36 @@ export function isKnownSubscriptionStatus(value: unknown): value is KnownSubscri
     typeof value === "string" && (KNOWN_SUBSCRIPTION_STATUSES as readonly string[]).includes(value)
   );
 }
+
+// ---------------------------------------------------------------------------
+// Chat — mirrors the CHECKs in 20261006150000_chat_module (chat_channels.kind,
+// chat_members.notify_level). Gated by the workspace owner's plan rank ≥ duo.
+// ---------------------------------------------------------------------------
+
+export const CHAT_CHANNEL_KINDS = ["channel", "dm"] as const;
+export type ChatChannelKind = (typeof CHAT_CHANNEL_KINDS)[number];
+export const chatChannelKindSchema = z.enum(CHAT_CHANNEL_KINDS);
+export function isChatChannelKind(value: unknown): value is ChatChannelKind {
+  return typeof value === "string" && (CHAT_CHANNEL_KINDS as readonly string[]).includes(value);
+}
+
+export const CHAT_NOTIFY_LEVELS = ["all", "mentions", "none"] as const;
+export type ChatNotifyLevel = (typeof CHAT_NOTIFY_LEVELS)[number];
+export const chatNotifyLevelSchema = z.enum(CHAT_NOTIFY_LEVELS);
+export function isChatNotifyLevel(value: unknown): value is ChatNotifyLevel {
+  return typeof value === "string" && (CHAT_NOTIFY_LEVELS as readonly string[]).includes(value);
+}
+/** Read-side normalization: an unknown level degrades to the quiet default. */
+export function normalizeChatNotifyLevel(input: unknown): ChatNotifyLevel {
+  return isChatNotifyLevel(input) ? input : "mentions";
+}
+/** Strict parse for write paths. */
+export function parseChatNotifyLevel(input: unknown): SafeParseResult<ChatNotifyLevel> {
+  return parseOrError(chatNotifyLevelSchema, input);
+}
+
+/** Plans whose workspaces get chat (mirrors public.chat_workspace_enabled: rank ≥ duo). */
+export const CHAT_PLAN_TIERS = ["duo", "team", "founder"] as const satisfies readonly PlanTier[];
+export function planHasChat(tier: unknown): boolean {
+  return (CHAT_PLAN_TIERS as readonly string[]).includes(normalizePlanTier(tier));
+}
