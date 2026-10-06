@@ -11,6 +11,7 @@ import type {
   CalendarModuleBundle,
 } from "../features/calendar/events";
 import type { CalendarWindow } from "../features/calendar/window";
+import type { ChatRuntime } from "../features/chat/model";
 import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
 import type {
   Company,
@@ -857,6 +858,9 @@ export type ModuoRuntime = {
    * `entities_op_*` RPCs (permission guard + write + attributed activity row in
    * one transaction); reads are direct SELECTs over the indexed tables.
    */
+  /** Chat (specs/chat.md) — Supabase-direct on both surfaces; Duo/Team/Founder workspaces. */
+  chat: ChatRuntime;
+
   spine: {
     /**
      * Every live link touching an entity (matched on either end). Block CT-2

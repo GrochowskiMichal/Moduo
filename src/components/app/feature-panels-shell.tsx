@@ -30,6 +30,11 @@ type Props = {
    * handles, no per-feature width persistence). Defaults to true.
    */
   resizable?: boolean;
+  /**
+   * The center renders edge-to-edge with no padding and no outer scroll — for
+   * surfaces that own their own scroller + sticky chrome (Chat's conversation).
+   */
+  flushCenter?: boolean;
 };
 
 type RailMode = "full" | "sheet" | "hidden";
@@ -87,6 +92,8 @@ const RAIL_WRAPPER =
   "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card flex flex-col overflow-hidden";
 const CENTER_WRAPPER =
   "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card overflow-auto relative";
+const CENTER_WRAPPER_FLUSH =
+  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card overflow-hidden relative flex flex-col";
 
 // Density-driven, uniform padding (responds to Appearance → density). Uniform so
 // content sits equidistant from every panel edge. Rails run tighter than center.
@@ -101,6 +108,7 @@ export function FeaturePanelsShell({
   hideRight = false,
   notice,
   resizable = true,
+  flushCenter = false,
 }: Props) {
   const [panelState, setPanelState] = useState(() => readFeaturePanelState(feature));
   const viewport = useViewportWidth();
@@ -268,7 +276,10 @@ export function FeaturePanelsShell({
       {showLeftFull ? <ResizableHandle /> : null}
 
       <ResizablePanel id={`${feature}-center`} defaultSize="60%" minSize="30%">
-        <main className={CENTER_WRAPPER} style={CENTER_PAD}>
+        <main
+          className={flushCenter ? CENTER_WRAPPER_FLUSH : CENTER_WRAPPER}
+          style={flushCenter ? undefined : CENTER_PAD}
+        >
           {center}
         </main>
       </ResizablePanel>
