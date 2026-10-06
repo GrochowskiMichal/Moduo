@@ -30,6 +30,10 @@ if (target === "landing") {
   const outDir = path.join(root, "dist", "web");
   fs.renameSync(path.join(outDir, "index.html"), path.join(outDir, "app.html"));
   fs.copyFileSync(path.join(root, "landing", file), path.join(outDir, "index.html"));
+  // Marketing subpages ride along on the public landing (staging keeps its portal at /).
+  if (file === "index.html") {
+    fs.copyFileSync(path.join(root, "landing", "manifesto.html"), path.join(outDir, "manifesto.html"));
+  }
   // The landing's own static files (share image, founder photos, …) go to /assets too.
   const assets = path.join(root, "landing", "assets");
   if (fs.existsSync(assets)) fs.cpSync(assets, path.join(outDir, "assets"), { recursive: true });

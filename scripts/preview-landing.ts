@@ -2,6 +2,8 @@
  * Local preview of the static landing, served the way Vercel ships it:
  *   /          → landing/index.html   (www.moduo.app, prod-landing)
  *   /staging   → landing/staging.html (staging.moduo.app, staging-landing)
+ *   /manifesto → landing/manifesto.html
+ *   /parked/x  → landing/parked/x.html (kept for later, never deployed)
  *
  * Usage: bun run preview:landing   (PORT=… to change the port)
  * Re-reads the file on every request — edit, then refresh.
@@ -33,6 +35,12 @@ const server = Bun.serve({
           ? new Response(page, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
           : new Response("Not found", { status: 404 }),
       );
+    }
+    // Marketing subpages, the way vercel.json rewrites them on moduo.app
+    if (pathname.replace(/\/$/, "") === "/manifesto") {
+      return new Response(Bun.file(path.join(root, "manifesto.html")), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
     }
     const file = pathname.replace(/\/$/, "") === "/staging" ? "staging.html" : "index.html";
     return new Response(Bun.file(path.join(root, file)), {

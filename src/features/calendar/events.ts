@@ -21,6 +21,8 @@ export type CalendarEventModel = {
   allDay: boolean;
   rrule: string | null;
   status: string;
+  /** Join URL when the event was created from a booking link. */
+  location?: string | null;
   color: string | null;
   createdAt: string;
   updatedAt: string;
@@ -79,6 +81,8 @@ export type CalendarMirrorEventInput = {
   status?: string;
   description?: string;
   calendarId?: string;
+  /** The meeting link or place. Sent only when the provider has one. */
+  location?: string;
 };
 
 /** One rendered occurrence of an event (recurring events yield several). */

@@ -4,7 +4,7 @@
 // Delete. External events render the same layout read-only with source
 // attribution. CAL-3's switcher will host this as the "Detail" variant.
 
-import { Trash2, X } from "lucide-react";
+import { Trash2, Video, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { DetailTitle, detailTitleVariants } from "../../../components/ui/detail-title";
@@ -24,6 +24,7 @@ import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { toLocalInputValue } from "../../tasks/helpers";
 import type { ActivityEntry } from "../../tasks/model";
 import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
+import { meetingLinkOf } from "../meeting-link";
 import { RepeatPicker } from "./repeat-picker";
 
 type Props = {
@@ -50,6 +51,7 @@ export function EventDetailPanel({
   onClose,
 }: Props) {
   const external = event.sourceAccountId !== null;
+  const meeting = meetingLinkOf(event);
   const editable = canEdit && !external;
   const account = useMemo(
     () => accounts.find((a) => a.id === event.sourceAccountId) ?? null,
@@ -144,6 +146,18 @@ export function EventDetailPanel({
       ) : (
         <DetailTitle>{event.title}</DetailTitle>
       )}
+
+      {meeting ? (
+        <div className="flex flex-col gap-1">
+          <Button asChild size="sm" className="w-fit gap-1.5">
+            <a href={meeting.url} target="_blank" rel="noreferrer">
+              <Video aria-hidden />
+              {meeting.label}
+            </a>
+          </Button>
+          <span className="truncate text-xs text-muted-foreground">{meeting.url}</span>
+        </div>
+      ) : null}
 
       {external ? (
         <span className="text-xs text-muted-foreground">

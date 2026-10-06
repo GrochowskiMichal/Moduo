@@ -112,7 +112,7 @@ fn encrypt_token(plaintext: &str, secret: &str, user_id: &str) -> Result<String,
 
 // ── Supabase upsert ───────────────────────────────────────────────────────────
 
-async fn upsert_integration_in_supabase(
+pub(crate) async fn upsert_integration_in_supabase(
     supabase_url: &str,
     shared_secret: &str,
     user_id: &str,

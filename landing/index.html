@@ -24,11 +24,10 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://www.moduo.app/assets/og.png" />
     <link rel="canonical" href="https://www.moduo.app/" />
-    <link
-      rel="icon"
-      type="image/svg+xml"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000'%3E%3Crect width='1000' height='1000' rx='220' fill='%23000'/%3E%3Cpath fill='%23fafafa' fill-rule='evenodd' d='M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z'/%3E%3C/svg%3E"
-    />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <style>
       /* ─── Fonts ─────────────────────────────────────────────────────────── */
@@ -254,6 +253,58 @@
       .mark {
         color: var(--foreground);
         fill: currentColor;
+      }
+
+      /* ─── Cookie consent ────────────────────────────────────────────────── */
+      .cc {
+        position: fixed;
+        inset-inline-start: 1rem;
+        inset-block-end: 1rem;
+        z-index: 80;
+        display: grid;
+        gap: 0.75rem;
+        width: min(22.5rem, calc(100vw - 2rem));
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--popover);
+        box-shadow: var(--shadow-lg);
+        opacity: 0;
+        transform: translateY(0.75rem);
+        transition:
+          opacity var(--motion-base) var(--ease-out),
+          transform var(--motion-base) var(--ease-out);
+      }
+      .cc[hidden] {
+        display: none;
+      }
+      .cc.is-on {
+        opacity: 1;
+        transform: none;
+      }
+      .cc-t {
+        font-size: var(--text-base);
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .cc-p {
+        font-size: var(--text-sm);
+        line-height: 1.5;
+        color: var(--muted-foreground);
+      }
+      .cc-a {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+      }
+      .ft-legal button.ft-a {
+        background: none;
+        border-top: 0;
+        border-right: 0;
+        border-bottom: 0;
+        font-family: inherit;
+        color: inherit;
+        cursor: pointer;
       }
 
       /* ─── Buttons ───────────────────────────────────────────────────────── */
@@ -8634,6 +8685,86 @@
     <script>
       document.documentElement.classList.add("js");
     </script>
+    <!-- PostHog (EU cloud): landing analytics. Public project token, safe to ship. Skipped on localhost. -->
+    <script>
+      window.mTrack = function (name, props) {
+        try {
+          if (window.posthog && window.posthog.capture) window.posthog.capture(name, props);
+        } catch (e) {}
+      };
+      if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+        !(function (t, e) {
+          var o, n, p, r;
+          e.__SV ||
+            ((window.posthog = e),
+            (e._i = []),
+            (e.init = function (i, s, a) {
+              function g(t, e) {
+                var o = e.split(".");
+                2 == o.length && ((t = t[o[0]]), (e = o[1])),
+                  (t[e] = function () {
+                    t.push([e].concat(Array.prototype.slice.call(arguments, 0)));
+                  });
+              }
+              ((p = t.createElement("script")).type = "text/javascript"),
+                (p.crossOrigin = "anonymous"),
+                (p.async = !0),
+                (p.src = s.api_host.replace(".i.posthog.com", "-assets.i.posthog.com") + "/static/array.js"),
+                (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r);
+              var u = e;
+              for (
+                void 0 !== a ? (u = e[a] = []) : (a = "posthog"),
+                  u.people = u.people || [],
+                  u.toString = function (t) {
+                    var e = "posthog";
+                    return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e;
+                  },
+                  u.people.toString = function () {
+                    return u.toString(1) + ".people (stub)";
+                  },
+                  o =
+                    "init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags onFeatureFlags identify setPersonProperties group reset get_distinct_id get_session_id alias set_config startSessionRecording stopSessionRecording captureException opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing".split(
+                      " "
+                    ),
+                  n = 0;
+                n < o.length;
+                n++
+              )
+                g(u, o[n]);
+              e._i.push([i, s, a]);
+            }),
+            (e.__SV = 1));
+        })(document, window.posthog || []);
+        var granted = false;
+        try {
+          granted = localStorage.getItem("moduo:consent") === "granted";
+        } catch (e) {}
+        posthog.init("phc_D4Y3CbRVFLqkufdCmhtb2XukD2xgV3GQfXjxemtEhqiN", {
+          // Nothing is recorded and no cookie is set until the visitor accepts (see the banner).
+          opt_out_capturing_by_default: !granted,
+          opt_out_persistence_by_default: !granted,
+          api_host: "https://eu.i.posthog.com",
+          ui_host: "https://eu.posthog.com",
+          defaults: "2025-11-30",
+          person_profiles: "identified_only",
+          capture_pageview: "history_change",
+          capture_pageleave: true,
+          autocapture: true,
+          capture_heatmaps: true,
+          capture_dead_clicks: true,
+          capture_exceptions: true,
+          respect_dnt: true,
+          session_recording: { maskAllInputs: true },
+          loaded: function (ph) {
+            var h = location.hostname;
+            ph.register({
+              surface: "landing",
+              environment: h === "www.moduo.app" || h === "moduo.app" ? "production" : "staging",
+            });
+          },
+        });
+      }
+    </script>
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
@@ -9810,6 +9941,7 @@
             <p class="ft-k" id="ft-k-co">Company</p>
             <ul>
               <li><a class="ft-a" href="#makers">About us</a></li>
+              <li><a class="ft-a" href="/manifesto">Manifesto</a></li>
               <li><span class="ft-a is-soon" data-href="/changelog">Changelog</span></li>
               <li><span class="ft-a is-soon" data-href="/press">Press kit</span></li>
               <li><a class="ft-a" href="mailto:hello@moduo.app">Contact</a></li>
@@ -9842,6 +9974,8 @@
               <li><a class="ft-a" href="https://www.linkedin.com/company/moduo_app/" target="_blank" rel="noopener noreferrer">LinkedIn</a></li>
               <li><a class="ft-a" href="https://www.producthunt.com/@moduo_app" target="_blank" rel="noopener noreferrer">Product Hunt</a></li>
               <li><a class="ft-a" href="https://www.reddit.com/user/Moduo_app/" target="_blank" rel="noopener noreferrer">Reddit</a></li>
+              <li><a class="ft-a" href="https://www.instagram.com/moduo_app/" target="_blank" rel="noopener noreferrer">Instagram</a></li>
+              <li><a class="ft-a" href="https://www.tiktok.com/@moduo_app" target="_blank" rel="noopener noreferrer">TikTok</a></li>
               <li><span class="ft-a is-soon">GitHub</span></li>
               <li><a class="ft-a" href="https://www.youtube.com/@Moduo_app" target="_blank" rel="noopener noreferrer">YouTube</a></li>
               <li><span class="ft-a is-soon">Discord</span></li>
@@ -9885,7 +10019,7 @@
           <nav class="ft-legal" aria-label="Legal">
             <span class="ft-a is-soon" data-href="/privacy">Privacy</span>
             <span class="ft-a is-soon" data-href="/terms">Terms</span>
-            <span class="ft-a is-soon" data-href="/cookies">Cookies</span>
+            <button type="button" class="ft-a" data-cc-open>Cookie settings</button>
             <a class="ft-a ft-top" href="#top">Back to top <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow" /></svg></a>
           </nav>
         </div>
@@ -12653,11 +12787,13 @@
               var done = form.querySelector(".wl-done");
               clearTimeout(timer);
               if (res.ok) {
+                window.mTrack("waitlist_joined", { source: form.getAttribute("data-source") });
                 writeStored(email);
                 markAll(email);
                 if (done) done.focus();
                 return;
               }
+              window.mTrack("waitlist_failed", { source: form.getAttribute("data-source"), status: res.status });
               setState(
                 form,
                 "error",
@@ -12667,6 +12803,7 @@
             })
             .catch(function () {
               clearTimeout(timer);
+              window.mTrack("waitlist_failed", { source: form.getAttribute("data-source"), status: 0 });
               setState(form, "error", MSG.offline);
             });
         };
@@ -12770,6 +12907,7 @@
               // Only trust a server that stored the choice and says so.
               if (!body || body.updates !== on) throw new Error("not stored");
               writeUpd(on);
+              window.mTrack("waitlist_updates_toggled", { source: form.getAttribute("data-source"), on: on });
               setOptText(on, on);
             })
             .catch(function () {
@@ -14033,6 +14171,169 @@
           var b = e.target.closest("[data-bill]");
           if (b) set(b.getAttribute("data-bill"));
         });
+      })();
+    </script>
+    <aside class="cc" id="cc" role="region" aria-label="Cookie consent" hidden>
+      <p class="cc-t">Can we count your visit?</p>
+      <p class="cc-p">We use a cookie and anonymous session recordings to see how this page is used. Nothing goes to ad networks, and what you type is never recorded.</p>
+      <div class="cc-a">
+        <button type="button" class="btn btn-outline btn-sm" data-cc="denied">Decline</button>
+        <button type="button" class="btn btn-primary btn-sm" data-cc="granted">Accept</button>
+      </div>
+    </aside>
+    <script>
+      // ── Cookie consent: analytics stays off until the visitor says yes. ──
+      (function () {
+        "use strict";
+        var KEY = "moduo:consent";
+        var el = document.getElementById("cc");
+        if (!el) return;
+        var read = function () {
+          try {
+            return localStorage.getItem(KEY);
+          } catch (e) {
+            return null;
+          }
+        };
+        var write = function (v) {
+          try {
+            localStorage.setItem(KEY, v);
+          } catch (e) {}
+        };
+        var show = function () {
+          el.hidden = false;
+          requestAnimationFrame(function () {
+            el.classList.add("is-on");
+          });
+        };
+        var hide = function () {
+          el.classList.remove("is-on");
+          setTimeout(function () {
+            el.hidden = true;
+          }, 220);
+        };
+        var apply = function (v) {
+          var p = window.posthog;
+          if (!p) return;
+          if (v === "granted") {
+            p.opt_in_capturing({ captureEventName: false });
+            p.capture("$pageview");
+            if (p.startSessionRecording) p.startSessionRecording();
+          } else {
+            p.opt_out_capturing();
+            if (p.stopSessionRecording) p.stopSessionRecording();
+          }
+        };
+        Array.prototype.forEach.call(el.querySelectorAll("[data-cc]"), function (b) {
+          b.addEventListener("click", function () {
+            var v = b.getAttribute("data-cc");
+            var prev = read();
+            write(v);
+            if (v !== prev) apply(v);
+            hide();
+          });
+        });
+        // Footer link: change your mind any time
+        document.addEventListener("click", function (e) {
+          if (e.target.closest && e.target.closest("[data-cc-open]")) show();
+        });
+        // Browsers sending Do Not Track are never tracked, so there is nothing to ask.
+        var dnt = navigator.doNotTrack === "1" || window.doNotTrack === "1";
+        if (!read() && !dnt) setTimeout(show, 600);
+      })();
+    </script>
+    <script>
+      // ── Analytics: behaviour the autocapture can't name. Never sends an email address. ──
+      (function () {
+        "use strict";
+        var track = window.mTrack;
+        if (!track) return;
+        var text = function (el) {
+          return ((el && el.textContent) || "").replace(/\s+/g, " ").trim().slice(0, 80);
+        };
+
+        // Which section / plan opened the waitlist dialog
+        document.addEventListener("click", function (e) {
+          var t = e.target.closest && e.target.closest("[data-wl-open]");
+          if (t) {
+            var sec = t.closest("section[id]");
+            var plan = t.closest(".plan");
+            track("waitlist_cta_clicked", {
+              location: sec ? sec.id : "nav",
+              plan: plan ? text(plan.querySelector("h3")) : undefined,
+            });
+            return;
+          }
+          var a = e.target.closest && e.target.closest("a[href]");
+          if (a && a.host && a.host !== location.host && /^https?:$/.test(a.protocol)) {
+            track("outbound_clicked", { destination: a.host, label: text(a), in_footer: !!a.closest("footer, .ft") });
+          }
+          var bill = e.target.closest && e.target.closest("[data-bill]");
+          if (bill) track("pricing_billing_toggled", { period: bill.getAttribute("data-bill") });
+        });
+
+        // First time someone starts typing their email, per form
+        var started = {};
+        document.addEventListener("focusin", function (e) {
+          var inp = e.target.closest && e.target.closest("form.wl .wl-input");
+          if (!inp) return;
+          var src = inp.closest("form.wl").getAttribute("data-source");
+          if (started[src]) return;
+          started[src] = true;
+          track("waitlist_email_started", { source: src });
+        });
+
+        // FAQ questions people open
+        document.addEventListener(
+          "toggle",
+          function (e) {
+            var d = e.target;
+            if (d && d.tagName === "DETAILS" && d.open && d.closest("#faq")) {
+              track("faq_opened", { question: text(d.querySelector("summary")) });
+            }
+          },
+          true
+        );
+
+        // Sections that actually came into view (once each per visit)
+        if ("IntersectionObserver" in window) {
+          var seen = {};
+          var io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (en) {
+                if (!en.isIntersecting || seen[en.target.id]) return;
+                seen[en.target.id] = true;
+                track("section_viewed", { section: en.target.id });
+                io.unobserve(en.target);
+              });
+            },
+            { threshold: 0.35 }
+          );
+          Array.prototype.forEach.call(document.querySelectorAll("main section[id]"), function (s) {
+            io.observe(s);
+          });
+        }
+
+        // Scroll depth milestones
+        var marks = [25, 50, 75, 100];
+        var hit = {};
+        var ticking = false;
+        var onScroll = function () {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(function () {
+            ticking = false;
+            var h = document.documentElement;
+            var pct = ((window.scrollY + window.innerHeight) / h.scrollHeight) * 100;
+            marks.forEach(function (m) {
+              if (pct >= m - 1 && !hit[m]) {
+                hit[m] = true;
+                track("scroll_depth", { percent: m });
+              }
+            });
+          });
+        };
+        window.addEventListener("scroll", onScroll, { passive: true });
       })();
     </script>
   </body>

@@ -732,11 +732,11 @@ export type ModuoRuntime = {
     }): Promise<{ upserted: number; removed: number }>;
 
     /**
-     * Desktop only (CAL-6b): fetch a connected account's RAW provider events
-     * for a window via the Tauri OAuth engine. The frontend maps them
-     * (mirror.ts) and pushes them through {@link mirrorEvents}. Web returns []
-     * (the sync writer is the desktop app). `externalAccountId` is the provider
-     * account id (the keychain key / the cloud account's `externalId`).
+     * Fetch a connected account's RAW provider events for a window. Desktop
+     * uses the Tauri OAuth engine. Web fetches Google through the stored
+     * refresh token and throws for providers it cannot read (so the sync
+     * loop does not treat "unsupported" as "this calendar is empty").
+     * `externalAccountId` is the provider account id.
      */
     fetchExternalEvents(input: {
       provider: "google" | "microsoft" | "caldav" | "ics";
