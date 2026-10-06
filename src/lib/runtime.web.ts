@@ -490,7 +490,9 @@ export const webRuntime: ModuoRuntime = {
       try {
         const { error } = await supabaseClient.auth.signInWithOtp({
           email,
-          options: { shouldCreateUser: true },
+          // Invite-only: sign-ups are off on the Supabase project, so only existing
+          // or dashboard-invited users get a code. Never create a user from here.
+          options: { shouldCreateUser: false },
         });
         if (error) return { data: {}, error: toError(error) };
         return { data: {}, error: null };
@@ -508,8 +510,12 @@ export const webRuntime: ModuoRuntime = {
         });
         if (error) return { data: { user: null, session: null }, error: toError(error) };
         const session = sessionFromSupabase(data.session);
-        const createdAt = data.user?.created_at ? new Date(data.user.created_at).getTime() : 0;
-        const isNewUser = !!sentAt && !!createdAt && createdAt >= sentAt - 30_000;
+        // An invited user exists from invite time but is only confirmed on their first
+        // sign-in, so "first confirmed" (not "first created") marks a new user.
+        const firstSeenAt = data.user?.email_confirmed_at
+          ? new Date(data.user.email_confirmed_at).getTime()
+          : 0;
+        const isNewUser = !!sentAt && !!firstSeenAt && firstSeenAt >= sentAt - 30_000;
         return { data: { user: session?.user ?? null, session, isNewUser }, error: null };
       } catch (error) {
         return { data: { user: null, session: null, isNewUser: false }, error: toError(error) };

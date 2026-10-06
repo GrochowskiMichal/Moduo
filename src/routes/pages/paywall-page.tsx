@@ -1,169 +1,160 @@
+import { normalizePlanTier } from "@contracts/vocabularies";
 import { Check } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { ModuoMark } from "@/components/ui/moduo-mark";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { ensureTrial, startCheckout } from "@/features/billing/checkout";
+import {
+  type BillingInterval,
+  PLAN_CARDS,
+  type PaidPlan,
+  type PlanCard as PlanCardModel,
+  priceFor,
+  TEAM_MIN_SEATS,
+  TRIAL_DAYS_NO_CARD,
+  TRIAL_DAYS_WITH_CARD,
+} from "@/features/billing/plans";
 import { supabaseClient } from "@/lib/runtime.web";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
-const SUPABASE_URL =
-  (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-  "https://wtoonrvuqumihpkbvwvs.supabase.co";
-
-type BillingCycle = "monthly" | "yearly";
-
-const FREE_FEATURES = [
-  "Notes, tasks, calendar & contacts",
-  "Access on web & desktop",
-  "Cloud sync across devices",
-  "7-day Pro trial, no card required",
-];
-
-const PRO_FEATURES = [
-  "Cloud sync across all devices",
-  "Unlimited notes & tasks",
-  "7-day free trial, no card required",
-  "Priority support",
-];
-
-const TEAM_FEATURES = [
-  "Everything in Pro",
-  "Invite team members",
-  "Shared workspaces",
-  "Admin controls",
-];
-
 /**
- * Plan selection after a trial ends. Monochrome by design (the `preWorkspace()`
- * route wrapper pins `data-accent="mono"`): Pro is emphasised through HIERARCHY —
- * a heavier border, elevation, a neutral "Most popular" badge, and the surface's
- * single solid `bg-primary` CTA against outline CTAs — never a brand hue. That
- * keeps DESIGN_RULES R5 ("one primary action per surface") intact and stops the
- * page reading like a different product from the rest of the app.
+ * Plans. Same four plans, prices and wording as the landing (src/features/billing/plans.ts).
+ * Free is a real tier — this page is a destination (trial banner, upgrade prompts, Settings),
+ * never a wall. Monochrome by design (the `preWorkspace()` wrapper pins `data-accent="mono"`):
+ * the user's best next step carries the single solid CTA; the rest are outline.
  */
 export function PaywallPage() {
-  const { accessToken } = useAuth();
-  const [billing, setBilling] = useState<BillingCycle>("monthly");
+  const { accessToken, userId, planTier } = useAuth();
+  const current = normalizePlanTier(planTier);
+  const isFounder = current === "founder";
+
+  const [interval, setInterval] = useState<BillingInterval>("monthly");
+  const [seats, setSeats] = useState(TEAM_MIN_SEATS);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // null until known. A Stripe customer means they've already had their one trial.
+  const [hadTrial, setHadTrial] = useState<boolean | null>(null);
 
-  const redirectToCheckout = async (plan: "pro" | "team", planName: string) => {
+  useEffect(() => {
+    if (!userId) return;
+    void supabaseClient
+      .from("profiles")
+      .select("stripe_customer_id")
+      .eq("id", userId)
+      .maybeSingle<{ stripe_customer_id: string | null }>()
+      .then(({ data }) => setHadTrial(!!data?.stripe_customer_id));
+  }, [userId]);
+
+  const choose = async (plan: PaidPlan, opts?: { withCard?: boolean }) => {
     if (!accessToken) {
       window.location.href = "/auth";
       return;
     }
-    setBusy(planName);
+    setBusy(opts?.withCard ? `${plan}-card` : plan);
     setError(null);
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/create-checkout-session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          plan,
-          interval: billing === "yearly" ? "yearly" : "monthly",
-          successUrl: `${window.location.origin}/?upgrade=success`,
-          cancelUrl: `${window.location.origin}/paywall`,
-        }),
+      const outcome = await startCheckout({
+        accessToken,
+        plan,
+        interval,
+        seats: plan === "team" ? seats : undefined,
+        withCard: opts?.withCard,
       });
-      const payload = await res.json();
-      if (!res.ok) throw new Error(payload?.error ?? payload?.message ?? "Checkout failed.");
-      if (payload?.error) throw new Error(payload.error);
-      if (!payload?.url) throw new Error("Checkout didn't return a URL. Please try again.");
-      // Navigating away — deliberately do NOT clear `busy`. Clearing it here
-      // re-enables the CTA while the browser is still loading Stripe, which let
-      // a second create-checkout-session fire.
-      window.location.href = payload.url;
+      // Redirected: leave `busy` set so the CTA can't fire a second session while Stripe loads.
+      if (outcome === "switched") window.location.href = "/?upgrade=success";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start checkout. Please try again.");
       setBusy(null);
     }
   };
 
-  const startFreeTrial = async () => {
-    if (!accessToken) {
-      window.location.href = "/auth";
-      return;
-    }
+  const startNoCardTrial = async () => {
     setBusy("trial");
     setError(null);
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/start-trial`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      // Poll user_entitlements until subscription_status is trialing/active
-      // (the edge function writes directly, but we wait to confirm before
-      // redirecting to avoid a redirect loop back to /paywall).
-      const MAX_POLLS = 12;
-      const POLL_INTERVAL_MS = 800;
-      let confirmed = false;
-      for (let i = 0; i < MAX_POLLS; i++) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        // supabase-js reports auth/RLS failures via `error`, not by throwing
-        // (gotchas §Supabase). Swallowing it made a 401 look like "not written
-        // yet" — 10s of polling, then a redirect that the gate bounces straight
-        // back to /paywall, the exact loop this poll exists to prevent.
-        const { data: row, error: pollError } = await supabaseClient
-          .from("user_entitlements")
-          .select("subscription_status")
-          .limit(1)
-          .maybeSingle<{ subscription_status: string }>();
-        if (pollError) throw pollError;
-        const status = row?.subscription_status;
-        if (status === "trialing" || status === "active") {
-          confirmed = true;
-          break;
-        }
-      }
-
-      if (!confirmed) {
-        console.warn(
-          "[paywall] trial created but subscription_status not yet reflected — redirecting anyway",
-        );
-      }
-
-      window.location.href = "/";
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start trial. Please try again.");
-    } finally {
-      setBusy(null);
+    await ensureTrial(accessToken);
+    // The plan lands via the Stripe Sync Engine a moment later — wait for it before leaving.
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => setTimeout(r, 800));
+      const { data } = await supabaseClient
+        .from("user_entitlements")
+        .select("has_access,plan_tier")
+        .maybeSingle<{ has_access: boolean | null; plan_tier: string | null }>();
+      if (data?.has_access && data.plan_tier !== "free") break;
     }
+    window.location.href = "/";
   };
 
-  const proPrice = billing === "monthly" ? "$10" : "$8";
-  const teamPrice = billing === "monthly" ? "$9" : "$7";
+  const heading =
+    isFounder || current !== "free"
+      ? { eyebrow: "Your plan", title: "Plans" }
+      : hadTrial
+        ? { eyebrow: "Your trial has ended", title: "Choose your plan to continue" }
+        : { eyebrow: "Welcome to Moduo", title: "Choose your plan" };
+
+  const ctaFor = (card: PlanCardModel): ReactNode => {
+    if (card.id === "free") {
+      return (
+        <Button
+          variant="outline"
+          size="lg"
+          className="w-full"
+          disabled={busy !== null}
+          onClick={() => {
+            window.location.href = "/";
+          }}
+        >
+          {current === "free" ? "Continue with Free" : "Back to Moduo"}
+        </Button>
+      );
+    }
+    const plan = card.id as PaidPlan;
+    const isCurrent = current === card.id;
+    const label = isCurrent
+      ? "Current plan"
+      : hadTrial !== true && current === "free"
+        ? "Start free trial"
+        : `Choose ${card.name}`;
+    return (
+      <Button
+        size="lg"
+        variant={card.id === "duo" ? "default" : "outline"}
+        className="w-full"
+        aria-label={`${label} — ${card.name}`}
+        disabled={busy !== null || isCurrent || isFounder}
+        onClick={() => void choose(plan)}
+      >
+        {busy === plan ? "Redirecting…" : label}
+      </Button>
+    );
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
       <div className="pointer-events-none absolute left-1/2 top-[-260px] h-[520px] w-[720px] -translate-x-1/2 rounded-full bg-foreground/5 blur-3xl" />
 
-      <div className="relative mx-auto w-full max-w-[1000px] px-5 py-14 sm:py-16">
+      <div className="relative mx-auto w-full max-w-[1180px] px-5 py-14 sm:py-16">
         <header className="flex flex-col items-center text-center">
           <ModuoMark className="mb-6 size-8 opacity-95" aria-hidden="true" />
-          <Eyebrow as="p">Your trial has ended</Eyebrow>
+          <Eyebrow as="p">{heading.eyebrow}</Eyebrow>
           <h1 className="mt-2 font-display text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-4xl">
-            Choose your plan to continue
+            {heading.title}
           </h1>
-          <p className="mx-auto mt-3 max-w-[460px] text-sm leading-6 text-muted-foreground">
-            All plans include a 7-day free trial. No credit card required to start.
+          <p className="mx-auto mt-3 max-w-[480px] text-sm leading-6 text-muted-foreground">
+            Start free. Try Pro for {TRIAL_DAYS_NO_CARD} days with no card, or{" "}
+            {TRIAL_DAYS_WITH_CARD} days with one. Early members keep the founding price.
           </p>
 
           <div className="mt-7 flex flex-col items-center gap-2">
             <SegmentedControl
               aria-label="Billing period"
-              value={billing}
+              value={interval}
               onValueChange={(v) => {
-                setBilling(v as BillingCycle);
+                setInterval(v as BillingInterval);
                 setError(null);
               }}
               items={[
@@ -175,79 +166,80 @@ export function PaywallPage() {
           </div>
         </header>
 
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
-          <PlanCard
-            name="Free"
-            price="$0"
-            caption="Web & desktop"
-            features={FREE_FEATURES}
-            action={
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full"
-                onClick={() => window.open("https://moduo.app/download", "_blank")}
-              >
-                Download desktop app
-              </Button>
-            }
-          />
+        {isFounder ? (
+          <p className="mx-auto mt-8 max-w-[480px] rounded-md border border-border bg-card px-4 py-3 text-center text-sm text-foreground">
+            You&apos;re a Founder — everything is included, no plan needed.
+          </p>
+        ) : null}
 
-          <PlanCard
-            name="Pro"
-            price={proPrice}
-            priceSuffix="/mo"
-            caption={
-              billing === "yearly" ? "billed as $96/yr · 7-day free trial" : "7-day free trial"
-            }
-            features={PRO_FEATURES}
-            featured
-            badge="Most popular"
-            action={
-              <Button
-                size="lg"
-                className="w-full"
-                aria-label="Start free trial on Pro"
-                disabled={busy !== null}
-                onClick={() => void redirectToCheckout("pro", "Pro")}
-              >
-                {busy === "Pro" ? "Redirecting…" : "Start free trial"}
-              </Button>
-            }
-          />
-
-          <PlanCard
-            name="Team"
-            price={teamPrice}
-            priceSuffix="/seat/mo"
-            caption="7-day free trial"
-            features={TEAM_FEATURES}
-            action={
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full"
-                aria-label="Start free trial on Team"
-                disabled={busy !== null}
-                onClick={() => void redirectToCheckout("team", "Team")}
-              >
-                {busy === "Team" ? "Redirecting…" : "Start free trial"}
-              </Button>
-            }
-          />
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {PLAN_CARDS.map((card) => (
+            <PlanCard
+              key={card.id}
+              name={card.name}
+              price={`$${priceFor(card, interval)}`}
+              priceSuffix={card.suffix}
+              caption={card.audience(interval)}
+              features={card.features}
+              featured={card.id === "duo"}
+              badge={current === card.id ? "Current" : card.badge}
+              note={card.founding}
+              action={
+                <div className="flex flex-col gap-3">
+                  {card.id === "team" && current !== "team" && !isFounder ? (
+                    <label className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                      Seats
+                      <input
+                        type="number"
+                        min={TEAM_MIN_SEATS}
+                        max={500}
+                        value={seats}
+                        onChange={(e) =>
+                          setSeats(
+                            Math.max(
+                              TEAM_MIN_SEATS,
+                              Math.floor(Number(e.target.value)) || TEAM_MIN_SEATS,
+                            ),
+                          )
+                        }
+                        className="h-9 w-20 rounded-md border border-input bg-background px-2 text-right text-foreground"
+                        aria-label="Number of seats (minimum 3)"
+                      />
+                    </label>
+                  ) : null}
+                  {ctaFor(card)}
+                </div>
+              }
+            />
+          ))}
         </div>
 
-        <div className="mt-8 text-center">
-          <Button
-            variant="link"
-            size="sm"
-            className="text-muted-foreground underline hover:text-foreground"
-            disabled={busy !== null}
-            onClick={() => void startFreeTrial()}
-          >
-            {busy === "trial" ? "Setting up your trial…" : "Start a no-card 7-day trial on Pro"}
-          </Button>
-        </div>
+        {current === "free" && hadTrial === false ? (
+          <div className="mt-8 flex flex-col items-center gap-1 text-center">
+            <Button
+              variant="link"
+              size="sm"
+              className="text-muted-foreground underline hover:text-foreground"
+              disabled={busy !== null}
+              onClick={() => void startNoCardTrial()}
+            >
+              {busy === "trial"
+                ? "Setting up your trial…"
+                : `Start a ${TRIAL_DAYS_NO_CARD}-day Pro trial, no card`}
+            </Button>
+            <Button
+              variant="link"
+              size="sm"
+              className="text-muted-foreground underline hover:text-foreground"
+              disabled={busy !== null}
+              onClick={() => void choose("pro", { withCard: true })}
+            >
+              {busy === "pro-card"
+                ? "Redirecting…"
+                : `Add a card for ${TRIAL_DAYS_WITH_CARD} days instead`}
+            </Button>
+          </div>
+        ) : null}
 
         {error ? (
           <div
@@ -275,6 +267,7 @@ function PlanCard({
   action,
   featured = false,
   badge,
+  note,
 }: {
   name: string;
   price: string;
@@ -284,6 +277,7 @@ function PlanCard({
   action: ReactNode;
   featured?: boolean;
   badge?: string;
+  note?: string;
 }) {
   return (
     <section
@@ -325,7 +319,9 @@ function PlanCard({
         ))}
       </ul>
 
-      <div className="mt-7">{action}</div>
+      {note ? <p className="mt-5 text-sm leading-5 text-foreground">{note}</p> : null}
+
+      <div className="mt-6">{action}</div>
     </section>
   );
 }

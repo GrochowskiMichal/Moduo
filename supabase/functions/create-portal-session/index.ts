@@ -14,6 +14,7 @@ import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
 import { createPortalSessionBodySchema, parseJsonBody } from "../_shared/contracts/http-bodies.ts";
+import { safeRedirect } from "../_shared/billing.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
@@ -69,8 +70,10 @@ Deno.serve(async (req: Request) => {
     if (!parsedBody.success) {
       return json({ error: "Invalid request", details: parsedBody.errors }, { status: 400 });
     }
-    const returnUrl =
-      parsedBody.data.returnUrl ?? Deno.env.get("APP_URL") ?? "https://app.moduo.app";
+    const returnUrl = safeRedirect(
+      parsedBody.data.returnUrl,
+      Deno.env.get("APP_URL") ?? "https://app.moduo.app",
+    );
 
     const { data: profile } = await supabase
       .from("profiles")

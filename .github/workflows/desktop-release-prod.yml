@@ -47,7 +47,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: prod-app
 
@@ -163,7 +163,7 @@ jobs:
           cp "$TGZ.sig" /tmp/Moduo_universal.app.tar.gz.sig
 
       - name: Upload Mac artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mac-dmg
           path: |
@@ -184,7 +184,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: prod-app
 
@@ -250,7 +250,7 @@ jobs:
           if [ -f "$SIG" ]; then cp "$SIG" release-artifacts/Moduo_x64-setup.exe.sig; fi
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-nsis
           if-no-files-found: error
@@ -267,18 +267,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: prod-app
 
       - name: Download Mac artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mac-dmg
           path: release-artifacts
 
       - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: windows-nsis
           path: release-artifacts
@@ -334,7 +334,7 @@ jobs:
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Upsert rolling prod-latest GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           repository: GrochowskiMichal/moduo-releases
           token: ${{ secrets.RELEASES_REPO_TOKEN }}
