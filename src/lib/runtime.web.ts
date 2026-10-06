@@ -608,7 +608,7 @@ export const webRuntime: ModuoRuntime = {
         .eq("id", workspaceId);
       if (error) throw new Error(error.message);
     },
-    async issueInvite(workspaceId, email, role, modulePermissions) {
+    async issueInvite(workspaceId, email, role, modulePermissions, roleId) {
       const user = await getAuthedUser();
       const { data, error } = await supabaseClient
         .from("workspace_invites")
@@ -617,6 +617,8 @@ export const webRuntime: ModuoRuntime = {
           created_by: user?.id,
           email,
           role,
+          // PERM-1: the role id wins; the DB trigger rewrites `role` to its tier.
+          ...(roleId ? { role_id: roleId } : {}),
           permissions_notes: modulePermissions?.notes ?? "write",
           permissions_tasks: modulePermissions?.tasks ?? "write",
         })
@@ -659,11 +661,12 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
       return data ?? [];
     },
-    async updateInvite(inviteId, role, modulePermissions) {
+    async updateInvite(inviteId, role, modulePermissions, roleId) {
       const { error } = await supabaseClient
         .from("workspace_invites")
         .update({
           role,
+          ...(roleId ? { role_id: roleId } : {}),
           permissions_notes: modulePermissions?.notes ?? "write",
           permissions_tasks: modulePermissions?.tasks ?? "write",
         })
@@ -698,6 +701,45 @@ export const webRuntime: ModuoRuntime = {
         p_member_id: memberId,
       });
       if (error) throw new Error(error.message);
+    },
+    async listRoles(workspaceId) {
+      const { data, error } = await supabaseClient
+        .from("workspace_roles")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .order("position")
+        .order("id");
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    async upsertRole(input) {
+      const { data, error } = await supabaseClient.rpc("workspace_op_role_upsert", {
+        p_workspace_id: input.workspaceId,
+        p_role_id: input.roleId,
+        p_name: input.name,
+        p_description: input.description,
+        p_permissions: input.permissions,
+        p_read_only: input.readOnly,
+        p_expected_updated_at: input.expectedUpdatedAt,
+      });
+      if (error) throw new Error(error.message);
+      return Array.isArray(data) ? data[0] : data;
+    },
+    async deleteRole(roleId, reassignTo) {
+      const { error } = await supabaseClient.rpc("workspace_op_role_delete", {
+        p_role_id: roleId,
+        p_reassign_to: reassignTo,
+      });
+      if (error) throw new Error(error.message);
+    },
+    async setMemberAccess(memberId, roleId, overrides) {
+      const { data, error } = await supabaseClient.rpc("workspace_op_set_member_access", {
+        p_member_id: memberId,
+        p_role_id: roleId,
+        p_overrides: overrides,
+      });
+      if (error) throw new Error(error.message);
+      return Array.isArray(data) ? data[0] : data;
     },
     async removeMember(memberId) {
       // The base workspace_members write-RLS is own-row (only `leave` self-deletes),

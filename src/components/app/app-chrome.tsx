@@ -252,13 +252,21 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const modulesNavItems = useMemo(
     () =>
       baseModulesNavItems.filter((tab) => {
+        // PERM-1: each module tab follows its own View permission.
         if (tab.module === "notes") return modulePermissions.notes !== "none";
         if (tab.module === "tasks") return modulePermissions.tasks !== "none";
-        // Calendar rides the Tasks permission lane at alpha (specs/calendar.md).
-        if (tab.module === "calendar") return modulePermissions.tasks !== "none";
+        if (tab.module === "calendar") return modulePermissions.calendar !== "none";
+        if (tab.module === "contacts") return modulePermissions.contacts !== "none";
+        if (tab.module === "chat") return modulePermissions.chat !== "none";
         return true;
       }),
-    [modulePermissions.notes, modulePermissions.tasks],
+    [
+      modulePermissions.notes,
+      modulePermissions.tasks,
+      modulePermissions.calendar,
+      modulePermissions.contacts,
+      modulePermissions.chat,
+    ],
   );
 
   useEffect(() => {

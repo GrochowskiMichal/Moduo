@@ -35,7 +35,8 @@ import { SettingsSectionShell } from "./section-shell";
  */
 export function ApiKeysSection() {
   const { runtime } = useAuth();
-  const { selectedWorkspace, canManageWorkspace } = useWorkspace();
+  const { selectedWorkspace, can } = useWorkspace();
+  const canManageKeys = can("ws.api_keys");
   const workspaceId = selectedWorkspace?.id ?? null;
 
   const [keys, setKeys] = useState<WorkspaceApiKey[]>([]);
@@ -112,7 +113,7 @@ export function ApiKeysSection() {
         <p className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
           No workspace selected.
         </p>
-      ) : !canManageWorkspace ? (
+      ) : !canManageKeys ? (
         <p className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
           Only workspace owners and admins can manage API keys.
         </p>
