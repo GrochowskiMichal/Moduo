@@ -172,7 +172,9 @@ export function GlobalCommandPalette() {
   const canReachModule = (id: string): boolean => {
     if (id === "notes") return modulePermissions.notes !== "none";
     if (id === "tasks") return modulePermissions.tasks !== "none";
-    if (id === "calendar") return modulePermissions.tasks !== "none";
+    if (id === "calendar") return modulePermissions.calendar !== "none";
+    if (id === "contacts") return modulePermissions.contacts !== "none";
+    if (id === "chat") return modulePermissions.chat !== "none";
     return true;
   };
 

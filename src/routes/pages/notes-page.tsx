@@ -87,7 +87,7 @@ import { useWorkspace } from "../../providers/workspace-provider";
 
 export function NotesPage() {
   const { runtime, userId, userEmail, configError } = useAuth();
-  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+  const { selectedWorkspaceId, modulePermissions, can } = useWorkspace();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as NotesSearch;
 
@@ -628,7 +628,7 @@ export function NotesPage() {
           <NotePublishControl
             note={selectedNote}
             notes={notes}
-            canEdit={canEdit}
+            canEdit={canEdit && can("ws.publish")}
             publishedUrl={(token) => runtime.notesV2.publishedUrl(token)}
             onPublish={() => module.publishNote(selectedNote.id)}
             onUnpublish={() => module.unpublishNote(selectedNote.id)}

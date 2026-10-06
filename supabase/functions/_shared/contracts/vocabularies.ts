@@ -183,6 +183,40 @@ export type MemberDbPermission = (typeof MEMBER_DB_PERMISSIONS)[number];
 export const memberDbPermissionSchema = z.enum(MEMBER_DB_PERMISSIONS);
 
 /**
+ * Workspace permission keys (PERM-1, specs/permissions.md). A role is a set of
+ * these; a member's personal exceptions allow/block single keys on top of it.
+ * Mirrors public.perm_all_keys() — same members, same order (the order drives
+ * the settings matrix). `<module>.<action>` for modules, `ws.<power>` for the
+ * workspace powers.
+ */
+export const PERMISSION_MODULES = ["notes", "tasks", "calendar", "contacts", "chat"] as const;
+export type PermissionModule = (typeof PERMISSION_MODULES)[number];
+export const PERMISSION_ACTIONS = ["view", "create", "edit", "delete"] as const;
+export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
+export const WORKSPACE_POWERS = [
+  "invite",
+  "manage_members",
+  "manage_roles",
+  "publish",
+  "api_keys",
+] as const;
+export type WorkspacePower = (typeof WORKSPACE_POWERS)[number];
+export type PermissionKey = `${PermissionModule}.${PermissionAction}` | `ws.${WorkspacePower}`;
+export const PERMISSION_KEYS: readonly PermissionKey[] = [
+  ...PERMISSION_MODULES.flatMap((m) => PERMISSION_ACTIONS.map((a) => `${m}.${a}` as const)),
+  ...WORKSPACE_POWERS.map((p) => `ws.${p}` as const),
+];
+export function isPermissionKey(value: unknown): value is PermissionKey {
+  return typeof value === "string" && (PERMISSION_KEYS as readonly string[]).includes(value);
+}
+/** System role keys seeded for every workspace (`workspace_roles.system_key`). */
+export const SYSTEM_ROLE_KEYS = ["admin", "member", "viewer"] as const;
+export type SystemRoleKey = (typeof SYSTEM_ROLE_KEYS)[number];
+export function isSystemRoleKey(value: unknown): value is SystemRoleKey {
+  return typeof value === "string" && (SYSTEM_ROLE_KEYS as readonly string[]).includes(value);
+}
+
+/**
  * MCP connector key scopes — a SEPARATE vocabulary from workspace permissions
  * on purpose: `admin` is never key-grantable, and the scope map is per-module.
  * Mirrors moduleScope() in supabase/functions/moduo-mcp/registry.ts.
