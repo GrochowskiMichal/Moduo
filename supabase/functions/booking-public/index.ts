@@ -200,6 +200,9 @@ async function busyIntervals(
     .from("calendar_events")
     .select("start_time, end_time, source_account_id, calendar_id")
     .eq("workspace_id", link.workspace_id)
+    // PERM-0: only the host's own calendar decides their availability —
+    // a teammate's events must neither block slots nor be inferable here.
+    .eq("owner_id", link.owner_user_id)
     .is("deleted_at", null)
     .lt("start_time", to.toISOString())
     .gt("end_time", from.toISOString());

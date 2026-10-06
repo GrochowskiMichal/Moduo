@@ -81,6 +81,26 @@ const entityRefProps = {
   target_id: { type: "string", description: "Target entity uuid." },
 } as const;
 
+/**
+ * PERM-0: events and email threads are owner-only. The connector reads with
+ * the service role (no RLS), so drop registry rows the key's creator doesn't own.
+ */
+const PRIVATE_TABLES: Record<string, string> = { event: "calendar_events", email_thread: "email_refs" };
+
+async function visibleToKey(ctx: ToolContext, data: Row[]): Promise<Row[]> {
+  const hidden = new Set<string>();
+  for (const [type, table] of Object.entries(PRIVATE_TABLES)) {
+    const ids = data.filter((e) => e.entity_type === type).map((e) => e.entity_id as string);
+    if (!ids.length) continue;
+    const owned = await rows(
+      ctx.db.from(table).select("id").in("id", ids).eq("owner_id", ctx.key.createdBy),
+    );
+    const ownedIds = new Set(owned.map((r) => r.id as string));
+    for (const id of ids) if (!ownedIds.has(id)) hidden.add(`${type}:${id}`);
+  }
+  return data.filter((e) => !hidden.has(`${e.entity_type}:${e.entity_id}`));
+}
+
 export const linksConnectorModule: ConnectorModule = {
   module: "links",
   tools: [
@@ -108,7 +128,10 @@ export const linksConnectorModule: ConnectorModule = {
         if (query) q = q.ilike("label", `%${query}%`);
         const types = Array.isArray(args.types) ? args.types.filter((t) => typeof t === "string") : [];
         if (types.length) q = q.in("entity_type", types);
-        const data = await rows(q.order("label").limit(clampLimit(args, 20, 50)));
+        // Over-fetch so dropping a teammate's private rows doesn't starve the page.
+        const limit = clampLimit(args, 20, 50);
+        const fetched = await rows(q.order("label").limit(limit * 4));
+        const data = (await visibleToKey(ctx, fetched)).slice(0, limit);
         return data.map((e) => ({ type: e.entity_type, id: e.entity_id, label: e.label, icon: e.icon }));
       },
     },
