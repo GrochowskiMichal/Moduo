@@ -25,8 +25,26 @@ function WorkspaceGate() {
 const POST_TRIAL_GRACE_POLLS = 6;
 const POST_TRIAL_GRACE_INTERVAL_MS = 1000;
 
+const SUPABASE_URL =
+  (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
+  "https://wtoonrvuqumihpkbvwvs.supabase.co";
+
+const isEntitled = (status: string) => status === "trialing" || status === "active";
+
+/** Edge-function POST that must never throw into the gate: a failure just leaves the status as-is. */
+async function callEdge(name: string, token: string): Promise<void> {
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (err) {
+    console.warn(`[app-gate] ${name} failed (non-fatal):`, err);
+  }
+}
+
 function SubscriptionGate({ children }: { children: React.ReactNode }) {
-  const { runtime, isSignedIn, accessToken } = useAuth();
+  const { runtime, isSignedIn, accessToken, userId } = useAuth();
   const isDesktop = !!runtime?.capabilities.isDesktop;
   const isWeb = !!runtime?.capabilities.isWeb;
 
@@ -34,7 +52,7 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
   const [checkDone, setCheckDone] = useState(false);
 
   useEffect(() => {
-    if (!isWeb || !isSignedIn || !accessToken) {
+    if (!isWeb || !isSignedIn || !accessToken || !userId) {
       setCheckDone(true);
       return;
     }
@@ -54,6 +72,17 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
       return row?.subscription_status ?? "none";
     };
 
+    // Fail closed on a read error here: the worst case is one extra start-trial call,
+    // which is idempotent.
+    const hasStripeCustomer = async (): Promise<boolean> => {
+      const { data } = await supabaseClient
+        .from("profiles")
+        .select("stripe_customer_id")
+        .eq("id", userId)
+        .maybeSingle<{ stripe_customer_id: string | null }>();
+      return !!data?.stripe_customer_id;
+    };
+
     const run = async () => {
       try {
         let status = await fetchStatus();
@@ -65,7 +94,27 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
             await new Promise((r) => setTimeout(r, POST_TRIAL_GRACE_INTERVAL_MS));
             if (cancelled) return;
             status = await fetchStatus();
-            if (status === "trialing" || status === "active") break;
+            if (isEntitled(status)) break;
+          }
+        }
+
+        // Still no entitlement: the mirror can lag or miss a Stripe trial created via
+        // Checkout, so pull the truth from Stripe once and re-read.
+        if (!isEntitled(status) && accessToken) {
+          await callEdge("sync-subscription", accessToken);
+          if (cancelled) return;
+          status = await fetchStatus();
+        }
+
+        // Invited users sign in through the invite link (no OTP step), so they never hit
+        // the signup auto-trial. A user who has never had a Stripe customer gets it here.
+        // start-trial is idempotent.
+        if (!isEntitled(status) && accessToken && !(await hasStripeCustomer())) {
+          await callEdge("start-trial", accessToken);
+          for (let i = 0; i < POST_TRIAL_GRACE_POLLS && !cancelled; i++) {
+            status = await fetchStatus();
+            if (isEntitled(status)) break;
+            await new Promise((r) => setTimeout(r, POST_TRIAL_GRACE_INTERVAL_MS));
           }
         }
 
@@ -87,7 +136,7 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [isWeb, isSignedIn, accessToken]);
+  }, [isWeb, isSignedIn, accessToken, userId]);
 
   // Desktop always passes through.
   if (isDesktop) return <>{children}</>;

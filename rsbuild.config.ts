@@ -50,10 +50,6 @@ const stagingPortal = readLocalEnvValue("PUBLIC_STAGING_PORTAL");
 // Production desktop build — set to "production" to advertise the prod installers.
 const desktopChannel = readLocalEnvValue("PUBLIC_DESKTOP_CHANNEL");
 
-// Comma-separated allowlist of emails that may sign in on staging.
-// Empty string = no restriction (dev / production). Staging Vercel sets this.
-const stagingAllowlist = readLocalEnvValue("PUBLIC_STAGING_ALLOWLIST");
-
 // MODUO_TARGET: "web" for web builds, "desktop" for Tauri builds (default).
 const target = (process.env.MODUO_TARGET as string | undefined) ?? "desktop";
 const isWeb = target === "web";
@@ -123,7 +119,6 @@ export default defineConfig({
       "import.meta.env.PUBLIC_WEB_ORIGIN": JSON.stringify(publicWebOrigin),
       "import.meta.env.PUBLIC_STAGING_PORTAL": JSON.stringify(stagingPortal),
       "import.meta.env.PUBLIC_DESKTOP_CHANNEL": JSON.stringify(desktopChannel),
-      "import.meta.env.PUBLIC_STAGING_ALLOWLIST": JSON.stringify(stagingAllowlist),
       "globalThis.__PUBLIC_ALPHA_VANTAGE_API_KEY__": JSON.stringify(alphaVantageKey),
       "globalThis.__PUBLIC_FINNHUB_API_KEY__": JSON.stringify(finnhubKey),
       "globalThis.__PUBLIC_MARKETSTACK_API_KEY__": JSON.stringify(marketstackKey),
