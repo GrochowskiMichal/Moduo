@@ -357,7 +357,12 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       }
       const bucketTasks = liveTasks.filter((t) => t.bucketId === fields.bucketId);
       const position = endPosition(bucketTasks);
-      const optimistic = makeTask({ ...fields, workspaceId, position });
+      const optimistic = makeTask({
+        ...fields,
+        ownerId: fields.ownerId || userId || undefined,
+        workspaceId,
+        position,
+      });
       const tempId = `tmp-${crypto.randomUUID()}`;
       optimistic.id = tempId;
       setBundle((prev) => ({ ...prev, tasks: [...prev.tasks, optimistic] }));
@@ -374,7 +379,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           toast.error(e instanceof Error ? e.message : "Couldn't create task.");
         });
     },
-    [runtime, workspaceId, canEdit, liveTasks],
+    [runtime, workspaceId, canEdit, liveTasks, userId],
   );
 
   /**
@@ -397,7 +402,13 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       const bucketTasks = liveTasks.filter((t) => t.bucketId === bucketId);
       const position = endPosition(bucketTasks);
       const maxOrder = committedTasks.reduce((m, t) => Math.max(m, t.commitOrder ?? 0), 0);
-      const optimistic = makeTask({ bucketId, title: trimmed, workspaceId, position });
+      const optimistic = makeTask({
+        bucketId,
+        title: trimmed,
+        workspaceId,
+        position,
+        ownerId: userId ?? undefined,
+      });
       optimistic.committedFor = today;
       optimistic.commitOrder = maxOrder + 1;
       const tempId = `tmp-${crypto.randomUUID()}`;
@@ -416,7 +427,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           toast.error(e instanceof Error ? e.message : "Couldn't create task.");
         });
     },
-    [runtime, workspaceId, canEdit, inbox, liveTasks, committedTasks, today],
+    [runtime, workspaceId, canEdit, inbox, liveTasks, committedTasks, today, userId],
   );
 
   const patchTask = useCallback(
