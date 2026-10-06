@@ -100,8 +100,20 @@ export type RollupOptions = {
   now?: Date;
 };
 
-/** Entity types only their owner can read (PERM-0, specs/permissions.md). */
-export const OWNER_ONLY_TYPES: ReadonlySet<string> = new Set(["event", "email_thread"]);
+/**
+ * A missing registry row for these types means the viewer can't open it
+ * (PERM-0 owner-only mail/events, PERM-3…6 per-item grants). The chip says
+ * "Private item" and never falls back to a title.
+ */
+export const OWNER_ONLY_TYPES: ReadonlySet<string> = new Set([
+  "event",
+  "email_thread",
+  "note",
+  "task",
+  "bucket",
+  "contact",
+  "company",
+]);
 
 /** Row title for a linked item the viewer can't open. */
 export const PRIVATE_ITEM_TITLE = "Private item";

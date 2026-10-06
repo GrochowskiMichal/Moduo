@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-
+import { toast } from "sonner";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { EntityHub } from "@/features/spine/ui/entity-hub";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
@@ -57,7 +57,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { cn } from "../../../lib/utils";
 import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
 import { activityActorName, activityLine } from "../activity";
-import { useAssignees } from "../assignees";
+import { previewAssign, useAssignees } from "../assignees";
 import { formatTimestamp, LEVEL_OPTIONS, STATUS_LABELS, wouldCreateCycle } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import {
@@ -417,7 +417,12 @@ function DetailBody({
             <AssigneeSelect
               value={task.ownerId}
               disabled={!canEdit}
-              onChange={(id) => api.patchTask(task.id, { ownerId: id })}
+              onChange={(id) => {
+                void previewAssign(task.bucketId, id).then((msg) => {
+                  if (msg) toast.message(msg);
+                });
+                api.patchTask(task.id, { ownerId: id });
+              }}
             />
           </PropertyRow>
 
@@ -1089,7 +1094,7 @@ function AssigneeSelect({
       </SelectTrigger>
       <SelectContent>
         {assignees.map((a) => (
-          <SelectItem key={a.userId} value={a.userId}>
+          <SelectItem key={a.userId} value={a.userId} disabled={!a.canTakeTasks}>
             <span className="flex items-center gap-2">
               <AssigneeAvatar assignee={a} className="size-4" />
               {a.name}

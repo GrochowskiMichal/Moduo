@@ -72,6 +72,8 @@ import { NoteOutlinePanel } from "../../features/notes/ui/note-outline-panel";
 import { NotePresenceAvatars } from "../../features/notes/ui/note-presence-avatars";
 import { NotePublishControl } from "../../features/notes/ui/note-publish-control";
 import { NoteTreeSidebar } from "../../features/notes/ui/note-tree-sidebar";
+import { noteIsPrivate } from "../../features/sharing/rules";
+import { ShareMenu } from "../../features/sharing/share-menu";
 import { createLinkWithToast } from "../../features/spine/ui/drop-link-toast";
 import { betweenPositions, endPosition } from "../../features/tasks/helpers";
 import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
@@ -81,13 +83,14 @@ import {
 } from "../../features/tasks/ui/task-detail-panel";
 import { asDragPayload, asDropLinkTarget, isSelfDrop, targetAccepts } from "../../lib/drag-payload";
 import type { EntityLink, EntityRef } from "../../lib/entity-links";
+import { supabaseClient } from "../../lib/runtime.web";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
 export function NotesPage() {
   const { runtime, userId, userEmail, configError } = useAuth();
-  const { selectedWorkspaceId, modulePermissions, can } = useWorkspace();
+  const { selectedWorkspaceId, modulePermissions, can, members } = useWorkspace();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as NotesSearch;
 
@@ -338,7 +341,28 @@ export function NotesPage() {
         betweenPositions,
       });
       if (!drop) return; // self/cycle/unknown — quiet no-op
+      // A sub-note that follows its parent's sharing has nothing to follow at
+      // the top level: it becomes private. Say so before teammates lose it.
+      const dragged = notes.find((n) => n.id === dragId);
+      if (
+        dragged?.shareMode === "inherit" &&
+        !drop.parentId &&
+        !noteIsPrivate(dragId, notes) &&
+        !window.confirm(
+          "This note follows its parent's sharing. At the top level it becomes private to you. Move it anyway?",
+        )
+      ) {
+        return;
+      }
+      const parentPrivate = drop.parentId ? noteIsPrivate(drop.parentId, notes) : false;
+      const keepSharing =
+        parentPrivate &&
+        !noteIsPrivate(dragId, notes) &&
+        !window.confirm("This note will sit under a private note. Make it private too?");
       module.moveNote(dragId, drop.parentId, drop.position);
+      if (parentPrivate && !keepSharing && !noteIsPrivate(dragId, notes)) {
+        void supabaseClient.rpc("share_op_follow_parent", { p_note_id: dragId });
+      }
     },
     [notes, module],
   );
@@ -623,6 +647,20 @@ export function NotesPage() {
             </TooltipTrigger>
             <TooltipContent side="left">Saved locally — will sync</TooltipContent>
           </Tooltip>
+        ) : null}
+        {selectedNote && !selectedNote.deletedAt && !degraded && runtime ? (
+          <ShareMenu
+            key={selectedNote.id}
+            resourceType="note"
+            resourceId={selectedNote.id}
+            inheritsFromParent={
+              selectedNote.shareMode === "inherit" && selectedNote.parentId != null
+            }
+            selfUserId={userId}
+            members={members
+              .filter((m) => m.isActive && !m.removedAt)
+              .map((m) => ({ userId: m.userId, name: m.displayName?.trim() || "Member" }))}
+          />
         ) : null}
         {selectedNote && !selectedNote.deletedAt && !degraded && runtime ? (
           <NotePublishControl

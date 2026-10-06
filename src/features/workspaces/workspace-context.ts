@@ -29,6 +29,11 @@ export type SendWorkspaceInviteArgs = {
   roleId?: string | null;
   modulePermissions?: ModuleAccessInput;
   itemAclTemplates?: ItemAclInput;
+  /** PERM-2b. `existing` is the first-invite step; `resources` are extra grants. */
+  sharePayload?: {
+    existing?: "none" | "view" | "edit";
+    resources?: { type: string; id: string; level: string }[];
+  };
 };
 
 export type UpdateWorkspaceInviteArgs = {

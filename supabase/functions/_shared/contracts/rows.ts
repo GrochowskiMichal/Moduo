@@ -74,6 +74,9 @@ export const noteRowSchema = z.object({
   published_at: optStr,
   publish_token: optStr,
   doc_version: optNum,
+  // PERM-3: a sub-note follows its parent ("inherit") or has its own sharing.
+  share_mode: z.enum(["inherit", "custom"]).optional(),
+  workspace_shared: z.boolean().optional(),
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,

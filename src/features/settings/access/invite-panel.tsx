@@ -48,8 +48,16 @@ function expiresIn(iso: string | null): string {
 
 export function InvitePanel() {
   const { runtime } = useAuth();
-  const { selectedWorkspace, myPerms, roles, invites, sendInvite, updateInvite, revokeInvite } =
-    useWorkspace();
+  const {
+    selectedWorkspace,
+    myPerms,
+    roles,
+    invites,
+    members,
+    sendInvite,
+    updateInvite,
+    revokeInvite,
+  } = useWorkspace();
   const isOwner = selectedWorkspace?.role === "owner";
   const { allowed: planAllowsInvites } = useEntitlement("team_members");
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -64,6 +72,8 @@ export function InvitePanel() {
   const defaultRole = grantable.find((r) => r.systemKey === "member") ?? grantable[0] ?? null;
 
   const [email, setEmail] = useState("");
+  const [existing, setExisting] = useState<"none" | "view" | "edit">("none");
+  const firstInvite = members.filter((m) => m.isActive && !m.removedAt).length <= 1;
   const [roleId, setRoleId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +114,10 @@ export function InvitePanel() {
         email: normalized,
         role: tierFor(chosen),
         roleId: chosen.id,
+        sharePayload: {
+          existing: firstInvite ? existing : "none",
+          resources: [],
+        },
       });
       setEmail("");
       if (invite?.token && runtime) setLastLink(runtime.workspace.inviteUrl(invite.token));
@@ -194,6 +208,26 @@ export function InvitePanel() {
               {sending ? "Creating…" : "Create invite"}
             </Button>
           </div>
+          {firstInvite ? (
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="invite-existing" className="text-xs text-muted-foreground">
+                What can they see of what you already have?
+              </Label>
+              <Select
+                value={existing}
+                onValueChange={(v) => setExisting(v as "none" | "view" | "edit")}
+              >
+                <SelectTrigger id="invite-existing">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nothing yet</SelectItem>
+                  <SelectItem value="view">Everything, view only</SelectItem>
+                  <SelectItem value="edit">Everything, can edit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
           {chosen ? (
             <p className="text-xs text-muted-foreground">

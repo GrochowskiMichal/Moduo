@@ -4,6 +4,7 @@
 
 import { useMemo } from "react";
 
+import { supabaseClient } from "../../lib/runtime.web";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../workspaces/workspace-context";
 
@@ -12,6 +13,8 @@ export type Assignee = {
   name: string;
   avatarUrl: string | null;
   isMe: boolean;
+  /** Viewers can't complete tasks, so they can't be assigned. */
+  canTakeTasks: boolean;
 };
 
 export function initialsOf(name: string): string {
@@ -20,6 +23,16 @@ export function initialsOf(name: string): string {
   const first = parts[0][0] ?? "";
   const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? "") : "";
   return (first + last).toUpperCase();
+}
+
+/** Null when they can already see the bucket. Otherwise the picker warning. */
+export async function previewAssign(bucketId: string, userId: string): Promise<string | null> {
+  const { data, error } = await supabaseClient.rpc("share_assign_preview", {
+    p_bucket_id: bucketId,
+    p_user_id: userId,
+  });
+  if (error || typeof data !== "string" || data.length === 0) return null;
+  return data;
 }
 
 /** Active workspace members as assignable people, current user first. */
@@ -38,6 +51,7 @@ export function useAssignees(): {
         name: m.userId === userId ? "Me" : (m.displayName?.trim() ?? "Member"),
         avatarUrl: m.avatarUrl,
         isMe: m.userId === userId,
+        canTakeTasks: m.perms.includes("tasks.edit"),
       }))
       .sort((a, b) => Number(b.isMe) - Number(a.isMe) || a.name.localeCompare(b.name));
     const map = new Map(list.map((a) => [a.userId, a]));

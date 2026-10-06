@@ -276,6 +276,45 @@ async function googleMirrorAccount(
   return row ? { id: String(row.id), calendarId: primary } : null;
 }
 
+function intersectDates(lists: Date[][]): Date[] {
+  if (lists.length === 0) return [];
+  const key = (d: Date) => d.toISOString();
+  let set = new Set(lists[0].map(key));
+  for (const list of lists.slice(1)) {
+    const next = new Set(list.map(key));
+    set = new Set([...set].filter((iso) => next.has(iso)));
+  }
+  return [...set].map((iso) => new Date(iso)).sort((a, b) => a.getTime() - b.getTime());
+}
+
+async function collectiveOpenSlots(
+  db: SupabaseClient,
+  link: LinkRow,
+  now: Date,
+  horizonEnd: Date,
+): Promise<Date[] | "paused"> {
+  const hosts = await db
+    .from("booking_link_hosts")
+    .select("user_id, status")
+    .eq("link_id", link.id);
+  const rows = (hosts.data ?? []) as { user_id: string; status: string }[];
+  if (rows.some((row) => row.status !== "accepted")) return "paused";
+  const people = [link.owner_user_id, ...rows.map((row) => row.user_id)];
+  const lists: Date[][] = [];
+  for (const person of people) {
+    const access = await googleAccess(db, person).catch(() => null);
+    const busy = await busyIntervals(
+      db,
+      { ...link, owner_user_id: person },
+      now,
+      horizonEnd,
+      access?.accessToken ?? null,
+    );
+    lists.push(openSlots({ ...link, owner_user_id: person }, busy, now));
+  }
+  return intersectDates(lists);
+}
+
 function openSlots(link: LinkRow, busy: Interval[], now: Date): Date[] {
   return computeOpenSlots({
     now,
@@ -466,8 +505,9 @@ Deno.serve(async (req: Request) => {
       : await zoomConnected(db, link.owner_user_id).catch(() => false);
   const video = videoOptions(setting, { google_meet: access != null, zoom: zoomOn });
   if (video.length === 0) return json({ ...publicLink(link, host, video), slots: [] });
-  const busy = await busyIntervals(db, link, now, horizonEnd, access?.accessToken ?? null);
-  const slots = openSlots(link, busy, now);
+  const collective = await collectiveOpenSlots(db, link, now, horizonEnd);
+  if (collective === "paused") return json({ ...publicLink(link, host, video), paused: true, slots: [] });
+  const slots = collective;
 
   if (action === "preview") {
     return json({
@@ -637,6 +677,10 @@ Deno.serve(async (req: Request) => {
     p_source_account_id: mirror?.id ?? null,
     p_external_event_id: mirror ? meet.eventId : null,
     p_calendar_id: mirror?.calendarId ?? null,
+    p_cohost_ids: (
+      (await db.from("booking_link_hosts").select("user_id").eq("link_id", link.id).eq("status", "accepted")).data ??
+      []
+    ).map((row: { user_id: string }) => row.user_id),
   });
   if (committed.error || !committed.data) {
     await undoMeeting();
