@@ -48,7 +48,6 @@ const authValue: AuthContextValue = {
   planTier: "free",
   signOut: async () => {},
   refreshPlanTier: async () => {},
-  syncSubscription: async () => "free",
 };
 
 const workspaceValue = {
