@@ -81,6 +81,7 @@ async function getRef(ctx: ToolContext, id: string, cols = REF_COLS): Promise<Ro
       .from("email_refs")
       .select(cols)
       .eq("workspace_id", ctx.key.workspaceId)
+      .eq("owner_id", ctx.key.createdBy) // PERM-0: owner-only
       .eq("id", id)
       .is("deleted_at", null)
       .limit(1),
@@ -107,6 +108,7 @@ export const emailConnectorModule: ConnectorModule = {
             .from("email_refs")
             .select(REF_COLS)
             .eq("workspace_id", ctx.key.workspaceId)
+            .eq("owner_id", ctx.key.createdBy) // PERM-0: owner-only
             .is("deleted_at", null)
             .order("updated_at", { ascending: false })
             .limit(clampLimit(args, 50, 200)),
@@ -149,6 +151,7 @@ export const emailConnectorModule: ConnectorModule = {
             .from("email_refs")
             .select(REF_COLS)
             .eq("workspace_id", ctx.key.workspaceId)
+            .eq("owner_id", ctx.key.createdBy) // PERM-0: owner-only
             .is("deleted_at", null)
             .or(
               `from_addr.ilike.%${q}%,from_name.ilike.%${q}%,subject.ilike.%${q}%,snippet.ilike.%${q}%`,

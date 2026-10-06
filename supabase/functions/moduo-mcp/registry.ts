@@ -23,7 +23,9 @@ export type KeyContext = {
   id: string;
   workspaceId: string;
   name: string;
-  /** module → 'none' | 'view' | 'edit' (admin is never key-grantable). */
+  /** The user the key acts as (PERM-0) — owner-only data is filtered to them. */
+  createdBy: string;
+  /** module → 'none' | 'view' | 'edit', already capped by the creator's permission. */
   scopes: Record<string, string>;
 };
 

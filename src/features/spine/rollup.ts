@@ -100,6 +100,12 @@ export type RollupOptions = {
   now?: Date;
 };
 
+/** Entity types only their owner can read (PERM-0, specs/permissions.md). */
+export const OWNER_ONLY_TYPES: ReadonlySet<string> = new Set(["event", "email_thread"]);
+
+/** Row title for a linked item the viewer can't open. */
+export const PRIVATE_ITEM_TITLE = "Private item";
+
 /**
  * Group a focus entity's links into the fixed, ordered hub sections.
  *
@@ -130,14 +136,21 @@ export function rollupSections(
     const record = records.get(key) ?? null;
     const tombstoned = !!record?.deletedAt;
     const projected = projectSnippet(record, other, { meta: snippetMeta?.get(key), now });
-    const title = tombstoned ? `Deleted ${other.type}` : projected.title;
+    // PERM-0: a linked event/email thread you don't own isn't readable, so its
+    // registry record never arrives — say so instead of "Untitled event".
+    const hidden = record === null && OWNER_ONLY_TYPES.has(other.type);
+    const title = tombstoned
+      ? `Deleted ${other.type}`
+      : hidden
+        ? PRIVATE_ITEM_TITLE
+        : projected.title;
 
     const row: HubRow = {
       link,
       other,
       relationKind: link.relationKind,
       title,
-      snippet: tombstoned ? null : projected.snippet,
+      snippet: tombstoned || hidden ? null : projected.snippet,
       icon: projected.icon,
       tombstoned,
     };
