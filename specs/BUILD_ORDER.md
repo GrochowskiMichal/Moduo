@@ -211,9 +211,10 @@ Shared Zod 4 contracts + closed vocabularies. Wave 1 (tasks 1–4) landed on `t/
 
 > Order: PERM-0 → PERM-1 → PERM-2, then PERM-3…7 in any order (each needs PERM-1+2); PERM-8 needs PERM-5. Designer calls locked 2026-10-06 (spec §Open questions).
 
-- [x] **PERM-0 — Privacy fixes: calendar + email refs owner-only, spine doesn't leak them, API keys act as creator** · deps: — · ✅ 2026-10-06 `t/mike/perm-0-privacy` (migration `20261006180000_perm0_privacy.sql` **not yet applied to the hosted project**)
-- [ ] **PERM-1 — Core: grants table, `can_access`, role ceiling (viewer = view-only), workspace defaults, migration of existing workspaces** · deps: PERM-0
-- [ ] **PERM-2 — Settings → Members & permissions + invite "give access" + first-invite "existing content" step** · deps: PERM-1
+- [x] **PERM-0 — Privacy fixes: calendar + email refs owner-only, spine doesn't leak them, API keys act as creator** · deps: — · ✅ 2026-10-06 `t/mike/perm-0-privacy` (migration applied to the hosted project 2026-10-06)
+- [x] **PERM-1 — Roles + personal exceptions, enforced in Postgres (role matrix per module × view/create/edit/delete + workspace powers, read-only ceiling, legacy lanes migrated)** · deps: PERM-0 · ✅ 2026-10-06 `t/mike/perm-roles` (migration `20261006200000_perm1_roles_overrides.sql` applied to the hosted project)
+- [x] **PERM-2 — Settings → Members and access (roles editor, person editor with exceptions + explanations, invites by role)** · deps: PERM-1 · ✅ 2026-10-06 `t/mike/perm-roles`
+- [ ] **PERM-2b — Per-item sharing layer: workspace defaults for new things, first-invite "existing content" step, invite "give access to…"** · deps: PERM-2 (needs the per-thing grants that PERM-3…6 introduce)
 - [ ] **PERM-3 — Notes sharing (share popover, private toggle, inheritance) + "Private item" chips everywhere** · deps: PERM-2
 - [ ] **PERM-4 — Buckets sharing + assignee auto-grant** · deps: PERM-2
 - [ ] **PERM-5 — Calendars: custom calendars, sharing levels incl. free/busy, publish/ICS, calendar sets** · deps: PERM-2

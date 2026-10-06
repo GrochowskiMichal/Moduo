@@ -24,6 +24,7 @@ const runtime = vi.hoisted(() => ({
     })),
     listMembers: vi.fn(async () => []),
     listInvites: vi.fn(async () => []),
+    listRoles: vi.fn(async () => []),
     listNotifications: vi.fn(async () => []),
   },
   spine: {

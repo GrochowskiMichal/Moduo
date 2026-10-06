@@ -237,6 +237,8 @@ export type ModuoRuntime = {
       email: string,
       role: string,
       modulePermissions?: { notes?: string; tasks?: string },
+      /** PERM-1: the workspace role to join with (wins over `role`). */
+      roleId?: string | null,
     ): Promise<any>;
     joinInvite(token: string): Promise<any>;
     listMembers(workspaceId: string): Promise<any[]>;
@@ -245,6 +247,7 @@ export type ModuoRuntime = {
       inviteId: string,
       role: string,
       modulePermissions?: { notes?: string; tasks?: string },
+      roleId?: string | null,
     ): Promise<void>;
     revokeInvite(inviteId: string): Promise<void>;
     updateMemberPermissions(
@@ -259,6 +262,26 @@ export type ModuoRuntime = {
      * `workspace_members` write-RLS is own-row. DF-24.
      */
     removeMember(memberId: string): Promise<void>;
+    /** PERM-1: the workspace's roles (system + custom), readable by members. */
+    listRoles(workspaceId: string): Promise<any[]>;
+    /** Create (`roleId` null) or update a role. Server enforces every rule. */
+    upsertRole(input: {
+      workspaceId: string;
+      roleId: string | null;
+      name: string;
+      description: string;
+      permissions: string[];
+      readOnly: boolean;
+      expectedUpdatedAt: string | null;
+    }): Promise<any>;
+    /** Delete a custom role, moving its people + pending invites to `reassignTo`. */
+    deleteRole(roleId: string, reassignTo: string): Promise<void>;
+    /** Set a member's role and personal exceptions in one step. */
+    setMemberAccess(
+      memberId: string,
+      roleId: string,
+      overrides: Record<string, boolean>,
+    ): Promise<any>;
     /**
      * Hand workspace ownership to another member (owner-only): promotes them to
      * owner, demotes the caller to admin. SECURITY DEFINER RPC. Needed by the

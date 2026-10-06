@@ -1,7 +1,10 @@
 import { createContext, useContext } from "react";
 import type { NotificationItem } from "../spine/notifications";
+import type { Overrides, WorkspaceRoleDef } from "./access";
 import type {
   ModulePermission,
+  ModulePermissions,
+  PermissionKey,
   WorkspaceBranding,
   WorkspaceInvite,
   WorkspaceMember,
@@ -22,6 +25,8 @@ type ItemAclInput = Array<{
 export type SendWorkspaceInviteArgs = {
   email: string;
   role: WorkspaceRole;
+  /** PERM-1: the workspace role to join with. */
+  roleId?: string | null;
   modulePermissions?: ModuleAccessInput;
   itemAclTemplates?: ItemAclInput;
 };
@@ -29,6 +34,7 @@ export type SendWorkspaceInviteArgs = {
 export type UpdateWorkspaceInviteArgs = {
   inviteId: string;
   role: WorkspaceRole;
+  roleId?: string | null;
   modulePermissions?: ModuleAccessInput;
   itemAclTemplates?: ItemAclInput;
 };
@@ -45,8 +51,24 @@ export type WorkspaceContextValue = {
   workspaces: WorkspaceSummary[];
   selectedWorkspaceId: string | null;
   selectedWorkspace: WorkspaceSummary | null;
-  modulePermissions: { notes: ModulePermission; tasks: ModulePermission };
+  modulePermissions: ModulePermissions;
   canManageWorkspace: boolean;
+  /** The caller's effective permission keys in the selected workspace. */
+  myPerms: PermissionKey[];
+  /** Does the caller hold this permission here? (Owners: always.) */
+  can: (key: PermissionKey) => boolean;
+  /** The selected workspace's roles, system roles first. */
+  roles: WorkspaceRoleDef[];
+  upsertRole: (input: {
+    roleId: string | null;
+    name: string;
+    description: string;
+    permissions: PermissionKey[];
+    readOnly: boolean;
+    expectedUpdatedAt: string | null;
+  }) => Promise<WorkspaceRoleDef | null>;
+  deleteRole: (roleId: string, reassignTo: string) => Promise<void>;
+  setMemberAccess: (memberId: string, roleId: string, overrides: Overrides) => Promise<void>;
   members: WorkspaceMember[];
   invites: WorkspaceInvite[];
   notificationsLoading: boolean;
