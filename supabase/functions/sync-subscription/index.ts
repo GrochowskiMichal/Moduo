@@ -34,6 +34,14 @@ const CORS_HEADERS = {
 
 const PRICE_TO_TIER = buildPriceToTier();
 
+/** Newer Stripe API versions moved current_period_end from the subscription onto its items. */
+function periodEndIso(sub: Stripe.Subscription): string | null {
+  const secs =
+    (sub as { current_period_end?: number }).current_period_end ??
+    (sub.items.data[0] as { current_period_end?: number } | undefined)?.current_period_end;
+  return secs ? new Date(secs * 1000).toISOString() : null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
 
@@ -79,7 +87,7 @@ Deno.serve(async (req: Request) => {
     if (active.length === 0) {
       await supabase.from("profiles").update({
         plan_tier: assertPlanTierForWrite("free"),
-        subscription_status: "none",
+        subscription_status: "inactive",
       }).eq("id", user.id);
       return Response.json({ plan_tier: "free", subscription_status: "none" }, { headers: CORS_HEADERS });
     }
@@ -100,7 +108,7 @@ Deno.serve(async (req: Request) => {
       plan_tier: planTier,
       stripe_subscription_id: best.id,
       subscription_status: best.status,
-      current_period_end: new Date(best.current_period_end * 1000).toISOString(),
+      current_period_end: periodEndIso(best),
       plan_updated_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq("id", user.id);
