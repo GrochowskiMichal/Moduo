@@ -6,6 +6,7 @@
 import type { WidgetType } from "../engine/types";
 import { ActivityFeedWidget } from "../ui/widgets/activity-feed-widget";
 import { CalendarTodayWidget } from "../ui/widgets/calendar-today-widget";
+import { ChatWidget } from "../ui/widgets/chat-widget";
 import { ClockWidget } from "../ui/widgets/clock-widget";
 import { CountdownWidget } from "../ui/widgets/countdown-widget";
 import { EmailInboxWidget } from "../ui/widgets/email-inbox-widget";
@@ -41,6 +42,7 @@ const WIDGET_COMPONENTS: Record<WidgetType, WidgetComponent> = {
   "quick-capture": QuickCaptureWidget,
   habits: HabitsWidget,
   pinned: PinnedWidget,
+  chat: ChatWidget,
 };
 
 export function getWidgetComponent(type: WidgetType): WidgetComponent {

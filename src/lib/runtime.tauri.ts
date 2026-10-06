@@ -321,6 +321,9 @@ export const tauriRuntime: ModuoRuntime = {
   // surfaces (entity_links FK'd into the entities registry). Same code path.
   spine: webRuntime.spine,
 
+  // Cloud-first: Chat is Supabase-direct on both surfaces. Same code path as web.
+  chat: webRuntime.chat,
+
   // Cloud-first: Contacts is Supabase-direct on both surfaces (contacts_op_* /
   // companies_op_* RPCs + the entities registry). Same code path as web.
   contacts: webRuntime.contacts,

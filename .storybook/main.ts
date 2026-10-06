@@ -16,9 +16,13 @@ const config: StorybookConfig = {
   viteFinal: async (cfg) => {
     cfg.resolve = cfg.resolve ?? {};
     const existingAlias = cfg.resolve.alias;
+    // Mirror tsconfig `paths` exactly (`@/*` → src, `@contracts/*` → the shared
+    // Zod layer). `@` used to point at the repo root, so every `@/lib/utils`
+    // import 404'd and no story rendered (gotchas §Storybook).
     const aliasMap: Record<string, string> = {
+      "@contracts": path.resolve(projectRoot, "supabase/functions/_shared/contracts"),
       "@/src": path.resolve(projectRoot, "src"),
-      "@": projectRoot,
+      "@": path.resolve(projectRoot, "src"),
     };
     if (Array.isArray(existingAlias)) {
       cfg.resolve.alias = [

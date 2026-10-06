@@ -16,6 +16,7 @@ import { contactsConnectorModule } from "./modules/contacts.ts";
 import { calendarConnectorModule } from "./modules/calendar.ts";
 import { notesConnectorModule } from "./modules/notes.ts";
 import { emailConnectorModule } from "./modules/email.ts";
+import { chatConnectorModule } from "./modules/chat.ts";
 
 /** A verified, live API key — the connector's caller identity. */
 export type KeyContext = {
@@ -55,6 +56,7 @@ export const connectorModules: ConnectorModule[] = [
   calendarConnectorModule,
   notesConnectorModule,
   emailConnectorModule,
+  chatConnectorModule,
 ];
 
 /** Normalize a key's scope for a module (absent/unknown → none). */
