@@ -214,13 +214,15 @@ Shared Zod 4 contracts + closed vocabularies. Wave 1 (tasks 1–4) landed on `t/
 - [x] **PERM-0 — Privacy fixes: calendar + email refs owner-only, spine doesn't leak them, API keys act as creator** · deps: — · ✅ 2026-10-06 `t/mike/perm-0-privacy` (migration applied to the hosted project 2026-10-06)
 - [x] **PERM-1 — Roles + personal exceptions, enforced in Postgres (role matrix per module × view/create/edit/delete + workspace powers, read-only ceiling, legacy lanes migrated)** · deps: PERM-0 · ✅ 2026-10-06 `t/mike/perm-roles` (migration `20261006200000_perm1_roles_overrides.sql` applied to the hosted project)
 - [x] **PERM-2 — Settings → Members and access (roles editor, person editor with exceptions + explanations, invites by role)** · deps: PERM-1 · ✅ 2026-10-06 `t/mike/perm-roles`
-- [ ] **PERM-2b — Per-item sharing layer: workspace defaults for new things, first-invite "existing content" step, invite "give access to…"** · deps: PERM-2 (needs the per-thing grants that PERM-3…6 introduce)
-- [ ] **PERM-3 — Notes sharing (share popover, private toggle, inheritance) + "Private item" chips everywhere** · deps: PERM-2
-- [ ] **PERM-4 — Buckets sharing + assignee auto-grant** · deps: PERM-2
-- [ ] **PERM-5 — Calendars: custom calendars, sharing levels incl. free/busy, publish/ICS, calendar sets** · deps: PERM-2
-- [ ] **PERM-6 — Contacts: private by default (incl. booking-created contacts) + contact groups + merge-on-share** · deps: PERM-2
-- [ ] **PERM-7 — Chat capability grid + channel managers + announcement mode** · deps: PERM-2
-- [ ] **PERM-8 — Collective (Duo) booking links + Moduo Meet co-hosts** · deps: PERM-5
+- [x] **PERM-2b — Per-item sharing layer: workspace defaults for new things, first-invite "existing content" step, invite "give access to…"** · deps: PERM-2 (needs the per-thing grants that PERM-3…6 introduce) · ✅ 2026-10-06 `t/mike/perm-sharing` (defaults + first-invite existing-content step; the per-item "give access to…" picker is stored on the invite but not picked in the UI yet)
+- [x] **PERM-3 — Notes sharing (share popover, private toggle, inheritance) + "Private item" chips everywhere** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing`
+- [x] **PERM-4 — Buckets sharing + assignee auto-grant** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing`
+- [x] **PERM-5 — Calendars: custom calendars, sharing levels incl. free/busy, publish/ICS, calendar sets** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing` (Google/Outlook Can edit does not write back; the public busy/ICS link is hidden — nothing serves the feed yet)
+- [x] **PERM-6 — Contacts: private by default (incl. booking-created contacts) + contact groups + merge-on-share** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing` (private-by-default live; the group + merge bar is hidden: groups have no list/share screen and merge doesn't move links yet)
+- [x] **PERM-7 — Chat capability grid + channel managers + announcement mode** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing`
+- [ ] **PERM-8b — Collective links for real: per-host busy calendars in booking-public, a co-host request inbox (link name visible to hosts), owner sees pending/declined; then flip `COLLECTIVE_LINKS_ENABLED`** · deps: PERM-8
+- [ ] **PERM-6b — Contact groups list + share screen; merge moves links/activity and is scoped to the workspace; then re-enable the contact share bar** · deps: PERM-6
+- [x] **PERM-8 — Collective (Duo) booking links + Moduo Meet co-hosts** · deps: PERM-5 · ✅ 2026-10-06 `t/mike/perm-sharing` (database live; the co-host picker is HIDDEN behind `COLLECTIVE_LINKS_ENABLED` — the booking page doesn't combine each host's own calendars and co-hosts can't see the request yet; Moduo Meet not built)
 
 ## Running sessions & parallelism
 

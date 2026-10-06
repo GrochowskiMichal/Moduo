@@ -24,6 +24,8 @@ function note(p: Partial<Note> & { id: string }): Note {
     createdAt: "2026-07-04T00:00:00Z",
     updatedAt: "2026-07-04T00:00:00Z",
     deletedAt: p.deletedAt ?? null,
+    shareMode: p.shareMode ?? "custom",
+    workspaceShared: p.workspaceShared ?? false,
   };
 }
 

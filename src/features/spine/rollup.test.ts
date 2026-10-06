@@ -204,12 +204,12 @@ describe("rollupSections — owner-only entities (PERM-0)", () => {
     expect(rows.every((r) => r.snippet === null && !r.tombstoned)).toBe(true);
   });
 
-  it("keeps the default title for a missing record of a shared type", () => {
+  it("titles a linked note or task the viewer can't read as a private item", () => {
     const [row] = rollupSections(
       FOCUS,
       [link({ type: "task", id: "t-missing" })],
       new Map(),
     ).flatMap((s) => s.rows);
-    expect(row.title).not.toBe(PRIVATE_ITEM_TITLE);
+    expect(row.title).toBe(PRIVATE_ITEM_TITLE);
   });
 });

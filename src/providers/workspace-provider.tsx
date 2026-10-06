@@ -324,6 +324,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         args.role,
         args.modulePermissions,
         args.roleId ?? null,
+        args.sharePayload,
       );
       await refreshAccessData();
       await refreshNotifications();

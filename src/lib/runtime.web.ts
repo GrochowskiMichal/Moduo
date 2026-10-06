@@ -608,7 +608,7 @@ export const webRuntime: ModuoRuntime = {
         .eq("id", workspaceId);
       if (error) throw new Error(error.message);
     },
-    async issueInvite(workspaceId, email, role, modulePermissions, roleId) {
+    async issueInvite(workspaceId, email, role, modulePermissions, roleId, sharePayload) {
       const user = await getAuthedUser();
       const { data, error } = await supabaseClient
         .from("workspace_invites")
@@ -621,6 +621,7 @@ export const webRuntime: ModuoRuntime = {
           ...(roleId ? { role_id: roleId } : {}),
           permissions_notes: modulePermissions?.notes ?? "write",
           permissions_tasks: modulePermissions?.tasks ?? "write",
+          ...(sharePayload ? { share_payload: sharePayload } : {}),
         })
         .select()
         .single();
@@ -873,7 +874,7 @@ export const webRuntime: ModuoRuntime = {
     // the bundle degraded. Explicit mutations throw honest errors instead.
     async listMeta(workspaceId) {
       const V2_COLS =
-        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, created_at, updated_at, deleted_at";
+        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, share_mode, workspace_shared, created_at, updated_at, deleted_at";
       const LEGACY_COLS =
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
       const cutoff = trashWindowCutoffIso(new Date());
@@ -1942,7 +1943,9 @@ export const webRuntime: ModuoRuntime = {
   // file.
   tasks: {
     async list(workspaceId) {
-      await ensureWebInbox(workspaceId);
+      // Best effort: a Viewer can't create their own Inbox (no tasks.create),
+      // and that must not stop them reading the shared buckets.
+      await ensureWebInbox(workspaceId).catch(() => null);
       const live = (table: string) => (opts?: SelectOpts) =>
         supabaseClient
           .from(table)
@@ -3118,18 +3121,19 @@ function activityRowToModel(raw: unknown): ActivityEntry {
 
 /** Ensure the workspace has its reserved Inbox bucket (idempotent). */
 async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
+  const user = await getAuthedUser();
   const find = () =>
     supabaseClient
       .from("buckets")
       .select("*")
       .eq("workspace_id", workspaceId)
       .eq("is_system", true)
+      .eq("owner_id", user?.id ?? "")
       .is("deleted_at", null)
       .limit(1)
       .maybeSingle();
   const { data: existing } = await find();
   if (existing) return bucketRowToModel(existing);
-  const user = await getAuthedUser();
   const now = new Date().toISOString();
   const { data, error } = await supabaseClient
     .from("buckets")

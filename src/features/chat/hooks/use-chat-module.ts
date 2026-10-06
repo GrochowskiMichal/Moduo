@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { supabaseClient } from "@/lib/runtime.web";
 import { type ComposerPick, encodeComposerText, toPlainText } from "../markup";
 import type { ChatChannel, ChatMember, ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
 import {
@@ -791,9 +792,28 @@ export function useChatModule({
   }, [chat, workspaceId, userId]);
 
   const createChannel = useCallback(
-    async (args: { name: string; topic: string; isPrivate: boolean; memberIds: string[] }) => {
+    async (args: {
+      name: string;
+      topic: string;
+      isPrivate: boolean;
+      memberIds: string[];
+      managersOnly?: boolean;
+    }) => {
       if (!chat || !workspaceId) throw new Error("Chat isn't ready.");
-      const channel = await chat.createChannel({ workspaceId, ...args });
+      const channel = await chat.createChannel({
+        workspaceId,
+        name: args.name,
+        topic: args.topic,
+        isPrivate: args.isPrivate,
+        memberIds: args.memberIds,
+      });
+      if (args.managersOnly) {
+        const { error } = await supabaseClient.rpc("share_op_announce", {
+          p_channel_id: channel.id,
+          p_on: true,
+        });
+        if (error) throw new Error(error.message);
+      }
       await refreshMembership();
       return channel;
     },
