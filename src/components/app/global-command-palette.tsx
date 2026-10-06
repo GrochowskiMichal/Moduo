@@ -7,6 +7,7 @@ import {
   FileText,
   House,
   Inbox,
+  MessagesSquare,
   Settings as SettingsIcon,
   Upload,
   UserPlus,
@@ -184,6 +185,7 @@ export function GlobalCommandPalette() {
     // nav/palette stay in sync. The /mindmap route stays reachable directly.
     { id: "email", label: "Open Email", icon: Inbox, run: go("/email") },
     { id: "contacts", label: "Open Contacts", icon: ContactIcon, run: go("/contacts") },
+    { id: "chat", label: "Open Chat", icon: MessagesSquare, run: go("/chat") },
   ].filter((action) => canReachModule(action.id));
 
   // Notes capture works from any page (Wave-3 AC1): same `action` pattern.

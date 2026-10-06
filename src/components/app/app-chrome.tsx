@@ -3,6 +3,7 @@ import { ChevronsLeft, ChevronsRight, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
+import { useChatBadge } from "../../features/chat/hooks/use-chat-badge";
 import {
   DASHBOARD_EDIT_CHANGED_EVENT,
   DASHBOARD_PAGER_EVENT,
@@ -107,7 +108,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   // useShortcut wiring here for the rest.
   useShortcut("new-item", () => dispatchCreateNew());
   const { runtime, userEmail, userId } = useAuth();
-  const { loading, modulePermissions } = useWorkspace();
+  const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
+  // Chat tab badge + app-wide presence (you show as online anywhere in Moduo).
+  const chatBadge = useChatBadge({ runtime, workspaceId: selectedWorkspaceId, userId });
   // Global capture (Wave-3 Notes AC1): ⌘⇧N → a fresh note from anywhere.
   useShortcut(
     "new-note",
@@ -310,6 +313,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     "module-6",
     useCallback(() => navigateToIndex(5), [navigateToIndex]),
   );
+  useShortcut(
+    "module-7",
+    useCallback(() => navigateToIndex(6), [navigateToIndex]),
+  );
 
   useEffect(() => {
     writePanelsMap(featurePanels);
@@ -506,7 +513,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                 active={active}
                 index={index}
                 onClick={() => void navigate({ to: tab.href })}
-                badgeCount={tab.module === "email" ? emailUnread : 0}
+                badgeCount={
+                  tab.module === "email" ? emailUnread : tab.module === "chat" ? chatBadge.count : 0
+                }
               />
             );
           })}
