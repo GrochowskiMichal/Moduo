@@ -24,6 +24,16 @@ const server = Bun.serve({
         ok ? new Response(asset, { headers: { "cache-control": "no-store" } }) : new Response("Not found", { status: 404 }),
       );
     }
+    // Parked pages (not deployed) preview at /parked/<name>
+    const parked = pathname.match(/^\/parked\/([a-z0-9-]+)\/?$/);
+    if (parked) {
+      const page = Bun.file(path.join(root, "parked", parked[1] + ".html"));
+      return page.exists().then((ok) =>
+        ok
+          ? new Response(page, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
+          : new Response("Not found", { status: 404 }),
+      );
+    }
     const file = pathname.replace(/\/$/, "") === "/staging" ? "staging.html" : "index.html";
     return new Response(Bun.file(path.join(root, file)), {
       headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },

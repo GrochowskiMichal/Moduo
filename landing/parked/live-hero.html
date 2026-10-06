@@ -1,4 +1,13 @@
 <!DOCTYPE html>
+<!--
+  PARKED (6 Oct 2026): the landing with the live, clickable Moduo window in the hero.
+  Kept for later. Once the app UI is final and invites roll out, the window comes back
+  as the first section of the pane, not in the hero. Not deployed: vercel-build only
+  ships landing/index.html and landing/assets. Local preview: /parked/live-hero
+  The window is the block from "<div class=\"hx-stage\"" to its caption, its CSS is under
+  "Hero: the copy, then the real app", and its script starts "Hero: ten apps assemble
+  into a real Moduo window".
+-->
 <html lang="en" data-theme="dark" data-accent="mono" data-font="geist">
   <head>
     <meta charset="UTF-8" />
@@ -983,16 +992,12 @@
         margin-top: clamp(4.5rem, 10vw, 8rem);
       }
 
-      /* ─── Hero: the stage ────────────────────────────────────────────────
-         Fills the first screen and holds still on desktop while the pane
-         (everything else) slides up over it. */
+      /* ─── Hero: the copy, then the real app ─────────────────────────────
+         No frame. A short headline with its lead beside it, then one Moduo
+         window you can click. Ten app windows assemble into its Home first. */
       .hx {
-        --hx-pad: clamp(1rem, 1.6vw, 1.375rem);
         position: relative;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        padding: calc(var(--nav-h) + 0.5rem) var(--stage-gut) calc(var(--peek) + 1rem);
+        padding: calc(var(--nav-h) + clamp(2.25rem, 6svh, 4.5rem)) var(--stage-gut) calc(var(--peek) + clamp(1.5rem, 3vw, 2.5rem));
       }
       .hx::after {
         content: "";
@@ -1003,57 +1008,52 @@
         opacity: calc(var(--cover, 0) * 0.62);
         pointer-events: none;
       }
+      /* On large screens the hero scrolls until the window's foot reaches the
+         bottom of the screen, then holds while the pane slides over it */
       @media (min-width: 1001px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
         .hx {
           position: sticky;
-          top: 0;
-          height: 100svh;
-          padding-block: var(--nav-h) var(--peek);
+          top: var(--hx-top, 0px);
         }
-        /* The mockup is sized from the screen height too, so the frame keeps air above and below it */
-        .hx .asm {
-          width: min(100%, calc((86svh - 18rem) * 1.3));
-          justify-self: center;
+        /* While it holds, the whole window, its caption and the pane's edge fit under the bar */
+        .hx .hx-in {
+          max-width: min(80rem, calc((100svh - 14rem) * 1.598));
         }
       }
-      .hx-frame {
+      .hx-in {
         width: 100%;
-        max-width: 92rem;
+        max-width: 80rem;
         margin-inline: auto;
-      }
-
-      /* Copy on the left, the assembling workspace on the right. No frame, no grid. */
-      .hx-plate {
-        position: relative;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
-        align-items: center;
-        gap: clamp(2rem, 4vw, 4.5rem);
-        min-height: 0;
-        padding: clamp(1.75rem, 3.6svh, 3.25rem) clamp(0rem, 2vw, 2rem);
+        gap: clamp(2.5rem, 6svh, 4rem);
       }
-      .hx-plate > * {
-        position: relative;
-      }
-
       .hx-copy {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        justify-items: start;
-        gap: clamp(1.5rem, 2.4vw, 2.25rem);
-        text-align: left;
         container-type: inline-size;
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+        grid-template-areas:
+          "pill pill"
+          "head side";
+        align-items: end;
+        column-gap: clamp(2rem, 5vw, 5rem);
+        row-gap: clamp(1.25rem, 2.6svh, 1.75rem);
       }
       .hx .h-hero {
-        /* Sized from its own column so it always sits on two lines */
-        font-size: min(13.2cqi, 12svh, 8.5rem);
+        grid-area: head;
+        /* Sized from the copy's width, so it always sits on two lines */
+        font-size: max(2.75rem, min(5.25rem, 7cqi));
         line-height: 0.96;
         letter-spacing: -0.045em;
-        white-space: nowrap;
+      }
+      .hx-side {
+        grid-area: side;
+        display: grid;
+        gap: 1.375rem;
+        padding-bottom: 0.25rem;
       }
       .hx .lead {
         max-width: 34rem;
-        font-size: clamp(1.0625rem, 0.55rem + 0.75vw, 1.3125rem);
+        font-size: clamp(1.0625rem, 0.6rem + 0.6vw, 1.25rem);
       }
       .hx-cta {
         width: 100%;
@@ -1064,6 +1064,7 @@
       }
       .hx .wl-row {
         justify-content: flex-start;
+        width: 100%;
       }
       .hx .wl-field,
       .close .wl-field {
@@ -1087,9 +1088,23 @@
       .hx .wl-msg {
         font-size: var(--text-base);
       }
+      @media (max-width: 1000px) {
+        .hx-copy {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-areas:
+            "pill"
+            "head"
+            "side";
+        }
+        .hx .h-hero {
+          font-size: clamp(2.75rem, 9vw, 4.75rem);
+        }
+      }
 
       /* The announcement pill. It only says what's true today. */
       .hx-pill {
+        grid-area: pill;
+        justify-self: start;
         display: inline-flex;
         align-items: center;
         gap: 0.625rem;
@@ -1147,661 +1162,1869 @@
         }
       }
 
-      .hx-visual {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 0.75rem;
-        min-width: 0;
-      }
-      /* Assembly stage — sized in container units so it scales like an illustration */
-      .asm {
+      /* ─── The stage: a fixed 1240 × 776 window, scaled to its column ──── */
+      .hx-stage {
         position: relative;
-        width: 100%;
-        aspect-ratio: 16 / 12.6;
-        overflow: visible;
-        border-radius: 1em;
-        container-type: inline-size;
       }
-      /* The Moduo window is inset so its own border and corners never touch the clip */
-      .ws {
+      /* One soft glow behind the window, nothing else */
+      .hx-stage::before {
+        content: "";
         position: absolute;
-        inset: 2px;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: 2.6em minmax(0, 1fr) 2.3em;
-        font-size: 1.72cqw;
-        border: 1px solid transparent;
-        border-radius: 1em;
+        left: 10%;
+        right: 10%;
+        top: -8%;
+        height: 60%;
+        background: radial-gradient(ellipse 60% 55% at 50% 40%, color-mix(in oklab, var(--foreground) 9%, transparent), transparent 72%);
+        filter: blur(28px);
         opacity: 0;
-        transition:
-          opacity 700ms var(--ease-out),
-          border-color 900ms var(--ease-out),
-          background-color 900ms var(--ease-out),
-          box-shadow 1200ms var(--ease-out);
+        pointer-events: none;
+        transition: opacity 1.6s var(--ease-out);
       }
-      /* The workspace takes shape as the apps arrive: faint outlines while they fly,
-         then the real lines, fill and glow once everything has landed. Lines stay
-         solid and only their colour changes, so nothing switches style mid-way. */
-      .asm[data-state="on"] .ws,
-      .asm.is-built .ws {
+      .hx-stage.is-lit::before {
         opacity: 1;
       }
-      .asm[data-state="on"] .ws {
-        border-color: color-mix(in oklab, var(--foreground) 7%, transparent);
+      .hx-fit {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1240 / 776;
       }
-      .asm.is-built .ws {
-        border-color: color-mix(in oklab, var(--foreground) 13%, transparent);
-        background: color-mix(in oklab, var(--card) 26%, transparent);
+      .hx-note {
+        margin-top: 1rem;
+        text-align: center;
+        font-size: var(--text-sm);
+        color: var(--subtle-foreground);
+      }
+      .hx-note .is-pic,
+      .hx-stage.is-pic .hx-note .is-live {
+        display: none;
+      }
+      .hx-stage.is-pic .hx-note .is-pic {
+        display: inline;
+      }
+      .hx-scale {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1240px;
+        height: 776px;
+        transform: scale(var(--s, 1));
+        transform-origin: 0 0;
+      }
+
+      /* ─── The app window ───────────────────────────────────────────────
+         Measured from the app: 48px bars, 32px controls, 13px labels, 8px
+         control radius, 16px panels. The page's tokens are the app's
+         dark · black · mono defaults, so colours carry straight over. */
+      .app {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        display: grid;
+        grid-template-rows: 48px minmax(0, 1fr) 48px;
+        border: 1px solid color-mix(in oklab, var(--foreground) 13%, transparent);
+        border-radius: 14px;
+        background: var(--background);
         box-shadow:
-          0 0 0 1px rgb(0 0 0 / 0.6),
-          0 0 44px -8px color-mix(in oklab, var(--foreground) 11%, transparent),
-          0 30px 80px -30px rgb(0 0 0 / 0.9);
+          0 48px 120px -36px rgb(0 0 0 / 0.95),
+          0 0 0 1px rgb(0 0 0 / 0.6);
+        overflow: hidden;
+        font-family: var(--font-ui);
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--foreground);
+        text-align: left;
+        -webkit-user-select: none;
+        user-select: none;
+        transition:
+          border-color 0.6s var(--ease-out),
+          box-shadow 0.6s var(--ease-out);
       }
-      /* The app's real chrome: logo + workspace, module tabs (icon mode), bell + avatar */
-      .ws-bar {
+      .app button {
+        text-align: inherit;
+      }
+      .app .icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+      }
+      /* Before the apps arrive the window is only an outline */
+      .app.is-pre {
+        border-style: dashed;
+        border-color: var(--border-strong);
+        box-shadow: none;
+      }
+      .app.is-pre > *,
+      .app.is-assembling .app-bot {
+        opacity: 0;
+      }
+      .app > * {
+        transition: opacity 0.5s var(--ease-out);
+      }
+      /* Phones: a picture of the window, not a control */
+      .app.is-pic {
+        pointer-events: none;
+      }
+
+      .app-top,
+      .app-bot {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
         align-items: center;
-        gap: 1em;
-        min-width: 0;
-        padding: 0 0.9em;
-        border-bottom: 1px solid transparent;
-        font-size: 0.85em;
-        color: var(--faint-foreground);
-        transition:
-          color var(--motion-slow) var(--ease-out),
-          border-color 900ms var(--ease-out);
+        padding-inline: 20px;
       }
-      .ws-brand {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5em;
-        min-width: 0;
-        white-space: nowrap;
-      }
-      .ws-brand .mark {
-        width: 1.7em;
-        height: 1.7em;
-        color: currentColor;
-      }
-      .ws-tabs {
+      .app-l,
+      .app-r,
+      .app-bl,
+      .app-bc,
+      .app-br {
         display: flex;
         align-items: center;
-        gap: 0.3em;
       }
-      .ws-tabs > * {
+      .app-l {
+        gap: 4px;
+      }
+      .app-r,
+      .app-br {
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .app-bc {
+        gap: 8px;
+      }
+      .app-mark {
+        width: 32px;
+        height: 32px;
+        color: var(--foreground);
+        fill: currentColor;
+      }
+      .app-ws {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding-inline: 8px;
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      .app-wsm {
         display: grid;
         place-items: center;
-        width: 2.1em;
-        height: 1.75em;
-        border-radius: 0.45em;
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--popover);
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--muted-foreground);
       }
-      .ws-tabs .icon {
-        width: 1.05em;
-        height: 1.05em;
+      .app-ws .icon {
+        width: 16px;
+        height: 16px;
+        color: var(--muted-foreground);
       }
-      .ws-tabs b {
-        color: var(--foreground);
-        background: color-mix(in oklab, var(--foreground) 10%, transparent);
+      .app-tabs {
+        display: flex;
+        gap: 4px;
       }
-      .ws-me {
-        justify-self: end;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.8em;
-      }
-      .ws-me .icon {
-        width: 1.05em;
-        height: 1.05em;
-      }
-      .ws-av {
-        width: 1.55em;
-        height: 1.55em;
-        border-radius: var(--radius-full);
-        background: linear-gradient(135deg, color-mix(in oklab, var(--foreground) 34%, transparent), color-mix(in oklab, var(--foreground) 10%, transparent));
-      }
-      .ws-foot {
+      .app-tab {
+        position: relative;
         display: flex;
         align-items: center;
-        justify-content: center;
-        min-width: 0;
-        padding: 0 0.9em;
-        border-top: 1px solid transparent;
-        font-size: 0.85em;
-        color: var(--faint-foreground);
+        gap: 8px;
+        height: 32px;
+        padding-inline: 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+        cursor: pointer;
         transition:
-          color var(--motion-slow) var(--ease-out),
-          border-color 900ms var(--ease-out);
+          background-color var(--motion-fade) var(--ease-out),
+          color var(--motion-fade) var(--ease-out),
+          box-shadow 0.5s var(--ease-out);
       }
-      /* The bottom bar narrates instead of copying the app's toolbar */
-      .ws-say {
-        min-width: 0;
-        overflow: hidden;
-        font-size: 0.95em;
-        color: var(--subtle-foreground);
-        white-space: nowrap;
-        text-overflow: ellipsis;
+      .app-tab:hover,
+      .app-tab[aria-current="page"] {
+        background: var(--accent);
+        color: var(--foreground);
       }
-      .ws-say.is-swap {
-        animation: pv-in var(--motion-slow) var(--ease-out);
+      /* A module lights up for a moment as its apps land in Home */
+      .app-tab.is-lit {
+        background: var(--accent);
+        color: var(--foreground);
+        box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 22%, transparent), 0 0 18px -2px color-mix(in oklab, var(--foreground) 30%, transparent);
+        transition-duration: 0.12s;
       }
-      .ws-pg {
+      .app-dot {
+        position: absolute;
+        left: 22px;
+        top: 6px;
+        width: 6px;
+        height: 6px;
+        border-radius: var(--radius-full);
+        background: var(--primary);
+      }
+      .app-ib {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        color: var(--muted-foreground);
+      }
+      .app-bot .app-ib .icon {
+        width: 16px;
+        height: 16px;
+      }
+      .app-cnt {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        display: grid;
+        place-items: center;
+        min-width: 18px;
+        height: 18px;
+        padding-inline: 5px;
+        border-radius: 9px;
+        background: var(--warning);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1;
+        color: oklch(0.2 0 0);
+      }
+      .app-me {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-full);
+        background: var(--popover);
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .app-dots {
         display: flex;
-        gap: 0.35em;
+        gap: 6px;
+        padding-left: 10px;
       }
-      .ws-pg i {
-        width: 0.45em;
-        height: 0.45em;
+      .app-dots i {
+        width: 6px;
+        height: 6px;
         border-radius: var(--radius-full);
         background: var(--border-strong);
       }
-      .ws-pg i.is-on {
-        background: var(--muted-foreground);
+      .app-dots i.is-on {
+        width: 16px;
+        border-radius: 3px;
+        background: var(--foreground);
       }
-      .ws-tools {
-        display: flex;
-        align-items: center;
-        gap: 1.1em;
-      }
-      .ws-tools .icon {
-        width: 1.05em;
-        height: 1.05em;
-      }
-      .ws-edit {
-        justify-self: end;
-        padding: 0.15em 0.6em;
-        border: 1px solid var(--border);
-        border-radius: 0.45em;
-      }
-      .asm[data-state="on"] .ws-bar {
-        border-bottom-color: color-mix(in oklab, var(--foreground) 5%, transparent);
-      }
-      .asm[data-state="on"] .ws-foot {
-        border-top-color: color-mix(in oklab, var(--foreground) 5%, transparent);
-      }
-      .asm.is-built .ws-bar {
-        border-bottom-color: var(--border);
-      }
-      .asm.is-built .ws-foot {
-        border-top-color: var(--border);
-      }
-      .asm.is-built .ws-brand {
-        color: var(--muted-foreground);
-      }
-      .ws-grid {
-        display: grid;
-        grid-template-columns: repeat(10, minmax(0, 1fr));
-        grid-template-rows: repeat(5, minmax(0, 1fr));
-        gap: 0.55em;
-        min-height: 0;
-        padding: 0.65em;
-      }
-      /* Laid out so every link is a short path that crosses no other */
-      .md-mail {
-        grid-column: 1 / 5;
-        grid-row: 1 / 4;
-      }
-      .md-contacts {
-        grid-column: 1 / 5;
-        grid-row: 4 / 6;
-      }
-      .md-tasks {
-        grid-column: 5 / 8;
-        grid-row: 1 / 4;
-      }
-      .md-notes {
-        grid-column: 5 / 8;
-        grid-row: 4 / 6;
-      }
-      .md-cal {
-        grid-column: 8 / 11;
-        grid-row: 1 / 4;
-      }
-      .md-chat {
-        grid-column: 8 / 11;
-        grid-row: 4 / 6;
-      }
-      .md-body.ct {
-        display: flex;
-        flex-direction: column;
-        gap: 0.55em;
-        padding: 0.1em 0.7em 0.7em;
-      }
-      .ct-p,
-      .cm-r {
-        display: flex;
-        align-items: center;
-        gap: 0.5em;
-        min-width: 0;
-      }
-      .ct-p > span,
-      .cm-r > span {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-      }
-      .ct-p strong,
-      .cm-r strong {
-        font-size: 0.85em;
-        font-weight: 500;
-        color: var(--foreground);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .ct-p em,
-      .cm-r em,
-      .ct-s {
-        font-style: normal;
-        font-size: 0.8em;
-        color: var(--faint-foreground);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .cm-r {
-        padding: 0.45em 0.5em;
-        border-radius: 0.45em;
-        background: var(--selected-bg);
-      }
-      .cm-r em {
-        color: var(--muted-foreground);
-      }
-      .asm.is-ten .aw {
-        width: 31%;
-        font-size: 1.75cqw;
+      /* Home has page dots and an edit button; modules have panel toggles */
+      .app[data-view="home"] .app-lp,
+      .app[data-view="home"] .app-rp,
+      .app:not([data-view="home"]) .app-dots,
+      .app:not([data-view="home"]) .app-edit {
+        display: none;
       }
 
-      .md {
+      .app-main {
+        position: relative;
+        min-height: 0;
+      }
+      .vw {
+        position: absolute;
+        inset: 0;
+        display: none;
+      }
+      .vw.is-on {
+        display: grid;
+      }
+      .vw.is-enter {
+        animation: vw-in 260ms var(--ease-out);
+      }
+      @keyframes vw-in {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+      }
+
+      /* ─── Shared pieces, as the app draws them ──────────────────────── */
+      .app .vw-mod {
+        grid-template-columns: 240px minmax(0, 1fr) 240px;
+        gap: 16px;
+        padding-inline: 16px;
+      }
+      .app .pn {
         position: relative;
         display: flex;
         flex-direction: column;
         min-width: 0;
         min-height: 0;
-        border: 1px solid transparent;
-        border-radius: 0.75em;
-        overflow: hidden;
-        transition:
-          border-color var(--motion-slower) var(--ease-out),
-          background-color var(--motion-slower) var(--ease-out),
-          opacity var(--motion-base) var(--ease-out);
-      }
-      /* Empty slots show as the faintest outlines until their app lands */
-      .asm[data-state="on"] .md {
-        border-color: color-mix(in oklab, var(--foreground) 6%, transparent);
-      }
-      .md::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        pointer-events: none;
-      }
-      .asm .md.is-built {
-        border-color: var(--border);
+        border: 1px solid var(--border);
+        border-radius: 16px;
         background: var(--card);
-      }
-      .md.is-built::after {
-        animation: md-snap 700ms var(--ease-out);
-      }
-      @keyframes md-snap {
-        from {
-          box-shadow:
-            inset 0 0 0 1px var(--foreground),
-            0 0 0 0 color-mix(in oklab, var(--foreground) 35%, transparent);
-        }
-        to {
-          box-shadow:
-            inset 0 0 0 1px transparent,
-            0 0 0 0.9em transparent;
-        }
-      }
-      .md-h {
-        display: flex;
-        align-items: center;
-        gap: 0.45em;
-        padding: 0.65em 0.75em 0.45em;
-        font-size: 0.95em;
-        font-weight: 500;
-        color: var(--faint-foreground);
-        white-space: nowrap;
-        transition: color var(--motion-slow) var(--ease-out);
-      }
-      .md-h .icon {
-        width: 1em;
-        height: 1em;
-        flex-shrink: 0;
-      }
-      .md-n {
-        font-size: 0.85em;
-        font-weight: 400;
-        color: var(--subtle-foreground);
-        opacity: 0;
-        transition: opacity var(--motion-slow) var(--ease-out) 300ms;
-      }
-      .md-id {
-        margin-left: auto;
-        font-family: var(--font-mono);
-        font-size: 0.72em;
-        font-weight: 400;
-        letter-spacing: 0.04em;
-        color: var(--faint-foreground);
-      }
-      .md.is-built .md-h {
-        color: var(--foreground);
-      }
-      .md.is-built .md-n {
-        opacity: 1;
-      }
-      .md-body {
-        flex: 1;
-        min-height: 0;
-        display: grid;
-        align-content: start;
-        gap: 0.3em;
-        margin: 0;
-        padding: 0 0.6em;
-        list-style: none;
-      }
-      .md-body > * {
-        opacity: 0;
-        transform: translateY(0.45em);
-        transition:
-          opacity var(--motion-slow) var(--ease-out),
-          transform var(--motion-slower) var(--ease-out);
-      }
-      .md.is-built .md-body > * {
-        opacity: 1;
-        transform: none;
-        transition-delay: calc(var(--n, 1) * 70ms + 200ms);
-      }
-      .md-f {
-        padding: 0.5em 0.75em 0.6em;
-        border-top: 1px solid var(--border);
-        font-family: var(--font-mono);
-        font-size: 0.66em;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--faint-foreground);
-        white-space: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
-        opacity: 0;
-        transition: opacity var(--motion-slow) var(--ease-out);
       }
-      .md.is-built .md-f {
-        opacity: 1;
-        transition-delay: 620ms;
+      .app .pn-rail {
+        padding: 12px;
       }
-
-      .tk {
+      .app .pn-main {
+        padding: 16px;
+      }
+      .app .eb {
         display: flex;
         align-items: center;
-        gap: 0.55em;
-        min-width: 0;
-        padding: 0.42em 0.45em;
-        border-radius: 0.45em;
-        font-size: 0.9em;
+        gap: 8px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
         color: var(--muted-foreground);
       }
-      .tk > span {
+      .app .bdg {
+        display: inline-grid;
+        place-items: center;
+        min-width: 18px;
+        padding-inline: 6px;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
+      }
+      /* Rail rows: 32px, 8px radius, 14px icon */
+      .app .rr {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 32px;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      .app .rr .icon {
+        color: var(--muted-foreground);
+      }
+      .app .rr > span:not(.av2) {
         flex: 1;
         min-width: 0;
-        white-space: nowrap;
         overflow: hidden;
+        white-space: nowrap;
         text-overflow: ellipsis;
       }
-      .cb {
-        display: grid;
-        place-items: center;
-        flex-shrink: 0;
-        width: 1em;
-        height: 1em;
-        border: 1px solid var(--border-strong);
-        border-radius: 0.28em;
+      .app .rr em {
+        font-style: normal;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        color: var(--subtle-foreground);
       }
-      .cb .icon {
-        width: 0.75em;
-        height: 0.75em;
+      .app button.rr {
+        cursor: pointer;
       }
-      .tk.is-done .cb {
-        border-color: var(--success);
-        background: var(--success);
-        color: var(--primary-foreground);
+      .app button.rr:hover {
+        background: var(--accent);
       }
-      .tk.is-done > span {
-        color: var(--faint-foreground);
-        text-decoration: line-through;
-      }
-      .tk[data-a] {
+      .app .rr.is-sel {
         background: var(--selected-bg);
         color: var(--foreground);
       }
-      .ch {
+      .app .rr.is-sel .icon {
+        color: var(--foreground);
+      }
+      .app .rr-gap {
+        height: 12px;
+      }
+      /* Linked items (EntityHub rows) */
+      .app .er {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 32px;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background-color var(--motion-fade) var(--ease-out);
+      }
+      .app .er:hover {
+        background: var(--accent);
+      }
+      .app .er .icon {
+        color: var(--muted-foreground);
+      }
+      .app .er > span {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .app .er small {
+        flex-shrink: 0;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+      }
+      .app .er-sec {
+        grid-template-columns: minmax(0, 1fr);
+        display: grid;
+        gap: 2px;
+        margin-top: 16px;
+      }
+      .app .er-sec > .eb {
+        margin-bottom: 6px;
+      }
+      /* Inline reference chip (EntityRefChip) */
+      .app .ref {
         display: inline-flex;
         align-items: center;
-        gap: 0.25em;
-        flex-shrink: 0;
-        padding: 0.12em 0.4em;
-        border: 1px solid var(--border);
-        border-radius: 0.35em;
-        font-family: var(--font-mono);
-        font-size: 0.72em;
-        font-style: normal;
-        color: var(--subtle-foreground);
-      }
-      .ch .icon {
-        width: 0.9em;
-        height: 0.9em;
-      }
-
-      .cal {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        grid-template-rows: auto repeat(4, minmax(0, 1fr));
-        align-content: stretch;
-        gap: 0.25em 0.3em;
-        padding-bottom: 0.6em;
-      }
-      .cal-d {
-        font-family: var(--font-mono);
-        font-size: 0.66em;
-        text-align: center;
-        color: var(--faint-foreground);
-      }
-      .ev {
-        grid-column: var(--c);
-        grid-row: var(--r);
-        min-width: 0;
-        padding: 0.25em 0.35em;
-        border-left: 2px solid var(--subtle-foreground);
-        border-radius: 0.3em;
-        background: color-mix(in oklab, var(--foreground) 8%, transparent);
-        font-size: 0.68em;
-        line-height: 1.25;
-        color: var(--muted-foreground);
-        overflow: hidden;
-      }
-      .ev.is-soft {
-        border-left-color: var(--border-strong);
-        background: color-mix(in oklab, var(--foreground) 4%, transparent);
-      }
-      .ev.is-key {
-        border-left-color: var(--info);
-        background: color-mix(in oklab, var(--info) 20%, var(--card));
+        gap: 4px;
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: var(--popover);
+        font-size: 13px;
+        line-height: 1.4;
         color: var(--foreground);
+        vertical-align: baseline;
+        cursor: pointer;
+        transition: background-color var(--motion-fade) var(--ease-out);
       }
-
-      .ml {
+      .app .ref:hover {
+        background: var(--accent);
+      }
+      .app .ref .icon {
+        color: var(--muted-foreground);
+      }
+      /* Property rows: a 96px label column */
+      .app .pr {
+        display: grid;
+        grid-template-columns: 96px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        min-height: 32px;
+        font-size: 13px;
+      }
+      .app .pr > span:first-child {
         display: flex;
         align-items: center;
-        gap: 0.6em;
-        min-width: 0;
-        padding: 0.45em 0.5em;
-        border-radius: 0.45em;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted-foreground);
       }
-      .ml > span {
-        display: grid;
+      .app .pr > span:first-child .icon {
+        opacity: 0.7;
+      }
+      .app .pr-v {
+        display: flex;
+        align-items: center;
+        gap: 6px;
         min-width: 0;
       }
-      .av {
+      /* The task toggle: a 16px circle that fills when done */
+      .app .tg {
         display: grid;
         place-items: center;
         flex-shrink: 0;
-        width: 1.9em;
-        height: 1.9em;
+        width: 16px;
+        height: 16px;
+        border: 1px solid color-mix(in oklab, var(--muted-foreground) 50%, transparent);
         border-radius: var(--radius-full);
-        background: var(--accent);
-        font-family: var(--font-mono);
-        font-size: 0.62em;
-        font-weight: 500;
-        color: var(--muted-foreground);
+        cursor: pointer;
+        transition:
+          background-color var(--motion-base) var(--ease-out),
+          border-color var(--motion-base) var(--ease-out);
       }
-      .ml strong {
-        font-size: 0.85em;
-        font-weight: 500;
-        color: var(--muted-foreground);
-      }
-      .ml em {
-        font-size: 0.8em;
-        font-style: normal;
-        color: var(--subtle-foreground);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .ml.is-new {
-        background: var(--selected-bg);
-      }
-      .ml.is-new strong {
-        color: var(--foreground);
-      }
-      .ml.is-new .av {
-        background: color-mix(in oklab, var(--info) 30%, var(--card));
-        color: var(--foreground);
-      }
-
-      .nt {
-        gap: 0.5em;
-        padding-top: 0.15em;
-      }
-      .nt strong {
-        font-size: 0.85em;
-        font-weight: 600;
-        color: var(--foreground);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .nt-ln {
-        display: block;
-        width: 92%;
-        height: 0.36em;
-        border-radius: var(--radius-full);
-        background: var(--accent);
-      }
-      .nt-ln.is-s {
-        width: 62%;
-      }
-      .nt-m {
-        justify-self: start;
-        max-width: 100%;
-        padding: 0.12em 0.4em;
-        border-radius: 0.3em;
-        background: color-mix(in oklab, var(--info) 20%, var(--card));
-        font-size: 0.75em;
-        color: var(--foreground);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .mm {
-        width: 100%;
-        height: 100%;
-        padding: 0 0.3em 0.4em;
-      }
-      .mm-e {
-        fill: none;
-        stroke: var(--border-strong);
-        stroke-width: 1.2;
-        vector-effect: non-scaling-stroke;
-      }
-      .mm-n {
-        fill: var(--card);
-        stroke: var(--muted-foreground);
-        stroke-width: 1;
-        vector-effect: non-scaling-stroke;
-      }
-      .mm-n.is-root {
-        fill: var(--selected-bg);
-        stroke: var(--foreground);
-      }
-      .mm text {
-        font-size: 7px;
-        font-weight: 500;
-        text-anchor: middle;
-        fill: var(--foreground);
-      }
-
-      .ws-spine {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        overflow: visible;
-        pointer-events: none;
-      }
-      /* Same line language as the story below: quiet grey threads, a small travelling pulse */
-      .ws-spine path {
-        fill: none;
-        stroke: var(--border-strong);
-        stroke-width: 1.25;
-        stroke-linecap: round;
+      .app .tg svg {
+        width: 10px;
+        height: 10px;
+        stroke-width: 3;
+        opacity: 0;
+        transform: scale(0.5);
         transition:
           opacity var(--motion-base) var(--ease-out),
-          stroke var(--motion-base) var(--ease-out);
+          transform var(--motion-base) var(--ease-spring);
       }
-      .ws-spine path.is-hot {
-        stroke: var(--foreground);
-        stroke-width: 1.5;
+      .app .tg[aria-pressed="true"] {
+        border-color: var(--primary);
+        background: var(--primary);
+        color: var(--primary-foreground);
       }
-      .ws-spine .sp-end {
-        fill: var(--border-strong);
-        stroke: none;
+      .app .tg[aria-pressed="true"] svg {
+        opacity: 1;
+        transform: none;
       }
-      .ws-spine .sp-dot {
-        fill: var(--foreground);
+      .app .is-done-t {
+        color: var(--subtle-foreground);
+        text-decoration: line-through;
+        text-decoration-color: color-mix(in oklab, var(--subtle-foreground) 70%, transparent);
       }
-      .asm.is-tracing .ws-spine path:not(.is-hot),
-      .asm.is-touring .ws-spine path:not(.is-hot) {
-        opacity: 0.3;
+      .app .ttl {
+        font-size: 15px;
+        font-weight: 500;
+        letter-spacing: -0.005em;
+        line-height: 1.35;
       }
-      .asm.is-tracing .ws-spine .is-cold,
-      .asm.is-touring .ws-spine .is-cold {
-        opacity: 0.3;
+      .app .mut {
+        color: var(--muted-foreground);
       }
-      /* Only a real hover dims the rest; the automatic tour never hides anything */
-      .asm.is-tracing .md:not(.is-focus):not(.is-rel) {
-        opacity: 0.62;
+      .app .sub {
+        font-size: 12px;
+        color: var(--subtle-foreground);
       }
-      .md.is-focus {
-        border-color: var(--muted-foreground);
+      .app .hr {
+        height: 1px;
+        margin-block: 12px;
+        background: var(--border);
+      }
+      .app .av2 {
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        width: 24px;
+        height: 24px;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        font-size: 10px;
+        font-weight: 500;
+        color: var(--muted-foreground);
+      }
+      .app .av2.is-lg {
+        width: 40px;
+        height: 40px;
+        font-size: 14px;
+      }
+      /* When a link lands you somewhere, the thing it pointed at glows once */
+      .app .is-flash {
+        animation: app-flash 1.4s var(--ease-out);
+      }
+      @keyframes app-flash {
+        0%,
+        30% {
+          box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 55%, transparent);
+          background-color: color-mix(in oklab, var(--foreground) 9%, transparent);
+        }
       }
 
-      /* The twenty apps */
+      /* ─── Home: full-bleed, the app's 8 × 4 grid (12px gaps, 16px inset) ─ */
+      .app .vw-home {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        grid-template-rows: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        padding: 16px;
+      }
+      .app .hw {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        grid-column: span 2;
+        grid-row: span 2;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--card);
+        overflow: hidden;
+      }
+      .app .hw.is-m {
+        grid-column: span 4;
+      }
+      /* The frame's header: just the title, 13px/500 */
+      .app .hw-h {
+        display: flex;
+        align-items: center;
+        min-height: 41px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .app .hw-h button:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      .app .hw-list {
+        display: grid;
+        align-content: start;
+        gap: 2px;
+        min-height: 0;
+        padding: 0 6px 6px;
+      }
+      .app .hw-sec {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px 4px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .app .hw-sec .icon {
+        width: 12px;
+        height: 12px;
+      }
+      .app .hw-sec em {
+        font-style: normal;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0;
+        text-transform: none;
+        color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+      }
+      /* Widget rows: 36px, 8px radius, 14px icon, an 11px value at the end */
+      .app .hw-r {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-width: 0;
+        min-height: 36px;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background-color var(--motion-fade) var(--ease-out);
+      }
+      .app .hw-r:hover {
+        background: var(--accent);
+      }
+      .app .hw-r > .icon {
+        color: var(--muted-foreground);
+      }
+      .app .hw-r > :is(span, button):not(.tg, .av2, .hw-time) {
+        flex: 1;
+        min-width: 0;
+      }
+      .app .tg,
+      .app .av2 {
+        flex: none;
+      }
+      .app .hw-r em {
+        flex-shrink: 0;
+        font-style: normal;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
+      }
+      .app .hw-r.is-next {
+        font-weight: 500;
+      }
+      .app .hw-r.is-past {
+        opacity: 0.6;
+      }
+      .app .hw-time {
+        flex: 0 0 48px !important;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
+      }
+      .app .hw-two {
+        display: grid;
+        min-width: 0;
+        text-align: left;
+      }
+      .app .hw-two b,
+      .app .hw-two span {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .app .hw-two b {
+        font-weight: 400;
+      }
+      .app .hw-two small {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .app .hw-more {
+        padding: 6px 8px;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      /* The tasks widget uses a 20px circle */
+      .app .tg.is-20 {
+        width: 20px;
+        height: 20px;
+        border-color: var(--border);
+      }
+      .app .tg.is-20 svg {
+        width: 12px;
+        height: 12px;
+      }
+      .app .hw-ring {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 56px;
+        height: 56px;
+        flex-shrink: 0;
+      }
+      .app .hw-ring svg {
+        position: absolute;
+        inset: 0;
+        width: 56px;
+        height: 56px;
+        transform: rotate(-90deg);
+      }
+      .app .hw-ring circle {
+        fill: none;
+        stroke-width: 2.5;
+      }
+      .app .hw-ring .bg {
+        stroke: var(--accent);
+      }
+      .app .hw-ring .fg {
+        stroke: var(--foreground);
+        stroke-linecap: round;
+      }
+      .app .hw-ring b {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted-foreground);
+      }
+      .app .hw-rc {
+        display: grid;
+        justify-items: center;
+        gap: 4px;
+        margin: 4px 6px 0;
+        padding: 14px 8px;
+        border-radius: 8px;
+        text-align: center;
+        cursor: pointer;
+      }
+      .app .hw-rc:hover {
+        background: var(--accent);
+      }
+      .app .hw-rc b {
+        margin-top: 6px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .app .hw-rc small {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .app .hw-rc .btn2 {
+        margin-top: 8px;
+      }
+      /* Widgets fill in as their apps land */
+      .app.is-assembling .hw {
+        opacity: 0;
+        transform: scale(0.97);
+      }
+      .app.is-assembling .hw.is-in {
+        opacity: 1;
+        transform: none;
+        transition:
+          opacity 0.35s var(--ease-out),
+          transform 0.6s var(--ease-spring);
+      }
+      .app.is-assembling .hw .hw-fill > * {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+      .app.is-assembling .hw.is-in .hw-fill > * {
+        opacity: 1;
+        transform: none;
+        transition:
+          opacity 0.4s var(--ease-out),
+          transform 0.5s var(--ease-out);
+        transition-delay: calc(120ms + var(--n, 0) * 55ms);
+      }
+
+      /* ─── Buttons and fields inside the app ─────────────────────────── */
+      .app .btn2 {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        flex-shrink: 0;
+        height: 26px;
+        padding-inline: 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        white-space: nowrap;
+        color: var(--foreground);
+      }
+      .app .btn2.is-p {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .app .btn2.is-s {
+        background: var(--accent);
+      }
+      .app .btn2.is-o {
+        border: 1px solid var(--border);
+      }
+      .app .btn2.is-g {
+        color: var(--muted-foreground);
+      }
+      .app .btn2.is-g:hover,
+      .app .btn2.is-s:hover {
+        background: var(--accent);
+        color: var(--foreground);
+      }
+      .app .ib2 {
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        color: var(--muted-foreground);
+      }
+      .app .fld {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 32px;
+        padding-inline: 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--popover);
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      .app .fld .icon {
+        width: 12px;
+        height: 12px;
+      }
+      .app .seg {
+        display: flex;
+        gap: 2px;
+        padding: 2px;
+        border-radius: 8px;
+        background: var(--popover);
+      }
+      .app .seg > * {
+        flex: 1;
+        display: grid;
+        place-items: center;
+        height: 22px;
+        padding-inline: 8px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        white-space: nowrap;
+        color: var(--muted-foreground);
+      }
+      .app .seg > .is-on {
+        background: var(--card);
+        color: var(--foreground);
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
+      }
+      .app .seg.is-32 > * {
+        height: 28px;
+      }
+      .app .seg.is-ic > * {
+        flex: none;
+        width: 26px;
+        height: 22px;
+        padding: 0;
+      }
+      .app button.seg-b {
+        cursor: pointer;
+      }
+      .app .sel-bar {
+        position: relative;
+      }
+      .app .sel-bar.is-sel::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 8px;
+        bottom: 8px;
+        width: 2px;
+        border-radius: 1px;
+        background: var(--primary);
+      }
+
+      /* ─── Email: rail, list, and the reader in the right rail ──────────── */
+      .app .vw-mod[data-v="email"] {
+        grid-template-columns: 240px minmax(0, 1fr) 392px;
+      }
+      .app .rr.is-36 {
+        min-height: 36px;
+      }
+      .app .rr.is-28 {
+        min-height: 28px;
+      }
+      .app .hue {
+        width: 10px;
+        height: 10px;
+        flex-shrink: 0;
+        border-radius: var(--radius-full);
+        background: var(--h, var(--primary));
+      }
+      .app .em-tool {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .app .em-tool .fld {
+        flex: 1;
+      }
+      .app .em-list {
+        display: grid;
+        align-content: start;
+        gap: 2px;
+        padding: 4px;
+        overflow: hidden;
+      }
+      .app .em-sec {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 8px 4px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .app .em-sec em {
+        font-style: normal;
+        letter-spacing: 0;
+        color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+      }
+      .app .em-row {
+        position: relative;
+        display: grid;
+        grid-template-columns: 8px minmax(0, 1fr);
+        gap: 10px;
+        width: 100%;
+        padding: 10px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color var(--motion-fade) var(--ease-out);
+      }
+      .app .em-row:hover {
+        background: color-mix(in oklab, var(--accent) 60%, transparent);
+      }
+      .app .em-row.is-sel {
+        background: var(--selected-bg);
+      }
+      .app .em-row.is-sel::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 10px;
+        bottom: 10px;
+        width: 2px;
+        border-radius: 1px;
+        background: var(--primary);
+      }
+      .app .em-dot {
+        width: 8px;
+        height: 8px;
+        margin-top: 6px;
+        border-radius: var(--radius-full);
+      }
+      .app .em-row.is-unread .em-dot {
+        background: var(--primary);
+      }
+      .app .em-l {
+        display: grid;
+        min-width: 0;
+      }
+      .app .em-l > span {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .app .em-f {
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      .app .em-row.is-unread .em-f,
+      .app .em-row.is-unread .em-s {
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .app .em-f em {
+        margin-left: auto;
+        font-style: normal;
+        font-size: 11px;
+        font-weight: 400;
+        font-variant-numeric: tabular-nums;
+        color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
+      }
+      .app .em-s {
+        font-size: 13px;
+      }
+      .app .em-n {
+        padding: 0 6px;
+        border-radius: var(--radius-full);
+        background: var(--popover);
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .app .em-p {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .app .rd-acts {
+        display: flex;
+        gap: 2px;
+        margin: 8px 0 12px -6px;
+      }
+      .app .rd-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--card);
+        overflow: hidden;
+      }
+      .app .rd-head {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr) 14px;
+        column-gap: 10px;
+        align-items: center;
+        padding: 10px 12px;
+      }
+      .app .rd-head .icon {
+        color: var(--muted-foreground);
+      }
+      .app .rd-head b {
+        font-size: 13px;
+        font-weight: 400;
+      }
+      .app .rd-head small {
+        margin-left: 8px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .app .rd-head span {
+        display: block;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .app .rd-body {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        border-top: 1px solid var(--border);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      .app .rd-file {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        justify-self: start;
+        height: 28px;
+        padding-inline: 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .app .rd-old {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 8px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      .app .rd-old b {
+        font-weight: 400;
+        color: var(--foreground);
+      }
+      .app .rail-seg {
+        margin-bottom: 12px;
+      }
+
+      /* ─── Tasks ─────────────────────────────────────────────────────── */
+      .app .vw-mod[data-v="tasks"] {
+        grid-template-columns: 240px minmax(0, 1fr) 296px;
+      }
+      .app .tk-h {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .app .tk-t {
+        margin-right: auto;
+        font-size: 18px;
+        font-weight: 400;
+      }
+      .app .tk-grp {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .app .tk-sel {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 112px;
+        height: 26px;
+        padding-inline: 8px;
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      .app .tk-sel .icon {
+        width: 12px;
+        height: 12px;
+        color: var(--muted-foreground);
+      }
+      .app .tk-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 36px;
+        padding: 2px 8px;
+        border-radius: 8px;
+        transition: background-color var(--motion-fade) var(--ease-out);
+      }
+      .app .tk-row:hover {
+        background: color-mix(in oklab, var(--accent) 60%, transparent);
+      }
+      .app .tk-row.is-sel {
+        background: var(--selected-bg);
+      }
+      .app .tk-row.is-sel::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 8px;
+        bottom: 8px;
+        width: 2px;
+        border-radius: 1px;
+        background: var(--primary);
+      }
+      .app .tk-ti {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 15px;
+        cursor: pointer;
+      }
+      .app .tag {
+        font-size: 12px;
+        color: color-mix(in oklab, var(--foreground) 90%, transparent);
+      }
+      .app .tag i {
+        font-style: normal;
+        color: var(--h, var(--info));
+      }
+      .app .meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .app .tk-q {
+        color: var(--muted-foreground);
+        opacity: 0.45;
+      }
+      .app .tk-q.is-on {
+        opacity: 1;
+        color: var(--foreground);
+      }
+      .app .td-title {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 6px 4px 0;
+      }
+      .app .td-title .tg {
+        margin-top: 3px;
+      }
+      .app .td-desc {
+        padding: 10px 4px 0;
+        font-size: 13px;
+        line-height: 1.65;
+        color: var(--muted-foreground);
+      }
+      .app .td-props {
+        display: grid;
+        padding: 0 4px;
+      }
+      .app .pr-v.is-ph {
+        color: var(--muted-foreground);
+      }
+      .app .td-linked {
+        margin-top: 14px;
+        padding: 0 4px;
+      }
+
+      /* ─── Calendar ──────────────────────────────────────────────────── */
+      .app .vw-mod[data-v="calendar"] {
+        grid-template-columns: 240px minmax(0, 1fr) 260px;
+      }
+      .app .mm-cap {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 0 8px 6px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .app .mm-cap span {
+        display: flex;
+      }
+      .app .mm-cap .ib2 {
+        width: 28px;
+        height: 28px;
+      }
+      .app .mm3 {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        row-gap: 2px;
+        text-align: center;
+      }
+      .app .mm3 i {
+        height: 22px;
+        font-style: normal;
+        font-size: 11px;
+        line-height: 22px;
+        color: var(--muted-foreground);
+      }
+      .app .mm3 span {
+        position: relative;
+        display: grid;
+        place-items: center;
+        height: 28px;
+        margin-inline: 1px;
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      .app .mm3 span.is-today {
+        box-shadow: inset 0 0 0 1px var(--primary);
+      }
+      .app .mm3 span.is-out {
+        color: color-mix(in oklab, var(--muted-foreground) 50%, transparent);
+      }
+      .app .mm3 span.is-pick {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+      .app .mm3 span.is-busy::after {
+        content: "";
+        position: absolute;
+        bottom: 3px;
+        width: 4px;
+        height: 4px;
+        border-radius: var(--radius-full);
+        background: var(--muted-foreground);
+      }
+      .app .mm3 span.is-pick::after {
+        background: var(--primary-foreground);
+      }
+      .app .wk {
+        display: flex;
+        flex-direction: column;
+      }
+      .app .wk-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-bottom: 12px;
+      }
+      .app .wk-bar b {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .app .wk-bar .seg {
+        margin-left: auto;
+      }
+      .app .wk-head,
+      .app .wk-body {
+        display: grid;
+        grid-template-columns: 52px repeat(7, minmax(0, 1fr));
+      }
+      .app .wk-head {
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--border);
+      }
+      .app .wk-head span {
+        padding-left: 6px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      .app .wk-head span b {
+        font-weight: 400;
+        color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+      }
+      .app .wk-head span.is-today,
+      .app .wk-head span.is-today b {
+        font-weight: 500;
+        color: var(--foreground);
+      }
+      .app .wk-body {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .app .wk-hrs {
+        position: relative;
+      }
+      .app .wk-hrs span {
+        position: absolute;
+        right: 8px;
+        transform: translateY(-50%);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
+      }
+      .app .wk-day {
+        position: relative;
+        border-left: 1px solid var(--border);
+        background-image: linear-gradient(var(--border) 1px, transparent 1px);
+        background-size: 100% 56px;
+        background-position: 0 -1px;
+      }
+      .app .wk-ev {
+        position: absolute;
+        left: 3px;
+        right: 4px;
+        display: grid;
+        align-content: start;
+        gap: 1px;
+        padding: 2px 6px;
+        border: 1px solid color-mix(in oklab, var(--primary) 35%, transparent);
+        border-radius: 8px;
+        background: color-mix(in oklab, var(--primary) 10%, transparent);
+        overflow: hidden;
+        cursor: pointer;
+        transition: background-color var(--motion-fade) var(--ease-out);
+      }
+      .app .wk-ev:hover {
+        background: color-mix(in oklab, var(--primary) 15%, transparent);
+      }
+      .app .wk-ev b {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 12px;
+        font-weight: 400;
+      }
+      .app .wk-ev small {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .app .wk-ev.is-brief {
+        align-content: center;
+        padding-block: 0;
+      }
+      .app .wk-ev.is-brief b small {
+        margin-left: 4px;
+      }
+      .app .wk-tx {
+        display: grid;
+        min-width: 0;
+      }
+      .app .wk-ev.is-past {
+        opacity: 0.6;
+      }
+      .app .wk-ev.is-sel {
+        box-shadow: 0 0 0 2px var(--ring);
+      }
+      /* A scheduled task is a task block, not an event */
+      .app .wk-ev.is-task {
+        grid-template-columns: 16px minmax(0, 1fr);
+        column-gap: 6px;
+        border-color: var(--border);
+        background: color-mix(in oklab, var(--popover) 60%, transparent);
+      }
+      .app .wk-ev.is-task .tg {
+        grid-row: span 2;
+        margin-top: 2px;
+      }
+      .app .wk-now {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: var(--primary);
+      }
+      .app .wk-now::before {
+        content: "";
+        position: absolute;
+        left: -4px;
+        top: -2.5px;
+        width: 6px;
+        height: 6px;
+        border-radius: var(--radius-full);
+        background: var(--primary);
+      }
+      .app .ev-fld {
+        display: grid;
+        gap: 4px;
+        margin-top: 12px;
+        font-size: 13px;
+      }
+      .app .ev-in {
+        display: flex;
+        align-items: center;
+        height: 32px;
+        padding-inline: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--popover);
+        font-size: 13px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .app .ev-title {
+        margin-top: 12px;
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .app .sw {
+        position: relative;
+        width: 36px;
+        height: 20px;
+        border-radius: var(--radius-full);
+        background: var(--popover);
+        box-shadow: inset 0 0 0 1px var(--border);
+      }
+      .app .sw i {
+        position: absolute;
+        left: 2px;
+        top: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: var(--radius-full);
+        background: var(--foreground);
+      }
+      .app .ev-fld .eb {
+        font-size: 11px;
+      }
+
+      /* ─── Notes ─────────────────────────────────────────────────────── */
+      .app .vw-mod[data-v="notes"] {
+        grid-template-columns: 240px minmax(0, 1fr) 280px;
+      }
+      .app .nt-top {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 0 0 8px 4px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .app .nt-top b {
+        margin-right: auto;
+        font-weight: 600;
+      }
+      .app .nt-sec {
+        margin: 12px 0 2px;
+        padding-left: 8px;
+      }
+      .app .nt-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        width: 100%;
+        min-height: 27px;
+        padding: 4px 6px 4px calc(8px + var(--lv, 0) * 14px);
+        border-radius: 8px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+        cursor: pointer;
+      }
+      .app .nt-row:hover {
+        background: color-mix(in oklab, var(--accent) 60%, transparent);
+        color: var(--foreground);
+      }
+      .app .nt-row.is-sel {
+        background: var(--selected-bg);
+        color: var(--foreground);
+      }
+      .app .nt-row.is-sel::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 6px;
+        bottom: 6px;
+        width: 2px;
+        border-radius: 1px;
+        background: var(--primary);
+      }
+      .app .nt-chev {
+        display: grid;
+        place-items: center;
+        width: 18px;
+        flex-shrink: 0;
+      }
+      .app .nt-chev .icon {
+        width: 14px;
+        height: 14px;
+      }
+      .app .nt-chev.is-open .icon {
+        transform: none;
+      }
+      .app .nt-chev.is-closed .icon {
+        transform: rotate(-90deg);
+      }
+      .app .nt-row > .icon {
+        width: 16px;
+        height: 16px;
+        color: var(--muted-foreground);
+      }
+      .app .nt-row span {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .app .nt-card {
+        padding: 16px;
+      }
+      .app .nt-ed {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        border-radius: 8px;
+        background: var(--background);
+        overflow: hidden;
+      }
+      .app .nt-tools {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        gap: 8px;
+      }
+      .app .nt-doc {
+        max-width: 768px;
+        padding: 40px 24px 24px;
+        font-size: 14px;
+        line-height: 1.65;
+      }
+      .app .nt-doc h3 {
+        margin-bottom: 12px;
+        font-size: 30px;
+        font-weight: 600;
+        line-height: 1.2;
+        letter-spacing: -0.015em;
+      }
+      .app .nt-doc h4 {
+        margin: 20px 0 8px;
+        font-size: 20px;
+        font-weight: 600;
+        line-height: 1.2;
+        letter-spacing: -0.015em;
+      }
+      .app .nt-doc p {
+        margin-bottom: 10px;
+        color: color-mix(in oklab, var(--foreground) 92%, transparent);
+      }
+      .app .nt-tl {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 30px;
+      }
+      .app .nt-tl > span:not(.av2) {
+        flex: 1;
+        min-width: 0;
+      }
+      .app .sug {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 12px;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--popover);
+        font-size: 13px;
+      }
+      .app .sug small {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .app .sug-b {
+        display: flex;
+        gap: 4px;
+        width: 100%;
+        justify-content: flex-end;
+      }
+      .app .tagrow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .app .tag-add {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 22px;
+        padding-inline: 8px;
+        border: 1px dashed var(--border-strong);
+        border-radius: 8px;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+
+      /* ─── Contacts ──────────────────────────────────────────────────── */
+      .app .vw-mod[data-v="contacts"] {
+        grid-template-columns: 252px minmax(0, 1fr) 240px;
+      }
+      .app .ct-top {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+      .app .ct-top .seg {
+        flex: 1;
+      }
+      .app .ct-filters {
+        display: flex;
+        gap: 2px;
+        margin: 6px 0 4px;
+      }
+      .app .ct-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        padding: 6px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .app .ct-row:hover {
+        background: color-mix(in oklab, var(--accent) 60%, transparent);
+      }
+      .app .ct-row.is-sel {
+        background: var(--selected-bg);
+      }
+      .app .ct-row.is-sel::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 8px;
+        bottom: 8px;
+        width: 2px;
+        border-radius: 1px;
+        background: var(--primary);
+      }
+      .app .ct-row .hw-two {
+        flex: 1;
+      }
+      .app .ct-row .hw-two b {
+        font-size: 13px;
+      }
+      .app .stat {
+        width: 8px;
+        height: 8px;
+        flex-shrink: 0;
+        border-radius: var(--radius-full);
+        background: var(--success);
+      }
+      .app .stat.is-lead {
+        background: var(--info);
+      }
+      .app .stat.is-dormant {
+        background: var(--warning);
+      }
+      .app .ct-hub {
+        display: grid;
+        align-content: start;
+        gap: 18px;
+        max-width: 672px;
+        padding: 8px 8px 0;
+      }
+      .app .ct-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+      }
+      .app .ct-head > div {
+        flex: 1;
+        min-width: 0;
+      }
+      .app .ct-name {
+        font-size: 24px;
+        font-weight: 400;
+        line-height: 1.25;
+      }
+      .app .ct-subt {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 2px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      .app .pill {
+        display: inline-flex;
+        align-items: center;
+        height: 20px;
+        padding-inline: 8px;
+        border-radius: var(--radius-full);
+        background: color-mix(in oklab, var(--success) 16%, transparent);
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--success);
+      }
+      .app .ct-acts {
+        display: flex;
+        gap: 6px;
+      }
+      .app .ct-acts .btn2 {
+        height: 26px;
+      }
+      .app .ct-touch {
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      .app .ct-lk {
+        grid-template-columns: minmax(0, 1fr);
+        display: grid;
+        gap: 4px;
+      }
+      .app .ct-lk .er small {
+        font-size: 12px;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .app .av2.is-xl {
+        width: 40px;
+        height: 40px;
+        font-size: 14px;
+      }
+
+      /* ─── Chat (drawn in the app's language) ────────────────────────── */
+      .app .vw-mod[data-v="chat"] {
+        grid-template-columns: 240px minmax(0, 1fr) 240px;
+      }
+      .app .ch-w {
+        display: flex;
+        flex-direction: column;
+      }
+      .app .ch-h {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .app .ch-h b {
+        font-weight: 500;
+      }
+      .app .ch-h .btn2 {
+        margin-left: auto;
+      }
+      .app .ch-list {
+        display: grid;
+        align-content: end;
+        gap: 14px;
+        flex: 1;
+        min-height: 0;
+        padding: 16px;
+        overflow: hidden;
+      }
+      .app .ch-m {
+        display: flex;
+        gap: 10px;
+      }
+      .app .ch-m .av2 {
+        width: 28px;
+        height: 28px;
+      }
+      .app .ch-m b {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .app .ch-m b small {
+        margin-left: 8px;
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--muted-foreground);
+      }
+      .app .ch-m p {
+        margin-top: 2px;
+        font-size: 14px;
+        line-height: 1.55;
+        color: color-mix(in oklab, var(--foreground) 92%, transparent);
+      }
+      .app .ch-in {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+        margin: 0 16px 16px;
+        padding-inline: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--popover);
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      .app .ch-in .icon {
+        margin-left: auto;
+      }
+      .app .on-dot {
+        width: 8px;
+        height: 8px;
+        flex-shrink: 0;
+        border-radius: var(--radius-full);
+        background: var(--success);
+      }
+
+      /* ─── Ten apps, before ──────────────────────────────────────────── */
+      .hx-pile {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+      }
+      .hx-pile .aw {
+        width: 20%;
+        font-size: 13px;
+      }
       .aw {
         position: absolute;
         left: var(--x);
         top: var(--y);
         translate: -50% -50%;
         z-index: var(--z);
-        width: 23%;
         aspect-ratio: 3 / 2;
-        font-size: 1.55cqw;
         transform: translate(var(--px, 0px), var(--py, 0px));
         transition: transform 900ms var(--ease-out);
         pointer-events: none;
       }
-      .asm.is-busy .aw {
+      .hx-pile.is-busy .aw {
         transition: none;
       }
       .aw-in {
@@ -1814,7 +3037,7 @@
         box-shadow: var(--shadow-lg);
         overflow: hidden;
         opacity: var(--o, 1);
-        transform: rotate(var(--r, 0deg)) scale(var(--s, 1));
+        transform: rotate(var(--r, 0deg)) scale(var(--sc, 1));
       }
       .aw-bar {
         display: flex;
@@ -1865,39 +3088,99 @@
         stroke: var(--muted-foreground);
       }
 
-      @container (max-width: 440px) {
-        .md-f,
-        .ws-k,
-        .ch {
+      /* ─── The tour's pointer ────────────────────────────────────────── */
+      .hx-cur {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 4;
+        width: 22px;
+        height: 22px;
+        margin: -3px 0 0 -4px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(var(--cx, 620px), var(--cy, 500px));
+        transition:
+          transform 950ms cubic-bezier(0.65, 0, 0.35, 1),
+          opacity 300ms var(--ease-out);
+        filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.55));
+      }
+      .hx-cur.is-on {
+        opacity: 1;
+      }
+      .hx-cur svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .hx-cur .cur-a {
+        fill: var(--foreground);
+        stroke: oklch(0.12 0 0);
+        stroke-width: 1.4;
+        stroke-linejoin: round;
+        transition: transform 120ms var(--ease-out);
+        transform-origin: 4px 3px;
+      }
+      .hx-cur.is-down .cur-a {
+        transform: scale(0.86);
+      }
+      .hx-cur .cur-r {
+        fill: none;
+        stroke: var(--foreground);
+        stroke-width: 1.5;
+        opacity: 0;
+      }
+      .hx-cur.is-down .cur-r {
+        animation: cur-ring 520ms var(--ease-out);
+      }
+      @keyframes cur-ring {
+        0% {
+          opacity: 0.7;
+          r: 2px;
+        }
+        100% {
+          opacity: 0;
+          r: 16px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .vw.is-enter,
+        .is-flash {
+          animation: none;
+        }
+        .hx-cur {
           display: none;
         }
       }
 
-
-      .hx .hero-demo {
-        margin-top: clamp(4rem, 9vw, 7rem);
+      /* Shared bits other sections still use */
+      .cb {
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        width: 1em;
+        height: 1em;
+        border: 1px solid var(--border-strong);
+        border-radius: 0.28em;
       }
-
-      @media (max-width: 1000px) {
-        .hx-plate {
-          grid-template-columns: minmax(0, 1fr);
-          min-height: 0;
-        }
+      .cb .icon {
+        width: 0.75em;
+        height: 0.75em;
       }
-      @media (prefers-reduced-motion: reduce) {
-        .md.is-built::after {
-          animation: none;
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .aw,
-        .ws,
-        .ws-bar,
-        .ws-foot,
-        .md,
-        .md-body > * {
-          transition: none;
-        }
+      .av {
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        width: 1.9em;
+        height: 1.9em;
+        border-radius: var(--radius-full);
+        background: var(--accent);
+        font-family: var(--font-mono);
+        font-size: 0.62em;
+        font-weight: 500;
+        color: var(--muted-foreground);
       }
 
       /* ─── Pane: everything after the hero slides up over it ─────────────── */
@@ -2115,11 +3398,6 @@
         }
         .lu-links {
           display: none;
-        }
-      }
-      @media (max-width: 1000px) {
-        .hx .h-hero {
-          font-size: min(13.2cqi, 5.5rem);
         }
       }
       @media (max-width: 720px) {
@@ -8836,6 +10114,34 @@
         <symbol id="i-sparkle" viewBox="0 0 24 24">
           <path d="M12 3.5l1.8 5.2 5.2 1.8-5.2 1.8L12 17.5l-1.8-5.2L5 10.5l5.2-1.8z" />
         </symbol>
+        <!-- App icons for the hero window (Lucide shapes, as the app uses) -->
+        <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="m9 12 2 2 4-4" /></symbol>
+        <symbol id="i-chevl" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol>
+        <symbol id="i-chevr" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol>
+        <symbol id="i-chevsl" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5" /><path d="m18 17-5-5 5-5" /></symbol>
+        <symbol id="i-chevsr" viewBox="0 0 24 24"><path d="m6 17 5-5-5-5" /><path d="m13 17 5-5-5-5" /></symbol>
+        <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" /></symbol>
+        <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /><path d="m15 5 4 4" /></symbol>
+        <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" /></symbol>
+        <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528" /></symbol>
+        <symbol id="i-reply" viewBox="0 0 24 24"><path d="m9 17-5-5 5-5" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></symbol>
+        <symbol id="i-reply-all" viewBox="0 0 24 24"><path d="m7 17-5-5 5-5" /><path d="m12 17-5-5 5-5" /><path d="M22 18v-2a4 4 0 0 0-4-4H7" /></symbol>
+        <symbol id="i-forward" viewBox="0 0 24 24"><path d="m15 17 5-5-5-5" /><path d="M4 18v-2a4 4 0 0 1 4-4h12" /></symbol>
+        <symbol id="i-list-checks" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /><path d="M13 6h8" /><path d="M13 12h8" /><path d="M13 18h8" /></symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" /><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" /><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" /></symbol>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></symbol>
+        <symbol id="i-filter" viewBox="0 0 24 24"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z" /></symbol>
+        <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01" /><path d="M3 18h.01" /><path d="M3 6h.01" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M8 6h13" /></symbol>
+        <symbol id="i-columns" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18" /><path d="M15 3v18" /></symbol>
+        <symbol id="i-gantt" viewBox="0 0 24 24"><path d="M10 6h8" /><path d="M12 16h6" /><path d="M3 3v16a2 2 0 0 0 2 2h16" /><path d="M8 11h7" /></symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></symbol>
+        <symbol id="i-hash" viewBox="0 0 24 24"><path d="M4 9h16" /><path d="M4 15h16" /><path d="M10 3 8 21" /><path d="m16 3-2 18" /></symbol>
+        <symbol id="i-video" viewBox="0 0 24 24"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" /><rect x="2" y="6" width="14" height="12" rx="2" /></symbol>
+        <symbol id="i-building" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" /><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" /><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" /><path d="M10 6h4" /><path d="M10 10h4" /><path d="M10 14h4" /><path d="M10 18h4" /></symbol>
+        <symbol id="i-star" viewBox="0 0 24 24"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></symbol>
+        <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" /></symbol>
+        <symbol id="i-panel" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M15 3v18" /></symbol>
+        <symbol id="i-circle-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="1" /></symbol>
       </defs>
     </svg>
 
@@ -8865,22 +10171,21 @@
     </header>
 
     <main id="main">
-      <!-- ─── Hero: copy on the left, ten apps assembling on the right ──── -->
+      <!-- ─── Hero: the copy, then the real app ────────────────────────── -->
       <section class="hero hx" id="top" aria-labelledby="hero-title">
-        <div class="hx-frame">
-          <div class="hx-plate" id="hx-plate">
-
-            <div class="hx-copy">
-              <a class="hx-pill hero-fade" href="#pricing" style="--d: 120ms">
-                <span class="hx-pill-k">Private beta</span>
-                <span class="hx-pill-t">Early members keep the founding price</span>
-                <span class="hx-pill-t is-short">Founding price for early members</span>
-                <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
-              </a>
-              <h1 class="h-hero" id="hero-title">
-                <span class="line">Fire ten apps.</span>
-                <span class="line soft">Keep the work.</span>
-              </h1>
+        <div class="hx-in">
+          <div class="hx-copy">
+            <a class="hx-pill hero-fade" href="#pricing" style="--d: 120ms">
+              <span class="hx-pill-k">Private beta</span>
+              <span class="hx-pill-t">Early members keep the founding price</span>
+              <span class="hx-pill-t is-short">Founding price for early members</span>
+              <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
+            </a>
+            <h1 class="h-hero" id="hero-title">
+              <span class="line">Fire ten apps.</span>
+              <span class="line soft">Keep the work.</span>
+            </h1>
+            <div class="hx-side">
               <p class="lead hero-fade" style="--d: 520ms">
                 Email, tasks, notes, calendar, contacts and chat in one workspace,
                 <span class="fg">linked to each other, so nothing lives in two places.</span>
@@ -8923,83 +10228,78 @@
                 </form>
               </div>
             </div>
-
-            <div class="hx-visual hero-fade" style="--d: 760ms">
-              <div class="asm is-ten" id="asm" data-state="off" role="img" aria-label="Ten separate apps for mail, contacts, tasks, time tracking, habits, notes, docs, calendar, planning and team chat sliding together into one Moduo workspace">
-                <div class="ws" aria-hidden="true">
-                  <div class="ws-bar">
-                    <span class="ws-brand"><svg class="mark"><use href="#mark" /></svg></span>
-                    <span class="ws-tabs"><b><svg class="icon"><use href="#i-home" /></svg></b><span><svg class="icon"><use href="#i-notes" /></svg></span><span><svg class="icon"><use href="#i-tasks" /></svg></span><span><svg class="icon"><use href="#i-calendar" /></svg></span><span><svg class="icon"><use href="#i-mail" /></svg></span><span><svg class="icon"><use href="#i-contact" /></svg></span></span>
-                    <span class="ws-me"><i class="ws-av"></i></span>
-                  </div>
-                  <div class="ws-grid">
-                    <section class="md md-mail" data-m="0" style="--m: 0">
-                      <header class="md-h"><svg class="icon"><use href="#i-mail" /></svg>Email<span class="md-n">3 new</span></header>
-                      <ul class="md-body">
-                        <li class="ml is-new" data-a="mail" style="--n: 1"><b class="av">AC</b><span><strong>Anna Carter</strong><em>Final deck notes</em></span></li>
-                        <li class="ml" style="--n: 2"><b class="av">MB</b><span><strong>Maya Brooks</strong><em>Re: logo files</em></span></li>
-                        <li class="ml" style="--n: 3"><b class="av">PS</b><span><strong>Print shop</strong><em>Proof for the posters</em></span></li>
-                      </ul>
-                    </section>
-                    <section class="md md-contacts" data-m="1" style="--m: 1">
-                      <header class="md-h"><svg class="icon"><use href="#i-contact" /></svg>Contacts</header>
-                      <div class="md-body ct">
-                        <span class="ct-p" data-a="contact" style="--n: 1"><b class="av">AC</b><span><strong>Anna Carter</strong><em>Client</em></span></span>
-                        <span class="ct-s" style="--n: 2">3 emails · 2 tasks · 1 note</span>
-                      </div>
-                    </section>
-                    <section class="md md-tasks" data-m="2" style="--m: 2">
-                      <header class="md-h"><svg class="icon"><use href="#i-tasks" /></svg>Tasks<span class="md-n">Today 4</span></header>
-                      <ul class="md-body">
-                        <li class="tk is-done" style="--n: 1"><i class="cb"><svg class="icon"><use href="#i-check" /></svg></i><span>Moodboard review</span></li>
-                        <li class="tk" style="--n: 2"><i class="cb"></i><span>Prep the Phase 2 call</span><em class="ch"><svg class="icon"><use href="#i-timer" /></svg>0:42</em></li>
-                        <li class="tk" style="--n: 3"><i class="cb"></i><span>Stretch</span><em class="ch">12 days</em></li>
-                        <li class="tk" data-a="task" style="--n: 4"><i class="cb"></i><span>Send Anna the revised deck</span></li>
-                      </ul>
-                    </section>
-                    <section class="md md-notes" data-m="3" style="--m: 3">
-                      <header class="md-h"><svg class="icon"><use href="#i-notes" /></svg>Notes</header>
-                      <div class="md-body nt">
-                        <strong style="--n: 1">Kickoff</strong>
-                        <span class="nt-ln" style="--n: 2"></span>
-                        <span class="nt-m" data-a="note" style="--n: 3">@Anna Carter</span>
-                      </div>
-                    </section>
-                    <section class="md md-cal" data-m="4" style="--m: 4">
-                      <header class="md-h"><svg class="icon"><use href="#i-calendar" /></svg>Calendar</header>
-                      <div class="md-body cal">
-                        <span class="cal-d" style="--n: 1">Fri</span><span class="cal-d" style="--n: 1">Mon</span><span class="cal-d" style="--n: 1">Tue</span>
-                        <span class="ev is-key" data-a="event" style="--n: 2; --c: 1; --r: 2 / 4">Deck · 10:00</span>
-                        <span class="ev" style="--n: 3; --c: 2; --r: 3 / 5">Phase 2 call</span>
-                        <span class="ev is-soft" style="--n: 4; --c: 3; --r: 2 / 6">Focus</span>
-                      </div>
-                    </section>
-                    <section class="md md-chat" data-m="5" style="--m: 5">
-                      <header class="md-h"><svg class="icon"><use href="#i-chat" /></svg>Chat</header>
-                      <ul class="md-body cm">
-                        <li class="cm-r" data-a="chat" style="--n: 1"><b class="av">JR</b><span><strong>Jamie Ross</strong><em>Blocked Friday 10:00 for the deck</em></span></li>
-                      </ul>
-                    </section>
-                  </div>
-                  <div class="ws-foot">
-                    <span class="ws-say" id="ws-say">One email from Anna, linked five ways. Nothing copied.</span>
-                  </div>
-                  <svg class="ws-spine" id="ws-spine" aria-hidden="true"></svg>
-                </div>
-                <div class="aw" data-k="0" data-m="0" data-t="mail"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Mail</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="1" data-m="1" data-t="crm"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>CRM</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="2" data-m="2" data-t="list"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>To-do</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="3" data-m="2" data-t="timer"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Time tracker</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="4" data-m="2" data-t="grid"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Habits</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="5" data-m="3" data-t="note"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Notes</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="6" data-m="3" data-t="doc"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Docs</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="7" data-m="4" data-t="cal"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Calendar</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="8" data-m="4" data-t="planner"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Planner</span></div><div class="aw-ui"></div></div></div>
-                <div class="aw" data-k="9" data-m="5" data-t="chat"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Team chat</span></div><div class="aw-ui"></div></div></div>
-              </div>
-            </div>
           </div>
 
+          <!-- The window is the app's own layout at 1240 × 776, scaled to fit. Sample data only. -->
+          <div class="hx-stage hero-fade" id="hx-stage" style="--d: 760ms">
+            <div class="hx-fit" id="hx-fit">
+              <div class="hx-scale" id="hx-scale">
+                <div class="app is-pre" id="app" data-view="home" role="region" aria-label="Moduo, a working preview with sample work. Click around.">
+                  <header class="app-top">
+                    <div class="app-l">
+                      <svg class="app-mark" aria-hidden="true"><use href="#mark" /></svg>
+                      <span class="app-ws"><span class="app-wsm">S</span>Studio<svg class="icon" aria-hidden="true"><use href="#i-chev" /></svg></span>
+                    </div>
+                    <nav class="app-tabs" aria-label="Modules">
+                      <button class="app-tab" type="button" data-go="home" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-home" /></svg>Home</button>
+                      <button class="app-tab" type="button" data-go="notes"><svg class="icon" aria-hidden="true"><use href="#i-notes" /></svg>Notes</button>
+                      <button class="app-tab" type="button" data-go="tasks"><svg class="icon" aria-hidden="true"><use href="#i-tasks" /></svg>Tasks</button>
+                      <button class="app-tab" type="button" data-go="calendar"><svg class="icon" aria-hidden="true"><use href="#i-calendar" /></svg>Calendar</button>
+                      <button class="app-tab" type="button" data-go="email"><svg class="icon" aria-hidden="true"><use href="#i-mail" /></svg>Email<i class="app-dot" aria-hidden="true"></i></button>
+                      <button class="app-tab" type="button" data-go="contacts"><svg class="icon" aria-hidden="true"><use href="#i-contact" /></svg>Contacts</button>
+                      <button class="app-tab" type="button" data-go="chat"><svg class="icon" aria-hidden="true"><use href="#i-chat" /></svg>Chat</button>
+                    </nav>
+                    <div class="app-r" aria-hidden="true">
+                      <span class="app-ib"><svg class="icon"><use href="#i-bell" /></svg><b class="app-cnt">2</b></span>
+                      <span class="app-me">M</span>
+                    </div>
+                  </header>
+                  <div class="app-main" id="app-main">
+                    <div class="vw vw-home is-on" data-v="home"></div>
+                    <div class="vw vw-mod" data-v="notes"></div>
+                    <div class="vw vw-mod" data-v="tasks"></div>
+                    <div class="vw vw-mod" data-v="calendar"></div>
+                    <div class="vw vw-mod" data-v="email"></div>
+                    <div class="vw vw-mod" data-v="contacts"></div>
+                    <div class="vw vw-mod" data-v="chat"></div>
+                  </div>
+                  <footer class="app-bot" aria-hidden="true">
+                    <div class="app-bl">
+                      <span class="app-dots"><i class="is-on"></i><i></i></span>
+                      <span class="app-ib app-lp"><svg class="icon"><use href="#i-chevsl" /></svg></span>
+                    </div>
+                    <div class="app-bc">
+                      <span class="app-ib"><svg class="icon"><use href="#i-keyboard" /></svg></span>
+                      <span class="app-ib"><svg class="icon"><use href="#i-search" /></svg></span>
+                      <span class="app-ib"><svg class="icon"><use href="#i-pen" /></svg></span>
+                      <span class="app-ib"><svg class="icon"><use href="#i-plus" /></svg></span>
+                    </div>
+                    <div class="app-br">
+                      <span class="app-ib app-edit"><svg class="icon"><use href="#i-pencil" /></svg></span>
+                      <span class="app-ib app-rp"><svg class="icon"><use href="#i-chevsr" /></svg></span>
+                    </div>
+                  </footer>
+                </div>
+
+                <!-- Before: ten separate apps -->
+                <div class="hx-pile" id="hx-pile" aria-hidden="true">
+                  <div class="aw" data-t="mail" data-w="inbox"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Mail</span></div><div class="aw-ui"></div></div></div>
+                  <div class="aw" data-t="crm" data-w="people"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>CRM</span></div><div class="aw-ui"></div></div></div>
+                  <div class="aw" data-t="list" data-w="tasks"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>To-do</span></div><div class="aw-ui"></div></div></div>
+                  <div class="aw" data-t="timer" data-w="tasks"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Time tracker</span></div><div class="aw-ui"></div></div></div>
+                  <div class="aw" data-t="grid" data-w="tasks"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Habits</span></div><div class="aw-ui"></div></div></div>
+                  <div class="aw" data-t="note" data-w="notes"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Notes</span></div><div class="aw-ui"></div></div></div>
+                  <div class="aw" data-t="doc" data-w="notes"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Docs</span></div><div class="aw-ui"></div></div></div>
+                  <div class="aw" data-t="cal" data-w="agenda"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Calendar</span></div><div class="aw-ui"></div></div></div>
+                  <div class="aw" data-t="planner" data-w="agenda"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Planner</span></div><div class="aw-ui"></div></div></div>
+                  <div class="aw" data-t="chat" data-w="activity"><div class="aw-in"><div class="aw-bar"><i></i><i></i><i></i><span>Team chat</span></div><div class="aw-ui"></div></div></div>
+                </div>
+
+                <div class="hx-cur" id="hx-cur" aria-hidden="true"><svg viewBox="0 0 22 22"><circle class="cur-r" cx="4" cy="3" r="2" /><path class="cur-a" d="M4 3 L4 18 L8 14.2 L10.9 20 L13.4 18.9 L10.6 13.2 L16 13 Z" /></svg></div>
+              </div>
+            </div>
+            <p class="hx-note"><span class="is-live">A working preview with sample data. Click anything.</span><span class="is-pic">A preview with sample data.</span></p>
+          </div>
         </div>
       </section>
 
@@ -9952,7 +11252,7 @@
           var pt = pane ? pane.getBoundingClientRect().top : 0;
           var peek = pane ? Math.max(0, vh - pane.offsetTop) : 0;
           var from = pane ? pane.offsetTop - navH : 0;
-          var docked = !pane || pt <= navH + 0.5 || (!heroSticky && y > 8);
+          var docked = !pane || pt <= navH + 0.5 || y > 8;
           var cover = pane ? Math.min(1, Math.max(0, (vh - peek - pt) / Math.max(1, vh - peek - navH))) : 1;
           var dock = pane ? Math.min(1, Math.max(0, (navH + 220 - pt) / 220)) : 1;
           var p = max > from ? Math.min(1, Math.max(0, (y - from) / (max - from))) : 0;
@@ -9963,7 +11263,7 @@
             pane.style.setProperty("--pane-r", ((1 - dock) * 28).toFixed(1) + "px");
             pane.style.setProperty("--dock", dock.toFixed(3));
           }
-          var glass = !pane ? 1 : heroSticky ? Math.min(1, Math.max(0, (navH + 160 - pt) / 160)) : Math.min(1, Math.max(0, y / 90));
+          var glass = !pane ? 1 : Math.min(1, Math.max(0, y / 90, heroSticky ? (navH + 160 - pt) / 160 : 0));
           var px = (p * nav.clientWidth).toFixed(1) + "px";
           nav.style.setProperty("--glass", glass.toFixed(3));
           nav.style.setProperty("--tip", px);
@@ -13132,594 +14432,851 @@
       })();
     </script>
     <script>
+      // ── Hero: ten apps assemble into a real Moduo window you can click ──
       (function () {
         "use strict";
+        var app = document.getElementById("app");
+        if (!app) return;
+        var hero = document.getElementById("top");
+        var stage = document.getElementById("hx-stage");
+        var fit = document.getElementById("hx-fit");
+        var box = document.getElementById("hx-scale");
+        var pile = document.getElementById("hx-pile");
+        var cur = document.getElementById("hx-cur");
+        var main = document.getElementById("app-main");
         var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         var fine = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-        var NS = "http://www.w3.org/2000/svg";
-        var asm = document.getElementById("asm");
-        var plate = document.getElementById("hx-plate");
-        if (!asm || !plate || !asm.animate) return;
-        var visual = asm.closest(".hx-visual");
-        var ws = asm.querySelector(".ws");
-        var spine = document.getElementById("ws-spine");
-        var mods = asm.querySelectorAll(".md");
-        var wins = asm.querySelectorAll(".aw");
-        var segs = visual.querySelectorAll(".hx-seg-b");
-        var counts = document.querySelectorAll(".hx-read [data-count]");
-        var ORDER = [0, 1, 2, 3, 4, 5];
-        var LINKS = [
-          { a: "mail", b: "contact", m: [0, 1] },
-          { a: "mail", b: "task", m: [0, 2] },
-          { a: "task", b: "note", m: [2, 3] },
-          { a: "task", b: "event", m: [2, 4] },
-          { a: "event", b: "chat", m: [4, 5] },
-        ];
-        var say = document.getElementById("ws-say");
-        var SAY_ALL = "One email from Anna, linked five ways. Nothing copied.";
-        var SAY = [
-          "Anna’s email links to her contact and to the task it became.",
-          "Her contact shows every email, task and note she’s part of.",
-          "The task keeps the email, the kickoff note and its Friday slot.",
-          "The kickoff note mentions Anna and holds the task.",
-          "Friday’s block is the task itself, and Jamie confirmed it in chat.",
-          "Jamie confirmed Friday’s block in chat, right next to the work.",
-        ];
-        var saySet = function (text) {
-          if (!say || say.textContent === text) return;
-          say.textContent = text;
-          say.classList.remove("is-swap");
-          void say.offsetWidth;
-          say.classList.add("is-swap");
-        };
-        var NWIN = wins.length;
-        var FLY = 820;
-        var STEP = 150;
-        var on = false;
-        var built = false;
-        var touched = false;
-        var inView = true;
-        var timers = [];
-        var flights = [];
-        var paths = [];
-        var pulseRaf = 0;
-        var tourTimer = 0;
-
-        var depth = [];
+        var W0 = 1240;
+        var S = 1;
+        var live = true;
         var each = function (list, fn) {
           Array.prototype.forEach.call(list, fn);
         };
-        var later = function (fn, ms) {
-          timers.push(setTimeout(fn, ms));
+        var q = function (sel, root) {
+          return (root || app).querySelector(sel);
         };
-        var clearTimers = function () {
-          each(timers, clearTimeout);
-          timers = [];
+        var qa = function (sel, root) {
+          return (root || app).querySelectorAll(sel);
         };
-        var el = function (name, attrs) {
-          var n = document.createElementNS(NS, name);
-          Object.keys(attrs).forEach(function (k) {
-            n.setAttribute(k, attrs[k]);
+        var ic = function (id) {
+          return '<svg class="icon" aria-hidden="true"><use href="#' + id + '" /></svg>';
+        };
+        var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>';
+
+        // ── Fit the fixed 1240 × 776 window to its column ──
+        var sizeHero = function () {
+          if (hero) hero.style.setProperty("--hx-top", Math.min(0, window.innerHeight - hero.offsetHeight) + "px");
+        };
+        var fitNow = function () {
+          var w = fit.clientWidth;
+          if (!w) return;
+          S = w / W0;
+          box.style.setProperty("--s", S.toFixed(4));
+          // Phones get a picture of the window; it is too small to use
+          live = w >= 700;
+          app.classList.toggle("is-pic", !live);
+          stage.classList.toggle("is-pic", !live);
+          if ("inert" in app) app.inert = !live;
+          sizeHero();
+        };
+        fitNow();
+        if ("ResizeObserver" in window) {
+          new ResizeObserver(fitNow).observe(fit);
+          if (hero) new ResizeObserver(sizeHero).observe(hero);
+        }
+        window.addEventListener("resize", sizeHero);
+
+        // ── The sample workspace. Today is this week's Tuesday at 11:20, the same as Home further down. ──
+        var monday = (function () {
+          var d = new Date();
+          d.setHours(0, 0, 0, 0);
+          d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+          return d;
+        })();
+        var dayAt = function (k) {
+          var d = new Date(monday);
+          d.setDate(d.getDate() + k);
+          return d;
+        };
+        var TODAY = 1;
+        var NOW = 11 + 20 / 60;
+        var DN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        var MS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        var MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        var today = dayAt(TODAY);
+        var short = function (k) {
+          var d = dayAt(k);
+          return MS[d.getMonth()] + " " + d.getDate();
+        };
+        // The app's due chip: Today, Tomorrow, or "Oct 9"
+        var dueText = function (k) {
+          return k === TODAY ? "Today" : k === TODAY + 1 ? "Tomorrow" : short(k);
+        };
+        var hm = function (h) {
+          var m = Math.round((h % 1) * 60);
+          return Math.floor(h) + ":" + (m < 10 ? "0" : "") + m;
+        };
+
+        var PEOPLE = {
+          anna: { n: "Anna Carter", i: "AC", job: "Client", org: "Carter & Co", mail: "anna@carterandco.com", stat: "", fav: true },
+          jamie: { n: "Jamie Ross", i: "JR", job: "Designer", org: "Studio", mail: "jamie@studio.work", stat: "" },
+          jordan: { n: "Jordan Reyes", i: "JY", job: "Founder", org: "Reyes Studio", mail: "jordan@reyes.studio", stat: "is-dormant" },
+          maya: { n: "Maya Brooks", i: "MB", job: "Illustrator", org: "Freelance", mail: "maya@mayabrooks.art", stat: "" },
+          print: { n: "Print House", i: "PH", job: "Supplier", org: "Print House", mail: "orders@printhouse.co", stat: "" },
+          priya: { n: "Priya Shah", i: "PS", job: "Photographer", org: "Freelance", mail: "hello@priyashah.photo", stat: "is-lead" },
+          tom: { n: "Tom Becker", i: "TB", job: "Producer", org: "Becker Films", mail: "tom@beckerfilms.com", stat: "is-lead" },
+        };
+        var MAIL = {
+          deck: { p: "anna", s: "Final deck notes", t: "9:12", at: [TODAY, 9.2], unread: true, n: 2, prev: "Here’s the draft for Friday. Shout if anything’s off.", snip: "Love it. Just swap the hero photo and we’re done.", body: ["Hi!", "Love it. Just swap the hero photo and we’re done. Can you send the revised deck by Friday?", "Thanks, Anna"], file: "Deck v3.pdf", task: "deck", links: [["task:deck", "Spawned from"], ["note:kickoff", "Mentions"], ["event:deck", "References"]] },
+          logo: { p: "maya", s: "Logo files for print", t: "9:05", at: [TODAY, 9.08], unread: true, snip: "SVGs and PNGs are in the shared folder.", body: ["Morning!", "SVGs and PNGs are in the shared folder. Shout if the printer needs anything else.", "Maya"], task: "svg", links: [["task:svg", "Spawned from"], ["task:logo", "References"]] },
+          phase3: { p: "tom", s: "Intro: the Phase 3 team", t: "Mon", at: [0, 16.5], snip: "Meet the crew for the shoot in November.", body: ["Hi both,", "Meet the crew for the shoot in November. I’ve copied Priya, who’ll take the photos.", "Tom"], links: [["note:phase3", "References"]] },
+          shoot: { p: "priya", s: "Photos from the shoot", t: "Sun", at: [-1, 21], snip: "Forty selects, uploaded tonight.", body: ["Hey,", "Forty selects, uploaded tonight. Let me know your favourites.", "Priya"], links: [] },
+          proof: { p: "print", s: "Your proofs are ready", t: "Mon", at: [0, 11], snip: "Come by any time before Friday to check the colours.", body: ["Hello,", "Your proofs are ready. Come by any time before Friday to check the colours.", "Print House"], links: [["task:proofs", "References"]] },
+        };
+        var TASKS = {
+          deck: { t: "Send Anna the revised deck", due: 4, sched: [4, 10], tag: ["client", "var(--info)"], b: "Website redesign", pri: "High", desc: "From Anna’s email. Swap the hero photo first.", links: [["email:deck", "Spawned from"], ["note:kickoff", "Mentions"], ["event:deck", "References"], ["contact:anna", "References"]] },
+          phase2: { t: "Prep the Phase 2 review", due: 3, b: "Website redesign", sub: "2/5", links: [["event:review", "References"], ["note:kickoff", "References"]] },
+          logo: { t: "Final logo exports", due: 2, sched: [2, 9], b: "Website redesign", links: [["email:logo", "References"], ["contact:maya", "References"]] },
+          proofs: { t: "Book the print proofs", due: 4, tag: ["print", "var(--warning)"], b: "Website redesign", links: [["email:proof", "References"], ["note:print", "References"]] },
+          svg: { t: "Reply to Maya about the SVGs", due: 1, b: "Studio", links: [["email:logo", "Spawned from"]] },
+          stretch: { t: "Stretch", due: 1, b: "Studio", rep: "Every day", links: [] },
+          mood: { t: "Moodboard review", b: "Website redesign", links: [] },
+        };
+        var QUEUE = ["deck", "phase2", "logo", "proofs", "svg", "stretch", "mood"];
+        var EVENTS = {
+          sprint: { t: "Plan the sprint", d: 0, s: 9.5, e: 10.5 },
+          lunch: { t: "Lunch with Jamie", d: 0, s: 12.5, e: 13.5 },
+          standup: { t: "Studio standup", d: 1, s: 10, e: 10.5 },
+          demo: { t: "Demo with Anna", d: 1, s: 14, e: 15, links: [["contact:anna", "References"], ["note:kickoff", "References"]] },
+          maya: { t: "Call with Maya", d: 1, s: 16.5, e: 17.25, links: [["contact:maya", "References"], ["task:logo", "References"]] },
+          draft: { t: "Review the deck draft", d: 1, s: 17.5, e: 18, links: [["task:deck", "References"]] },
+          focus: { t: "Final logo exports", d: 2, s: 9, e: 11, task: "logo", links: [["task:logo", "References"]] },
+          visit: { t: "Print shop visit", d: 2, s: 15, e: 16, links: [["task:proofs", "References"], ["contact:print", "References"]] },
+          review: { t: "Phase 2 review", d: 3, s: 15, e: 16, links: [["task:phase2", "References"], ["contact:anna", "References"]] },
+          deck: { t: "Send Anna the revised deck", d: 4, s: 10, e: 11, task: "deck", links: [["task:deck", "References"], ["email:deck", "References"], ["note:kickoff", "References"], ["chat:studio", "References"]] },
+          retro: { t: "Studio retro", d: 4, s: 16, e: 17 },
+          gym: { t: "Gym", d: 5, s: 10, e: 11 },
+        };
+        var NOTES = {
+          kickoff: { t: "Kickoff · Website redesign", lv: 1, links: [["contact:anna", "Mentions"], ["task:deck", "References"], ["task:logo", "References"], ["email:deck", "References"], ["contact:priya", "Mentions"]] },
+          decknotes: { t: "Final deck notes", lv: 1, links: [["email:deck", "References"]] },
+          print: { t: "Print checklist", lv: 1, links: [["task:proofs", "References"]] },
+          phase3: { t: "Ideas for Phase 3", lv: 1, links: [["contact:tom", "Mentions"], ["email:phase3", "References"]] },
+          rules: { t: "Studio rules", lv: 0, links: [] },
+        };
+        var CHANNELS = {
+          studio: { t: "studio", members: ["jamie", "maya"], links: [["event:deck", "References"], ["task:deck", "References"], ["email:logo", "References"]] },
+          web: { t: "website-redesign", members: ["jamie", "anna"], links: [["note:kickoff", "References"]] },
+          phase3: { t: "phase-3", members: ["tom", "priya"], links: [["note:phase3", "References"]] },
+        };
+        // What each person's page lists, in the hub's fixed order
+        var CONTACT_LINKS = {
+          anna: [["task:deck", "References"], ["task:phase2", "References"], ["note:kickoff", "Mentions"], ["email:deck", "References"], ["event:demo", "References"], ["event:review", "References"]],
+          jamie: [["task:deck", "Assigned"], ["event:deck", "References"], ["chat:studio", "References"]],
+          jordan: [],
+          maya: [["task:logo", "References"], ["email:logo", "References"], ["event:maya", "References"]],
+          print: [["task:proofs", "References"], ["email:proof", "References"], ["event:visit", "References"]],
+          priya: [["note:kickoff", "Mentions"], ["email:shoot", "References"]],
+          tom: [["note:phase3", "Mentions"], ["email:phase3", "References"]],
+        };
+
+        var st = { view: "home", email: "deck", task: "deck", event: "deck", note: "kickoff", contact: "anna", chat: "studio", erail: "reader", crail: "detail", nrail: "detail", done: { mood: true }, read: {} };
+
+        // ── Small pieces ──
+        var KIND = { task: "i-check-circle", email: "i-mail", note: "i-notes", event: "i-calendar", contact: "i-contact", chat: "i-hash" };
+        var label = function (r) {
+          var p = r.split(":");
+          var id = p[1];
+          if (p[0] === "task") return TASKS[id].t;
+          if (p[0] === "email") return MAIL[id].s;
+          if (p[0] === "note") return NOTES[id].t;
+          if (p[0] === "event") return EVENTS[id].t;
+          if (p[0] === "contact") return PEOPLE[id].n;
+          return CHANNELS[id].t;
+        };
+        var who = function (pid) {
+          return pid === "me" ? { n: "You", i: "M" } : PEOPLE[pid];
+        };
+        var av = function (pid, cls) {
+          return '<span class="av2' + (cls ? " " + cls : "") + '">' + who(pid).i + "</span>";
+        };
+        // A linked item: the rail shows the relation as a small tag, the page hides "References"
+        var er = function (r, rel, page) {
+          var tagged = rel && (!page || rel !== "References");
+          return '<button class="er" type="button" data-open="' + r + '">' + ic(KIND[r.split(":")[0]]) + "<span>" + label(r) + "</span>" + (tagged ? "<small>" + rel + "</small>" : "") + "</button>";
+        };
+        var hub = function (links) {
+          var g = { "Open work": [], Conversations: [], Notes: [], Other: [] };
+          links.forEach(function (l) {
+            var t = l[0].split(":")[0];
+            (t === "task" ? g["Open work"] : t === "email" || t === "chat" ? g.Conversations : t === "note" ? g.Notes : g.Other).push(l);
           });
-          return n;
+          return Object.keys(g)
+            .filter(function (k) { return g[k].length; })
+            .map(function (k) {
+              return '<div class="er-sec"><div class="eb">' + k + '<span class="bdg">' + g[k].length + "</span></div>" + g[k].map(function (l) { return er(l[0], l[1]); }).join("") + "</div>";
+            })
+            .join("");
+        };
+        var chip = function (r, text) {
+          return '<button class="ref" type="button" data-open="' + r + '">' + ic(KIND[r.split(":")[0]]) + (text || label(r)) + "</button>";
+        };
+        var tg = function (id, big) {
+          return '<button class="tg' + (big ? " is-20" : "") + '" type="button" data-tick="' + id + '" aria-pressed="' + !!st.done[id] + '" aria-label="Complete: ' + TASKS[id].t + '">' + CHECK + "</button>";
+        };
+        var tt = function (id) {
+          return '<span class="' + (st.done[id] ? "is-done-t" : "") + '" data-tt="' + id + '">' + TASKS[id].t + "</span>";
+        };
+        var rr = function (icon, text, count, sel, cls) {
+          return '<div class="rr' + (cls ? " " + cls : "") + (sel ? " is-sel" : "") + '">' + ic(icon) + "<span>" + text + "</span>" + (count ? "<em>" + count + "</em>" : "") + "</div>";
+        };
+        var segs = function (key, items, cls) {
+          return '<div class="seg' + (cls ? " " + cls : "") + '">' + items.map(function (it) {
+            return '<button type="button" class="seg-b' + (st[key] === it[0] ? " is-on" : "") + '" data-seg="' + key + ":" + it[0] + '">' + it[1] + "</button>";
+          }).join("") + "</div>";
+        };
+        var openCount = function () {
+          return QUEUE.filter(function (id) { return !st.done[id]; }).length;
+        };
+        var unread = function (id) {
+          return MAIL[id].unread && !st.read[id];
         };
 
-        var rng = (function (seed) {
-          return function () {
-            seed = (seed + 0x6d2b79f5) | 0;
-            var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        // ── Home: six widgets the ten apps turn into ──
+        var dotEl = app.querySelector(".app-dot");
+        var V = {};
+        V.home = function () {
+          var nUnread = Object.keys(MAIL).filter(unread).length;
+          var tasks =
+            '<section class="hw is-m" data-w="tasks"><div class="hw-h"><button type="button" data-go="tasks">Tasks</button></div><div class="hw-fill hw-list">' +
+            '<div class="hw-sec" style="--n: 0">Today<em data-open-n>' + openCount() + "</em></div>" +
+            QUEUE.slice(0, 5).map(function (id, k) {
+              return '<div class="hw-r" style="--n: ' + (k + 1) + '">' + tg(id, true) + '<button type="button" class="hw-two" data-open="task:' + id + '">' + tt(id) + "</button></div>";
+            }).join("") +
+            '<div class="hw-more" style="--n: 6">+' + (QUEUE.length - 5) + " more</div></div></section>";
+          var mrow = function (id, k, end) {
+            var m = MAIL[id];
+            return '<button type="button" class="hw-r" data-open="email:' + id + '" style="--n: ' + k + '"><span class="hw-two"><span>' + PEOPLE[m.p].n + "</span><small>" + m.s + "</small></span><em>" + (end || m.t) + "</em></button>";
           };
-        })(23);
+          var inbox =
+            '<section class="hw is-m" data-w="inbox"><div class="hw-h"><button type="button" data-go="email">Inbox</button></div><div class="hw-fill hw-list">' +
+            '<div class="hw-sec" style="--n: 0">' + ic("i-mail") + "Unread<em>hello@studio.work · " + nUnread + "</em></div>" + (["deck", "logo"].filter(unread).map(function (id, k) { return mrow(id, k + 1); }).join("") || '<div class="hw-more" style="--n: 1">Nothing unread</div>') +
+            '<div class="hw-sec" style="--n: 3">' + ic("i-clock") + "Returning today<em>1</em></div>" + mrow("phase3", 4, "14:00") +
+            '<div class="hw-sec" style="--n: 5">' + ic("i-reply") + "Awaiting reply<em>1</em></div>" + mrow("proof", 6) +
+            "</div></section>";
+          var day =
+            '<section class="hw" data-w="agenda"><div class="hw-h"><button type="button" data-go="calendar">Today</button></div><div class="hw-fill hw-list">' +
+            '<button type="button" class="hw-r is-next" data-open="event:demo" style="--n: 0"><span class="hw-time">14:00</span><span>Demo with Anna</span>' + ic("i-arrow") + "</button>" +
+            '<button type="button" class="hw-r" data-open="event:maya" style="--n: 1"><span class="hw-time">16:30</span><span>Call with Maya</span></button>' +
+            '<button type="button" class="hw-r" data-open="event:draft" style="--n: 2"><span class="hw-time">17:30</span><span>Review the deck draft</span></button>' +
+            "</div></section>";
+          var notes =
+            '<section class="hw" data-w="notes"><div class="hw-h"><button type="button" data-go="notes">Notes</button></div><div class="hw-fill hw-list">' +
+            [["kickoff", "Anna wants Phase 2 live before the launch.", "1h ago"], ["print", "SVGs, bleed, paper stock, proofs.", "Mon"], ["phase3", "A client portal and shared boards.", "Sep 28"]].map(function (x, k) {
+              return '<button type="button" class="hw-r" data-open="note:' + x[0] + '" style="--n: ' + k + '">' + ic("i-notes") + '<span class="hw-two"><span>' + NOTES[x[0]].t + "</span><small>" + x[1] + "</small></span><em>" + x[2] + "</em></button>";
+            }).join("") +
+            "</div></section>";
+          var reconnect =
+            '<section class="hw" data-w="people"><div class="hw-h">Reconnect</div><div class="hw-fill">' +
+            '<button type="button" class="hw-rc" data-open="contact:jordan" style="--n: 0"><span class="hw-ring"><svg viewBox="0 0 56 56" aria-hidden="true"><circle class="bg" cx="28" cy="28" r="25" /><circle class="fg" cx="28" cy="28" r="25" stroke-dasharray="157.1" stroke-dashoffset="39.3" /></svg><b>JY</b></span><b>Jordan Reyes</b><small>3 weeks since you spoke</small><span class="btn2 is-s">' + ic("i-mail") + "Say hello</span></button>" +
+            "</div></section>";
+          var activity =
+            '<section class="hw" data-w="activity"><div class="hw-h">Activity</div><div class="hw-fill hw-list">' +
+            [["jamie", "Jamie blocked Fri 10:00 for the deck", "9:41", "event:deck"], ["anna", "Anna replied to Final deck notes", "9:12", "email:deck"], ["maya", "Maya sent Logo files for print", "9:05", "email:logo"]].map(function (x, k) {
+              return '<button type="button" class="hw-r" data-open="' + x[3] + '" style="--n: ' + k + '">' + av(x[0]) + '<span class="hw-two"><span>' + x[1] + "</span></span><em>" + x[2] + "</em></button>";
+            }).join("") +
+            "</div></section>";
+          return tasks + inbox + day + notes + reconnect + activity;
+        };
 
+        // ── Email: accounts in the rail, threads in the middle, the reader on the right ──
+        V.email = function () {
+          st.read[st.email] = true;
+          if (dotEl) dotEl.hidden = !Object.keys(MAIL).some(unread);
+          var m = MAIL[st.email];
+          var p = PEOPLE[m.p];
+          var row = function (id) {
+            var x = MAIL[id];
+            return '<button type="button" class="em-row' + (unread(id) ? " is-unread" : "") + (id === st.email ? " is-sel" : "") + '" data-open="email:' + id + '" data-id="email:' + id + '"><i class="em-dot"></i><span class="em-l"><span class="em-f">' + PEOPLE[x.p].n + "<em>" + x.t + '</em></span><span class="em-s">' + x.s + (x.n ? ' <span class="em-n">' + x.n + "</span>" : "") + '</span><span class="em-p">' + x.snip + "</span></span></button>";
+          };
+          var items = [["reader", "Reader"], ["contact", "Contact"], ["detail", "Detail"]];
+          if (m.task) items.push(["task", "Task"]);
+          if (!m.task && st.erail === "task") st.erail = "reader";
+          var rail;
+          if (st.erail === "contact") {
+            rail = '<div style="padding:2px 4px 2px"><div style="font-size:13px;font-weight:500">' + p.n + '</div><div class="sub">' + p.mail + "</div></div>" + hub(CONTACT_LINKS[m.p]);
+          } else if (st.erail === "detail") {
+            rail = '<div class="tagrow"><span class="tag" style="--h:var(--info)"><i>#</i>' + (m.p === "anna" ? "client" : "studio") + '</span><span class="tag-add">' + ic("i-plus") + "Add tag</span></div>" + hub(m.links);
+          } else if (st.erail === "task") {
+            rail = taskDetail(m.task);
+          } else {
+            var d = dayAt(m.at[0]);
+            rail =
+              '<div class="ttl">' + m.s + "</div>" +
+              '<div class="rd-acts"><span class="btn2 is-g">' + ic("i-reply") + 'Reply</span><span class="btn2 is-g">' + ic("i-reply-all") + 'All</span><span class="btn2 is-g">' + ic("i-forward") + "Forward</span>" + (m.task ? '<button type="button" class="btn2 is-g" data-seg="erail:task">' + ic("i-list-checks") + "To task</button>" : '<span class="btn2 is-g">' + ic("i-list-checks") + "To task</span>") + "</div>" +
+              (m.prev ? '<div class="rd-old"><span class="av2">M</span><b>You</b><span>' + m.prev + "</span></div>" : "") +
+              '<div class="rd-card" style="margin-top:8px"><div class="rd-head">' + av(m.p) + "<div><b>" + p.n + "</b><small>" + (d.getDate() < 10 ? "0" : "") + d.getDate() + " " + MS[d.getMonth()] + " " + d.getFullYear() + ", " + hm(m.at[1]) + "</small><span>To: hello@studio.work</span></div>" + ic("i-chev") + '</div><div class="rd-body">' + m.body.map(function (x) { return "<p>" + x + "</p>"; }).join("") + (m.file ? '<span class="rd-file">' + ic("i-paperclip") + m.file + "</span>" : "") + "</div></div>";
+          }
+          return (
+            '<div class="pn pn-rail pn-l">' +
+            rr("i-inbox", "All inboxes", String(Object.keys(MAIL).filter(unread).length || ""), true, "is-36") +
+            '<div class="eb" style="padding:12px 8px 6px">Accounts</div>' +
+            '<div class="rr is-36"><i class="hue" style="--h: var(--info)"></i><span>hello@studio.work</span><em>' + (Object.keys(MAIL).filter(unread).length || "") + "</em></div>" +
+            '<div class="rr is-36"><i class="hue" style="--h: var(--success)"></i><span>me@hey.com</span></div>' +
+            '<div class="rr-gap"></div>' + rr("i-clock", "Snoozed", "1", false, "is-28") + rr("i-reply", "Follow-ups", "1", false, "is-28") +
+            '<span class="btn2 is-g" style="margin-top:auto;align-self:flex-start">' + ic("i-plus") + "Connect account</span></div>" +
+            '<div class="pn pn-c"><div class="em-tool"><span class="fld">' + ic("i-search") + 'Search mail…</span><span class="ib2">' + ic("i-refresh") + '</span><span class="btn2 is-p">' + ic("i-pen") + 'New message</span></div><div class="em-list">' +
+            '<div class="em-sec">Personal<em>4</em></div>' + ["deck", "logo", "phase3", "shoot"].map(row).join("") +
+            '<div class="em-sec">Notifications<em>1</em></div>' + row("proof") +
+            "</div></div>" +
+            '<div class="pn pn-rail pn-r" data-id="email:' + st.email + '">' + segs("erail", items, "rail-seg") + rail + "</div>"
+          );
+        };
+
+        // ── Tasks: buckets, the list, and the task itself on the right ──
+        var taskDetail = function (id) {
+          var t = TASKS[id];
+          var row = function (icon, k, v, ph) {
+            return '<div class="pr"><span>' + ic(icon) + k + '</span><span class="pr-v' + (ph ? " is-ph" : "") + '">' + v + "</span></div>";
+          };
+          return (
+            '<div class="td-title">' + tg(id) + '<div class="ttl">' + tt(id) + "</div></div>" +
+            '<div class="td-desc">' + (t.desc || '<span style="opacity:.7">Add a description…</span>') + "</div>" +
+            '<div class="hr"></div><div class="td-props">' +
+            row("i-circle-dot", "Status", st.done[id] ? "Done" : "Todo") +
+            row("i-folder", "Bucket", t.b) +
+            row("i-clock", "Scheduled", t.sched ? DN[t.sched[0]] + " " + hm(t.sched[1]) : "Set time", !t.sched) +
+            row("i-calendar", "Due", t.due != null ? dueText(t.due) : "Set date", t.due == null) +
+            row("i-flag", "Priority", t.pri || "None", !t.pri) +
+            row("i-repeat", "Repeat", t.rep || "Doesn’t repeat", !t.rep) +
+            "</div>" +
+            (t.links.length ? '<div class="td-linked"><div class="eb">Linked</div>' + hub(t.links) + "</div>" : "")
+          );
+        };
+        V.tasks = function () {
+          var rows = QUEUE.map(function (id) {
+            var x = TASKS[id];
+            return (
+              '<div class="tk-row' + (id === st.task ? " is-sel" : "") + '" data-id="task:' + id + '">' + tg(id) +
+              '<button type="button" class="tk-ti" data-open="task:' + id + '">' + tt(id) + "</button>" +
+              (x.sub ? '<span class="meta">' + x.sub + "</span>" : "") +
+              (x.tag ? '<span class="tag" style="--h:' + x.tag[1] + '"><i>#</i>' + x.tag[0] + "</span>" : "") +
+              (x.sched ? '<span class="meta">' + ic("i-clock") + hm(x.sched[1]) + "</span>" : "") +
+              (x.due != null ? '<span class="meta">' + ic("i-calendar") + dueText(x.due) + "</span>" : "") +
+              '<span class="tk-q is-on">' + ic("i-list-checks") + "</span></div>"
+            );
+          }).join("");
+          return (
+            '<div class="pn pn-rail pn-l"><div class="seg is-32" style="margin-bottom:8px"><span class="is-on">Plan</span><span>Focus</span></div>' +
+            rr("i-layers", "All", "9", false, "is-36") + rr("i-list-checks", "Queue", String(openCount()), true, "is-36") + rr("i-inbox", "Inbox", "2", false, "is-36") +
+            '<div class="eb" style="padding:14px 8px 6px;opacity:.7">Buckets</div>' +
+            rr("i-folder", "Website redesign", "5", false, "is-36") + rr("i-folder", "Phase 3", "2", false, "is-36") + rr("i-folder", "Studio", "2", false, "is-36") + "</div>" +
+            '<div class="pn pn-main pn-c"><div class="tk-h"><h3 class="tk-t">Queue</h3><span class="tk-grp">Group</span><span class="tk-sel">None' + ic("i-chev") + '</span><span class="btn2 is-o">' + ic("i-filter") + 'Filter</span><div class="seg is-ic"><span class="is-on">' + ic("i-list") + "</span><span>" + ic("i-columns") + "</span><span>" + ic("i-gantt") + '</span></div><span class="btn2 is-p">' + ic("i-plus") + "New</span></div>" + rows + "</div>" +
+            '<div class="pn pn-rail pn-r" data-id="task:' + st.task + '">' + taskDetail(st.task) + "</div>"
+          );
+        };
+
+        // ── Calendar: the week, with the selected event on the right ──
+        V.calendar = function () {
+          var H0 = 9;
+          var HH = 56;
+          var e = EVENTS[st.event];
+          var head = DN.map(function (d, k) {
+            return '<span class="' + (k === TODAY ? "is-today" : "") + '">' + d + " <b>" + dayAt(k).getDate() + "</b></span>";
+          }).join("");
+          var hrs = "";
+          for (var h = H0 + 1; h < 19; h++) hrs += '<span style="top:' + (h - H0) * HH + 'px">' + h + ":00</span>";
+          var cols = DN.map(function (d, k) {
+            return '<div class="wk-day">' + Object.keys(EVENTS).filter(function (id) { return EVENTS[id].d === k; }).map(function (id) {
+              var x = EVENTS[id];
+              var past = x.d < TODAY || (x.d === TODAY && x.e <= NOW);
+              var brief = x.e - x.s < 0.67;
+              var inner = brief ? "<b>" + x.t + "</b>" : "<b>" + x.t + "</b><small>" + hm(x.s) + " – " + hm(x.e) + "</small>";
+              return '<div role="button" tabindex="0" class="wk-ev' + (x.task ? " is-task" : "") + (brief ? " is-brief" : "") + (past ? " is-past" : "") + (id === st.event ? " is-sel" : "") + '" data-open="event:' + id + '" data-id="event:' + id + '" style="top:' + ((x.s - H0) * HH + 1) + "px;height:" + ((x.e - x.s) * HH - 3) + 'px">' + (x.task ? tg(x.task) + '<span class="wk-tx">' + inner + "</span>" : inner) + "</div>";
+            }).join("") + (k === TODAY ? '<div class="wk-now" style="top:' + (NOW - H0) * HH + 'px"></div>' : "") + "</div>";
+          }).join("");
+          // The rail's month
+          var first = new Date(today.getFullYear(), today.getMonth(), 1);
+          var lead = (first.getDay() + 6) % 7;
+          var days = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+          var busy = {};
+          Object.keys(EVENTS).forEach(function (id) {
+            var dd = dayAt(EVENTS[id].d);
+            if (dd.getMonth() === today.getMonth()) busy[dd.getDate()] = true;
+          });
+          var pick = dayAt(e.d);
+          var mm = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map(function (d) { return "<i>" + d + "</i>"; }).join("");
+          var prevDays = new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+          for (var k = 0; k < lead; k++) mm += '<span class="is-out">' + (prevDays - lead + 1 + k) + "</span>";
+          for (var dd = 1; dd <= days; dd++) mm += '<span class="' + (dd === today.getDate() ? "is-today " : "") + (pick.getMonth() === today.getMonth() && dd === pick.getDate() ? "is-pick " : "") + (busy[dd] ? "is-busy" : "") + '">' + dd + "</span>";
+          for (var nx = 1; (lead + days + nx - 1) % 7 !== 0; nx++) mm += '<span class="is-out">' + nx + "</span>";
+          var rail;
+          if (st.crail === "tasks") {
+            rail = '<span class="fld">' + ic("i-search") + 'Search tasks</span><div class="eb" style="margin:14px 0 4px">Today (2)</div>' + ["svg", "stretch"].map(function (id) { return '<div class="tk-row">' + tg(id) + '<button type="button" class="tk-ti" style="font-size:13px" data-open="task:' + id + '">' + tt(id) + "</button></div>"; }).join("") + '<div class="eb" style="margin:14px 0 4px">Due soon (3)</div>' + ["logo", "phase2", "proofs"].map(function (id) { return '<div class="tk-row">' + tg(id) + '<button type="button" class="tk-ti" style="font-size:13px" data-open="task:' + id + '">' + tt(id) + "</button></div>"; }).join("");
+          } else if (st.crail === "notes") {
+            rail = hub((e.links || []).filter(function (l) { return l[0].indexOf("note:") === 0; })) || '<p class="sub" style="padding:8px 4px">No linked notes yet.</p>';
+          } else {
+            rail =
+              '<div class="eb" style="justify-content:space-between">Event<span class="ib2" style="width:20px;height:20px">' + ic("i-x") + "</span></div>" +
+              '<div class="ev-in ev-title">' + e.t + "</div>" +
+              '<div class="ev-fld"><span class="eb">Starts</span><span class="ev-in">' + DN[e.d] + ", " + short(e.d) + " · " + hm(e.s) + "</span></div>" +
+              '<div class="ev-fld"><span class="eb">Ends</span><span class="ev-in">' + DN[e.d] + ", " + short(e.d) + " · " + hm(e.e) + "</span></div>" +
+              '<div class="ev-fld"><span class="eb">All day</span><span class="sw" aria-hidden="true"><i></i></span></div>' +
+              '<div class="ev-fld"><span class="eb">Repeats</span><span class="btn2 is-o" style="justify-self:start">' + ic("i-repeat") + "Doesn’t repeat</span></div>" +
+              '<div class="hr"></div>' + (e.links ? hub(e.links) : '<p class="sub">Nothing linked yet</p>');
+          }
+          return (
+            '<div class="pn pn-rail pn-l"><div class="mm-cap">' + MON[today.getMonth()] + " " + today.getFullYear() + '<span><span class="ib2">' + ic("i-chevl") + '</span><span class="ib2">' + ic("i-chevr") + '</span></span></div><div class="mm3">' + mm + "</div>" +
+            '<div class="eb" style="padding:16px 8px 6px">Calendars</div><div class="rr is-28"><i class="hue" style="width:10px;height:10px"></i><span>Moduo</span></div><div class="rr is-28"><i class="hue" style="--h: var(--info)"></i><span>hello@studio.work</span></div>' +
+            '<span class="btn2 is-g" style="margin-top:6px;align-self:flex-start">' + ic("i-plus") + "Connect calendar…</span></div>" +
+            '<div class="pn pn-main pn-c wk"><div class="wk-bar"><span class="ib2">' + ic("i-chevl") + '</span><span class="ib2">' + ic("i-chevr") + '</span><span class="btn2 is-o">Today</span><b>' + short(0) + " – " + short(6) + '</b><div class="seg" style="width:120px"><span>Day</span><span class="is-on">Week</span></div></div><div class="wk-head"><span></span>' + head + '</div><div class="wk-body"><div class="wk-hrs">' + hrs + "</div>" + cols + "</div></div>" +
+            '<div class="pn pn-rail pn-r" data-id="event:' + st.event + '">' + segs("crail", [["tasks", "Tasks"], ["detail", "Detail"], ["notes", "Notes"]], "rail-seg") + rail + "</div>"
+          );
+        };
+
+        // ── Notes: the tree, the page, and what it links to ──
+        V.notes = function () {
+          var n = NOTES[st.note];
+          var node = function (id) {
+            var x = NOTES[id];
+            return '<button type="button" class="nt-row' + (id === st.note ? " is-sel" : "") + '" data-open="note:' + id + '" style="--lv:' + x.lv + '"><span class="nt-chev"></span>' + ic("i-notes") + "<span>" + x.t + "</span></button>";
+          };
+          var folder = function (name, open) {
+            return '<div class="nt-row" style="--lv:0"><span class="nt-chev ' + (open ? "is-open" : "is-closed") + '">' + ic("i-chev") + "</span>" + ic("i-notes") + "<span>" + name + "</span></div>";
+          };
+          var body;
+          if (st.note === "kickoff") {
+            body =
+              "<p>" + chip("contact:anna") + " wants Phase 2 live before the launch. The deck is the last thing she needs from us.</p>" +
+              "<h4>This week</h4>" +
+              '<div class="nt-tl">' + tg("deck") + tt("deck") + chip("task:deck", "Fri") + av("jamie") + "</div>" +
+              '<div class="nt-tl">' + tg("logo") + tt("logo") + chip("task:logo", "Wed") + av("maya") + "</div>" +
+              '<div class="nt-tl">' + tg("proofs") + tt("proofs") + chip("task:proofs", "Fri") + "</div>" +
+              "<h4>From the call</h4>" +
+              "<p>She loved the new type. Swap the hero photo for one from " + chip("contact:priya") + "’s shoot. Print needs the SVGs by Friday.</p>";
+          } else {
+            body = "<p>" + { decknotes: "Swap the hero image and tighten slide 4. Anna signs off on Friday.", print: "SVGs, bleed, paper stock and proofs. Visit Print House before Friday.", phase3: "A client portal and shared boards. Tom brings the crew in November.", rules: "No meetings on Wednesdays. Lunch is at the big table." }[st.note] + "</p>";
+          }
+          var rail;
+          if (st.nrail === "comments") rail = '<div class="ch-m" style="margin-top:4px">' + av("jamie") + '<div><b>Jamie Ross<small>9:50</small></b><p style="font-size:13px">I’ll take the deck. Photo first.</p></div></div>';
+          else if (st.nrail === "outline") rail = '<div class="rr">' + ic("i-notes") + '<span>This week</span></div><div class="rr">' + ic("i-notes") + "<span>From the call</span></div>";
+          else rail = '<div class="tagrow"><span class="tag" style="--h:var(--info)"><i>#</i>client</span><span class="tag-add">' + ic("i-plus") + "Add tag</span></div>" + (st.note === "kickoff" ? '<div class="sug">' + ic("i-contact") + "Link to <b>Maya Brooks</b>?<small>· Edited around the same time</small><span class=\"sug-b\"><span class=\"btn2 is-g\">Dismiss</span><span class=\"btn2 is-p\">Link</span></span></div>" : "") + hub(n.links);
+          return (
+            '<div class="pn pn-rail pn-l"><div class="nt-top"><b>Notes</b><span class="ib2">' + ic("i-import") + '</span><span class="ib2">' + ic("i-plus") + '</span></div><span class="fld" style="background:var(--popover)">' + ic("i-search") + "Search notes…</span>" +
+            '<div class="eb nt-sec">Pinned</div>' + node("kickoff") +
+            '<div class="eb nt-sec">Workspace</div>' + folder("Website redesign", true) + node("kickoff") + node("decknotes") + node("print") + folder("Phase 3", true) + node("phase3") + node("rules") +
+            '<div class="eb nt-sec">Published</div><div class="eb nt-sec">Archive</div></div>' +
+            '<div class="pn pn-c nt-card"><div class="nt-ed"><div class="nt-tools"><span class="btn2 is-g">' + ic("i-globe") + 'Publish</span><span class="ib2">' + ic("i-panel") + '</span></div><div class="nt-doc" data-id="note:' + st.note + '"><h3>' + n.t + "</h3>" + body + "</div></div></div>" +
+            '<div class="pn pn-rail pn-r">' + segs("nrail", [["detail", "Detail"], ["comments", "Comments"], ["outline", "Outline"]], "rail-seg") + rail + "</div>"
+          );
+        };
+
+        // ── Contacts: the directory, then everything about one person ──
+        V.contacts = function () {
+          var id0 = st.contact;
+          var p = PEOPLE[id0];
+          var ids = Object.keys(PEOPLE);
+          var row = function (id) {
+            var x = PEOPLE[id];
+            return '<button type="button" class="ct-row' + (id === id0 ? " is-sel" : "") + '" data-open="contact:' + id + '">' + av(id) + '<span class="hw-two"><b>' + x.n + "</b><small>" + x.job + " · " + x.org + '</small></span><i class="stat ' + x.stat + '"></i></button>';
+          };
+          var letters = "";
+          var lastL = "";
+          ids.forEach(function (id) {
+            if (PEOPLE[id].fav) return;
+            var L = PEOPLE[id].n.charAt(0);
+            if (L !== lastL) {
+              letters += '<div class="eb" style="padding:10px 8px 4px">' + L + "</div>";
+              lastL = L;
+            }
+            letters += row(id);
+          });
+          var groups = [["Tasks", "task"], ["Notes", "note"], ["Emails", "email"], ["Events", "event"], ["Other", "chat"]];
+          var links = CONTACT_LINKS[id0];
+          var sections = groups.map(function (g) {
+            var ls = links.filter(function (l) { return l[0].indexOf(g[1] + ":") === 0; });
+            if (!ls.length) return "";
+            return '<div class="ct-lk"><div class="eb">' + g[0] + '<span class="bdg">' + ls.length + "</span></div>" + ls.map(function (l) { return er(l[0], l[1], true); }).join("") + "</div>";
+          }).join("") || '<p class="sub">Nothing linked yet. Last touch was three weeks ago.</p>';
+          return (
+            '<div class="pn pn-rail pn-l"><div class="ct-top"><div class="seg"><span class="is-on">People 7</span><span>Companies 4</span></div><span class="ib2">' + ic("i-import") + '</span><span class="ib2">' + ic("i-plus") + '</span></div><span class="fld">' + ic("i-search") + 'Search people</span><div class="ct-filters"><span class="btn2 is-g">Status</span><span class="btn2 is-g">Tag</span></div>' +
+            '<div class="eb" style="padding:8px 8px 4px">★ Favorites</div>' + row("anna") + letters + "</div>" +
+            '<div class="pn pn-main pn-c" data-id="contact:' + id0 + '"><div class="ct-hub"><div class="ct-head">' + av(id0, "is-xl") + '<div><h3 class="ct-name">' + p.n + '</h3><div class="ct-subt">' + p.job + " · " + ic("i-building") + p.org + (p.stat ? "" : ' <span class="pill">Active</span>') + '</div></div><span class="ib2">' + ic("i-star") + '</span><span class="ib2">' + ic("i-pencil") + '</span><span class="ib2">' + ic("i-dots") + "</span></div>" +
+            '<div class="ct-acts"><span class="btn2 is-s">' + ic("i-mail") + 'Email</span><span class="btn2 is-s">' + ic("i-calendar") + 'Add task</span><span class="btn2 is-s">' + ic("i-plus") + 'Note</span><span class="btn2 is-s">' + ic("i-link") + "Link</span></div>" +
+            '<div class="ct-touch">Last touch: ' + (id0 === "anna" ? "today, Final deck notes" : id0 === "jordan" ? "3 weeks ago" : "this week") + "</div>" +
+            sections + "</div></div>" +
+            '<div class="pn pn-rail pn-r"><div class="seg rail-seg"><span class="is-on">Notes</span></div>' + (links.filter(function (l) { return l[0].indexOf("note:") === 0; }).map(function (l) { return er(l[0], l[1]); }).join("") || '<p class="sub" style="padding:4px">No linked notes yet.</p>') + "</div>"
+          );
+        };
+
+        // ── Chat: channels for Duo and Team, drawn in the app's language ──
+        V.chat = function () {
+          var c = CHANNELS[st.chat];
+          var MSG = {
+            studio: [["maya", "9:05", "Logo files are up. SVGs and PNGs are in the shared folder."], ["jamie", "9:41", "Blocked Friday 10:00 for the deck. " + chip("event:deck", "Fri 10:00 · Send Anna the revised deck")], ["me", "9:44", "Perfect. I’ll send it to Anna right after."], ["jamie", "9:46", "I’ll grab the new hero photo from " + chip("contact:priya") + " first."]],
+            web: [["anna", "Yesterday", "Loved the new type. One small thing on slide 4."], ["me", "Yesterday", "On it. Notes are in " + chip("note:kickoff") + "."]],
+            phase3: [["tom", "Mon", "The crew list for November is in the email."], ["priya", "Mon", "I can do the 14th and 15th."]],
+          }[st.chat];
+          return (
+            '<div class="pn pn-rail pn-l"><div class="eb" style="padding:4px 8px 8px">Channels</div>' +
+            Object.keys(CHANNELS).map(function (id) {
+              return '<button type="button" class="rr is-36' + (id === st.chat ? " is-sel" : "") + '" data-open="chat:' + id + '">' + ic("i-hash") + "<span>" + CHANNELS[id].t + "</span>" + (id === "web" ? "<em>2</em>" : "") + "</button>";
+            }).join("") +
+            '<div class="eb" style="padding:14px 8px 8px">Direct messages</div><div class="rr is-36">' + av("jamie") + '<span>Jamie Ross</span><i class="on-dot"></i></div><div class="rr is-36">' + av("maya") + "<span>Maya Brooks</span></div></div>" +
+            '<div class="pn pn-c ch-w" data-id="chat:' + st.chat + '"><div class="ch-h">' + ic("i-hash") + "<b>" + c.t + '</b><span class="sub">' + (c.members.length + 1) + ' members</span><span class="btn2 is-s">' + ic("i-video") + 'Call</span></div><div class="ch-list">' +
+            MSG.map(function (m) { var w = who(m[0]); return '<div class="ch-m"><span class="av2">' + w.i + "</span><div><b>" + w.n + "<small>" + m[1] + "</small></b><p>" + m[2] + "</p></div></div>"; }).join("") +
+            '</div><div class="ch-in">Message #' + c.t + ic("i-arrow") + "</div></div>" +
+            '<div class="pn pn-rail pn-r"><div class="eb" style="padding:4px 4px 6px">Members</div>' + c.members.map(function (w) { return '<div class="rr">' + av(w) + "<span>" + PEOPLE[w].n + "</span></div>"; }).join("") + '<div class="rr"><span class="av2">M</span><span>You</span></div>' + hub(c.links) + "</div>"
+          );
+        };
+
+        // ── Show a view, open a linked item, tick a task ──
+        var views = {};
+        each(qa(".vw", main), function (v) {
+          views[v.getAttribute("data-v")] = v;
+        });
+        var render = function (name) {
+          views[name].innerHTML = V[name]();
+        };
+        var go = function (name, flashRef) {
+          var was = st.view;
+          st.view = name;
+          app.setAttribute("data-view", name);
+          each(qa(".app-tab"), function (t) {
+            if (t.getAttribute("data-go") === name) t.setAttribute("aria-current", "page");
+            else t.removeAttribute("aria-current");
+          });
+          render(name);
+          if (was !== name) {
+            each(qa(".vw", main), function (v) {
+              v.classList.toggle("is-on", v === views[name]);
+              v.classList.remove("is-enter");
+            });
+            if (!reduce) {
+              void views[name].offsetWidth;
+              views[name].classList.add("is-enter");
+            }
+          }
+          if (flashRef && !reduce) {
+            var hit = q('[data-id="' + flashRef + '"]', views[name]);
+            if (hit) {
+              hit.classList.remove("is-flash");
+              void hit.offsetWidth;
+              hit.classList.add("is-flash");
+            }
+          }
+        };
+        var VIEW = { email: "email", task: "tasks", event: "calendar", note: "notes", contact: "contacts", chat: "chat" };
+        var open = function (r) {
+          var p = r.split(":");
+          if (!VIEW[p[0]]) return;
+          if (p[0] === "email") {
+            if (st.email !== p[1] || st.view !== "email") st.erail = "reader";
+          }
+          if (p[0] === "event") st.crail = "detail";
+          if (p[0] === "note" && st.view !== "notes") st.nrail = "detail";
+          st[p[0]] = p[1];
+          go(VIEW[p[0]], r);
+        };
+        var seg = function (v) {
+          var p = v.split(":");
+          st[p[0]] = p[1];
+          render(st.view);
+        };
+        var tick = function (id) {
+          st.done[id] = !st.done[id];
+          each(qa('[data-tick="' + id + '"]'), function (b) {
+            b.setAttribute("aria-pressed", String(!!st.done[id]));
+          });
+          each(qa('[data-tt="' + id + '"]'), function (t) {
+            t.classList.toggle("is-done-t", !!st.done[id]);
+          });
+          each(qa("[data-open-n]"), function (b) {
+            b.textContent = openCount();
+          });
+        };
+        app.addEventListener("click", function (e) {
+          var t = e.target.closest("[data-tick],[data-seg],[data-go],[data-open]");
+          if (!t || !app.contains(t)) return;
+          if (t.hasAttribute("data-tick")) tick(t.getAttribute("data-tick"));
+          else if (t.hasAttribute("data-seg")) seg(t.getAttribute("data-seg"));
+          else if (t.hasAttribute("data-go")) go(t.getAttribute("data-go"));
+          else open(t.getAttribute("data-open"));
+        });
+        app.addEventListener("keydown", function (e) {
+          var t = e.target;
+          if ((e.key === "Enter" || e.key === " ") && t.getAttribute && t.getAttribute("role") === "button" && t.hasAttribute("data-open")) {
+            e.preventDefault();
+            open(t.getAttribute("data-open"));
+          }
+        });
+        render("home");
+
+        // ── Ten apps, scattered, then each one lands in its Home widget ──
+        var wins = pile ? pile.querySelectorAll(".aw") : [];
         var UI = {
-          list:
-            '<rect x="2" y="4" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="6" width="70" height="3" rx="1.5"/>' +
-            '<rect class="k" x="2" y="18" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="20" width="52" height="3" rx="1.5"/>' +
-            '<rect x="2" y="32" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="34" width="80" height="3" rx="1.5"/>' +
-            '<rect x="2" y="46" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="48" width="44" height="3" rx="1.5"/>',
-          kanban:
-            '<rect x="1" y="1" width="36" height="62" rx="3"/><rect x="42" y="1" width="36" height="62" rx="3"/><rect x="83" y="1" width="36" height="62" rx="3"/>' +
-            '<rect class="f" x="5" y="6" width="28" height="12" rx="2"/><rect class="f" x="5" y="22" width="28" height="12" rx="2"/>' +
-            '<rect class="k" x="46" y="6" width="28" height="12" rx="2"/><rect class="f" x="87" y="6" width="28" height="12" rx="2"/>' +
-            '<rect class="f" x="87" y="22" width="28" height="12" rx="2"/><rect class="f" x="87" y="38" width="28" height="12" rx="2"/>',
+          list: '<rect x="2" y="4" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="6" width="70" height="3" rx="1.5"/><rect class="k" x="2" y="18" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="20" width="52" height="3" rx="1.5"/><rect x="2" y="32" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="34" width="80" height="3" rx="1.5"/><rect x="2" y="46" width="7" height="7" rx="1.5"/><rect class="f" x="14" y="48" width="44" height="3" rx="1.5"/>',
+          timer: '<circle cx="30" cy="32" r="24"/><path class="k" d="M30 8 A24 24 0 0 1 52 40" style="fill:none"/><rect class="f" x="66" y="12" width="50" height="5" rx="2.5"/><rect class="f" x="66" y="26" width="38" height="5" rx="2.5"/><rect class="f" x="66" y="40" width="44" height="5" rx="2.5"/>',
+          doc: '<rect class="k" x="2" y="2" width="58" height="6" rx="2"/><rect class="f" x="2" y="16" width="112" height="3" rx="1.5"/><rect class="f" x="2" y="25" width="104" height="3" rx="1.5"/><rect class="f" x="2" y="34" width="110" height="3" rx="1.5"/><rect class="f" x="2" y="43" width="70" height="3" rx="1.5"/><rect class="f" x="2" y="55" width="96" height="3" rx="1.5"/>',
+          mail: '<circle cx="7" cy="8" r="5"/><rect class="f" x="17" y="4" width="40" height="3" rx="1.5"/><rect class="f" x="17" y="10" width="86" height="3" rx="1.5"/><circle class="k" cx="7" cy="28" r="5"/><rect class="f" x="17" y="24" width="32" height="3" rx="1.5"/><rect class="f" x="17" y="30" width="72" height="3" rx="1.5"/><circle cx="7" cy="48" r="5"/><rect class="f" x="17" y="44" width="46" height="3" rx="1.5"/><rect class="f" x="17" y="50" width="94" height="3" rx="1.5"/>',
+          crm: '<circle cx="7" cy="7" r="4.5"/><rect class="f" x="16" y="5.5" width="30" height="3" rx="1.5"/><rect class="f" x="58" y="5.5" width="24" height="3" rx="1.5"/><rect class="f" x="94" y="5.5" width="20" height="3" rx="1.5"/><circle class="k" cx="7" cy="23" r="4.5"/><rect class="f" x="16" y="21.5" width="38" height="3" rx="1.5"/><rect class="f" x="58" y="21.5" width="18" height="3" rx="1.5"/><rect class="f" x="94" y="21.5" width="20" height="3" rx="1.5"/><circle cx="7" cy="39" r="4.5"/><rect class="f" x="16" y="37.5" width="26" height="3" rx="1.5"/><rect class="f" x="58" y="37.5" width="28" height="3" rx="1.5"/><rect class="f" x="94" y="37.5" width="20" height="3" rx="1.5"/><circle cx="7" cy="55" r="4.5"/><rect class="f" x="16" y="53.5" width="34" height="3" rx="1.5"/><rect class="f" x="58" y="53.5" width="22" height="3" rx="1.5"/><rect class="f" x="94" y="53.5" width="20" height="3" rx="1.5"/>',
+          planner: '<rect class="f" x="2" y="4" width="10" height="3" rx="1.5"/><rect class="f" x="2" y="24" width="10" height="3" rx="1.5"/><rect class="f" x="2" y="44" width="10" height="3" rx="1.5"/><path d="M18 5.5 H118 M18 25.5 H118 M18 45.5 H118"/><rect class="k" x="20" y="8" width="96" height="14" rx="3"/><rect x="20" y="28" width="64" height="10" rx="3"/><rect class="f" x="20" y="48" width="96" height="14" rx="3"/>',
+          chat: '<circle cx="7" cy="8" r="4.5"/><rect x="16" y="3" width="70" height="11" rx="4"/><rect class="k" x="44" y="19" width="72" height="11" rx="4"/><circle cx="7" cy="41" r="4.5"/><rect x="16" y="36" width="54" height="11" rx="4"/><rect class="f" x="2" y="53" width="116" height="9" rx="3"/>',
+          note: '<rect class="k" x="2" y="2" width="40" height="6" rx="2"/><rect class="f" x="2" y="15" width="96" height="3" rx="1.5"/><rect class="f" x="2" y="23" width="78" height="3" rx="1.5"/><rect x="2" y="32" width="34" height="9" rx="3"/><rect class="f" x="42" y="35" width="56" height="3" rx="1.5"/><rect class="f" x="2" y="49" width="104" height="3" rx="1.5"/>',
           grid: (function () {
             var s = "";
-            var r;
-            var c;
-            for (r = 0; r < 4; r += 1) {
-              for (c = 0; c < 8; c += 1) {
-                s +=
-                  '<rect class="' +
-                  ((r * 8 + c) % 3 === 0 || (r + c) % 5 === 0 ? "f" : "") +
-                  '" x="' +
-                  (2 + c * 14.6) +
-                  '" y="' +
-                  (2 + r * 15.5) +
-                  '" width="11" height="11" rx="2"/>';
-              }
-            }
+            for (var r = 0; r < 4; r++) for (var c = 0; c < 8; c++) s += '<rect class="' + ((r * 8 + c) % 3 === 0 || (r + c) % 5 === 0 ? "f" : "") + '" x="' + (2 + c * 14.6) + '" y="' + (2 + r * 15.5) + '" width="11" height="11" rx="2"/>';
             return s;
           })(),
           cal: (function () {
             var s = '<rect class="f" x="1" y="1" width="118" height="6" rx="2"/>';
-            var r;
-            var c;
-            for (r = 0; r < 4; r += 1) {
-              for (c = 0; c < 7; c += 1) {
-                s +=
-                  '<rect class="' +
-                  (r === 1 && c === 3 ? "k" : "") +
-                  '" x="' +
-                  (1 + c * 17) +
-                  '" y="' +
-                  (11 + r * 13.2) +
-                  '" width="15" height="11" rx="2"/>';
-              }
-            }
+            for (var r = 0; r < 4; r++) for (var c = 0; c < 7; c++) s += '<rect class="' + (r === 1 && c === 3 ? "k" : "") + '" x="' + (1 + c * 17) + '" y="' + (11 + r * 13.2) + '" width="15" height="11" rx="2"/>';
             return s;
           })(),
-          timer:
-            '<circle cx="30" cy="32" r="24"/><path class="k" d="M30 8 A24 24 0 0 1 52 40" style="fill:none"/>' +
-            '<rect class="f" x="66" y="12" width="50" height="5" rx="2.5"/><rect class="f" x="66" y="26" width="38" height="5" rx="2.5"/>' +
-            '<rect class="f" x="66" y="40" width="44" height="5" rx="2.5"/>',
-          doc:
-            '<rect class="k" x="2" y="2" width="58" height="6" rx="2"/><rect class="f" x="2" y="16" width="112" height="3" rx="1.5"/>' +
-            '<rect class="f" x="2" y="25" width="104" height="3" rx="1.5"/><rect class="f" x="2" y="34" width="110" height="3" rx="1.5"/>' +
-            '<rect class="f" x="2" y="43" width="70" height="3" rx="1.5"/><rect class="f" x="2" y="55" width="96" height="3" rx="1.5"/>',
-          mail:
-            '<circle cx="7" cy="8" r="5"/><rect class="f" x="17" y="4" width="40" height="3" rx="1.5"/><rect class="f" x="17" y="10" width="86" height="3" rx="1.5"/>' +
-            '<circle class="k" cx="7" cy="28" r="5"/><rect class="f" x="17" y="24" width="32" height="3" rx="1.5"/><rect class="f" x="17" y="30" width="72" height="3" rx="1.5"/>' +
-            '<circle cx="7" cy="48" r="5"/><rect class="f" x="17" y="44" width="46" height="3" rx="1.5"/><rect class="f" x="17" y="50" width="94" height="3" rx="1.5"/>',
-          crm:
-            '<circle cx="7" cy="7" r="4.5"/><rect class="f" x="16" y="5.5" width="30" height="3" rx="1.5"/><rect class="f" x="58" y="5.5" width="24" height="3" rx="1.5"/><rect class="f" x="94" y="5.5" width="20" height="3" rx="1.5"/>' +
-            '<circle class="k" cx="7" cy="23" r="4.5"/><rect class="f" x="16" y="21.5" width="38" height="3" rx="1.5"/><rect class="f" x="58" y="21.5" width="18" height="3" rx="1.5"/><rect class="f" x="94" y="21.5" width="20" height="3" rx="1.5"/>' +
-            '<circle cx="7" cy="39" r="4.5"/><rect class="f" x="16" y="37.5" width="26" height="3" rx="1.5"/><rect class="f" x="58" y="37.5" width="28" height="3" rx="1.5"/><rect class="f" x="94" y="37.5" width="20" height="3" rx="1.5"/>' +
-            '<circle cx="7" cy="55" r="4.5"/><rect class="f" x="16" y="53.5" width="34" height="3" rx="1.5"/><rect class="f" x="58" y="53.5" width="22" height="3" rx="1.5"/><rect class="f" x="94" y="53.5" width="20" height="3" rx="1.5"/>',
-          planner:
-            '<rect class="f" x="2" y="4" width="10" height="3" rx="1.5"/><rect class="f" x="2" y="24" width="10" height="3" rx="1.5"/><rect class="f" x="2" y="44" width="10" height="3" rx="1.5"/>' +
-            '<path d="M18 5.5 H118 M18 25.5 H118 M18 45.5 H118"/>' +
-            '<rect class="k" x="20" y="8" width="96" height="14" rx="3"/><rect x="20" y="28" width="64" height="10" rx="3"/><rect class="f" x="20" y="48" width="96" height="14" rx="3"/>',
-          chat:
-            '<circle cx="7" cy="8" r="4.5"/><rect x="16" y="3" width="70" height="11" rx="4"/>' +
-            '<rect class="k" x="44" y="19" width="72" height="11" rx="4"/>' +
-            '<circle cx="7" cy="41" r="4.5"/><rect x="16" y="36" width="54" height="11" rx="4"/>' +
-            '<rect class="f" x="2" y="53" width="116" height="9" rx="3"/>',
-          note:
-            '<rect class="k" x="2" y="2" width="40" height="6" rx="2"/><rect class="f" x="2" y="15" width="96" height="3" rx="1.5"/>' +
-            '<rect class="f" x="2" y="23" width="78" height="3" rx="1.5"/><rect x="2" y="32" width="34" height="9" rx="3"/>' +
-            '<rect class="f" x="42" y="35" width="56" height="3" rx="1.5"/><rect class="f" x="2" y="49" width="104" height="3" rx="1.5"/>',
-          graph:
-            '<path d="M60 32 L22 12 M60 32 L20 52 M60 32 L98 14 M60 32 L100 50 M98 14 L112 30"/>' +
-            '<rect class="k" x="46" y="25" width="28" height="14" rx="4"/><circle cx="22" cy="12" r="5"/><circle cx="20" cy="52" r="5"/>' +
-            '<circle cx="98" cy="14" r="5"/><circle cx="100" cy="50" r="5"/><circle cx="112" cy="30" r="3.5"/>',
-          chart:
-            '<path d="M2 62 H118 M2 2 V62"/><rect class="f" x="10" y="38" width="12" height="22" rx="1.5"/>' +
-            '<rect class="f" x="28" y="28" width="12" height="32" rx="1.5"/><rect class="f" x="46" y="44" width="12" height="16" rx="1.5"/>' +
-            '<rect class="f" x="64" y="18" width="12" height="42" rx="1.5"/><rect class="k" x="82" y="8" width="12" height="52" rx="1.5"/>' +
-            '<rect class="f" x="100" y="24" width="12" height="36" rx="1.5"/>',
         };
-
-        var cells = [];
-        var ci;
-        var sw;
-        var tmp;
-        for (ci = 0; ci < 20; ci += 1) cells.push(ci);
-        for (ci = cells.length - 1; ci > 0; ci -= 1) {
-          sw = Math.floor(rng() * (ci + 1));
-          tmp = cells[ci];
-          cells[ci] = cells[sw];
-          cells[sw] = tmp;
-        }
-        // Ten apps get a hand-placed scatter, positioned by each window's centre
-        // so the pile sits around the middle of the mockup.
-        var TEN = [
-          [21, 23, -5],
-          [25, 75, 4],
-          [51, 19, 3],
-          [79, 27, -4],
-          [64, 40, 6],
-          [38, 58, -3],
-          [77, 76, -6],
-          [19, 51, 2],
-          [81, 54, 3],
-          [51, 80, -2],
-        ];
+        // A hand-placed mess over the whole window: x %, y %, tilt
+        var TEN = [[16, 22, -5], [33, 77, 4], [47, 18, 3], [82, 20, -4], [64, 47, 6], [37, 47, -3], [78, 76, -6], [13, 59, 2], [56, 80, 3], [89, 49, -2]];
+        var depth = [];
         each(wins, function (w, k) {
-          var cell = cells[k];
-          var col = cell % 5;
-          var row = Math.floor(cell / 5);
-          var d = rng();
-          var x = Math.max(-3, Math.min(80, col * 19.4 + (rng() - 0.5) * 8));
-          var y = Math.max(-3, Math.min(80, row * 25 + (rng() - 0.5) * 9));
-          if (NWIN <= TEN.length) {
-            x = TEN[k][0];
-            y = TEN[k][1];
-          }
+          var d = ((k * 37) % 10) / 10;
           depth[k] = d;
-          w.style.setProperty("--x", x.toFixed(1) + "%");
-          w.style.setProperty("--y", y.toFixed(1) + "%");
+          w.style.setProperty("--x", TEN[k][0] + "%");
+          w.style.setProperty("--y", TEN[k][1] + "%");
+          w.style.setProperty("--r", TEN[k][2] + "deg");
           w.style.setProperty("--z", String(2 + Math.round(d * 20)));
-          w.style.setProperty("--k", String(k));
-          var rot = ((rng() - 0.5) * 14).toFixed(1);
-          w.style.setProperty("--r", (NWIN <= TEN.length ? TEN[k][2] : rot) + "deg");
-          w.style.setProperty("--s", (NWIN <= TEN.length ? 0.93 + d * 0.07 : 0.8 + d * 0.24).toFixed(2));
-          w.style.setProperty("--o", (NWIN <= TEN.length ? 0.88 + d * 0.12 : 0.64 + d * 0.36).toFixed(2));
-          w.querySelector(".aw-ui").innerHTML =
-            '<svg viewBox="0 0 120 64" preserveAspectRatio="xMidYMid meet">' + UI[w.getAttribute("data-t")] + "</svg>";
+          w.style.setProperty("--sc", (0.93 + d * 0.07).toFixed(2));
+          w.style.setProperty("--o", (0.88 + d * 0.12).toFixed(2));
+          w.querySelector(".aw-ui").innerHTML = '<svg viewBox="0 0 120 64" preserveAspectRatio="xMidYMid meet">' + UI[w.getAttribute("data-t")] + "</svg>";
         });
-
-        var center = function (r, o) {
-          return { x: r.left - o.left + r.width / 2, y: r.top - o.top + r.height / 2 };
+        var TAB_OF = { inbox: "email", people: "contacts", tasks: "tasks", notes: "notes", agenda: "calendar", activity: "chat" };
+        var ORDER = ["tasks", "inbox", "agenda", "notes", "people", "activity"];
+        var rectIn = function (el) {
+          var r = el.getBoundingClientRect();
+          var b = box.getBoundingClientRect();
+          return { x: (r.left - b.left) / S, y: (r.top - b.top) / S, w: r.width / S, h: r.height / S };
         };
-
-        var stopPulse = function () {
-          cancelAnimationFrame(pulseRaf);
-          pulseRaf = 0;
-        };
-        var pulse = function (now) {
-          pulseRaf = 0;
-          if (!built || !inView) return;
-          if (document.documentElement.classList.contains("is-covered")) {
-            setTimeout(startPulse, 500);
-            return;
-          }
-          each(paths, function (p, i) {
-            var len = p.len;
-            var t = (now / 2400 + i * 0.37) % 1;
-            var pt = p.path.getPointAtLength(t * len);
-            p.dot.setAttribute("cx", pt.x.toFixed(1));
-            p.dot.setAttribute("cy", pt.y.toFixed(1));
-            p.dot.style.opacity = String(Math.sin(t * Math.PI));
-          });
-          pulseRaf = requestAnimationFrame(pulse);
-        };
-        var startPulse = function () {
-          if (reduce || pulseRaf || !built) return;
-          pulseRaf = requestAnimationFrame(pulse);
-        };
-
-        var clearSpine = function () {
-          stopPulse();
-          paths = [];
-          while (spine.firstChild) spine.removeChild(spine.firstChild);
-        };
-
-        var drawSpine = function (animate) {
-          var o = ws.getBoundingClientRect();
-          clearSpine();
-          spine.setAttribute("viewBox", "0 0 " + o.width.toFixed(1) + " " + o.height.toFixed(1));
-          LINKS.forEach(function (l, i) {
-            var ra = ws.querySelector('[data-a="' + l.a + '"]').getBoundingClientRect();
-            var rb = ws.querySelector('[data-a="' + l.b + '"]').getBoundingClientRect();
-            var overlapX = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
-            var x1;
-            var y1;
-            var x2;
-            var y2;
-            var d;
-            var mid;
-            var g = el("g", { "data-l": String(i) });
-            var path;
-            var len;
-            var ends;
-            if (overlapX > 0) {
-              x1 = ra.left - o.left + ra.width / 2;
-              x2 = rb.left - o.left + rb.width / 2;
-              y1 = ra.top < rb.top ? ra.bottom - o.top : ra.top - o.top;
-              y2 = ra.top < rb.top ? rb.top - o.top : rb.bottom - o.top;
-              mid = (y1 + y2) / 2;
-              d = "M" + x1 + " " + y1 + " C" + x1 + " " + mid + " " + x2 + " " + mid + " " + x2 + " " + y2;
-            } else {
-              x1 = ra.left > rb.left ? ra.left - o.left : ra.right - o.left;
-              x2 = ra.left > rb.left ? rb.right - o.left : rb.left - o.left;
-              y1 = ra.top - o.top + ra.height / 2;
-              y2 = rb.top - o.top + rb.height / 2;
-              mid = (x1 + x2) / 2;
-              d = "M" + x1 + " " + y1 + " C" + mid + " " + y1 + " " + mid + " " + y2 + " " + x2 + " " + y2;
-            }
-            path = el("path", { d: d });
-            g.appendChild(path);
-            ends = [el("circle", { class: "sp-end", cx: x1, cy: y1, r: 1.6 }), el("circle", { class: "sp-end", cx: x2, cy: y2, r: 1.6 })];
-            g.appendChild(ends[0]);
-            g.appendChild(ends[1]);
-            paths.push({ path: path, len: 0, dot: null, g: g, m: l.m });
-            spine.appendChild(g);
-            len = path.getTotalLength();
-            paths[i].len = len;
-            paths[i].dot = el("circle", { class: "sp-dot", r: 1.9, cx: x1, cy: y1 });
-            paths[i].dot.style.opacity = "0";
-            g.appendChild(paths[i].dot);
-            if (animate && !reduce) {
-              path.style.strokeDasharray = String(len);
-              path
-                .animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], {
-                  duration: 700,
-                  delay: i * 180,
-                  easing: "cubic-bezier(.65,0,.35,1)",
-                  fill: "both",
-                })
-                .finished.then(function () {
-                  path.style.strokeDasharray = "";
-                }, function () {});
-              ends.forEach(function (c, j) {
-                c.animate([{ opacity: 0, transform: "scale(0)" }, { opacity: 1, transform: "none" }], {
-                  duration: 260,
-                  delay: i * 180 + (j ? 640 : 0),
-                  easing: "cubic-bezier(.34,1.56,.64,1)",
-                  fill: "both",
-                });
-                c.style.transformBox = "fill-box";
-                c.style.transformOrigin = "center";
-              });
-            }
-          });
-          startPulse();
-        };
-
-        var untrace = function () {
-          saySet(SAY_ALL);
-          asm.classList.remove("is-tracing", "is-touring");
-          each(mods, function (m) {
-            m.classList.remove("is-focus", "is-rel");
-          });
-          each(paths, function (p) {
-            p.path.classList.remove("is-hot");
-            p.g.classList.remove("is-cold");
-          });
-        };
-
-        var trace = function (k, fromTour) {
-          if (!built) return;
-          untrace();
-          saySet(SAY[k] || SAY_ALL);
-          asm.classList.add(fromTour ? "is-touring" : "is-tracing");
-          mods[k].classList.add("is-focus");
-          each(paths, function (p) {
-            var hit = p.m.indexOf(k) !== -1;
-            p.path.classList.toggle("is-hot", hit);
-            p.g.classList.toggle("is-cold", !hit);
-            if (hit) {
-              p.m.forEach(function (j) {
-                if (j !== k) mods[j].classList.add("is-rel");
-              });
-            }
-          });
-        };
-
-        var tween = function (toOne) {
-          var t0 = 0;
-          var pad = function (v) {
-            return (v < 10 ? "0" : "") + v;
-          };
-          var ends = Array.prototype.map.call(counts, function (c) {
-            var hi = Number(c.getAttribute("data-from")) || NWIN;
-            return toOne ? [hi, 1] : [1, hi];
-          });
-          var step = function (now) {
-            var p;
-            if (!t0) t0 = now;
-            p = Math.min(1, (now - t0) / 1400);
-            each(counts, function (c, i) {
-              var e = ends[i];
-              c.textContent = pad(Math.round(e[0] + (e[1] - e[0]) * (1 - Math.pow(1 - p, 3))));
-            });
-            if (p < 1) requestAnimationFrame(step);
-          };
-          if (reduce) {
-            each(counts, function (c, i) {
-              c.textContent = pad(ends[i][1]);
-            });
-            return;
-          }
-          requestAnimationFrame(step);
-        };
-
-        var stopTour = function () {
-          clearTimeout(tourTimer);
-          tourTimer = 0;
-        };
-        var finishBuild = function () {
-          built = true;
-          asm.classList.add("is-built");
-          // The windows are invisible now, so their pointer offsets can reset quietly.
-          each(wins, function (w) {
-            w.style.setProperty("--px", "0px");
-            w.style.setProperty("--py", "0px");
-          });
-          drawSpine(true);
-          // No automatic tour: a module lights up only when the visitor points at it.
-        };
-
-        var assemble = function () {
-          var o;
-          if (reduce) {
-            each(wins, function (w) {
-              w.style.visibility = "hidden";
-            });
-            each(mods, function (m) {
-              m.classList.add("is-built");
-            });
-            finishBuild();
-            return;
-          }
-          var midFlight = flights.some(function (a) {
-            return a && a.playState === "running";
-          });
-          if (midFlight) {
-            each(flights, function (a) {
-              if (a) a.reverse();
-            });
-          } else {
-            each(flights, function (a) {
-              if (a) a.cancel();
-            });
-            flights = [];
-            o = asm.getBoundingClientRect();
-            each(wins, function (w, k) {
-              var m = Number(w.getAttribute("data-m"));
-              var slot = center(mods[m].getBoundingClientRect(), o);
-              var inner = w.querySelector(".aw-in");
-              var from = center(inner.getBoundingClientRect(), o);
-              var dx = slot.x - from.x;
-              var dy = slot.y - from.y;
-              var nth = Number(w.getAttribute("data-k")) % 4;
-              var rot = w.style.getPropertyValue("--r");
-              var sc = w.style.getPropertyValue("--s");
-              var op = w.style.getPropertyValue("--o");
-              flights[k] = inner.animate(
-                [
-                  { transform: "translate(0px,0px) rotate(" + rot + ") scale(" + sc + ")", opacity: op },
-                  {
-                    transform: "translate(" + dx * 0.94 + "px," + dy * 0.94 + "px) rotate(0deg) scale(.62)",
-                    opacity: 1,
-                    offset: 0.8,
-                  },
-                  { transform: "translate(" + dx + "px," + dy + "px) rotate(0deg) scale(.42)", opacity: 0 },
-                ],
-                {
-                  duration: FLY,
-                  delay: ORDER.indexOf(m) * STEP + nth * 55,
-                  easing: "cubic-bezier(.7,0,.2,1)",
-                  fill: "both",
-                },
-              );
-            });
-          }
-          ORDER.forEach(function (m, i) {
-            later(function () {
-              mods[m].classList.add("is-built");
-            }, i * STEP + 3 * 55 + FLY * 0.82);
-          });
-          later(finishBuild, (ORDER.length - 1) * STEP + 3 * 55 + FLY + 120);
-        };
-
-        var disassemble = function () {
-          built = false;
-          clearSpine();
-          asm.classList.remove("is-built");
-          each(mods, function (m) {
-            m.classList.remove("is-built");
-          });
-          if (reduce) {
-            each(wins, function (w) {
-              w.style.visibility = "";
-            });
-            return;
-          }
-          each(flights, function (a) {
-            if (a) a.reverse();
-          });
-        };
-
-        var setState = function (next) {
-          if (next === on) return;
-          on = next;
-          clearTimers();
-          untrace();
-          stopTour();
-          asm.classList.add("is-busy");
-          asm.setAttribute("data-state", on ? "on" : "off");
-          visual.classList.toggle("is-on", on);
-          each(segs, function (b) {
-            b.setAttribute("aria-pressed", String((b.getAttribute("data-to") === "on") === on));
-          });
-          tween(on);
-          if (on) assemble();
-          else disassemble();
-          later(function () {
-            asm.classList.remove("is-busy");
-          }, FLY + STEP * 4);
-        };
-
-        each(segs, function (b) {
-          b.addEventListener("click", function () {
-            touched = true;
-            setState(b.getAttribute("data-to") === "on");
-          });
-        });
-        each(mods, function (m, k) {
-          m.addEventListener("pointerenter", function () {
-            if (!built) return;
-            touched = true;
-            stopTour();
-            trace(k);
-          });
-        });
-        ws.addEventListener("pointerleave", function () {
-          if (built) untrace();
-        });
-
-        if ("IntersectionObserver" in window) {
-          new IntersectionObserver(function (entries) {
-            inView = entries[0].isIntersecting;
-            if (inView) startPulse();
-          }).observe(asm);
-        }
-
-        if ("ResizeObserver" in window) {
-          (function () {
-            var rt = 0;
-            var lastW = 0;
-            new ResizeObserver(function (entries) {
-              var w = entries[0].contentRect.width;
-              if (Math.abs(w - lastW) < 1) return;
-              lastW = w;
-              clearTimeout(rt);
-              rt = setTimeout(function () {
-                if (built) drawSpine(false);
-              }, 120);
-            }).observe(ws);
-          })();
-        }
-
-        if (reduce) {
-          setState(true);
-        } else {
+        var built = false;
+        var started = false;
+        var lightTab = function (w) {
+          var t = q('.app-tab[data-go="' + TAB_OF[w] + '"]');
+          if (!t) return;
+          t.classList.add("is-lit");
           setTimeout(function () {
-            if (!touched) setState(true);
-          }, 2400);
-        }
+            t.classList.remove("is-lit");
+          }, 650);
+        };
+        var finish = function () {
+          built = true;
+          app.classList.remove("is-pre", "is-assembling");
+          app.classList.add("is-built");
+          stage.classList.add("is-lit");
+          if (pile) pile.hidden = true;
+          sizeHero();
+          if (!reduce) setTimeout(tourStart, 2600);
+        };
+        var assemble = function () {
+          if (started) return;
+          started = true;
+          if (reduce || !pile || !app.animate) {
+            finish();
+            return;
+          }
+          app.classList.remove("is-pre");
+          app.classList.add("is-assembling");
+          pile.classList.add("is-busy");
+          var FLY = 860;
+          var STEP = 120;
+          var landed = {};
+          var last = 0;
+          each(wins, function (w, k) {
+            var key = w.getAttribute("data-w");
+            var target = q('.hw[data-w="' + key + '"]');
+            var inner = w.querySelector(".aw-in");
+            var a = rectIn(w);
+            var t = rectIn(target);
+            var dx = t.x + t.w / 2 - (a.x + a.w / 2);
+            var dy = t.y + t.h / 2 - (a.y + a.h / 2);
+            var sx = t.w / a.w;
+            var sy = t.h / a.h;
+            var delay = 260 + ORDER.indexOf(key) * STEP * 1.6 + (k % 3) * 70;
+            last = Math.max(last, delay);
+            inner.animate(
+              [
+                { transform: "translate(0px,0px) rotate(" + TEN[k][2] + "deg) scale(" + w.style.getPropertyValue("--sc") + ")", opacity: Number(w.style.getPropertyValue("--o")) },
+                { transform: "translate(" + dx * 0.9 + "px," + dy * 0.9 + "px) rotate(0deg) scale(" + (sx * 0.94).toFixed(3) + "," + (sy * 0.94).toFixed(3) + ")", opacity: 1, offset: 0.76 },
+                { transform: "translate(" + dx + "px," + dy + "px) rotate(0deg) scale(" + sx.toFixed(3) + "," + sy.toFixed(3) + ")", opacity: 0 },
+              ],
+              { duration: FLY, delay: delay, easing: "cubic-bezier(.7,0,.2,1)", fill: "both" }
+            );
+            setTimeout(function () {
+              if (!landed[key]) {
+                landed[key] = true;
+                target.classList.add("is-in");
+              }
+              lightTab(key);
+            }, delay + FLY * 0.74);
+          });
+          setTimeout(finish, last + FLY + 260);
+        };
 
-        if (fine && !reduce) {
+        // Before it assembles, the pile drifts a little with the pointer
+        if (fine && !reduce && pile) {
           (function () {
             var raf = 0;
             var last = null;
             var paint = function () {
-              var r = plate.getBoundingClientRect();
-              var x = last.clientX - r.left;
-              var y = last.clientY - r.top;
-              var a = asm.getBoundingClientRect();
+              raf = 0;
+              if (started) return;
+              var a = box.getBoundingClientRect();
               var mx = Math.max(-0.9, Math.min(0.9, (last.clientX - a.left) / a.width - 0.5));
               var my = Math.max(-0.9, Math.min(0.9, (last.clientY - a.top) / a.height - 0.5));
-              raf = 0;
-              plate.style.setProperty("--mx", x.toFixed(1) + "px");
-              plate.style.setProperty("--my", y.toFixed(1) + "px");
-              if (on || asm.classList.contains("is-busy")) return;
               each(wins, function (w, k) {
-                var f = 4 + depth[k] * 16;
+                var f = (4 + depth[k] * 16) / Math.max(S, 0.3);
                 w.style.setProperty("--px", (-mx * f).toFixed(1) + "px");
                 w.style.setProperty("--py", (-my * f).toFixed(1) + "px");
               });
             };
-            var stage = plate.closest(".hx") || plate;
-            stage.addEventListener("pointermove", function (e) {
-              var r = plate.getBoundingClientRect();
+            hero.addEventListener("pointermove", function (e) {
               last = e;
-              plate.classList.toggle("is-tracking", e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom);
               if (!raf) raf = requestAnimationFrame(paint);
-            });
-            stage.addEventListener("pointerleave", function () {
-              plate.classList.remove("is-tracking");
-              if (on || asm.classList.contains("is-busy")) return;
-              each(wins, function (w) {
-                w.style.setProperty("--px", "0px");
-                w.style.setProperty("--py", "0px");
-              });
             });
           })();
         }
+
+        // Assemble once the window is on screen and the headline has had its moment
+        var inView = true;
+        var t0 = Date.now();
+        var kick = function () {
+          setTimeout(assemble, Math.max(0, 2000 - (Date.now() - t0)));
+        };
+        if ("IntersectionObserver" in window) {
+          var seen = false;
+          new IntersectionObserver(
+            function (es) {
+              inView = es[0].isIntersecting;
+              if (inView && !seen) {
+                seen = true;
+                kick();
+              }
+              if (inView) tourWake();
+            },
+            { threshold: 0.2 }
+          ).observe(stage);
+        } else kick();
+        if (reduce) assemble();
+
+        // ── A short tour: a pointer follows links until you take over ──
+        // Each route follows one thread of links, then goes back to Home
+        var ROUTES = [
+          [[".app-tab[data-go='email']"], [".pn-r [data-seg='erail:detail']"], [".pn-r [data-open='task:deck']"], [".pn-r [data-open='event:deck']"], [".app-tab[data-go='home']"]],
+          [[".hw [data-open='event:deck']"], [".pn-r [data-open='note:kickoff']"], [".nt-doc [data-open='contact:anna']"], [".app-tab[data-go='home']"]],
+          [[".app-tab[data-go='chat']"], [".ch-list [data-open='event:deck']"], [".pn-r [data-open='email:deck']"], [".app-tab[data-go='home']"]],
+        ];
+        var touched = false;
+        var paused = false;
+        var running = false;
+        var wake = null;
+        var tourWake = function () {
+          if (wake && !paused && inView && !touched) {
+            var w = wake;
+            wake = null;
+            w();
+          }
+        };
+        var gate = function (ms) {
+          return new Promise(function (resolve, reject) {
+            setTimeout(function () {
+              if (touched) return reject(0);
+              // Hold while the pointer is in the window, it's off screen, or the pane covers it
+              if (paused || !inView || document.hidden || document.documentElement.classList.contains("is-covered")) {
+                cur.classList.remove("is-on");
+                wake = function () {
+                  gate(400).then(resolve, reject);
+                };
+                return;
+              }
+              resolve();
+            }, ms);
+          });
+        };
+        var point = function (sel) {
+          var el = q(sel, views[st.view]) || q(sel);
+          if (!el) return null;
+          var r = rectIn(el);
+          cur.style.setProperty("--cx", (r.x + Math.min(r.w * 0.5, 60)).toFixed(1) + "px");
+          cur.style.setProperty("--cy", (r.y + r.h * 0.55).toFixed(1) + "px");
+          cur.classList.add("is-on");
+          return el;
+        };
+        var press = function (el) {
+          cur.classList.remove("is-down");
+          void cur.offsetWidth;
+          cur.classList.add("is-down");
+          setTimeout(function () {
+            cur.classList.remove("is-down");
+          }, 260);
+          if (el.hasAttribute("data-go")) go(el.getAttribute("data-go"));
+          else if (el.hasAttribute("data-seg")) seg(el.getAttribute("data-seg"));
+          else if (el.hasAttribute("data-open")) open(el.getAttribute("data-open"));
+        };
+        var route = 0;
+        var runRoute = function () {
+          var steps = ROUTES[route % ROUTES.length];
+          route += 1;
+          var chain = gate(200);
+          steps.forEach(function (s, i) {
+            chain = chain
+              .then(function () {
+                var el = point(s[0]);
+                if (!el) throw 1;
+                return gate(1050).then(function () {
+                  return el;
+                });
+              })
+              .then(function (el) {
+                press(el);
+                return gate(i === steps.length - 1 ? 2600 : 2300);
+              });
+          });
+          return chain;
+        };
+        var loop = function () {
+          runRoute().then(loop, function (why) {
+            if (why === 1 && !touched) gate(800).then(loop, function () {});
+          });
+        };
+        var tourStart = function () {
+          if (running || touched || reduce) return;
+          running = true;
+          cur.style.setProperty("--cx", "760px");
+          cur.style.setProperty("--cy", "560px");
+          loop();
+        };
+        var stopTour = function () {
+          touched = true;
+          paused = true;
+          cur.classList.remove("is-on");
+        };
+        app.addEventListener("pointerdown", stopTour, true);
+        app.addEventListener("keydown", stopTour, true);
+        if (fine) {
+          app.addEventListener("pointermove", function () {
+            paused = true;
+            cur.classList.remove("is-on");
+          });
+          app.addEventListener("pointerleave", function () {
+            if (touched) return;
+            setTimeout(function () {
+              if (touched) return;
+              paused = false;
+              tourWake();
+            }, 2500);
+          });
+        }
+        document.addEventListener("visibilitychange", tourWake);
+        window.addEventListener("scroll", function () {
+          if (wake && !document.documentElement.classList.contains("is-covered")) tourWake();
+        }, { passive: true });
       })();
     </script>
     <script>
