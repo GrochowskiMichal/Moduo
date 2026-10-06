@@ -8396,6 +8396,79 @@
     <script>
       document.documentElement.classList.add("js");
     </script>
+    <!-- PostHog (EU cloud): landing analytics. Public project token, safe to ship. Skipped on localhost. -->
+    <script>
+      window.mTrack = function (name, props) {
+        try {
+          if (window.posthog && window.posthog.capture) window.posthog.capture(name, props);
+        } catch (e) {}
+      };
+      if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+        !(function (t, e) {
+          var o, n, p, r;
+          e.__SV ||
+            ((window.posthog = e),
+            (e._i = []),
+            (e.init = function (i, s, a) {
+              function g(t, e) {
+                var o = e.split(".");
+                2 == o.length && ((t = t[o[0]]), (e = o[1])),
+                  (t[e] = function () {
+                    t.push([e].concat(Array.prototype.slice.call(arguments, 0)));
+                  });
+              }
+              ((p = t.createElement("script")).type = "text/javascript"),
+                (p.crossOrigin = "anonymous"),
+                (p.async = !0),
+                (p.src = s.api_host.replace(".i.posthog.com", "-assets.i.posthog.com") + "/static/array.js"),
+                (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r);
+              var u = e;
+              for (
+                void 0 !== a ? (u = e[a] = []) : (a = "posthog"),
+                  u.people = u.people || [],
+                  u.toString = function (t) {
+                    var e = "posthog";
+                    return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e;
+                  },
+                  u.people.toString = function () {
+                    return u.toString(1) + ".people (stub)";
+                  },
+                  o =
+                    "init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags onFeatureFlags identify setPersonProperties group reset get_distinct_id get_session_id alias set_config startSessionRecording stopSessionRecording captureException opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing".split(
+                      " "
+                    ),
+                  n = 0;
+                n < o.length;
+                n++
+              )
+                g(u, o[n]);
+              e._i.push([i, s, a]);
+            }),
+            (e.__SV = 1));
+        })(document, window.posthog || []);
+        posthog.init("phc_D4Y3CbRVFLqkufdCmhtb2XukD2xgV3GQfXjxemtEhqiN", {
+          api_host: "https://eu.i.posthog.com",
+          ui_host: "https://eu.posthog.com",
+          defaults: "2025-11-30",
+          person_profiles: "identified_only",
+          capture_pageview: "history_change",
+          capture_pageleave: true,
+          autocapture: true,
+          capture_heatmaps: true,
+          capture_dead_clicks: true,
+          capture_exceptions: true,
+          respect_dnt: true,
+          session_recording: { maskAllInputs: true },
+          loaded: function (ph) {
+            var h = location.hostname;
+            ph.register({
+              surface: "landing",
+              environment: h === "www.moduo.app" || h === "moduo.app" ? "production" : "staging",
+            });
+          },
+        });
+      }
+    </script>
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
@@ -12332,11 +12405,13 @@
               var done = form.querySelector(".wl-done");
               clearTimeout(timer);
               if (res.ok) {
+                window.mTrack("waitlist_joined", { source: form.getAttribute("data-source") });
                 writeStored(email);
                 markAll(email);
                 if (done) done.focus();
                 return;
               }
+              window.mTrack("waitlist_failed", { source: form.getAttribute("data-source"), status: res.status });
               setState(
                 form,
                 "error",
@@ -12346,6 +12421,7 @@
             })
             .catch(function () {
               clearTimeout(timer);
+              window.mTrack("waitlist_failed", { source: form.getAttribute("data-source"), status: 0 });
               setState(form, "error", MSG.offline);
             });
         };
@@ -12449,6 +12525,7 @@
               // Only trust a server that stored the choice and says so.
               if (!body || body.updates !== on) throw new Error("not stored");
               writeUpd(on);
+              window.mTrack("waitlist_updates_toggled", { source: form.getAttribute("data-source"), on: on });
               setOptText(on, on);
             })
             .catch(function () {
@@ -13731,6 +13808,100 @@
           var b = e.target.closest("[data-bill]");
           if (b) set(b.getAttribute("data-bill"));
         });
+      })();
+    </script>
+    <script>
+      // ── Analytics: behaviour the autocapture can't name. Never sends an email address. ──
+      (function () {
+        "use strict";
+        var track = window.mTrack;
+        if (!track) return;
+        var text = function (el) {
+          return ((el && el.textContent) || "").replace(/\s+/g, " ").trim().slice(0, 80);
+        };
+
+        // Which section / plan opened the waitlist dialog
+        document.addEventListener("click", function (e) {
+          var t = e.target.closest && e.target.closest("[data-wl-open]");
+          if (t) {
+            var sec = t.closest("section[id]");
+            var plan = t.closest(".plan");
+            track("waitlist_cta_clicked", {
+              location: sec ? sec.id : "nav",
+              plan: plan ? text(plan.querySelector("h3")) : undefined,
+            });
+            return;
+          }
+          var a = e.target.closest && e.target.closest("a[href]");
+          if (a && a.host && a.host !== location.host && /^https?:$/.test(a.protocol)) {
+            track("outbound_clicked", { destination: a.host, label: text(a), in_footer: !!a.closest("footer, .ft") });
+          }
+          var bill = e.target.closest && e.target.closest("[data-bill]");
+          if (bill) track("pricing_billing_toggled", { period: bill.getAttribute("data-bill") });
+        });
+
+        // First time someone starts typing their email, per form
+        var started = {};
+        document.addEventListener("focusin", function (e) {
+          var inp = e.target.closest && e.target.closest("form.wl .wl-input");
+          if (!inp) return;
+          var src = inp.closest("form.wl").getAttribute("data-source");
+          if (started[src]) return;
+          started[src] = true;
+          track("waitlist_email_started", { source: src });
+        });
+
+        // FAQ questions people open
+        document.addEventListener(
+          "toggle",
+          function (e) {
+            var d = e.target;
+            if (d && d.tagName === "DETAILS" && d.open && d.closest("#faq")) {
+              track("faq_opened", { question: text(d.querySelector("summary")) });
+            }
+          },
+          true
+        );
+
+        // Sections that actually came into view (once each per visit)
+        if ("IntersectionObserver" in window) {
+          var seen = {};
+          var io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (en) {
+                if (!en.isIntersecting || seen[en.target.id]) return;
+                seen[en.target.id] = true;
+                track("section_viewed", { section: en.target.id });
+                io.unobserve(en.target);
+              });
+            },
+            { threshold: 0.35 }
+          );
+          Array.prototype.forEach.call(document.querySelectorAll("main section[id]"), function (s) {
+            io.observe(s);
+          });
+        }
+
+        // Scroll depth milestones
+        var marks = [25, 50, 75, 100];
+        var hit = {};
+        var ticking = false;
+        var onScroll = function () {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(function () {
+            ticking = false;
+            var h = document.documentElement;
+            var pct = ((window.scrollY + window.innerHeight) / h.scrollHeight) * 100;
+            marks.forEach(function (m) {
+              if (pct >= m - 1 && !hit[m]) {
+                hit[m] = true;
+                track("scroll_depth", { percent: m });
+              }
+            });
+          });
+        };
+        window.addEventListener("scroll", onScroll, { passive: true });
       })();
     </script>
   </body>
