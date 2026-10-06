@@ -25,6 +25,9 @@ import { Input } from "../../../components/ui/input";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
+import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
+import { ShareMenu } from "../../sharing/share-menu";
 import { TIME_BLOCK_LABELS, TIME_BLOCK_SLOTS, type TimeBlockSlot } from "../default-view";
 import { bucketSections } from "../helpers";
 import type { Bucket } from "../model";
@@ -388,6 +391,9 @@ function BucketRow({
   onSetGroup: (group: string | null) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
+  const [shareNonce, setShareNonce] = useState(0);
+  const { userId } = useAuth();
+  const { members } = useWorkspace();
   const [addingSection, setAddingSection] = useState(false);
   const [value, setValue] = useState(bucket.name);
   const ref = useRef<HTMLInputElement>(null);
@@ -469,6 +475,11 @@ function BucketRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => setRenaming(true)}>Rename</DropdownMenuItem>
+            {!bucket.isSystem ? (
+              <DropdownMenuItem onSelect={() => setShareNonce((n) => n + 1)}>
+                Share
+              </DropdownMenuItem>
+            ) : null}
             {drift > 0 ? (
               <DropdownMenuItem onSelect={onTriage}>Triage {drift} drifted…</DropdownMenuItem>
             ) : null}
@@ -515,6 +526,18 @@ function BucketRow({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      ) : null}
+      {shareNonce > 0 && !bucket.isSystem ? (
+        <ShareMenu
+          key={shareNonce}
+          defaultOpen
+          resourceType="bucket"
+          resourceId={bucket.id}
+          selfUserId={userId}
+          members={members
+            .filter((m) => m.isActive && !m.removedAt)
+            .map((m) => ({ userId: m.userId, name: m.displayName?.trim() || "Member" }))}
+        />
       ) : null}
     </div>
   );

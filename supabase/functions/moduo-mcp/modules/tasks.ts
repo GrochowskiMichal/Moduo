@@ -16,6 +16,7 @@
 
 import { TASK_STATUSES, isTaskStatus } from "../../_shared/contracts/vocabularies.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
+import { visibleIds } from "../share.ts";
 import {
   pointerOnStatusChange,
   skipOccurrenceTargets,
@@ -59,12 +60,14 @@ async function rows(query: PromiseLike<{ data: Row[] | null; error: { message: s
 /** Tasks + the cross-row context needed for computed state, one fetch. */
 async function loadWorkspace(ctx: ToolContext) {
   const ws = ctx.key.workspaceId;
-  const [tasks, relations, tags, tagLinks] = await Promise.all([
+  const visible = await visibleIds(ctx, "task");
+  const [allTasks, relations, tags, tagLinks] = await Promise.all([
     rows(ctx.db.from("tasks").select("*").eq("workspace_id", ws).is("deleted_at", null)),
     rows(ctx.db.from("task_relations").select("*").eq("workspace_id", ws)),
     rows(ctx.db.from("tags").select("id, name, color").eq("workspace_id", ws).is("deleted_at", null)),
     rows(ctx.db.from("tag_links").select("tag_id, entity_type, entity_id").eq("workspace_id", ws).eq("entity_type", "task")),
   ]);
+  const tasks = allTasks.filter((t) => visible.has(t.id));
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const open = (id: string) => {
     const t = byId.get(id);
@@ -133,7 +136,10 @@ async function fetchTask(ctx: ToolContext, taskId: string): Promise<Row> {
     ctx.db.from("tasks").select("*")
       .eq("workspace_id", ctx.key.workspaceId).eq("id", taskId).is("deleted_at", null),
   );
-  if (!found.length) throw new Error("Task not found in this workspace.");
+  // Service role sees every row: only tasks shared with the key's creator exist.
+  if (!found.length || !(await visibleIds(ctx, "task")).has(found[0].id)) {
+    throw new Error("Task not found in this workspace.");
+  }
   return found[0];
 }
 
@@ -173,7 +179,8 @@ export const tasksConnectorModule: ConnectorModule = {
             .eq("workspace_id", ctx.key.workspaceId).is("deleted_at", null)
             .order("position"),
         );
-        return buckets.map((b) => ({
+        const visible = await visibleIds(ctx, "bucket");
+        return buckets.filter((b) => visible.has(b.id)).map((b) => ({
           id: b.id,
           name: b.name,
           is_system: b.is_system,
@@ -338,13 +345,26 @@ export const tasksConnectorModule: ConnectorModule = {
       },
       handler: async (args, ctx) => {
         let query = ctx.db.from("module_activity")
-          .select("entity_id, op, actor_type, actor_label, payload, created_at")
+          .select("entity_type, entity_id, op, actor_type, actor_label, payload, created_at")
           .eq("workspace_id", ctx.key.workspaceId).eq("module", "tasks")
-          .order("created_at", { ascending: false })
-          .limit(clampLimit(args, 25, 100));
+          .order("created_at", { ascending: false });
         const taskId = str(args, "task_id", false);
-        if (taskId) query = query.eq("entity_type", "task").eq("entity_id", taskId);
-        return await rows(query);
+        if (taskId) {
+          await fetchTask(ctx, taskId); // not shared with you → not found
+          query = query.eq("entity_type", "task").eq("entity_id", taskId);
+        }
+        // Over-fetch, then keep only trail rows about things you can see
+        // (titles live in the payloads).
+        const limit = clampLimit(args, 25, 100);
+        const [fetched, tasks, buckets] = await Promise.all([
+          rows(query.limit(limit * 4)),
+          visibleIds(ctx, "task"),
+          visibleIds(ctx, "bucket"),
+        ]);
+        return fetched
+          .filter((r) => tasks.has(r.entity_id) || buckets.has(r.entity_id))
+          .slice(0, limit)
+          .map(({ entity_type: _type, ...rest }) => rest);
       },
     },
 

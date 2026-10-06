@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { supabaseClient } from "../../../lib/runtime.web";
 import { undoToast } from "../../../lib/undo-toast";
 import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
 import {
@@ -32,6 +33,7 @@ export type CreateEventDraft = {
 };
 
 const isTempId = (id: string) => id.startsWith("tmp-");
+const isBusyId = (id: string) => id.startsWith("busy:");
 
 function applyPatch(e: CalendarEventModel, patch: CalendarEventPatch): CalendarEventModel {
   return {
@@ -52,6 +54,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
 
   const [events, setEvents] = useState<CalendarEventModel[]>([]);
+  const [busy, setBusy] = useState<CalendarEventModel[]>([]);
   const [accounts, setAccounts] = useState<CalendarAccountModel[]>([]);
   const [degraded, setDegraded] = useState(false);
   const [truncated, setTruncated] = useState<Truncation[]>([]);
@@ -108,6 +111,47 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     setDegraded(bundle.degraded);
     setTruncated(bundle.truncated);
     setLoading(false);
+    void (async () => {
+      try {
+        const busyRows = await supabaseClient.rpc("calendar_busy_blocks", {
+          p_workspace_id: workspaceId,
+          p_from: fetchWindow.fromIso,
+          p_to: fetchWindow.toIso,
+        });
+        if (reqRef.current !== req) return;
+        setBusy(
+          busyRows.error || !Array.isArray(busyRows.data)
+            ? []
+            : busyRows.data.map(
+                (
+                  row: { calendar_id: string; start_time: string; end_time: string },
+                  i: number,
+                ) => ({
+                  // Two busy blocks can start at the same time; keep keys unique.
+                  id: `busy:${row.calendar_id}:${row.start_time}:${i}`,
+                  workspaceId,
+                  ownerId: null,
+                  sourceAccountId: "busy",
+                  externalEventId: null,
+                  calendarId: "busy",
+                  title: "Busy",
+                  description: "",
+                  startsAt: row.start_time,
+                  endsAt: row.end_time,
+                  allDay: false,
+                  rrule: null,
+                  status: "confirmed",
+                  color: null,
+                  createdAt: row.start_time,
+                  updatedAt: row.start_time,
+                  deletedAt: null,
+                }),
+              ),
+        );
+      } catch {
+        if (reqRef.current === req) setBusy([]);
+      }
+    })();
   }, [runtime, userId, workspaceId, canRead, fetchWindow]);
 
   useEffect(() => {
@@ -141,7 +185,10 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     });
   }, [setFetchWindow]);
 
-  const liveEvents = useMemo(() => events.filter((e) => !e.deletedAt), [events]);
+  const liveEvents = useMemo(
+    () => [...events.filter((e) => !e.deletedAt), ...busy],
+    [events, busy],
+  );
 
   const guardEdit = useCallback((): boolean => {
     if (!canEdit) {
@@ -203,7 +250,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
 
   const updateEvent = useCallback(
     async (eventId: string, patch: CalendarEventPatch): Promise<void> => {
-      if (!guardEdit() || isTempId(eventId)) return;
+      if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
       // Snapshot INSIDE the updater — a stale closure snapshot would roll a
       // rapid second edit back past the first one's success.
       let before: CalendarEventModel | undefined;
@@ -233,7 +280,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
 
   const deleteEvent = useCallback(
     async (eventId: string): Promise<void> => {
-      if (!guardEdit() || isTempId(eventId)) return;
+      if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
       // Surgical rollback: re-insert only the removed row — restoring a whole
       // snapshot would resurrect tmp-ids reconciled while the RPC flew.
       let removed: CalendarEventModel | undefined;

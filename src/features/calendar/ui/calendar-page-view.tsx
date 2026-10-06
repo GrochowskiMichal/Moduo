@@ -93,6 +93,7 @@ import { CalendarRail } from "./calendar-rail";
 import { CalendarStrip } from "./calendar-strip";
 import { CalendarTasksPanel } from "./calendar-tasks-panel";
 import { CalendarToolbar } from "./calendar-toolbar";
+import { CalendarsPanel } from "./calendars-panel";
 import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
 import type { QuickCreateDraft } from "./event-quick-create";
@@ -992,12 +993,26 @@ export function CalendarPageView({
             onRemoveAccount={removeAccount}
             onReconnectAccount={IS_DESKTOP ? setReconnectTarget : undefined}
             footer={
-              <BookingLinks
-                runtime={runtime}
-                workspaceId={workspaceId}
-                userId={userId}
-                accounts={calendar.accounts}
-              />
+              <>
+                <CalendarsPanel
+                  workspaceId={workspaceId}
+                  userId={userId}
+                  onShowAccounts={(accountIds) => {
+                    const show = new Set(accountIds);
+                    updatePrefs(() => ({
+                      hiddenAccountIds: calendar.accounts
+                        .map((account) => account.id)
+                        .filter((id) => !show.has(id)),
+                    }));
+                  }}
+                />
+                <BookingLinks
+                  runtime={runtime}
+                  workspaceId={workspaceId}
+                  userId={userId}
+                  accounts={calendar.accounts}
+                />
+              </>
             }
           />
         }

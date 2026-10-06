@@ -217,6 +217,49 @@ export function isSystemRoleKey(value: unknown): value is SystemRoleKey {
 }
 
 /**
+ * Per-thing sharing (PERM-3…8). Mirrors resource_grants CHECKs in
+ * 20261006210000_perm_sharing.sql. `freebusy` is calendars only.
+ */
+export const GRANT_LEVELS = ["freebusy", "view", "edit", "full"] as const;
+export type GrantLevel = (typeof GRANT_LEVELS)[number];
+export const grantLevelSchema = z.enum(GRANT_LEVELS);
+export function isGrantLevel(value: unknown): value is GrantLevel {
+  return typeof value === "string" && (GRANT_LEVELS as readonly string[]).includes(value);
+}
+
+export const SHARE_RESOURCE_TYPES = [
+  "note",
+  "bucket",
+  "task",
+  "calendar",
+  "contact",
+  "contact_group",
+  "channel",
+] as const;
+export type ShareResourceType = (typeof SHARE_RESOURCE_TYPES)[number];
+export function isShareResourceType(value: unknown): value is ShareResourceType {
+  return typeof value === "string" && (SHARE_RESOURCE_TYPES as readonly string[]).includes(value);
+}
+
+export const GRANT_SUBJECT_TYPES = ["member", "workspace", "public_link"] as const;
+export type GrantSubjectType = (typeof GRANT_SUBJECT_TYPES)[number];
+
+/** Workspace default for a new container. `private` writes no workspace grant. */
+export const SHARE_DEFAULT_LEVELS = ["private", "freebusy", "view", "edit", "full"] as const;
+export type ShareDefaultLevel = (typeof SHARE_DEFAULT_LEVELS)[number];
+
+export const CHAT_CAPABILITIES = [
+  "create_public",
+  "create_private",
+  "manage_any",
+  "delete_others",
+  "mention_everyone",
+  "post",
+  "start_calls",
+] as const;
+export type ChatCapability = (typeof CHAT_CAPABILITIES)[number];
+
+/**
  * MCP connector key scopes — a SEPARATE vocabulary from workspace permissions
  * on purpose: `admin` is never key-grantable, and the scope map is per-module.
  * Mirrors moduleScope() in supabase/functions/moduo-mcp/registry.ts.

@@ -16,6 +16,7 @@
  */
 
 import type { ConnectorModule, ToolContext } from "../registry.ts";
+import { visibleIds } from "../share.ts";
 
 type Row = Record<string, any>;
 
@@ -115,14 +116,16 @@ export const calendarConnectorModule: ConnectorModule = {
             .from("calendar_events")
             .select("*")
             .eq("workspace_id", ctx.key.workspaceId)
-            .eq("owner_id", ctx.key.createdBy) // PERM-0: owner-only
             .is("deleted_at", null)
             .lt("start_time", to)
             .gte("end_time", from)
             .order("start_time")
             .limit(clampLimit(args, 200, 500)),
         );
-        return data.map(shapeEvent);
+        const calendars = await visibleIds(ctx, "calendar");
+        return data
+          .filter((e) => e.owner_id === ctx.key.createdBy || calendars.has(e.calendar_ref))
+          .map(shapeEvent);
       },
     },
     {
@@ -145,7 +148,6 @@ export const calendarConnectorModule: ConnectorModule = {
               .from("calendar_events")
               .select("*")
               .eq("workspace_id", ctx.key.workspaceId)
-              .eq("owner_id", ctx.key.createdBy) // PERM-0: owner-only
               .is("deleted_at", null)
               .lt("start_time", endIso)
               .gte("end_time", startIso)
@@ -182,11 +184,17 @@ export const calendarConnectorModule: ConnectorModule = {
           const durMs = (Number(t.duration_minutes) > 0 ? Number(t.duration_minutes) : 30) * 60_000;
           return Number.isFinite(start) && start + durMs <= nowMsLocal;
         });
+        const [calendars, tasks] = await Promise.all([
+          visibleIds(ctx, "calendar"),
+          visibleIds(ctx, "task"),
+        ]);
         return {
           date: startIso.slice(0, 10),
-          events: events.map(shapeEvent),
-          blocks: blocks.map(shapeBlock),
-          strip: stripEnded.map(shapeBlock),
+          events: events
+            .filter((e) => e.owner_id === ctx.key.createdBy || calendars.has(e.calendar_ref))
+            .map(shapeEvent),
+          blocks: blocks.filter((t) => tasks.has(t.id)).map(shapeBlock),
+          strip: stripEnded.filter((t) => tasks.has(t.id)).map(shapeBlock),
         };
       },
     },
