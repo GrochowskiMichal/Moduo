@@ -1,5 +1,5 @@
 import { Check } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,10 +46,23 @@ const TEAM_FEATURES = [
  * page reading like a different product from the rest of the app.
  */
 export function PaywallPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, userId } = useAuth();
   const [billing, setBilling] = useState<BillingCycle>("monthly");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // "Your trial has ended" is only true for someone who actually had a subscription;
+  // a freshly invited user has none, so they get neutral copy.
+  const [hadTrial, setHadTrial] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    void supabaseClient
+      .from("profiles")
+      .select("stripe_customer_id")
+      .eq("id", userId)
+      .maybeSingle<{ stripe_customer_id: string | null }>()
+      .then(({ data }) => setHadTrial(!!data?.stripe_customer_id));
+  }, [userId]);
 
   const redirectToCheckout = async (plan: "pro" | "team", planName: string) => {
     if (!accessToken) {
@@ -150,7 +163,7 @@ export function PaywallPage() {
       <div className="relative mx-auto w-full max-w-[1000px] px-5 py-14 sm:py-16">
         <header className="flex flex-col items-center text-center">
           <ModuoMark className="mb-6 size-8 opacity-95" aria-hidden="true" />
-          <Eyebrow as="p">Your trial has ended</Eyebrow>
+          <Eyebrow as="p">{hadTrial ? "Your trial has ended" : "Welcome to Moduo"}</Eyebrow>
           <h1 className="mt-2 font-display text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-4xl">
             Choose your plan to continue
           </h1>
