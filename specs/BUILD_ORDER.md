@@ -190,6 +190,37 @@ Shared Zod 4 contracts + closed vocabularies. Wave 1 (tasks 1–4) landed on `t/
 
 ---
 
+## Moduo Meet — own video calls (LiveKit on Azure) · [`specs/moduo-meet.md`](./moduo-meet.md)
+
+> Lanes: **infra** (0a → 0b) · **app** (1 → 2 → 3 → 4 → 7 → 8 → 9 → 10). **MEET-5** (desktop) and **MEET-6** (Studio) can run in parallel after MEET-2. 0b can run alongside 1/2. External prereqs for 0a: Azure VM quota (the subscription reports 0 today), Vercel DNS access, Supabase MCP auth.
+
+- [ ] **MEET-0a — Azure foundation + single LiveKit node** · deps: —
+- [ ] **MEET-0b — Scale-out (Redis + VMSS autoscale) + Egress + monitoring** · deps: MEET-0a
+- [ ] **MEET-1 — Data, contracts, tokens (meet_rooms/invites/sessions/recordings, meet-room/token/admit)** · deps: MEET-0a
+- [ ] **MEET-2 — Call core (web): join pre-connect, calm-cinematic stage, dock, share, adaptive quality** · deps: MEET-1
+- [ ] **MEET-3 — Public /m/:slug, lobby/knock, waiting room, mobile guest** · deps: MEET-2
+- [ ] **MEET-4 — Booking + events + instant call wiring (default for paid)** · deps: MEET-3
+- [ ] **MEET-5 — Desktop in-app calls + floating mini-player + screen share** · deps: MEET-2
+- [ ] **MEET-6 — Studio look (blur/replace, noise, low-light, auto-framing)** · deps: MEET-2
+- [ ] **MEET-7 — Spine panel + live Call note (action items → tasks)** · deps: MEET-4
+- [ ] **MEET-8 — Webhooks + aftermath recap + 4 h sweep** · deps: MEET-7, MEET-0b
+- [ ] **MEET-9 — Recording + transcript (Egress → Blob, Speech batch, consent)** · deps: MEET-8
+- [ ] **MEET-10 — Module DoD: MCP tools + Next-call widget** · deps: MEET-8
+
+## Permissions & sharing (all modules) · [`specs/permissions.md`](./permissions.md)
+
+> Order: PERM-0 → PERM-1 → PERM-2, then PERM-3…7 in any order (each needs PERM-1+2); PERM-8 needs PERM-5. Designer calls locked 2026-10-06 (spec §Open questions).
+
+- [x] **PERM-0 — Privacy fixes: calendar + email refs owner-only, spine doesn't leak them, API keys act as creator** · deps: — · ✅ 2026-10-06 `t/mike/perm-0-privacy` (migration `20261006180000_perm0_privacy.sql` **not yet applied to the hosted project**)
+- [ ] **PERM-1 — Core: grants table, `can_access`, role ceiling (viewer = view-only), workspace defaults, migration of existing workspaces** · deps: PERM-0
+- [ ] **PERM-2 — Settings → Members & permissions + invite "give access" + first-invite "existing content" step** · deps: PERM-1
+- [ ] **PERM-3 — Notes sharing (share popover, private toggle, inheritance) + "Private item" chips everywhere** · deps: PERM-2
+- [ ] **PERM-4 — Buckets sharing + assignee auto-grant** · deps: PERM-2
+- [ ] **PERM-5 — Calendars: custom calendars, sharing levels incl. free/busy, publish/ICS, calendar sets** · deps: PERM-2
+- [ ] **PERM-6 — Contacts: private by default (incl. booking-created contacts) + contact groups + merge-on-share** · deps: PERM-2
+- [ ] **PERM-7 — Chat capability grid + channel managers + announcement mode** · deps: PERM-2
+- [ ] **PERM-8 — Collective (Duo) booking links + Moduo Meet co-hosts** · deps: PERM-5
+
 ## Running sessions & parallelism
 
 **Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `main`/`develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).

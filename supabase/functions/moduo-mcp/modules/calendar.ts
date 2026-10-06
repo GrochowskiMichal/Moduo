@@ -115,6 +115,7 @@ export const calendarConnectorModule: ConnectorModule = {
             .from("calendar_events")
             .select("*")
             .eq("workspace_id", ctx.key.workspaceId)
+            .eq("owner_id", ctx.key.createdBy) // PERM-0: owner-only
             .is("deleted_at", null)
             .lt("start_time", to)
             .gte("end_time", from)
@@ -144,6 +145,7 @@ export const calendarConnectorModule: ConnectorModule = {
               .from("calendar_events")
               .select("*")
               .eq("workspace_id", ctx.key.workspaceId)
+              .eq("owner_id", ctx.key.createdBy) // PERM-0: owner-only
               .is("deleted_at", null)
               .lt("start_time", endIso)
               .gte("end_time", startIso)
