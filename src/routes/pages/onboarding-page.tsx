@@ -6,7 +6,6 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModuoMark } from "@/components/ui/moduo-mark";
-import { checkoutRedirectUrl } from "@/lib/checkout-redirect";
 import { useAuth } from "@/providers/auth-provider";
 
 /**
@@ -29,14 +28,8 @@ export function OnboardingPage() {
   // create two workspaces.
   const submitting = useRef(false);
 
-  // Read once at mount — `finish` clears this key, so re-reading later would
-  // flip the note mid-flight.
-  const [hadPendingPrice] = useState(
-    () => typeof window !== "undefined" && !!window.localStorage.getItem("moduo:pending_price_id"),
-  );
-  // Web-only reassurance: desktop users and anyone arriving from a paid plan
-  // link are not on the free-trial path.
-  const showTrialNote = !!runtime?.capabilities.isWeb && !hadPendingPrice;
+  // Web-only reassurance; desktop users are not on the free-trial path.
+  const showTrialNote = !!runtime?.capabilities.isWeb;
 
   useEffect(() => {
     if (!loading && !isSignedIn) void navigate({ to: "/auth", replace: true });
@@ -59,15 +52,6 @@ export function OnboardingPage() {
       const existing = await runtime.workspace.list();
       if (existing.length === 0) {
         await runtime.workspace.create(name);
-      }
-
-      const pendingPriceId = window.localStorage.getItem("moduo:pending_price_id");
-      if (pendingPriceId) {
-        window.localStorage.removeItem("moduo:pending_price_id");
-        const session = await runtime.auth.getSession();
-        const token = session?.data?.session?.access_token ?? null;
-        window.location.href = checkoutRedirectUrl(pendingPriceId, token);
-        return;
       }
 
       void navigate({ to: "/", replace: true });

@@ -16,13 +16,16 @@ import { contactsConnectorModule } from "./modules/contacts.ts";
 import { calendarConnectorModule } from "./modules/calendar.ts";
 import { notesConnectorModule } from "./modules/notes.ts";
 import { emailConnectorModule } from "./modules/email.ts";
+import { chatConnectorModule } from "./modules/chat.ts";
 
 /** A verified, live API key — the connector's caller identity. */
 export type KeyContext = {
   id: string;
   workspaceId: string;
   name: string;
-  /** module → 'none' | 'view' | 'edit' (admin is never key-grantable). */
+  /** The user the key acts as (PERM-0) — owner-only data is filtered to them. */
+  createdBy: string;
+  /** module → 'none' | 'view' | 'edit', already capped by the creator's permission. */
   scopes: Record<string, string>;
 };
 
@@ -55,6 +58,7 @@ export const connectorModules: ConnectorModule[] = [
   calendarConnectorModule,
   notesConnectorModule,
   emailConnectorModule,
+  chatConnectorModule,
 ];
 
 /** Normalize a key's scope for a module (absent/unknown → none). */

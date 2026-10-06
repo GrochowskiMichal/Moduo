@@ -6,44 +6,39 @@
  *   const { allowed, planTier, upgrade } = useEntitlement("cloud_sync");
  *   if (!allowed) return <UpgradePrompt onUpgrade={upgrade} />;
  *
- * Feature gates are defined in FEATURE_GATES below.  Add new gates here as
- * the product grows; components only need to call useEntitlement(featureName).
+ * Feature gates are defined in FEATURE_GATES below. The plan itself is resolved
+ * server-side (Stripe Sync Engine → profiles.plan_tier); this hook only reads it.
+ * RLS enforces the hard limits (workspaces, seats) — this is the friendly UI layer.
  */
 
 import { normalizePlanTier } from "@contracts/vocabularies";
 import { useCallback } from "react";
-import { getRuntime } from "../lib/runtime";
-import { SUPABASE_URL } from "../lib/runtime.web";
+import { startCheckout } from "../features/billing/checkout";
+import { type PaidPlan, tierRank } from "../features/billing/plans";
+import { isDesktopShell, openStripeUrl } from "../features/billing/stripe-url";
 import { type PlanTier, useAuth } from "../providers/auth-provider";
+
+export { isDesktopShell, openStripeUrl };
 
 export type FeatureGate =
   | "cloud_sync"
   | "unlimited_workspaces"
   | "team_members"
+  | "shared_workspaces"
   | "priority_support"
   | "api_access"
   | "advanced_analytics"
   | "custom_domain";
 
-const TIER_RANK: Record<PlanTier, number> = {
-  free: 0,
-  pro: 1,
-  founder: 2,
-  team: 3,
-};
-
-function tierRankFor(tier: string): number {
-  return TIER_RANK[normalizePlanTier(tier)];
-}
-
-/** Minimum tier required to access each feature gate. */
+/** Minimum tier required to access each feature gate (landing comparison table). */
 const FEATURE_GATES: Record<FeatureGate, PlanTier> = {
   cloud_sync: "pro",
   unlimited_workspaces: "pro",
-  team_members: "team",
   priority_support: "pro",
   api_access: "pro",
   advanced_analytics: "pro",
+  shared_workspaces: "duo",
+  team_members: "duo",
   custom_domain: "team",
 };
 
@@ -58,71 +53,20 @@ export type EntitlementResult = {
   upgrade: () => void;
 };
 
-/** True when running inside the Tauri desktop shell (runtime-init independent). */
-export function isDesktopShell(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-/**
- * Opens a Stripe URL. On Tauri desktop, opens in the system browser.
- * On web, navigates the current tab (same-tab for checkout/portal flow).
- * The desktop check is on the shell, not the runtime singleton — a null
- * runtime must never make the Tauri webview navigate itself to Stripe.
- */
-export async function openStripeUrl(url: string) {
-  if (isDesktopShell()) {
-    const rt = getRuntime();
-    if (!rt?.capabilities.isDesktop) {
-      throw new Error("The app is still starting — try again in a moment.");
-    }
-    await rt.window.openExternalUrl(url);
-  } else {
-    window.location.href = url;
-  }
-}
-
-/**
- * Opens Stripe Checkout via `create-checkout-session` using plan + interval
- * so the edge function resolves price IDs from Supabase secrets (not client env).
- */
-async function redirectToCheckout(accessToken: string | null, tier: "pro" | "team") {
-  if (!accessToken) {
-    await openStripeUrl("https://moduo.app/#pricing");
-    return;
-  }
-
-  try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/create-checkout-session`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        plan: tier,
-        interval: "monthly",
-        successUrl: `${window.location.origin}/?upgrade=success`,
-        cancelUrl: `${window.location.origin}/?upgrade=cancelled`,
-      }),
-    });
-    const { url, error } = await res.json();
-    if (error) throw new Error(error);
-    if (url) await openStripeUrl(url);
-  } catch (err) {
-    console.error("[useEntitlement] checkout redirect failed:", err);
-    await openStripeUrl("https://moduo.app/#pricing");
-  }
-}
-
 export function useEntitlement(feature: FeatureGate): EntitlementResult {
   const { planTier, accessToken } = useAuth();
+  const tier = normalizePlanTier(planTier);
   const requiredTier = FEATURE_GATES[feature];
-  const allowed = tierRankFor(planTier) >= tierRankFor(requiredTier);
+  const allowed = tierRank(tier) >= tierRank(requiredTier);
 
   const upgrade = useCallback(() => {
-    const targetTier = requiredTier === "team" ? "team" : "pro";
-    void redirectToCheckout(accessToken, targetTier);
+    const plan: PaidPlan =
+      requiredTier === "team" ? "team" : requiredTier === "duo" ? "duo" : "pro";
+    void startCheckout({ accessToken, plan }).catch((err) => {
+      console.error("[useEntitlement] checkout failed:", err);
+      void openStripeUrl("https://moduo.app/#pricing");
+    });
   }, [accessToken, requiredTier]);
 
-  return { allowed, planTier, requiredTier, upgrade };
+  return { allowed, planTier: tier, requiredTier, upgrade };
 }

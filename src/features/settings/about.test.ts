@@ -6,7 +6,8 @@ import {
   ABOUT_STORAGE_LINE,
   ABOUT_TAGLINE,
   APP_VERSION,
-  STAGING_DESKTOP_DOWNLOADS,
+  desktopDownloads,
+  resolveDesktopChannel,
   versionLabel,
 } from "./about";
 
@@ -65,11 +66,26 @@ describe("About links (AC12)", () => {
   });
 });
 
-describe("Staging desktop downloads", () => {
-  it("points at the rolling staging release", () => {
-    expect(STAGING_DESKTOP_DOWNLOADS.map((d) => d.href)).toEqual([
-      "https://github.com/GrochowskiMichal/moduohyb/releases/download/staging-latest/Moduo_universal.dmg",
-      "https://github.com/GrochowskiMichal/moduohyb/releases/download/staging-latest/Moduo_x64-setup.exe",
+describe("Desktop downloads", () => {
+  it("staging points at the rolling staging release", () => {
+    expect(desktopDownloads("staging").map((d) => d.href)).toEqual([
+      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/staging-latest/Moduo_universal.dmg",
+      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/staging-latest/Moduo_x64-setup.exe",
     ]);
+  });
+
+  it("production points at the rolling prod release", () => {
+    expect(desktopDownloads("production").map((d) => d.href)).toEqual([
+      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/prod-latest/Moduo_universal.dmg",
+      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/prod-latest/Moduo_x64-setup.exe",
+    ]);
+  });
+
+  it("resolves the channel from env, then from the prod web host", () => {
+    expect(resolveDesktopChannel({ channel: "production" }, undefined)).toBe("production");
+    expect(resolveDesktopChannel({ stagingPortal: "true" }, "app.moduo.app")).toBe("staging");
+    expect(resolveDesktopChannel({}, "app.moduo.app")).toBe("production");
+    expect(resolveDesktopChannel({}, "app.staging.moduo.app")).toBeNull();
+    expect(resolveDesktopChannel({}, "127.0.0.1")).toBeNull();
   });
 });

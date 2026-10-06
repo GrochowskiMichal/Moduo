@@ -28,3 +28,21 @@ describe("keyScope (AC8 — scope mapping)", () => {
     expect(keyScope(makeKey(undefined))).toBe("view");
   });
 });
+
+describe("chatKeyScope", () => {
+  it("defaults to none and reads view/edit", async () => {
+    const { chatKeyScope } = await import("./api-keys");
+    const base = {
+      id: "k",
+      workspaceId: "w",
+      name: "n",
+      keyPrefix: "p",
+      createdAt: "",
+      lastUsedAt: null,
+    };
+    expect(chatKeyScope({ ...base, scopes: { tasks: "edit" } })).toBe("none");
+    expect(chatKeyScope({ ...base, scopes: { chat: "view" } })).toBe("view");
+    expect(chatKeyScope({ ...base, scopes: { chat: "edit" } })).toBe("edit");
+    expect(chatKeyScope({ ...base, scopes: { chat: "admin" } })).toBe("none");
+  });
+});

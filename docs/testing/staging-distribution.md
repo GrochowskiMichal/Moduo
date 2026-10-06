@@ -16,7 +16,6 @@ Branch: `t/mike/staging-distribution` → merged to `mike` → merged to `develo
   - `PUBLIC_SUPABASE_URL`
   - `PUBLIC_SUPABASE_PUBLISHABLE_KEY`
   - `PUBLIC_STRIPE_PUBLISHABLE_KEY` + price keys
-  - `PUBLIC_STAGING_ALLOWLIST` = comma-separated founder emails (e.g. `mike@example.com,maciej@example.com`)
   - *(already added by agent: `PUBLIC_WEB_ORIGIN`, `PUBLIC_STAGING_PORTAL`, `MODUO_TARGET`)*
 - [ ] **Add GitHub Actions secrets** for desktop CI — [Settings → Secrets → Actions](https://github.com/GrochowskiMichal/moduohyb/settings/secrets/actions):
   - `APPLE_CERTIFICATE` — base64-encoded Developer ID Application `.p12` (run: `base64 -i YourCert.p12`)
@@ -57,17 +56,16 @@ Branch: `t/mike/staging-distribution` → merged to `mike` → merged to `develo
 
 ---
 
-## 3. Email allowlist
+## 3. Invite-only access
 
 **Surface: web browser, logged out**
 
-*Prerequisite: `PUBLIC_STAGING_ALLOWLIST` env var is set in Vercel*
+Access is controlled in Supabase (Authentication → "Allow new users to sign up" = off), not by a build-time env. See `docs/decisions.md` (2026-10-02).
 
-- [ ] Open `/auth` on staging, type an email that IS on the allowlist → OTP code is sent normally
-- [ ] Type an email NOT on the allowlist → error shown: "This staging build is invite-only. Contact us to request access." — no email sent
-- [ ] Verify the allowlist check only fires when the env var is set (dev build with no env var → normal OTP flow)
-
----
+- [ ] Existing user: `/auth` → enter email → OTP code arrives → signed in
+- [ ] Unknown email: `/auth` → "Moduo is invite-only right now…" — no email sent
+- [ ] Dashboard invite (Add user → Send invitation): the link opens the deployed app (not localhost) and signs the invitee in; they land in onboarding
+- [ ] Invited user can also sign in later via OTP
 
 ## 4. Desktop CI — GitHub Actions
 
@@ -109,4 +107,3 @@ Branch: `t/mike/staging-distribution` → merged to `mike` → merged to `develo
 - Notarization (requires paid Apple Developer account + CI secrets to be configured)
 - Download links work end-to-end (requires first CI run after secrets are added)
 - Updater restart on Windows (not locally testable without a Windows build)
-- `PUBLIC_STAGING_ALLOWLIST` enforcement on the Vercel-deployed build (requires Vercel env to be set)

@@ -105,7 +105,7 @@ function downloadText(filename: string, text: string, mime: string) {
 export function ContactsPage() {
   const { runtime, userId, configError } = useAuth();
   const { selectedWorkspaceId, modulePermissions } = useWorkspace();
-  const permission = modulePermissions.tasks;
+  const permission = modulePermissions.contacts;
   const canEdit = permission === "edit" || permission === "admin";
 
   const workspaceId = selectedWorkspaceId ?? null;

@@ -151,6 +151,17 @@ export const WIDGET_CATALOG: Record<WidgetType, WidgetMeta> = {
     defaultSize: "M",
     defaultConfig: {},
   },
+  // Chat (specs/chat.md): per-workspace plan gate lives in the body (the
+  // catalog only knows runtime capabilities), so it's always offered.
+  chat: {
+    type: "chat",
+    label: "Conversations",
+    moduleLabel: "Chat",
+    sizes: ["S", "M", "L"],
+    defaultSize: "M",
+    defaultConfig: {},
+    openRoute: "/chat",
+  },
   pinned: {
     type: "pinned",
     label: "Pinned",
@@ -171,6 +182,7 @@ export const SHIPPED_WIDGET_TYPES: readonly WidgetType[] = [
   "activity",
   "needs-attention",
   "reconnect",
+  "chat",
 ];
 
 export function widgetMeta(type: WidgetType): WidgetMeta {

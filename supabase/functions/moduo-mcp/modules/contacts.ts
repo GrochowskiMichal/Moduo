@@ -12,6 +12,7 @@
 
 import { RELATION_KINDS } from "../../_shared/contracts/vocabularies.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
+import { visibleIds } from "../share.ts";
 
 type Row = Record<string, any>;
 
@@ -111,7 +112,15 @@ export const contactsConnectorModule: ConnectorModule = {
               .limit(limit),
           ),
         ]);
-        return { contacts: people.map(shapeContact), companies: companies.map(shapeCompany) };
+        const visible = await visibleIds(ctx, "contact");
+        const mine = people.filter((p) => visible.has(p.id));
+        const companyIds = new Set(mine.map((p) => p.company_id).filter(Boolean));
+        return {
+          contacts: mine.map(shapeContact),
+          companies: companies
+            .filter((c) => c.owner_id === ctx.key.createdBy || companyIds.has(c.id))
+            .map(shapeCompany),
+        };
       },
     },
     {
@@ -135,6 +144,8 @@ export const contactsConnectorModule: ConnectorModule = {
           ctx.db.from(table).select("*").eq("workspace_id", ctx.key.workspaceId).eq("id", id).is("deleted_at", null),
         );
         if (found.length === 0) return null;
+        // Private contacts/companies read as absent unless shared with you.
+        if (!(await visibleIds(ctx, type)).has(found[0].id)) return null;
         const links = await rows(
           ctx.db
             .from("entity_links")
@@ -194,8 +205,15 @@ export const contactsConnectorModule: ConnectorModule = {
         ]);
         const peopleById = new Map<string, Row>();
         for (const c of [...byName, ...byEmail]) if (!peopleById.has(c.id)) peopleById.set(c.id, c);
-        const people = [...peopleById.values()].slice(0, limit);
-        return { contacts: people.map(shapeContact), companies: companies.map(shapeCompany) };
+        const visible = await visibleIds(ctx, "contact");
+        const people = [...peopleById.values()].filter((p) => visible.has(p.id)).slice(0, limit);
+        const companyIds = new Set(people.map((p) => p.company_id).filter(Boolean));
+        return {
+          contacts: people.map(shapeContact),
+          companies: companies
+            .filter((c) => c.owner_id === ctx.key.createdBy || companyIds.has(c.id))
+            .map(shapeCompany),
+        };
       },
     },
     // ── writes (edit scope) ──────────────────────────────────────────────────

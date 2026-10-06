@@ -24,7 +24,8 @@ export type ShortcutId =
   | "module-3"
   | "module-4"
   | "module-5"
-  | "module-6";
+  | "module-6"
+  | "module-7";
 
 export type ShortcutEntry = {
   id: ShortcutId;
@@ -134,15 +135,15 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
       !event.altKey &&
       (event.key === "?" || (event.shiftKey && event.key === "/")),
   },
-  // Module shortcuts ⌘1..⌘6 navigate to the Nth visible module tab in the
-  // top bar. The count matches the max number of visible tabs (6 after Mindmap
-  // was hidden in DF-4 — keep this in sync with baseModulesNavItems so no tab
+  // Module shortcuts ⌘1..⌘7 navigate to the Nth visible module tab in the
+  // top bar. The count matches the max number of visible tabs (7 with Chat;
+  // Mindmap hidden in DF-4 — keep this in sync with baseModulesNavItems so no tab
   // loses its ⌘N and no shortcut points past the list). On the dev:web build
   // these collide with the browser's built-in tab-switching shortcuts (most
   // browsers reserve Cmd/Ctrl+1..9 for tabs). moduo is Tauri-first, so we accept
   // the collision and do NOT preventDefault at a level that would fight the
   // browser. In Tauri there is no browser chrome to compete with.
-  ...(["1", "2", "3", "4", "5", "6"] as const).map(
+  ...(["1", "2", "3", "4", "5", "6", "7"] as const).map(
     (digit): ShortcutEntry => ({
       id: `module-${digit}` as ShortcutId,
       label: `Module ${digit}`,

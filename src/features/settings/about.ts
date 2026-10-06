@@ -12,28 +12,57 @@ export const APP_BUILD: string = (import.meta.env.MODUO_BUILD as string | undefi
 /** Desktop (Tauri) shell vs the web build — drives the "check for updates" hint. */
 export const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-/** Staging web/desktop builds only. Production stays without public installers. */
-export const IS_STAGING_PORTAL =
-  (import.meta.env.PUBLIC_STAGING_PORTAL as string | undefined) === "true";
+export type DesktopChannel = "staging" | "production";
 
-const STAGING_RELEASE_BASE =
-  "https://github.com/GrochowskiMichal/moduohyb/releases/download/staging-latest";
+const PROD_APP_HOST = "app.moduo.app";
 
-export type StagingDesktopDownload = { platform: "mac" | "windows"; label: string; href: string };
-
-/** Signed-in staging Settings → About. Hidden on the public login page. */
-export const STAGING_DESKTOP_DOWNLOADS: StagingDesktopDownload[] = [
-  {
-    platform: "mac",
-    label: "Download for Mac",
-    href: `${STAGING_RELEASE_BASE}/Moduo_universal.dmg`,
+/**
+ * Which desktop-installer channel this build advertises in Settings → About.
+ * Staging builds set PUBLIC_STAGING_PORTAL; the production desktop build sets
+ * PUBLIC_DESKTOP_CHANNEL=production. The production web app is recognised by
+ * its host, so it needs no extra Vercel env. Anything else (local dev) → null.
+ */
+export function resolveDesktopChannel(
+  env: { channel?: string; stagingPortal?: string } = {
+    channel: import.meta.env.PUBLIC_DESKTOP_CHANNEL as string | undefined,
+    stagingPortal: import.meta.env.PUBLIC_STAGING_PORTAL as string | undefined,
   },
-  {
-    platform: "windows",
-    label: "Download for Windows",
-    href: `${STAGING_RELEASE_BASE}/Moduo_x64-setup.exe`,
-  },
-];
+  hostname: string | undefined = typeof window !== "undefined"
+    ? window.location.hostname
+    : undefined,
+): DesktopChannel | null {
+  if (env.channel === "production") return "production";
+  if (env.stagingPortal === "true") return "staging";
+  if (hostname === PROD_APP_HOST) return "production";
+  return null;
+}
+
+export const DESKTOP_CHANNEL: DesktopChannel | null = resolveDesktopChannel();
+
+/** Staging builds only — drives the STAGING badge on the login page. */
+export const IS_STAGING_PORTAL = DESKTOP_CHANNEL === "staging";
+
+// Public releases-only repo (installers + auto-update manifests, no source) — no GitHub login needed.
+const RELEASE_BASE = "https://github.com/GrochowskiMichal/moduo-releases/releases/download";
+
+export type DesktopDownload = { platform: "mac" | "windows"; label: string; href: string };
+
+/** Signed-in Settings → About installers for a channel (rolling `<tag>-latest` GitHub release). */
+export function desktopDownloads(channel: DesktopChannel): DesktopDownload[] {
+  const tag = channel === "production" ? "prod-latest" : "staging-latest";
+  return [
+    {
+      platform: "mac",
+      label: "Download for Mac",
+      href: `${RELEASE_BASE}/${tag}/Moduo_universal.dmg`,
+    },
+    {
+      platform: "windows",
+      label: "Download for Windows",
+      href: `${RELEASE_BASE}/${tag}/Moduo_x64-setup.exe`,
+    },
+  ];
+}
 
 export const ABOUT_TAGLINE =
   "Notes, tasks, calendar, email, and contacts — synced across web and desktop, in one window.";

@@ -152,7 +152,7 @@ describe("PLAN_TIERS drift guards", () => {
     // these labels in this order. Canonical label is `founder` (SINGULAR);
     // `founders` (plural) is the legacy app/Stripe spelling and is a
     // compatibility INPUT only — never emitted.
-    expect(PLAN_TIERS).toEqual(["free", "pro", "team", "founder"]);
+    expect(PLAN_TIERS).toEqual(["free", "pro", "team", "founder", "duo"]);
   });
 
   it("schema accepts canonical values and rejects the legacy spelling", () => {
@@ -306,5 +306,28 @@ describe("link vocabulary normalization", () => {
   it("strict schemas reject unknown values", () => {
     expect(relationKindSchema.safeParse("knows").success).toBe(false);
     expect(taskStatusSchema.safeParse("doing").success).toBe(false);
+  });
+});
+
+describe("chat vocabularies", () => {
+  it("mirror the chat_module CHECKs", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.CHAT_CHANNEL_KINDS]).toEqual(["channel", "dm"]);
+    expect([...v.CHAT_NOTIFY_LEVELS]).toEqual(["all", "mentions", "none"]);
+  });
+  it("normalize an unknown notify level to the quiet default", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeChatNotifyLevel("loud")).toBe("mentions");
+    expect(v.normalizeChatNotifyLevel("none")).toBe("none");
+    expect(v.parseChatNotifyLevel("loud").success).toBe(false);
+  });
+  it("gate chat to Duo, Team and Founder (owner rank ≥ duo)", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.planHasChat("free")).toBe(false);
+    expect(v.planHasChat("pro")).toBe(false);
+    expect(v.planHasChat("duo")).toBe(true);
+    expect(v.planHasChat("team")).toBe(true);
+    expect(v.planHasChat("founders")).toBe(true);
+    expect(v.planHasChat("garbage")).toBe(false);
   });
 });

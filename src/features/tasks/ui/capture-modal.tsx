@@ -7,6 +7,7 @@ import {
   Inbox,
   Repeat,
   Timer,
+  User,
   X,
   Zap,
 } from "lucide-react";
@@ -35,6 +36,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 import { cn } from "../../../lib/utils";
+import { useAssignees } from "../assignees";
 import { ENERGY_LABELS, type NewTaskFields, PRIORITY_LABELS } from "../helpers";
 import type { Bucket, EnergyLevel, PriorityLevel, RecurrenceRule } from "../model";
 import { parseCapture } from "../parse/capture-parser";
@@ -44,6 +46,7 @@ import {
   recurrenceFromPreset,
   recurrenceLabel,
 } from "../parse/recurrence";
+import { AssigneeAvatar } from "./assignee-avatar";
 
 type Props = {
   open: boolean;
@@ -86,6 +89,9 @@ export function CaptureModal({
     auto<RecurrenceRule>(),
   );
   const [createMore, setCreateMore] = useState(false);
+  const { assignees, currentUserId, byId } = useAssignees();
+  // Defaults to me (null only before the session resolves — the backend then assigns me).
+  const [assigneeId, setAssigneeId] = useState<string | null>(currentUserId);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const resetFields = (keepBucket: boolean) => {
@@ -97,7 +103,11 @@ export function CaptureModal({
     setDue(auto<string>());
     setScheduled(auto<string>());
     setRecurrence(auto<RecurrenceRule>());
-    if (!keepBucket) setBucketId(defaultBucketId);
+    // Every fresh capture starts assigned to me; "Create more" keeps bucket + assignee.
+    if (!keepBucket) {
+      setBucketId(defaultBucketId);
+      setAssigneeId(currentUserId);
+    }
   };
 
   useEffect(() => {
@@ -142,6 +152,7 @@ export function CaptureModal({
       priority,
       energyLevel: energy,
       durationMinutes: duration,
+      ownerId: assigneeId ?? undefined,
     });
     toast(title, {
       description: summarize(effScheduled, effDue, effRecurrence, bucketName(bucketId)),
@@ -221,6 +232,27 @@ export function CaptureModal({
                   {b.isSystem ? <Inbox className="size-3.5" /> : null}
                   <span className="truncate">{b.name}</span>
                   {b.id === bucketId ? <Check className="ml-auto size-3.5" /> : null}
+                </DropdownMenuItem>
+              ))}
+            </ListPill>
+
+            {/* Assignee */}
+            <ListPill
+              active={!!assigneeId && assigneeId !== currentUserId}
+              icon={
+                assigneeId ? (
+                  <AssigneeAvatar assignee={byId(assigneeId)} className="size-4" />
+                ) : (
+                  <User className="size-3.5" />
+                )
+              }
+              label={byId(assigneeId)?.name ?? "Assignee"}
+            >
+              {assignees.map((a) => (
+                <DropdownMenuItem key={a.userId} onSelect={() => setAssigneeId(a.userId)}>
+                  <AssigneeAvatar assignee={a} className="size-4" />
+                  <span className="truncate">{a.name}</span>
+                  {a.userId === assigneeId ? <Check className="ml-auto size-3.5" /> : null}
                 </DropdownMenuItem>
               ))}
             </ListPill>

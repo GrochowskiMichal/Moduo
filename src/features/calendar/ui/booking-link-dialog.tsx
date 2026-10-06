@@ -46,7 +46,18 @@ export type LinkDraft = {
   questions: GuestQuestion[];
   paused: boolean;
   video: VideoSetting;
+  /** Other workspace members who host this link with you. */
+  cohostIds: string[];
+  /** The co-hosts as last saved (null until loaded for an existing link). */
+  savedCohostIds: string[] | null;
 };
+
+/**
+ * Collective (co-host) booking links stay off until the booking page combines
+ * every host's own calendars and co-hosts can see and accept the request
+ * (PERM-8 follow-up). The database side is live and unused.
+ */
+export const COLLECTIVE_LINKS_ENABLED = false;
 
 const NOTICE_OPTIONS = [
   { minutes: 0, label: "No minimum" },
@@ -100,6 +111,7 @@ type Props = {
   onDisconnectZoom: () => void;
   onSave: () => void;
   onDelete: () => void;
+  teammates?: { userId: string; name: string }[];
 };
 
 type VideoRow = {
@@ -157,6 +169,7 @@ export function BookingLinkDialog({
   onDisconnectZoom,
   onSave,
   onDelete,
+  teammates = [],
 }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const draftId = draft?.id ?? null;
@@ -179,6 +192,40 @@ export function BookingLinkDialog({
                 Guests pick a time on your link. The meeting is added to Google and to Moduo.
               </DialogDescription>
             </DialogHeader>
+            {COLLECTIVE_LINKS_ENABLED && teammates.length > 0 ? (
+              <div className="flex shrink-0 flex-col gap-2 border-b border-border px-6 py-3">
+                <p className="text-xs text-muted-foreground">
+                  Also book with — they have to accept before the link offers times.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {teammates.map((person) => {
+                    const on = draft.cohostIds.includes(person.userId);
+                    return (
+                      <button
+                        key={person.userId}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() =>
+                          onChange({
+                            ...draft,
+                            cohostIds: on
+                              ? draft.cohostIds.filter((id) => id !== person.userId)
+                              : [...draft.cohostIds, person.userId],
+                          })
+                        }
+                        className={
+                          on
+                            ? "rounded-full border border-(--selected-border) bg-(--selected-bg) px-2.5 py-1 text-xs text-foreground"
+                            : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                        }
+                      >
+                        {person.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             {needsGoogle ? (
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-6 py-3">
                 <p className="text-sm text-muted-foreground">

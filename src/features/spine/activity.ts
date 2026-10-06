@@ -102,6 +102,23 @@ export function spineActivityLine(entry: {
       return "added this company";
     case "companies.update":
       return "updated this company";
+    // Chat (specs/chat.md). Only mentions + thread replies notify (quiet bar).
+    case "chat.mention":
+    case "chat.reply": {
+      const name = str(p.channel_name);
+      const where = name ? `in #${name}` : "in a direct message";
+      const verb = entry.op === "chat.mention" ? "mentioned you" : "replied in a thread";
+      const excerpt = str(p.excerpt);
+      return excerpt ? `${verb} ${where}: “${excerpt}”` : `${verb} ${where}`;
+    }
+    case "chat.channel_create": {
+      const name = str(p.name);
+      return name ? `created #${name}` : "created a channel";
+    }
+    case "chat.channel_archive":
+      return "archived this channel";
+    case "chat.channel_unarchive":
+      return "unarchived this channel";
     default:
       return entry.op;
   }
