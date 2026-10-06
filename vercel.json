@@ -34,6 +34,16 @@
       "has": [{ "type": "host", "value": "www.moduo.app" }],
       "destination": "/app.html"
     },
+    {
+      "source": "/manifesto",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/manifesto.html"
+    },
+    {
+      "source": "/manifesto",
+      "has": [{ "type": "host", "value": "www.moduo.app" }],
+      "destination": "/manifesto.html"
+    },
     { "source": "/((?!assets|favicon|manifest|sw\\.|app\\.html|landing\\.html).*)", "destination": "/index.html" }
   ]
 }

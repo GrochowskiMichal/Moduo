@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manifesto — Moduo</title>
+    <meta
+      name="description"
+      content="Moduo is a modular workspace. One home. Only the page in front of you. Everything else connected, and out of the room."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#161616" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://www.moduo.app/manifesto" />
+    <meta property="og:title" content="Manifesto — Every app you need. None you don’t." />
+    <meta
+      property="og:description"
+      content="Moduo is a modular workspace. One home. Only the page in front of you. Everything else connected, and out of the room."
+    />
+    <meta property="og:image" content="https://www.moduo.app/assets/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://www.moduo.app/assets/og.png" />
+    <link rel="canonical" href="https://www.moduo.app/manifesto" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link
+      rel="preload"
+      href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <script>
+      // Runs before first paint: apply a remembered theme / motion choice so
+      // nothing flips after load. Storage can throw (private mode) — ignore.
+      (function () {
+        var d = document.documentElement;
+        d.classList.add("js");
+        try {
+          var t = localStorage.getItem("moduo-manifesto-theme");
+          if (t === "light" || t === "dark") d.setAttribute("data-theme", t);
+          var m = localStorage.getItem("moduo-manifesto-motion");
+          if (m === "reduce" || m === "full") d.setAttribute("data-motion", m);
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      /* ─── Fonts ──────────────────────────────────────────────────────────
+         One family (Geist), as on the landing. Fallback is metric-matched to
+         Geist so the swap does not shift layout (CLS ≈ 0). */
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-400-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-500-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-600-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: "Geist Mono";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5.2.5/files/geist-mono-latin-400-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: "Geist Fallback";
+        src: local("Arial"), local("Helvetica Neue"), local("Helvetica");
+        size-adjust: 103.3%;
+        ascent-override: 89.1%;
+        descent-override: 21.3%;
+        line-gap-override: 0%;
+      }
+
+      /* ─── Tokens ─────────────────────────────────────────────────────────
+         Dark is the brand default, on off-black (#161616) with off-white text
+         (not #000 / #fff) to cut halation. Light follows the OS or the toggle.
+         Contrast (WCAG / APCA Lc), dark: heading 16.4:1 / −99 · body 13.2:1 /
+         −85 · muted 8.4:1 / −59. Light: heading 18.6:1 / 103 · body 14.4:1 /
+         99 · muted 6.5:1 / 81. */
+      :root {
+        color-scheme: dark;
+        --bg: oklch(0.2 0 0);
+        --fg-strong: oklch(0.965 0 0);
+        --fg: oklch(0.895 0 0);
+        --fg-muted: oklch(0.76 0 0);
+        --fg-faint: oklch(0.6 0 0);
+        --hairline: oklch(0.3 0 0);
+        --hover: oklch(0.26 0 0);
+        --primary: oklch(0.95 0 0);
+        --primary-hover: oklch(1 0 0);
+        --primary-fg: oklch(0.1 0 0);
+        --ring: oklch(0.95 0 0);
+        /* Light text on dark reads slightly bolder (irradiation): open the
+           tracking a hair and add leading instead of thinning the face. */
+        --body-tracking: 0.006em;
+        --body-leading: 1.65;
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: oklch(0.985 0 0);
+        --fg-strong: oklch(0.16 0 0);
+        --fg: oklch(0.27 0 0);
+        --fg-muted: oklch(0.47 0 0);
+        --fg-faint: oklch(0.58 0 0);
+        --hairline: oklch(0.9 0 0);
+        --hover: oklch(0.94 0 0);
+        --primary: oklch(0.16 0 0);
+        --primary-hover: oklch(0 0 0);
+        --primary-fg: oklch(0.985 0 0);
+        --ring: oklch(0.16 0 0);
+        --body-tracking: 0em;
+        --body-leading: 1.6;
+      }
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme="dark"]) {
+          color-scheme: light;
+          --bg: oklch(0.985 0 0);
+          --fg-strong: oklch(0.16 0 0);
+          --fg: oklch(0.27 0 0);
+          --fg-muted: oklch(0.47 0 0);
+          --fg-faint: oklch(0.58 0 0);
+          --hairline: oklch(0.9 0 0);
+          --hover: oklch(0.94 0 0);
+          --primary: oklch(0.16 0 0);
+          --primary-hover: oklch(0 0 0);
+          --primary-fg: oklch(0.985 0 0);
+          --ring: oklch(0.16 0 0);
+          --body-tracking: 0em;
+          --body-leading: 1.6;
+        }
+      }
+
+      :root {
+        --font-sans: Geist, "Geist Fallback", system-ui, -apple-system, sans-serif;
+        --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+        /* Type scale. Body is fluid 16 → 19px. Steps use a ratio that grows
+           with the viewport: ~1.25 on phones → ~1.333 on desktop. */
+        --step--1: 0.75rem; /* 12px — eyebrow, controls */
+        --step-0: clamp(1rem, 0.925rem + 0.375vw, 1.1875rem); /* body 16 → 19 */
+        --step-1: clamp(1.125rem, 1rem + 0.55vw, 1.4375rem); /* lede, peak 18 → 23 */
+        --step-2: clamp(1.5rem, 1.2rem + 1.3vw, 2.125rem); /* h2 24 → 34 */
+        --step-3: clamp(1.75rem, 1.25rem + 2.2vw, 3rem); /* closing 28 → 48 */
+        --step-4: clamp(2.375rem, 1.5rem + 3.9vw, 4.5rem); /* h1 38 → 72 */
+
+        /* Measure: ~66 characters per line (Geist averages 0.472em/char). */
+        --measure: 31.5em;
+
+        /* Spacing, on a 4px base. */
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-6: 1.5rem;
+        --space-8: 2rem;
+        --space-12: 3rem;
+        --space-16: 4rem;
+        --space-section: clamp(4.5rem, 3rem + 6vw, 8rem);
+        --space-closing: clamp(7rem, 5rem + 10vw, 13rem);
+        --gutter: clamp(1rem, 0.5rem + 2.5vw, 2rem);
+
+        /* Motion. Entrances only; nothing moves while it is being read. */
+        --motion-duration-xs: 120ms;
+        --motion-duration-s: 200ms;
+        --motion-duration-m: 420ms;
+        --motion-duration-l: 560ms;
+        --motion-ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+        --motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+        --motion-distance-s: 8px;
+        --motion-distance-m: 14px;
+        --motion-stagger: 70ms;
+
+        --radius-md: 0.5rem;
+        --ctrl-h: 2rem;
+        --ctrl-h-lg: 2.75rem;
+      }
+
+      /* ─── Base ───────────────────────────────────────────────────────── */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        background: var(--bg);
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      body {
+        min-height: 100dvh;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-sans);
+        font-size: var(--step-0);
+        line-height: var(--body-leading);
+        letter-spacing: var(--body-tracking);
+        font-kerning: normal;
+        font-variant-ligatures: common-ligatures;
+        font-variant-numeric: proportional-nums oldstyle-nums;
+        font-optical-sizing: auto;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+      a {
+        color: inherit;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        cursor: pointer;
+      }
+      svg {
+        display: block;
+        flex-shrink: 0;
+      }
+      ::selection {
+        background: color-mix(in oklab, var(--fg-strong) 24%, transparent);
+      }
+      :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 3px;
+        border-radius: 0.25rem;
+      }
+
+      .skip {
+        position: absolute;
+        left: var(--gutter);
+        top: -4rem;
+        z-index: 10;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        background: var(--primary);
+        color: var(--primary-fg);
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-decoration: none;
+      }
+      .skip:focus {
+        top: var(--space-3);
+      }
+
+      /* One column. Its left edge never moves between sections, so every
+         return sweep lands in the same place. */
+      .col {
+        width: 100%;
+        max-width: calc(var(--measure) + 2 * var(--gutter));
+        margin-inline: auto;
+        padding-inline: var(--gutter);
+      }
+
+      /* ─── Top bar (static, not sticky) ───────────────────────────────── */
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding-block: var(--space-4);
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: var(--ctrl-h);
+        color: var(--fg-strong);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        text-decoration: none;
+      }
+      .brand svg {
+        width: 1.25rem;
+        height: 1.25rem;
+        fill: currentColor;
+      }
+      .prefs {
+        display: flex;
+        gap: var(--space-1);
+      }
+      .pref {
+        min-height: var(--ctrl-h);
+        padding-inline: var(--space-2);
+        border-radius: var(--radius-md);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        letter-spacing: 0.02em;
+        color: var(--fg-muted);
+        transition:
+          background-color var(--motion-duration-xs) var(--motion-ease-out),
+          color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .pref:hover {
+        background: var(--hover);
+        color: var(--fg-strong);
+      }
+      .pref b {
+        font-weight: 400;
+        color: var(--fg-strong);
+      }
+
+      /* ─── Opening ────────────────────────────────────────────────────── */
+      .opening {
+        padding-top: clamp(3.5rem, 2rem + 8vh, 8rem);
+      }
+      .eyebrow {
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        line-height: 1.4;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--fg-muted);
+        margin-bottom: var(--space-6);
+      }
+      h1 {
+        font-size: var(--step-4);
+        line-height: 1.04;
+        font-weight: 600;
+        letter-spacing: -0.032em;
+        color: var(--fg-strong);
+        text-wrap: balance;
+        margin-bottom: clamp(2rem, 1.5rem + 2vw, 3.25rem);
+      }
+      /* Each sentence of a display line owns its own line. */
+      .line {
+        display: block;
+      }
+      .lede {
+        font-size: var(--step-1);
+        line-height: 1.55;
+        letter-spacing: -0.003em;
+        color: var(--fg-strong);
+        text-wrap: pretty;
+      }
+      .lede + .lede {
+        margin-top: 0.85em;
+      }
+
+      /* ─── Principles ─────────────────────────────────────────────────── */
+      .principle,
+      .closing {
+        scroll-margin-top: var(--space-8);
+      }
+      .principle {
+        position: relative;
+        margin-top: var(--space-section);
+      }
+      h2 {
+        font-size: var(--step-2);
+        line-height: 1.15;
+        font-weight: 600;
+        letter-spacing: -0.022em;
+        color: var(--fg-strong);
+        text-wrap: balance;
+        /* Heading sits ~4× closer to its own text than to the previous
+           section (proximity). */
+        margin-bottom: 0.6em;
+      }
+      .principle p {
+        text-wrap: pretty;
+      }
+      .principle p + p {
+        margin-top: 0.85em;
+      }
+      /* Section numbers live in the left margin on wide screens only, so the
+         reading edge stays put. Decorative: hidden from assistive tech. */
+      .num {
+        display: none;
+      }
+      @media (min-width: 1100px) {
+        .num {
+          display: block;
+          position: absolute;
+          right: calc(100% + 2.5rem);
+          top: 0.55em;
+          font-family: var(--font-mono);
+          font-size: var(--step--1);
+          font-weight: 400;
+          letter-spacing: 0.04em;
+          line-height: 1;
+          color: var(--fg-faint);
+          font-variant-numeric: tabular-nums lining-nums;
+        }
+      }
+
+      /* The one isolated line on the page (peak). */
+      .peak {
+        display: block;
+        margin-top: 1.1em;
+        font-size: var(--step-1);
+        line-height: 1.35;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        color: var(--fg-strong);
+      }
+
+      /* ─── Closing (end) ──────────────────────────────────────────────── */
+      .closing {
+        margin-top: var(--space-closing);
+        padding-bottom: var(--space-closing);
+      }
+      .closing p {
+        font-size: var(--step-3);
+        line-height: 1.12;
+        font-weight: 600;
+        letter-spacing: -0.026em;
+        color: var(--fg-strong);
+        text-wrap: balance;
+      }
+
+      /* ─── After the end ──────────────────────────────────────────────── */
+      .after {
+        border-top: 1px solid var(--hairline);
+        padding-block: var(--space-12) var(--space-16);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-3) var(--space-6);
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: var(--ctrl-h-lg);
+        padding-inline: 1.25rem;
+        border-radius: var(--radius-md);
+        font-size: 0.9375rem;
+        font-weight: 500;
+        letter-spacing: 0;
+        text-decoration: none;
+        background: var(--primary);
+        color: var(--primary-fg);
+        transition: background-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .btn:hover {
+        background: var(--primary-hover);
+      }
+      .back {
+        font-size: 0.9375rem;
+        color: var(--fg-muted);
+        text-decoration: underline;
+        text-decoration-color: var(--hairline);
+        text-underline-offset: 0.25em;
+        transition:
+          color var(--motion-duration-xs) var(--motion-ease-out),
+          text-decoration-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .back:hover {
+        color: var(--fg-strong);
+        text-decoration-color: currentColor;
+      }
+
+      /* Narrow phones: allow hyphenation in body only, never in headings. */
+      @media (max-width: 480px) {
+        .principle p,
+        .lede {
+          hyphens: auto;
+          -webkit-hyphens: auto;
+        }
+        .principle p .peak {
+          hyphens: manual;
+          -webkit-hyphens: manual;
+        }
+      }
+
+      /* ─── Motion ─────────────────────────────────────────────────────────
+         Only blocks that start below the fold are ever hidden, and only
+         after the script confirms it can reveal them (.is-pending). Without
+         JS — or in reader mode, print, search crawlers — every word is
+         visible from the first paint. Opacity + transform only. */
+      .is-pending {
+        opacity: 0;
+        transform: translate3d(0, var(--motion-distance-m), 0);
+      }
+      .is-pending .peak,
+      .is-pending .line {
+        opacity: 0;
+        transform: translate3d(0, var(--motion-distance-s), 0);
+      }
+      .is-shown {
+        transition:
+          opacity var(--motion-duration-m) var(--motion-ease-out),
+          transform var(--motion-duration-m) var(--motion-ease-out);
+      }
+      .is-shown .peak,
+      .is-shown .line {
+        transition:
+          opacity var(--motion-duration-m) var(--motion-ease-out),
+          transform var(--motion-duration-m) var(--motion-ease-out);
+      }
+      .is-shown .peak {
+        transition-delay: calc(var(--motion-stagger) * 3);
+      }
+      .is-shown .line:nth-child(2) {
+        transition-delay: var(--motion-stagger);
+      }
+
+      /* Reduced motion (OS setting or the on-page toggle): no movement, no
+         stagger. Nothing is hidden, so nothing needs to fade in. */
+      @media (prefers-reduced-motion: reduce) {
+        :root:not([data-motion="full"]) .is-pending,
+        :root:not([data-motion="full"]) .is-pending .peak,
+        :root:not([data-motion="full"]) .is-pending .line {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      :root[data-motion="reduce"] .is-pending,
+      :root[data-motion="reduce"] .is-pending .peak,
+      :root[data-motion="reduce"] .is-pending .line {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* ─── Print ──────────────────────────────────────────────────────── */
+      @media print {
+        :root,
+        :root[data-theme] {
+          --bg: #fff;
+          --fg-strong: #000;
+          --fg: #111;
+          --fg-muted: #444;
+        }
+        .top .prefs,
+        .after .btn,
+        .skip,
+        .num {
+          display: none !important;
+        }
+        .is-pending,
+        .is-pending * {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+        .principle,
+        .closing {
+          break-inside: avoid;
+        }
+        .closing {
+          margin-top: 3rem;
+          padding-bottom: 2rem;
+        }
+      }
+    </style>
+    <!-- PostHog (EU cloud), same project as the landing. Loaded only when the visitor
+         already accepted analytics on the landing (moduo:consent); no banner here, so
+         without that choice nothing loads and nothing is stored. Skipped on localhost. -->
+    <script>
+      (function () {
+        var granted = false;
+        try {
+          granted = localStorage.getItem("moduo:consent") === "granted";
+        } catch (e) {}
+        if (!granted || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return;
+        var s = document.createElement("script");
+        s.async = true;
+        s.crossOrigin = "anonymous";
+        s.src = "https://eu-assets.i.posthog.com/static/array.full.js";
+        s.onload = function () {
+          if (!window.posthog || !window.posthog.init) return;
+          window.posthog.init("phc_D4Y3CbRVFLqkufdCmhtb2XukD2xgV3GQfXjxemtEhqiN", {
+            api_host: "https://eu.i.posthog.com",
+            ui_host: "https://eu.posthog.com",
+            defaults: "2025-11-30",
+            person_profiles: "identified_only",
+            capture_pageleave: true,
+            autocapture: true,
+            respect_dnt: true,
+            loaded: function (ph) {
+              var h = location.hostname;
+              ph.register({
+                surface: "manifesto",
+                environment: h === "www.moduo.app" || h === "moduo.app" ? "production" : "staging",
+              });
+            },
+          });
+        };
+        document.head.appendChild(s);
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="col top">
+      <a class="brand" href="/">
+        <svg viewBox="0 0 1000 1000" aria-hidden="true"><path fill-rule="evenodd" d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z" /></svg>
+        Moduo
+      </a>
+      <div class="prefs" hidden>
+        <button class="pref" type="button" id="pref-theme" aria-pressed="false">Light</button>
+        <button class="pref" type="button" id="pref-motion" aria-pressed="false">Reduce motion</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <article class="col" aria-labelledby="manifesto-title">
+        <header class="opening">
+          <p class="eyebrow">Manifesto</p>
+          <h1 id="manifesto-title"><span class="line">Every app you need.</span> <span class="line">None you don’t.</span></h1>
+          <p class="lede">You open the computer to finish an hour. The tools around that hour are a row of apps that never meet, or one suite with the whole product switched on. The screen stops being the work.</p>
+          <p class="lede">Moduo is a modular workspace. One home. Only the page in front of you. Everything else connected, and out of the room.</p>
+        </header>
+
+        <section class="principle" id="open-on-the-work" aria-labelledby="h-open-on-the-work" data-reveal>
+          <h2 id="h-open-on-the-work"><span class="num" aria-hidden="true">01</span>Open on the work.</h2>
+          <p>Home is a grid, and it is already enough to start. Today’s tasks, which you finish on the tile. What’s left on the calendar. A line you can capture. The time. You don’t build a system. You just work.</p>
+        </section>
+
+        <section class="principle" id="the-page-is-the-switch" aria-labelledby="h-the-page-is-the-switch" data-reveal>
+          <h2 id="h-the-page-is-the-switch"><span class="num" aria-hidden="true">02</span>The page is the switch.</h2>
+          <p>Add a widget. Choose its size. It takes the first open slot. Drag it, resize it, take it off. When the page is full, the next widget starts another page.</p>
+          <p>The page you are on is the hour. The other pages wait. Every workspace keeps its own board.</p>
+        </section>
+
+        <section class="principle" id="go-further" aria-labelledby="h-go-further" data-reveal>
+          <h2 id="h-go-further"><span class="num" aria-hidden="true">03</span>Go further only when the tile runs out.</h2>
+          <p>Notes, tasks, calendar, email, contacts, and chat sit one click past the widget. The row opens the exact thing. The small act stays on Home. The module is for the rest of it. Then you are back on the same board.</p>
+        </section>
+
+        <section class="principle" id="a-link-happens" aria-labelledby="h-a-link-happens" data-reveal>
+          <h2 id="h-a-link-happens"><span class="num" aria-hidden="true">04</span>A link happens while you work.</h2>
+          <p>Drag one thing onto another. Mention it as you write. Moduo offers one suggestion. Accept it, or dismiss it and it stays dismissed. No tagging.</p>
+          <p>The link shows up on Home, and either end opens. A module can be closed. The work still knows itself.</p>
+        </section>
+
+        <section class="principle" id="your-ai" aria-labelledby="h-your-ai" data-reveal>
+          <h2 id="h-your-ai"><span class="num" aria-hidden="true">05</span>Your AI sees what you allow.</h2>
+          <p>Plug in Claude, ChatGPT, Cursor, or any assistant. It can search, link, and act across the workspace, tool by tool, with your permission. <strong class="peak">The hour stays yours.</strong></p>
+        </section>
+
+        <section class="principle" id="leave-with-everything" aria-labelledby="h-leave-with-everything" data-reveal>
+          <h2 id="h-leave-with-everything"><span class="num" aria-hidden="true">06</span>Leave with everything.</h2>
+          <p>Free to start. Turn on what this workspace needs today. Add the rest when the work asks for it. If you go, your data goes with you.</p>
+        </section>
+
+        <footer class="closing" id="close" data-reveal>
+          <p><span class="line">The last productivity app you’ll ever set up.</span> <span class="line">Close the other tabs.</span></p>
+        </footer>
+      </article>
+
+      <nav class="col" aria-label="Next">
+        <div class="after">
+          <a class="btn" href="/#waitlist">Start free</a>
+          <a class="back" href="/">Back to moduo.app</a>
+        </div>
+      </nav>
+    </main>
+
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var mq = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+        var cmq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+
+        function store(key, value) {
+          try {
+            localStorage.setItem(key, value);
+          } catch (e) {}
+        }
+        function motionReduced() {
+          var m = root.getAttribute("data-motion");
+          if (m === "reduce") return true;
+          if (m === "full") return false;
+          return !!(mq && mq.matches);
+        }
+        function isLight() {
+          var t = root.getAttribute("data-theme");
+          if (t) return t === "light";
+          return !!(cmq && cmq.matches);
+        }
+
+        // ── Preferences (only shown once the script can honour them) ─────
+        var prefs = document.querySelector(".prefs");
+        var themeBtn = document.getElementById("pref-theme");
+        var motionBtn = document.getElementById("pref-motion");
+        function paintPrefs() {
+          var light = isLight();
+          themeBtn.textContent = light ? "Dark" : "Light";
+          themeBtn.setAttribute("aria-label", light ? "Switch to dark theme" : "Switch to light theme");
+          themeBtn.removeAttribute("aria-pressed");
+          var reduced = motionReduced();
+          motionBtn.setAttribute("aria-pressed", reduced ? "true" : "false");
+        }
+        themeBtn.addEventListener("click", function () {
+          var next = isLight() ? "dark" : "light";
+          root.setAttribute("data-theme", next);
+          store("moduo-manifesto-theme", next);
+          paintPrefs();
+        });
+        motionBtn.addEventListener("click", function () {
+          var next = motionReduced() ? "full" : "reduce";
+          root.setAttribute("data-motion", next);
+          store("moduo-manifesto-motion", next);
+          if (next === "reduce") revealAll();
+          paintPrefs();
+        });
+        if (cmq && cmq.addEventListener) cmq.addEventListener("change", paintPrefs);
+        if (mq && mq.addEventListener) mq.addEventListener("change", paintPrefs);
+        prefs.hidden = false;
+        paintPrefs();
+
+        // ── Entrances ───────────────────────────────────────────────────
+        // Blocks already on screen (or above it, e.g. a deep link) are never
+        // hidden. Blocks below the fold enter once, as one unit, when they
+        // are ~20% into the viewport — before the eye gets there — and then
+        // never move again.
+        var blocks = Array.prototype.slice.call(document.querySelectorAll("[data-reveal]"));
+        var io = null;
+        function show(el) {
+          el.classList.add("is-shown");
+          el.classList.remove("is-pending");
+          if (io) io.unobserve(el);
+        }
+        function revealAll() {
+          blocks.forEach(function (el) {
+            if (el.classList.contains("is-pending")) show(el);
+          });
+        }
+        if (!("IntersectionObserver" in window) || motionReduced()) return;
+
+        var fold = window.innerHeight * 0.9;
+        var heard = false;
+        io = new IntersectionObserver(
+          function (entries) {
+            heard = true;
+            entries.forEach(function (e) {
+              if (e.isIntersecting) show(e.target);
+            });
+          },
+          // The root reaches far above the viewport, so a block that a fast
+          // scroll or jump skips straight past still counts as "in".
+          { rootMargin: "100000px 0px -20% 0px", threshold: 0 }
+        );
+        blocks.forEach(function (el) {
+          if (el.getBoundingClientRect().top > fold) {
+            el.classList.add("is-pending");
+            io.observe(el);
+          }
+        });
+        // Fail-safe: an observer that never reports (background tab, odd
+        // embed) must not leave words hidden.
+        setTimeout(function () {
+          if (!heard) revealAll();
+        }, 1500);
+        // Find-in-page and printing reveal everything at once.
+        document.addEventListener("keydown", function (e) {
+          if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F")) revealAll();
+        });
+        window.addEventListener("beforeprint", revealAll);
+      })();
+    </script>
+  </body>
+</html>
