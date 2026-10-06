@@ -1,3 +1,4 @@
+import { normalizePlanTier } from "@contracts/vocabularies";
 import { CreditCard } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -81,7 +82,9 @@ export function BillingSection() {
     try {
       // Desktop omits returnUrl: window.location.origin is tauri://localhost
       // there, which Stripe rejects — the edge function falls back to APP_URL.
-      const body = isDesktopShell() ? {} : { returnUrl: window.location.origin };
+      const body = isDesktopShell()
+        ? {}
+        : { returnUrl: `${window.location.origin}/?billing=return` };
       const res = await fetch(`${SUPABASE_URL}/functions/v1/create-portal-session`, {
         method: "POST",
         headers: {
@@ -109,7 +112,10 @@ export function BillingSection() {
     }
   };
 
-  const tier = row?.plan_tier ?? planTier;
+  const tier = normalizePlanTier(row?.plan_tier ?? planTier);
+  // The portal needs a Stripe customer; before a first trial there is nothing to manage yet.
+  const hasBillingAccount =
+    !!row?.stripe_subscription_id || (row?.subscription_status ?? "inactive") !== "inactive";
   const statusLine =
     loadState === "loading"
       ? "Checking subscription…"
@@ -129,14 +135,25 @@ export function BillingSection() {
             <span className="font-display text-lg text-foreground">{planLabel(tier)}</span>
             <p className="text-sm text-muted-foreground">{statusLine}</p>
           </div>
-          <Button
-            type="button"
-            onClick={() => void handleManageBilling()}
-            disabled={!accessToken || portalBusy}
-          >
-            <CreditCard aria-hidden />
-            {portalBusy ? "Opening…" : "Manage billing"}
-          </Button>
+          {tier === "founder" ? null : hasBillingAccount ? (
+            <Button
+              type="button"
+              onClick={() => void handleManageBilling()}
+              disabled={!accessToken || portalBusy}
+            >
+              <CreditCard aria-hidden />
+              {portalBusy ? "Opening…" : "Manage billing"}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={() => {
+                window.location.href = "/paywall";
+              }}
+            >
+              See plans
+            </Button>
+          )}
         </div>
 
         {loadState === "loaded" && isTrialing(row) ? (

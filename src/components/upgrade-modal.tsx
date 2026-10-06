@@ -1,4 +1,5 @@
 import { Sparkles, Users, Zap } from "lucide-react";
+import { PLAN_CARDS } from "../features/billing/plans";
 import { type FeatureGate, useEntitlement } from "../hooks/use-entitlement";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -13,33 +14,17 @@ const FEATURE_LABELS: Record<FeatureGate, string> = {
   cloud_sync: "Cloud Sync",
   unlimited_workspaces: "Unlimited Workspaces",
   team_members: "Team Members",
+  shared_workspaces: "Shared Workspaces",
   priority_support: "Priority Support",
   api_access: "API Access",
   advanced_analytics: "Advanced Analytics",
   custom_domain: "Custom Domain",
 };
 
-const PLAN_BULLETS: Record<"pro" | "team" | "founder", string[]> = {
-  pro: [
-    "Cloud sync across all your devices",
-    "Unlimited workspaces",
-    "Priority support",
-    "API access",
-    "Advanced analytics",
-  ],
-  team: [
-    "Everything in Pro",
-    "Unlimited team members",
-    "Custom domain",
-    "Team audit log",
-    "SSO / SAML (coming soon)",
-  ],
-  founder: [
-    "Everything in Pro forever",
-    "Early access to new features",
-    "Direct founder support",
-    "Lifetime price lock",
-  ],
+const TARGET_BULLETS: Record<"pro" | "duo" | "team", string[]> = {
+  pro: PLAN_CARDS[1].features,
+  duo: PLAN_CARDS[2].features,
+  team: PLAN_CARDS[3].features,
 };
 
 /**
@@ -50,11 +35,11 @@ const PLAN_BULLETS: Record<"pro" | "team" | "founder", string[]> = {
 export function UpgradeModal({ visible, feature, onClose }: Props) {
   const { planTier, requiredTier, upgrade } = useEntitlement(feature);
 
-  const targetTier = requiredTier === "team" ? "team" : "pro";
-  const bullets = PLAN_BULLETS[targetTier];
+  const targetTier = requiredTier === "team" ? "team" : requiredTier === "duo" ? "duo" : "pro";
+  const bullets = TARGET_BULLETS[targetTier];
   const featureLabel = FEATURE_LABELS[feature];
   const TierIcon = targetTier === "team" ? Users : Sparkles;
-  const tierLabel = targetTier === "team" ? "Team" : "Pro";
+  const tierLabel = targetTier === "team" ? "Team" : targetTier === "duo" ? "Duo" : "Pro";
 
   const handleUpgrade = () => {
     upgrade();

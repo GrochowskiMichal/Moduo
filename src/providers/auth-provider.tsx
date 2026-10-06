@@ -21,7 +21,6 @@ export type AuthContextValue = {
   planTier: PlanTier;
   signOut: () => Promise<void>;
   refreshPlanTier: () => Promise<void>;
-  syncSubscription: () => Promise<PlanTier>;
 };
 
 export const AuthContext = createContext<AuthContextValue>({
@@ -35,7 +34,6 @@ export const AuthContext = createContext<AuthContextValue>({
   planTier: "free",
   signOut: async () => {},
   refreshPlanTier: async () => {},
-  syncSubscription: async () => "free",
 });
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -143,31 +141,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   };
 
-  const syncSubscription = async (): Promise<PlanTier> => {
-    const token = session?.access_token;
-    if (!token) return planTier;
-    const SUPABASE_URL =
-      (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ??
-      "https://wtoonrvuqumihpkbvwvs.supabase.co";
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-subscription`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const { plan_tier, error } = await res.json();
-      if (error) throw new Error(error);
-      if (plan_tier) {
-        const normalized = normalizePlanTier(plan_tier);
-        setPlanTier(normalized);
-        return normalized;
-      }
-      return planTier;
-    } catch (err) {
-      console.error("[auth] syncSubscription failed:", err);
-      return planTier;
-    }
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -181,7 +154,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
         planTier,
         signOut,
         refreshPlanTier,
-        syncSubscription,
       }}
     >
       {children}

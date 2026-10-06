@@ -28,12 +28,12 @@ import { parseOrError, type SafeParseResult } from "./errors.ts";
 
 // ---------------------------------------------------------------------------
 // plan_tier — the only native Postgres enum today.
-// Live pg_enum (2026-08-14): free | pro | team | founder  (SINGULAR).
+// Live pg_enum (2026-10-06): free | pro | team | founder | duo  (SINGULAR).
 // The app historically used "founders" (plural); Stripe/sync Edge Functions
 // wrote "founders" until task 6. "founders" is a compatibility INPUT only.
 // ---------------------------------------------------------------------------
 
-export const PLAN_TIERS = ["free", "pro", "team", "founder"] as const;
+export const PLAN_TIERS = ["free", "pro", "team", "founder", "duo"] as const;
 export type PlanTier = (typeof PLAN_TIERS)[number];
 export const planTierSchema = z.enum(PLAN_TIERS);
 

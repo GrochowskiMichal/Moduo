@@ -25,7 +25,7 @@ type PlanTierGenerated = Database["public"]["Enums"]["plan_tier"];
 
 /**
  * Assert that the generated `plan_tier` union is exactly
- * `"free" | "pro" | "team" | "founder"`.
+ * `"free" | "pro" | "team" | "founder" | "duo"`.
  *
  * `[T] extends [U]` (wrapped in tuples) prevents distributive conditional
  * types, giving a true bidirectional equality check.
@@ -34,7 +34,7 @@ type AssertEqual<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : fa
 
 const _planTierCheck: AssertEqual<
   PlanTierGenerated,
-  "free" | "pro" | "team" | "founder"
+  "free" | "pro" | "team" | "founder" | "duo"
 > = true;
 
 /**

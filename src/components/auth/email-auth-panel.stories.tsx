@@ -24,9 +24,3 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Primary: Story = {};
-
-export const WithStripePriceId: Story = {
-  args: {
-    priceId: "price_1ExampleStripePrice",
-  },
-};
