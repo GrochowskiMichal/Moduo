@@ -1,6 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarDays, Clock, CornerDownRight, Inbox, ListChecks, Repeat } from "lucide-react";
+import { toast } from "sonner";
 import { TagChipList } from "../../../components/tag-chip";
 import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -18,7 +19,7 @@ import {
 } from "../../../components/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
-import { useAssignees } from "../assignees";
+import { previewAssign, useAssignees } from "../assignees";
 import { formatDue, formatScheduled, LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type EnergyLevel, isDrifted, type PriorityLevel, type Task } from "../model";
@@ -148,12 +149,18 @@ export function TaskCard({
               <ContextMenuRadioGroup
                 value={task.ownerId}
                 onValueChange={(v) => {
-                  if (v !== task.ownerId) api.patchTask(task.id, { ownerId: v });
+                  if (v === task.ownerId) return;
+                  const person = assignees.find((a) => a.userId === v);
+                  if (!person?.canTakeTasks) return;
+                  void previewAssign(task.bucketId, v).then((msg) => {
+                    if (msg) toast.message(msg);
+                  });
+                  api.patchTask(task.id, { ownerId: v });
                 }}
               >
                 {assignees.map((a) => (
-                  <ContextMenuRadioItem key={a.userId} value={a.userId}>
-                    {a.name}
+                  <ContextMenuRadioItem key={a.userId} value={a.userId} disabled={!a.canTakeTasks}>
+                    {a.canTakeTasks ? a.name : `${a.name} (view only)`}
                   </ContextMenuRadioItem>
                 ))}
               </ContextMenuRadioGroup>

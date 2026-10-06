@@ -30,6 +30,7 @@
  */
 
 import type { ConnectorModule, ToolContext } from "../registry.ts";
+import { visibleIds } from "../share.ts";
 
 type Row = Record<string, any>;
 
@@ -149,7 +150,8 @@ export const notesConnectorModule: ConnectorModule = {
             .order("position")
             .limit(clampLimit(args, 200, 1000)),
         );
-        return data.map(shapeNote);
+        const visible = await visibleIds(ctx, "note");
+        return data.filter((n) => visible.has(n.id)).map(shapeNote);
       },
     },
     {
@@ -167,7 +169,7 @@ export const notesConnectorModule: ConnectorModule = {
           str(args, "note_id"),
           "id, title, parent_id, icon, is_archived, published_at, publish_token, body_md",
         );
-        if (!n) return null;
+        if (!n || !(await visibleIds(ctx, "note")).has(n.id)) return null;
         return {
           ...shapeNote(n),
           markdown: n.body_md ?? "",
@@ -199,7 +201,8 @@ export const notesConnectorModule: ConnectorModule = {
             .textSearch("search_tsv", q, { type: "websearch", config: "simple" })
             .limit(clampLimit(args, 20, 50)),
         );
-        return data.map((n) => ({
+        const visible = await visibleIds(ctx, "note");
+        return data.filter((n) => visible.has(n.id)).map((n) => ({
           id: n.id,
           title: (n.title ?? "").trim() || "Untitled",
           archived: Boolean(n.is_archived),

@@ -47,6 +47,8 @@ describe("noteRowToModel", () => {
       createdAt: "2026-06-01T08:00:00.000Z",
       updatedAt: "2026-07-02T09:00:00.000Z",
       deletedAt: null,
+      shareMode: "custom",
+      workspaceShared: false,
     });
   });
 

@@ -49,11 +49,13 @@ export function CreateChannelDialog({
     topic: string;
     isPrivate: boolean;
     memberIds: string[];
+    managersOnly: boolean;
   }) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [topic, setTopic] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
+  const [managersOnly, setManagersOnly] = useState(false);
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +65,7 @@ export function CreateChannelDialog({
     setName("");
     setTopic("");
     setIsPrivate(false);
+    setManagersOnly(false);
     setMemberIds([]);
     setError(null);
   }, [open]);
@@ -76,7 +79,7 @@ export function CreateChannelDialog({
     setBusy(true);
     setError(null);
     try {
-      await onCreate({ name: normalized, topic: topic.trim(), isPrivate, memberIds });
+      await onCreate({ name: normalized, topic: topic.trim(), isPrivate, memberIds, managersOnly });
       onOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't create the channel.");
@@ -156,6 +159,19 @@ export function CreateChannelDialog({
               </p>
             </div>
             <Switch id="chat-channel-private" checked={isPrivate} onCheckedChange={setIsPrivate} />
+          </div>
+          <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+            <div className="flex flex-col gap-0.5">
+              <Label htmlFor="chat-channel-announce">Only managers can post</Label>
+              <p className="text-xs text-muted-foreground">
+                An announcement channel. You can still add managers later.
+              </p>
+            </div>
+            <Switch
+              id="chat-channel-announce"
+              checked={managersOnly}
+              onCheckedChange={setManagersOnly}
+            />
           </div>
           {others.length > 0 ? (
             <div className="flex flex-col gap-1.5">

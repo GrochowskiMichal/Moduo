@@ -59,82 +59,114 @@ export function useNoteRealtime({ engine, noteId, enabled, selfUserId, selfName 
       return;
     }
 
-    const session = engine.getOrCreateSession(noteId);
-    const doc = session.doc;
-    const persistence = session.persistence;
-    const channel = supabaseClient.channel(noteChannelName(noteId), {
-      config: { broadcast: { self: false }, presence: { key: selfUserId } },
-    });
+    let cancelled = false;
+    let teardown: (() => void) | null = null;
 
-    // ── outbound: coalesce local edits, one merged broadcast per tick ──────
-    // `send()` on a channel that isn't JOINED does NOT drop — realtime-js
-    // silently REST-falls-back (with a console.warn). So gate the outbound
-    // path on a real subscribed state; while joining or after teardown we drop
-    // the burst rather than REST-spam or accumulate unbounded — durability
-    // rides the outbox + the peer's next pull (realtime is latency, not truth).
-    let buffer: Uint8Array[] = [];
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let pushable = false;
-    const flush = () => {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
+    void (async () => {
+      // A note created moments ago may not be saved yet, so "no access" can be
+      // a race, not a refusal: re-ask a few times before giving up.
+      let permitted = false;
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
+        const allowed = await supabaseClient.rpc("share_can", {
+          p_type: "note",
+          p_id: noteId,
+          p_min: "view",
+        });
+        if (allowed.error?.code === "PGRST202") {
+          // Missing function = the migration isn't applied yet. Keep today's channel.
+          permitted = true;
+          break;
+        }
+        if (allowed.data === true) {
+          permitted = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
       }
-      if (!pushable) {
+      if (cancelled || !permitted) return;
+
+      const session = engine.getOrCreateSession(noteId);
+      const doc = session.doc;
+      const persistence = session.persistence;
+      const channel = supabaseClient.channel(noteChannelName(noteId), {
+        config: { broadcast: { self: false }, presence: { key: selfUserId } },
+      });
+
+      // ── outbound: coalesce local edits, one merged broadcast per tick ──────
+      // `send()` on a channel that isn't JOINED does NOT drop — realtime-js
+      // silently REST-falls-back (with a console.warn). So gate the outbound
+      // path on a real subscribed state; while joining or after teardown we drop
+      // the burst rather than REST-spam or accumulate unbounded — durability
+      // rides the outbox + the peer's next pull (realtime is latency, not truth).
+      let buffer: Uint8Array[] = [];
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let pushable = false;
+      const flush = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        if (!pushable) {
+          buffer = [];
+          return;
+        }
+        const merged = coalesceUpdates(buffer);
         buffer = [];
-        return;
-      }
-      const merged = coalesceUpdates(buffer);
-      buffer = [];
-      if (!merged || merged.byteLength > MAX_BROADCAST_BYTES) return;
-      void channel.send({
-        type: "broadcast",
-        event: NOTE_UPDATE_EVENT,
-        payload: { b64: encodeUint8ToBase64(merged) },
-      });
-    };
-    const onLocalUpdate = (update: Uint8Array, origin: unknown) => {
-      // Mirror the engine's own guard (engine-v2 getOrCreateSession observer):
-      // ignore remote applications and the IndexedDB replay — relay only
-      // genuine local edits.
-      if (origin === "remote" || origin === persistence) return;
-      buffer.push(update);
-      if (!timer) timer = setTimeout(flush, BROADCAST_COALESCE_MS);
-    };
-    doc.on("update", onLocalUpdate);
+        if (!merged || merged.byteLength > MAX_BROADCAST_BYTES) return;
+        void channel.send({
+          type: "broadcast",
+          event: NOTE_UPDATE_EVENT,
+          payload: { b64: encodeUint8ToBase64(merged) },
+        });
+      };
+      const onLocalUpdate = (update: Uint8Array, origin: unknown) => {
+        // Mirror the engine's own guard (engine-v2 getOrCreateSession observer):
+        // ignore remote applications and the IndexedDB replay — relay only
+        // genuine local edits.
+        if (origin === "remote" || origin === persistence) return;
+        buffer.push(update);
+        if (!timer) timer = setTimeout(flush, BROADCAST_COALESCE_MS);
+      };
+      doc.on("update", onLocalUpdate);
 
-    const syncViewers = () =>
-      setViewers(presenceViewers(channel.presenceState() as PresenceState, selfUserId));
+      const syncViewers = () =>
+        setViewers(presenceViewers(channel.presenceState() as PresenceState, selfUserId));
 
-    channel
-      .on("broadcast", { event: NOTE_UPDATE_EVENT }, (msg) => {
-        const b64 = (msg.payload as { b64?: unknown } | undefined)?.b64;
-        if (typeof b64 !== "string") return;
-        try {
-          Y.applyUpdate(doc, decodeBase64ToUint8(b64), "remote");
-        } catch {
-          // A malformed peer update can't wedge us; the next pull reconciles.
-        }
-      })
-      .on("presence", { event: "sync" }, syncViewers)
-      .on("presence", { event: "join" }, syncViewers)
-      .on("presence", { event: "leave" }, syncViewers)
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          pushable = true;
-          void channel.track({ userId: selfUserId, name: selfName, at: Date.now() });
-        } else {
-          // CLOSED / CHANNEL_ERROR / TIMED_OUT — stop pushing, degrade to pull.
-          pushable = false;
-        }
-      });
+      channel
+        .on("broadcast", { event: NOTE_UPDATE_EVENT }, (msg) => {
+          const b64 = (msg.payload as { b64?: unknown } | undefined)?.b64;
+          if (typeof b64 !== "string") return;
+          try {
+            Y.applyUpdate(doc, decodeBase64ToUint8(b64), "remote");
+          } catch {
+            // A malformed peer update can't wedge us; the next pull reconciles.
+          }
+        })
+        .on("presence", { event: "sync" }, syncViewers)
+        .on("presence", { event: "join" }, syncViewers)
+        .on("presence", { event: "leave" }, syncViewers)
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            pushable = true;
+            void channel.track({ userId: selfUserId, name: selfName, at: Date.now() });
+          } else {
+            // CLOSED / CHANNEL_ERROR / TIMED_OUT — stop pushing, degrade to pull.
+            pushable = false;
+          }
+        });
+
+      teardown = () => {
+        pushable = false;
+        doc.off("update", onLocalUpdate);
+        if (timer) clearTimeout(timer);
+        void channel.untrack();
+        void supabaseClient.removeChannel(channel);
+      };
+    })();
 
     return () => {
-      pushable = false;
-      doc.off("update", onLocalUpdate);
-      if (timer) clearTimeout(timer);
-      void channel.untrack();
-      void supabaseClient.removeChannel(channel);
+      cancelled = true;
+      teardown?.();
       setViewers([]);
     };
   }, [engine, noteId, enabled, selfUserId, selfName]);

@@ -239,6 +239,10 @@ export type ModuoRuntime = {
       modulePermissions?: { notes?: string; tasks?: string },
       /** PERM-1: the workspace role to join with (wins over `role`). */
       roleId?: string | null,
+      sharePayload?: {
+        existing?: string;
+        resources?: { type: string; id: string; level: string }[];
+      },
     ): Promise<any>;
     joinInvite(token: string): Promise<any>;
     listMembers(workspaceId: string): Promise<any[]>;

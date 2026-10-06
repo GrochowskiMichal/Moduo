@@ -18,6 +18,7 @@
 
 import { RELATION_KINDS } from "../../_shared/contracts/vocabularies.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
+import { visibleIds } from "../share.ts";
 
 type Row = Record<string, any>;
 
@@ -86,6 +87,7 @@ const entityRefProps = {
  * the service role (no RLS), so drop registry rows the key's creator doesn't own.
  */
 const PRIVATE_TABLES: Record<string, string> = { event: "calendar_events", email_thread: "email_refs" };
+const SHARED_TYPES = ["note", "task", "bucket", "contact", "company"] as const;
 
 async function visibleToKey(ctx: ToolContext, data: Row[]): Promise<Row[]> {
   const hidden = new Set<string>();
@@ -97,6 +99,13 @@ async function visibleToKey(ctx: ToolContext, data: Row[]): Promise<Row[]> {
     );
     const ownedIds = new Set(owned.map((r) => r.id as string));
     for (const id of ids) if (!ownedIds.has(id)) hidden.add(`${type}:${id}`);
+  }
+  // Shareable things (PERM-3…6): only what's shared with the key's creator.
+  for (const type of SHARED_TYPES) {
+    const ids = data.filter((e) => e.entity_type === type).map((e) => e.entity_id as string);
+    if (!ids.length) continue;
+    const visible = await visibleIds(ctx, type);
+    for (const id of ids) if (!visible.has(id)) hidden.add(`${type}:${id}`);
   }
   return data.filter((e) => !hidden.has(`${e.entity_type}:${e.entity_id}`));
 }

@@ -26,6 +26,10 @@ export type Note = {
   updatedAt: string;
   /** Set = the note is in the trash (30-day window). */
   deletedAt: string | null;
+  /** `inherit` follows the parent; `custom` uses this note's own grants. */
+  shareMode: "inherit" | "custom";
+  /** A workspace grant exists on this note (children may still inherit one). */
+  workspaceShared: boolean;
 };
 
 export type NotesV2Bundle = {
@@ -84,6 +88,8 @@ export function noteRowToModel(r: any): Note {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
+    shareMode: r.share_mode === "inherit" ? "inherit" : "custom",
+    workspaceShared: r.workspace_shared === true,
   };
 }
 
