@@ -461,6 +461,21 @@
       .wl[data-state="error"] .wl-msg {
         color: var(--destructive);
       }
+      .wl-legal {
+        margin-top: -0.5rem;
+        font-size: var(--text-xs);
+        color: var(--subtle-foreground);
+      }
+      .wl-legal a,
+      .cc-p a {
+        color: var(--muted-foreground);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .wl-legal a:hover,
+      .cc-p a:hover {
+        color: var(--foreground);
+      }
       .wl-hp {
         position: absolute;
         left: -10000px;
@@ -9052,6 +9067,7 @@
                       <button class="wl-again" type="button" data-wl-reset>Use a different email</button>
                     </div>
                   </div>
+                  <p class="wl-legal">See how we handle your email in our <a href="/privacy">privacy policy</a>.</p>
                 </form>
               </div>
             </div>
@@ -9852,6 +9868,7 @@
                 <button class="wl-again" type="button" data-wl-reset>Use a different email</button>
               </div>
             </div>
+            <p class="wl-legal">See how we handle your email in our <a href="/privacy">privacy policy</a>.</p>
           </form>
         </div>
       </section>
@@ -9899,6 +9916,7 @@
                 <button class="wl-again" type="button" data-wl-reset>Use a different email</button>
               </div>
             </div>
+            <p class="wl-legal">See how we handle your email in our <a href="/privacy">privacy policy</a>.</p>
           </form>
     </dialog>
 
@@ -10018,8 +10036,8 @@
           <p class="ft-copyr">© 2026 Moduo. All rights reserved.</p>
           <p class="ft-status">Private beta. Invites go out in waves.</p>
           <nav class="ft-legal" aria-label="Legal">
-            <span class="ft-a is-soon" data-href="/privacy">Privacy</span>
-            <span class="ft-a is-soon" data-href="/terms">Terms</span>
+            <a class="ft-a" href="/privacy">Privacy</a>
+            <a class="ft-a" href="/terms">Terms</a>
             <button type="button" class="ft-a" data-cc-open>Cookie settings</button>
             <a class="ft-a ft-top" href="#top">Back to top <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow" /></svg></a>
           </nav>
@@ -14176,7 +14194,7 @@
     </script>
     <aside class="cc" id="cc" role="region" aria-label="Cookie consent" hidden>
       <p class="cc-t">Can we count your visit?</p>
-      <p class="cc-p">We use a cookie and anonymous session recordings to see how this page is used. Nothing goes to ad networks, and what you type is never recorded.</p>
+      <p class="cc-p">We use a cookie and anonymous session recordings to see how this page is used. Nothing goes to ad networks, and what you type is never recorded. More in our <a href="/privacy#cookies">privacy policy</a>.</p>
       <div class="cc-a">
         <button type="button" class="btn btn-outline btn-sm" data-cc="denied">Decline</button>
         <button type="button" class="btn btn-primary btn-sm" data-cc="granted">Accept</button>
@@ -14241,6 +14259,11 @@
         // Browsers sending Do Not Track are never tracked, so there is nothing to ask.
         var dnt = navigator.doNotTrack === "1" || window.doNotTrack === "1";
         if (!read() && !dnt) setTimeout(show, 600);
+        // The privacy page links here (/#cookie-settings) to change the choice.
+        if (location.hash === "#cookie-settings") {
+          show();
+          history.replaceState(null, "", location.pathname + location.search);
+        }
       })();
     </script>
     <script>
