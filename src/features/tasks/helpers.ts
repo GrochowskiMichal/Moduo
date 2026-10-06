@@ -176,6 +176,8 @@ export type NewTaskFields = {
   position: string;
   /** Parent task id — makes the new task a subtask (one level, spec §11). */
   parentId?: string | null;
+  /** Assignee (the task's `ownerId`). Omit and the backend assigns the creator. */
+  ownerId?: string;
   description?: string;
   dueDate?: string | null;
   scheduledAt?: string | null;
@@ -195,7 +197,7 @@ export function makeTask(fields: NewTaskFields): Task {
   return {
     id: "",
     workspaceId: fields.workspaceId,
-    ownerId: "",
+    ownerId: fields.ownerId ?? "",
     bucketId: fields.bucketId,
     parentId: fields.parentId ?? null,
     title: fields.title,
