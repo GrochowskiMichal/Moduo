@@ -124,10 +124,12 @@ Check the page at three sizes: 1512 × 982 (laptop), 2560 × 1440 (4K at 150%) a
 - [ ] Columns:
   - Product
   - Modules, including Chat and Home
-  - Company: About us, Changelog, Press kit soon, Contact
+  - Company: About us, Manifesto (opens /manifesto), Changelog (soon), Press kit (soon), Contact
   - Resources: Questions, plus Help center, MCP docs, Import guide, Security and Status, all soon
-  - Follow along
+  - Follow along: X, LinkedIn, Product Hunt, Reddit, Instagram, TikTok, YouTube; GitHub and Discord soon
   - Say hello
+- [ ] Every link that doesn't exist yet carries a small "Soon" tag, visible without hovering, on phones too. Labels never break across lines.
+- [ ] The bottom row has Privacy (soon), Terms (soon) and "Cookie settings", which reopens the cookie banner.
 - [ ] No monospace in the footer.
 - [ ] No stray construction circle crosses the "d".
 - [ ] The wordmark is the real "moduo" (Pilat Extended outlines). Its guides are true to the letters:
