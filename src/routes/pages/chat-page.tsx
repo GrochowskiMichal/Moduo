@@ -10,15 +10,15 @@
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Hash, Loader2, Lock, MessagesSquare } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { Button } from "../../components/ui/button";
 import { EmptyState } from "../../components/ui/empty-state";
+import { useChatOnline, useChatTyping } from "../../features/chat/hooks/use-chat-live";
 import { useChatModule } from "../../features/chat/hooks/use-chat-module";
 import { decodeForComposer, toPlainText } from "../../features/chat/markup";
 import type { ChatChannel, ChatMember, ChatMessage, ChatPerson } from "../../features/chat/model";
-import type { ChatLink } from "../../features/chat/realtime";
 import type { ChatSearch } from "../../features/chat/search";
 import {
   buildSidebar,
@@ -47,25 +47,6 @@ import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
 type RightPanel = "details" | "search" | null;
-
-const EMPTY_SET: ReadonlySet<string> = new Set();
-const noopSubscribe = () => () => {};
-
-function useOnline(link: ChatLink | null): ReadonlySet<string> {
-  return useSyncExternalStore(
-    link?.subscribePresence ?? noopSubscribe,
-    link?.getOnline ?? (() => EMPTY_SET),
-    () => EMPTY_SET,
-  );
-}
-
-function useTyping(link: ChatLink | null) {
-  return useSyncExternalStore(
-    link?.subscribeTyping ?? noopSubscribe,
-    link?.getTyping ?? (() => []),
-    () => [],
-  );
-}
 
 function typingLine(names: string[]): string | null {
   if (names.length === 0) return null;
@@ -103,8 +84,8 @@ export function ChatPage() {
     activeChannelId,
     activeThreadId,
   });
-  const online = useOnline(link);
-  const typing = useTyping(link);
+  const online = useChatOnline(link);
+  const typing = useChatTyping(link);
   const selfId = userId ?? "";
 
   useEffect(() => {
