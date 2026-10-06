@@ -3,6 +3,7 @@ export const SETTINGS_SECTION_IDS = [
   "account",
   "billing",
   "workspace",
+  "access",
   "integrations",
   "apikeys",
   "preferences",
@@ -17,7 +18,7 @@ export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 // nav renders groups in this order, sections in each group's `ids` order.
 export const SETTINGS_GROUPS = [
   { label: "Personal", ids: ["account", "billing", "appearance", "preferences", "focus"] },
-  { label: "Workspace", ids: ["workspace", "integrations", "apikeys"] },
+  { label: "Workspace", ids: ["workspace", "access", "integrations", "apikeys"] },
   { label: "App", ids: ["advanced", "about"] },
 ] as const satisfies ReadonlyArray<{ label: string; ids: readonly SettingsSectionId[] }>;
 

@@ -10,6 +10,7 @@ import {
   TerminalSquare,
   Timer,
   User,
+  Users,
   X,
 } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
@@ -21,6 +22,7 @@ import { useShortcut } from "../../lib/shortcuts";
 import { cn } from "../../lib/utils";
 
 import { AboutSection } from "./sections/about-section";
+import { AccessSection } from "./sections/access-section";
 import { AccountSection } from "./sections/account-section";
 import { AdvancedSection } from "./sections/advanced-section";
 import { ApiKeysSection } from "./sections/api-keys-section";
@@ -52,6 +54,7 @@ const SECTIONS: SectionEntry[] = [
   { id: "account", label: "Account", icon: User, Component: AccountSection },
   { id: "billing", label: "Billing", icon: CreditCard, Component: BillingSection },
   { id: "workspace", label: "Workspace", icon: Building2, Component: WorkspaceSection },
+  { id: "access", label: "Members and access", icon: Users, Component: AccessSection },
   { id: "integrations", label: "Integrations", icon: Plug, Component: IntegrationsSection },
   { id: "apikeys", label: "API keys", icon: KeyRound, Component: ApiKeysSection },
   {

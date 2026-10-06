@@ -18,7 +18,7 @@ export const baseModulesNavItems: ModuleNavItem[] = [
   // after Email + Dashboard. The /mindmap route + its layout entry stay wired
   // (route-tree.tsx, routeToFeatureLayout) so it's still reachable directly.
   { label: "Email", iconName: "mail", href: "/email", module: "email" },
-  { label: "Contacts", iconName: "contact", href: "/contacts" },
+  { label: "Contacts", iconName: "contact", href: "/contacts", module: "contacts" },
   // Chat (specs/chat.md): always listed — Duo/Team/Founder workspaces get the
   // module, everyone else gets the locked explainer + upgrade path.
   { label: "Chat", iconName: "message-square", href: "/chat", module: "chat" },

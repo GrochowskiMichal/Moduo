@@ -28,6 +28,18 @@ One permission system for every module, applied in **collaborative workspaces** 
 
 ---
 
+## 1a. What shipped as PERM-1/2 (2026-10-06, designer-approved model)
+
+The designer replaced the first draft's "role ceiling + per-thing grants" settings with a **role-based + per-person** model (mockup approved 2026-10-06). It is the layer that decides **what kinds of things** someone can do; §1's per-thing sharing (which notes/buckets/calendars) still comes with PERM-3…6.
+
+- **Roles** — per workspace. Built-in **Admin**, **Member**, **Viewer** (seeded for every workspace, names fixed, can't be deleted) plus **custom roles** (max 20). A role is a set of permission keys: `<module>.<view|create|edit|delete>` for Notes, Tasks and buckets, Calendars, Contacts, Chat, plus workspace powers `ws.invite`, `ws.manage_members`, `ws.manage_roles`, `ws.publish`, `ws.api_keys`. Create/edit/delete need View on the same module.
+- **Read-only roles** (Viewer, and custom ones built on it) are a ceiling: only View survives, whatever an exception says.
+- **Personal exceptions** — allow or block single keys for one person on top of their role; personal beats role. One click flips a cell, a second click resets it.
+- **Owner** — always everything; never managed through this page (transfer ownership instead).
+- **Guardrails** — nobody grants (by role, exception or invite) a permission they don't hold; only the owner gives or manages member/role management; nobody changes their own access or the role they hold; built-in roles keep their name and read-only flag; deleting a custom role moves its people and pending invites to a role you pick; concurrent role edits are refused with "Someone else just changed this role".
+- **Enforcement** — Postgres: module read rules require View (also for spine titles, activity, comments); one write check per module table covers ops, direct writes and API keys; API keys stay capped by their creator. The UI mirrors the rules only to explain and disable.
+- **Defaults** — Admin = everything; Member = full module access + publish (today's behavior); Viewer = view everything. Existing per-module settings (`permissions_notes/tasks`) became personal exceptions.
+
 ## 1. The model (one model, every module)
 
 Three layers. Access is checked as **role ceiling ∩ grant on the thing**.
@@ -221,8 +233,9 @@ Per channel: **channel manager(s)** (the creator by default) + an optional **"On
 | Block | What | Why this order |
 | --- | --- | --- |
 | **PERM-0** ✅ 2026-10-06 | Privacy fixes: calendar events/accounts, `email_refs` (+ their `entities` labels, activity, link suggestions, booking busy time) → owner-only; API keys act as creator. *Contacts moved to PERM-6: there's no email auto-capture yet, but booking-public creates a contact for each booker, visible workspace-wide.* | Leaks exist today. Ship before Duo/Team marketing |
-| **PERM-1** | Core: grants table, `can_access`, role ceiling, workspace defaults, migration of existing workspaces | Foundation for everything else |
-| **PERM-2** | Settings → Members & permissions (defaults + capability grid) + invite "give access" + first-invite "existing content" step | The control surface |
+| **PERM-1** ✅ 2026-10-06 | Roles + personal exceptions enforced in Postgres (see §1a) | Foundation for everything else |
+| **PERM-2** ✅ 2026-10-06 | Settings → Members and access: roles editor, person editor with exceptions + plain-language explanations, invites by role | The control surface |
+| **PERM-2b** | Workspace defaults for new things + first-invite "existing content" step + invite "give access to…" (needs PERM-3…6's per-thing grants) | Deferred: nothing to grant on yet |
 | **PERM-3** | Notes share popover + private toggle + inheritance + locked "Private item" chips across the spine | Highest daily value |
 | **PERM-4** | Buckets sharing + assignee auto-grant | |
 | **PERM-5** | Calendars: custom calendars, sharing levels incl. free/busy, publish/ICS, calendar sets | |
