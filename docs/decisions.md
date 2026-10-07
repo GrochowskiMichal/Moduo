@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-07 · The repo is public, so Entire checkpoints are local-only and never pushed.
 - 2026-10-07 · Claude Code is the only harness, on Anthropic models, and AGENTS.md is the single instruction file.
 - 2026-08-17 · Agents land bigger chunks on `develop` (standing), Entire default is `develop`, domain values go through `@contracts`.
 - 2026-08-14 · DOC-1 (doc reconcile) — the doc set now declares an explicit authority hierarchy, and stale *status* claims are neutralized by banner, not by rewriting history.

@@ -84,3 +84,6 @@ main.mjs
 
 # backups of configs (they tend to hold secrets)
 *.backup
+
+# desktop keychain fallback files (local login sessions — never commit)
+src-tauri/.moduo_keychain_*
