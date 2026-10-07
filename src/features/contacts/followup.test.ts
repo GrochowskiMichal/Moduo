@@ -2,7 +2,7 @@
 // new "deal" object. (The two writes themselves are the page's job; here we prove
 // the shapes.)
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { EntityRef } from "../../lib/entity-links";
 import { buildFollowupTask, followupLinkArgs, followupTitle } from "./followup";
 

@@ -1,6 +1,6 @@
 // DB-7 AC7 (habits) — the pure habit logic: date math, toggling, streaks.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import {
   addDays,

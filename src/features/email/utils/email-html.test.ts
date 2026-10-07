@@ -1,6 +1,6 @@
 // DF-6 — remote-content blocking + auto-height injection in buildEmailSrcDoc.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import {
   buildEmailReaderDoc,

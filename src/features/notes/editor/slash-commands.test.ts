@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { filterSlashCommands, SLASH_COMMANDS } from "./slash-commands";
 
 describe("slash grammar (AC5 — the ratified final set)", () => {

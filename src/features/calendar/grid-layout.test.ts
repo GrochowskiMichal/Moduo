@@ -3,7 +3,7 @@
 // other files.
 process.env.TZ = "Europe/Warsaw";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import {
   chipSpanInDay,

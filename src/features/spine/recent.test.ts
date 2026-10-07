@@ -2,7 +2,7 @@
 // endpoints resolved from the registry, missing/empty labels fall back to the
 // type, and tombstoned endpoints are flagged (never dropped).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { EntityLink, EntityRecord } from "../../lib/entity-links";
 import { shapeRecentLinks } from "./recent";
 

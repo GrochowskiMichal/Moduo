@@ -1,6 +1,6 @@
 // EM-10/DF-6 — the email prefs sanitizer round-trips both domains.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { sanitizeEmailPrefs } from "./prefs";
 

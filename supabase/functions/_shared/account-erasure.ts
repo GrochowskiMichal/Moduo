@@ -21,9 +21,9 @@
  * account in place and a retry finishes the job. Stripe runs first: when it fails,
  * nothing in Moduo has been deleted yet.
  *
- * Plain TypeScript with injected clients (no Deno globals, no URL imports) so vitest
- * can run it: see account-erasure.test.ts. The real supabase-js and Stripe clients
- * satisfy the small interfaces below.
+ * Plain TypeScript with injected clients (no Deno globals, no URL imports) so the
+ * unit tests can run it: see account-erasure.test.ts. The real supabase-js and
+ * Stripe clients satisfy the small interfaces below.
  */
 
 // ── The slices of supabase-js and Stripe this module uses ────────────────────

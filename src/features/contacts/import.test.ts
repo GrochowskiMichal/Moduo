@@ -2,7 +2,7 @@
 // dedupe (email FIRST, then name+company, against existing rows AND within the
 // file), malformed-row skip, and payload shaping. Server round-trip is manual.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import {
   buildImportRows,
   guessColumnMapping,

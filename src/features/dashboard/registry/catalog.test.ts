@@ -2,7 +2,7 @@
 // every type, and the gallery filter hides permission-"none" + platform-
 // unavailable types (while keeping an existing instance renderable elsewhere).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import type { RuntimeCapabilities } from "@/lib/runtime.types";
 

@@ -9,7 +9,7 @@ import { AutoLinkNode, LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { $createParagraphNode, $getRoot, $insertNodes } from "lexical";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 function roundTrip(html: string): { html: string; text: string } {
   const editor = createHeadlessEditor({

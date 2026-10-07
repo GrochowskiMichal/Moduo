@@ -4,7 +4,7 @@
 // signal strength, merges multi-signal pairs, and suppresses any pair the user
 // has declined or already linked. There is no path here that writes a link.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { deriveLinkKey, type EntityRef } from "../../lib/entity-links";
 import {

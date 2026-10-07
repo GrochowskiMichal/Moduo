@@ -2,7 +2,7 @@
 // mutation args (specs/tasks-timeline.md AC5/AC6). The connector-dot half of
 // the spec's test row lands with TL-3.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import type { TaskRelation } from "./model";
 import { resolveBarDrag, resolveConnectorDrop, resolveTrayDrop } from "./timeline-drag";

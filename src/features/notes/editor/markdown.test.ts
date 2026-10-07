@@ -14,7 +14,7 @@ import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
 import { $createParagraphNode, $createTextNode, $getRoot } from "lexical";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { EntityRefNode } from "../../spine/editor/entity-ref-node";
 import {
   blocksToMarkdown,

@@ -1,7 +1,7 @@
 // DF-21e AC9 — the opt-in overdue section: with the pref ON, drifted tasks become
 // passive items; with it OFF, the section is empty; resolving a task drops it.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { type OverdueTaskInput, selectOverdueTasks } from "./overdue-inbox";
 

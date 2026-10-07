@@ -3,7 +3,7 @@
 // ones), exposes color + label for every status, and deliberately ships NO
 // stage machine (no transition table, no canTransition / next-stage API).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import * as statusModule from "./status";
 import {

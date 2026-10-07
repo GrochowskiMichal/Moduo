@@ -161,4 +161,18 @@ export default defineConfig({
       root: isWeb ? "dist/web" : "dist",
     },
   },
+  performance: {
+    // Reuse the previous compile on the next dev or production build.
+    // The target is part of the cache key so a web build cannot be reused
+    // as the desktop bundle.
+    buildCache: {
+      cacheDigest: [target],
+    },
+    // Fetch route chunks in the background so the next screen opens from
+    // cache. On desktop the files are already local; on web this is idle
+    // bandwidth after the first paint.
+    prefetch: {
+      type: "async-chunks",
+    },
+  },
 });

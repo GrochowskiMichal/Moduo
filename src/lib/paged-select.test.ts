@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, rs } from "@rstest/core";
 
 import {
   collectTruncations,
@@ -42,7 +42,7 @@ describe("readPaged", () => {
 
   it("stops at the cap and reports the exact total", async () => {
     const t = fakeTable(4321);
-    const countTotal = vi.fn(async () => 4321);
+    const countTotal = rs.fn(async () => 4321);
     const res = await readPaged({ scope: "tasks", cap: 100, page: t.page, countTotal });
     expect(res.rows).toHaveLength(100);
     expect(res.truncation).toEqual({ scope: "tasks", shown: 100, total: 4321 });
@@ -51,7 +51,7 @@ describe("readPaged", () => {
 
   it("never pays for the count when nothing was truncated", async () => {
     const t = fakeTable(10);
-    const countTotal = vi.fn(async () => 10);
+    const countTotal = rs.fn(async () => 10);
     const res = await readPaged({ scope: "tasks", cap: 100, page: t.page, countTotal });
     expect(res.truncation).toBeNull();
     expect(countTotal).not.toHaveBeenCalled();

@@ -11,7 +11,7 @@
  * grammar (they're editor-agnostic Lexical plugins).
  */
 
-import { registerCodeHighlighting } from "@lexical/code";
+import { registerCodeHighlighting } from "@lexical/code-prism";
 import { $createListItemNode, $createListNode, $isListItemNode } from "@lexical/list";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";

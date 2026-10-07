@@ -1,0 +1,495 @@
+name: Desktop Release (shared)
+
+# The one desktop build both channels call (desktop-release.yml = staging, desktop-release-prod.yml = production).
+# Builds a signed, notarised Mac universal .dmg + Windows NSIS installer and publishes them, with
+# a latest.json for the in-app updater, to a rolling release in GrochowskiMichal/moduo-releases.
+#
+# Mac notarization is one Apple submission (the .dmg; Apple notarises the .app inside it too).
+# build-mac waits for Apple for a while; if Apple is slower than that, notarize-mac keeps waiting on
+# the same submission on its own, and "Re-run failed jobs" there never rebuilds or resubmits.
+# Windows is best-effort: a broken Windows build still publishes the Mac release.
+#
+# Required secrets (GitHub → Settings → Secrets → Actions), passed with `secrets: inherit`:
+#   APPLE_CERTIFICATE             base64-encoded p12 Developer ID Application certificate
+#   APPLE_CERTIFICATE_PASSWORD    p12 password
+#   APPLE_SIGNING_IDENTITY        "Developer ID Application: <Name> (<TeamID>)"
+#   APPLE_TEAM_ID                 10-character Apple team id
+#   APPLE_ID                      Apple ID email used for notarization
+#   APPLE_ID_PASSWORD             App-specific password for that Apple ID
+#   (optional, preferred) APPLE_API_KEY_ID / APPLE_API_ISSUER / APPLE_API_KEY_P8 — an App Store Connect
+#                                 API key; used for notarization instead of the Apple ID when all three are set
+#   RELEASES_REPO_TOKEN           fine-grained PAT, contents:write on GrochowskiMichal/moduo-releases
+#   TAURI_SIGNING_PRIVATE_KEY     private key from `bunx tauri signer generate`
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  key password (empty string if none)
+#   MODUO_KEYCHAIN_SERVICE, MODUO_TOKEN_ENCRYPTION_SECRET, MODUO_GOOGLE_MEET_CLIENT_ID/SECRET,
+#   MODUO_CALENDAR_GOOGLE_CLIENT_ID/SECRET, PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+#   PUBLIC_STRIPE_PUBLISHABLE_KEY, PUBLIC_STRIPE_PRICE_{PRO,TEAM}_{MONTHLY,YEARLY}
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        description: "staging | production"
+        required: true
+        type: string
+      ref:
+        description: "Branch to build (empty = the commit that triggered the run)"
+        required: false
+        type: string
+        default: ""
+      release_tag:
+        required: true
+        type: string
+      release_name:
+        required: true
+        type: string
+      prerelease:
+        required: true
+        type: boolean
+      web_origin:
+        required: true
+        type: string
+      staging_portal:
+        description: "Sets PUBLIC_STAGING_PORTAL=true (the STAGING badge) in the web bundle"
+        required: false
+        type: boolean
+        default: false
+      desktop_channel:
+        description: "PUBLIC_DESKTOP_CHANNEL for the web bundle"
+        required: false
+        type: string
+        default: ""
+
+env:
+  MODUO_BUILD: ${{ github.sha }}
+  MODUO_VERSION: 1.0.${{ github.run_number }}
+  RELEASES_REPO: GrochowskiMichal/moduo-releases
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # macOS — universal binary (Apple Silicon + Intel), signed, submitted to Apple
+  # ─────────────────────────────────────────────────────────────────
+  build-mac:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    outputs:
+      notary_id: ${{ steps.submit.outputs.id }}
+      stapled: ${{ steps.wait.outputs.stapled }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      # CI scripts come from the workflow's own commit, so a build of an older branch
+      # (prod-app before a promote) still gets the current signing/notarization logic.
+      - name: Checkout CI scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci
+          sparse-checkout: scripts
+
+      # Seconds, before any compile: a bad Apple login used to surface only after the build.
+      - name: Check Apple notarization login
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: bash .ci/scripts/ci-macos-notarize.sh check
+
+      # Import the Developer ID cert into an ephemeral keychain and prove codesign can see it.
+      - name: Import Apple Developer ID certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # Never auto-lock mid-build (the default 5-minute lock breaks codesign with errSecInternalComponent).
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          # shellcheck disable=SC2046 # one keychain path per word
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s "$KEYCHAIN"
+          rm "$RUNNER_TEMP/cert.p12"
+          echo "BUILD_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -qF "$APPLE_SIGNING_IDENTITY"; then
+            security find-identity -v -p codesigning "$KEYCHAIN"
+            echo "::error::APPLE_SIGNING_IDENTITY is not a valid signing identity in APPLE_CERTIFICATE (expired cert, wrong p12, or name mismatch)."
+            exit 1
+          fi
+          # Sign a throwaway binary with a 90s cap. If codesign would wait on a keychain prompt nobody can
+          # click, this fails now instead of hanging the real signing step for hours.
+          cp /usr/bin/true "$RUNNER_TEMP/sign-probe"
+          if ! perl -e 'alarm 90; exec @ARGV' codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" --keychain "$KEYCHAIN" "$RUNNER_TEMP/sign-probe"; then
+            echo "::error::codesign could not use the certificate without a prompt (or timed out reaching Apple's timestamp server)."
+            exit 1
+          fi
+
+      - name: Read Rust toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' src-tauri/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      # Same channel as src-tauri/rust-toolchain.toml, so the targets land on the toolchain cargo uses.
+      - name: Setup Rust (+ both Apple targets)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+          components: rustfmt, clippy
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      # Saved even when a later step fails, so a signing/notarization failure doesn't force a cold compile next time.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: desktop-mac
+          cache-on-failure: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install frontend deps
+        run: bun install --frozen-lockfile
+
+      # Stamp a per-run version (the updater only offers builds newer than the installed one),
+      # turn on signed updater bundles, and point this channel's updater at the public releases repo.
+      - name: Write CI Tauri config
+        run: |
+          cat > "$RUNNER_TEMP/ci-tauri-config.json" <<EOF
+          {
+            "version": "${MODUO_VERSION}",
+            "bundle": { "createUpdaterArtifacts": true },
+            "plugins": { "updater": { "endpoints": ["https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
+          }
+          EOF
+
+      # No APPLE_ID / APPLE_PASSWORD here on purpose: Tauri would notarize the .app and block on Apple,
+      # and the .dmg submission below covers the .app too. No APPLE_CERTIFICATE either: Tauri would import
+      # a second copy into its own keychain, and codesign hung there for 1.5 h (run 37636171897).
+      - name: Build universal macOS .dmg + updater bundle (signed)
+        run: |
+          KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
+          echo "::add-mask::$KEY"
+          export TAURI_SIGNING_PRIVATE_KEY="$KEY"
+          bunx tauri build --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/ci-tauri-config.json"
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          MODUO_KEYCHAIN_SERVICE: ${{ secrets.MODUO_KEYCHAIN_SERVICE }}
+          MODUO_TOKEN_ENCRYPTION_SECRET: ${{ secrets.MODUO_TOKEN_ENCRYPTION_SECRET }}
+          MODUO_GOOGLE_MEET_CLIENT_ID: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_ID }}
+          MODUO_GOOGLE_MEET_CLIENT_SECRET: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_SECRET }}
+          MODUO_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_ID }}
+          MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+          PUBLIC_STRIPE_PRICE_PRO_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_MONTHLY }}
+          PUBLIC_STRIPE_PRICE_PRO_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_YEARLY }}
+          PUBLIC_STRIPE_PRICE_TEAM_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_MONTHLY }}
+          PUBLIC_STRIPE_PRICE_TEAM_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_YEARLY }}
+          PUBLIC_WEB_ORIGIN: ${{ inputs.web_origin }}
+          PUBLIC_STAGING_PORTAL: ${{ inputs.staging_portal && 'true' || '' }}
+          PUBLIC_DESKTOP_CHANNEL: ${{ inputs.desktop_channel }}
+
+      # Stable filenames so download URLs don't change between versions. The macOS updater
+      # installs the .app.tar.gz, not the .dmg.
+      - name: Verify signatures and stage artifacts
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          BUNDLE=src-tauri/target/universal-apple-darwin/release/bundle
+          APP=$(find "$BUNDLE/macos" -maxdepth 1 -name "*.app" | head -1)
+          DMG=$(find "$BUNDLE/dmg" -name "*.dmg" | head -1)
+          TGZ=$(find "$BUNDLE/macos" -name "*.app.tar.gz" | head -1)
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv "$APP" 2>&1 | grep -q "flags=.*runtime" || { echo "::error::The app is not signed with the hardened runtime; Apple will reject it."; exit 1; }
+          if ! codesign --verify "$DMG" 2>/dev/null; then
+            codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" --keychain "$BUILD_KEYCHAIN" "$DMG"
+          fi
+          mkdir -p "$RUNNER_TEMP/mac"
+          cp "$DMG" "$RUNNER_TEMP/mac/Moduo_universal.dmg"
+          cp "$TGZ" "$RUNNER_TEMP/mac/Moduo_universal.app.tar.gz"
+          cp "$TGZ.sig" "$RUNNER_TEMP/mac/Moduo_universal.app.tar.gz.sig"
+
+      - name: Submit the .dmg to Apple
+        id: submit
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          ID=$(bash .ci/scripts/ci-macos-notarize.sh submit "$RUNNER_TEMP/mac/Moduo_universal.dmg")
+          echo "$ID" > "$RUNNER_TEMP/mac/notary-id.txt"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          echo "Apple notarization submission: \`$ID\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # Most submissions finish in a few minutes. A slower one is handed to notarize-mac.
+      - name: Wait for Apple (up to 20 min) and staple
+        id: wait
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          NOTARY_WAIT_TIMEOUT: 20m
+        run: |
+          set +e
+          bash .ci/scripts/ci-macos-notarize.sh wait "${{ steps.submit.outputs.id }}" "$RUNNER_TEMP/mac/Moduo_universal.dmg"
+          code=$?
+          set -e
+          case $code in
+            0) echo "stapled=true" >> "$GITHUB_OUTPUT" ;;
+            3) echo "stapled=false" >> "$GITHUB_OUTPUT"
+               echo "Apple is still processing; notarize-mac keeps waiting on the same submission." >> "$GITHUB_STEP_SUMMARY" ;;
+            *) exit "$code" ;;
+          esac
+
+      - name: Upload Mac artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: mac-dmg
+          if-no-files-found: error
+          path: ${{ runner.temp }}/mac/*
+
+  # ─────────────────────────────────────────────────────────────────
+  # macOS — only when Apple was slower than build-mac's wait. Waits on the same
+  # submission; re-running this job never rebuilds or resubmits.
+  # ─────────────────────────────────────────────────────────────────
+  notarize-mac:
+    needs: build-mac
+    if: needs.build-mac.outputs.stapled == 'false'
+    runs-on: macos-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout CI scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: scripts
+
+      - name: Download Mac artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: mac-dmg
+          path: mac
+
+      - name: Wait for Apple (up to 160 min) and staple
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          NOTARY_WAIT_TIMEOUT: 160m
+        run: |
+          set +e
+          bash scripts/ci-macos-notarize.sh wait "$(cat mac/notary-id.txt)" mac/Moduo_universal.dmg
+          code=$?
+          set -e
+          if [ "$code" = 3 ]; then
+            echo "::error::Apple still hasn't finished. Use \"Re-run failed jobs\" — it waits on the same submission without rebuilding."
+          fi
+          exit "$code"
+
+      - name: Upload stapled Mac artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: mac-dmg
+          overwrite: true
+          if-no-files-found: error
+          path: mac/*
+
+  # ─────────────────────────────────────────────────────────────────
+  # Windows — NSIS installer (unsigned; SmartScreen "Run anyway" for founders)
+  # ─────────────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Checkout CI scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci
+          sparse-checkout: scripts
+
+      - name: Read Rust toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' src-tauri/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: desktop-windows
+          cache-on-failure: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install frontend deps
+        run: bun install --frozen-lockfile
+
+      - name: Write CI Tauri config
+        run: |
+          cat > ci-tauri-config.json <<EOF
+          {
+            "version": "${MODUO_VERSION}",
+            "bundle": { "createUpdaterArtifacts": true },
+            "plugins": { "updater": { "endpoints": ["https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
+          }
+          EOF
+
+      # $GITHUB_WORKSPACE keeps its backslashes when quoted; `${{ github.workspace }}` pasted into bash
+      # loses them (D:aModuoModuo/...).
+      - name: Build Windows NSIS installer
+        run: |
+          KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
+          echo "::add-mask::$KEY"
+          export TAURI_SIGNING_PRIVATE_KEY="$KEY"
+          bunx tauri build --bundles nsis --config "$GITHUB_WORKSPACE/ci-tauri-config.json"
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          MODUO_KEYCHAIN_SERVICE: ${{ secrets.MODUO_KEYCHAIN_SERVICE }}
+          MODUO_TOKEN_ENCRYPTION_SECRET: ${{ secrets.MODUO_TOKEN_ENCRYPTION_SECRET }}
+          MODUO_GOOGLE_MEET_CLIENT_ID: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_ID }}
+          MODUO_GOOGLE_MEET_CLIENT_SECRET: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_SECRET }}
+          MODUO_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_ID }}
+          MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+          PUBLIC_STRIPE_PRICE_PRO_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_MONTHLY }}
+          PUBLIC_STRIPE_PRICE_PRO_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_YEARLY }}
+          PUBLIC_STRIPE_PRICE_TEAM_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_MONTHLY }}
+          PUBLIC_STRIPE_PRICE_TEAM_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_YEARLY }}
+          PUBLIC_WEB_ORIGIN: ${{ inputs.web_origin }}
+          PUBLIC_STAGING_PORTAL: ${{ inputs.staging_portal && 'true' || '' }}
+          PUBLIC_DESKTOP_CHANNEL: ${{ inputs.desktop_channel }}
+
+      # Git Bash's /tmp is not the path the upload action sees on Windows.
+      - name: Stage artifacts
+        run: |
+          mkdir -p release-artifacts
+          NSIS=$(find src-tauri/target/release/bundle/nsis -name "*-setup.exe" | head -1)
+          cp "$NSIS" release-artifacts/Moduo_x64-setup.exe
+          cp "$NSIS.sig" release-artifacts/Moduo_x64-setup.exe.sig
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-nsis
+          if-no-files-found: error
+          path: release-artifacts/*
+
+  # ─────────────────────────────────────────────────────────────────
+  # Publish — update the rolling release. Needs a notarised Mac build; Windows is optional.
+  # ─────────────────────────────────────────────────────────────────
+  publish:
+    needs: [build-mac, notarize-mac, build-windows]
+    if: >-
+      always() &&
+      needs.build-mac.result == 'success' &&
+      (needs.notarize-mac.result == 'success' || needs.notarize-mac.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Download Mac artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: mac-dmg
+          path: release-artifacts
+
+      - name: Download Windows artifacts
+        if: needs.build-windows.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: windows-nsis
+          path: release-artifacts
+
+      # Manifest for the Tauri in-app updater. Without a fresh Windows build the Windows entry is left
+      # out (no update offered) rather than pointing at an older installer under a newer version.
+      - name: Generate latest.json
+        run: |
+          cd release-artifacts
+          BASE_URL="https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}"
+          MAC_SIG=$(cat Moduo_universal.app.tar.gz.sig)
+          jq -n \
+            --arg version "$MODUO_VERSION" \
+            --arg notes "${{ inputs.channel }} build from commit ${{ github.sha }}" \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg mac_sig "$MAC_SIG" \
+            --arg mac_url "$BASE_URL/Moduo_universal.app.tar.gz" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {
+               "darwin-aarch64": {signature: $mac_sig, url: $mac_url},
+               "darwin-x86_64":  {signature: $mac_sig, url: $mac_url}}}' > latest.json
+          if [ -f Moduo_x64-setup.exe.sig ]; then
+            jq --arg sig "$(cat Moduo_x64-setup.exe.sig)" --arg url "$BASE_URL/Moduo_x64-setup.exe" \
+              '.platforms["windows-x86_64"] = {signature: $sig, url: $url}' latest.json > latest.tmp && mv latest.tmp latest.json
+          else
+            echo "::warning::No Windows build this run — the release keeps its previous Windows installer and the updater offers Windows nothing new."
+          fi
+          cat latest.json
+
+      - name: Upsert rolling ${{ inputs.release_tag }} GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          repository: ${{ env.RELEASES_REPO }}
+          token: ${{ secrets.RELEASES_REPO_TOKEN }}
+          tag_name: ${{ inputs.release_tag }}
+          name: ${{ inputs.release_name }}
+          prerelease: ${{ inputs.prerelease }}
+          body: |
+            Rolling ${{ inputs.channel }} release.
+
+            **Commit:** ${{ github.sha }}
+            **Version:** ${{ env.MODUO_VERSION }}
+            **Run:** ${{ github.run_id }}
+
+            Download the desktop app or let the in-app updater install it automatically.
+          files: |
+            release-artifacts/Moduo_universal.dmg
+            release-artifacts/Moduo_universal.app.tar.gz
+            release-artifacts/Moduo_x64-setup.exe
+            release-artifacts/latest.json

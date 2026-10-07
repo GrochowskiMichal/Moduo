@@ -5,7 +5,7 @@
 // waits on it). Everything else about the hook is covered by its page tests.
 
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, rs } from "@rstest/core";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { allTimeCalendarWindow, defaultCalendarWindow } from "../window";
@@ -16,7 +16,7 @@ type Call = { workspaceId: string; fromIso: string; toIso: string };
 function fakeRuntime(calls: Call[]): ModuoRuntime {
   return {
     calendar: {
-      listModule: vi.fn(
+      listModule: rs.fn(
         async (workspaceId: string, window?: { fromIso: string; toIso: string }) => {
           calls.push({ workspaceId, fromIso: window!.fromIso, toIso: window!.toIso });
           return { events: [], accounts: [], degraded: false, truncated: [] };
