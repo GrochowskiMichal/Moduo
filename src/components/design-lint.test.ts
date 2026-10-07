@@ -2,7 +2,7 @@
 // `text-red-400`, which bypasses the token layer just as hard (and already
 // slipped through). A regex that silently stops matching reads exactly like a
 // clean codebase, so the patterns get their own test.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { PATTERNS, scanFile } from "../../scripts/check-arbitrary-tw";
 

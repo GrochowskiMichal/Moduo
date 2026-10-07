@@ -1,7 +1,7 @@
 // Proves the curated first-run page is a real, legal layout (AC6) — a fresh user
 // must never be dropped onto a broken or empty grid.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { createDefaultLayout } from "./default-layout";
 import { isValidPlacement, sanitizeLayout, spanOf } from "./grid-engine";

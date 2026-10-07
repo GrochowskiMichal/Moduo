@@ -2,7 +2,7 @@
 // read + write surface whose RPC names match the real ops, conforming to
 // ModuleManifest, without dropping the Tasks manifest.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { ModuleManifest } from "./module-manifest";
 import { moduleManifests } from "./module-registry";
 

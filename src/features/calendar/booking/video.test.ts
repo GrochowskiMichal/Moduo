@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@rstest/core";
 import { pickVideo, videoOptions, videoSetting } from "./video";
 
 describe("booking video platform", () => {

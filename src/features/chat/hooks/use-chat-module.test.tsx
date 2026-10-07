@@ -1,5 +1,5 @@
 import { renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, rs } from "@rstest/core";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import type { ChatChannel, ChatMember, ChatRuntime } from "../model";
 
@@ -11,7 +11,7 @@ const fakeLink = {
   getTyping: () => [],
   sendTyping: () => {},
 };
-vi.mock("../realtime", () => ({
+rs.mock("../realtime", () => ({
   acquireChatLink: () => ({ link: fakeLink, release: () => {} }),
   dispatchChatReadChanged: () => {},
 }));
@@ -46,19 +46,19 @@ const member: ChatMember = {
 
 function fakeRuntime(enabled: boolean) {
   const chat: Partial<ChatRuntime> = {
-    isEnabled: vi.fn(async () => enabled),
-    bootstrap: vi.fn(async () => {}),
-    listChannels: vi.fn(async () => [general]),
-    listMyMemberships: vi.fn(async () => [member]),
-    unreadCounts: vi.fn(async () => []),
-    listMessages: vi.fn(async () => []),
-    markRead: vi.fn(async () => {}),
-    join: vi.fn(async () => member),
+    isEnabled: rs.fn(async () => enabled),
+    bootstrap: rs.fn(async () => {}),
+    listChannels: rs.fn(async () => [general]),
+    listMyMemberships: rs.fn(async () => [member]),
+    unreadCounts: rs.fn(async () => []),
+    listMessages: rs.fn(async () => []),
+    markRead: rs.fn(async () => {}),
+    join: rs.fn(async () => member),
   };
   return {
     chat,
     workspace: {
-      listMembers: vi.fn(async () => [{ user_id: ME, profiles: { display_name: "Mike" } }]),
+      listMembers: rs.fn(async () => [{ user_id: ME, profiles: { display_name: "Mike" } }]),
     },
   } as unknown as ModuoRuntime;
 }

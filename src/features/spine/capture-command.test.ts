@@ -3,7 +3,7 @@
 // slash stays a Task) and that createCapturedEntity calls each module's own
 // create op with a date-stripped title / correct event times.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, rs } from "@rstest/core";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import {
@@ -74,12 +74,12 @@ describe("parseCaptureCommand", () => {
 const REF = new Date("2026-07-11T09:00:00"); // Saturday, local
 
 function mockRuntime() {
-  const seedInbox = vi.fn().mockResolvedValue({ id: "inbox-1" });
-  const list = vi.fn().mockResolvedValue({ tasks: [] });
-  const upsertTask = vi.fn().mockImplementation(async (t: unknown) => t);
-  const noteCreate = vi.fn().mockResolvedValue({ id: "n1", title: "Design review" });
-  const createEvent = vi.fn().mockResolvedValue({ id: "e1" });
-  const createContact = vi.fn().mockResolvedValue({ id: "c1", name: "Ada Lovelace" });
+  const seedInbox = rs.fn().mockResolvedValue({ id: "inbox-1" });
+  const list = rs.fn().mockResolvedValue({ tasks: [] });
+  const upsertTask = rs.fn().mockImplementation(async (t: unknown) => t);
+  const noteCreate = rs.fn().mockResolvedValue({ id: "n1", title: "Design review" });
+  const createEvent = rs.fn().mockResolvedValue({ id: "e1" });
+  const createContact = rs.fn().mockResolvedValue({ id: "c1", name: "Ada Lovelace" });
   const runtime = {
     tasks: { seedInbox, list, upsertTask },
     notesV2: { create: noteCreate },

@@ -3,18 +3,18 @@
 // `workspace_id`), NOT `mapWorkspace(inviteRow)` — the invite shape would yield a
 // garbage id/name and select a non-existent workspace.
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 
-const runtime = vi.hoisted(() => ({
+const runtime = rs.hoisted(() => ({
   workspace: {
     // `list` always returns both workspaces so the just-joined one resolves.
-    list: vi.fn(async () => [
+    list: rs.fn(async () => [
       { id: "ws-1", name: "Alpha", role: "owner" },
       { id: "ws-2", name: "Beta", role: "editor" },
     ]),
     // `joinInvite` returns the accepted *invite* row (per runtime.web.ts) — its
     // `workspace_id` points at the joined workspace; its `id` is the invite id.
-    joinInvite: vi.fn(async () => ({
+    joinInvite: rs.fn(async () => ({
       id: "invite-1",
       workspace_id: "ws-2",
       role: "editor",
@@ -22,17 +22,17 @@ const runtime = vi.hoisted(() => ({
       status: "accepted",
       token: "TOK",
     })),
-    listMembers: vi.fn(async () => []),
-    listInvites: vi.fn(async () => []),
-    listRoles: vi.fn(async () => []),
-    listNotifications: vi.fn(async () => []),
+    listMembers: rs.fn(async () => []),
+    listInvites: rs.fn(async () => []),
+    listRoles: rs.fn(async () => []),
+    listNotifications: rs.fn(async () => []),
   },
   spine: {
-    listNotifications: vi.fn(async () => []),
+    listNotifications: rs.fn(async () => []),
   },
 }));
 
-vi.mock("./auth-provider", () => ({
+rs.mock("./auth-provider", () => ({
   useAuth: () => ({ runtime, userId: "user-1" }),
 }));
 
@@ -41,7 +41,7 @@ import { useWorkspace, WorkspaceProvider } from "./workspace-provider";
 describe("WorkspaceProvider.joinWorkspace", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    vi.clearAllMocks();
+    rs.clearAllMocks();
   });
 
   it("returns the joined workspace summary and selects it (not the invite shape)", async () => {

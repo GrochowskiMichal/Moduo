@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { findQuoteOffset, formatQuoteComment, parseQuoteComment } from "./quote";
 
 describe("quote-comment body round-trip (AC9)", () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { makeTask, todayStr } from "./helpers";
 import type { RecurrenceRule, Task, TaskStatus } from "./model";

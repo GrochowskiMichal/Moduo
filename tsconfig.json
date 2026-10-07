@@ -20,7 +20,7 @@
     "src",
     "rsbuild.config.ts",
     "playwright.config.ts",
-    "vitest.config.ts",
+    "rstest.config.ts",
     "supabase/functions/_shared/contracts",
     "supabase/functions/_shared/account-erasure.ts",
     "supabase/functions/_shared/account-erasure.test.ts"

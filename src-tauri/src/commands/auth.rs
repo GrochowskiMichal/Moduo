@@ -1,8 +1,8 @@
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHasher, PasswordVerifier},
     Argon2,
 };
-use bip39::{Language, Mnemonic};
+use bip39::{Language, Mnemonic, WordCount};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -100,17 +100,15 @@ fn now_iso() -> String {
 }
 
 fn hash_secret(secret: &str) -> Result<String, String> {
-    let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
-        .hash_password(secret.as_bytes(), &salt)
+        .hash_password(secret.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|e| e.to_string())
 }
 
 fn verify_secret(secret: &str, hash: &str) -> Result<bool, String> {
-    let parsed = PasswordHash::new(hash).map_err(|e| e.to_string())?;
     Ok(Argon2::default()
-        .verify_password(secret.as_bytes(), &parsed)
+        .verify_password(secret.as_bytes(), hash)
         .is_ok())
 }
 
@@ -350,7 +348,7 @@ pub async fn auth_get_local_auth_state(
 /// 128 bits of entropy).
 #[tauri::command]
 pub async fn auth_generate_mnemonic() -> Result<AuthMnemonicResponse, String> {
-    let mnemonic = Mnemonic::generate_in_with(&mut rand::thread_rng(), Language::English, 12)
+    let mnemonic = Mnemonic::generate_in(Language::English, WordCount::Words12)
         .map_err(|e| format!("mnemonic_generation_failed: {}", e))?;
 
     let words: Vec<String> = mnemonic.words().map(|w| w.to_string()).collect();

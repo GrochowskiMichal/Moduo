@@ -2,7 +2,7 @@
 // resolution (task id → select in its bucket scope; bucket/"project" id →
 // scope only; unknown → none, so the page degrades without a crash).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { resolveTasksDeepLink, validateTasksSearch } from "./search";
 
 describe("validateTasksSearch", () => {

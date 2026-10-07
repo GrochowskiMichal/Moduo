@@ -1,7 +1,7 @@
 // DB-8 — the gallery's widget-instance factory seeds the type's default size +
 // config and a fresh id (the engine assigns x/y on placement).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { defaultConfigFor, defaultSizeFor } from "./catalog";
 import { newWidgetInstance } from "./instance";

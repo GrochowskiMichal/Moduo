@@ -3,7 +3,7 @@
 // into TaskRelations; the existing blocked-by helpers then compute IDENTICALLY,
 // which is the whole point of the dual-path (same data, different source table).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { EntityLink } from "../../lib/entity-links";
 import { blocksLinksToRelations } from "./blocks-bridge";
 import { blockedTaskIds, frontierTasks, makeTask } from "./helpers";

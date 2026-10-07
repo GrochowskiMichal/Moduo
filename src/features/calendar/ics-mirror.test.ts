@@ -3,7 +3,7 @@
 // UTC-instant events (Fastmail style), bare-IANA TZIDs (feed exports), and
 // the drop-never-shift posture for unresolvable zones.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { icsCalendarName, isValidIanaZone, mapIcsEvents, wallTimeToInstant } from "./ics-mirror";
 

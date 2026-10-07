@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@rstest/core";
 import { computeOpenSlots, DEFAULT_WEEKLY_HOURS, type WeeklyHours } from "./slots";
 
 const MONDAY_ONLY: WeeklyHours = {
