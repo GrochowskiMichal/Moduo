@@ -32,6 +32,6 @@
 - [ ] **Do:** open the `checks` run on this PR → **Expect:** the new "Secret scan (gitleaks)" step passes _(GitHub)_
 
 ## Known gaps / not-yet-testable
-- `bun run lint:js` (Biome) fails repo-wide with 57 errors that predate this branch, so `bun run verify` is red until block LINT-1. See `docs/gotchas/workflow.md`.
+- `bun run lint:js` (Biome) failed repo-wide with 57 pre-existing errors when this was written; block LINT-1 fixed it and added Biome to CI.
 - The TypeScript LSP plugin isn't enabled: `typescript-lsp` launches typescript-language-server, which needs the tsserver that TypeScript 7 no longer ships. Diagnostics for TS still come from `bun run typecheck` and the hooks.
 - Revoke the old Modal key at Modal; it remains in git history.

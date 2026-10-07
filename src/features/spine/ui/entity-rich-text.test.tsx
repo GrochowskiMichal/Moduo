@@ -2,8 +2,8 @@
 // verbatim (never parse untrusted mirror data as markup), and (b) turn our html
 // into clickable chips that deep-link via `moduo:entity:open`.
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { EntityRichText } from "./entity-rich-text";
 
 afterEach(cleanup);
