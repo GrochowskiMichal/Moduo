@@ -4895,6 +4895,61 @@
         pointer-events: none;
         color: var(--muted-foreground);
       }
+      /* Native option lists: Windows draws them on a white system background unless the
+         options carry their own colours, and the font pill is see-through, so there's
+         nothing to inherit. Both pickers follow whatever theme they sit in. */
+      .dk-font option,
+      .wb-sel option {
+        background-color: var(--popover);
+        color: var(--foreground);
+      }
+      /* Where the browser lets us draw the whole list (Chrome and Edge), the font menu
+         matches the page's own menus instead of the system's */
+      @supports (appearance: base-select) {
+        .dk-font select,
+        .dk-font select::picker(select) {
+          appearance: base-select;
+        }
+        .dk-font select {
+          display: inline-flex;
+          align-items: center;
+          border: 0;
+        }
+        .dk-font select::picker-icon {
+          display: none;
+        }
+        .dk-font select::picker(select) {
+          min-width: 9.5rem;
+          margin-block: 0.375rem;
+          padding: 0.25rem;
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          background: var(--popover);
+          color: var(--foreground);
+          box-shadow: var(--shadow-md);
+        }
+        .dk-font option {
+          gap: 0.5rem;
+          min-height: 1.875rem;
+          padding: 0 0.625rem;
+          border-radius: calc(var(--radius-lg) - 0.25rem);
+          font-size: var(--text-sm);
+          cursor: pointer;
+        }
+        .dk-font option:hover,
+        .dk-font option:focus-visible {
+          background-color: var(--accent);
+          outline: none;
+        }
+        .dk-font option:checked {
+          font-weight: 500;
+        }
+        .dk-font option::checkmark {
+          order: 1;
+          margin-left: auto;
+          color: var(--muted-foreground);
+        }
+      }
       .dk-shuffle {
         display: inline-flex;
         align-items: center;

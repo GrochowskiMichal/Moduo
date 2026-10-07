@@ -58,6 +58,7 @@ Check the page at three sizes: 1512 × 982 (laptop), 2560 × 1440 (4K at 150%) a
   - habit heatmaps
   - a page stack for notes
 - [ ] Pick an accent: it shows in all of them. Mono shows white.
+- [ ] Open the Font menu on Windows: the options are readable, light on dark, not light on white. In Chrome and Edge the menu is drawn like the page's own menus (dark, rounded, a tick on the current font). The widget picker on a card's back follows the preview's light or dark theme.
 - [ ] The preview and the dock are separate: a 16:9 Home on its own, with the dock below it.
 - [ ] The dock is one row and never wraps. On a phone it scrolls sideways and fades at the right edge.
 - [ ] Studio, Personal and Side project all use the same layout (M S S / S S M). Switching changes only what's inside it.
