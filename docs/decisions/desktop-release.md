@@ -1,6 +1,6 @@
 # Decisions: Desktop app, Tauri, releases
 
-Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
+Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index. Superseded entries are in [archive/2026-Q3.md](archive/2026-Q3.md).
 
 - **2026-10-07 · Both desktop release channels run one shared workflow, and only the `.dmg` is notarized.** `desktop-release.yml` (staging) and `desktop-release-prod.yml` (production) call `_desktop-release.yml` with their channel settings, so a fix can't reach one channel and miss the other. The Mac build makes one Apple submission (the `.dmg`, which covers the `.app` inside it), and its wait is time-limited and can be resumed. The release publishes once the Mac build is notarized. Windows doesn't block it: when the Windows build fails, `latest.json` leaves Windows out rather than pointing an old installer at a newer version. CI scripts are checked out from the workflow's own commit, so a production build of an older `prod-app` still gets the current signing logic. Staging cancels a superseded run; production queues a second run behind the first.
 
