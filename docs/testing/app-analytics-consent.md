@@ -21,10 +21,11 @@ Remove both lines when you're done. Never set `PUBLIC_POSTHOG_KEY` on Vercel or 
 - [ ] **Do:** DevTools → Network, filter `127.0.0.1:9`. Use the app for a minute. → **Expect:** No requests. In Application → Local Storage, no `ph_moduo_app` keys. _(web)_
 - [ ] **Do:** Switch it **on**. → **Expect:** A request to `127.0.0.1:9/e/` appears (it fails, which is expected). Local Storage now has `moduo:consent:<your user id>` = `granted`, `ph_moduo_app` and `__ph_opt_in_out_moduo_app`. _(web)_
 - [ ] **Do:** Reload the app. → **Expect:** The switch is still on, and an event goes to `127.0.0.1:9/e/` within a few seconds. _(web)_
-- [ ] **Do:** Switch it **off**. → **Expect:** `moduo:consent:<id>` = `denied`. Every `ph_moduo_app…` key and `__ph_opt_in_out_moduo_app` is gone from Local Storage *and* Session Storage. No more requests. _(web)_
+- [ ] **Do:** Switch it **off**, then use the app (open a few pages). → **Expect:** `moduo:consent:<id>` = `denied`. Every `ph_moduo_app…` key and `__ph_opt_in_out_moduo_app` is gone from Local Storage *and* Session Storage. No new requests to `/e/`. _(web)_
+  - Requests whose URL has `retry_count=` are fine. The dead port makes every send fail, and PostHog keeps retrying events captured *before* you switched off until you reload. A request **without** `retry_count=` after switching off would be a real bug.
 
 ## Sign-out, other people, other tabs
-- [ ] **Do:** Switch it on, then sign out. → **Expect:** One last request (the sign-out event), then every `ph_moduo_app…` key is gone. `moduo:consent:<id>` stays, so your choice is remembered next time. _(web)_
+- [ ] **Do:** Switch it on, then sign out. → **Expect:** One last new request (the sign-out event), plus any `retry_count=` retries of earlier ones. Every `ph_moduo_app…` key is gone. `moduo:consent:<id>` stays, so your choice is remembered next time. _(web)_
 - [ ] **Do:** In the same browser, sign in as a different account. → **Expect:** The switch is **off** for them and no requests go out. Their "yes" or "no" is separate from yours. _(web)_
 - [ ] **Do:** Open the app in two tabs, open Settings in both, flip the switch in one. → **Expect:** The other tab's switch follows on its own. _(web)_
 - [ ] **Do:** Turn on your browser's "Do Not Track" setting (in Chrome it's under Settings → Privacy and security), then reload. → **Expect:** No Privacy group and no requests, even if you'd switched it on before. _(web)_

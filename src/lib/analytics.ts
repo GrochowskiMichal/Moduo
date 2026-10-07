@@ -16,7 +16,9 @@
  * Even then PostHog starts opted out (opt_out_capturing_by_default +
  * opt_out_persistence_by_default, as on the landing) and is opted in only for that
  * person. Signing out, switching to someone who hasn't opted in, or withdrawing consent
- * opts it out again and wipes its storage.
+ * opts it out again and wipes its storage. New events stop at once; ones captured just
+ * before can still go out with PostHog's current batch (or its retries of a failed
+ * send, until the page reloads) — posthog-js has no way to drop those.
  *
  * Only the explicit `track()` calls below are captured, plus PostHog's `$identify` —
  * never autocapture, pageviews, session replay, heatmaps or surveys, whatever the
@@ -50,7 +52,7 @@ const PH_STORAGE_NAME = "moduo_app"; // → `ph_moduo_app` (+ `ph_moduo_app_…`
 const PH_CONSENT_NAME = "__ph_opt_in_out_moduo_app";
 
 // undefined until the auth provider reports in, so a first "nobody is signed in" still
-// runs a reconcile and clears what an earlier session left behind.
+// clears what an earlier session left behind (see clearAbandonedPostHogState).
 let currentUserId: string | null | undefined;
 let posthog: PostHog | null = null;
 let loading: Promise<PostHog | null> | null = null;
@@ -240,12 +242,32 @@ function clearStoredPostHogState() {
   }
 }
 
+/** Startup with nobody signed in. That can be a session that only failed to restore
+ *  (offline, a token refresh that failed) and comes back a moment later, so the stored
+ *  PostHog identity of someone who opted in on this device stays. Anything else is left
+ *  over from an earlier session and goes. */
+function clearAbandonedPostHogState() {
+  if (!consented(storedPostHogDistinctId())) clearStoredPostHogState();
+}
+
+/** Who PostHog's stored state belongs to (posthog-js keeps it as JSON under `ph_<name>`). */
+function storedPostHogDistinctId(): string | null {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(`ph_${PH_STORAGE_NAME}`) ?? "null");
+    const id = (stored as { distinct_id?: unknown } | null)?.distinct_id;
+    return typeof id === "string" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Who is signed in (null when nobody is). The auth provider calls this on every session
  *  change. Settles once PostHog reflects it. */
 export function setAnalyticsUser(userId: string | null): Promise<void> {
   if (userId !== currentUserId) {
+    const atStartup = currentUserId === undefined;
     currentUserId = userId;
-    if (PH_KEY) void enqueue(reconcile);
+    if (PH_KEY) void enqueue(atStartup && userId === null ? clearAbandonedPostHogState : reconcile);
   }
   return queue;
 }

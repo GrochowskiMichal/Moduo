@@ -271,15 +271,37 @@ describe("analytics — consent is per person and can be withdrawn", () => {
     expect(ph.has_opted_in_capturing()).toBe(false);
   });
 
-  it("clears the window id PostHog keeps in sessionStorage once it's opted out", async () => {
+  it("signing out wipes PostHog's storage, even for someone who opted in", async () => {
     const a = await loadAnalytics();
     await a.setAnalyticsUser("u1");
     await a.setAnalyticsConsent("u1", "granted");
-    // posthog-js writes this one directly; opt_out_capturing() + reset() leave it behind.
+    // What the real library holds while opted in (the fake doesn't write storage). The
+    // window id it writes directly, so opt_out_capturing() + reset() leave it behind.
+    localStorage.setItem("ph_moduo_app", '{"distinct_id":"u1"}');
+    localStorage.setItem("__ph_opt_in_out_moduo_app", "1");
     sessionStorage.setItem("ph_moduo_app_window_id", "w1");
     await a.setAnalyticsUser(null);
 
+    expect(localStorage.getItem("ph_moduo_app")).toBeNull();
+    expect(localStorage.getItem("__ph_opt_in_out_moduo_app")).toBeNull();
     expect(sessionStorage.getItem("ph_moduo_app_window_id")).toBeNull();
+    expect(localStorage.getItem("moduo:consent:u1")).toBe("granted");
+  });
+
+  it("keeps an opted-in person's PostHog identity when their session only failed to restore at startup", async () => {
+    // e.g. the app opened offline with an expired token: nobody at first, then
+    // TOKEN_REFRESHED brings the same person back — who should keep their device id.
+    localStorage.setItem("moduo:consent:u1", "granted");
+    localStorage.setItem("ph_moduo_app", '{"distinct_id":"u1","$device_id":"d1"}');
+    localStorage.setItem("__ph_opt_in_out_moduo_app", "1");
+    sessionStorage.setItem("ph_moduo_app_window_id", "w1");
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser(null);
+
+    expect(localStorage.getItem("ph_moduo_app")).toBe('{"distinct_id":"u1","$device_id":"d1"}');
+    expect(localStorage.getItem("__ph_opt_in_out_moduo_app")).toBe("1");
+    expect(sessionStorage.getItem("ph_moduo_app_window_id")).toBe("w1");
+    expect(ph.init).not.toHaveBeenCalled();
   });
 
   it("applies a choice made in another tab", async () => {
