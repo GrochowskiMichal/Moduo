@@ -29,7 +29,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Billing, plans, trials, waitlist → [decisions/billing.md](decisions/billing.md)
 
-- 2026-10-07 · The Early Founders form is gone for good: `founders-apply` is removed from the repo and must be deleted from Supabase; `issue-founder-coupon` and `founders_interest` stay, closed to clients
+- 2026-10-07 · The Early Founders form is gone for good: `founders-apply` is removed from the repo and deleted from Supabase; `issue-founder-coupon` and `founders_interest` stay, closed to clients
 - 2026-10-06 · Chat v1 ships as the 7th tab (`/chat`, ⌘7) for Duo / Team / Founder workspaces.
 - 2026-10-06 · Billing runs on the Stripe Sync Engine; Free is a real tier; four plans (Free / Pro $12 / Duo $20 / Team $15-per-seat).
 - 2026-10-02 · Moduo is invite-only.
