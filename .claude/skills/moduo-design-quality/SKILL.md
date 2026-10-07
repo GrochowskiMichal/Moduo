@@ -1,11 +1,11 @@
 ---
 name: moduo-design-quality
-description: Enforce Moduo's design system AND build/redesign UI with taste. Audits or fixes changed components against src/styles/tokens.css + docs/DESIGN_RULES.md (R1–R10) — flags raw hex / arbitrary Tailwind / inline-style color / motion-token bypass / anti-slop, checks relational rules a regex can't, and returns a severity-bucketed Before/After report. Modes audit (default) · polish (audit+fix) · build-with-taste · motion-pass. Use after editing UI, before shipping, for a token/quality pass, or to craft a token-driven component. NOT for planning, IA, briefs, or running the design process from scratch — that is design-flow.
+description: Enforce Moduo's design system AND build/redesign UI with taste. Audits or fixes changed components against src/styles/tokens.css + docs/DESIGN_RULES.md (R1–R10) — flags raw hex / arbitrary Tailwind / inline-style color / motion-token bypass / anti-slop, checks relational rules a regex can't, and returns a severity-bucketed Before/After report. Modes audit (default) · polish (audit+fix) · build-with-taste · motion-pass. Use after editing UI, before shipping, for a token/quality pass, or to craft a token-driven component. NOT for planning, IA, briefs, or running the design process from scratch — that is /s1 (with the prototype skill or /design).
 ---
 
 # moduo-design-quality
 
-The enforcement-plus-taste layer for Moduo's frontend (a product app — Tauri + shadcn/ui + React; **not** landing pages or brand work). It checks changed components against the live design system and, when building, ships token-driven UI with taste. It audits/fixes against an existing system — it does **not** invent visual direction or run the phase sequence (that's `design-flow`).
+The enforcement-plus-taste layer for Moduo's frontend (a product app — Tauri + shadcn/ui + React; **not** landing pages or brand work). It checks changed components against the live design system and, when building, ships token-driven UI with taste. It audits/fixes against an existing system — it does **not** invent visual direction or run the design process (that's `/s1`).
 
 **Always read first:** `src/styles/tokens.css` (the value source), `docs/DESIGN_RULES.md` (relational rules R1–R10), and a neighbouring component (match its patterns). Use the shadcn primitive in `src/components/ui/` where one exists; never roll your own. If a needed value is missing, **add it to `tokens.css`** — never inline it.
 
@@ -66,5 +66,5 @@ No `transition: all` (name props) · no bounce/elastic easing · no gradient tex
 ## Build (build-with-taste / polish-new)
 Token-driven from line one. Match the **shape** of the experience, not just the surface: progressive disclosure, the right flow (modal vs route, save-on-blur vs submit), same conceptual weight → same visual weight as adjacent features, same nouns/verbs. Product register: one well-tuned sans carries everything; restrained color (accent = primary action / selection / state only, never decoration); responsive = structural (collapse the sidebar), not fluid type. **Taste bar:** would a user fluent in Linear/Notion/Raycast trust it, or pause at every subtly-off control? The tool disappears into the task.
 
-## This skill is NOT design-flow
-It works on **changed components against an existing token + rule system**. It does not grill, write briefs, do IA, pick a design direction from scratch, or run phases 1–6. If the task is "plan/design a new feature from zero," that's `design-flow` / `/s1`.
+## This skill is not the design process
+It works on **changed components against an existing token + rule system**. It does not grill, write briefs, do IA, pick a design direction from scratch, or run phases 1–6. If the task is "plan/design a new feature from zero," that's `/s1`.

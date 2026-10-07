@@ -1,6 +1,6 @@
 # Moduo Design System
 
-The full reference. [CLAUDE.md](./CLAUDE.md) holds the short rules; this document holds the why, the structure, the recipes.
+The full reference. [AGENTS.md](../AGENTS.md) holds the short rules; this document holds the why, the structure, the recipes.
 
 > If you're reading this as a human: skim the rules section, then the recipes. If you're Claude: the rules section is the contract.
 >
