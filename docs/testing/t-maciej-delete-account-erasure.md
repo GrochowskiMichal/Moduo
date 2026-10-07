@@ -68,7 +68,7 @@ Run in the Supabase SQL editor (or MCP `execute_sql`) on project `wtoonrvuqumihp
   → **Expect:** zeros. Anything else is data from an earlier deletion; removing it is a one-off cleanup that needs its own OK.
 
 ## 1. Deploy (designer OK required)
-- [ ] **Do:** `supabase functions deploy delete-account --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api` (or MCP `deploy_edge_function` with `_shared/account-erasure.ts`, `_shared/billing.ts`, `_shared/secret-keys.ts`) → **Expect:** deploy succeeds; `STRIPE_SECRET_KEY` is already a project secret (start-trial uses it). _(server)_
+- [ ] **Do:** deploy with the Supabase connector's `deploy_edge_function` (this Mac has no `supabase` CLI): `delete-account/index.ts` plus `_shared/account-erasure.ts`, `_shared/billing.ts`, `_shared/secret-keys.ts`, with `verify_jwt: false`. Mike's CLI equivalent: `supabase functions deploy delete-account --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api` → **Expect:** deploy succeeds; `STRIPE_SECRET_KEY` is already a project secret (start-trial uses it). _(server)_
 - [ ] **Do:** `curl -X POST https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/delete-account` with no `Authorization` → **Expect:** `401 {"error":"Unauthorized"}`. A `GET` → `405`. _(server)_
 
 ## 2. Delete a throwaway account end to end (never the reusable test account)
