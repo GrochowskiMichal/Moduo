@@ -21,7 +21,9 @@
     "rsbuild.config.ts",
     "playwright.config.ts",
     "vitest.config.ts",
-    "supabase/functions/_shared/contracts"
+    "supabase/functions/_shared/contracts",
+    "supabase/functions/_shared/account-erasure.ts",
+    "supabase/functions/_shared/account-erasure.test.ts"
   ],
   "exclude": ["node_modules", "dist", "src-tauri"]
 }
