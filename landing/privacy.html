@@ -825,7 +825,7 @@
           <p>We don’t link any of this to your name or email, and we don’t build a profile of you. Before you choose, your browser downloads PostHog’s code and settings from PostHog, but nothing is recorded or stored until you accept. You can change your choice any time in <a href="/#cookie-settings">Cookie settings</a> on the main page.</p>
 
           <h3 id="app-analytics">In the Moduo app</h3>
-          <p>After you sign in, the app may ask you once whether to share usage analytics. Until you say yes, it records nothing, and PostHog’s code isn’t even loaded. Your answer is saved for your account on that device, so we don’t ask again.</p>
+          <p>After you sign in, the app may ask whether you want to share usage analytics. It asks on each device, and keeps asking until you answer. Until you say yes, it records nothing, and PostHog’s code isn’t even loaded. Your answer is saved for your account on that device.</p>
           <p>If you say yes, the app sends PostHog:</p>
           <ul>
             <li>a few events about how you use the app, like opening it or signing out. Never what you type or what you put into Moduo, like your tasks, notes, emails or contacts.</li>
@@ -834,7 +834,7 @@
             <li>your browser, operating system, device type, screen size, language and time zone, which version of the app you use and whether it’s the web or desktop app, and your IP address, which PostHog may use to estimate your location</li>
             <li>random IDs for your device and session, kept in the app’s storage on your device so your visits can be counted</li>
           </ul>
-          <p>The app doesn’t make session recordings or heatmaps, and it doesn’t track your clicks. We use these events only to understand how Moduo is used and what to fix first, not to build a profile of you or for ads. Turn analytics off any time in Settings → Preferences → Privacy. Signing out stops them until you sign in again, and clears what PostHog stored on your device.</p>
+          <p>The app doesn’t make session recordings or heatmaps, and it doesn’t track your clicks. We use these events only to understand how Moduo is used and what to fix first. They’re kept under your account ID so we can see how use changes over time, never for ads or to make decisions about you. Turn analytics off any time in Settings → Preferences → Privacy: that stops new events, and if you’d like what was already sent deleted, email <a href="mailto:privacy@moduo.app">privacy@moduo.app</a>. Signing out stops them until you sign in again, and clears what PostHog stored on your device.</p>
 
           <p>Legal basis for both: your consent (Article 6(1)(a) GDPR and the Polish rules on cookies).</p>
         </section>
@@ -947,7 +947,7 @@
             </div>
             <div>
               <dt>Analytics</dt>
-              <dd>Events for 12 months. Session recordings, which only the website makes, for 30 days.</dd>
+              <dd>Events for 12 months. Session recordings, which only the website makes, for 30 days. The app’s analytics are kept under your account ID; email <a href="mailto:privacy@moduo.app">privacy@moduo.app</a> and we’ll delete them sooner, for example when you delete your account.</dd>
             </div>
             <div>
               <dt>Your account and workspaces</dt>
@@ -1022,11 +1022,11 @@
           <dl class="specs is-stacked">
             <div>
               <dt><code>moduo:consent:&lt;your account ID&gt;</code></dt>
-              <dd>Local storage. Remembers whether you said yes or no to analytics in the app, for your account on that device, so we ask only once.</dd>
+              <dd>Local storage. Remembers whether you said yes or no to analytics in the app, for your account on that device, so we don’t ask again.</dd>
             </div>
             <div>
               <dt>PostHog</dt>
-              <dd>Only if you say yes. <code>ph_moduo_app</code> in local and session storage, <code>ph_moduo_app_…</code> entries in session storage, and <code>__ph_opt_in_out_moduo_app</code> in local storage. They hold random IDs for your device and session, and note that analytics are on. They’re cleared when you turn analytics off or sign out. No cookies.</dd>
+              <dd>Only if you say yes. <code>ph_moduo_app</code> in local and session storage, <code>ph_moduo_app_…</code> entries in session storage, and <code>__ph_opt_in_out_moduo_app</code> in local storage. They hold your account ID, random IDs for your device and session, and a note that analytics are on. They also hold, on your device only and never sent, the address and referrer of the page where your session started (with sign-in and invite codes hidden) and, if you came from a search engine, the words you searched for. All of it is cleared when you turn analytics off or sign out. No cookies.</dd>
             </div>
           </dl>
           <p>The desktop app keeps the same entries in its own storage on your computer.</p>
