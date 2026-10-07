@@ -1,11 +1,11 @@
 # Manual test checklist — Storybook 10 + MCP
 
-> Generated 2026-10-08 · branch `t/mike/storybook-10` · **Live-verified:** partial. The agent built both Storybooks (main: 248 entries, design-sync reference: 148), started `bun run storybook`, rendered the Button story with controls, actions, interactions and the density/theme toolbar, and listed the 7 MCP tools at `http://localhost:6006/mcp`. Design-sync regeneration and the MCP from a Claude session were not run.
+> Generated 2026-10-08 · branch `t/mike/storybook-10` · **Live-verified:** partial. The agent built both Storybooks (main: 248 entries, design-sync reference: 148), started `bun run storybook`, rendered the Button story with controls, actions, interactions and the density and Shade toolbar, and listed the 7 MCP tools at `http://localhost:6006/mcp`. Design-sync regeneration and the MCP from a Claude session were not run.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## Storybook
 - [ ] **Do:** `bun install`, then `bun run storybook` → **Expect:** opens on port 6006 with no build error; the sidebar shows `app`, `auth`, `ui` and the feature folders _(browser)_
-- [ ] **Do:** open three `ui` stories (button, dialog, select) and switch the density and theme toolbar items → **Expect:** each renders and restyles; Controls, Actions and Interactions panels are present _(browser)_
+- [ ] **Do:** open three `ui` stories (button, dialog, select) and switch the density and Shade toolbar items → **Expect:** each renders and restyles; Controls, Actions and Interactions panels are present _(browser)_
 - [ ] **Do:** open a story's **Docs** page → **Expect:** autodocs render (props table and examples) _(browser)_
 - [ ] **Do:** `bun run build-storybook` → **Expect:** exits 0 _(terminal)_
 
