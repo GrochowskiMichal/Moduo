@@ -1,5 +1,5 @@
-import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "@rstest/core";
+import { renderHook } from "@testing-library/react";
 import { useChatOnline, useChatTyping } from "./use-chat-live";
 
 describe("chat live hooks before the realtime link exists", () => {
