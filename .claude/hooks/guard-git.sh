@@ -12,6 +12,11 @@ seg="${seg%%&&*}"; seg="${seg%%;*}"; seg="${seg%%|*}"; seg="${seg%%$'\n'*}"
 
 set -f # don't glob-expand the tokens below
 for t in $seg; do
+  case "$t" in
+    *refs/entire*|--mirror|--all)
+      echo "Blocked: this would publish Entire session transcripts (refs/entire). The repo is public; checkpoints stay local (docs/entire.md)." >&2
+      exit 2 ;;
+  esac
   case "${t##*:}" in
     main|develop|prod-app|staging-app|refs/heads/main|refs/heads/develop|refs/heads/prod-app|refs/heads/staging-app)
       echo "Blocked: direct push to '${t##*:}'. Push your t/<owner>/<task> branch and land it through a PR (gh pr create, then gh pr merge --merge)." >&2
