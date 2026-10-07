@@ -50,8 +50,6 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-07-13 · DF-19f-quit LIVE-VERIFIED on a real desktop build — the fix works; gate closed.
 - 2026-07-13 · Desktop bundle frontend builds with `MODUO_TARGET=desktop` → `dist/`
 - 2026-07-13 · DF-19f-quit FIXED — it was shipping non-functional (both the ⌘Q *and* window-close confirmations never fired).
-- 2026-07-13 · DF-19f-quit ⌘Q coverage (macOS) landed
-- 2026-07-13 · DF-19f-quit (desktop confirm-before-quit) built
 - 2026-07-11 · Proposal C executed — dead Rust graph/embeddings sidecar pruned; `sync` feature-gated behind `lite`.
 - 2026-07-09 · Desktop distribution = macOS-first; hands-off updater deferred.
 - 2026-07-03 · Calendar CAL-8b landed — CalDAV/ICS connect UX + rail grouping; Wave-2 CalDAV/ICS fast-follow COMPLETE (migration APPLIED to prod + round-tripped same day; live-verify is the designer's desktop pass).
