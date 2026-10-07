@@ -2,7 +2,7 @@
 // (active > 14d), and stale leads (> 30d) at the threshold boundaries, with
 // overdue winning the priority.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { Contact } from "./model";
 import { type OverdueFollowup, selectNeedsAttention } from "./needs-attention";
 

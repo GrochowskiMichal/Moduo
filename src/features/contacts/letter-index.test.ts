@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { groupByLetter, type LetterGroup } from "./letter-index";
 import type { Contact } from "./model";

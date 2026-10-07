@@ -1,7 +1,7 @@
 // FX-1 — the /contacts search-param validator: malformed params are dropped,
 // selection only counts as a type+id pair, and the palette action survives.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { validateContactsSearch } from "./search";
 
 describe("validateContactsSearch", () => {

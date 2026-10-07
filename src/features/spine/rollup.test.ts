@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "@/lib/entity-links";
 import {
   entityRefKey,

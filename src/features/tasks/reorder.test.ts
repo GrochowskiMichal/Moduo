@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { betweenPositions, endPosition, positionsAfter } from "./helpers";
 import { commitOrderUpdates, moveItem, positionForReorder } from "./reorder";

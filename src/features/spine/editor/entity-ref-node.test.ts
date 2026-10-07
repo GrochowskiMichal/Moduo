@@ -6,7 +6,7 @@
 import { createHeadlessEditor } from "@lexical/headless";
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
 import { $createParagraphNode, $getRoot, $isElementNode, type LexicalNode } from "lexical";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { $createEntityRefNode, $isEntityRefNode, EntityRefNode } from "./entity-ref-node";
 
 function makeEditor() {

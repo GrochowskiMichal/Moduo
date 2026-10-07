@@ -1,6 +1,6 @@
 // Contacts module — dedupe heuristics tests.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { findDuplicateGroups, probeDuplicate } from "./dedupe";
 import type { Contact, ContactChannel } from "./model";
 

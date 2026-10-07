@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 
 // A stand-in cloud row + a mock runtime.preferences that records every set() patch
-// and merges it into the row (mimicking the upsert). Hoisted so vi.mock can close
+// and merges it into the row (mimicking the upsert). Hoisted so rs.mock can close
 // over it. The reconcile/push engine talks only to runtime.preferences.get/set.
-const h = vi.hoisted(() => {
+const h = rs.hoisted(() => {
   const emptyRow = () => ({
     appearance: null,
     appearanceUpdatedAt: null,
@@ -33,7 +33,7 @@ const h = vi.hoisted(() => {
   return { state, runtime, emptyRow };
 });
 
-vi.mock("./runtime", () => ({
+rs.mock("./runtime", () => ({
   initRuntime: async () => h.runtime,
   getRuntime: () => h.runtime,
 }));

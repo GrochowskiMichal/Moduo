@@ -2,7 +2,7 @@
 // filters (including the "no status" sentinel), Recent sort ordering, and the
 // "title · company" secondary line.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { TagLink } from "../tasks/model";
 import {
   filterCompanies,

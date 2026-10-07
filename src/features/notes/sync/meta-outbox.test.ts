@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { MetaOutboxEntry } from "./idb";
 import { isDuplicateKeyError, isNetworkError, replayDecision, replayOrder } from "./meta-outbox";
 

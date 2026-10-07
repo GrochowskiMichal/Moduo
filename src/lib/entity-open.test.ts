@@ -2,7 +2,7 @@
 // page (contacts with URL selection params), unknown types resolve to null so
 // the listener can no-op with a quiet toast instead of crashing.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { entityOpenTarget, markEntityOpenIntent, takeEntityOpenIntent } from "./entity-open";
 
 describe("entityOpenTarget", () => {

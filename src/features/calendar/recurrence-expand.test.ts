@@ -2,7 +2,7 @@
 // per file, so this never leaks).
 process.env.TZ = "Europe/Warsaw";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { type ExpandableEvent, expandEventOccurrences } from "./recurrence-expand";
 

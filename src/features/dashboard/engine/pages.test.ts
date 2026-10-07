@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { addPage, removePage, setPageWidgets } from "./grid-engine";
 import type { DashboardLayout, WidgetInstance } from "./types";

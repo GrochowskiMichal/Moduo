@@ -2,7 +2,7 @@
 // empty contact yields a minimal valid card, escaping is correct, and the bulk
 // serializer resolves ORG via the companyId → name map.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import type { Contact } from "./model";
 import { contactsToVCard, contactToVCard } from "./vcard";
