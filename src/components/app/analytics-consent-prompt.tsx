@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
 
+import { PRIVACY_POLICY_URL } from "../../features/settings/about";
 import {
   type AnalyticsConsent,
   isAnalyticsAvailable,
@@ -13,7 +14,8 @@ import { Button } from "../ui/button";
 export const ANALYTICS_CONSENT_TOAST_ID = "analytics-consent";
 /** Let the app settle first, so the question never lands on the first paint. */
 export const ANALYTICS_CONSENT_ASK_DELAY_MS = 2000;
-const PRIVACY_URL = "https://moduo.app/privacy#analytics";
+/** Straight to the policy's "In the Moduo app" part, not the website's analytics. */
+const PRIVACY_URL = `${PRIVACY_POLICY_URL}#app-analytics`;
 
 // The delay applies once per session. A later remount of the shell (boot churn, a
 // workspace switch) puts the question straight back instead of waiting again.

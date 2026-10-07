@@ -18,7 +18,9 @@ async function decode(body: unknown): Promise<unknown> {
     typeof (body as Blob).arrayBuffer === "function"
       ? new Uint8Array(await (body as Blob).arrayBuffer())
       : body instanceof ArrayBuffer || ArrayBuffer.isView(body)
-        ? new Uint8Array(body instanceof ArrayBuffer ? body : body.buffer)
+        ? body instanceof ArrayBuffer
+          ? new Uint8Array(body)
+          : new Uint8Array(body.buffer, body.byteOffset, body.byteLength)
         : new TextEncoder().encode(String(body));
   const isGzip = bytes[0] === 0x1f && bytes[1] === 0x8b;
   const text = isGzip ? gunzipSync(bytes).toString("utf8") : new TextDecoder().decode(bytes);

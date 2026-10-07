@@ -75,13 +75,16 @@ export const ABOUT_RUNTIME_LINE = "Web & desktop (Tauri 2) · React 19";
 
 export type AboutLink = { label: string; href: string; kind: "changelog" | "legal" | "support" };
 
+/** The privacy policy (landing/privacy.html on prod-landing). */
+export const PRIVACY_POLICY_URL = "https://moduo.app/privacy";
+
 /**
  * External links shown at the bottom of About. All point at the canonical
  * marketing domain (moduo.app) so they stay correct as the pages fill in.
  */
 export const ABOUT_LINKS: AboutLink[] = [
   { label: "What's new", href: "https://moduo.app/changelog", kind: "changelog" },
-  { label: "Privacy", href: "https://moduo.app/privacy", kind: "legal" },
+  { label: "Privacy", href: PRIVACY_POLICY_URL, kind: "legal" },
   { label: "Terms", href: "https://moduo.app/terms", kind: "legal" },
   { label: "Support", href: "https://moduo.app/support", kind: "support" },
 ];

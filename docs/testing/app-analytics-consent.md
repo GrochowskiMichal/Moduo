@@ -39,7 +39,7 @@ Remove both lines when you're done. Setting the real key on a live build is now 
 - [ ] **Do:** Open moduo.app/privacy after the `prod-landing` deploy. → **Expect:** "The short version" says analytics run only if you say yes, on the website or in the app. §04 Analytics has two parts, "On our website" and "In the Moduo app". §05 no longer says the app has no analytics. §07 lists PostHog for the website and the app. §11 "In the Moduo app" lists `moduo:consent:<your account ID>` and PostHog's `ph_moduo_app` entries. "Your choices" points to Settings → Preferences → Privacy. _(web)_
 
 ## In PostHog, once a real key is live
-- [ ] **Do:** In the project's activity view, filter by `surface`. → **Expect:** The landing's events have `surface = landing`; the app's have `surface = app`, plus `platform` (web/desktop), `environment` and `app_version`. Build app insights with `surface = app`. _(PostHog)_
+- [ ] **Do:** In the project's activity view, filter by `surface`. → **Expect:** The landing's events have `surface = landing`; the app's have `surface = app`, plus `platform` (web/desktop), `environment` (production, staging, preview, development) and `app_version`. Build app insights with `surface = app`. _(PostHog)_
 - [ ] **Do:** Check the project's settings. → **Expect:** Decide on "Discard client IP data". The policy says PostHog may use the IP for location, which stays true either way. _(PostHog)_
 
 ## Known gaps / not-yet-testable

@@ -50,9 +50,15 @@ afterEach(() => {
 });
 
 describe("AnalyticsConsentPrompt", () => {
-  // First on purpose: the settle delay applies to the first ask of a session only.
-  it("asks once the app has settled, for a signed-in person who hasn't answered", () => {
-    render(<AnalyticsConsentPrompt />);
+  it("asks once the app has settled, for a signed-in person who hasn't answered", async () => {
+    // The settle delay applies to a session's first ask only, so start from a fresh copy
+    // of the module (and the testing library that shares its React).
+    rs.resetModules();
+    const fresh = await import("./analytics-consent-prompt");
+    const { createElement } = await import("react");
+    const { render: freshRender } = await import("@testing-library/react");
+    const { unmount } = freshRender(createElement(fresh.AnalyticsConsentPrompt));
+
     rs.advanceTimersByTime(ANALYTICS_CONSENT_ASK_DELAY_MS - 1);
     expect(h.toast.custom).not.toHaveBeenCalled();
 
@@ -63,6 +69,7 @@ describe("AnalyticsConsentPrompt", () => {
       duration: Number.POSITIVE_INFINITY,
       dismissible: false,
     });
+    unmount();
   });
 
   it.each([
@@ -113,7 +120,7 @@ describe("AnalyticsConsentPrompt", () => {
     const link = screen.getByRole("link", { name: "Privacy policy" });
     const notPrevented = fireEvent.click(link);
 
-    expect(openExternalUrl).toHaveBeenCalledWith("https://moduo.app/privacy#analytics");
+    expect(openExternalUrl).toHaveBeenCalledWith("https://moduo.app/privacy#app-analytics");
     expect(notPrevented).toBe(false);
   });
 });

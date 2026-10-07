@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import type { CaptureResult } from "posthog-js";
 
@@ -438,5 +440,17 @@ describe("analytics — outgoing events (before_send)", () => {
   it("passes a null event through", async () => {
     const scrub = await beforeSend();
     expect(scrub(null)).toBeNull();
+  });
+});
+
+describe("analytics — the code itself stays off the page until consent", () => {
+  // The privacy policy says PostHog's code isn't loaded before someone says yes. Two
+  // lines keep that true; this trips if either goes (gotchas/build-ci.md, prefetch).
+  it("names the posthog-js chunk and keeps it out of the async-chunk prefetch", () => {
+    const analytics = readFileSync(resolve(process.cwd(), "src/lib/analytics.ts"), "utf8");
+    const rsbuild = readFileSync(resolve(process.cwd(), "rsbuild.config.ts"), "utf8");
+
+    expect(analytics).toContain('import(/* webpackChunkName: "posthog" */ "posthog-js")');
+    expect(rsbuild).toMatch(/prefetch: \{[^}]*exclude: \[[^\]]*posthog/);
   });
 });

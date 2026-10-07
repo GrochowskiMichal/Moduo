@@ -291,6 +291,14 @@ export function track(event: string, properties?: Properties): Promise<void> {
 
 // ── Outgoing events (before_send) ─────────────────────────────────────────────
 
+/** No known channel: this machine (dev server, a local desktop build) or some other host,
+ *  like a Vercel preview, which shouldn't read as local development. */
+function localOrPreview(): "development" | "preview" {
+  const host = typeof window === "undefined" ? "" : window.location.hostname;
+  const local = host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost");
+  return local ? "development" : "preview";
+}
+
 // Where every app event came from. The landing sends to the same PostHog project
 // with `surface: "landing"`, so filter or break down by `surface` to keep the two
 // apart. Stamped in before_send rather than registered as super properties, so a
@@ -298,7 +306,7 @@ export function track(event: string, properties?: Properties): Promise<void> {
 const EVENT_SOURCE = {
   surface: "app",
   platform: IS_DESKTOP ? "desktop" : "web",
-  environment: DESKTOP_CHANNEL ?? "development",
+  environment: DESKTOP_CHANNEL ?? localOrPreview(),
   app_version: APP_VERSION,
 } as const;
 
