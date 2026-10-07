@@ -14,11 +14,13 @@
  *
  * Abuse controls: Origin allowlist, body cap, honeypot + minimum time-on-page,
  * and a per-IP (8/hour) + global (500/10 min) limit enforced atomically in SQL.
- * IPs are never stored raw: HMAC-SHA256 keyed with the project secret key.
+ * The IP is Cloudflare's cf-connecting-ip (see _shared/client-ip.ts), never stored
+ * raw: HMAC-SHA256 keyed with the project secret key.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { clientIp } from "../_shared/client-ip.ts";
 import { parseJsonBody, waitlistJoinBodySchema } from "../_shared/contracts/http-bodies.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
@@ -54,12 +56,6 @@ function json(body: unknown, status: number, headers: HeadersInit): Response {
     status,
     headers: { ...headers, "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
-}
-
-function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return req.headers.get("cf-connecting-ip") ?? req.headers.get("x-real-ip") ?? "unknown";
 }
 
 const hmacKey = crypto.subtle.importKey(
