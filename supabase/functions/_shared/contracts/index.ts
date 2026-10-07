@@ -45,7 +45,6 @@ export {
   createCheckoutSessionBodySchema,
   createPortalSessionBodySchema,
   emailBodySchema,
-  foundersApplyBodySchema,
   issueFounderCouponBodySchema,
   manageIntegrationBodySchema,
   manageIntegrationQuerySchema,
