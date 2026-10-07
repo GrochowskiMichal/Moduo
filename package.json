@@ -20,6 +20,7 @@
     "icon:liquid": "bun scripts/icons/build-liquid-icon.ts",
     "db:reconcile": "bun scripts/db-reconcile.ts",
     "db:preflight": "bun scripts/db-contract-preflight.ts",
+    "functions:reconcile": "bun scripts/functions-reconcile.ts",
     "storybook": "sb dev -p 6006",
     "build-storybook": "sb build",
     "storybook:gen": "bun ./scripts/generate-storybook-stories.ts",
