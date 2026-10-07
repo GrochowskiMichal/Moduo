@@ -1,6 +1,6 @@
 # Manual test checklist — account deletion erasure (DF-19h follow-up)
 
-> Generated 2026-10-07 · branch `t/maciej/delete-account-erasure` · **Live-verified:** no. The new `delete-account` is **not deployed**, and production was not queried (both need the designer's OK). Verified locally: `account-erasure.test.ts` (28 tests against in-memory supabase-js / Stripe stand-ins; each of ten deliberate code breaks made a test fail), `bun run typecheck` (now covers the module and its test), the function type-checked against the local supabase-js and Stripe types, and a skeptical review pass whose findings are fixed.
+> Generated 2026-10-07 · branch `t/maciej/delete-account-erasure` · **Live-verified:** partly. The read-only check in §0 ran on production on 2026-10-07 with the designer's OK (results inline). The end-to-end delete in §2 needs a throwaway account, which only the designer can create. Verified locally: `account-erasure.test.ts` (28 tests against in-memory supabase-js / Stripe stand-ins; each of ten deliberate code breaks made a test fail), `bun run typecheck` (now covers the module and its test), the function type-checked against the local supabase-js and Stripe types, and a skeptical review pass whose findings are fixed.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## 0. Before deploying: read-only live check (designer present)
@@ -17,7 +17,7 @@ Run in the Supabase SQL editor (or MCP `execute_sql`) on project `wtoonrvuqumihp
     and c.confrelid in ('auth.users'::regclass, 'public.profiles'::regclass, 'public.workspaces'::regclass)
   order by 3, 1, 2;
   ```
-  → **Expect:** no `RESTRICT` / `NO ACTION` anywhere (one would make `auth.admin.deleteUser` fail at the very last step, after everything else is gone). Note whether `user_integrations`, `exposed_slot_links`, `slot_bookings`, `booking_link_hosts`, `contact_private_notes` appear at all (the repo says their user columns have no FK; the new code deletes them explicitly either way).
+  → **Expect:** no `RESTRICT` / `NO ACTION` anywhere (one would make `auth.admin.deleteUser` fail at the very last step, after everything else is gone). **2026-10-07 result:** none; `calendar_events.owner_id` cascades from `profiles`. Note whether `user_integrations`, `exposed_slot_links`, `slot_bookings`, `booking_link_hosts`, `contact_private_notes` appear at all (the repo says their user columns have no FK; the new code deletes them explicitly either way).
 - [ ] **Do:** list user-looking columns with **no** FK (what survives a deletion unless code removes it):
   ```sql
   select c.relname as table_name, a.attname as column_name, format_type(a.atttypid, a.atttypmod) as type
@@ -65,7 +65,12 @@ Run in the Supabase SQL editor (or MCP `execute_sql`) on project `wtoonrvuqumihp
     where coalesce(c.deleted, false) = false and c.metadata ->> 'supabase_user_id' is not null
       and not exists (select 1 from auth.users u where u.id::text = c.metadata ->> 'supabase_user_id');
   ```
-  → **Expect:** zeros. Anything else is data from an earlier deletion; removing it is a one-off cleanup that needs its own OK.
+  → **Expect:** zeros. Anything else is data from an earlier deletion; removing it is a one-off cleanup that needs its own OK. **2026-10-07 result:** all zero except `stripe customers (mirror)` = 2. List them, then delete each in the Stripe dashboard (Customers → the id → Delete customer), which also cancels the live trial one of them still has:
+  ```sql
+  select c.id, to_timestamp(c.created)::date as created from stripe.customers c
+  where coalesce(c.deleted, false) = false and c.metadata ->> 'supabase_user_id' is not null
+    and not exists (select 1 from auth.users u where u.id::text = c.metadata ->> 'supabase_user_id');
+  ```
 
 ## 1. Deploy (designer OK required)
 - [ ] **Do:** deploy with the Supabase connector's `deploy_edge_function` (this Mac has no `supabase` CLI): `delete-account/index.ts` plus `_shared/account-erasure.ts`, `_shared/billing.ts`, `_shared/secret-keys.ts`, with `verify_jwt: false`. Mike's CLI equivalent: `supabase functions deploy delete-account --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api` → **Expect:** deploy succeeds; `STRIPE_SECRET_KEY` is already a project secret (start-trial uses it). _(server)_
@@ -92,7 +97,10 @@ Set up a throwaway invited account first: sign in once (the app starts the Strip
   ```
   → **Expect:** all `0`.
 
-## 3. The sole-owner block is unchanged
+## 3. The Danger zone copy
+- [ ] **Do:** Settings → Account → scroll to **Danger zone** → **Expect:** "Permanently delete your account and your personal data. This also cancels your Moduo plan. This can't be undone." _(both)_ (not checked in a browser this session: it needs a signed-in account.)
+
+## 4. The sole-owner block is unchanged
 - [ ] **Do:** on an account that solely owns a workspace with another member, try to delete → **Expect:** the panel lists the workspace and says to hand off ownership or delete it first; nothing is deleted: the Stripe customer, the picture and the booking links are all still there. _(both)_
 
 ## Edge cases (covered by unit tests, not live)
