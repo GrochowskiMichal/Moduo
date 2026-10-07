@@ -109,8 +109,23 @@ jobs:
           }
           EOF
 
+      # Fail in seconds if Apple rejects the notarization login, instead of after the compile.
+      - name: Check Apple notarization login
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool history \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            >/tmp/notary-history.txt
+
       - name: Build universal macOS .dmg + updater bundle (signed)
-        run: bunx tauri build --target universal-apple-darwin --bundles app,dmg --config ${{ github.workspace }}/ci-tauri-config.json
+        run: |
+          export TAURI_SIGNING_PRIVATE_KEY="$(bash scripts/ci-normalize-updater-key.sh)"
+          bunx tauri build --target universal-apple-darwin --bundles app,dmg --config ${{ github.workspace }}/ci-tauri-config.json
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -223,7 +238,10 @@ jobs:
           EOF
 
       - name: Build Windows NSIS installer
-        run: bunx tauri build --bundles nsis --config ${{ github.workspace }}/ci-tauri-config.json
+        shell: bash
+        run: |
+          export TAURI_SIGNING_PRIVATE_KEY="$(bash scripts/ci-normalize-updater-key.sh)"
+          bunx tauri build --bundles nsis --config ${{ github.workspace }}/ci-tauri-config.json
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
