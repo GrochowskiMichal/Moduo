@@ -69,7 +69,7 @@ Pick the tier by what the diff touches; details and commands are in the `/s3` sk
 
 ## Stack
 
-Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, Bun. Supabase is the source of truth (cloud-first) on web and desktop; redb persists only the not-yet-migrated desktop modules. Lexical for rich text, Yjs for collaboration, XYFlow for the mindmap, Storybook 8 for components, Rstest + Playwright for tests, Biome for JS lint/format.
+Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, Bun. Supabase is the source of truth (cloud-first) on web and desktop; redb persists only the not-yet-migrated desktop modules. Lexical for rich text, Yjs for collaboration, XYFlow for the mindmap, Storybook 10 for components (with its MCP server), Rstest + Playwright for tests, Biome for JS lint/format.
 
 ## Build / dev
 
