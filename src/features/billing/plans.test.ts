@@ -1,5 +1,5 @@
 import { PLAN_TIERS } from "@contracts/vocabularies";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { PLAN_CARDS, planCard, priceFor, TIER_RANK, tierRank } from "./plans";
 

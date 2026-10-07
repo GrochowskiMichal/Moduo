@@ -1,7 +1,7 @@
 // DF-10 — the palette entity-search grouping. Verifies the fixed group order,
 // type→group folding, empty-group dropping, and that un-navigable kinds vanish.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { EntityRecord } from "./entity-links";
 import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "./palette-search";
 

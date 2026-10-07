@@ -3,7 +3,7 @@
 // dates preserve the calendar-day delta in every timezone, and clock/month-day
 // text is matched structurally rather than to an exact wall-clock string).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import {
   formatEmailSnippet,
   formatEventSnippet,

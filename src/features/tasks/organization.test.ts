@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { bucketGroupNames, bucketSections, taskMatchesTagFilter } from "./helpers";
 import type { Bucket } from "./model";

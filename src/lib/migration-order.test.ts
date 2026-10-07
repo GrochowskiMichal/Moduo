@@ -2,10 +2,10 @@ import { readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 // A repo-hygiene guard, not a unit test — there is no `migration-order.ts` to import.
-// It lives under src/ only because vitest.config.ts scopes `include` to `src/**/*.test.ts`.
+// It lives under src/ only because rstest.config.ts scopes `include` to `src/**/*.test.ts`.
 //
 // OPS-1. Supabase applies `supabase/migrations/*.sql` in lexicographic filename order,
 // so a timestamp prefix shared by two files leaves the apply order of that pair

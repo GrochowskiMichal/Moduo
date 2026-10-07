@@ -61,10 +61,12 @@ jobs:
           bun-version: latest
 
       # Must match src-tauri/rust-toolchain.toml. Cargo switches to that channel
-      # inside src-tauri, so targets added to `stable` are invisible to the build.
-      - name: Setup Rust (1.88.0 + both Apple targets)
-        uses: dtolnay/rust-toolchain@1.88.0
+      # inside src-tauri, so targets added to a different toolchain are invisible.
+      - name: Setup Rust (nightly-2026-10-06 + both Apple targets)
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: nightly-2026-10-06
+          components: rustfmt, clippy
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Ensure Intel macOS target is installed
@@ -196,7 +198,10 @@ jobs:
           bun-version: latest
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@1.88.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-10-06
+          components: rustfmt, clippy
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

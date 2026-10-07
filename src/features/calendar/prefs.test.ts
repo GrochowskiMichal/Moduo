@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "@rstest/core";
 
 import {
   DEFAULT_CALENDAR_PREFS,

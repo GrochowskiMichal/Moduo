@@ -3,7 +3,7 @@
 // the INVARIANTS (in-bounds, no overlap, active lands at target, reject leaves the
 // input untouched) rather than exact positions — the robust way to test physics.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import {
   addWidget,
   canPlace,

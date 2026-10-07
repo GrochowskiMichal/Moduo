@@ -1,7 +1,7 @@
 // AC7 proof: the birthday countdown caption. Appears only within 60 days, uses
 // "in N days" then "in N weeks", and wraps across the year boundary.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { birthdayCountdown } from "./dates";
 

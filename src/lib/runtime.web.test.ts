@@ -1,5 +1,5 @@
 import { mapKnownRows, requireRow, taskRowSchema } from "@contracts/rows";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 describe("runtime.web mapper boundary", () => {
   const valid = {

@@ -2,7 +2,7 @@
 // sentence; unknown ops fall back to the op name; actor resolves to You / label
 // / quiet fallback. Mirrors src/features/tasks/activity.test.ts.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { spineActivityLine, spineActorName } from "./activity";
 

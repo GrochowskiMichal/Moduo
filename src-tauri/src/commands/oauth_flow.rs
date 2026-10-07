@@ -16,7 +16,6 @@ use std::time::{Duration, Instant};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -53,7 +52,7 @@ pub(crate) enum OAuthRefreshError {
 
 fn random_b64url(bytes: usize) -> String {
     let mut data = vec![0u8; bytes];
-    rand::rngs::OsRng.fill_bytes(&mut data);
+    rand::fill(&mut data);
     URL_SAFE_NO_PAD.encode(data)
 }
 

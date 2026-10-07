@@ -3,7 +3,7 @@
 // into clickable chips that deep-link via `moduo:entity:open`.
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { EntityRichText } from "./entity-rich-text";
 
 afterEach(cleanup);
@@ -15,7 +15,7 @@ describe("EntityRichText", () => {
   });
 
   it("renders our html with a chip that deep-links on click", () => {
-    const spy = vi.fn();
+    const spy = rs.fn();
     window.addEventListener("moduo:entity:open", spy as EventListener);
     render(
       <EntityRichText

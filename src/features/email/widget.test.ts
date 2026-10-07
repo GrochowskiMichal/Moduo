@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import type { EmailAccountRef, EmailModuleBundle, EmailThreadRef } from "../../lib/runtime.types";
 import { shapeEmailInbox } from "./widget";

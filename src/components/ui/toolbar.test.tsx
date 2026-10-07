@@ -3,7 +3,7 @@
 // these lock the behaviour in.
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { SegmentedControl } from "./segmented-control";
 import { Toolbar } from "./toolbar";
 
@@ -183,7 +183,7 @@ describe("Toolbar roving focus", () => {
   });
 
   it("passes the consumer's own handlers through", () => {
-    const onKeyDown = vi.fn();
+    const onKeyDown = rs.fn();
     render(
       <Toolbar aria-label="Row" onKeyDown={onKeyDown}>
         <button type="button">One</button>

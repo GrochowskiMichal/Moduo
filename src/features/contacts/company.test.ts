@@ -1,7 +1,7 @@
 // AC8 proof: a company hub unions its people (denormalized members ∪ works-at
 // links) and their work one level up, dropping the intra-company edges.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { EntityLink, EntityRecord, EntityRef } from "../../lib/entity-links";
 import { entityRefKey } from "../spine/rollup";
 import type { ActivityEntry } from "../tasks/model";

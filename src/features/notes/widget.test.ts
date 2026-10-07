@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { type RecentNoteRow, shapeRecentNotes, timeAgo } from "./recent";
 
 const NOW = new Date("2026-07-04T12:00:00Z");

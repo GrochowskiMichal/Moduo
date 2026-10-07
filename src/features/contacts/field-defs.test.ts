@@ -2,7 +2,7 @@
 // and a stored value missing from the def's options is preserved (still renders,
 // still selectable — never silently dropped).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { parseFieldOptions, selectOptionsFor, serializeFieldOptions } from "./field-defs";
 import type { ContactFieldDef } from "./model";

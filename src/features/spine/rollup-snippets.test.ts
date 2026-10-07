@@ -3,7 +3,7 @@
 // (vitest gives each file its own module/projector registry) because importing
 // the builtins overrides the default projector for task/note/event/email.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import "./snippet-projectors.builtin";
 import type { EntityLink, EntityRef } from "@/lib/entity-links";
 import { entityRefKey, rollupSections } from "./rollup";

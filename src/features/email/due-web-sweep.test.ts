@@ -1,7 +1,7 @@
 // DF-21f AC12 — the web follow-up-due selector: fire only MY awaiting follow-ups
 // whose deadline passed; never snooze-due (excluded on web); never someone else's.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { EmailThreadRef } from "@/lib/runtime.types";
 import { selectWebFollowUpDue } from "./due-web-sweep";
 

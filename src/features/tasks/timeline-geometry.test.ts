@@ -1,7 +1,7 @@
 // Tests for the Timeline view's pure geometry (specs/tasks-timeline.md).
 // Each block name mirrors the spec's "Tests that prove them" table.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { makeTask } from "./helpers";
 import type { Task, TaskRelation } from "./model";

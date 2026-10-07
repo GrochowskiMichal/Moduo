@@ -1,7 +1,7 @@
 // AC7 proof: a contact accepting a spine suggestion writes through contacts.link
 // (origin='suggest'); declining records the pair for the spine to remember.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { EntityRef } from "../../lib/entity-links";
 import type { LinkSuggestion } from "../spine/suggest";
 import { contactDeclineArgs, contactSuggestLinkArgs } from "./suggest-link";
