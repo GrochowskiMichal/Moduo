@@ -50,7 +50,7 @@ On Max, Fable counts against at most half the weekly limit. On Pro it bills usag
 
 Pick the tier by what the diff touches; details and commands are in the `/s3` skill.
 
-- **Tier 0, every block:** `bun run verify` + hooks + LSP diagnostics, then the `validator` subagent and `/code-review high`.
+- **Tier 0, every block:** `bun run verify` + hooks + Rust LSP diagnostics, then the `validator` subagent and `/code-review high`.
 - **Tier 1, every PR into `develop`:** `/code-review high <PR>` on the PR plus the review checklist in [REVIEW.md](./REVIEW.md).
 - **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater/signing, `.github/workflows`): add `/code-review ultra <PR>` and a `/claude-security` diff scan before merging.
 - **Tier 3, promotion to `prod-app`:** the designer's manual checklist pass.
@@ -98,7 +98,7 @@ Closed vocabularies (plan tier, task status, roles, link origins, …) live in `
 
 ## Agent tooling (Claude Code)
 
-- **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, LSP diagnostics, security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
+- **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
 - **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates every block.
 - **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the three guards above.
 - **MCP:** `supabase`, `subframe`, `vercel`, `github` in `.mcp.json` (`claude mcp login <name>` once per machine).

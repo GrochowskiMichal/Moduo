@@ -32,7 +32,7 @@ Close out the session so nothing is lost and the next one picks up cleanly. **Th
    - **Duplication guard, before merging:** run `gh pr list --base <personal> --state open` and check whether another open PR touches the same new files, migrations or DB objects, or the same `BUILD_ORDER` block. If so, don't merge: surface the overlap and get the designer's call.
    - Merge only a conflict-free (`mergeable: MERGEABLE`), non-overlapping PR, with `gh pr merge <n> --merge`. If it conflicts with the advanced base, merge the latest personal branch in, resolve, re-run `bun run verify`, then merge.
 6b. **Sync personal → `develop`** for a bigger chunk: a finished block, a multi-file change, user-visible UI, a schema change, or anything the other person should build on.
-   - Run `bun run verify`, then open `<personal> → develop` and merge it with `gh pr merge --merge`.
+   - Run `bun run verify`, then open `<personal> → develop`. A ruleset requires the `static-checks` job on `develop`, so wait for it (`gh pr checks <n> --watch --required`) and merge with `gh pr merge <n> --merge` once it passes. If it fails, fix it on the personal branch; never try to bypass the ruleset.
    - Afterwards `git fetch` and merge `origin/develop` back into the personal branch, so the two stay aligned.
    - Skip this step if the designer said to keep the work on the task branch, if the chunk is a one-line typo or doc nit, or if the duplication guard against open PRs into `develop` shows overlap.
 7. **Report.** Tell the designer what shipped, whether `bun run verify` is green, which gates ran and what they found, what merged (PR links), what's left undone, which next sessions you suggest and why (one line each), and whether it's safe to archive the session.
