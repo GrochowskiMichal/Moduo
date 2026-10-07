@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-
+import { toast } from "sonner";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { EntityHub } from "@/features/spine/ui/entity-hub";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
@@ -57,6 +57,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { cn } from "../../../lib/utils";
 import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
 import { activityActorName, activityLine } from "../activity";
+import { previewAssign, useAssignees } from "../assignees";
 import { formatTimestamp, LEVEL_OPTIONS, STATUS_LABELS, wouldCreateCycle } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import {
@@ -74,6 +75,7 @@ import {
   recurrenceFromPreset,
   recurrenceLabel,
 } from "../parse/recurrence";
+import { AssigneeAvatar } from "./assignee-avatar";
 
 type Props = {
   task: Task | null;
@@ -408,6 +410,19 @@ function DetailBody({
               aria-label="Due date"
               disabled={!canEdit}
               className="w-full"
+            />
+          </PropertyRow>
+
+          <PropertyRow label="Assignee">
+            <AssigneeSelect
+              value={task.ownerId}
+              disabled={!canEdit}
+              onChange={(id) => {
+                void previewAssign(task.bucketId, id).then((msg) => {
+                  if (msg) toast.message(msg);
+                });
+                api.patchTask(task.id, { ownerId: id });
+              }}
             />
           </PropertyRow>
 
@@ -1043,6 +1058,47 @@ function LevelSelect({
         {LEVEL_OPTIONS.map((l) => (
           <SelectItem key={l.value} value={l.value}>
             {l.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function AssigneeSelect({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  disabled: boolean;
+  onChange: (next: string) => void;
+}) {
+  const { assignees, byId } = useAssignees();
+  // A previous assignee who left the workspace stays selectable-as-current so the
+  // control never renders blank.
+  const known = byId(value);
+  return (
+    <Select value={value || undefined} disabled={disabled} onValueChange={onChange}>
+      <SelectTrigger size="sm" variant="ghost" className="w-full" aria-label="Assignee">
+        <SelectValue placeholder="Unassigned">
+          {known ? (
+            <span className="flex items-center gap-2">
+              <AssigneeAvatar assignee={known} className="size-4" />
+              <span className="truncate">{known.name}</span>
+            </span>
+          ) : value ? (
+            "Former member"
+          ) : null}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {assignees.map((a) => (
+          <SelectItem key={a.userId} value={a.userId} disabled={!a.canTakeTasks}>
+            <span className="flex items-center gap-2">
+              <AssigneeAvatar assignee={a} className="size-4" />
+              {a.name}
+            </span>
           </SelectItem>
         ))}
       </SelectContent>

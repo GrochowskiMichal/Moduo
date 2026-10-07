@@ -28,12 +28,12 @@ import { parseOrError, type SafeParseResult } from "./errors.ts";
 
 // ---------------------------------------------------------------------------
 // plan_tier — the only native Postgres enum today.
-// Live pg_enum (2026-08-14): free | pro | team | founder  (SINGULAR).
+// Live pg_enum (2026-10-06): free | pro | team | founder | duo  (SINGULAR).
 // The app historically used "founders" (plural); Stripe/sync Edge Functions
 // wrote "founders" until task 6. "founders" is a compatibility INPUT only.
 // ---------------------------------------------------------------------------
 
-export const PLAN_TIERS = ["free", "pro", "team", "founder"] as const;
+export const PLAN_TIERS = ["free", "pro", "team", "founder", "duo"] as const;
 export type PlanTier = (typeof PLAN_TIERS)[number];
 export const planTierSchema = z.enum(PLAN_TIERS);
 
@@ -183,6 +183,83 @@ export type MemberDbPermission = (typeof MEMBER_DB_PERMISSIONS)[number];
 export const memberDbPermissionSchema = z.enum(MEMBER_DB_PERMISSIONS);
 
 /**
+ * Workspace permission keys (PERM-1, specs/permissions.md). A role is a set of
+ * these; a member's personal exceptions allow/block single keys on top of it.
+ * Mirrors public.perm_all_keys() — same members, same order (the order drives
+ * the settings matrix). `<module>.<action>` for modules, `ws.<power>` for the
+ * workspace powers.
+ */
+export const PERMISSION_MODULES = ["notes", "tasks", "calendar", "contacts", "chat"] as const;
+export type PermissionModule = (typeof PERMISSION_MODULES)[number];
+export const PERMISSION_ACTIONS = ["view", "create", "edit", "delete"] as const;
+export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
+export const WORKSPACE_POWERS = [
+  "invite",
+  "manage_members",
+  "manage_roles",
+  "publish",
+  "api_keys",
+] as const;
+export type WorkspacePower = (typeof WORKSPACE_POWERS)[number];
+export type PermissionKey = `${PermissionModule}.${PermissionAction}` | `ws.${WorkspacePower}`;
+export const PERMISSION_KEYS: readonly PermissionKey[] = [
+  ...PERMISSION_MODULES.flatMap((m) => PERMISSION_ACTIONS.map((a) => `${m}.${a}` as const)),
+  ...WORKSPACE_POWERS.map((p) => `ws.${p}` as const),
+];
+export function isPermissionKey(value: unknown): value is PermissionKey {
+  return typeof value === "string" && (PERMISSION_KEYS as readonly string[]).includes(value);
+}
+/** System role keys seeded for every workspace (`workspace_roles.system_key`). */
+export const SYSTEM_ROLE_KEYS = ["admin", "member", "viewer"] as const;
+export type SystemRoleKey = (typeof SYSTEM_ROLE_KEYS)[number];
+export function isSystemRoleKey(value: unknown): value is SystemRoleKey {
+  return typeof value === "string" && (SYSTEM_ROLE_KEYS as readonly string[]).includes(value);
+}
+
+/**
+ * Per-thing sharing (PERM-3…8). Mirrors resource_grants CHECKs in
+ * 20261006210000_perm_sharing.sql. `freebusy` is calendars only.
+ */
+export const GRANT_LEVELS = ["freebusy", "view", "edit", "full"] as const;
+export type GrantLevel = (typeof GRANT_LEVELS)[number];
+export const grantLevelSchema = z.enum(GRANT_LEVELS);
+export function isGrantLevel(value: unknown): value is GrantLevel {
+  return typeof value === "string" && (GRANT_LEVELS as readonly string[]).includes(value);
+}
+
+export const SHARE_RESOURCE_TYPES = [
+  "note",
+  "bucket",
+  "task",
+  "calendar",
+  "contact",
+  "contact_group",
+  "channel",
+] as const;
+export type ShareResourceType = (typeof SHARE_RESOURCE_TYPES)[number];
+export function isShareResourceType(value: unknown): value is ShareResourceType {
+  return typeof value === "string" && (SHARE_RESOURCE_TYPES as readonly string[]).includes(value);
+}
+
+export const GRANT_SUBJECT_TYPES = ["member", "workspace", "public_link"] as const;
+export type GrantSubjectType = (typeof GRANT_SUBJECT_TYPES)[number];
+
+/** Workspace default for a new container. `private` writes no workspace grant. */
+export const SHARE_DEFAULT_LEVELS = ["private", "freebusy", "view", "edit", "full"] as const;
+export type ShareDefaultLevel = (typeof SHARE_DEFAULT_LEVELS)[number];
+
+export const CHAT_CAPABILITIES = [
+  "create_public",
+  "create_private",
+  "manage_any",
+  "delete_others",
+  "mention_everyone",
+  "post",
+  "start_calls",
+] as const;
+export type ChatCapability = (typeof CHAT_CAPABILITIES)[number];
+
+/**
  * MCP connector key scopes — a SEPARATE vocabulary from workspace permissions
  * on purpose: `admin` is never key-grantable, and the scope map is per-module.
  * Mirrors moduleScope() in supabase/functions/moduo-mcp/registry.ts.
@@ -325,4 +402,37 @@ export function isKnownSubscriptionStatus(value: unknown): value is KnownSubscri
   return (
     typeof value === "string" && (KNOWN_SUBSCRIPTION_STATUSES as readonly string[]).includes(value)
   );
+}
+
+// ---------------------------------------------------------------------------
+// Chat — mirrors the CHECKs in 20261006150000_chat_module (chat_channels.kind,
+// chat_members.notify_level). Gated by the workspace owner's plan rank ≥ duo.
+// ---------------------------------------------------------------------------
+
+export const CHAT_CHANNEL_KINDS = ["channel", "dm"] as const;
+export type ChatChannelKind = (typeof CHAT_CHANNEL_KINDS)[number];
+export const chatChannelKindSchema = z.enum(CHAT_CHANNEL_KINDS);
+export function isChatChannelKind(value: unknown): value is ChatChannelKind {
+  return typeof value === "string" && (CHAT_CHANNEL_KINDS as readonly string[]).includes(value);
+}
+
+export const CHAT_NOTIFY_LEVELS = ["all", "mentions", "none"] as const;
+export type ChatNotifyLevel = (typeof CHAT_NOTIFY_LEVELS)[number];
+export const chatNotifyLevelSchema = z.enum(CHAT_NOTIFY_LEVELS);
+export function isChatNotifyLevel(value: unknown): value is ChatNotifyLevel {
+  return typeof value === "string" && (CHAT_NOTIFY_LEVELS as readonly string[]).includes(value);
+}
+/** Read-side normalization: an unknown level degrades to the quiet default. */
+export function normalizeChatNotifyLevel(input: unknown): ChatNotifyLevel {
+  return isChatNotifyLevel(input) ? input : "mentions";
+}
+/** Strict parse for write paths. */
+export function parseChatNotifyLevel(input: unknown): SafeParseResult<ChatNotifyLevel> {
+  return parseOrError(chatNotifyLevelSchema, input);
+}
+
+/** Plans whose workspaces get chat (mirrors public.chat_workspace_enabled: rank ≥ duo). */
+export const CHAT_PLAN_TIERS = ["duo", "team", "founder"] as const satisfies readonly PlanTier[];
+export function planHasChat(tier: unknown): boolean {
+  return (CHAT_PLAN_TIERS as readonly string[]).includes(normalizePlanTier(tier));
 }

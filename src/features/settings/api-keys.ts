@@ -13,3 +13,20 @@ export type KeyScope = "view" | "edit";
 export function keyScope(key: WorkspaceApiKey): KeyScope {
   return key.scopes?.tasks === "edit" ? "edit" : "view";
 }
+
+export type ChatKeyScope = "none" | "view" | "edit";
+
+/**
+ * A key's chat access (specs/chat.md §Agents). Chat has its own lane and is
+ * off unless granted — and even then apps only see public channels.
+ */
+export function chatKeyScope(key: WorkspaceApiKey): ChatKeyScope {
+  const raw = key.scopes?.chat;
+  return raw === "edit" || raw === "view" ? raw : "none";
+}
+
+export const CHAT_SCOPE_LABEL: Record<ChatKeyScope, string> = {
+  none: "No chat",
+  view: "Read public channels",
+  edit: "Read + post",
+};

@@ -17,7 +17,13 @@ import type { WorkspaceApiKey } from "../../../lib/runtime";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 
-import { type KeyScope, keyScope } from "../api-keys";
+import {
+  CHAT_SCOPE_LABEL,
+  type ChatKeyScope,
+  chatKeyScope,
+  type KeyScope,
+  keyScope,
+} from "../api-keys";
 import { SettingsSectionShell } from "./section-shell";
 
 /**
@@ -29,12 +35,14 @@ import { SettingsSectionShell } from "./section-shell";
  */
 export function ApiKeysSection() {
   const { runtime } = useAuth();
-  const { selectedWorkspace, canManageWorkspace } = useWorkspace();
+  const { selectedWorkspace, can } = useWorkspace();
+  const canManageKeys = can("ws.api_keys");
   const workspaceId = selectedWorkspace?.id ?? null;
 
   const [keys, setKeys] = useState<WorkspaceApiKey[]>([]);
   const [name, setName] = useState("");
   const [scope, setScope] = useState<KeyScope>("view");
+  const [chatScope, setChatScope] = useState<ChatKeyScope>("none");
   const [creating, setCreating] = useState(false);
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState<"secret" | "endpoint" | null>(null);
@@ -70,11 +78,12 @@ export function ApiKeysSection() {
       const created = await runtime.workspace.createApiKey({
         workspaceId,
         name: trimmed,
-        scopes: { tasks: scope },
+        scopes: { tasks: scope, chat: chatScope },
       });
       setRevealedSecret(created.secret);
       setName("");
       setScope("view");
+      setChatScope("none");
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't create the key.");
@@ -104,7 +113,7 @@ export function ApiKeysSection() {
         <p className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
           No workspace selected.
         </p>
-      ) : !canManageWorkspace ? (
+      ) : !canManageKeys ? (
         <p className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
           Only workspace owners and admins can manage API keys.
         </p>
@@ -180,6 +189,32 @@ export function ApiKeysSection() {
             </Button>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Chat</span>
+            <div
+              role="radiogroup"
+              aria-label="Chat access"
+              className="inline-flex items-center gap-1"
+            >
+              {(["none", "view", "edit"] as const).map((level) => (
+                <Button
+                  key={level}
+                  type="button"
+                  variant={chatScope === level ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setChatScope(level)}
+                  aria-pressed={chatScope === level}
+                  className={chatScope === level ? "text-foreground" : "text-muted-foreground"}
+                >
+                  {CHAT_SCOPE_LABEL[level]}
+                </Button>
+              ))}
+            </div>
+            <span className="text-2xs text-muted-foreground">
+              Apps never see direct messages or private channels.
+            </span>
+          </div>
+
           {revealedSecret ? (
             <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2">
               <Check className="size-3.5 shrink-0 text-success" aria-hidden />
@@ -241,6 +276,11 @@ export function ApiKeysSection() {
                     <Badge variant={keyScope(key) === "edit" ? "info" : "secondary"}>
                       Tasks · {keyScope(key) === "edit" ? "Edit" : "View"}
                     </Badge>
+                    {chatKeyScope(key) !== "none" ? (
+                      <Badge variant={chatKeyScope(key) === "edit" ? "info" : "secondary"}>
+                        Chat · {chatKeyScope(key) === "edit" ? "Post" : "Read"}
+                      </Badge>
+                    ) : null}
                     <Button
                       type="button"
                       variant="ghost"

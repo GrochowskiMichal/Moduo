@@ -1,6 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarDays, Clock, CornerDownRight, Inbox, ListChecks, Repeat } from "lucide-react";
+import { toast } from "sonner";
 import { TagChipList } from "../../../components/tag-chip";
 import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -18,10 +19,12 @@ import {
 } from "../../../components/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
+import { previewAssign, useAssignees } from "../assignees";
 import { formatDue, formatScheduled, LEVEL_OPTIONS } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type EnergyLevel, isDrifted, type PriorityLevel, type Task } from "../model";
 import { recurrenceLabel } from "../parse/recurrence";
+import { AssigneeAvatar } from "./assignee-avatar";
 import { taskDrag } from "./dnd/task-dnd";
 import { LevelDots } from "./level-icons";
 import { BlockedMarker } from "./task-row";
@@ -56,6 +59,7 @@ export function TaskCard({
   onTagFilter,
   api,
 }: Props) {
+  const { assignees } = useAssignees();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: taskDrag(task.id, "board"),
@@ -138,6 +142,31 @@ export function TaskCard({
             </ContextMenuRadioGroup>
           </ContextMenuSubContent>
         </ContextMenuSub>
+        {assignees.length > 1 ? (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>Assign to</ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              <ContextMenuRadioGroup
+                value={task.ownerId}
+                onValueChange={(v) => {
+                  if (v === task.ownerId) return;
+                  const person = assignees.find((a) => a.userId === v);
+                  if (!person?.canTakeTasks) return;
+                  void previewAssign(task.bucketId, v).then((msg) => {
+                    if (msg) toast.message(msg);
+                  });
+                  api.patchTask(task.id, { ownerId: v });
+                }}
+              >
+                {assignees.map((a) => (
+                  <ContextMenuRadioItem key={a.userId} value={a.userId} disabled={!a.canTakeTasks}>
+                    {a.canTakeTasks ? a.name : `${a.name} (view only)`}
+                  </ContextMenuRadioItem>
+                ))}
+              </ContextMenuRadioGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        ) : null}
         <ContextMenuSub>
           <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
           <ContextMenuSubContent>
@@ -209,6 +238,8 @@ export function CardBody({
   const tags = api.tagsByTask.get(task.id) ?? [];
   // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
   const blocked = api.blockedTaskIds.has(task.id);
+  const { assignees, byId } = useAssignees();
+  const assignee = assignees.length > 1 ? byId(task.ownerId) : null;
   // Quiet subtask mirrors: n/m progress on a parent; a parent caption on a
   // subtask card rendered flat (Today, or its parent is off this board).
   const progress = api.subtaskProgressByTask.get(task.id) ?? null;
@@ -221,6 +252,7 @@ export function CardBody({
     due ||
     task.priority ||
     task.energyLevel ||
+    !!assignee ||
     tags.length > 0 ||
     (progress?.total ?? 0) > 0 ||
     !!parent;
@@ -313,6 +345,16 @@ export function CardBody({
             </span>
           ) : null}
           <LevelDots task={task} />
+          {assignee ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex items-center" aria-label={`Assignee: ${assignee.name}`}>
+                  <AssigneeAvatar assignee={assignee} className="size-4" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{assignee.name}</TooltipContent>
+            </Tooltip>
+          ) : null}
           {showBucket ? (
             <Badge variant="secondary" className="gap-1 font-normal">
               {task.bucketId === inboxId ? <Inbox className="size-3" aria-hidden /> : null}

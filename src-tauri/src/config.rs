@@ -1,3 +1,21 @@
+/// Keychain service for signed release builds (staging + prod share it: same
+/// Developer ID, same designated requirement, so macOS never re-prompts).
+const RELEASE_KEYCHAIN_SERVICE: &str = "com.moduo.desktop.auth";
+
+/// Unsigned local/dev builds get their own service. macOS ties each keychain
+/// entry's access list to the app that created it, so a dev build and the signed
+/// `.dmg` app sharing one service makes the signed app prompt for the login
+/// password on every read of an entry the dev build wrote.
+const DEV_KEYCHAIN_SERVICE: &str = "com.moduo.desktop.dev.auth";
+
+fn default_keychain_service() -> &'static str {
+    if cfg!(debug_assertions) {
+        DEV_KEYCHAIN_SERVICE
+    } else {
+        RELEASE_KEYCHAIN_SERVICE
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct AppConfig {
     pub keychain_service: String,
@@ -23,7 +41,7 @@ impl AppConfig {
             keychain_service: std::env::var("MODUO_KEYCHAIN_SERVICE")
                 .ok()
                 .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(|| "com.moduo.desktop.auth".to_string()),
+                .unwrap_or_else(|| default_keychain_service().to_string()),
             calendar_google_client_id: std::env::var("MODUO_CALENDAR_GOOGLE_CLIENT_ID")
                 .ok()
                 .map(|value| value.trim().to_string())
@@ -70,5 +88,17 @@ impl AppConfig {
                 .filter(|v| !v.is_empty())
                 .unwrap_or_else(|| "https://wtoonrvuqumihpkbvwvs.supabase.co".to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dev_and_release_builds_never_share_a_keychain_service() {
+        assert_ne!(DEV_KEYCHAIN_SERVICE, RELEASE_KEYCHAIN_SERVICE);
+        // `cargo test` is a debug build, so it must land on the dev service.
+        assert_eq!(default_keychain_service(), DEV_KEYCHAIN_SERVICE);
     }
 }

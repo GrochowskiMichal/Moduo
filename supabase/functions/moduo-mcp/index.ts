@@ -58,10 +58,17 @@ async function authenticate(req: Request, admin: SupabaseClient): Promise<KeyCon
   if (!match) return null;
   const { data, error } = await admin
     .from("workspace_api_keys")
-    .select("id, workspace_id, name, scopes, revoked_at, last_used_at")
+    .select("id, workspace_id, name, scopes, created_by, revoked_at, last_used_at")
     .eq("key_hash", await sha256Hex(match[1]))
     .maybeSingle();
   if (error || !data || data.revoked_at) return null;
+  // PERM-0: a key acts as its creator. A key with no recorded creator can't be
+  // scoped to anyone's private data, so it is refused outright.
+  if (!data.created_by) return null;
+  // Effective scopes = key scopes capped by the creator's current permission
+  // (all 'none' once the creator leaves). Fail closed if the RPC is missing.
+  const effective = await admin.rpc("module_api_key_effective_scopes", { p_key_id: data.id });
+  if (effective.error || !effective.data || typeof effective.data !== "object") return null;
   // Ambient last-used stamp, throttled to once a minute; never blocks the call.
   const lastUsed = data.last_used_at ? new Date(data.last_used_at).getTime() : 0;
   if (Date.now() - lastUsed > 60_000) {
@@ -72,7 +79,8 @@ async function authenticate(req: Request, admin: SupabaseClient): Promise<KeyCon
     id: data.id,
     workspaceId: data.workspace_id,
     name: data.name,
-    scopes: (data.scopes ?? {}) as Record<string, string>,
+    createdBy: data.created_by,
+    scopes: effective.data as Record<string, string>,
   };
 }
 

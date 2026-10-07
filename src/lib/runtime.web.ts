@@ -79,6 +79,7 @@ import {
   prefsSelectCols,
 } from "./prefs-columns";
 import { createRequestCache } from "./request-cache";
+import { webChatRuntime } from "./runtime.chat.web";
 import type {
   AuthChangeEvent,
   AuthListener,
@@ -292,6 +293,10 @@ export const webCapabilities: RuntimeCapabilities = {
 export const webRuntime: ModuoRuntime = {
   capabilities: webCapabilities,
 
+  // Chat (specs/chat.md): ops + RLS reads live in runtime.chat.web.ts. Only this
+  // file imports it — importing it first elsewhere would hit the module cycle.
+  chat: webChatRuntime,
+
   auth: {
     async getLocalAuthState() {
       // Cloud-auth equivalent of the desktop vault state: derived from the
@@ -490,7 +495,9 @@ export const webRuntime: ModuoRuntime = {
       try {
         const { error } = await supabaseClient.auth.signInWithOtp({
           email,
-          options: { shouldCreateUser: true },
+          // Invite-only: sign-ups are off on the Supabase project, so only existing
+          // or dashboard-invited users get a code. Never create a user from here.
+          options: { shouldCreateUser: false },
         });
         if (error) return { data: {}, error: toError(error) };
         return { data: {}, error: null };
@@ -508,8 +515,12 @@ export const webRuntime: ModuoRuntime = {
         });
         if (error) return { data: { user: null, session: null }, error: toError(error) };
         const session = sessionFromSupabase(data.session);
-        const createdAt = data.user?.created_at ? new Date(data.user.created_at).getTime() : 0;
-        const isNewUser = !!sentAt && !!createdAt && createdAt >= sentAt - 30_000;
+        // An invited user exists from invite time but is only confirmed on their first
+        // sign-in, so "first confirmed" (not "first created") marks a new user.
+        const firstSeenAt = data.user?.email_confirmed_at
+          ? new Date(data.user.email_confirmed_at).getTime()
+          : 0;
+        const isNewUser = !!sentAt && !!firstSeenAt && firstSeenAt >= sentAt - 30_000;
         return { data: { user: session?.user ?? null, session, isNewUser }, error: null };
       } catch (error) {
         return { data: { user: null, session: null, isNewUser: false }, error: toError(error) };
@@ -597,7 +608,7 @@ export const webRuntime: ModuoRuntime = {
         .eq("id", workspaceId);
       if (error) throw new Error(error.message);
     },
-    async issueInvite(workspaceId, email, role, modulePermissions) {
+    async issueInvite(workspaceId, email, role, modulePermissions, roleId, sharePayload) {
       const user = await getAuthedUser();
       const { data, error } = await supabaseClient
         .from("workspace_invites")
@@ -606,8 +617,11 @@ export const webRuntime: ModuoRuntime = {
           created_by: user?.id,
           email,
           role,
+          // PERM-1: the role id wins; the DB trigger rewrites `role` to its tier.
+          ...(roleId ? { role_id: roleId } : {}),
           permissions_notes: modulePermissions?.notes ?? "write",
           permissions_tasks: modulePermissions?.tasks ?? "write",
+          ...(sharePayload ? { share_payload: sharePayload } : {}),
         })
         .select()
         .single();
@@ -648,11 +662,12 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
       return data ?? [];
     },
-    async updateInvite(inviteId, role, modulePermissions) {
+    async updateInvite(inviteId, role, modulePermissions, roleId) {
       const { error } = await supabaseClient
         .from("workspace_invites")
         .update({
           role,
+          ...(roleId ? { role_id: roleId } : {}),
           permissions_notes: modulePermissions?.notes ?? "write",
           permissions_tasks: modulePermissions?.tasks ?? "write",
         })
@@ -687,6 +702,45 @@ export const webRuntime: ModuoRuntime = {
         p_member_id: memberId,
       });
       if (error) throw new Error(error.message);
+    },
+    async listRoles(workspaceId) {
+      const { data, error } = await supabaseClient
+        .from("workspace_roles")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .order("position")
+        .order("id");
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    async upsertRole(input) {
+      const { data, error } = await supabaseClient.rpc("workspace_op_role_upsert", {
+        p_workspace_id: input.workspaceId,
+        p_role_id: input.roleId,
+        p_name: input.name,
+        p_description: input.description,
+        p_permissions: input.permissions,
+        p_read_only: input.readOnly,
+        p_expected_updated_at: input.expectedUpdatedAt,
+      });
+      if (error) throw new Error(error.message);
+      return Array.isArray(data) ? data[0] : data;
+    },
+    async deleteRole(roleId, reassignTo) {
+      const { error } = await supabaseClient.rpc("workspace_op_role_delete", {
+        p_role_id: roleId,
+        p_reassign_to: reassignTo,
+      });
+      if (error) throw new Error(error.message);
+    },
+    async setMemberAccess(memberId, roleId, overrides) {
+      const { data, error } = await supabaseClient.rpc("workspace_op_set_member_access", {
+        p_member_id: memberId,
+        p_role_id: roleId,
+        p_overrides: overrides,
+      });
+      if (error) throw new Error(error.message);
+      return Array.isArray(data) ? data[0] : data;
     },
     async removeMember(memberId) {
       // The base workspace_members write-RLS is own-row (only `leave` self-deletes),
@@ -820,7 +874,7 @@ export const webRuntime: ModuoRuntime = {
     // the bundle degraded. Explicit mutations throw honest errors instead.
     async listMeta(workspaceId) {
       const V2_COLS =
-        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, created_at, updated_at, deleted_at";
+        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, share_mode, workspace_shared, created_at, updated_at, deleted_at";
       const LEGACY_COLS =
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
       const cutoff = trashWindowCutoffIso(new Date());
@@ -1889,7 +1943,9 @@ export const webRuntime: ModuoRuntime = {
   // file.
   tasks: {
     async list(workspaceId) {
-      await ensureWebInbox(workspaceId);
+      // Best effort: a Viewer can't create their own Inbox (no tasks.create),
+      // and that must not stop them reading the shared buckets.
+      await ensureWebInbox(workspaceId).catch(() => null);
       const live = (table: string) => (opts?: SelectOpts) =>
         supabaseClient
           .from(table)
@@ -3065,18 +3121,19 @@ function activityRowToModel(raw: unknown): ActivityEntry {
 
 /** Ensure the workspace has its reserved Inbox bucket (idempotent). */
 async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
+  const user = await getAuthedUser();
   const find = () =>
     supabaseClient
       .from("buckets")
       .select("*")
       .eq("workspace_id", workspaceId)
       .eq("is_system", true)
+      .eq("owner_id", user?.id ?? "")
       .is("deleted_at", null)
       .limit(1)
       .maybeSingle();
   const { data: existing } = await find();
   if (existing) return bucketRowToModel(existing);
-  const user = await getAuthedUser();
   const now = new Date().toISOString();
   const { data, error } = await supabaseClient
     .from("buckets")

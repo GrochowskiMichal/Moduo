@@ -190,6 +190,40 @@ Shared Zod 4 contracts + closed vocabularies. Wave 1 (tasks 1–4) landed on `t/
 
 ---
 
+## Moduo Meet — own video calls (LiveKit on Azure) · [`specs/moduo-meet.md`](./moduo-meet.md)
+
+> Lanes: **infra** (0a → 0b) · **app** (1 → 2 → 3 → 4 → 7 → 8 → 9 → 10). **MEET-5** (desktop) and **MEET-6** (Studio) can run in parallel after MEET-2. 0b can run alongside 1/2. External prereqs for 0a: Azure VM quota (the subscription reports 0 today), Vercel DNS access, Supabase MCP auth.
+
+- [ ] **MEET-0a — Azure foundation + single LiveKit node** · deps: —
+- [ ] **MEET-0b — Scale-out (Redis + VMSS autoscale) + Egress + monitoring** · deps: MEET-0a
+- [ ] **MEET-1 — Data, contracts, tokens (meet_rooms/invites/sessions/recordings, meet-room/token/admit)** · deps: MEET-0a
+- [ ] **MEET-2 — Call core (web): join pre-connect, calm-cinematic stage, dock, share, adaptive quality** · deps: MEET-1
+- [ ] **MEET-3 — Public /m/:slug, lobby/knock, waiting room, mobile guest** · deps: MEET-2
+- [ ] **MEET-4 — Booking + events + instant call wiring (default for paid)** · deps: MEET-3
+- [ ] **MEET-5 — Desktop in-app calls + floating mini-player + screen share** · deps: MEET-2
+- [ ] **MEET-6 — Studio look (blur/replace, noise, low-light, auto-framing)** · deps: MEET-2
+- [ ] **MEET-7 — Spine panel + live Call note (action items → tasks)** · deps: MEET-4
+- [ ] **MEET-8 — Webhooks + aftermath recap + 4 h sweep** · deps: MEET-7, MEET-0b
+- [ ] **MEET-9 — Recording + transcript (Egress → Blob, Speech batch, consent)** · deps: MEET-8
+- [ ] **MEET-10 — Module DoD: MCP tools + Next-call widget** · deps: MEET-8
+
+## Permissions & sharing (all modules) · [`specs/permissions.md`](./permissions.md)
+
+> Order: PERM-0 → PERM-1 → PERM-2, then PERM-3…7 in any order (each needs PERM-1+2); PERM-8 needs PERM-5. Designer calls locked 2026-10-06 (spec §Open questions).
+
+- [x] **PERM-0 — Privacy fixes: calendar + email refs owner-only, spine doesn't leak them, API keys act as creator** · deps: — · ✅ 2026-10-06 `t/mike/perm-0-privacy` (migration applied to the hosted project 2026-10-06)
+- [x] **PERM-1 — Roles + personal exceptions, enforced in Postgres (role matrix per module × view/create/edit/delete + workspace powers, read-only ceiling, legacy lanes migrated)** · deps: PERM-0 · ✅ 2026-10-06 `t/mike/perm-roles` (migration `20261006200000_perm1_roles_overrides.sql` applied to the hosted project)
+- [x] **PERM-2 — Settings → Members and access (roles editor, person editor with exceptions + explanations, invites by role)** · deps: PERM-1 · ✅ 2026-10-06 `t/mike/perm-roles`
+- [x] **PERM-2b — Per-item sharing layer: workspace defaults for new things, first-invite "existing content" step, invite "give access to…"** · deps: PERM-2 (needs the per-thing grants that PERM-3…6 introduce) · ✅ 2026-10-06 `t/mike/perm-sharing` (defaults + first-invite existing-content step; the per-item "give access to…" picker is stored on the invite but not picked in the UI yet)
+- [x] **PERM-3 — Notes sharing (share popover, private toggle, inheritance) + "Private item" chips everywhere** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing`
+- [x] **PERM-4 — Buckets sharing + assignee auto-grant** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing`
+- [x] **PERM-5 — Calendars: custom calendars, sharing levels incl. free/busy, publish/ICS, calendar sets** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing` (Google/Outlook Can edit does not write back; the public busy/ICS link is hidden — nothing serves the feed yet)
+- [x] **PERM-6 — Contacts: private by default (incl. booking-created contacts) + contact groups + merge-on-share** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing` (private-by-default live; the group + merge bar is hidden: groups have no list/share screen and merge doesn't move links yet)
+- [x] **PERM-7 — Chat capability grid + channel managers + announcement mode** · deps: PERM-2 · ✅ 2026-10-06 `t/mike/perm-sharing`
+- [ ] **PERM-8b — Collective links for real: per-host busy calendars in booking-public, a co-host request inbox (link name visible to hosts), owner sees pending/declined; then flip `COLLECTIVE_LINKS_ENABLED`** · deps: PERM-8
+- [ ] **PERM-6b — Contact groups list + share screen; merge moves links/activity and is scoped to the workspace; then re-enable the contact share bar** · deps: PERM-6
+- [x] **PERM-8 — Collective (Duo) booking links + Moduo Meet co-hosts** · deps: PERM-5 · ✅ 2026-10-06 `t/mike/perm-sharing` (database live; the co-host picker is HIDDEN behind `COLLECTIVE_LINKS_ENABLED` — the booking page doesn't combine each host's own calendars and co-hosts can't see the request yet; Moduo Meet not built)
+
 ## Running sessions & parallelism
 
 **Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `main`/`develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).
@@ -253,6 +287,8 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 
 - [ ] 🔴 **`/s1 ALPHA` — Alpha launch plan** · deps: — · **NOT DoR-ready — needs `/s1`, and several answers only the designer has.** A friend currently **cannot obtain the app at all**: there is **no web deploy** (no Vercel/Netlify/Docker config anywhere; `PUBLIC_WEB_ORIGIN` is empty, so invite links and `/p/<token>` share links point at `localhost`), and the macOS build is signed with an **Apple *Development*** certificate with no notarization and no updater, so Gatekeeper refuses it on anyone else's Mac. Beyond distribution: the trial is 7 days and then the paywall hard-blocks, with Stripe in **test mode**; **invites are gated on the Team tier while trials provision Pro**, so friends can't be invited at all; email OTP runs on Supabase's default sender (low hourly cap, unverified — the cheapest way to make the whole alpha look broken); and the invite→join→redeem loop has **never been run by two humans**. Decisions needed: hosting target + domain, trial length / comping for alpha, whether to drop the Team gate for alpha, Resend (or similar) for transactional email, Developer ID cert + notarization (**start early — it has lead time**), and error monitoring (`posthog-js` is a dependency but unwired).
 - [ ] **DF-15 — Home first-run composition** *(existing block, see Wave C)* · **needs the designer's look-approval on the draft** — the only remaining block that literally cannot complete without you.
+- [~] **PRIV-1 — Account deletion erases Stripe, Storage, booking links, integration tokens, waitlist** · deps: ~~DF-19h ✓~~ · _code + tests 2026-10-07 · `t/maciej/delete-account-erasure`_ (closes the five deletion gaps found 2026-10-07, plus private contact notes and legacy busy windows; Stripe still keeps invoices and our `stripe.*` mirror keeps a copy, see PRIV-2. Live check passed and `delete-account` v15 deployed 2026-10-07. **Open:** the throwaway-account pass in [docs/testing/t-maciej-delete-account-erasure.md](../docs/testing/t-maciej-delete-account-erasure.md) §2. Decision: [docs/decisions.md](../docs/decisions.md) 2026-10-07.)
+- [ ] 🔴 **PRIV-2 — Erase the rest: private items in other people's workspaces, the Stripe mirror, past leftovers** · deps: PRIV-1 · **Private items → delete** (Maciej, 2026-10-07): private buckets and notes (so account deletion no longer hands them to the workspace owner via `share_member_removed`), private contacts and contact groups, calendars and calendar sets, connected calendar and email accounts, plus the user's `notification_state` and `chat_channel_managers` rows (prod's no-FK list: §0 of the testing doc). Needs a short plan first (hard vs soft delete for notes/buckets and what hangs off them: tasks, entities, links, comments). Still open calls: our `stripe.*` mirror copy, Stripe-side invoices (redact or keep for tax), founder coupons. One-off cleanup: delete the two Stripe customers whose accounts are already gone (list them with the last query in §0 of [docs/testing/t-maciej-delete-account-erasure.md](../docs/testing/t-maciej-delete-account-erasure.md)), then re-run its leftover counts.
 - [x] ~~**DF-18 — Eyebrow / header / toolbar standardization**~~ — **DONE 2026-08-14**, see Wave C for what shipped.
 - [x] ~~🔴 Mindmap: in or out of alpha?~~ — **DECIDED 2026-07-29: OUT of alpha.** The designer ratified "mindmap comes later, out of alpha." It stays hidden from nav but URL-reachable (DF-4), and its rethink moves to post-alpha. **This unblocks MCP-1**, whose dependency line named "the Dashboard/Mindmap reworks" — MCP-1 is now buildable with no further planning.
 

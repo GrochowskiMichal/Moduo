@@ -214,6 +214,8 @@ const ROUTE_BY_TYPE: Record<string, string> = {
   // (DF-2), so passing this entityType through deep-links the thread, not a
   // dead-end inbox.
   email_thread: "/email",
+  // Chat mentions / thread replies (module_activity entity_type chat_channel).
+  chat_channel: "/chat",
 };
 
 /**
@@ -223,6 +225,7 @@ const ROUTE_BY_TYPE: Record<string, string> = {
  */
 const DEEP_LINK_NOUN: Record<string, string> = {
   email_thread: "email",
+  chat_channel: "conversation",
 };
 
 export function notificationDeepLinkNoun(entityType: string): string {

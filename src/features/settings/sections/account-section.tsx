@@ -537,7 +537,8 @@ export function AccountSection() {
             <h3 className="font-display text-lg text-foreground">Danger zone</h3>
           </div>
           <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-            Permanently delete your account and your personal data. This can&apos;t be undone.
+            Permanently delete your account and your personal data. This also cancels your Moduo
+            plan. This can&apos;t be undone.
           </p>
 
           {!deleteOpen ? (

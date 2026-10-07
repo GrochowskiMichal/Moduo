@@ -3,30 +3,15 @@ import { useEffect } from "react";
 
 import { EmailAuthPanel } from "@/components/auth/email-auth-panel";
 import { IS_STAGING_PORTAL } from "@/features/settings/about";
-import { checkoutRedirectUrl } from "@/lib/checkout-redirect";
 import { useAuth } from "@/providers/auth-provider";
 
-function getSearchParam(key: string): string | null {
-  if (typeof window === "undefined") return null;
-  return new URLSearchParams(window.location.search).get(key);
-}
-
 export function AuthPage() {
-  const { isSignedIn, loading, accessToken } = useAuth();
+  const { isSignedIn, loading } = useAuth();
   const navigate = useNavigate();
-
-  const priceId = getSearchParam("price_id");
 
   useEffect(() => {
     if (loading || !isSignedIn) return;
     if (window.sessionStorage.getItem("moduo:auth_resolving") === "1") return;
-
-    const pendingPriceId = priceId ?? window.localStorage.getItem("moduo:pending_price_id");
-    if (pendingPriceId) {
-      window.localStorage.removeItem("moduo:pending_price_id");
-      window.location.href = checkoutRedirectUrl(pendingPriceId, accessToken);
-      return;
-    }
 
     // Resume a workspace invite the user opened while signed out (DF-24).
     const pendingJoin = window.localStorage.getItem("moduo:pending_join");
@@ -37,7 +22,7 @@ export function AuthPage() {
     }
 
     void navigate({ to: "/", replace: true });
-  }, [isSignedIn, loading, navigate, priceId, accessToken]);
+  }, [isSignedIn, loading, navigate]);
 
   if (loading) {
     return (
@@ -68,7 +53,7 @@ export function AuthPage() {
         )}
 
         <div className="w-full rounded-xl border border-border bg-card px-6 py-7 shadow-xl sm:px-7 sm:py-8">
-          <EmailAuthPanel priceId={priceId} />
+          <EmailAuthPanel />
         </div>
       </div>
     </div>

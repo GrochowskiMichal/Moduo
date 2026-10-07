@@ -51,6 +51,7 @@ export const WIDGET_TYPES = [
   "quick-capture",
   "habits",
   "pinned",
+  "chat",
 ] as const;
 
 export type WidgetType = (typeof WIDGET_TYPES)[number];

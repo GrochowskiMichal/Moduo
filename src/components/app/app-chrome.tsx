@@ -3,6 +3,7 @@ import { ChevronsLeft, ChevronsRight, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
+import { useChatBadge } from "../../features/chat/hooks/use-chat-badge";
 import {
   DASHBOARD_EDIT_CHANGED_EVENT,
   DASHBOARD_PAGER_EVENT,
@@ -25,6 +26,7 @@ import {
 import { PROFILE_UPDATED_EVENT } from "../../features/profile/profile-storage";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { SettingsModal } from "../../features/settings/settings-modal";
+import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
 import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
 import {
   formatShortcut,
@@ -106,7 +108,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   // useShortcut wiring here for the rest.
   useShortcut("new-item", () => dispatchCreateNew());
   const { runtime, userEmail, userId } = useAuth();
-  const { loading, modulePermissions } = useWorkspace();
+  const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
+  // Chat tab badge + app-wide presence (you show as online anywhere in Moduo).
+  const chatBadge = useChatBadge({ runtime, workspaceId: selectedWorkspaceId, userId });
   // Global capture (Wave-3 Notes AC1): ⌘⇧N → a fresh note from anywhere.
   useShortcut(
     "new-note",
@@ -248,13 +252,21 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const modulesNavItems = useMemo(
     () =>
       baseModulesNavItems.filter((tab) => {
+        // PERM-1: each module tab follows its own View permission.
         if (tab.module === "notes") return modulePermissions.notes !== "none";
         if (tab.module === "tasks") return modulePermissions.tasks !== "none";
-        // Calendar rides the Tasks permission lane at alpha (specs/calendar.md).
-        if (tab.module === "calendar") return modulePermissions.tasks !== "none";
+        if (tab.module === "calendar") return modulePermissions.calendar !== "none";
+        if (tab.module === "contacts") return modulePermissions.contacts !== "none";
+        if (tab.module === "chat") return modulePermissions.chat !== "none";
         return true;
       }),
-    [modulePermissions.notes, modulePermissions.tasks],
+    [
+      modulePermissions.notes,
+      modulePermissions.tasks,
+      modulePermissions.calendar,
+      modulePermissions.contacts,
+      modulePermissions.chat,
+    ],
   );
 
   useEffect(() => {
@@ -308,6 +320,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useShortcut(
     "module-6",
     useCallback(() => navigateToIndex(5), [navigateToIndex]),
+  );
+  useShortcut(
+    "module-7",
+    useCallback(() => navigateToIndex(6), [navigateToIndex]),
   );
 
   useEffect(() => {
@@ -505,7 +521,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                 active={active}
                 index={index}
                 onClick={() => void navigate({ to: tab.href })}
-                badgeCount={tab.module === "email" ? emailUnread : 0}
+                badgeCount={
+                  tab.module === "email" ? emailUnread : tab.module === "chat" ? chatBadge.count : 0
+                }
               />
             );
           })}
@@ -514,6 +532,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         <div className="flex flex-row items-center justify-end gap-2">
           {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
           <EmailDueWebSweep />
+          <UpdateOnLaunch />
           <NotificationCenter />
           <UserMenu
             avatarDataUrl={avatarDataUrl}

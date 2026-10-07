@@ -108,6 +108,16 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   }),
   email_remove: z.object({ ref_id: nonempty }),
 
+  // Chat (specs/chat.md §Agents) — public channels only; channel = name or id.
+  chat_list_channels: z.object({}),
+  chat_read: z.object({ channel: nonempty, thread_id: nonempty.optional(), limit }),
+  chat_search: z.object({ query: nonempty, limit }),
+  chat_post: z.object({
+    channel: nonempty,
+    text: z.string().trim().min(1).max(8000),
+    thread_id: nonempty.optional(),
+  }),
+
   links_search_entities: z.object({
     query: nonempty.optional(),
     types: z.array(nonempty).optional(),

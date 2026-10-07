@@ -6,6 +6,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { validateCalendarSearch } from "../../features/calendar/search";
+import { validateChatSearch } from "../../features/chat/search";
 import { validateContactsSearch } from "../../features/contacts/search";
 import { validateEmailSearch } from "../../features/email/url-search";
 import { validateNotesSearch } from "../../features/notes/search";
@@ -17,6 +18,7 @@ import { AuthPage } from "../../routes/pages/auth-page";
 import { BookCancelPage } from "../../routes/pages/book-cancel-page";
 import { BookPage } from "../../routes/pages/book-page";
 import { CalendarPage } from "../../routes/pages/calendar-page";
+import { ChatPage } from "../../routes/pages/chat-page";
 import { ContactsPage } from "../../routes/pages/contacts-page";
 import { HomePage } from "../../routes/pages/home-page";
 import { JoinPage } from "../../routes/pages/join-page";
@@ -190,6 +192,15 @@ const emailRoute = createRoute({
   validateSearch: validateEmailSearch,
 });
 
+// Chat (specs/chat.md) — Duo / Team / Founder workspaces; others see the
+// locked explainer. `?c` conversation · `?t` thread · `?m` message to focus.
+const chatRoute = createRoute({
+  getParentRoute: () => appGateRoute,
+  path: "/chat",
+  component: ChatPage,
+  validateSearch: validateChatSearch,
+});
+
 const contactsRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/contacts",
@@ -232,6 +243,7 @@ export const routeTree = rootRoute.addChildren([
     mindmapRoute,
     emailRoute,
     contactsRoute,
+    chatRoute,
     legacyCrmRoute,
     settingsRoute,
   ]),

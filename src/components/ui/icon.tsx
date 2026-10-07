@@ -15,6 +15,7 @@ import {
   House,
   LogOut,
   Mail,
+  MessageSquare,
   PenTool,
   Search,
   Settings,
@@ -104,6 +105,7 @@ export type IconName =
   | "dollar-sign"
   | "search"
   | "user-plus"
+  | "message-square"
   | "ground-roots";
 
 export type IconSize = "sm" | "md" | "lg";
@@ -143,6 +145,7 @@ const ICONS: Record<IconName, any> = {
   "dollar-sign": DollarSign,
   search: Search,
   "user-plus": UserPlus,
+  "message-square": MessageSquare,
   "ground-roots": GroundRootsIcon,
 };
 
