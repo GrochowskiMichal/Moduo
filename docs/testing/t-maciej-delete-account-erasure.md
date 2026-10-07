@@ -1,11 +1,11 @@
 # Manual test checklist — account deletion erasure (DF-19h follow-up)
 
-> Generated 2026-10-07 · branch `t/maciej/delete-account-erasure` · **Live-verified:** partly. The read-only check in §0 ran on production on 2026-10-07 with the designer's OK (results inline). The end-to-end delete in §2 needs a throwaway account, which only the designer can create. Verified locally: `account-erasure.test.ts` (28 tests against in-memory supabase-js / Stripe stand-ins; each of ten deliberate code breaks made a test fail), `bun run typecheck` (now covers the module and its test), the function type-checked against the local supabase-js and Stripe types, and a skeptical review pass whose findings are fixed.
+> Generated 2026-10-07 · branch `t/maciej/delete-account-erasure` · **Live-verified:** partly. The read-only check in §0 ran on production on 2026-10-07 with the designer's OK (results inline), and §1's deploy is done (v15). The end-to-end delete in §2 needs a throwaway account, which only the designer can create. Verified locally: `account-erasure.test.ts` (28 tests against in-memory supabase-js / Stripe stand-ins; each of ten deliberate code breaks made a test fail), `bun run typecheck` (now covers the module and its test), the function type-checked against the local supabase-js and Stripe types, and a skeptical review pass whose findings are fixed.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## 0. Before deploying: read-only live check (designer present)
 Run in the Supabase SQL editor (or MCP `execute_sql`) on project `wtoonrvuqumihpkbvwvs`. Nothing here writes.
-- [ ] **Do:** list every FK that points at a user or a workspace, with its delete rule:
+- [x] **Do:** list every FK that points at a user or a workspace, with its delete rule:
   ```sql
   select c.conrelid::regclass as table_name, a.attname as column_name,
          c.confrelid::regclass as references_table,
@@ -18,7 +18,7 @@ Run in the Supabase SQL editor (or MCP `execute_sql`) on project `wtoonrvuqumihp
   order by 3, 1, 2;
   ```
   → **Expect:** no `RESTRICT` / `NO ACTION` anywhere (one would make `auth.admin.deleteUser` fail at the very last step, after everything else is gone). **2026-10-07 result:** none; `calendar_events.owner_id` cascades from `profiles`. Note whether `user_integrations`, `exposed_slot_links`, `slot_bookings`, `booking_link_hosts`, `contact_private_notes` appear at all (the repo says their user columns have no FK; the new code deletes them explicitly either way).
-- [ ] **Do:** list user-looking columns with **no** FK (what survives a deletion unless code removes it):
+- [x] **Do:** list user-looking columns with **no** FK (what survives a deletion unless code removes it):
   ```sql
   select c.relname as table_name, a.attname as column_name, format_type(a.atttypid, a.atttypmod) as type
   from pg_attribute a
@@ -30,8 +30,8 @@ Run in the Supabase SQL editor (or MCP `execute_sql`) on project `wtoonrvuqumihp
                     where f.contype = 'f' and f.conrelid = c.oid and a.attnum = any (f.conkey))
   order by 1, 2;
   ```
-  → **Expect:** a list to compare with "Not covered yet" in the 2026-10-07 entry of `docs/decisions.md`.
-- [ ] **Do:** confirm the columns the function relies on:
+  → **Expect:** a list to compare with "Not covered yet" in the 2026-10-07 entry of `docs/decisions.md`. **2026-10-07 result:** 24 columns. Handled by this change: `user_integrations`, `exposed_slot_links`, `booking_link_hosts`, `contact_private_notes`. Private items for PRIV-2: `buckets`, `tasks`, `contacts`, `contact_groups`, `calendars`, `calendar_sets`, `calendar_accounts`, `email_accounts`, `email_refs`, plus `notification_state` and `chat_channel_managers`. Probably authorship on shared content, to keep like `notes.created_by` (confirm in PRIV-2): `comments`, `entity_links`, `module_activity`, `resource_grants.created_by`, `workspace_api_keys`, `workspace_roles`, `companies`, `tags`.
+- [x] **Do:** confirm the columns the function relies on:
   ```sql
   select table_name, column_name, data_type from information_schema.columns
   where table_schema = 'public'
@@ -41,8 +41,8 @@ Run in the Supabase SQL editor (or MCP `execute_sql`) on project `wtoonrvuqumihp
   order by 1, 2;
   ```
   → **Expect:** `user_integrations.user_id`, `exposed_slot_links.id` + `owner_user_id` + `slot_id`, `slot_bookings.slot_id`, `slot_conflict_windows.slot_id`, `booking_link_hosts.user_id`, `contact_private_notes.user_id`, `waitlist.email`, `founders_interest.id` + `email`, `profiles.stripe_customer_id`. A missing one makes that step fail for everyone (it fails closed, so nothing is half-done).
-- [ ] **Do:** `select id, public from storage.buckets order by id;` → **Expect:** only `avatars` holds user files (any other bucket needs adding to the erasure).
-- [ ] **Do:** check no profile points at someone else's Stripe customer:
+- [x] **Do:** `select id, public from storage.buckets order by id;` → **Expect:** only `avatars` holds user files (any other bucket needs adding to the erasure).
+- [x] **Do:** check no profile points at someone else's Stripe customer:
   ```sql
   select p.id, p.stripe_customer_id, c.metadata ->> 'supabase_user_id' as tagged_user
   from public.profiles p
@@ -51,7 +51,7 @@ Run in the Supabase SQL editor (or MCP `execute_sql`) on project `wtoonrvuqumihp
     and c.metadata ->> 'supabase_user_id' <> p.id::text;
   ```
   → **Expect:** no rows. Deletion now skips such a customer, but the row would also open that customer's billing portal to the wrong person: report it.
-- [ ] **Do:** count leftovers from deletions that already happened:
+- [x] **Do:** count leftovers from deletions that already happened:
   ```sql
   select 'user_integrations' as t, count(*) from public.user_integrations x
     where not exists (select 1 from auth.users u where u.id::text = x.user_id::text)
@@ -73,8 +73,8 @@ Run in the Supabase SQL editor (or MCP `execute_sql`) on project `wtoonrvuqumihp
   ```
 
 ## 1. Deploy (designer OK required)
-- [ ] **Do:** deploy with the Supabase connector's `deploy_edge_function` (this Mac has no `supabase` CLI): `delete-account/index.ts` plus `_shared/account-erasure.ts`, `_shared/billing.ts`, `_shared/secret-keys.ts`, with `verify_jwt: false`. Mike's CLI equivalent: `supabase functions deploy delete-account --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api` → **Expect:** deploy succeeds; `STRIPE_SECRET_KEY` is already a project secret (start-trial uses it). _(server)_
-- [ ] **Do:** `curl -X POST https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/delete-account` with no `Authorization` → **Expect:** `401 {"error":"Unauthorized"}`. A `GET` → `405`. _(server)_
+- [x] **Do:** deploy with the Supabase connector's `deploy_edge_function` (this Mac has no `supabase` CLI): `delete-account/index.ts` plus `_shared/account-erasure.ts`, `_shared/billing.ts`, `_shared/secret-keys.ts`, with `verify_jwt: false`. Mike's CLI equivalent: `supabase functions deploy delete-account --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api` → **Expect:** deploy succeeds; `STRIPE_SECRET_KEY` is already a project secret (start-trial uses it). _(server)_
+- [x] **Do:** `curl -X POST https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/delete-account` with no `Authorization` → **Expect:** `401 {"error":"Unauthorized"}`. A `GET` → `405`. _(server)_ **2026-10-07:** deployed as v15; no auth → 401, bogus token → 401, GET → 405, OPTIONS → 200.
 
 ## 2. Delete a throwaway account end to end (never the reusable test account)
 Set up a throwaway invited account first: sign in once (the app starts the Stripe trial), upload a profile picture, give its solo workspace a logo, create a booking link and book one slot from another browser, connect Google Calendar if handy, and join the landing waitlist with the same email.
@@ -110,7 +110,7 @@ Set up a throwaway invited account first: sign in once (the app starts the Strip
 - No migration. The `delete-account` Edge Function changes, plus the new shared module it imports; `tsconfig.json` now includes that module and its test so `bun run typecheck` checks them.
 
 ## Known gaps / not-yet-testable
-- Not deployed and not run against production (designer OK needed for both, per the task).
+- Deployed (v15) after the read-only check, both with the designer's OK. Not yet run end to end: §2 needs a throwaway account, which only the designer can create.
 - Not erased yet, needs decisions (PRIV-2; see the 2026-10-07 entry in `docs/decisions.md`): the `stripe.*` Sync Engine mirror rows (customer email/name, invoices, charges); invoices and charges Stripe itself keeps after a customer is deleted; founder coupons and promotion codes, which carry the email in their name and metadata; private items the user owns in **other people's** workspaces (owner-only calendar and email accounts, private contacts, calendars; private buckets there, and possibly private notes, go to that workspace's owner through the member-removal trigger). Google / Zoom grants are not revoked at the provider, same as the existing Disconnect.
 - A deleted co-host seat leaves the other owner's collective link paused (collective links are switched off today).
 - Waitlist and founders rows are only deleted when the account's email is confirmed (OTP sign-in confirms it, so in practice always).
