@@ -6,6 +6,8 @@
  * and the user's memberships elsewhere. These live outside that cascade, so they
  * are removed explicitly, all of them BEFORE the auth user goes:
  *
+ *   0. posthog        the app's usage analytics (PRIV-3): the PostHog person with the
+ *                     user id as distinct id, and their events (posthog-erasure.ts).
  *   1. stripe         every Stripe customer for this user: live subscriptions are
  *                     cancelled, then the customer is deleted (Stripe drops its saved
  *                     cards with it).
@@ -18,13 +20,15 @@
  *   6. waitlist       public.waitlist + founders_interest rows for the account email.
  *
  * Every step is idempotent and the auth delete runs last, so a failure leaves the
- * account in place and a retry finishes the job. Stripe runs first: when it fails,
- * nothing in Moduo has been deleted yet.
+ * account in place and a retry finishes the job. PostHog and Stripe run first: when
+ * they fail, nothing in Moduo has been deleted yet.
  *
  * Plain TypeScript with injected clients (no Deno globals, no URL imports) so the
  * unit tests can run it: see account-erasure.test.ts. The real supabase-js and
  * Stripe clients satisfy the small interfaces below.
  */
+
+import type { ErasurePostHog } from "./posthog-erasure.ts";
 
 // ── The slices of supabase-js and Stripe this module uses ────────────────────
 
@@ -92,6 +96,9 @@ export type ErasureDeps = {
   db: ErasureDb;
   /** null when STRIPE_SECRET_KEY isn't configured. */
   stripe: ErasureStripe | null;
+  /** null when the PostHog secrets aren't configured (posthog-erasure.ts). Required, so
+   *  every caller of deleteAccount decides it rather than skipping it by omission. */
+  posthog: ErasurePostHog | null;
   /** Rows per select page. PostgREST caps every response at 1000 rows; tests use less. */
   pageSize?: number;
 };
@@ -105,6 +112,7 @@ export type DeleteAccountResult =
 
 export type ErasureStep =
   | "check"
+  | "posthog"
   | "stripe"
   | "storage"
   | "booking"
@@ -129,6 +137,8 @@ export function erasureErrorMessage(step: ErasureStep): string {
   switch (step) {
     case "check":
       return "Couldn't check your workspaces. Your account wasn't deleted. Try again.";
+    case "posthog":
+      return "Couldn't delete your usage analytics, so your account wasn't deleted. Try again in a few minutes.";
     case "stripe":
       // Subscriptions are cancelled before the customer is deleted, so a failure
       // here can come after the plan already ended.
@@ -192,6 +202,8 @@ export async function deleteAccount(
   if (blocking.length > 0) return { status: "blocked", workspaces: blocking };
 
   const warnings: string[] = [];
+  // Analytics first: an outage there leaves everything else, billing included, untouched.
+  await step("posthog", () => eraseAnalytics(deps, user.id, warnings));
   await step("stripe", () => closeStripeBilling(deps, user.id, warnings));
   await step("storage", () => removeStoredImages(deps, user.id));
   await step("booking", () => deleteBookingData(deps, user.id));
@@ -216,6 +228,24 @@ async function step<T>(name: ErasureStep, run: () => Promise<T>): Promise<T> {
   } catch (err) {
     throw new ErasureError(name, err);
   }
+}
+
+// ── PostHog (PRIV-3) ─────────────────────────────────────────────────────────
+
+async function eraseAnalytics(
+  deps: ErasureDeps,
+  userId: string,
+  warnings: string[],
+): Promise<void> {
+  if (!deps.posthog) {
+    warnings.push("posthog_not_configured");
+    return;
+  }
+  const result = await deps.posthog.erasePerson(userId);
+  // A wrong key, scope or project id can't be fixed by retrying, and it must not
+  // block every deletion. The warning names the user, so the analytics can still be
+  // deleted by hand. A network error, rate limit or 5xx throws and fails the step.
+  if (result.status === "refused") warnings.push(`posthog_refused: ${result.httpStatus}`);
 }
 
 // ── Stripe ───────────────────────────────────────────────────────────────────

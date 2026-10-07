@@ -19,7 +19,9 @@
  * person. Signing out, switching to someone who hasn't opted in, or withdrawing consent
  * opts it out again and wipes its storage. New events stop at once; ones captured just
  * before can still go out with PostHog's current batch (or its retries of a failed
- * send, until the page reloads) — posthog-js has no way to drop those.
+ * send, until the page reloads) — posthog-js has no way to drop those. Switching off
+ * after a yes also has the server delete what PostHog holds for the person (PRIV-3,
+ * after the batch lands); deleting the account does the same in delete-account.
  *
  * Only the explicit `track()` calls below are captured, plus PostHog's `$identify` —
  * never autocapture, pageviews, session replay, heatmaps or surveys, whatever the
@@ -32,8 +34,8 @@
  *
  * The privacy policy (landing/privacy.html on prod-landing, §04 Analytics and §11
  * Cookies) describes all of this; change it in the same breath as anything here. Set
- * the key only once moduo.app/privacy shows "In the Moduo app". Deleting a person's
- * PostHog data isn't automatic yet (PRIV-3). See docs/decisions/permissions.md (2026-10-07).
+ * the key only once moduo.app/privacy shows "In the Moduo app", and only with the
+ * PostHog erasure secrets in place (PRIV-3). See docs/decisions/permissions.md.
  */
 
 import type { CaptureResult, PostHog, PostHogConfig } from "posthog-js";
@@ -104,6 +106,7 @@ export function getAnalyticsConsent(userId: string): AnalyticsConsent | null {
 /** Record this person's choice and apply it straight away. Settles once PostHog
  *  reflects it. */
 export function setAnalyticsConsent(userId: string, consent: AnalyticsConsent): Promise<void> {
+  const previous = getAnalyticsConsent(userId);
   try {
     // Remove first: if the write then fails, the choice reads as "not granted".
     localStorage.removeItem(CONSENT_KEY_PREFIX + userId);
@@ -113,6 +116,10 @@ export function setAnalyticsConsent(userId: string, consent: AnalyticsConsent): 
   }
   notifyConsent();
   if (userId === currentUserId) void enqueue(reconcile);
+  // Switching off after a yes also deletes what PostHog already has (PRIV-3). A first
+  // "no" has nothing to delete; a yes again before the request goes cancels it.
+  if (PH_KEY && previous === "granted" && consent === "denied") scheduleForget(userId);
+  if (consent === "granted") cancelForget(userId);
   return queue;
 }
 
@@ -293,9 +300,64 @@ export function setAnalyticsUser(userId: string | null): Promise<void> {
   if (userId !== currentUserId) {
     const atStartup = currentUserId === undefined;
     currentUserId = userId;
-    if (PH_KEY) void enqueue(atStartup && userId === null ? clearAbandonedPostHogState : reconcile);
+    if (PH_KEY) {
+      void enqueue(atStartup && userId === null ? clearAbandonedPostHogState : reconcile);
+      // A deletion asked for earlier that never reached the server (closed, offline).
+      if (userId !== null && hasPendingForget(userId)) void runPendingForget(userId);
+    }
   }
   return queue;
+}
+
+// ── Deleting what was sent (PRIV-3) ───────────────────────────────────────────
+
+// When someone switches analytics off, the server deletes their PostHog person and events
+// (supabase/functions/analytics-forget). The request waits a few seconds so the batch
+// PostHog was still sending lands first: PostHog only deletes events it already has. A
+// marker keeps the request alive across a reload until the server confirms it.
+const FORGET_KEY_PREFIX = "moduo:analytics-forget:";
+export const ANALYTICS_FORGET_DELAY_MS = 10_000;
+const pendingForgets = new Set<string>(); // the marker, when storage is unavailable
+let forgetTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleForget(userId: string) {
+  pendingForgets.add(userId);
+  try {
+    localStorage.setItem(FORGET_KEY_PREFIX + userId, "1");
+  } catch {
+    // Storage unavailable: this session still sends it.
+  }
+  clearTimeout(forgetTimer);
+  forgetTimer = setTimeout(() => void runPendingForget(userId), ANALYTICS_FORGET_DELAY_MS);
+}
+
+function cancelForget(userId: string) {
+  clearTimeout(forgetTimer);
+  pendingForgets.delete(userId);
+  try {
+    localStorage.removeItem(FORGET_KEY_PREFIX + userId);
+  } catch {
+    // Storage unavailable: nothing was stored.
+  }
+}
+
+function hasPendingForget(userId: string): boolean {
+  if (pendingForgets.has(userId)) return true;
+  try {
+    return localStorage.getItem(FORGET_KEY_PREFIX + userId) !== null;
+  } catch {
+    return false;
+  }
+}
+
+async function runPendingForget(userId: string) {
+  if (!hasPendingForget(userId)) return; // a yes again cancelled it
+  try {
+    const { requestAnalyticsForget } = await import("./analytics-forget");
+    if (await requestAnalyticsForget(userId)) cancelForget(userId);
+  } catch (err) {
+    console.warn("[analytics] couldn't ask to delete analytics; will retry", err);
+  }
 }
 
 /** Track a named event with optional properties — dropped unless the signed-in person

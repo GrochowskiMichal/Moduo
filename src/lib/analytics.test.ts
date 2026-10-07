@@ -52,6 +52,10 @@ const ph = rs.hoisted(() => {
 
 rs.mock("posthog-js", () => ({ default: ph }));
 
+// The server call that deletes what PostHog holds (PRIV-3): true = the server took it.
+const forget = rs.hoisted(() => ({ request: rs.fn(async (_userId: string) => true) }));
+rs.mock("./analytics-forget", () => ({ requestAnalyticsForget: forget.request }));
+
 type AnalyticsModule = typeof import("./analytics");
 
 // The key and host are read when the module loads, so each test loads a fresh copy.
@@ -491,3 +495,97 @@ describe("analytics — the code itself stays off the page until consent", () =>
     expect(rsbuild).toMatch(/prefetch: \{[^}]*exclude: \[[^\]]*posthog/);
   });
 });
+
+describe("analytics — switching off deletes what was sent (PRIV-3)", () => {
+  async function optedInThenOff(a: AnalyticsModule) {
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "granted");
+    await a.setAnalyticsConsent("u1", "denied");
+  }
+
+  it("asks the server to delete it once PostHog's last batch has had time to land", async () => {
+    rs.useFakeTimers();
+    try {
+      const a = await loadAnalytics();
+      await optedInThenOff(a);
+
+      expect(forget.request).not.toHaveBeenCalled();
+      expect(localStorage.getItem("moduo:analytics-forget:u1")).toBe("1");
+
+      await rs.advanceTimersByTimeAsync(a.ANALYTICS_FORGET_DELAY_MS);
+      await settle();
+
+      expect(forget.request).toHaveBeenCalledWith("u1");
+      expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull();
+    } finally {
+      rs.useRealTimers();
+    }
+  });
+
+  it("asks nothing for a first no: nothing was ever sent", async () => {
+    rs.useFakeTimers();
+    try {
+      const a = await loadAnalytics();
+      await a.setAnalyticsUser("u1");
+      await a.setAnalyticsConsent("u1", "denied");
+      await rs.advanceTimersByTimeAsync(a.ANALYTICS_FORGET_DELAY_MS);
+      await settle();
+
+      expect(forget.request).not.toHaveBeenCalled();
+      expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull();
+    } finally {
+      rs.useRealTimers();
+    }
+  });
+
+  it("cancels it when the person says yes again before it goes", async () => {
+    rs.useFakeTimers();
+    try {
+      const a = await loadAnalytics();
+      await optedInThenOff(a);
+      await a.setAnalyticsConsent("u1", "granted");
+      await rs.advanceTimersByTimeAsync(a.ANALYTICS_FORGET_DELAY_MS);
+      await settle();
+
+      expect(forget.request).not.toHaveBeenCalled();
+      expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull();
+    } finally {
+      rs.useRealTimers();
+    }
+  });
+
+  it("keeps the request until the server takes it, and retries when that person is back", async () => {
+    rs.useFakeTimers();
+    try {
+      forget.request.mockResolvedValueOnce(false); // offline, or a 502
+      const a = await loadAnalytics();
+      await optedInThenOff(a);
+      await rs.advanceTimersByTimeAsync(a.ANALYTICS_FORGET_DELAY_MS);
+      await settle();
+      expect(localStorage.getItem("moduo:analytics-forget:u1")).toBe("1");
+    } finally {
+      rs.useRealTimers();
+    }
+
+    // The next launch, signed in as the same person.
+    const b = await loadAnalytics();
+    await b.setAnalyticsUser("u1");
+    await rs.waitFor(() => expect(forget.request).toHaveBeenCalledTimes(2));
+    await rs.waitFor(() => expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull());
+  });
+
+  it("leaves another person's pending request for their own session", async () => {
+    localStorage.setItem("moduo:analytics-forget:u2", "1");
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await settle();
+
+    expect(forget.request).not.toHaveBeenCalled();
+    expect(localStorage.getItem("moduo:analytics-forget:u2")).toBe("1");
+  });
+});
+
+/** Let queued promise jobs (the dynamic import, the request) run. */
+async function settle() {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+}
