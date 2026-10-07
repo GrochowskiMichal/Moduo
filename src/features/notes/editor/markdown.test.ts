@@ -13,8 +13,8 @@ import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/m
 import { HorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
-import { $createParagraphNode, $createTextNode, $getRoot } from "lexical";
 import { describe, expect, it } from "@rstest/core";
+import { $createParagraphNode, $createTextNode, $getRoot } from "lexical";
 import { EntityRefNode } from "../../spine/editor/entity-ref-node";
 import {
   blocksToMarkdown,

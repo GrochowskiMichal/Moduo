@@ -4,8 +4,8 @@
 // `ensureAllTime` that silently does nothing (stranding the deep link that
 // waits on it). Everything else about the hook is covered by its page tests.
 
-import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, rs } from "@rstest/core";
+import { act, renderHook, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { allTimeCalendarWindow, defaultCalendarWindow } from "../window";
