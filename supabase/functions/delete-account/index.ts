@@ -3,7 +3,7 @@
  *
  * Permanently deletes the caller's account. A client can't delete its own auth
  * user or cascade safely, so this runs with the project's default secret key
- * (service-role credentials).
+ * (service-role credentials) and the Stripe secret key.
  *
  * Deploy with verify_jwt = false — the caller's JWT is verified in code (getUser).
  *
@@ -15,14 +15,25 @@
  * → workspace_members, all ON DELETE CASCADE; the caller's own memberships in
  * other workspaces cascade via workspace_members.user_id → profiles).
  *
+ * Erasure (2026-10-07): the cascade doesn't reach Stripe, Storage, booking links,
+ * integration tokens or the waitlist. ../_shared/account-erasure.ts removes those
+ * first and deletes the auth user last, so a failed run can simply be retried.
+ *
  * Returns:
  *   200 { ok: true }
  *   409 { blocked: true, workspaces: [{ id, name }] }
- *   401 { error }  /  500 { error }
+ *   401 { error }  /  500 { error, step? }
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import {
+  deleteAccount,
+  type ErasureDb,
+  ErasureError,
+  erasureErrorMessage,
+} from "../_shared/account-erasure.ts";
+import { makeStripe, stripeSecretKeyConfigError } from "../_shared/billing.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const CORS = {
@@ -33,14 +44,6 @@ const CORS = {
 
 const json = (body: unknown, init?: ResponseInit) =>
   Response.json(body, { ...init, headers: { ...CORS, ...(init?.headers ?? {}) } });
-
-type OwnedWorkspace = { id: string; name: string; otherMemberCount: number };
-
-/** Sole-owner-of-shared blocks deletion. Kept in lockstep with the client's pure
- *  `blockingWorkspaces` in src/features/settings/delete-account.ts. */
-function blockingWorkspaces(owned: OwnedWorkspace[]): OwnedWorkspace[] {
-  return owned.filter((w) => w.otherMemberCount > 0);
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -62,48 +65,34 @@ Deno.serve(async (req: Request) => {
     } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) return json({ error: "Unauthorized" }, { status: 401 });
 
-    // Workspaces this user owns. `deleted_at is null` excludes a workspace the user
-    // already soft-deleted — it's invisible to its members, and the account delete
-    // hard-cascades it (+ its lingering member rows) anyway, so it can't orphan anyone.
-    const { data: ownedRows, error: ownedErr } = await supabase
-      .from("workspaces")
-      .select("id, name")
-      .eq("owner_id", user.id)
-      .is("deleted_at", null);
-    if (ownedErr) throw new Error(ownedErr.message);
-    const owned = (ownedRows ?? []) as { id: string; name: string }[];
+    // supabase-js parses select() column strings at the type level, which can't be
+    // checked against ErasureDb (TS2589), so only `from` is cast; storage and auth check.
+    const db: ErasureDb = {
+      from: (table) => supabase.from(table) as unknown as ReturnType<ErasureDb["from"]>,
+      storage: supabase.storage,
+      auth: supabase.auth,
+    };
+    // null when the key is missing: the erasure then refuses to finish for anyone
+    // who has a Stripe customer, instead of leaving that record behind.
+    const stripe = stripeSecretKeyConfigError() ? null : makeStripe();
 
-    // Count OTHER members per owned workspace with an EXACT head-count. A single
-    // `.in(...).select()` would rely on PostgREST's 1000-row default cap — a
-    // workspace whose member rows page out would compute 0 others and false-safe
-    // through the block, orphaning teammates. Per-workspace counts have no such cap.
-    const ownedWithCounts: OwnedWorkspace[] = [];
-    for (const w of owned) {
-      const { count, error: cErr } = await supabase
-        .from("workspace_members")
-        .select("user_id", { count: "exact", head: true })
-        .eq("workspace_id", w.id)
-        .neq("user_id", user.id);
-      if (cErr) throw new Error(cErr.message);
-      ownedWithCounts.push({ ...w, otherMemberCount: count ?? 0 });
+    const result = await deleteAccount(
+      { db, stripe },
+      // An unconfirmed address may be someone else's: it must not delete their waitlist rows.
+      { id: user.id, email: user.email_confirmed_at ? (user.email ?? null) : null },
+    );
+    if (result.status === "blocked") {
+      return json({ blocked: true, workspaces: result.workspaces }, { status: 409 });
     }
-
-    const blocking = blockingWorkspaces(ownedWithCounts);
-    if (blocking.length > 0) {
-      return json(
-        { blocked: true, workspaces: blocking.map((w) => ({ id: w.id, name: w.name })) },
-        { status: 409 },
-      );
+    if (result.warnings.length > 0) {
+      console.warn("[delete-account] deleted with warnings", user.id, result.warnings);
     }
-
-    // Safe: delete the auth user. The FK cascade removes the profile, every owned
-    // (now solo) workspace + its members, and the caller's own memberships.
-    const { error: delError } = await supabase.auth.admin.deleteUser(user.id);
-    if (delError) throw new Error(delError.message);
-
     return json({ ok: true });
   } catch (err) {
     console.error("[delete-account]", err);
+    if (err instanceof ErasureError) {
+      return json({ error: erasureErrorMessage(err.step), step: err.step }, { status: 500 });
+    }
     return json({ error: err instanceof Error ? err.message : "Internal error" }, { status: 500 });
   }
 });
