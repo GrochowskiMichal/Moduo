@@ -5,11 +5,11 @@
 
 ## Undeploy `founders-apply`
 - [x] **Do:** `supabase functions delete founders-apply --project-ref wtoonrvuqumihpkbvwvs` → **Expect:** "Deleted Edge Function."; it's gone from `supabase functions list` _(done 2026-10-07)_
-- [ ] **Do:** `curl -i https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/founders-apply` → **Expect:** `404 {"code":"NOT_FOUND",...}` from the gateway. Before the delete it returned `405 Method not allowed` from the function _(terminal; got 404 on 2026-10-07)_
-- [x] **Do:** `supabase secrets list --project-ref wtoonrvuqumihpkbvwvs` → **Expect:** no `FOUNDERS_NOTIFY_EMAIL`. It was never set, so there was nothing to remove _(checked 2026-10-07)_
+- [x] **Do:** `curl -i https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/founders-apply` → **Expect:** `404 {"code":"NOT_FOUND",...}` from the gateway. Before the delete it returned `405 Method not allowed` from the function _(terminal; checked 2026-10-07: 404)_
+- [x] **Do:** `supabase secrets list --project-ref wtoonrvuqumihpkbvwvs` → **Expect:** no `FOUNDERS_NOTIFY_EMAIL`. It isn't set, so there was nothing to remove _(checked 2026-10-07)_
 
 ## Still in place
-- [ ] **Do:** `curl -i https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/issue-founder-coupon` (no key) → **Expect:** `403 Forbidden`. Kept on purpose, admin-only _(terminal; got 403 on 2026-10-07)_
+- [x] **Do:** `curl -i https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/issue-founder-coupon` (no key) → **Expect:** `403 Forbidden`. Kept on purpose, admin-only _(terminal; checked 2026-10-07: 403)_
 
 ## Migrations / data
 - [x] **Do:** in the catalog, `has_table_privilege('anon' | 'authenticated', 'public.founders_interest', 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'TRUNCATE')` → **Expect:** all false; `service_role` all true; RLS still on; 0 rows _(prod, checked 2026-10-07 after applying `20261007000830`)_
