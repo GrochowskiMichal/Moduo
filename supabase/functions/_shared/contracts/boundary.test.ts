@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { parseOrError } from "./errors.ts";
 import { parseJsonBody, createCheckoutSessionBodySchema, issueFounderCouponBodySchema } from "./http-bodies.ts";

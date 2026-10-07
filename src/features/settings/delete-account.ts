@@ -1,9 +1,10 @@
-// Pure logic for the delete-account flow (DF-19h). The destructive work — auth
-// user deletion + the FK cascade that removes owned solo workspaces + memberships —
-// happens in the service-role `supabase/functions/delete-account` edge function
-// (a client can't delete its own auth user or cascade safely). These helpers are
-// the two decisions the UI + the edge function make, kept here so they're unit-
-// testable without Deno.
+// Pure logic for the delete-account flow (DF-19h). The destructive work — Stripe,
+// Storage, booking links, integration tokens, then auth user deletion + the FK
+// cascade that removes owned solo workspaces + memberships — happens in the
+// service-role `supabase/functions/delete-account` edge function (a client can't
+// delete its own auth user or cascade safely); the server side lives in
+// `supabase/functions/_shared/account-erasure.ts`. These helpers are the two
+// decisions the UI + the edge function make, kept here so they're unit-testable.
 
 /** A workspace the caller owns, with how many OTHER members it has. */
 export type OwnedWorkspace = {
@@ -19,8 +20,9 @@ export type OwnedWorkspace = {
  * or deletes the workspace. An owned *solo* workspace (no other members) is safe —
  * it's cascade-deleted with the account.
  *
- * The edge function recomputes this exact filter server-side over the live rows;
- * keep the two in lockstep (mirrors the member-permissions client/SQL pattern).
+ * The edge function recomputes this exact filter server-side over the live rows
+ * (`blockingWorkspaces` in supabase/functions/_shared/account-erasure.ts); keep
+ * the two in lockstep (mirrors the member-permissions client/SQL pattern).
  */
 export function blockingWorkspaces(owned: OwnedWorkspace[]): OwnedWorkspace[] {
   return owned.filter((w) => w.otherMemberCount > 0);

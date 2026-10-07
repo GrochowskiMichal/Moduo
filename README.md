@@ -5,13 +5,13 @@ Rust-first desktop app using React + Rspack (Rsbuild) + TanStack Router + Tauri 
 ## Tech Stack
 
 ### Frontend
-- **React 19** - UI framework
+- **React 19.3** - UI framework
 - **Rspack/Rsbuild** - Build tool
 - **TanStack Router** - Type-safe routing
-- **Tailwind CSS 4** - Styling
+- **Tailwind CSS 4.3** - Styling
 - **Framer Motion** - Animations
-- **Lexical** - Rich text editor
-- **Yjs** - CRDT for real-time collaboration
+- **Lexical 0.52** - Rich text editor
+- **Yjs 13.6** - CRDT for real-time collaboration
 - **XYFlow** - Node-based graphs (mindmaps)
 - **Dnd Kit** - Drag and drop
 - **Lucide React** - Icons
@@ -19,7 +19,7 @@ Rust-first desktop app using React + Rspack (Rsbuild) + TanStack Router + Tauri 
 
 ### Backend (Tauri/Rust)
 - **Tauri 2.0** - Desktop runtime
-- **Rust 1.88** - Backend language
+- **Rust nightly-2026-10-06** - Backend language
 - **Redb 2** - Embedded database (paused; kept for the future offline/"lite" build)
 - **Argon2/Ed25519-dalek/BIP39** - Cryptography
 - **Keyring** - Secure credential storage
@@ -28,9 +28,9 @@ Rust-first desktop app using React + Rspack (Rsbuild) + TanStack Router + Tauri 
 - **IMAP/Lettre** - Email protocol support
 
 ### Testing & Development
-- **Vitest** - Unit testing
+- **Rstest** - Unit testing
 - **Playwright** - E2E testing
-- **TypeScript 5.9** - Type safety
+- **TypeScript 7** - Type safety
 
 ## Setup
 

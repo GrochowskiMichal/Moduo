@@ -1,7 +1,7 @@
 // DF-23 — the shape heuristic that lets ONE `description` column hold both our
 // rich html (parse as markup) and foreign/legacy plain text (render verbatim),
 // plus the outgoing-email attribute scrub.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { looksLikeRichHtml, stripEntityRefAttrs } from "./entity-rich-html";
 
 describe("looksLikeRichHtml", () => {

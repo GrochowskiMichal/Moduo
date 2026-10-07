@@ -1,7 +1,7 @@
 // parseContactText proof: a pasted signature blob, a bare email, and junk input
 // all map to a forgiving ParsedContactInput — best-effort, never throws.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { channelsFromValues, parseContactText, parsedContactChannels } from "./parse-contact";
 

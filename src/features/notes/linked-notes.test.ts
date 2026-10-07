@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import type { EntityLink, EntityRef } from "../../lib/entity-links";
 import type { HubRow, HubSection } from "../spine/rollup";

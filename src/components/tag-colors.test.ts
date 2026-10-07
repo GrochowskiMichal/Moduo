@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { DEFAULT_LABEL_COLOR, LABEL_COLORS, normalizeLabelColor, pickTagColor } from "./tag-colors";
 

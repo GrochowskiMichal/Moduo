@@ -10,7 +10,7 @@
 import { createHeadlessEditor } from "@lexical/headless";
 import { $convertToMarkdownString } from "@lexical/markdown";
 import { createBindingV2__EXPERIMENTAL, syncYjsStateToLexicalV2__EXPERIMENTAL } from "@lexical/yjs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
 import { deriveBody } from "../sync/doc-text";

@@ -1,7 +1,7 @@
 // FX-2 AC3 — tag-row selectors: attached tags resolve through links (skipping
 // soft-deleted tags), and create-dedupe matches names case-insensitively.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { Tag, TagLink } from "../tasks/model";
 import { attachedTags, findTagByName } from "./tags";
 

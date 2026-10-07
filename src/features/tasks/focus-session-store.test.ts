@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { DEFAULT_FOCUS_PREFS } from "../../lib/focus-prefs";
 import {
   __resetFocusSessionForTest,
@@ -36,12 +36,12 @@ beforeEach(() => {
   __resetFocusSessionForTest();
   localStorage.clear();
   setPrefs({ workMinutes: 1, breakMinutes: 1, longBreakMinutes: 2, sessionsBeforeLongBreak: 2 });
-  vi.useFakeTimers();
+  rs.useFakeTimers();
 });
 
 afterEach(() => {
   __resetFocusSessionForTest();
-  vi.useRealTimers();
+  rs.useRealTimers();
 });
 
 describe("focus-session store — session lifecycle", () => {
@@ -71,7 +71,7 @@ describe("focus-session store — session lifecycle", () => {
   it("accrues work seconds and elapsed as the clock ticks", () => {
     bindFocusTask("t1", "A");
     startFocus();
-    vi.advanceTimersByTime(5000);
+    rs.advanceTimersByTime(5000);
     const s = getFocusSession();
     expect(s.sitElapsed).toBe(5);
     expect(s.accrued).toBe(5);
@@ -82,7 +82,7 @@ describe("focus-session store — session lifecycle", () => {
     bindFocusTask("t1", "A");
     startFocus();
     // No React subscribers at all — the interval must still advance the store.
-    vi.advanceTimersByTime(10_000);
+    rs.advanceTimersByTime(10_000);
     expect(getFocusSession().sitElapsed).toBe(10);
   });
 });
@@ -93,7 +93,7 @@ describe("focus-session store — flushing", () => {
     registerFocusFlushSink(sink);
     bindFocusTask("t1", "A");
     startFocus();
-    vi.advanceTimersByTime(3000);
+    rs.advanceTimersByTime(3000);
     toggleFocusRunning(); // pause
     expect(getFocusSession().running).toBe(false);
     expect(calls).toEqual([{ taskId: "t1", seconds: 3 }]);
@@ -105,7 +105,7 @@ describe("focus-session store — flushing", () => {
     registerFocusFlushSink(sink);
     bindFocusTask("t1", "A");
     startFocus();
-    vi.advanceTimersByTime(4000);
+    rs.advanceTimersByTime(4000);
     stopFocus();
     const s = getFocusSession();
     expect(calls).toEqual([{ taskId: "t1", seconds: 4 }]);
@@ -119,7 +119,7 @@ describe("focus-session store — flushing", () => {
     registerFocusFlushSink(sink);
     bindFocusTask("t1", "A");
     startFocus();
-    vi.advanceTimersByTime(60_000);
+    rs.advanceTimersByTime(60_000);
     // Order-independent: the tick(60) and the 60s flush land on the same instant,
     // so the 60 tracked seconds may bank as one call or split — either way every
     // banked + still-accrued second is accounted for and none double-counted.
@@ -133,7 +133,7 @@ describe("focus-session store — flushing", () => {
   it("with no sink, accrued time is held (never lost) and drains on register", () => {
     bindFocusTask("t1", "A");
     startFocus();
-    vi.advanceTimersByTime(7000);
+    rs.advanceTimersByTime(7000);
     toggleFocusRunning(); // pause — no sink yet, so accrued is held
     expect(getFocusSession().accrued).toBe(7);
     const { calls, sink } = recordingSink();
@@ -148,7 +148,7 @@ describe("focus-session store — flushing", () => {
     // away-accrued time must be RETAINED — not silently zeroed (the DF-11 blocker).
     bindFocusTask("t1", "A");
     startFocus();
-    vi.advanceTimersByTime(45_000);
+    rs.advanceTimersByTime(45_000);
     toggleFocusRunning(); // pause — accrued = 45, no sink yet
 
     const notLoaded = recordingSink(false); // bundle not loaded → drops
@@ -170,7 +170,7 @@ describe("focus-session store — flushing", () => {
     const unregister = registerFocusFlushSink(sink);
     bindFocusTask("t1", "A");
     startFocus();
-    vi.advanceTimersByTime(9000);
+    rs.advanceTimersByTime(9000);
     unregister(); // /tasks unmounts mid-session
     expect(calls).toEqual([{ taskId: "t1", seconds: 9 }]);
     expect(getFocusSession().running).toBe(true); // session keeps running
@@ -183,7 +183,7 @@ describe("focus-session store — task binding", () => {
     registerFocusFlushSink(sink);
     bindFocusTask("t1", "A");
     startFocus();
-    vi.advanceTimersByTime(6000);
+    rs.advanceTimersByTime(6000);
     bindFocusTask("t2", "B"); // e.g. marked t1 done → advance to t2
     expect(calls).toEqual([{ taskId: "t1", seconds: 6 }]);
     const s = getFocusSession();
@@ -195,7 +195,7 @@ describe("focus-session store — task binding", () => {
   it("binding the same task keeps a running session intact (return from nav)", () => {
     bindFocusTask("t1", "A", "Inbox");
     startFocus();
-    vi.advanceTimersByTime(5000);
+    rs.advanceTimersByTime(5000);
     bindFocusTask("t1", "A", "Inbox"); // Execute remounts, re-binds the same task
     const s = getFocusSession();
     expect(s.running).toBe(true);
@@ -205,7 +205,7 @@ describe("focus-session store — task binding", () => {
   it("binding the same task refreshes a renamed title without resetting", () => {
     bindFocusTask("t1", "A");
     startFocus();
-    vi.advanceTimersByTime(3000);
+    rs.advanceTimersByTime(3000);
     bindFocusTask("t1", "A renamed");
     const s = getFocusSession();
     expect(s.taskTitle).toBe("A renamed");
@@ -218,7 +218,7 @@ describe("focus-session store — task binding", () => {
     registerFocusFlushSink(sink);
     bindFocusTask("t1", "A");
     startFocus();
-    vi.advanceTimersByTime(2000);
+    rs.advanceTimersByTime(2000);
     bindFocusTask(null);
     expect(calls).toEqual([{ taskId: "t1", seconds: 2 }]);
     expect(getFocusSession().taskId).toBeNull();
@@ -234,7 +234,7 @@ describe("focus-session store — pomodoro", () => {
     toggleFocusPomodoro(); // pomodoro on (workMinutes=1 → 60s)
     startFocus();
     expect(getFocusSession().pomoLeft).toBe(60);
-    vi.advanceTimersByTime(60_000); // one work block
+    rs.advanceTimersByTime(60_000); // one work block
     const s = getFocusSession();
     expect(s.phase).toBe("break");
     expect(s.pomoLeft).toBe(60); // breakMinutes=1
@@ -249,9 +249,9 @@ describe("focus-session store — pomodoro", () => {
     toggleFocusPomodoro();
     startFocus();
     setPrefs({ workMinutes: 1, breakMinutes: 1, autoStartNext: true });
-    vi.advanceTimersByTime(60_000); // finish work → break (accrued flushed to held 0)
+    rs.advanceTimersByTime(60_000); // finish work → break (accrued flushed to held 0)
     const accruedAtBreakStart = getFocusSession().accrued;
-    vi.advanceTimersByTime(10_000); // 10s into the break
+    rs.advanceTimersByTime(10_000); // 10s into the break
     expect(getFocusSession().phase).toBe("break");
     expect(getFocusSession().accrued).toBe(accruedAtBreakStart); // unchanged during break
   });
@@ -261,7 +261,7 @@ describe("focus-session store — pomodoro", () => {
     bindFocusTask("t1", "A");
     toggleFocusPomodoro();
     startFocus();
-    vi.advanceTimersByTime(60_000);
+    rs.advanceTimersByTime(60_000);
     expect(getFocusSession().running).toBe(false); // pauses for a manual resume
   });
 
@@ -284,7 +284,7 @@ describe("focus-session store — open-Focus request", () => {
   });
 
   it("requestFocusView dispatches the window event for a mounted /tasks", () => {
-    const handler = vi.fn();
+    const handler = rs.fn();
     window.addEventListener("moduo:tasks:focus-view", handler);
     requestFocusView();
     expect(handler).toHaveBeenCalledTimes(1);

@@ -1,74 +1,45 @@
-# Agent setup — Cursor, OpenCode & Claude Code
+# Agent setup — Claude Code
 
-How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. **One instruction file:** `AGENTS.md` is what Cursor, OpenCode, and Claude Code all load (Claude Code via the `CLAUDE.md` pointer). Cursor also has a short always-on rule in `.cursor/rules/moduo-always.mdc` that points here.
+How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is built with **Claude Code only**, on Anthropic models (Claude Max plan). `AGENTS.md` is the single instruction file: Claude Code reads it natively (v2.1.277+), and there is deliberately no `CLAUDE.md`. Folder-level `AGENTS.md` files load when work touches `supabase/`, `src-tauri/`, `src/components/ui/` or `.github/`.
 
-The workflow itself (skills, spec template, execution ledger) is committed and shared; this doc covers the per-machine setup each person does once.
+## What the repo provides (committed)
 
-## Cursor
+- **Skills** (`.claude/skills/`): `/s1` plan, `/s2` build one block, `/s3` wrap and land, `moduo-design-quality`.
+- **Subagent** (`.claude/agents/validator.md`): the skeptical staff review `/s2` runs before a block counts as done.
+- **Plugins** (enabled in `.claude/settings.json`, installed for you on first trust):
+  - `mattpocock-skills`: grilling, prototype, to-tickets, tdd, diagnosing-bugs, handoff, retro, improve-codebase-architecture. Configured through [docs/agents/](./agents/).
+  - `supabase` + `postgres-best-practices`: Supabase and Postgres/RLS rules.
+  - `claude-security`: a deep vulnerability scan of a diff or the repo.
+  - `security-guidance`: reviews Claude's own edits for security issues.
+  - `rust-analyzer-lsp`: Rust diagnostics after every edit.
+  - `skill-creator`: evals for our own skills.
+- **Hooks** (`.claude/hooks/`, wired in `.claude/settings.json`):
+  - `session-start.sh`: stale-base preflight and the reading list. `session-title.sh` applies `.claude/SESSION_TITLE`.
+  - `guard-git.sh`: blocks direct pushes to `main`/`develop`/`prod-app`/`staging-app` and bare force-pushes.
+  - `guard-secrets.sh`: gitleaks scan of staged changes on every commit.
+  - `guard-design-tokens.sh`: re-runs `lint:tw` + `lint:css` after UI edits, and wakes Claude only on a violation.
+  - `notify.sh`: desktop notifications when a block finishes or Claude needs you.
+  - Entire capture hooks.
+- **Permissions:** `.env` files can't be read, and production deploys and migrations (`supabase db push`, `supabase functions deploy`, `az deployment … create`, Supabase MCP `apply_migration` / `execute_sql` / `deploy_edge_function`) always ask first.
+- **MCP servers** (`.mcp.json`): `supabase`, `subframe`, `vercel`, `github`.
+- **Review rules** ([REVIEW.md](../REVIEW.md)) and the risk tiers in `/s3`.
 
-Mike's IDE. Project instructions: `AGENTS.md` + `.cursor/rules/moduo-always.mdc`. Entire hooks live in `.cursor/hooks.json` (installed via `entire agent add cursor`). Do not treat Cursor-only rules as the source of truth — edit `AGENTS.md` first.
+## One-time setup per machine
 
-**MCP (this machine):**
+1. **Claude Code ≥ 2.1.277** (`claude update`), signed in with your claude.ai account (Max).
+2. **gitleaks** for the commit guard: `brew install gitleaks`.
+3. **rust-analyzer** on PATH for Rust diagnostics: `rustup component add rust-analyzer`.
+4. **MCP auth**, once per server: `claude mcp login supabase` (then `subframe`, `vercel`, `github`).
+5. **Trust the project** when Claude Code asks; that installs the project plugins and the Supabase skills marketplace.
+6. **Max plan only:** `/advisor fable`, which lets Fable 5.1 advise Opus 5.5 at decision points (saved in your user settings). On Pro, skip it: Fable bills usage credits there.
+7. **Auto mode** for `/s2` runs (the default for new sessions on Pro and Max). Phone pushes need `agentPushNotifEnabled` / `inputNeededNotifEnabled` plus Remote Control.
+8. **Personal notes** (optional): `docs/local/` (gitignored), or machine-wide rules in `~/.claude/CLAUDE.md`.
 
-- **Vercel** — project `.cursor/mcp.json` points at `https://mcp.vercel.com`. After Cursor picks it up, click **Needs login** in Settings → MCP and authorize the Vercel account. No token in the repo.
-- **GitHub** — Cursor's hosted GitHub MCP still wants a PAT, so it lives in **user** `~/.cursor/mcp.json` (not committed). This machine reuses the GitHub CLI login (`gh auth token`). If you `gh auth login` / logout, refresh that file. Do not paste the token into the project mcp.json.
-- Claude Code / OpenCode share the same remote URLs in `.mcp.json` and `opencode.json`. OpenCode GitHub expects `GITHUB_PERSONAL_ACCESS_TOKEN` in the environment (`oauth: false`); Vercel is `opencode mcp auth vercel`.
+## The unsupervised flow
 
-## OpenCode
+1. **Day:** `/s1 <topic>`, the grilling, spec, blocks and Definition-of-Ready gate (read-only; plan mode works).
+2. **Night shift:** one session per block, each in its own worktree (dispatch from `claude agents` or the desktop app). Start each with the `/goal` template from the `/s2` skill, so the session keeps working until the block's definition of done holds. `/s2` claims its block with a draft PR, so parallel sessions never take the same one.
+3. **Morning:** read each Changed · Test this · Next report and run the manual checklist. Then `/s3` runs the review gate the diff's risk calls for, merges into the personal branch, and syncs bigger chunks to `develop`.
+4. **Large audits and migrations** across many files run as dynamic workflows (put `ultracode` in the prompt). Watch long CI or release runs with `/loop`.
 
-**What the repo provides (committed):**
-
-- `AGENTS.md` — auto-loaded project instructions.
-- `.opencode/commands/` — the `/s1` `/s2` `/s3` slash-commands (thin wrappers over the shared skills in `.claude/skills/`, which OpenCode also discovers).
-- `.opencode/agents/validator.md` — the skeptical-senior review subagent `/s2` runs before reporting done.
-- `opencode.json` — the project's MCP servers: `supabase`, `subframe`, `notion`.
-
-**One-time per machine:**
-
-1. **MCP auth.** Each remote MCP server needs a browser OAuth once:
-   ```sh
-   opencode mcp auth supabase
-   opencode mcp auth subframe
-   opencode mcp auth notion
-   opencode mcp list   # check status anytime
-   ```
-   Tokens are stored in `~/.local/share/opencode/mcp-auth.json`.
-2. **Notifications (the at-desk signal).** Create/edit `~/.config/opencode/tui.json`:
-   ```json
-   { "$schema": "https://opencode.ai/tui.json", "attention": { "enabled": true, "notifications": true } }
-   ```
-   This fires a native desktop notification when a session goes idle or needs input — the OpenCode equivalent of the Claude Code Stop/Notification hooks.
-3. **Permissions.** OpenCode's default allows routine operations without prompting, which is what `/s2` expects. To tighten (e.g. ask on edits/bash), set `permission` in `~/.config/opencode/opencode.json` — see the OpenCode permissions docs.
-4. **Personal rules (optional).** `~/.config/opencode/AGENTS.md` for machine-global personal rules; `docs/local/` for project-personal notes (gitignored — see AGENTS.md §Personal layer).
-
-## Claude Code
-
-**What the repo sets up (committed):**
-
-- `CLAUDE.md` → points at `AGENTS.md`.
-- `.claude/skills/` — the `/s1` `/s2` `/s3` + `moduo-design-quality` skills (shared with OpenCode; edit them once, both tools get the change).
-- **Lifecycle hooks** — `.claude/settings.json` + `.claude/hooks/`:
-  - **SessionStart** → a preflight that warns when the branch is behind the personal base (stale specs/tokens risk).
-  - **Stop hook** → a desktop notification when a block finishes ("ready for your review").
-  - **Notification hook** → a desktop notification when Claude is blocked waiting on your input.
-  - The notify script is cross-platform and always exits 0, so it can never block a session. Hooks **merge** with user-level hooks. First time they change, Claude Code asks you to approve them — expected.
-
-**What only you can toggle (user-level / in-app):**
-
-| Setting | What it does | Recommended |
-| --- | --- | --- |
-| **Auto mode** | Removes routine permission prompts but keeps the safety classifier. Toggle with the mode selector / `Shift+Tab`. A repo cannot enable it for itself — by design. | On, for `/s2` runs |
-| **`agentPushNotifEnabled`** | Phone push when a long task finishes (needs Remote Control connected). | On |
-| **`inputNeededNotifEnabled`** | Phone push when Claude is waiting on your input. | On |
-
-These give the *away-from-desk* signal; the repo hooks give the *at-desk* desktop notification.
-
-## The unsupervised flow (any of the three)
-
-1. `/s1` → grill + spec + execution blocks → "Ready to execute." (read-only; use your tool's plan mode if it has one)
-2. Approve → switch to the tool's autonomous mode.
-3. `/s2` one block. It builds, runs `bun run verify`, runs the validator, and reports. Notifications tell you it's done.
-4. You test, approve the next block. Task branches merge to the personal branch, then **bigger chunks to `develop`** (`/s3` step 5b). Nothing hits `main` until a release.
-5. `/s3` at the end (personal merge + develop sync).
-
-The only two things you ever manage: **the work plan** and **your subscription limits.**
+The only two things you manage: **the work plan** and **your plan limits**.

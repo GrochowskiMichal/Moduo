@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { blockingWorkspaces, matchesDeleteConfirm, type OwnedWorkspace } from "./delete-account";
 

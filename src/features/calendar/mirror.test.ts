@@ -2,7 +2,7 @@
 // normalization is deterministic across machines.
 process.env.TZ = "Europe/Warsaw";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { deletedExternalIds, mapGoogleEvent, mapOutlookEvent, mapProviderEvents } from "./mirror";
 

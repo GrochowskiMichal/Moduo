@@ -1,7 +1,7 @@
 // DB-5 AC13 — the density budget: a denser setting shows more rows in the same
 // cell, and a bigger footprint shows more than a smaller one, at every density.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { isWidgetDensity, widgetRowBudget, widgetVariant } from "./widget-density";
 

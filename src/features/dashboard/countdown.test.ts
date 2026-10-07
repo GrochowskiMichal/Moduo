@@ -1,6 +1,6 @@
 // DB-6 — countdown math + datetime-local round-trip.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { computeCountdown, parseLocalDateTime, toDateTimeLocalValue } from "./countdown";
 

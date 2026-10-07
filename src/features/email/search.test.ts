@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import type { EmailEnvelope } from "./model/email-types";
 import { hitKey, mergeHits, searchEnvelopes, searchTokens } from "./search";

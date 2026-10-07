@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { accountSyncHealth, providerLabel, resolveAccountHues } from "./accounts";
 import type { AccountStatus, SavedAccount } from "./model/email-types";
