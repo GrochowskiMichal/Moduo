@@ -68,7 +68,7 @@ for s in pending[:5]:
   wait)
     id="$1"; file="$2"
     timeout="${NOTARY_WAIT_TIMEOUT:-60m}"
-    echo "Waiting up to $timeout for Apple to finish submission $id…"
+    echo "Waiting up to $timeout for Apple to finish submission ${id}..."
     set +e
     out=$(xcrun notarytool wait "$id" "${AUTH[@]}" --timeout "$timeout" --output-format json 2>&1)
     set -e
