@@ -206,6 +206,7 @@ A founder runs one command in Terminal, with the admin secret from their passwor
 - Changing the landing card wording (designer's call).
 - Rewriting entity tokens inside other people's chat messages and note bodies, or dashboard widget settings that point at deleted buckets. They already render as a missing or "Private item" chip.
 - What removing a member does with private items (the owner archive stays as decided).
+- Erasing the person's PostHog analytics when the account is deleted: that is **PRIV-3** in BUILD_ORDER (planned separately with app analytics, 2026-10-07). It will add its own step to the same `deleteAccount` flow.
 
 ---
 
