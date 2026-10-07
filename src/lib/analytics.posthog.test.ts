@@ -157,6 +157,11 @@ describe("analytics with the real posthog-js (network stubbed)", () => {
     }
     const payload = JSON.stringify(sent);
     expect(payload).not.toMatch(/SECRET|CLICKID|newsletter|abc123/);
+    // What PostHog keeps on the device (the session's entry URL) holds no tokens either.
+    const stored = ourStorage().map(
+      (key) => localStorage.getItem(key) ?? sessionStorage.getItem(key),
+    );
+    expect(stored.join("\n")).not.toMatch(/SECRET|CLICKID/);
     // Only PostHog's own storage, under the app's names.
     expect(ourStorage().sort()).toEqual(
       expect.arrayContaining(["__ph_opt_in_out_moduo_app", "ph_moduo_app"]),

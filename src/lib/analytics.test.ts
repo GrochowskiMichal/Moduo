@@ -341,6 +341,18 @@ describe("analytics — consent is per person and can be withdrawn", () => {
     expect(ph.init).not.toHaveBeenCalled();
   });
 
+  it("ignores a consent change from another tab until the auth provider has reported", async () => {
+    // At startup nobody is known yet; wiping now would cost an opted-in person their ids.
+    localStorage.setItem("moduo:consent:u1", "granted");
+    localStorage.setItem("ph_moduo_app", '{"distinct_id":"u1"}');
+    await loadAnalytics();
+    window.dispatchEvent(new StorageEvent("storage", { key: "moduo:consent:u2" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(localStorage.getItem("ph_moduo_app")).toBe('{"distinct_id":"u1"}');
+    expect(ph.init).not.toHaveBeenCalled();
+  });
+
   it("useAnalyticsConsent follows the stored choice", async () => {
     const a = await loadAnalytics();
     // The fresh module copy brings a fresh React; render with the testing library that

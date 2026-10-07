@@ -70,7 +70,8 @@ export function AnalyticsConsentCard({
   onOpenPolicy,
 }: {
   onChoose: (choice: AnalyticsConsent) => void;
-  /** Opens the policy outside the app (desktop). Without it the link opens a new tab. */
+  /** Opens the policy through the runtime (the system browser on desktop). Without it the
+   *  link opens in a new tab. */
   onOpenPolicy?: () => void;
 }) {
   return (
@@ -83,9 +84,9 @@ export function AnalyticsConsentCard({
           Help us improve Moduo?
         </p>
         <p className="text-xs text-muted-foreground">
-          Share usage analytics: events like opening the app, with basic device and browser details.
-          They carry your account ID, never your email or anything you write. You can change this
-          any time in Settings → Preferences.
+          Share usage analytics with PostHog: events like opening the app, with basic device and
+          browser details. They carry your account ID, never your email or anything you write. You
+          can change this any time in Settings → Preferences.
         </p>
       </div>
       <div className="flex items-center justify-between gap-2">

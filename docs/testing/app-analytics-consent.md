@@ -10,7 +10,7 @@ PUBLIC_POSTHOG_KEY=phc_local_test
 PUBLIC_POSTHOG_HOST=http://127.0.0.1:9
 ```
 
-Remove both lines when you're done. Setting the real key on a live build is now unblocked (the privacy policy describes app analytics). Do that in the Vercel and desktop build settings, not in git.
+Remove both lines when you're done. Set the real key on a live build (in the Vercel and desktop build settings, never in git) **only once moduo.app/privacy shows §04 "In the Moduo app"** (GrochowskiMichal/Moduo#232 deployed from `prod-landing`). It's also best to do it after **PRIV-3**, so deleting an account or switching off deletes PostHog data too (today that happens by request to privacy@moduo.app).
 
 ## Today's builds (no key) — nothing changes
 - [ ] **Do:** Without the setup lines, sign in and wait a few seconds. → **Expect:** No question appears. Settings → Preferences has no "Privacy" group. _(both)_

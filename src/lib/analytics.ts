@@ -31,8 +31,9 @@
  * `surface: "landing"`.
  *
  * The privacy policy (landing/privacy.html on prod-landing, §04 Analytics and §11
- * Cookies) describes all of this; change it in the same breath as anything here.
- * See docs/decisions/permissions.md (2026-10-07).
+ * Cookies) describes all of this; change it in the same breath as anything here. Set
+ * the key only once moduo.app/privacy shows "In the Moduo app". Deleting a person's
+ * PostHog data isn't automatic yet (PRIV-3). See docs/decisions/permissions.md (2026-10-07).
  */
 
 import type { CaptureResult, PostHog, PostHogConfig } from "posthog-js";
@@ -142,7 +143,8 @@ if (PH_KEY && typeof window !== "undefined") {
   window.addEventListener("storage", (event) => {
     if (event.key !== null && !event.key.startsWith(CONSENT_KEY_PREFIX)) return;
     notifyConsent();
-    void enqueue(reconcile);
+    // Before the auth provider reports, there's nobody to reconcile for yet.
+    if (currentUserId !== undefined) void enqueue(reconcile);
   });
 }
 
@@ -187,7 +189,20 @@ const POSTHOG_CONFIG: Partial<PostHogConfig> = {
   disable_external_dependency_loading: true,
   save_referrer: false,
   save_campaign_params: false,
-  mask_personal_data_properties: true, // ad click ids, wherever PostHog reads a URL
+  disableDeviceModel: true,
+  // What PostHog keeps on the device (the session's entry URL) mustn't hold tokens either:
+  // no URL fragments (auth redirects put tokens there), and these query values masked,
+  // along with ad click ids.
+  disable_capture_url_hashes: true,
+  mask_personal_data_properties: true,
+  custom_personal_data_properties: [
+    "token",
+    "invite",
+    "code",
+    "access_token",
+    "refresh_token",
+    "session_id",
+  ],
   before_send: prepareEvent,
 };
 
@@ -226,8 +241,12 @@ async function reconcile() {
   if (!ph || currentUserId !== userId || !consented(userId)) return;
   // A new person starts from a clean slate — new anonymous and device ids — so nothing
   // links them to whoever used this device before. reset() also clears PostHog's own
-  // opt-in, so it must come before opt_in_capturing().
-  if (ph.get_distinct_id() !== userId) ph.reset(true);
+  // opt-in, so it must come before opt_in_capturing(); opting out first keeps it from
+  // warning that it turned capturing off when the previous person had opted in.
+  if (ph.get_distinct_id() !== userId) {
+    ph.opt_out_capturing();
+    ph.reset(true);
+  }
   if (!ph.has_opted_in_capturing()) ph.opt_in_capturing({ captureEventName: false });
   if (ph.get_distinct_id() !== userId) ph.identify(userId);
 }
