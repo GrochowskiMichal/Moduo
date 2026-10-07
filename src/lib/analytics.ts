@@ -11,8 +11,9 @@
  *      browser isn't sending Do Not Track;
  *   2. someone is signed in;
  *   3. that person opted in on this device: `moduo:consent:<userId>` = "granted" — the
- *      per-person twin of the landing's `moduo:consent`, set from Settings → Preferences
- *      → Privacy.
+ *      per-person twin of the landing's `moduo:consent`, set by the one-time question
+ *      after sign-in (components/app/analytics-consent-prompt.tsx) or in Settings →
+ *      Preferences → Privacy.
  * Even then PostHog starts opted out (opt_out_capturing_by_default +
  * opt_out_persistence_by_default, as on the landing) and is opted in only for that
  * person. Signing out, switching to someone who hasn't opted in, or withdrawing consent
@@ -25,14 +26,18 @@
  * PostHog project's remote settings say. People are identified by their user id alone,
  * never an email or a name, and each person gets their own device id. Before anything
  * leaves, URLs are cut to their route root and values that hold an email, or that
- * PostHog lifted from a query string or a search engine's referrer, are dropped.
+ * PostHog lifted from a query string or a search engine's referrer, are dropped. Every
+ * event carries `surface: "app"`: the landing shares the PostHog project and sends
+ * `surface: "landing"`.
  *
- * Turning it on in a live build also means updating landing/privacy.html — see
- * docs/decisions.md (2026-10-07).
+ * The privacy policy (landing/privacy.html on prod-landing, §04 Analytics and §11
+ * Cookies) describes all of this; change it in the same breath as anything here.
+ * See docs/decisions/permissions.md (2026-10-07).
  */
 
 import type { CaptureResult, PostHog, PostHogConfig } from "posthog-js";
 import { useSyncExternalStore } from "react";
+import { APP_VERSION, DESKTOP_CHANNEL, IS_DESKTOP } from "../features/settings/about";
 
 type Properties = Record<string, string | number | boolean | null | undefined>;
 
@@ -183,11 +188,13 @@ const POSTHOG_CONFIG: Partial<PostHogConfig> = {
   save_referrer: false,
   save_campaign_params: false,
   mask_personal_data_properties: true, // ad click ids, wherever PostHog reads a URL
-  before_send: scrubEvent,
+  before_send: prepareEvent,
 };
 
 function loadPostHog(): Promise<PostHog | null> {
-  loading ??= import("posthog-js")
+  // Named so rsbuild.config.ts can keep it out of the async-chunk prefetch: nobody
+  // downloads analytics code before they opt in.
+  loading ??= import(/* webpackChunkName: "posthog" */ "posthog-js")
     .then(({ default: ph }) => {
       ph.init(PH_KEY, POSTHOG_CONFIG);
       posthog = ph;
@@ -282,7 +289,24 @@ export function track(event: string, properties?: Properties): Promise<void> {
   });
 }
 
-// ── Outgoing scrub (before_send) ──────────────────────────────────────────────
+// ── Outgoing events (before_send) ─────────────────────────────────────────────
+
+// Where every app event came from. The landing sends to the same PostHog project
+// with `surface: "landing"`, so filter or break down by `surface` to keep the two
+// apart. Stamped in before_send rather than registered as super properties, so a
+// reset() can't drop them.
+const EVENT_SOURCE = {
+  surface: "app",
+  platform: IS_DESKTOP ? "desktop" : "web",
+  environment: DESKTOP_CHANNEL ?? "development",
+  app_version: APP_VERSION,
+} as const;
+
+function prepareEvent(event: CaptureResult | null): CaptureResult | null {
+  const scrubbed = scrubEvent(event);
+  if (!scrubbed) return null;
+  return { ...scrubbed, properties: { ...scrubbed.properties, ...EVENT_SOURCE } };
+}
 
 const URL_PATTERN = /^[a-z][a-z\d+.-]*:\/\//i;
 const EMAIL_PATTERN = /[^\s@/:]+(?:@|%40)[^\s@/]+\.[a-z]{2,}/i;

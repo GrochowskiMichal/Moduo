@@ -1,5 +1,5 @@
 import { gunzipSync } from "node:zlib";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, rs } from "@rstest/core";
 
 // The REAL posthog-js behind lib/analytics.ts, with every transport stubbed (fetch, XHR,
 // sendBeacon) — nothing leaves the test. It proves what the fake in analytics.test.ts
@@ -10,18 +10,19 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 type Sent = { url: string; body: unknown };
 const sent: Sent[] = [];
 
-async function decode(url: string, body: unknown): Promise<unknown> {
+// posthog-js picks a body format by what the environment supports (gzip, base64 form
+// data or plain JSON; a bare array or `{ api_key, batch }`), so read whatever it sent.
+async function decode(body: unknown): Promise<unknown> {
   if (body == null) return null;
   const bytes =
-    body instanceof Blob
-      ? new Uint8Array(await body.arrayBuffer())
-      : body instanceof ArrayBuffer
-        ? new Uint8Array(body)
+    typeof (body as Blob).arrayBuffer === "function"
+      ? new Uint8Array(await (body as Blob).arrayBuffer())
+      : body instanceof ArrayBuffer || ArrayBuffer.isView(body)
+        ? new Uint8Array(body instanceof ArrayBuffer ? body : body.buffer)
         : new TextEncoder().encode(String(body));
-  const text = url.includes("compression=gzip-js")
-    ? gunzipSync(bytes).toString("utf8")
-    : new TextDecoder().decode(bytes);
-  if (url.includes("compression=base64")) {
+  const isGzip = bytes[0] === 0x1f && bytes[1] === 0x8b;
+  const text = isGzip ? gunzipSync(bytes).toString("utf8") : new TextDecoder().decode(bytes);
+  if (text.startsWith("data=")) {
     const data = new URLSearchParams(text).get("data") ?? "";
     return JSON.parse(Buffer.from(data, "base64").toString("utf8"));
   }
@@ -31,7 +32,7 @@ async function decode(url: string, body: unknown): Promise<unknown> {
 const pending: Promise<void>[] = [];
 function record(url: string, body: unknown) {
   pending.push(
-    decode(url, body).then(
+    decode(body).then(
       (decoded) => {
         sent.push({ url, body: decoded });
       },
@@ -47,8 +48,8 @@ async function settled() {
 }
 
 /** Everything PostHog has queued goes out now (it flushes on page hide, by beacon).
- *  `$identify` skips the batch and goes out by fetch once it's compressed (async), so
- *  give that a beat too. */
+ *  `$identify` skips the batch and goes out by fetch, after an async compression step
+ *  where the environment has one, so give that a beat too. */
 async function flush() {
   window.dispatchEvent(new Event("pagehide"));
   window.dispatchEvent(new Event("unload"));
@@ -56,10 +57,12 @@ async function flush() {
   await settled();
 }
 
-const events = () =>
+type SentEvent = { event: string; properties: Record<string, unknown> } & object;
+const events = (): SentEvent[] =>
   sent.flatMap(({ body }) => {
-    const list = Array.isArray(body) ? body : [body];
-    return list as Array<{ event: string; properties: Record<string, unknown> } & object>;
+    if (Array.isArray(body)) return body;
+    const batch = (body as { batch?: unknown } | null)?.batch;
+    return Array.isArray(batch) ? batch : [body];
   });
 
 const ourStorage = () =>
@@ -69,16 +72,16 @@ const ourStorage = () =>
 
 beforeAll(() => {
   // posthog-js picks its transports when it loads, so stub them before it ever does.
-  vi.stubEnv("PUBLIC_POSTHOG_KEY", "phc_test");
-  vi.stubEnv("PUBLIC_POSTHOG_HOST", "https://ph.invalid");
-  vi.stubGlobal(
+  rs.stubEnv("PUBLIC_POSTHOG_KEY", "phc_test");
+  rs.stubEnv("PUBLIC_POSTHOG_HOST", "https://ph.invalid");
+  rs.stubGlobal(
     "fetch",
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    rs.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       record(input instanceof Request ? input.url : String(input), init?.body);
       return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
     }),
   );
-  vi.stubGlobal(
+  rs.stubGlobal(
     "XMLHttpRequest",
     class {
       withCredentials = false;
@@ -107,8 +110,8 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
+  rs.unstubAllEnvs();
+  rs.unstubAllGlobals();
   Reflect.deleteProperty(navigator, "sendBeacon");
 });
 
@@ -134,7 +137,7 @@ describe("analytics with the real posthog-js (network stubbed)", () => {
     await a.Analytics.app.signedIn("cloud");
     await flush();
 
-    await vi.waitFor(async () => {
+    await rs.waitFor(async () => {
       await settled();
       expect(
         events()
@@ -145,6 +148,7 @@ describe("analytics with the real posthog-js (network stubbed)", () => {
     for (const { url } of sent) expect(url).toMatch(/^https:\/\/ph\.invalid\/e\//);
     for (const e of events()) {
       expect(e.properties.distinct_id).toBe("u1");
+      expect(e.properties.surface).toBe("app");
       expect(e.properties.$current_url).toBe("http://localhost:3000/join");
       expect(e).not.toHaveProperty("$set_once");
       expect(Object.keys(e.properties).filter((k) => k.startsWith("$session_entry_"))).toEqual([]);

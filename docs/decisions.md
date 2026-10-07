@@ -19,7 +19,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
-- 2026-10-07 · App analytics (PostHog) is opt-in per person and off by default — and turning it on also means updating the privacy policy.
+- 2026-10-07 · App analytics (PostHog) is opt-in per person: asked once after sign-in, off until you say yes, tagged `surface: "app"` in the shared PostHog project, and in the privacy policy.
 - 2026-10-07 · Deleting an account also deletes the user's private items in other people's workspaces, and the Danger zone says the plan ends
 - 2026-10-07 · Account deletion now erases what the FK cascade can't reach: Stripe, Storage, booking links, integration tokens, waitlist.
 - 2026-10-06 · PERM-3…8 + PERM-2b: one `resource_grants` table; access = role ceiling ∩ grant.

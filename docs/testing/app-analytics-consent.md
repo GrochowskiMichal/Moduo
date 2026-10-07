@@ -1,6 +1,6 @@
-# Manual test checklist — app analytics: safe by default + consent gate
+# Manual test checklist — app analytics: one-time question, opt-in, safe by default
 
-> Generated 2026-10-07 · branch `t/maciej/app-analytics-consent` · **Live-verified:** yes, in the web preview. A temporary harness (deleted before commit) rendered the real Settings → Preferences section for two fake signed-in people, with a dummy key and a local stand-in for PostHog. The full flow passed: off before consent → opt in → page view → switch person → opt in → sign out. Nothing was sent to PostHog.
+> Generated 2026-10-07 · branch `t/maciej/app-analytics-consent` (+ `t/maciej/privacy-app-analytics` for the policy) · **Live-verified:** yes, in the web preview. A temporary harness (deleted before commit) rendered the real question, toaster and Settings → Preferences for two fake signed-in people. It used a dummy key and a local stand-in for PostHog, so nothing was sent to PostHog. Covered: asked after the settle delay; Share → events tagged `surface: "app"`; never asked again; a second person asked separately; Don't share → nothing sent. The policy page was checked in a local preview.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 **Setup for everything below "With a test key".** Add these two lines to the checkout's `.env.local`, then restart `bun run dev:web`. The host is a dead local port, so events fail on your machine and nothing reaches PostHog:
@@ -10,34 +10,42 @@ PUBLIC_POSTHOG_KEY=phc_local_test
 PUBLIC_POSTHOG_HOST=http://127.0.0.1:9
 ```
 
-Remove both lines when you're done. Never set `PUBLIC_POSTHOG_KEY` on Vercel or another live build until the privacy policy has been updated (docs/decisions.md, 2026-10-07).
+Remove both lines when you're done. Setting the real key on a live build is now unblocked (the privacy policy describes app analytics). Do that in the Vercel and desktop build settings, not in git.
 
 ## Today's builds (no key) — nothing changes
-- [ ] **Do:** Without the setup lines, sign in and open Settings → Preferences. → **Expect:** No "Privacy" group at the bottom; the section ends with Sounds & motion. _(both)_
-- [ ] **Do:** DevTools → Network, type `posthog` in the filter, reload. → **Expect:** No posthog file is downloaded and nothing goes to a PostHog host. _(web)_
+- [ ] **Do:** Without the setup lines, sign in and wait a few seconds. → **Expect:** No question appears. Settings → Preferences has no "Privacy" group. _(both)_
+- [ ] **Do:** DevTools → Network, filter `posthog`, reload. → **Expect:** No posthog file is downloaded (not even prefetched) and nothing goes to a PostHog host. _(web)_
 
-## With a test key — off until you say yes
-- [ ] **Do:** Sign in, open Settings → Preferences, scroll to the bottom. → **Expect:** A "Privacy" group ("Saved on this device, for your account only.") with "Share usage analytics", switched **off**. _(both)_
-- [ ] **Do:** DevTools → Network, filter `127.0.0.1:9`. Use the app for a minute. → **Expect:** No requests. In Application → Local Storage, no `ph_moduo_app` keys. _(web)_
-- [ ] **Do:** Switch it **on**. → **Expect:** A request to `127.0.0.1:9/e/` appears (it fails, which is expected). Local Storage now has `moduo:consent:<your user id>` = `granted`, `ph_moduo_app` and `__ph_opt_in_out_moduo_app`. _(web)_
-- [ ] **Do:** Reload the app. → **Expect:** The switch is still on, and an event goes to `127.0.0.1:9/e/` within a few seconds. _(web)_
-- [ ] **Do:** Switch it **off**, then use the app (open a few pages). → **Expect:** `moduo:consent:<id>` = `denied`. Every `ph_moduo_app…` key and `__ph_opt_in_out_moduo_app` is gone from Local Storage *and* Session Storage. No new requests to `/e/`. _(web)_
+## With a test key — the one-time question
+- [ ] **Do:** Sign in and wait about 2 seconds. → **Expect:** A card at the bottom right: "Help us improve Moduo?", a short explanation, a "Privacy policy" link, and two equal buttons, "Don't share" and "Share". You can keep using the app around it. _(both)_
+- [ ] **Do:** Before answering, check DevTools → Network (filter `posthog` and `127.0.0.1:9`). → **Expect:** Nothing: no posthog file and no requests. _(web)_
+- [ ] **Do:** Click "Privacy policy". → **Expect:** moduo.app/privacy opens at "In the Moduo app" (web: a new tab; desktop: your browser). _(both)_
+- [ ] **Do:** Click **Share**. → **Expect:** The card closes, and a request goes to `127.0.0.1:9/e/` (it fails, which is expected). Local Storage has `moduo:consent:<your user id>` = `granted`, `ph_moduo_app` and `__ph_opt_in_out_moduo_app`. Settings → Preferences → Privacy shows the switch on. _(web)_
+- [ ] **Do:** Reload, or quit and reopen. → **Expect:** No question again. An event goes to `127.0.0.1:9/e/` within a few seconds. _(both)_
+- [ ] **Do:** Sign in as another account in the same browser. → **Expect:** They get the question, because each person answers for themselves. Click **Don't share**: the card closes, nothing is sent, and no `ph_moduo_app…` keys appear. _(web)_
+- [ ] **Do:** Ignore the card and reload. → **Expect:** It comes back until you answer. Answering is the only way it stops. _(web)_
+
+## Changing your mind
+- [ ] **Do:** Settings → Preferences → Privacy → switch it **off**, then open a few pages. → **Expect:** `moduo:consent:<id>` = `denied`. Every `ph_moduo_app…` key and `__ph_opt_in_out_moduo_app` is gone from Local Storage *and* Session Storage. No new requests to `/e/`. _(web)_
   - Requests whose URL has `retry_count=` are fine. The dead port makes every send fail, and PostHog keeps retrying events captured *before* you switched off until you reload. A request **without** `retry_count=` after switching off would be a real bug.
-
-## Sign-out, other people, other tabs
-- [ ] **Do:** Switch it on, then sign out. → **Expect:** One last new request (the sign-out event), plus any `retry_count=` retries of earlier ones. Every `ph_moduo_app…` key is gone. `moduo:consent:<id>` stays, so your choice is remembered next time. _(web)_
-- [ ] **Do:** In the same browser, sign in as a different account. → **Expect:** The switch is **off** for them and no requests go out. Their "yes" or "no" is separate from yours. _(web)_
-- [ ] **Do:** Open the app in two tabs, open Settings in both, flip the switch in one. → **Expect:** The other tab's switch follows on its own. _(web)_
-- [ ] **Do:** Turn on your browser's "Do Not Track" setting (in Chrome it's under Settings → Privacy and security), then reload. → **Expect:** No Privacy group and no requests, even if you'd switched it on before. _(web)_
+- [ ] **Do:** Switch it on again, then sign out. → **Expect:** One last new request (the sign-out event), plus any `retry_count=` retries. Every `ph_moduo_app…` key is gone. `moduo:consent:<id>` stays, so you're not asked again next time. _(web)_
+- [ ] **Do:** Open two tabs, with Settings open in one. Answer the question (or flip the switch) in the other. → **Expect:** The first tab follows on its own, and its card closes. _(web)_
+- [ ] **Do:** Turn on your browser's "Do Not Track" setting (in Chrome it's under Settings → Privacy and security), then reload. → **Expect:** No question, no Privacy group, no requests. _(web)_
 
 ## Desktop
-- [ ] **Do:** `bun run dev:desktop` with the same two setup lines, then Settings → Preferences. → **Expect:** Same Privacy row, same behaviour. Switching it on doesn't break anything else in the app. _(desktop)_
+- [ ] **Do:** `bun run dev:desktop` with the same two setup lines. → **Expect:** The same question after sign-in and the same Settings row. "Privacy policy" opens in your browser, not inside the app. _(desktop)_
+
+## The privacy policy (moduo.app/privacy)
+- [ ] **Do:** Open moduo.app/privacy after the `prod-landing` deploy. → **Expect:** "The short version" says analytics run only if you say yes, on the website or in the app. §04 Analytics has two parts, "On our website" and "In the Moduo app". §05 no longer says the app has no analytics. §07 lists PostHog for the website and the app. §11 "In the Moduo app" lists `moduo:consent:<your account ID>` and PostHog's `ph_moduo_app` entries. "Your choices" points to Settings → Preferences → Privacy. _(web)_
+
+## In PostHog, once a real key is live
+- [ ] **Do:** In the project's activity view, filter by `surface`. → **Expect:** The landing's events have `surface = landing`; the app's have `surface = app`, plus `platform` (web/desktop), `environment` and `app_version`. Build app insights with `surface = app`. _(PostHog)_
+- [ ] **Do:** Check the project's settings. → **Expect:** Decide on "Discard client IP data". The policy says PostHog may use the IP for location, which stays true either way. _(PostHog)_
 
 ## Known gaps / not-yet-testable
-- **Real PostHog was never contacted** (deliberate: no key is set anywhere). What the payloads contain was checked two ways: an automated test that runs the real posthog-js library with the network stubbed (`src/lib/analytics.posthog.test.ts`), and the agent's live run against a local stand-in. Both confirmed: user id only, no email, URLs cut to the route root, no tokens, campaign tags or click ids. You can't easily read payloads in DevTools because they're gzip-compressed. The first real enable should be checked in PostHog's live events view with a test account.
-- **Desktop wasn't run by the agent.** The code is shared; `tauri://` URLs are covered by a unit test.
-- **The real sign-in path wasn't driven live.** The app only offers emailed-code sign-in, so the agent used fake signed-in people in a harness. The auth-provider wiring is covered by typecheck and the unit tests.
-- **The privacy policy still says the app has no analytics.** Update `landing/privacy.html` §05, §07 and §11 before enabling (docs/decisions.md, 2026-10-07).
+- **Real PostHog was never contacted** (deliberate: no key is set anywhere). Payloads were checked by `src/lib/analytics.posthog.test.ts`, which runs the real posthog-js with the network stubbed, and by the live run against a local stand-in. The first real enable should be checked in PostHog's live events view with a test account.
+- **Desktop wasn't run by the agent.** The code is shared; `tauri://` URLs and the desktop policy link are covered by unit tests.
+- **The real sign-in path wasn't driven live.** The app only offers emailed-code sign-in, so the harness used fake signed-in people. The auth-provider wiring is covered by typecheck and unit tests.
 
 ---
-*Convention defined in [CLAUDE.md](../../CLAUDE.md) → "Session wrap-up". One file per sprint/branch so history is preserved.*
+*Convention defined in [AGENTS.md](../../AGENTS.md) → "Wrap". One file per sprint/branch so history is preserved.*

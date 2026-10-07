@@ -1,12 +1,11 @@
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import type { CaptureResult } from "posthog-js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // A stand-in for the posthog-js singleton that models what matters here, like the real
 // one: capture() sends nothing unless opted in; reset() drops the opt-in and the
 // anonymous id, and a new device id only with reset(true). `sent` is what would have
 // left the device. (analytics.posthog.test.ts runs the real library.)
-const ph = vi.hoisted(() => {
+const ph = rs.hoisted(() => {
   const state = {
     optedIn: false,
     distinctId: "anon-0",
@@ -16,16 +15,16 @@ const ph = vi.hoisted(() => {
   };
   return {
     state,
-    init: vi.fn(),
-    opt_in_capturing: vi.fn(() => {
+    init: rs.fn(),
+    opt_in_capturing: rs.fn(() => {
       state.optedIn = true;
     }),
-    opt_out_capturing: vi.fn(() => {
+    opt_out_capturing: rs.fn(() => {
       state.optedIn = false;
     }),
-    has_opted_in_capturing: vi.fn(() => state.optedIn),
-    get_distinct_id: vi.fn(() => state.distinctId),
-    identify: vi.fn((id: string) => {
+    has_opted_in_capturing: rs.fn(() => state.optedIn),
+    get_distinct_id: rs.fn(() => state.distinctId),
+    identify: rs.fn((id: string) => {
       state.distinctId = id;
       if (state.optedIn) {
         state.sent.push({
@@ -36,28 +35,28 @@ const ph = vi.hoisted(() => {
         });
       }
     }),
-    reset: vi.fn((resetDeviceId?: boolean) => {
+    reset: rs.fn((resetDeviceId?: boolean) => {
       state.resets += 1;
       state.optedIn = false;
       state.distinctId = `anon-${state.resets}`;
       if (resetDeviceId) state.deviceId = `device-${state.resets}`;
     }),
-    capture: vi.fn((event: string, props?: unknown) => {
+    capture: rs.fn((event: string, props?: unknown) => {
       if (!state.optedIn) return;
       state.sent.push({ event, props, distinctId: state.distinctId, deviceId: state.deviceId });
     }),
   };
 });
 
-vi.mock("posthog-js", () => ({ default: ph }));
+rs.mock("posthog-js", () => ({ default: ph }));
 
 type AnalyticsModule = typeof import("./analytics");
 
 // The key and host are read when the module loads, so each test loads a fresh copy.
 async function loadAnalytics(env: { key?: string; host?: string } = {}): Promise<AnalyticsModule> {
-  vi.resetModules();
-  vi.stubEnv("PUBLIC_POSTHOG_KEY", env.key ?? "phc_test");
-  vi.stubEnv("PUBLIC_POSTHOG_HOST", env.host ?? "");
+  rs.resetModules();
+  rs.stubEnv("PUBLIC_POSTHOG_KEY", env.key ?? "phc_test");
+  rs.stubEnv("PUBLIC_POSTHOG_HOST", env.host ?? "");
   return import("./analytics");
 }
 
@@ -76,7 +75,7 @@ const addEventListener = window.addEventListener.bind(window);
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
-  vi.clearAllMocks();
+  rs.clearAllMocks();
   Object.assign(ph.state, {
     optedIn: false,
     distinctId: "anon-0",
@@ -84,19 +83,18 @@ beforeEach(() => {
     resets: 0,
     sent: [],
   });
-  vi.spyOn(window, "addEventListener").mockImplementation((type, listener, options) => {
+  rs.spyOn(window, "addEventListener").mockImplementation((type, listener, options) => {
     if (type === "storage" && listener) storageListeners.push(listener);
     addEventListener(type, listener, options);
   });
 });
 
 afterEach(() => {
-  cleanup();
   for (const listener of storageListeners.splice(0)) {
     window.removeEventListener("storage", listener);
   }
-  vi.restoreAllMocks();
-  vi.unstubAllEnvs();
+  rs.restoreAllMocks();
+  rs.unstubAllEnvs();
   Reflect.deleteProperty(window, "doNotTrack");
 });
 
@@ -310,11 +308,11 @@ describe("analytics — consent is per person and can be withdrawn", () => {
 
     localStorage.setItem("moduo:consent:u1", "granted");
     window.dispatchEvent(new StorageEvent("storage", { key: "moduo:consent:u1" }));
-    await vi.waitFor(() => expect(ph.identify).toHaveBeenCalledWith("u1"));
+    await rs.waitFor(() => expect(ph.identify).toHaveBeenCalledWith("u1"));
 
     localStorage.setItem("moduo:consent:u1", "denied");
     window.dispatchEvent(new StorageEvent("storage", { key: "moduo:consent:u1" }));
-    await vi.waitFor(() => expect(ph.opt_out_capturing).toHaveBeenCalled());
+    await rs.waitFor(() => expect(ph.opt_out_capturing).toHaveBeenCalled());
     expect(ph.has_opted_in_capturing()).toBe(false);
   });
 
@@ -343,7 +341,10 @@ describe("analytics — consent is per person and can be withdrawn", () => {
 
   it("useAnalyticsConsent follows the stored choice", async () => {
     const a = await loadAnalytics();
-    const { result } = renderHook(() => a.useAnalyticsConsent("u1"));
+    // The fresh module copy brings a fresh React; render with the testing library that
+    // shares it, or the hook call throws "Invalid hook call".
+    const { act, renderHook } = await import("@testing-library/react");
+    const { result, unmount } = renderHook(() => a.useAnalyticsConsent("u1"));
     expect(result.current).toBeNull();
 
     await act(() => a.setAnalyticsConsent("u1", "granted"));
@@ -351,10 +352,20 @@ describe("analytics — consent is per person and can be withdrawn", () => {
 
     await act(() => a.setAnalyticsConsent("u1", "denied"));
     expect(result.current).toBe("denied");
+    unmount();
   });
 });
 
-describe("analytics — outgoing scrub (before_send)", () => {
+// What prepareEvent stamps under test: no Tauri shell, no channel env, localhost, and
+// no MODUO_VERSION (see features/settings/about.ts).
+const SOURCE_IN_TESTS = {
+  surface: "app",
+  platform: "web",
+  environment: "development",
+  app_version: "0.0.0",
+};
+
+describe("analytics — outgoing events (before_send)", () => {
   async function beforeSend() {
     const a = await loadAnalytics();
     await a.setAnalyticsUser("u1");
@@ -399,9 +410,18 @@ describe("analytics — outgoing scrub (before_send)", () => {
       $host: "app.moduo.app",
       method: "cloud",
       count: 3,
+      ...SOURCE_IN_TESTS,
     });
     expect(out?.$set).toEqual({});
     expect(out).not.toHaveProperty("$set_once");
+  });
+
+  it("tags every event as the app's, so it can be told apart from the landing's", async () => {
+    const scrub = await beforeSend();
+    // An incoming `surface` can't override it.
+    const out = scrub({ uuid: "e3", event: "app_signed_in", properties: { surface: "landing" } });
+
+    expect(out?.properties).toEqual(SOURCE_IN_TESTS);
   });
 
   it("keeps the desktop shell's URLs readable", async () => {
