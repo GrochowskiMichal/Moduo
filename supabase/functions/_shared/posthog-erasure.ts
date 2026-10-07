@@ -21,9 +21,11 @@
 export const POSTHOG_DEFAULT_API_HOST = "https://eu.posthog.com";
 
 export type PostHogEraseResult =
-  /** PostHog took the request: the person is gone, their events are queued. */
-  | { status: "queued"; personsFound: number }
-  /** PostHog refused it for good (wrong key, scope or project): a retry won't help. */
+  /** PostHog took the request: the person is gone (if there was one), their events are
+   *  queued. */
+  | { status: "queued" }
+  /** PostHog refused it (wrong key, scope or project): retrying won't help until the
+   *  setup is fixed. */
   | { status: "refused"; httpStatus: number };
 
 export interface ErasurePostHog {
@@ -78,16 +80,12 @@ export function makePostHogEraser(config: PostHogEraserConfig): ErasurePostHog {
       });
       const text = await res.text();
       if (res.ok) {
-        const summary = parseJson(text) as {
-          persons_found?: unknown;
-          deletion_errors?: unknown;
-        } | null;
+        const summary = parseJson(text) as { deletion_errors?: unknown } | null;
         // A person PostHog matched but couldn't finish deleting: worth another go.
         if (Array.isArray(summary?.deletion_errors) && summary.deletion_errors.length > 0) {
           throw new Error(`PostHog couldn't finish the deletion: ${clip(text)}`);
         }
-        const found = summary?.persons_found;
-        return { status: "queued", personsFound: typeof found === "number" ? found : 0 };
+        return { status: "queued" };
       }
       if (PERMANENT.has(res.status)) return { status: "refused", httpStatus: res.status };
       throw new Error(`PostHog ${res.status}: ${clip(text)}`);

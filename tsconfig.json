@@ -24,6 +24,8 @@
     "supabase/functions/_shared/contracts",
     "supabase/functions/_shared/account-erasure.ts",
     "supabase/functions/_shared/account-erasure.test.ts",
+    "supabase/functions/_shared/analytics-forget.ts",
+    "supabase/functions/_shared/analytics-forget.test.ts",
     "supabase/functions/_shared/posthog-erasure.ts",
     "supabase/functions/_shared/posthog-erasure.test.ts"
   ],

@@ -21,7 +21,8 @@
  * before can still go out with PostHog's current batch (or its retries of a failed
  * send, until the page reloads) — posthog-js has no way to drop those. Switching off
  * after a yes also has the server delete what PostHog holds for the person (PRIV-3,
- * after the batch lands); deleting the account does the same in delete-account.
+ * after the batch lands); deleting the account does the same in delete-account, and
+ * forgetAnalyticsAccount() stops this device before it signs out.
  *
  * Only the explicit `track()` calls below are captured, plus PostHog's `$identify` —
  * never autocapture, pageviews, session replay, heatmaps or surveys, whatever the
@@ -117,7 +118,7 @@ export function setAnalyticsConsent(userId: string, consent: AnalyticsConsent): 
   notifyConsent();
   if (userId === currentUserId) void enqueue(reconcile);
   // Switching off after a yes also deletes what PostHog already has (PRIV-3). A first
-  // "no" has nothing to delete; a yes again before the request goes cancels it.
+  // "no" has nothing to delete; a yes again drops a request the server hasn't confirmed.
   if (PH_KEY && previous === "granted" && consent === "denied") scheduleForget(userId);
   if (consent === "granted") cancelForget(userId);
   return queue;
@@ -302,8 +303,8 @@ export function setAnalyticsUser(userId: string | null): Promise<void> {
     currentUserId = userId;
     if (PH_KEY) {
       void enqueue(atStartup && userId === null ? clearAbandonedPostHogState : reconcile);
-      // A deletion asked for earlier that never reached the server (closed, offline).
-      if (userId !== null && hasPendingForget(userId)) void runPendingForget(userId);
+      // A deletion asked for earlier that the server never confirmed (closed, offline).
+      if (userId !== null) void runPendingForget(userId);
     }
   }
   return queue;
@@ -311,28 +312,39 @@ export function setAnalyticsUser(userId: string | null): Promise<void> {
 
 // ── Deleting what was sent (PRIV-3) ───────────────────────────────────────────
 
-// When someone switches analytics off, the server deletes their PostHog person and events
-// (supabase/functions/analytics-forget). The request waits a few seconds so the batch
-// PostHog was still sending lands first: PostHog only deletes events it already has. A
-// marker keeps the request alive across a reload until the server confirms it.
+// When someone switches analytics off after a yes, the server deletes their PostHog person
+// and events (supabase/functions/analytics-forget). The request goes at once, while they're
+// still signed in, and the server waits a few seconds before deleting so the batch PostHog
+// was still sending lands and goes too. A marker keeps the request until the server
+// confirms it; each later session of that person sends it again (closed, offline, an error).
 const FORGET_KEY_PREFIX = "moduo:analytics-forget:";
-export const ANALYTICS_FORGET_DELAY_MS = 10_000;
-const pendingForgets = new Set<string>(); // the marker, when storage is unavailable
-let forgetTimer: ReturnType<typeof setTimeout> | undefined;
+const pendingForgets = new Map<string, string>(); // this session's markers, storage or not
 
 function scheduleForget(userId: string) {
-  pendingForgets.add(userId);
+  // One per switch-off, so an older request finishing can't clear a newer one.
+  const marker = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  pendingForgets.set(userId, marker);
   try {
-    localStorage.setItem(FORGET_KEY_PREFIX + userId, "1");
+    localStorage.setItem(FORGET_KEY_PREFIX + userId, marker);
   } catch {
-    // Storage unavailable: this session still sends it.
+    // Storage unavailable: only this session sends it.
   }
-  clearTimeout(forgetTimer);
-  forgetTimer = setTimeout(() => void runPendingForget(userId), ANALYTICS_FORGET_DELAY_MS);
+  void runPendingForget(userId);
 }
 
-function cancelForget(userId: string) {
-  clearTimeout(forgetTimer);
+function pendingForget(userId: string): string | null {
+  const inSession = pendingForgets.get(userId);
+  if (inSession !== undefined) return inSession;
+  try {
+    return localStorage.getItem(FORGET_KEY_PREFIX + userId);
+  } catch {
+    return null;
+  }
+}
+
+/** Drops the pending request; given a `marker`, only while it's still that one. */
+function cancelForget(userId: string, marker?: string) {
+  if (marker !== undefined && pendingForget(userId) !== marker) return;
   pendingForgets.delete(userId);
   try {
     localStorage.removeItem(FORGET_KEY_PREFIX + userId);
@@ -341,23 +353,30 @@ function cancelForget(userId: string) {
   }
 }
 
-function hasPendingForget(userId: string): boolean {
-  if (pendingForgets.has(userId)) return true;
-  try {
-    return localStorage.getItem(FORGET_KEY_PREFIX + userId) !== null;
-  } catch {
-    return false;
-  }
-}
-
 async function runPendingForget(userId: string) {
-  if (!hasPendingForget(userId)) return; // a yes again cancelled it
+  const marker = pendingForget(userId);
+  if (marker === null) return;
   try {
     const { requestAnalyticsForget } = await import("./analytics-forget");
-    if (await requestAnalyticsForget(userId)) cancelForget(userId);
+    if (await requestAnalyticsForget(userId)) cancelForget(userId, marker);
   } catch (err) {
     console.warn("[analytics] couldn't ask to delete analytics; will retry", err);
   }
+}
+
+/** The account was deleted (Settings → Account), which erased its PostHog data too. Forgets
+ *  this person's choice and any pending request on this device and stops analytics, before
+ *  signing out tracks `app_signed_out` under the erased id and brings the person back. */
+export function forgetAnalyticsAccount(userId: string): Promise<void> {
+  cancelForget(userId);
+  try {
+    localStorage.removeItem(CONSENT_KEY_PREFIX + userId);
+  } catch {
+    // Storage unavailable: nothing was stored.
+  }
+  notifyConsent();
+  if (userId === currentUserId) void enqueue(reconcile);
+  return queue;
 }
 
 /** Track a named event with optional properties — dropped unless the signed-in person

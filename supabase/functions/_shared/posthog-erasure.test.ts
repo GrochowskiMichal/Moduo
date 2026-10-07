@@ -28,7 +28,7 @@ describe("makePostHogEraser", () => {
 
     const result = await eraser.erasePerson(USER);
 
-    expect(result).toEqual({ status: "queued", personsFound: 1 });
+    expect(result).toEqual({ status: "queued" });
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe("https://eu.posthog.com/api/projects/12345/persons/bulk_delete/");
     expect(calls[0].init.method).toBe("POST");
@@ -47,7 +47,7 @@ describe("makePostHogEraser", () => {
     const { impl } = fakeFetch(202, { persons_found: 0, deletion_errors: [] });
     const eraser = makePostHogEraser({ apiKey: "phx_key", projectId: "12345", fetch: impl });
 
-    expect(await eraser.erasePerson(USER)).toEqual({ status: "queued", personsFound: 0 });
+    expect(await eraser.erasePerson(USER)).toEqual({ status: "queued" });
   });
 
   it("uses another host when given one, without a doubled slash", async () => {

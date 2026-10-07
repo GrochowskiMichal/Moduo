@@ -6,20 +6,24 @@
  * user id, and their events, which PostHog removes in its weekly deletion run. Account
  * deletion does the same through delete-account. A caller can only ever erase their
  * own analytics: the distinct id is the verified user id, never something they send.
+ * The work itself is ../_shared/analytics-forget.ts; it waits about 10 s before
+ * deleting, so a request takes that long to answer.
  *
  * Deploy with verify_jwt = false — the caller's JWT is verified in code (getUser).
  * Needs the POSTHOG_PERSONAL_API_KEY and POSTHOG_PROJECT_ID secrets
- * (../_shared/posthog-erasure.ts); without them there is nothing to delete with.
+ * (../_shared/posthog-erasure.ts).
  *
  * Returns:
- *   200 { ok: true, queued: true }                PostHog took the deletion
- *   200 { ok: true, skipped: "not_configured" }   no PostHog secrets
- *   200 { ok: true, skipped: "refused" }          PostHog refused for good (logged)
- *   401 { error }  /  502 { error }                502: try again later (the app does)
+ *   200 { ok: true }    PostHog took the deletion
+ *   401 / 405 { error }
+ *   502 / 503 { error } not done; the app keeps the request and sends it again later.
+ *                       503: no PostHog secrets, or PostHog refused them (logged with
+ *                       the user id). 502: PostHog or the auth check failed.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { forgetAnalytics } from "../_shared/analytics-forget.ts";
 import { postHogEraserFromEnv } from "../_shared/posthog-erasure.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
@@ -46,21 +50,19 @@ Deno.serve(async (req: Request) => {
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+    } = await supabase.auth.getUser(authHeader.replace(/^Bearer\s+/i, ""));
     if (authError || !user) return json({ error: "Unauthorized" }, { status: 401 });
 
-    const posthog = postHogEraserFromEnv((name) => Deno.env.get(name));
-    if (!posthog) return json({ ok: true, skipped: "not_configured" });
-
-    const result = await posthog.erasePerson(user.id);
-    if (result.status === "refused") {
-      // A wrong key, scope or project id: retrying won't help. Logged with the user id
-      // so the analytics can still be deleted by hand once the setup is fixed.
-      console.warn("[analytics-forget] PostHog refused", user.id, result.httpStatus);
-      return json({ ok: true, skipped: "refused" });
-    }
-    return json({ ok: true, queued: true });
+    const { status, body } = await forgetAnalytics(
+      {
+        posthog: postHogEraserFromEnv((name) => Deno.env.get(name)),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      },
+      user.id,
+    );
+    return json(body, { status });
   } catch (err) {
+    // The auth check or the secret key failed: nothing was deleted, and the app asks again.
     console.error("[analytics-forget]", err);
     return json({ error: "Couldn't delete your analytics right now. Try again later." }, { status: 502 });
   }

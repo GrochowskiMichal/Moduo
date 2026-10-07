@@ -281,7 +281,7 @@ class FakePostHog implements ErasurePostHog {
     this.log.push(`erase ${distinctId}`);
     if (this.outcome === "throw") throw new Error("PostHog 503: busy");
     if (this.outcome === "refused") return { status: "refused", httpStatus: 403 };
-    return { status: "queued", personsFound: 1 };
+    return { status: "queued" };
   }
 }
 

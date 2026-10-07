@@ -207,7 +207,7 @@ function AnalyticsConsentGroup() {
     <PrefGroup label="Privacy" description="Saved on this device, for your account only.">
       <PrefRow
         title="Share usage analytics"
-        description="Send events like opening the app, with basic device and browser details, to PostHog so we can improve Moduo. They carry your account ID, never your email or anything you write. Turning this off also deletes what was already sent."
+        description="Send events like opening the app, with basic device and browser details, to PostHog so we can improve Moduo. They carry your account ID, never your email or anything you write. Turning this off also deletes what your account has sent so far, from every device."
       >
         <Switch
           checked={consent === "granted"}

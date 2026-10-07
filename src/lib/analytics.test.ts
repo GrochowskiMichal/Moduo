@@ -503,85 +503,121 @@ describe("analytics — switching off deletes what was sent (PRIV-3)", () => {
     await a.setAnalyticsConsent("u1", "denied");
   }
 
-  it("asks the server to delete it once PostHog's last batch has had time to land", async () => {
-    rs.useFakeTimers();
-    try {
-      const a = await loadAnalytics();
-      await optedInThenOff(a);
+  const pending = (userId: string) => localStorage.getItem(`moduo:analytics-forget:${userId}`);
 
-      expect(forget.request).not.toHaveBeenCalled();
-      expect(localStorage.getItem("moduo:analytics-forget:u1")).toBe("1");
+  it("asks the server right away, while the person is still signed in", async () => {
+    const a = await loadAnalytics();
+    await optedInThenOff(a);
+    await settle();
 
-      await rs.advanceTimersByTimeAsync(a.ANALYTICS_FORGET_DELAY_MS);
-      await settle();
-
-      expect(forget.request).toHaveBeenCalledWith("u1");
-      expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull();
-    } finally {
-      rs.useRealTimers();
-    }
+    expect(forget.request).toHaveBeenCalledTimes(1);
+    expect(forget.request).toHaveBeenCalledWith("u1");
+    expect(pending("u1")).toBeNull();
   });
 
   it("asks nothing for a first no: nothing was ever sent", async () => {
-    rs.useFakeTimers();
-    try {
-      const a = await loadAnalytics();
-      await a.setAnalyticsUser("u1");
-      await a.setAnalyticsConsent("u1", "denied");
-      await rs.advanceTimersByTimeAsync(a.ANALYTICS_FORGET_DELAY_MS);
-      await settle();
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "denied");
+    await settle();
 
-      expect(forget.request).not.toHaveBeenCalled();
-      expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull();
-    } finally {
-      rs.useRealTimers();
-    }
+    expect(forget.request).not.toHaveBeenCalled();
+    expect(pending("u1")).toBeNull();
   });
 
-  it("cancels it when the person says yes again before it goes", async () => {
-    rs.useFakeTimers();
-    try {
-      const a = await loadAnalytics();
-      await optedInThenOff(a);
-      await a.setAnalyticsConsent("u1", "granted");
-      await rs.advanceTimersByTimeAsync(a.ANALYTICS_FORGET_DELAY_MS);
-      await settle();
-
-      expect(forget.request).not.toHaveBeenCalled();
-      expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull();
-    } finally {
-      rs.useRealTimers();
-    }
-  });
-
-  it("keeps the request until the server takes it, and retries when that person is back", async () => {
-    rs.useFakeTimers();
-    try {
-      forget.request.mockResolvedValueOnce(false); // offline, or a 502
-      const a = await loadAnalytics();
-      await optedInThenOff(a);
-      await rs.advanceTimersByTimeAsync(a.ANALYTICS_FORGET_DELAY_MS);
-      await settle();
-      expect(localStorage.getItem("moduo:analytics-forget:u1")).toBe("1");
-    } finally {
-      rs.useRealTimers();
-    }
+  it("keeps the request until the server takes it, and sends it again when that person is back", async () => {
+    forget.request.mockResolvedValueOnce(false); // offline, or a 502/503
+    const a = await loadAnalytics();
+    await optedInThenOff(a);
+    await settle();
+    expect(pending("u1")).not.toBeNull();
 
     // The next launch, signed in as the same person.
     const b = await loadAnalytics();
     await b.setAnalyticsUser("u1");
     await rs.waitFor(() => expect(forget.request).toHaveBeenCalledTimes(2));
-    await rs.waitFor(() => expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull());
+    await rs.waitFor(() => expect(pending("u1")).toBeNull());
+  });
+
+  it("drops a request the server hasn't taken when the person says yes again", async () => {
+    forget.request.mockResolvedValueOnce(false);
+    const a = await loadAnalytics();
+    await optedInThenOff(a);
+    await settle();
+    await a.setAnalyticsConsent("u1", "granted");
+    expect(pending("u1")).toBeNull();
+
+    const b = await loadAnalytics();
+    await b.setAnalyticsUser("u1");
+    await settle();
+    expect(forget.request).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't let an older request's answer clear a newer switch-off", async () => {
+    let answerFirst: (taken: boolean) => void = () => {};
+    forget.request.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          answerFirst = resolve;
+        }),
+    );
+    forget.request.mockResolvedValueOnce(false); // the newer one doesn't get through
+    const a = await loadAnalytics();
+    await optedInThenOff(a); // the first request, still waiting on the server
+    await settle();
+    await a.setAnalyticsConsent("u1", "granted");
+    await a.setAnalyticsConsent("u1", "denied");
+    await settle();
+
+    answerFirst(true);
+    await settle();
+
+    expect(forget.request).toHaveBeenCalledTimes(2);
+    expect(pending("u1")).not.toBeNull(); // the newer switch-off is still owed
   });
 
   it("leaves another person's pending request for their own session", async () => {
-    localStorage.setItem("moduo:analytics-forget:u2", "1");
+    localStorage.setItem("moduo:analytics-forget:u2", "earlier");
     const a = await loadAnalytics();
     await a.setAnalyticsUser("u1");
     await settle();
 
     expect(forget.request).not.toHaveBeenCalled();
-    expect(localStorage.getItem("moduo:analytics-forget:u2")).toBe("1");
+    expect(pending("u2")).toBe("earlier");
+  });
+});
+
+describe("analytics — after the account is deleted (PRIV-3)", () => {
+  it("sends nothing more under the erased id, sign-out included, and forgets the choice", async () => {
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "granted");
+    const before = ph.state.sent.length;
+
+    await a.forgetAnalyticsAccount("u1");
+    // What the auth provider does on SIGNED_OUT.
+    await a.Analytics.app.signedOut();
+    await a.setAnalyticsUser(null);
+
+    expect(ph.state.sent.slice(before)).toEqual([]);
+    expect(ph.state.optedIn).toBe(false);
+    expect(a.getAnalyticsConsent("u1")).toBeNull();
+    // The server erased everything as part of the deletion: nothing more to ask.
+    expect(forget.request).not.toHaveBeenCalled();
+  });
+
+  it("drops a deletion request still pending on this device", async () => {
+    forget.request.mockResolvedValueOnce(false);
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "granted");
+    await a.setAnalyticsConsent("u1", "denied");
+    await settle();
+    expect(localStorage.getItem("moduo:analytics-forget:u1")).not.toBeNull();
+
+    await a.forgetAnalyticsAccount("u1");
+
+    expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull();
   });
 });
 
