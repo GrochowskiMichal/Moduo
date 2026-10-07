@@ -30,17 +30,26 @@ const server = Bun.serve({
     // Static assets next to the page (share image etc.), shipped to /assets by vercel-build.
     if (pathname.startsWith("/assets/") && !pathname.includes("..")) {
       const asset = Bun.file(path.join(root, pathname));
-      return asset.exists().then((ok) =>
-        ok ? new Response(asset, { headers: { "cache-control": "no-store" } }) : new Response("Not found", { status: 404 }),
-      );
+      return asset
+        .exists()
+        .then((ok) =>
+          ok
+            ? new Response(asset, { headers: { "cache-control": "no-store" } })
+            : new Response("Not found", { status: 404 }),
+        );
     }
     // Parked pages (not deployed) preview at /parked/<name>
     const parked = pathname.match(/^\/parked\/([a-z0-9-]+)\/?$/);
     if (parked) {
-      const page = Bun.file(path.join(root, "parked", parked[1] + ".html"));
+      const page = Bun.file(path.join(root, "parked", `${parked[1]}.html`));
       return page.exists().then((ok) =>
         ok
-          ? new Response(page, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } })
+          ? new Response(page, {
+              headers: {
+                "content-type": "text/html; charset=utf-8",
+                "cache-control": "no-store",
+              },
+            })
           : new Response("Not found", { status: 404 }),
       );
     }

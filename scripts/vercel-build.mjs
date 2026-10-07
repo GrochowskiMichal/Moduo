@@ -45,7 +45,10 @@ if (target === "landing") {
   if (ref === "staging-landing") {
     let page = fs.readFileSync(path.join(root, "landing", "index.html"), "utf8");
     if (!/name="robots"/.test(page)) {
-      page = page.replace("<head>", '<head>\n    <meta name="robots" content="noindex, nofollow" />');
+      page = page.replace(
+        "<head>",
+        '<head>\n    <meta name="robots" content="noindex, nofollow" />',
+      );
     }
     fs.writeFileSync(path.join(outDir, "landing.html"), page);
   }
