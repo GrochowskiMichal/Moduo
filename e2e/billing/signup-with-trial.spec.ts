@@ -10,7 +10,7 @@
 import { expect, test } from "@playwright/test";
 import { BASE_URL, fillSignupEmail, testEmail } from "./helpers";
 
-test.describe("Signup → 7-day trial", () => {
+test.describe("Signup → 14-day trial", () => {
   test("new user sees onboarding workspace setup after signup", async ({ page }) => {
     const email = testEmail("signup-trial");
     await fillSignupEmail(page, email);
@@ -24,6 +24,7 @@ test.describe("Signup → 7-day trial", () => {
 
     // All three plan names should be visible.
     await expect(page.getByText("Pro")).toBeVisible();
+    await expect(page.getByText("Duo")).toBeVisible();
     await expect(page.getByText("Team")).toBeVisible();
     await expect(page.getByText("Free")).toBeVisible();
 
@@ -31,9 +32,8 @@ test.describe("Signup → 7-day trial", () => {
     await expect(page.getByRole("button", { name: /start free trial/i }).first()).toBeVisible();
   });
 
-  test("unauthenticated web user is redirected to /paywall from /", async ({ page }) => {
+  test("unauthenticated web user is sent to /auth from /", async ({ page }) => {
     await page.goto(BASE_URL);
-    // Should end up on auth or paywall — not the main dashboard.
-    await expect(page).not.toHaveURL(/^http.*\/$/, { timeout: 8_000 });
+    await expect(page).toHaveURL(/\/auth/, { timeout: 8_000 });
   });
 });

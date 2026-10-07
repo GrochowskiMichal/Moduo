@@ -1,7 +1,7 @@
 // Activity-trail rendering (activity.ts) + the catch-up op item shaping
 // (recurrence-engine catchUpItem) — the pure halves of Session 8's intent ops.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { activityActorName, activityLine } from "./activity";
 import type { ActivityEntry, RecurrenceRule, Task } from "./model";

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { blockedTaskIds, frontierTasks, makeTask, wouldCreateCycle } from "./helpers";
 import type { Task, TaskRelation, TaskStatus } from "./model";

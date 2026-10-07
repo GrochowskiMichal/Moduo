@@ -9,6 +9,7 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { isTauriRuntime } from "../../../lib/runtime";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web";
+import { useWorkspace } from "../../workspaces/workspace-context";
 import { busyIdsFromJson, questionsFromJson, slugFor } from "../booking/model";
 import { bookingPublicUrl } from "../booking/public-origin";
 import { DEFAULT_WEEKLY_HOURS, normalizeWeeklyHours } from "../booking/slots";
@@ -87,6 +88,8 @@ function emptyDraft(): Draft {
     questions: [],
     paused: false,
     video: "google_meet",
+    cohostIds: [],
+    savedCohostIds: [],
   };
 }
 
@@ -110,6 +113,8 @@ function draftFromRow(row: LinkRow): Draft {
     questions: questionsFromJson(row.questions_json),
     paused: row.paused,
     video: videoSetting(row.video_provider),
+    cohostIds: [],
+    savedCohostIds: null,
   };
 }
 
@@ -127,7 +132,12 @@ function errorText(error: unknown, fallback: string): string {
 }
 
 export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) {
+  const { members } = useWorkspace();
+  const teammates = members
+    .filter((m) => m.isActive && !m.removedAt && m.userId !== userId)
+    .map((m) => ({ userId: m.userId, name: m.displayName || "Teammate" }));
   const [links, setLinks] = useState<LinkRow[]>([]);
+  const [pendingHost, setPendingHost] = useState<{ linkId: string; name: string }[]>([]);
   const [googleOn, setGoogleOn] = useState(false);
   const [zoom, setZoom] = useState<ZoomState>({ configured: false, connected: false });
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -155,6 +165,33 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
       setZoom({ configured: false, connected: false });
     }
   }, [userId, workspaceId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void supabaseClient
+      .from("booking_link_hosts")
+      .select("link_id, status")
+      .eq("user_id", userId)
+      .eq("status", "pending")
+      .then(async ({ data, error }) => {
+        if (cancelled || error || !data?.length) {
+          if (!cancelled) setPendingHost([]);
+          return;
+        }
+        const ids = data.map((row) => row.link_id as string);
+        const links = await supabaseClient
+          .from("exposed_slot_links")
+          .select("id, name")
+          .in("id", ids);
+        if (cancelled) return;
+        setPendingHost(
+          (links.data ?? []).map((row) => ({ linkId: row.id as string, name: row.name as string })),
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   useEffect(() => {
     void refresh();
@@ -303,15 +340,36 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
           .eq("id", draft.id);
         if (updateError) throw updateError;
       } else {
-        const { error: insertError } = await supabaseClient.from("exposed_slot_links").insert({
-          ...payload,
-          slot_id: crypto.randomUUID(),
-          slug: slugFor(name),
-          owner_user_id: userId,
-          owner_handle: (email ?? "host").split("@")[0] || "host",
-          workspace_id: workspaceId,
-        });
+        const { data: inserted, error: insertError } = await supabaseClient
+          .from("exposed_slot_links")
+          .insert({
+            ...payload,
+            slot_id: crypto.randomUUID(),
+            slug: slugFor(name),
+            owner_user_id: userId,
+            owner_handle: (email ?? "host").split("@")[0] || "host",
+            workspace_id: workspaceId,
+          })
+          .select("id")
+          .single();
         if (insertError) throw insertError;
+        draft.id = inserted.id;
+      }
+      // Send the co-host list whenever it changed — including to empty, which
+      // turns a collective link back into a solo one. Unchanged lists are not
+      // re-sent, so editing the title never re-pauses an accepted link.
+      const saved = draft.savedCohostIds;
+      const cohostsChanged =
+        saved === null
+          ? draft.cohostIds.length > 0
+          : saved.length !== draft.cohostIds.length ||
+            draft.cohostIds.some((id) => !saved.includes(id));
+      if (cohostsChanged && draft.id) {
+        const { error: hostError } = await supabaseClient.rpc("booking_hosts_set", {
+          p_link_id: draft.id,
+          p_user_ids: draft.cohostIds,
+        });
+        if (hostError) throw hostError;
       }
       setDraft(null);
       await refresh();
@@ -353,6 +411,41 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
       <Eyebrow as="div" className="px-1">
         Booking links
       </Eyebrow>
+      {pendingHost.map((ask) => (
+        <div key={ask.linkId} className="flex items-center gap-1 px-1">
+          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+            Host {ask.name} with you?
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              void supabaseClient
+                .rpc("booking_host_respond", { p_link_id: ask.linkId, p_accept: true })
+                .then(() =>
+                  setPendingHost((rows) => rows.filter((row) => row.linkId !== ask.linkId)),
+                )
+            }
+          >
+            Accept
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              void supabaseClient
+                .rpc("booking_host_respond", { p_link_id: ask.linkId, p_accept: false })
+                .then(() =>
+                  setPendingHost((rows) => rows.filter((row) => row.linkId !== ask.linkId)),
+                )
+            }
+          >
+            Decline
+          </Button>
+        </div>
+      ))}
       {links.map((link) => (
         <div key={link.id} className="flex items-center gap-1 px-1">
           <button
@@ -360,7 +453,24 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
             className="min-w-0 flex-1 truncate text-left text-sm text-foreground"
             onClick={() => {
               setError(null);
-              setDraft(draftFromRow(link));
+              const next = draftFromRow(link);
+              setDraft(next);
+              void supabaseClient
+                .from("booking_link_hosts")
+                .select("user_id")
+                .eq("link_id", link.id)
+                .then(({ data }) => {
+                  if (!data) return;
+                  setDraft((current) =>
+                    current?.id === link.id
+                      ? {
+                          ...current,
+                          cohostIds: data.map((row) => row.user_id as string),
+                          savedCohostIds: data.map((row) => row.user_id as string),
+                        }
+                      : current,
+                  );
+                });
             }}
           >
             {link.name}
@@ -408,6 +518,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         onDisconnectZoom={() => void disconnectZoom()}
         onSave={() => void save()}
         onDelete={() => void remove()}
+        teammates={teammates}
       />
     </div>
   );

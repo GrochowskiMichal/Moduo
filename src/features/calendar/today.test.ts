@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { CalendarEventModel } from "./events";
 import type { LensTask } from "./lens";
 import { shapeToday } from "./today";

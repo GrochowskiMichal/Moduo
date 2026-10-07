@@ -1,7 +1,7 @@
 // DF-2 — the /calendar deep-link search: validate `?event=` and resolve an
 // inbound event id to a navigate target (or `none` for stale/unknown ids).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { resolveCalendarDeepLink, validateCalendarSearch } from "./search";
 
 const ev = (id: string, startsAt: string) => ({ id, startsAt }) as { id: string; startsAt: string };

@@ -47,10 +47,8 @@ const publicWebOrigin = readLocalEnvValue("PUBLIC_WEB_ORIGIN");
 // Staging portal — set to "true" in the Vercel moduo-staging env vars.
 // Adds download buttons (Mac .dmg / Windows .exe) to the auth page.
 const stagingPortal = readLocalEnvValue("PUBLIC_STAGING_PORTAL");
-
-// Comma-separated allowlist of emails that may sign in on staging.
-// Empty string = no restriction (dev / production). Staging Vercel sets this.
-const stagingAllowlist = readLocalEnvValue("PUBLIC_STAGING_ALLOWLIST");
+// Production desktop build — set to "production" to advertise the prod installers.
+const desktopChannel = readLocalEnvValue("PUBLIC_DESKTOP_CHANNEL");
 
 // MODUO_TARGET: "web" for web builds, "desktop" for Tauri builds (default).
 const target = (process.env.MODUO_TARGET as string | undefined) ?? "desktop";
@@ -61,6 +59,10 @@ const isWeb = target === "web";
 // (CI may override with MODUO_BUILD) and degrades to "dev" when git isn't
 // available.
 function readPackageVersion(): string {
+  // CI release builds inject the same version they stamp into tauri.conf.json,
+  // so About and the updater compare like with like.
+  const injected = process.env.MODUO_VERSION?.trim();
+  if (injected) return injected;
   try {
     const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8")) as {
       version?: string;
@@ -116,7 +118,7 @@ export default defineConfig({
       "import.meta.env.PUBLIC_POSTHOG_HOST": JSON.stringify(posthogHost),
       "import.meta.env.PUBLIC_WEB_ORIGIN": JSON.stringify(publicWebOrigin),
       "import.meta.env.PUBLIC_STAGING_PORTAL": JSON.stringify(stagingPortal),
-      "import.meta.env.PUBLIC_STAGING_ALLOWLIST": JSON.stringify(stagingAllowlist),
+      "import.meta.env.PUBLIC_DESKTOP_CHANNEL": JSON.stringify(desktopChannel),
       "globalThis.__PUBLIC_ALPHA_VANTAGE_API_KEY__": JSON.stringify(alphaVantageKey),
       "globalThis.__PUBLIC_FINNHUB_API_KEY__": JSON.stringify(finnhubKey),
       "globalThis.__PUBLIC_MARKETSTACK_API_KEY__": JSON.stringify(marketstackKey),
@@ -157,6 +159,20 @@ export default defineConfig({
   output: {
     distPath: {
       root: isWeb ? "dist/web" : "dist",
+    },
+  },
+  performance: {
+    // Reuse the previous compile on the next dev or production build.
+    // The target is part of the cache key so a web build cannot be reused
+    // as the desktop bundle.
+    buildCache: {
+      cacheDigest: [target],
+    },
+    // Fetch route chunks in the background so the next screen opens from
+    // cache. On desktop the files are already local; on web this is idle
+    // bandwidth after the first paint.
+    prefetch: {
+      type: "async-chunks",
     },
   },
 });

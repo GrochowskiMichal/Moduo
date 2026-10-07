@@ -2,7 +2,7 @@
 // read + write surface whose RPC names match the real ops, conforming to
 // ModuleManifest, without dropping the Tasks manifest.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { ModuleManifest } from "./module-manifest";
 import { moduleManifests } from "./module-registry";
 
@@ -135,5 +135,17 @@ describe("calendar manifest", () => {
     expect(calendar.resources.map((r) => r.name)).toEqual(
       expect.arrayContaining(["calendar.list_events", "calendar.day"]),
     );
+  });
+});
+
+describe("chat manifest", () => {
+  const chat = manifest("chat");
+
+  it("has its own permission lane (never the Tasks lane — conversations are private by default)", () => {
+    expect(chat.permissionKey).toBe("chat");
+  });
+
+  it("exposes only the key-attributed post — never the auth.uid() in-app ops", () => {
+    expect(chat.ops.map((o) => o.rpc)).toEqual(["chat_op_agent_post"]);
   });
 });

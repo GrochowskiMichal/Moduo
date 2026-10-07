@@ -1512,36 +1512,6 @@ export type Database = {
         }
         Relationships: []
       }
-      subscription_events: {
-        Row: {
-          customer_id: string | null
-          event_type: string
-          id: string
-          payload: Json | null
-          processed_at: string
-          stripe_event_id: string
-          subscription_id: string | null
-        }
-        Insert: {
-          customer_id?: string | null
-          event_type: string
-          id?: string
-          payload?: Json | null
-          processed_at?: string
-          stripe_event_id: string
-          subscription_id?: string | null
-        }
-        Update: {
-          customer_id?: string | null
-          event_type?: string
-          id?: string
-          payload?: Json | null
-          processed_at?: string
-          stripe_event_id?: string
-          subscription_id?: string | null
-        }
-        Relationships: []
-      }
       tag_links: {
         Row: {
           created_at: string
@@ -2540,6 +2510,7 @@ export type Database = {
           trial_days_remaining: number | null
           trial_ends_at: string | null
           user_id: string | null
+          has_access: boolean | null
         }
         Insert: {
           current_period_end?: string | null
@@ -4694,7 +4665,7 @@ export type Database = {
       }
     }
     Enums: {
-      plan_tier: "free" | "pro" | "team" | "founder"
+      plan_tier: "free" | "pro" | "team" | "founder" | "duo"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4822,7 +4793,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      plan_tier: ["free", "pro", "team", "founder"],
+      plan_tier: ["free", "pro", "team", "founder", "duo"],
     },
   },
 } as const

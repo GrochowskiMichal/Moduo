@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { Note } from "./model";
 import { buildNoteSections, byPosition, descendantIds, siblingsOf, wouldCreateCycle } from "./tree";
 
@@ -21,6 +21,8 @@ function note(partial: Partial<Note> & { id: string }): Note {
     updatedAt: "2026-07-01T00:00:00.000Z",
     deletedAt: null,
     ...partial,
+    shareMode: partial.shareMode ?? "custom",
+    workspaceShared: partial.workspaceShared ?? false,
   };
 }
 

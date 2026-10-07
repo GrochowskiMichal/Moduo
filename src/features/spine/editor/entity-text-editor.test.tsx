@@ -4,14 +4,14 @@
 // the senior-review finding.
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { EntityTextEditor } from "./entity-text-editor";
 
 afterEach(cleanup);
 
 describe("EntityTextEditor commit-on-blur", () => {
   it("does not commit when a legacy plain-text value is focused then left untouched", () => {
-    const onCommit = vi.fn();
+    const onCommit = rs.fn();
     render(
       <EntityTextEditor
         value="a legacy plain description"

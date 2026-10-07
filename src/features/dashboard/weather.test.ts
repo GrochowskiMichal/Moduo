@@ -1,6 +1,6 @@
 // DB-6 — the WMO weather-code mapping + endpoint builders.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { forecastUrl, geocodeUrl, weatherEmoji, weatherLabel } from "./weather";
 

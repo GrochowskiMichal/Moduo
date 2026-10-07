@@ -4,7 +4,7 @@
  * targeting the right user (feeds `spine_activity_targets_me`).
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { buildMentionCandidates, resolveMention } from "../spine/mention";
 
 describe("@ = workspace people only (AC5)", () => {

@@ -1,6 +1,8 @@
 import { type PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deriveNotificationFeeds, type NotificationItem } from "../features/spine/notifications";
+import type { Overrides, WorkspaceRoleDef } from "../features/workspaces/access";
 import type {
+  PermissionKey,
   WorkspaceInvite,
   WorkspaceMember,
   WorkspaceNotification,
@@ -17,6 +19,7 @@ import {
   mapInvite,
   mapMember,
   mapNotification,
+  mapRole,
   mapWorkspace,
   storageKey,
 } from "../features/workspaces/workspace-mappers";
@@ -55,6 +58,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
+  const [roles, setRoles] = useState<WorkspaceRoleDef[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   // The raw merged feed (spine + legacy), unfiltered. The three derived feeds
   // (active / history / invitations) + the unread count come from it below, so a
@@ -113,13 +117,29 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     () => ({
       notes: selectedWorkspace?.permissions.notes ?? "none",
       tasks: selectedWorkspace?.permissions.tasks ?? "none",
+      calendar: selectedWorkspace?.permissions.calendar ?? "none",
+      contacts: selectedWorkspace?.permissions.contacts ?? "none",
+      chat: selectedWorkspace?.permissions.chat ?? "none",
     }),
     [selectedWorkspace],
   );
 
+  const myPerms = useMemo<PermissionKey[]>(
+    () => selectedWorkspace?.perms ?? [],
+    [selectedWorkspace],
+  );
+  const can = useCallback(
+    (key: PermissionKey) => selectedWorkspace?.role === "owner" || myPerms.includes(key),
+    [myPerms, selectedWorkspace?.role],
+  );
+
+  // "Can open the people/roles admin": any management power (PERM-1).
   const canManageWorkspace = useMemo(() => {
     if (!selectedWorkspace) return false;
-    return selectedWorkspace.role === "owner" || selectedWorkspace.role === "admin";
+    if (selectedWorkspace.role === "owner") return true;
+    return ["ws.invite", "ws.manage_members", "ws.manage_roles"].some((k) =>
+      selectedWorkspace.perms.includes(k as PermissionKey),
+    );
   }, [selectedWorkspace]);
 
   const selectWorkspace = useCallback(
@@ -177,18 +197,25 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     if (!runtime || !selectedWorkspaceId) {
       setMembers([]);
       setInvites([]);
+      setRoles([]);
       return;
     }
 
     // Settle independently: a viewer/editor can read the member roster but may
     // not be allowed to read invites — don't let that drop the roster too. DF-24.
-    const [memberResult, inviteResult] = await Promise.allSettled([
+    // Roles degrade to [] before the PERM-1 migration exists (gotchas: a new
+    // read path must survive the deploy gap).
+    const [memberResult, inviteResult, roleResult] = await Promise.allSettled([
       runtime.workspace.listMembers(selectedWorkspaceId),
       runtime.workspace.listInvites(selectedWorkspaceId),
+      // Async thunk: a runtime without listRoles (older shells, test doubles)
+      // must reject here, not throw synchronously and drop the roster too.
+      Promise.resolve().then(() => runtime.workspace.listRoles(selectedWorkspaceId)),
     ]);
 
     setMembers(memberResult.status === "fulfilled" ? memberResult.value.map(mapMember) : []);
     setInvites(inviteResult.status === "fulfilled" ? inviteResult.value.map(mapInvite) : []);
+    setRoles(roleResult.status === "fulfilled" ? roleResult.value.map(mapRole) : []);
   }, [runtime, selectedWorkspaceId]);
 
   const refreshNotifications = useCallback(async () => {
@@ -296,6 +323,8 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         args.email,
         args.role,
         args.modulePermissions,
+        args.roleId ?? null,
+        args.sharePayload,
       );
       await refreshAccessData();
       await refreshNotifications();
@@ -331,7 +360,12 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   const updateInvite = useCallback(
     async (args: UpdateWorkspaceInviteArgs) => {
       if (!runtime) return;
-      await runtime.workspace.updateInvite(args.inviteId, args.role, args.modulePermissions);
+      await runtime.workspace.updateInvite(
+        args.inviteId,
+        args.role,
+        args.modulePermissions,
+        args.roleId ?? null,
+      );
       await refreshAccessData();
       await refreshNotifications();
     },
@@ -350,6 +384,49 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       await refreshNotifications();
     },
     [refreshAccessData, refreshNotifications, runtime],
+  );
+
+  const upsertRole = useCallback(
+    async (input: {
+      roleId: string | null;
+      name: string;
+      description: string;
+      permissions: PermissionKey[];
+      readOnly: boolean;
+      expectedUpdatedAt: string | null;
+    }): Promise<WorkspaceRoleDef | null> => {
+      if (!runtime || !selectedWorkspaceId) return null;
+      const raw = await runtime.workspace.upsertRole({
+        workspaceId: selectedWorkspaceId,
+        ...input,
+      });
+      // A role edit re-resolves everyone holding it — the caller included.
+      await Promise.all([refreshAccessData(), refreshWorkspaces()]);
+      return raw ? mapRole(raw) : null;
+    },
+    [refreshAccessData, refreshWorkspaces, runtime, selectedWorkspaceId],
+  );
+
+  const deleteRole = useCallback(
+    async (roleId: string, reassignTo: string) => {
+      if (!runtime) return;
+      await runtime.workspace.deleteRole(roleId, reassignTo);
+      await Promise.all([refreshAccessData(), refreshWorkspaces()]);
+    },
+    [refreshAccessData, refreshWorkspaces, runtime],
+  );
+
+  const setMemberAccess = useCallback(
+    async (memberId: string, roleId: string, overrides: Overrides) => {
+      if (!runtime) return;
+      await runtime.workspace.setMemberAccess(
+        memberId,
+        roleId,
+        overrides as Record<string, boolean>,
+      );
+      await refreshAccessData();
+    },
+    [refreshAccessData, runtime],
   );
 
   const removeMember = useCallback(
@@ -515,6 +592,12 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       selectedWorkspace,
       modulePermissions,
       canManageWorkspace,
+      myPerms,
+      can,
+      roles,
+      upsertRole,
+      deleteRole,
+      setMemberAccess,
       members,
       invites,
       notificationsLoading,
@@ -544,7 +627,13 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       undismissNotifications,
     }),
     [
+      can,
       canManageWorkspace,
+      deleteRole,
+      myPerms,
+      roles,
+      setMemberAccess,
+      upsertRole,
       createWorkspace,
       dismissNotifications,
       invites,

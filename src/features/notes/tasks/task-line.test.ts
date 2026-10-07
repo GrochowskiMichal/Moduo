@@ -4,7 +4,7 @@
  * yields `references`; the title-sync mapper renames, never clobbers.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { makeTask } from "../../tasks/helpers";
 import type { Task } from "../../tasks/model";
 import {

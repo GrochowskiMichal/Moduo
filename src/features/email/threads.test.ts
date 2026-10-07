@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { resolveAccountHues } from "./accounts";
 import type { EmailEnvelope, SavedAccount } from "./model/email-types";

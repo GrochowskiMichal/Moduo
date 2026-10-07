@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { type EntitlementsRow, isTrialing, planLabel, subscriptionLine } from "./billing";
 
@@ -14,10 +14,11 @@ const row = (overrides: Partial<EntitlementsRow>): EntitlementsRow => ({
 describe("planLabel", () => {
   it("maps known tiers", () => {
     expect(planLabel("pro")).toBe("Pro");
+    expect(planLabel("duo")).toBe("Duo");
     expect(planLabel("team")).toBe("Team");
-    expect(planLabel("founders")).toBe("Founders");
+    expect(planLabel("founders")).toBe("Founder");
     // The DB enum spells it "founder"; the auth provider spells it "founders".
-    expect(planLabel("founder")).toBe("Founders");
+    expect(planLabel("founder")).toBe("Founder");
   });
 
   it("defaults to Free for free/null/unknown", () => {
@@ -102,5 +103,19 @@ describe("isTrialing", () => {
     expect(isTrialing(row({ subscription_status: "trialing" }))).toBe(true);
     expect(isTrialing(row({ subscription_status: "active" }))).toBe(false);
     expect(isTrialing(null)).toBe(false);
+  });
+});
+
+describe("subscriptionLine — founders and free", () => {
+  it("founders are never charged", () => {
+    expect(subscriptionLine(row({ plan_tier: "founder", subscription_status: "active" }))).toBe(
+      "Everything included — no charge",
+    );
+  });
+
+  it("an 'inactive' (never subscribed) profile reads as no subscription, not the raw status", () => {
+    expect(subscriptionLine(row({ plan_tier: "free", subscription_status: "inactive" }))).toBe(
+      "No subscription",
+    );
   });
 });

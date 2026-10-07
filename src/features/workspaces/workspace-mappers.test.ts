@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import {
   mapMember,
   mapWorkspace,
@@ -124,11 +124,57 @@ describe("mapWorkspace", () => {
     expect(mapWorkspace(drifted, "boss").role).toBe("owner");
   });
 
-  it("falls back to owner/edit for a bare row with no membership (create() result)", () => {
+  it("falls back to owner for a bare row with no membership (create() result)", () => {
     const created = mapWorkspace({ id: "ws9", name: "Fresh" });
     expect(created.role).toBe("owner");
-    expect(created.permissions.notes).toBe("edit");
-    expect(created.permissions.tasks).toBe("edit");
+    expect(created.permissions.notes).toBe("admin");
+    expect(created.permissions.tasks).toBe("admin");
+    expect(created.perms).toContain("ws.manage_roles");
+  });
+
+  it("derives every module lane from the member's resolved perms (PERM-1)", () => {
+    const ws = mapWorkspace(
+      {
+        id: "ws1",
+        name: "W",
+        owner_id: "o",
+        workspace_members: [
+          {
+            user_id: "u",
+            role: "member",
+            role_id: "r1",
+            perms: ["notes.view", "tasks.view", "tasks.edit", "bogus.key"],
+          },
+        ],
+      },
+      "u",
+    );
+    expect(ws.permissions).toEqual({
+      notes: "view",
+      tasks: "edit",
+      calendar: "none",
+      contacts: "none",
+      chat: "none",
+    });
+    expect(ws.perms).toEqual(["notes.view", "tasks.view", "tasks.edit"]);
+    expect(ws.roleId).toBe("r1");
+  });
+
+  it("maps a pre-PERM-1 member row through the legacy lanes", () => {
+    const ws = mapWorkspace(
+      {
+        id: "ws1",
+        name: "W",
+        owner_id: "o",
+        workspace_members: [
+          { user_id: "u", role: "member", permissions_notes: "write", permissions_tasks: "read" },
+        ],
+      },
+      "u",
+    );
+    expect(ws.permissions.notes).toBe("edit");
+    expect(ws.permissions.tasks).toBe("view");
+    expect(ws.permissions.calendar).toBe("view");
   });
 
   it("does not leak another member's role when currentUserId isn't in the roster", () => {

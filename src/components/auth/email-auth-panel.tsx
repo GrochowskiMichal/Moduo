@@ -7,7 +7,6 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { Input } from "@/components/ui/input";
 import { ModuoMark } from "@/components/ui/moduo-mark";
 import { notifyProfileUpdated, writeStoredAvatar } from "@/features/profile/profile-storage";
-import { checkoutRedirectUrl } from "@/lib/checkout-redirect";
 import type { AuthMnemonic } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -27,10 +26,6 @@ type WebFlow = "email" | "otp_sent";
 
 type Flow = DesktopFlow | WebFlow;
 
-interface Props {
-  priceId?: string | null;
-}
-
 function normalizePhrase(value: string) {
   return value
     .split(/\s+/)
@@ -39,7 +34,7 @@ function normalizePhrase(value: string) {
     .join(" ");
 }
 
-export function EmailAuthPanel({ priceId = null }: Props) {
+export function EmailAuthPanel() {
   const { runtime, configError } = useAuth();
   // Cloud auth (email OTP) is the default on web AND desktop (cloud-first).
   // The vault flows below only activate on runtimes that expose a local
@@ -118,22 +113,6 @@ export function EmailAuthPanel({ priceId = null }: Props) {
       return;
     }
 
-    // Staging invite-only allowlist guard. The allowlist is a comma-separated
-    // list of emails baked into the build via PUBLIC_STAGING_ALLOWLIST. When the
-    // list is non-empty, only listed emails may request an OTP — unknown addresses
-    // see a polite message and no OTP is sent to Supabase.
-    const rawAllowlist = (import.meta.env.PUBLIC_STAGING_ALLOWLIST as string | undefined)?.trim();
-    if (rawAllowlist) {
-      const allowed = rawAllowlist
-        .split(",")
-        .map((e) => e.trim().toLowerCase())
-        .filter(Boolean);
-      if (allowed.length > 0 && !allowed.includes(email)) {
-        setError("This staging build is invite-only. Contact us to request access.");
-        return;
-      }
-    }
-
     setBusy(true);
     setError(null);
     setInfo(null);
@@ -176,10 +155,6 @@ export function EmailAuthPanel({ priceId = null }: Props) {
       return;
     }
 
-    if (priceId) {
-      window.localStorage.setItem("moduo:pending_price_id", priceId);
-    }
-
     let hasWorkspace = false;
     try {
       const workspaces = await runtime.workspace.list();
@@ -191,35 +166,8 @@ export function EmailAuthPanel({ priceId = null }: Props) {
     const shouldOnboard = !!data.isNewUser || !hasWorkspace;
     window.sessionStorage.removeItem("moduo:auth_resolving");
 
-    if (data.isNewUser && !priceId) {
-      try {
-        const supabaseUrl =
-          (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-          "https://wtoonrvuqumihpkbvwvs.supabase.co";
-        const session = await runtime.auth.getSession();
-        const token = session?.data?.session?.access_token;
-        if (token) {
-          await fetch(`${supabaseUrl}/functions/v1/start-trial`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-          });
-        }
-      } catch (trialErr) {
-        console.warn("[auth] auto-trial start failed (non-fatal):", trialErr);
-      }
-    }
-
     if (shouldOnboard) {
       window.location.href = "/onboarding";
-      return;
-    }
-
-    const pendingPriceId = priceId ?? window.localStorage.getItem("moduo:pending_price_id");
-    if (pendingPriceId) {
-      window.localStorage.removeItem("moduo:pending_price_id");
-      const session = await runtime.auth.getSession();
-      const token = session?.data?.session?.access_token ?? null;
-      window.location.href = checkoutRedirectUrl(pendingPriceId, token);
       return;
     }
 

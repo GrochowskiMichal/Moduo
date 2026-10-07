@@ -182,7 +182,6 @@ async function main() {
   }
   console.log(`supabase secrets set STRIPE_PRICE_FOUNDERS=${foundersCouponId}`);
   console.log(`supabase secrets set RESEND_API_KEY=re_...`);
-  console.log(`supabase secrets set FOUNDERS_NOTIFY_EMAIL=founders@moduo.app`);
 
   console.log("\n=== moduo_landing .env.local vars ===\n");
   for (const [key, value] of Object.entries(results)) {

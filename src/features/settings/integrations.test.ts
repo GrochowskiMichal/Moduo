@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { MCP_KEYS_SECTION, mcpConnectorStatus } from "./integrations";
 import { isSettingsSectionId } from "./settings-events";

@@ -2,7 +2,7 @@
 // per-event card), unread/read derive from the read mark, and the card renders a
 // human sentence with a deep-link, never raw JSON.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import {
   activeNotifications,

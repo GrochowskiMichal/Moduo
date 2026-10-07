@@ -1,7 +1,7 @@
 // DB-6/DB-8 — the config-write mechanism: updateWidgetConfig merges a patch into
 // one widget, immutably, position-preserving (never moves/compacts).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 
 import { updateWidgetConfig } from "./grid-engine";
 import type { DashboardLayout } from "./types";

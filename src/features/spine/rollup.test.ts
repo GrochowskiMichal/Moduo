@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "@/lib/entity-links";
 import {
   entityRefKey,
   HUB_SECTIONS,
   isSectionTruncated,
+  PRIVATE_ITEM_TITLE,
   rollupSections,
   SECTION_ROW_CAP,
   sectionForType,
@@ -189,5 +190,26 @@ describe("HUB_SECTIONS", () => {
       "notes",
       "other",
     ]);
+  });
+});
+
+describe("rollupSections — owner-only entities (PERM-0)", () => {
+  it("titles a linked event/email thread the viewer can't read as a private item", () => {
+    const rows = rollupSections(
+      FOCUS,
+      [link({ type: "event", id: "e-theirs" }), link({ type: "email_thread", id: "t-theirs" })],
+      new Map(),
+    ).flatMap((s) => s.rows);
+    expect(rows.map((r) => r.title)).toEqual([PRIVATE_ITEM_TITLE, PRIVATE_ITEM_TITLE]);
+    expect(rows.every((r) => r.snippet === null && !r.tombstoned)).toBe(true);
+  });
+
+  it("titles a linked note or task the viewer can't read as a private item", () => {
+    const [row] = rollupSections(
+      FOCUS,
+      [link({ type: "task", id: "t-missing" })],
+      new Map(),
+    ).flatMap((s) => s.rows);
+    expect(row.title).toBe(PRIVATE_ITEM_TITLE);
   });
 });

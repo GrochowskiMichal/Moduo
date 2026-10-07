@@ -11,6 +11,7 @@ import type {
   CalendarModuleBundle,
 } from "../features/calendar/events";
 import type { CalendarWindow } from "../features/calendar/window";
+import type { ChatRuntime } from "../features/chat/model";
 import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
 import type {
   Company,
@@ -236,6 +237,12 @@ export type ModuoRuntime = {
       email: string,
       role: string,
       modulePermissions?: { notes?: string; tasks?: string },
+      /** PERM-1: the workspace role to join with (wins over `role`). */
+      roleId?: string | null,
+      sharePayload?: {
+        existing?: string;
+        resources?: { type: string; id: string; level: string }[];
+      },
     ): Promise<any>;
     joinInvite(token: string): Promise<any>;
     listMembers(workspaceId: string): Promise<any[]>;
@@ -244,6 +251,7 @@ export type ModuoRuntime = {
       inviteId: string,
       role: string,
       modulePermissions?: { notes?: string; tasks?: string },
+      roleId?: string | null,
     ): Promise<void>;
     revokeInvite(inviteId: string): Promise<void>;
     updateMemberPermissions(
@@ -258,6 +266,26 @@ export type ModuoRuntime = {
      * `workspace_members` write-RLS is own-row. DF-24.
      */
     removeMember(memberId: string): Promise<void>;
+    /** PERM-1: the workspace's roles (system + custom), readable by members. */
+    listRoles(workspaceId: string): Promise<any[]>;
+    /** Create (`roleId` null) or update a role. Server enforces every rule. */
+    upsertRole(input: {
+      workspaceId: string;
+      roleId: string | null;
+      name: string;
+      description: string;
+      permissions: string[];
+      readOnly: boolean;
+      expectedUpdatedAt: string | null;
+    }): Promise<any>;
+    /** Delete a custom role, moving its people + pending invites to `reassignTo`. */
+    deleteRole(roleId: string, reassignTo: string): Promise<void>;
+    /** Set a member's role and personal exceptions in one step. */
+    setMemberAccess(
+      memberId: string,
+      roleId: string,
+      overrides: Record<string, boolean>,
+    ): Promise<any>;
     /**
      * Hand workspace ownership to another member (owner-only): promotes them to
      * owner, demotes the caller to admin. SECURITY DEFINER RPC. Needed by the
@@ -857,6 +885,9 @@ export type ModuoRuntime = {
    * `entities_op_*` RPCs (permission guard + write + attributed activity row in
    * one transaction); reads are direct SELECTs over the indexed tables.
    */
+  /** Chat (specs/chat.md) — Supabase-direct on both surfaces; Duo/Team/Founder workspaces. */
+  chat: ChatRuntime;
+
   spine: {
     /**
      * Every live link touching an entity (matched on either end). Block CT-2

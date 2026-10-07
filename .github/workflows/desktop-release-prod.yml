@@ -1,0 +1,30 @@
+name: Desktop Release (production)
+
+# Manual run, built from the `prod-app` branch (what app.moduo.app serves) — run it after
+# "Promote to production". Builds the signed Mac universal .dmg + Windows NSIS installer, pointed
+# at app.moduo.app, and publishes them to the rolling `prod-latest` release.
+# The build itself lives in _desktop-release.yml.
+
+on:
+  workflow_dispatch:
+
+# Never cancel a production build mid-notarization; a second run queues behind it.
+concurrency:
+  group: desktop-release-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    uses: ./.github/workflows/_desktop-release.yml
+    secrets: inherit
+    with:
+      channel: production
+      ref: prod-app
+      release_tag: prod-latest
+      release_name: "Production — latest build"
+      prerelease: false
+      web_origin: "https://app.moduo.app"
+      desktop_channel: "production"

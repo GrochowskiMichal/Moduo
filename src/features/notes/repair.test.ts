@@ -8,7 +8,7 @@
  * anti-fork proof itself lives in `editor/materialize.test.ts`.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, rs } from "@rstest/core";
 import * as Y from "yjs";
 import { buildDocStateFromMarkdown, NOTES_DOC_ROOT } from "./editor/materialize";
 import { buildImportRows, planMdZipImport } from "./import";
@@ -38,7 +38,7 @@ function fakeServer(initial: { docState?: string | null; hasUpdates?: boolean } 
   };
   const perNote = new Map<string, string>();
   const bodies: Array<{ bodyMd: unknown; bodyText: unknown }> = [];
-  const seedDoc = vi.fn(
+  const seedDoc = rs.fn(
     async ({
       noteId,
       docStateB64,
@@ -164,7 +164,7 @@ describe("repairNote (AC3 — a legacy blank note is repaired)", () => {
 
   it("never throws when the write fails — the note stays repairable", async () => {
     const runtime = {
-      notesV2: { seedDoc: vi.fn().mockRejectedValue(new Error("offline")) },
+      notesV2: { seedDoc: rs.fn().mockRejectedValue(new Error("offline")) },
     } as any;
     expect(await repairNote(runtime, WS, NOTE, "# A")).toBe("failed");
   });
@@ -206,7 +206,7 @@ describe("repairUnmaterializedNotes (the backfill sweep)", () => {
     const seen: string[] = [];
     const runtime = {
       notesV2: {
-        listUnmaterialized: vi.fn().mockResolvedValue([
+        listUnmaterialized: rs.fn().mockResolvedValue([
           { id: "note-a", bodyMd: "# A" },
           { id: "note-b", bodyMd: "# B" },
           { id: "note-c", bodyMd: "  " },
@@ -231,11 +231,11 @@ describe("repairUnmaterializedNotes (the backfill sweep)", () => {
     const order: string[] = [];
     const runtime = {
       notesV2: {
-        listUnmaterialized: vi.fn(async () => {
+        listUnmaterialized: rs.fn(async () => {
           order.push("list");
           return [];
         }),
-        seedDoc: vi.fn(),
+        seedDoc: rs.fn(),
       },
     } as any;
 
@@ -250,7 +250,7 @@ describe("repairUnmaterializedNotes (the backfill sweep)", () => {
 
   it("skips the sweep entirely when the drain fails", async () => {
     const runtime = {
-      notesV2: { listUnmaterialized: vi.fn(), seedDoc: vi.fn() },
+      notesV2: { listUnmaterialized: rs.fn(), seedDoc: rs.fn() },
     } as any;
 
     const summary = await repairUnmaterializedNotes(runtime, WS, {
@@ -269,11 +269,11 @@ describe("repairUnmaterializedNotes (the backfill sweep)", () => {
     const server = fakeServer();
     const runtime = {
       notesV2: {
-        listUnmaterialized: vi.fn().mockResolvedValue([
+        listUnmaterialized: rs.fn().mockResolvedValue([
           { id: "note-a", bodyMd: "# A" },
           { id: "note-b", bodyMd: "# B" },
         ]),
-        seedDoc: vi.fn(async (args: any) => {
+        seedDoc: rs.fn(async (args: any) => {
           stop = true;
           return server.seedDoc(args);
         }),
@@ -290,8 +290,8 @@ describe("repairUnmaterializedNotes (the backfill sweep)", () => {
   it("degrades to a no-op when the RPC is not deployed yet", async () => {
     const runtime = {
       notesV2: {
-        listUnmaterialized: vi.fn().mockRejectedValue(new Error("404")),
-        seedDoc: vi.fn(),
+        listUnmaterialized: rs.fn().mockRejectedValue(new Error("404")),
+        seedDoc: rs.fn(),
       },
     } as any;
 

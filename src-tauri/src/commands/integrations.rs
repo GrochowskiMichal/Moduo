@@ -13,11 +13,10 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 
-use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng as AesOsRng};
+use aes_gcm::aead::{Aead, KeyInit, Nonce};
 use aes_gcm::{Aes256Gcm, Key};
 use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL};
 use base64::Engine;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::State;
@@ -99,13 +98,15 @@ fn derive_key(secret: &str, user_id: &str) -> [u8; 32] {
 
 fn encrypt_token(plaintext: &str, secret: &str, user_id: &str) -> Result<String, String> {
     let key_bytes = derive_key(secret, user_id);
-    let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
-    let cipher = Aes256Gcm::new(key);
-    let nonce = Aes256Gcm::generate_nonce(&mut AesOsRng);
+    let key = Key::<Aes256Gcm>::from(key_bytes);
+    let cipher = Aes256Gcm::new(&key);
+    let mut nonce_raw = [0u8; 12];
+    rand::fill(&mut nonce_raw);
+    let nonce = Nonce::<Aes256Gcm>::from(nonce_raw);
     let ciphertext = cipher
         .encrypt(&nonce, plaintext.as_bytes())
         .map_err(|e| format!("integration_encrypt_failed:{e}"))?;
-    let mut blob = nonce.to_vec();
+    let mut blob = nonce_raw.to_vec();
     blob.extend_from_slice(&ciphertext);
     Ok(B64.encode(blob))
 }
@@ -228,7 +229,7 @@ async fn run_google_meet_oauth(
     let cb = tauri::async_runtime::spawn_blocking(move || {
         let verifier = {
             let mut data = vec![0u8; 64];
-            rand::rngs::OsRng.fill_bytes(&mut data);
+            rand::fill(&mut data);
             B64URL.encode(&data)
         };
         let challenge = {
@@ -237,7 +238,7 @@ async fn run_google_meet_oauth(
         };
         let state_token = {
             let mut data = vec![0u8; 24];
-            rand::rngs::OsRng.fill_bytes(&mut data);
+            rand::fill(&mut data);
             B64URL.encode(&data)
         };
 
@@ -368,7 +369,7 @@ async fn run_zoom_oauth(client_id: &str, client_secret: &str) -> Result<Integrat
     let cb = tauri::async_runtime::spawn_blocking(move || {
         let state_token = {
             let mut data = vec![0u8; 24];
-            rand::rngs::OsRng.fill_bytes(&mut data);
+            rand::fill(&mut data);
             B64URL.encode(&data)
         };
 

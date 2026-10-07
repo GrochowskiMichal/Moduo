@@ -46,8 +46,8 @@ export function CalendarPage() {
       !!userId &&
       !!selectedWorkspaceId &&
       !configError &&
-      modulePermissions.tasks !== "none",
-    [configError, modulePermissions.tasks, runtime, selectedWorkspaceId, userId],
+      modulePermissions.calendar !== "none",
+    [configError, modulePermissions.calendar, runtime, selectedWorkspaceId, userId],
   );
 
   if (!canRender) {
@@ -60,8 +60,8 @@ export function CalendarPage() {
             <h2 className="font-display text-2xl text-foreground">Calendar unavailable</h2>
             <p className="text-sm">
               {configError ??
-                (modulePermissions.tasks === "none"
-                  ? "You do not have Calendar access in this workspace."
+                (modulePermissions.calendar === "none"
+                  ? "Your role doesn't include Calendar in this workspace."
                   : "Authentication, workspace, or runtime is missing.")}
             </p>
           </div>

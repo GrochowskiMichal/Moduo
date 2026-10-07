@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "@rstest/core";
 import { googleMeetingLink, graphMeetingLink, meetingLinkOf } from "./meeting-link";
 
 describe("meeting link", () => {

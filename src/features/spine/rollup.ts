@@ -101,6 +101,24 @@ export type RollupOptions = {
 };
 
 /**
+ * A missing registry row for these types means the viewer can't open it
+ * (PERM-0 owner-only mail/events, PERM-3…6 per-item grants). The chip says
+ * "Private item" and never falls back to a title.
+ */
+export const OWNER_ONLY_TYPES: ReadonlySet<string> = new Set([
+  "event",
+  "email_thread",
+  "note",
+  "task",
+  "bucket",
+  "contact",
+  "company",
+]);
+
+/** Row title for a linked item the viewer can't open. */
+export const PRIVATE_ITEM_TITLE = "Private item";
+
+/**
  * Group a focus entity's links into the fixed, ordered hub sections.
  *
  * - `links` come newest-first from one indexed `entity_links` read.
@@ -130,14 +148,21 @@ export function rollupSections(
     const record = records.get(key) ?? null;
     const tombstoned = !!record?.deletedAt;
     const projected = projectSnippet(record, other, { meta: snippetMeta?.get(key), now });
-    const title = tombstoned ? `Deleted ${other.type}` : projected.title;
+    // PERM-0: a linked event/email thread you don't own isn't readable, so its
+    // registry record never arrives — say so instead of "Untitled event".
+    const hidden = record === null && OWNER_ONLY_TYPES.has(other.type);
+    const title = tombstoned
+      ? `Deleted ${other.type}`
+      : hidden
+        ? PRIVATE_ITEM_TITLE
+        : projected.title;
 
     const row: HubRow = {
       link,
       other,
       relationKind: link.relationKind,
       title,
-      snippet: tombstoned ? null : projected.snippet,
+      snippet: tombstoned || hidden ? null : projected.snippet,
       icon: projected.icon,
       tombstoned,
     };
