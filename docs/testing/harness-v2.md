@@ -9,7 +9,7 @@
 - [ ] **Do:** look at the session-start preflight on `t/mike/*` and on `t/maciej/*` → **Expect:** it compares against `origin/mike` or `origin/maciej` respectively, and lists the short reading list _(Claude Code)_
 
 ## Plugins (first session after pulling)
-- [ ] **Do:** trust the project when asked, then run `/plugin` → **Expect:** these 7 are enabled: `mattpocock-skills`, `supabase`, `postgres-best-practices`, `claude-security`, `security-guidance`, `rust-analyzer-lsp`, `skill-creator` _(both machines)_
+- [ ] **Do:** trust the project when asked, then run `/plugin` → **Expect:** these 8 are enabled: `mattpocock-skills`, `supabase`, `postgres-best-practices`, `claude-security`, `security-guidance`, `rust-analyzer-lsp`, `skill-creator`, `ts7-lsp` (the last only once phase 2 is on `develop`) _(both machines)_
 - [ ] **Do:** type `/grilling` and `/claude-security` → **Expect:** both skills exist _(Claude Code)_
 - [ ] **Do:** have Claude introduce and then fix a type error in a `.rs` file → **Expect:** "Found N new diagnostic issues" after the edit _(Claude Code, needs rust-analyzer)_
 
