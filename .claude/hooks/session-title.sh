@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Claude Code SessionStart hook — session naming convention.
 # If this worktree has a .claude/SESSION_TITLE file (written by Claude the
-# moment the session's purpose is clear — see CLAUDE.md "Session naming"),
+# moment the session's purpose is clear — see AGENTS.md "Session start"),
 # emit it as the session title via hookSpecificOutput. Applies on startup and
 # on every resume, so a title written mid-session lands on the next resume.
 # Silent no-op when the file is absent or empty; never blocks a session.
