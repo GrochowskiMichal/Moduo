@@ -33,12 +33,10 @@ export { TagInput } from "@/components/ui/tag-input";
 export { Textarea } from "@/components/ui/textarea";
 export { Toolbar } from "@/components/ui/toolbar";
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-export { IntegrationsModal } from "@/components/integrations-modal";
 export { NotificationCenter } from "@/components/notification-center";
 export { TagChip, TagChipList } from "@/components/tag-chip";
 export { TagPicker } from "@/components/tag-picker";
 export { UserMenu } from "@/components/user-menu";
-export { WorkspaceSettingsModal } from "@/components/workspace-settings-modal";
 export { WorkspaceSwitcher } from "@/components/workspace-switcher";
 
 // App contexts exposed on window.ModuoDS so the preview decorator chain wraps

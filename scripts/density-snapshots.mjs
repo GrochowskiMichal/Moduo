@@ -1,7 +1,7 @@
 // Visual spot-check for the density / text-size appearance axes.
 //
 // Usage:
-//   ./node_modules/.bin/sb dev -p 6106 --no-open   # in one shell
+//   ./node_modules/.bin/storybook dev -p 6106 --no-open   # in one shell
 //   node scripts/density-snapshots.mjs             # in another
 //
 // Screenshots land in OUT (default /tmp/density-snaps), one per
