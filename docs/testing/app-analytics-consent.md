@@ -10,7 +10,7 @@ PUBLIC_POSTHOG_KEY=phc_local_test
 PUBLIC_POSTHOG_HOST=http://127.0.0.1:9
 ```
 
-Remove both lines when you're done. Set the real key on a live build (in the Vercel and desktop build settings, never in git) **only once moduo.app/privacy shows §04 "In the Moduo app"** (GrochowskiMichal/Moduo#232 deployed from `prod-landing`). It's also best to do it after **PRIV-3**, so deleting an account or switching off deletes PostHog data too (today that happens by request to privacy@moduo.app).
+Remove both lines when you're done. Set the real key on a live build (in the Vercel and desktop build settings, never in git) **only on a build that already contains this change, and only once moduo.app/privacy shows §04 "In the Moduo app"** (GrochowskiMichal/Moduo#232 deployed from `prod-landing`). The change is on `maciej`; `prod-app` and `staging-app` still have the old wrapper, which sends the email without asking, until a develop → staging → prod promotion carries it there. It's also best to do it after **PRIV-3**, so deleting an account or switching off deletes PostHog data too (today that happens by request to privacy@moduo.app).
 
 ## Today's builds (no key) — nothing changes
 - [ ] **Do:** Without the setup lines, sign in and wait a few seconds. → **Expect:** No question appears. Settings → Preferences has no "Privacy" group. _(both)_
@@ -27,7 +27,7 @@ Remove both lines when you're done. Set the real key on a live build (in the Ver
 
 ## Changing your mind
 - [ ] **Do:** Settings → Preferences → Privacy → switch it **off**, then open a few pages. → **Expect:** `moduo:consent:<id>` = `denied`. Every `ph_moduo_app…` key and `__ph_opt_in_out_moduo_app` is gone from Local Storage *and* Session Storage. No new requests to `/e/`. _(web)_
-  - Requests whose URL has `retry_count=` are fine. The dead port makes every send fail, and PostHog keeps retrying events captured *before* you switched off until you reload. A request **without** `retry_count=` after switching off would be a real bug.
+  - Two kinds of request can still appear and are fine: one in the first few seconds carrying events captured just *before* you switched off (PostHog's batch), and retries of earlier sends (URLs with `retry_count=`; the dead port makes every send fail, and PostHog retries until you reload). A bug looks like this: an event you trigger *after* switching off, such as opening a page, shows up in a request.
 - [ ] **Do:** Switch it on again, then sign out. → **Expect:** One last new request (the sign-out event), plus any `retry_count=` retries. Every `ph_moduo_app…` key is gone. `moduo:consent:<id>` stays, so you're not asked again next time. _(web)_
 - [ ] **Do:** Open two tabs, with Settings open in one. Answer the question (or flip the switch) in the other. → **Expect:** The first tab follows on its own, and its card closes. _(web)_
 - [ ] **Do:** Turn on your browser's "Do Not Track" setting (in Chrome it's under Settings → Privacy and security), then reload. → **Expect:** No question, no Privacy group, no requests. _(web)_

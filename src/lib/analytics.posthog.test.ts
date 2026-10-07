@@ -51,12 +51,16 @@ async function settled() {
 
 /** Everything PostHog has queued goes out now (it flushes on page hide, by beacon).
  *  `$identify` skips the batch and goes out by fetch, after an async compression step
- *  where the environment has one, so give that a beat too. */
+ *  where the environment has one, so wait until nothing new arrives for a beat. */
 async function flush() {
   window.dispatchEvent(new Event("pagehide"));
   window.dispatchEvent(new Event("unload"));
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  await settled();
+  let seen = -1;
+  for (let tick = 0; tick < 40 && seen !== sent.length + pending.length; tick++) {
+    seen = sent.length + pending.length;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await settled();
+  }
 }
 
 type SentEvent = { event: string; properties: Record<string, unknown> } & object;

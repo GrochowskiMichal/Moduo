@@ -198,6 +198,31 @@ describe("analytics — after opting in", () => {
     expect(sentEvents()).toEqual(["$identify", "app_signed_in"]);
   });
 
+  it("drops an event if the person withdrew before it was sent", async () => {
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "granted"); // PostHog loaded and opted in
+    const tracked = a.track("app_page_viewed", { page: "tasks" }); // queued while still a yes
+    void a.setAnalyticsConsent("u1", "denied"); // the no lands before that step runs
+    await tracked;
+
+    expect(sentEvents()).toEqual(["$identify"]);
+  });
+
+  it("tries loading PostHog again when it failed the first time", async () => {
+    localStorage.setItem("moduo:consent:u1", "granted");
+    ph.init.mockImplementationOnce(() => {
+      throw new Error("chunk failed to load");
+    });
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    expect(ph.state.sent).toEqual([]);
+
+    await a.track("app_page_viewed", { page: "tasks" });
+
+    expect(sentEvents()).toEqual(["$identify", "app_page_viewed"]);
+  });
+
   it("never sends an event under an id PostHog holds for someone else", async () => {
     const a = await loadAnalytics();
     await a.setAnalyticsUser("u1");
@@ -462,7 +487,7 @@ describe("analytics — the code itself stays off the page until consent", () =>
     const analytics = readFileSync(resolve(process.cwd(), "src/lib/analytics.ts"), "utf8");
     const rsbuild = readFileSync(resolve(process.cwd(), "rsbuild.config.ts"), "utf8");
 
-    expect(analytics).toContain('import(/* webpackChunkName: "posthog" */ "posthog-js")');
+    expect(analytics).toMatch(/webpackChunkName:\s*"posthog"\s*\*\/\s*"posthog-js"/);
     expect(rsbuild).toMatch(/prefetch: \{[^}]*exclude: \[[^\]]*posthog/);
   });
 });

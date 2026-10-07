@@ -303,7 +303,11 @@ export function setAnalyticsUser(userId: string | null): Promise<void> {
 export function track(event: string, properties?: Properties): Promise<void> {
   const userId = currentUserId;
   if (!consented(userId)) return Promise.resolve();
-  return enqueue(() => {
+  return enqueue(async () => {
+    // Still yes by the time this runs? A withdrawal queued after it doesn't excuse it.
+    if (!consented(userId)) return;
+    // PostHog failed to load earlier (a network blip): try again before giving up.
+    if (!posthog) await reconcile();
     if (posthog?.get_distinct_id() === userId) posthog.capture(event, properties);
   });
 }
