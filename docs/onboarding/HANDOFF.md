@@ -60,7 +60,7 @@ Also shipped along the way: the **MCP connector** now exposes **6 modules (~60 t
 
 ## 4. Architecture at a glance
 
-- **Stack:** Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind v4 · Lexical (rich text) · Yjs (Notes collab) · XYFlow (Mindmap) · Storybook 8 · Vitest/Playwright · Bun.
+- **Stack:** Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind v4 · Lexical (rich text) · Yjs (Notes collab) · XYFlow (Mindmap) · Storybook 10 · Rstest/Playwright · Bun.
 - **Two runtimes, one seam.** Everything data goes through `getRuntime()` → a `ModuoRuntime` interface. `src/lib/runtime.web.ts` is the **only** implementation with real logic (a single Supabase client; the **only** file in the app that calls `.rpc()`/`.from()`). `src/lib/runtime.tauri.ts` is a desktop composite that delegates almost everything back to the web runtime and only uses Tauri `invoke()` for genuinely-native surfaces.
 - **Cloud-first.** **Supabase is the source of truth for every new model.** redb (desktop) is **paused** — kept only for the future offline/"lite" tier and legacy modules not yet migrated. *Never make redb load-bearing for a new feature.*
 - **Writes = intent ops.** State-changing mutations go through `SECURITY DEFINER` Postgres RPCs named `<module>_op_<name>` (permission-check + activity-log + invariant-keeping, all in one transaction). **No raw client table writes for state changes.** Reads are RLS-filtered `.from()` selects.

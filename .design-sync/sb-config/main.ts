@@ -13,13 +13,10 @@ const config: StorybookConfig = {
     "../../src/components/ui/*.stories.@(js|jsx|ts|tsx)",
     "../../src/components/*.stories.@(js|jsx|ts|tsx)",
   ],
-  addons: ["@storybook/addon-essentials", "@storybook/addon-interactions"],
+  addons: ["@storybook/addon-docs"],
   framework: {
     name: "@storybook/react-vite",
     options: {},
-  },
-  docs: {
-    autodocs: "tag",
   },
   viteFinal: async (cfg) => {
     cfg.resolve = cfg.resolve ?? {};
@@ -28,6 +25,7 @@ const config: StorybookConfig = {
     // `@/components/...` resolve correctly in the reference build.
     const aliasMap: Record<string, string> = {
       "moduo2.0": path.resolve(projectRoot, ".design-sync/entry.tsx"),
+      "@contracts": path.resolve(projectRoot, "supabase/functions/_shared/contracts"),
       "@": path.resolve(projectRoot, "src"),
     };
     if (Array.isArray(existingAlias)) {
