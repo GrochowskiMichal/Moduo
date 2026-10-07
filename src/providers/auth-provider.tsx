@@ -1,6 +1,6 @@
 import { normalizePlanTier, type PlanTier } from "@contracts/vocabularies";
 import { createContext, type PropsWithChildren, useContext, useEffect, useState } from "react";
-import { Analytics, identify, resetIdentity } from "../lib/analytics";
+import { Analytics, setAnalyticsUser } from "../lib/analytics";
 import {
   initRuntime,
   type ModuoRuntime,
@@ -61,10 +61,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setSession(finalSession);
       setLoading(false);
 
-      if (finalSession?.user?.id) {
-        void identify(finalSession.user.id, { email: finalSession.user.email });
-        void Analytics.app.signedIn("cloud");
-      }
+      // Analytics knows the person by user id only (never email) and stays off
+      // unless they opted in — see lib/analytics.ts.
+      void setAnalyticsUser(finalSession?.user?.id ?? null);
+      if (finalSession?.user?.id) void Analytics.app.signedIn("cloud");
 
       // Non-critical: fetch plan tier from profile.
       const uid = finalSession?.user?.id;
@@ -115,8 +115,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       if (event === "SIGNED_OUT") {
         setPlanTier("free");
-        void resetIdentity();
+        // Tracked first (if they opted in), then analytics opts out and forgets them.
         void Analytics.app.signedOut();
+        void setAnalyticsUser(null);
+      } else {
+        void setAnalyticsUser(nextSession?.user?.id ?? null);
       }
     });
 
