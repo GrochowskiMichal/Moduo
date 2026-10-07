@@ -22,7 +22,7 @@
  * send, until the page reloads) — posthog-js has no way to drop those. Switching off
  * after a yes also has the server delete what PostHog holds for the person (PRIV-3,
  * after the batch lands); deleting the account does the same in delete-account, and
- * forgetAnalyticsAccount() stops this device before it signs out.
+ * stopAnalyticsForDeletedAccount() stops this device before it signs out.
  *
  * Only the explicit `track()` calls below are captured, plus PostHog's `$identify` —
  * never autocapture, pageviews, session replay, heatmaps or surveys, whatever the
@@ -108,13 +108,7 @@ export function getAnalyticsConsent(userId: string): AnalyticsConsent | null {
  *  reflects it. */
 export function setAnalyticsConsent(userId: string, consent: AnalyticsConsent): Promise<void> {
   const previous = getAnalyticsConsent(userId);
-  try {
-    // Remove first: if the write then fails, the choice reads as "not granted".
-    localStorage.removeItem(CONSENT_KEY_PREFIX + userId);
-    localStorage.setItem(CONSENT_KEY_PREFIX + userId, consent);
-  } catch {
-    // Storage unavailable — nothing reads as granted, so analytics stays off.
-  }
+  storeConsent(userId, consent);
   notifyConsent();
   if (userId === currentUserId) void enqueue(reconcile);
   // Switching off after a yes also deletes what PostHog already has (PRIV-3). A first
@@ -122,6 +116,16 @@ export function setAnalyticsConsent(userId: string, consent: AnalyticsConsent): 
   if (PH_KEY && previous === "granted" && consent === "denied") scheduleForget(userId);
   if (consent === "granted") cancelForget(userId);
   return queue;
+}
+
+function storeConsent(userId: string, consent: AnalyticsConsent) {
+  try {
+    // Remove first: if the write then fails, the choice reads as "not granted".
+    localStorage.removeItem(CONSENT_KEY_PREFIX + userId);
+    localStorage.setItem(CONSENT_KEY_PREFIX + userId, consent);
+  } catch {
+    // Storage unavailable — nothing reads as granted, so analytics stays off.
+  }
 }
 
 const consentListeners = new Set<() => void>();
@@ -364,16 +368,13 @@ async function runPendingForget(userId: string) {
   }
 }
 
-/** The account was deleted (Settings → Account), which erased its PostHog data too. Forgets
- *  this person's choice and any pending request on this device and stops analytics, before
- *  signing out tracks `app_signed_out` under the erased id and brings the person back. */
-export function forgetAnalyticsAccount(userId: string): Promise<void> {
+/** The account was deleted (Settings → Account), which erased its PostHog data too. Stops
+ *  analytics on this device before signing out tracks `app_signed_out` under the erased id
+ *  and brings the person back: records a "no" (not a missing answer, which would bring the
+ *  question back until the sign-out lands) and drops any pending deletion request. */
+export function stopAnalyticsForDeletedAccount(userId: string): Promise<void> {
   cancelForget(userId);
-  try {
-    localStorage.removeItem(CONSENT_KEY_PREFIX + userId);
-  } catch {
-    // Storage unavailable: nothing was stored.
-  }
+  storeConsent(userId, "denied");
   notifyConsent();
   if (userId === currentUserId) void enqueue(reconcile);
   return queue;

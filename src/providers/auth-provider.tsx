@@ -113,8 +113,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       if (event === "SIGNED_OUT") {
         setPlanTier("free");
-        // Tracked first (if they opted in), then analytics opts out and forgets them.
-        void Analytics.app.signedOut();
+        // Analytics opts out and forgets them. `app_signed_out` is tracked in signOut(),
+        // only when the person signs out: one auth-js does on its own, like a refused
+        // refresh after the account was deleted elsewhere, must not send an event that
+        // brings back the PostHog person the deletion erased (PRIV-3).
         void setAnalyticsUser(null);
       } else {
         void setAnalyticsUser(nextSession?.user?.id ?? null);
@@ -129,6 +131,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signOut = async () => {
     if (!rt) return;
+    // Tracked first (if they opted in); the SIGNED_OUT that follows opts analytics out.
+    void Analytics.app.signedOut();
     await rt.auth.signOut();
     setSession(null);
   };

@@ -13,7 +13,8 @@
  *   POSTHOG_PERSONAL_API_KEY  a personal API key with the person:write scope
  *   POSTHOG_PROJECT_ID        the project's numeric id
  *   POSTHOG_API_HOST          optional; default https://eu.posthog.com, the private API.
- *                             Not eu.i.posthog.com, which only takes events.
+ *                             Not eu.i.posthog.com, which only takes events. Anything
+ *                             but an https URL counts as not configured.
  *
  * Plain TypeScript with an injected fetch (no Deno globals), so the unit tests can run it.
  */
@@ -41,24 +42,37 @@ export type PostHogEraserConfig = {
   fetch?: typeof fetch;
 };
 
-/** Reads the secrets above; null when the key or the project id isn't set. */
+/** Reads the secrets above; null when the key or the project id isn't set, or the host
+ *  isn't an https URL. A broken setup must read as "not configured", never as an error
+ *  that fails every account deletion. */
 export function postHogEraserFromEnv(
   env: (name: string) => string | undefined,
   fetchImpl?: typeof fetch,
 ): ErasurePostHog | null {
   const apiKey = env("POSTHOG_PERSONAL_API_KEY")?.trim();
   const projectId = env("POSTHOG_PROJECT_ID")?.trim();
+  const host = env("POSTHOG_API_HOST")?.trim() || undefined;
   if (!apiKey || !projectId) return null;
-  return makePostHogEraser({
-    apiKey,
-    projectId,
-    host: env("POSTHOG_API_HOST")?.trim() || undefined,
-    fetch: fetchImpl,
-  });
+  if (host !== undefined && !isHttpsUrl(host)) return null;
+  return makePostHogEraser({ apiKey, projectId, host, fetch: fetchImpl });
 }
 
-/** 400 / 401 / 403 / 404: the request itself is wrong for this key or project. */
-const PERMANENT = new Set([400, 401, 403, 404]);
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** Worth another go later: a timeout, a rate limit, or PostHog having a bad moment (5xx).
+ *  Any other answer that isn't a success means this request will never work as set up. */
+function isTransient(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+/** Long enough for PostHog, short enough that account deletion doesn't hang on it. */
+export const POSTHOG_TIMEOUT_MS = 10_000;
 
 export function makePostHogEraser(config: PostHogEraserConfig): ErasurePostHog {
   const host = (config.host || POSTHOG_DEFAULT_API_HOST).replace(/\/+$/, "");
@@ -77,17 +91,24 @@ export function makePostHogEraser(config: PostHogEraserConfig): ErasurePostHog {
           delete_events: true,
           delete_recordings: true,
         }),
+        signal: AbortSignal.timeout(POSTHOG_TIMEOUT_MS),
       });
       const text = await res.text();
       if (res.ok) {
-        const summary = parseJson(text) as { deletion_errors?: unknown } | null;
+        const summary = parseJson(text);
+        // 202 is bulk_delete's answer, with or without a summary. Any other success must
+        // at least be JSON: an HTML page means a wrong host, which won't delete anything.
+        if (res.status !== 202 && (summary === null || typeof summary !== "object")) {
+          return { status: "refused", httpStatus: res.status };
+        }
+        const errors = (summary as { deletion_errors?: unknown } | null)?.deletion_errors;
         // A person PostHog matched but couldn't finish deleting: worth another go.
-        if (Array.isArray(summary?.deletion_errors) && summary.deletion_errors.length > 0) {
+        if (Array.isArray(errors) && errors.length > 0) {
           throw new Error(`PostHog couldn't finish the deletion: ${clip(text)}`);
         }
         return { status: "queued" };
       }
-      if (PERMANENT.has(res.status)) return { status: "refused", httpStatus: res.status };
+      if (!isTransient(res.status)) return { status: "refused", httpStatus: res.status };
       throw new Error(`PostHog ${res.status}: ${clip(text)}`);
     },
   };

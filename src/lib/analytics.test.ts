@@ -588,22 +588,31 @@ describe("analytics — switching off deletes what was sent (PRIV-3)", () => {
 });
 
 describe("analytics — after the account is deleted (PRIV-3)", () => {
-  it("sends nothing more under the erased id, sign-out included, and forgets the choice", async () => {
+  it("sends nothing more under the erased id, sign-out included", async () => {
     const a = await loadAnalytics();
     await a.setAnalyticsUser("u1");
     await a.setAnalyticsConsent("u1", "granted");
     const before = ph.state.sent.length;
 
-    await a.forgetAnalyticsAccount("u1");
-    // What the auth provider does on SIGNED_OUT.
+    await a.stopAnalyticsForDeletedAccount("u1");
+    // What signing out does: track, then the auth provider's SIGNED_OUT.
     await a.Analytics.app.signedOut();
     await a.setAnalyticsUser(null);
 
     expect(ph.state.sent.slice(before)).toEqual([]);
     expect(ph.state.optedIn).toBe(false);
-    expect(a.getAnalyticsConsent("u1")).toBeNull();
     // The server erased everything as part of the deletion: nothing more to ask.
     expect(forget.request).not.toHaveBeenCalled();
+  });
+
+  it("records a no, so the question doesn't come back before the sign-out lands", async () => {
+    const a = await loadAnalytics();
+    await a.setAnalyticsUser("u1");
+    await a.setAnalyticsConsent("u1", "granted");
+
+    await a.stopAnalyticsForDeletedAccount("u1");
+
+    expect(a.getAnalyticsConsent("u1")).toBe("denied");
   });
 
   it("drops a deletion request still pending on this device", async () => {
@@ -615,9 +624,10 @@ describe("analytics — after the account is deleted (PRIV-3)", () => {
     await settle();
     expect(localStorage.getItem("moduo:analytics-forget:u1")).not.toBeNull();
 
-    await a.forgetAnalyticsAccount("u1");
+    await a.stopAnalyticsForDeletedAccount("u1");
 
     expect(localStorage.getItem("moduo:analytics-forget:u1")).toBeNull();
+    expect(forget.request).toHaveBeenCalledTimes(1); // only the switch-off's own try
   });
 });
 

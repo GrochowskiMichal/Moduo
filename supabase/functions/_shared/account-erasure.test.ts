@@ -706,6 +706,16 @@ describe("deleteAccount — the app's usage analytics at PostHog (PRIV-3)", () =
     expect(result).toEqual({ status: "deleted", warnings: ["posthog_not_configured"] });
     expect(db.users.has(ME)).toBe(false);
   });
+
+  it("fails before anything is deleted when a caller forgot to pass posthog at all", async () => {
+    const { db, stripe, deps } = world();
+    // What an Edge Function entry point (not type-checked) would send without the field.
+    const { posthog: _left, ...withoutPostHog } = deps;
+
+    expect(await failedStep(deleteAccount(withoutPostHog as typeof deps, me))).toBe("posthog");
+    expect(stripe.log).toEqual([]);
+    expect(db.users.has(ME)).toBe(true);
+  });
 });
 
 describe("deleteAccount — failures leave a retryable account", () => {

@@ -138,7 +138,8 @@ export function erasureErrorMessage(step: ErasureStep): string {
     case "check":
       return "Couldn't check your workspaces. Your account wasn't deleted. Try again.";
     case "posthog":
-      return "Couldn't delete your usage analytics, so your account wasn't deleted. Try again in a few minutes.";
+      // Neutral: most people never shared analytics, and nothing was deleted yet.
+      return "Something went wrong on our side. Your account wasn't deleted. Try again in a few minutes.";
     case "stripe":
       // Subscriptions are cancelled before the customer is deleted, so a failure
       // here can come after the plan already ended.
@@ -237,14 +238,17 @@ async function eraseAnalytics(
   userId: string,
   warnings: string[],
 ): Promise<void> {
+  // Edge Function entry points aren't type-checked, so a caller that forgot the field
+  // fails here instead of silently skipping the erasure as "not configured".
+  if (deps.posthog === undefined) throw new Error("ErasureDeps.posthog is missing");
   if (!deps.posthog) {
     warnings.push("posthog_not_configured");
     return;
   }
   const result = await deps.posthog.erasePerson(userId);
-  // A wrong key, scope or project id can't be fixed by retrying, and it must not
+  // A wrong key, scope, project or host can't be fixed by retrying, and it must not
   // block every deletion. The warning names the user, so the analytics can still be
-  // deleted by hand. A network error, rate limit or 5xx throws and fails the step.
+  // deleted by hand. A network error, timeout, rate limit or 5xx throws and fails the step.
   if (result.status === "refused") warnings.push(`posthog_refused: ${result.httpStatus}`);
 }
 

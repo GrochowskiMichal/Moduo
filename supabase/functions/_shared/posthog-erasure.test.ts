@@ -64,7 +64,7 @@ describe("makePostHogEraser", () => {
     expect(calls[0].url).toBe("https://us.posthog.com/api/projects/7/persons/bulk_delete/");
   });
 
-  it.each([400, 401, 403, 404])(
+  it.each([400, 401, 403, 404, 405, 410, 422])(
     "reports a %s as refused for good, without throwing",
     async (status) => {
       const { impl } = fakeFetch(status, { detail: "nope" });
@@ -74,7 +74,30 @@ describe("makePostHogEraser", () => {
     },
   );
 
-  it.each([429, 500, 503])("throws on a %s, so the caller retries", async (status) => {
+  it("takes a 202 without a summary: older PostHog versions answer with an empty body", async () => {
+    const { impl } = fakeFetch(202, "");
+    const eraser = makePostHogEraser({ apiKey: "phx_key", projectId: "12345", fetch: impl });
+
+    expect(await eraser.erasePerson(USER)).toEqual({ status: "queued" });
+  });
+
+  it("counts a success that isn't JSON as refused: a wrong host's web page deletes nothing", async () => {
+    const { impl } = fakeFetch(200, "<!doctype html><title>PostHog</title>");
+    const eraser = makePostHogEraser({ apiKey: "phx_key", projectId: "12345", fetch: impl });
+
+    expect(await eraser.erasePerson(USER)).toEqual({ status: "refused", httpStatus: 200 });
+  });
+
+  it("gives up on a request PostHog doesn't answer in time", async () => {
+    const { calls, impl } = fakeFetch(202, {});
+    const eraser = makePostHogEraser({ apiKey: "phx_key", projectId: "12345", fetch: impl });
+
+    await eraser.erasePerson(USER);
+
+    expect(calls[0].init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it.each([408, 429, 500, 503])("throws on a %s, so the caller retries", async (status) => {
     const { impl } = fakeFetch(status, "busy");
     const eraser = makePostHogEraser({ apiKey: "phx_key", projectId: "12345", fetch: impl });
 
@@ -123,6 +146,17 @@ describe("postHogEraserFromEnv", () => {
     expect(calls[0].url).toBe(`${POSTHOG_DEFAULT_API_HOST}/api/projects/12345/persons/bulk_delete/`);
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe("Bearer phx_key");
   });
+
+  it.each(["eu.posthog.com", "http://eu.posthog.com", "not a url"])(
+    "reads a POSTHOG_API_HOST of %j as not configured, rather than failing every deletion",
+    (host) => {
+      expect(
+        postHogEraserFromEnv(
+          env({ POSTHOG_PERSONAL_API_KEY: "phx_key", POSTHOG_PROJECT_ID: "12345", POSTHOG_API_HOST: host }),
+        ),
+      ).toBeNull();
+    },
+  );
 
   it("uses POSTHOG_API_HOST when it's set", async () => {
     const { calls, impl } = fakeFetch(202, {});

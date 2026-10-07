@@ -7,8 +7,9 @@
 import { getRuntime } from "./runtime";
 import { SUPABASE_URL } from "./runtime.web";
 
-/** true once the server has taken the request, or has nothing to delete with. false means
- *  try again later: offline, a server error, or `userId` isn't who's signed in now. */
+/** true once the server has taken the request. false means try again later: offline, a
+ *  server error or a PostHog setup it can't use yet (502/503), or `userId` isn't who's
+ *  signed in now. */
 export async function requestAnalyticsForget(userId: string): Promise<boolean> {
   const runtime = getRuntime();
   if (!runtime) return false;

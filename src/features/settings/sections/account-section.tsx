@@ -6,7 +6,7 @@ import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { forgetAnalyticsAccount } from "../../../lib/analytics";
+import { stopAnalyticsForDeletedAccount } from "../../../lib/analytics";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
 import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";
@@ -100,7 +100,7 @@ export function AccountSection() {
       // Deleted — the session is now invalid. Sign out locally and land on /auth. Analytics
       // stops first: signing out tracks `app_signed_out`, which would bring back the
       // PostHog person the server just erased (PRIV-3).
-      if (userId) void forgetAnalyticsAccount(userId);
+      if (userId) void stopAnalyticsForDeletedAccount(userId);
       await signOut();
       await navigate({ to: "/auth" });
     } catch (err) {
