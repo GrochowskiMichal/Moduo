@@ -1,6 +1,6 @@
 # Manual test checklist — app analytics: one-time question, opt-in, safe by default
 
-> Generated 2026-10-07 · branch `t/maciej/app-analytics-consent` (+ `t/maciej/privacy-app-analytics` for the policy) · **Live-verified:** yes, in the web preview. A temporary harness (deleted before commit) rendered the real question, toaster and Settings → Preferences for two fake signed-in people. It used a dummy key and a local stand-in for PostHog, so nothing was sent to PostHog. Covered: asked after the settle delay; Share → events tagged `surface: "app"`; never asked again; a second person asked separately; Don't share → nothing sent. The policy page was checked in a local preview.
+> Generated 2026-10-07 · branch `t/maciej/app-analytics-consent` (+ `t/maciej/privacy-app-analytics` for the policy) · **Live-verified:** yes, in the web preview. A temporary harness (deleted before commit) rendered the real question, toaster and Settings → Preferences for two fake signed-in people. It used a dummy key and a local stand-in for PostHog, so nothing was sent to PostHog. Covered: asked after the settle delay; Share → events tagged `surface: "app"`; never asked again; a second person asked separately; Don't share → nothing sent. The privacy policy update (GrochowskiMichal/Moduo#232) has been live on www.moduo.app/privacy since 2026-10-07; the page has the `#app-analytics` section.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 **Setup for everything below "With a test key".** Add these two lines to the checkout's `.env.local`, then restart `bun run dev:web`. The host is a dead local port, so events fail on your machine and nothing reaches PostHog:
@@ -10,7 +10,7 @@ PUBLIC_POSTHOG_KEY=phc_local_test
 PUBLIC_POSTHOG_HOST=http://127.0.0.1:9
 ```
 
-Remove both lines when you're done. Set the real key on a live build (in the Vercel and desktop build settings, never in git) **only on a build that already contains this change, and only once moduo.app/privacy shows §04 "In the Moduo app"** (GrochowskiMichal/Moduo#232 deployed from `prod-landing`). The change is on `maciej`; `prod-app` and `staging-app` still have the old wrapper, which sends the email without asking, until a develop → staging → prod promotion carries it there. It's also best to do it after **PRIV-3**, so deleting an account or switching off deletes PostHog data too (today that happens by request to privacy@moduo.app).
+Remove both lines when you're done. Set the real key on a live build (in the Vercel and desktop build settings, never in git) **only on a build that already contains this change**. The policy side is done: www.moduo.app/privacy has shown §04 "In the Moduo app" since 2026-10-07 (GrochowskiMichal/Moduo#232). The change is on `maciej`; `prod-app` and `staging-app` still have the old wrapper, which sends the email without asking, until a develop → staging → prod promotion carries it there. It's also best to do it after **PRIV-3**, so deleting an account or switching off deletes PostHog data too (today that happens by request to privacy@moduo.app).
 
 ## Today's builds (no key) — nothing changes
 - [ ] **Do:** Without the setup lines, sign in and wait a few seconds. → **Expect:** No question appears. Settings → Preferences has no "Privacy" group. _(both)_
@@ -36,7 +36,7 @@ Remove both lines when you're done. Set the real key on a live build (in the Ver
 - [ ] **Do:** `bun run dev:desktop` with the same two setup lines. → **Expect:** The same question after sign-in and the same Settings row. "Privacy policy" opens in your browser, not inside the app. _(desktop)_
 
 ## The privacy policy (moduo.app/privacy)
-- [ ] **Do:** Open moduo.app/privacy after the `prod-landing` deploy. → **Expect:** "The short version" says analytics run only if you say yes, on the website or in the app. §04 Analytics has two parts, "On our website" and "In the Moduo app". §05 no longer says the app has no analytics. §07 lists PostHog for the website and the app. §11 "In the Moduo app" lists `moduo:consent:<your account ID>` and PostHog's `ph_moduo_app` entries. "Your choices" points to Settings → Preferences → Privacy. _(web)_
+- [ ] **Do:** Open www.moduo.app/privacy (live since 2026-10-07). → **Expect:** "The short version" says analytics run only if you say yes, on the website or in the app. §04 Analytics has two parts, "On our website" and "In the Moduo app". §05 no longer says the app has no analytics. §07 lists PostHog for the website and the app. §11 "In the Moduo app" lists `moduo:consent:<your account ID>` and PostHog's `ph_moduo_app` entries. "Your choices" points to Settings → Preferences → Privacy. _(web)_
 
 ## In PostHog, once a real key is live
 - [ ] **Do:** In the project's activity view, filter by `surface`. → **Expect:** The landing's events have `surface = landing`; the app's have `surface = app`, plus `platform` (web/desktop), `environment` (production, staging, preview, development) and `app_version`. Build app insights with `surface = app`. _(PostHog)_
