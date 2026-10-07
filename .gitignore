@@ -87,3 +87,6 @@ main.mjs
 
 # desktop keychain fallback files (local login sessions — never commit)
 src-tauri/.moduo_keychain_*
+
+# Cursor is not part of the harness (decisions/workflow.md, 2026-10-07)
+.cursor/
