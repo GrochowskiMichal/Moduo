@@ -31,8 +31,11 @@ if (target === "landing") {
   fs.renameSync(path.join(outDir, "index.html"), path.join(outDir, "app.html"));
   fs.copyFileSync(path.join(root, "landing", file), path.join(outDir, "index.html"));
   // Marketing subpages ride along on the public landing (staging keeps its portal at /).
+  // Each one also needs a host rewrite in vercel.json (/manifesto → /manifesto.html, …).
   if (file === "index.html") {
-    fs.copyFileSync(path.join(root, "landing", "manifesto.html"), path.join(outDir, "manifesto.html"));
+    for (const page of ["manifesto.html", "privacy.html", "terms.html"]) {
+      fs.copyFileSync(path.join(root, "landing", page), path.join(outDir, page));
+    }
   }
   // The landing's own static files (share image, founder photos, …) go to /assets too.
   const assets = path.join(root, "landing", "assets");

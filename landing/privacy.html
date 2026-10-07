@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<!--
+  Privacy policy for moduo.app, the waitlist and the Moduo apps.
+  Draft text written from the code and config as of 7 October 2026. It is not legal
+  advice: have a lawyer review it (or regenerate it with a tool like iubenda) once
+  Moduo's own company exists. Every fact here was checked in the repo; when the code
+  changes (new processor, analytics in the app, paid plans), update this page and
+  the "Last updated" date.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy policy · Moduo</title>
+    <meta
+      name="description"
+      content="How Moduo handles your data: what we collect and why, who helps us, where it is stored, how long we keep it, and your rights."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#161616" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.moduo.app/privacy" />
+    <meta property="og:title" content="Privacy policy · Moduo" />
+    <meta
+      property="og:description"
+      content="How Moduo handles your data: what we collect and why, who helps us, where it is stored, how long we keep it, and your rights."
+    />
+    <meta property="og:image" content="https://www.moduo.app/assets/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://www.moduo.app/assets/og.png" />
+    <link rel="canonical" href="https://www.moduo.app/privacy" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link
+      rel="preload"
+      href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <script>
+      // Before first paint: the theme remembered on our text pages (shared with the manifesto).
+      (function () {
+        var t;
+        try {
+          t = localStorage.getItem("moduo-manifesto-theme");
+        } catch (e) {}
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      })();
+    </script>
+    <style>
+      /* ─── Fonts ──────────────────────────────────────────────────────────
+         Same family and metric-matched fallback as the manifesto. */
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-400-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-500-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-600-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: "Geist Mono";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5.2.5/files/geist-mono-latin-400-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: "Geist Fallback";
+        src: local("Arial"), local("Helvetica Neue"), local("Helvetica");
+        size-adjust: 103.3%;
+        ascent-override: 89.1%;
+        descent-override: 21.3%;
+        line-gap-override: 0%;
+      }
+
+      /* ─── Tokens (the manifesto's, unchanged) ────────────────────────── */
+      :root {
+        color-scheme: dark;
+        --bg: oklch(0.2 0 0);
+        --surface: oklch(0.235 0 0);
+        --fg-strong: oklch(0.965 0 0);
+        --fg: oklch(0.895 0 0);
+        --fg-muted: oklch(0.76 0 0);
+        --fg-faint: oklch(0.6 0 0);
+        --fg-ghost: oklch(0.42 0 0);
+        --hairline: oklch(0.3 0 0);
+        --hairline-strong: oklch(0.4 0 0);
+        --hover: oklch(0.26 0 0);
+        --primary: oklch(0.95 0 0);
+        --primary-hover: oklch(1 0 0);
+        --primary-fg: oklch(0.1 0 0);
+        --ring: oklch(0.95 0 0);
+        --body-tracking: 0.006em;
+        --body-leading: 1.65;
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: oklch(0.985 0 0);
+        --surface: oklch(0.955 0 0);
+        --fg-strong: oklch(0.16 0 0);
+        --fg: oklch(0.27 0 0);
+        --fg-muted: oklch(0.47 0 0);
+        --fg-faint: oklch(0.58 0 0);
+        --fg-ghost: oklch(0.8 0 0);
+        --hairline: oklch(0.9 0 0);
+        --hairline-strong: oklch(0.82 0 0);
+        --hover: oklch(0.94 0 0);
+        --primary: oklch(0.16 0 0);
+        --primary-hover: oklch(0 0 0);
+        --primary-fg: oklch(0.985 0 0);
+        --ring: oklch(0.16 0 0);
+        --body-tracking: 0em;
+        --body-leading: 1.6;
+      }
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme="dark"]) {
+          color-scheme: light;
+          --bg: oklch(0.985 0 0);
+          --surface: oklch(0.955 0 0);
+          --fg-strong: oklch(0.16 0 0);
+          --fg: oklch(0.27 0 0);
+          --fg-muted: oklch(0.47 0 0);
+          --fg-faint: oklch(0.58 0 0);
+          --fg-ghost: oklch(0.8 0 0);
+          --hairline: oklch(0.9 0 0);
+          --hairline-strong: oklch(0.82 0 0);
+          --hover: oklch(0.94 0 0);
+          --primary: oklch(0.16 0 0);
+          --primary-hover: oklch(0 0 0);
+          --primary-fg: oklch(0.985 0 0);
+          --ring: oklch(0.16 0 0);
+          --body-tracking: 0em;
+          --body-leading: 1.6;
+        }
+      }
+
+      :root {
+        --font-sans: Geist, "Geist Fallback", system-ui, -apple-system, sans-serif;
+        --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+        --step--1: 0.75rem;
+        --step-0: clamp(1rem, 0.925rem + 0.375vw, 1.1875rem);
+        --step-1: clamp(1.125rem, 1rem + 0.55vw, 1.4375rem);
+        --step-2: clamp(1.5rem, 1.2rem + 1.3vw, 2.125rem);
+        --step-4: clamp(2.375rem, 1.5rem + 3.9vw, 4.5rem);
+
+        --measure: 31.5em;
+
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-6: 1.5rem;
+        --space-8: 2rem;
+        --space-12: 3rem;
+        --space-16: 4rem;
+        /* Legal pages are long: sections sit closer than the manifesto's. */
+        --space-section: clamp(3.5rem, 2.5rem + 4vw, 5.5rem);
+        --gutter: clamp(1rem, 0.5rem + 2.5vw, 2rem);
+
+        --motion-duration-xs: 140ms;
+        --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+        --radius-sm: 0.375rem;
+        --radius-md: 0.5rem;
+        --radius-lg: 0.75rem;
+        --ctrl-h: 2rem;
+        --ctrl-h-lg: 2.75rem;
+      }
+
+      /* ─── Base ───────────────────────────────────────────────────────── */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        background: var(--bg);
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      body {
+        min-height: 100dvh;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-sans);
+        font-size: var(--step-0);
+        line-height: var(--body-leading);
+        letter-spacing: var(--body-tracking);
+        font-kerning: normal;
+        font-variant-ligatures: common-ligatures;
+        font-variant-numeric: proportional-nums oldstyle-nums;
+        font-optical-sizing: auto;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+      a {
+        color: inherit;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        cursor: pointer;
+      }
+      svg {
+        display: block;
+        flex-shrink: 0;
+      }
+      ::selection {
+        background: color-mix(in oklab, var(--fg-strong) 24%, transparent);
+      }
+      :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 3px;
+        border-radius: 0.25rem;
+      }
+
+      .skip {
+        position: absolute;
+        left: var(--gutter);
+        top: -4rem;
+        z-index: 10;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        background: var(--primary);
+        color: var(--primary-fg);
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-decoration: none;
+      }
+      .skip:focus {
+        top: var(--space-3);
+      }
+
+      .col {
+        width: 100%;
+        max-width: calc(var(--measure) + 2 * var(--gutter));
+        margin-inline: auto;
+        padding-inline: var(--gutter);
+      }
+
+      /* ─── Top bar (static, not sticky) ───────────────────────────────── */
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding-block: var(--space-4);
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: var(--ctrl-h);
+        color: var(--fg-strong);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        text-decoration: none;
+      }
+      .brand svg {
+        width: 1.25rem;
+        height: 1.25rem;
+        fill: currentColor;
+      }
+      .pref {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: var(--ctrl-h);
+        padding-inline: var(--space-2);
+        border-radius: var(--radius-md);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        letter-spacing: 0.02em;
+        color: var(--fg-muted);
+        transition:
+          background-color var(--motion-duration-xs) var(--motion-ease-out),
+          color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .pref:hover {
+        background: var(--hover);
+        color: var(--fg-strong);
+      }
+      .pref svg {
+        width: 0.875rem;
+        height: 0.875rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+      }
+
+      /* ─── Opening ────────────────────────────────────────────────────── */
+      .opening {
+        padding-top: clamp(3rem, 2rem + 6vh, 6rem);
+      }
+      .eyebrow,
+      .label {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        font-weight: 400;
+        line-height: 1.4;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--fg-muted);
+      }
+      .eyebrow {
+        margin-bottom: var(--space-6);
+      }
+      .eyebrow::after {
+        content: "";
+        width: 3rem;
+        height: 1px;
+        background: var(--hairline-strong);
+      }
+      h1 {
+        font-size: var(--step-4);
+        line-height: 1.04;
+        font-weight: 600;
+        letter-spacing: -0.032em;
+        color: var(--fg-strong);
+        text-wrap: balance;
+        margin-bottom: clamp(1.5rem, 1.25rem + 1.5vw, 2.5rem);
+      }
+      .lede {
+        font-size: var(--step-1);
+        line-height: 1.55;
+        letter-spacing: -0.003em;
+        color: var(--fg-strong);
+        text-wrap: pretty;
+      }
+      .updated {
+        margin-top: var(--space-6);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        letter-spacing: 0.04em;
+        color: var(--fg-faint);
+        font-variant-numeric: lining-nums;
+      }
+
+      /* The short version: the whole page in six lines. */
+      .brief {
+        margin-top: clamp(2.5rem, 2rem + 2vw, 3.5rem);
+        padding: clamp(1.25rem, 1rem + 1vw, 1.75rem);
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+      }
+      .brief .label {
+        margin-bottom: var(--space-4);
+      }
+
+      /* Contents: a quiet index, numbered like the sections. */
+      .toc {
+        margin-top: var(--space-12);
+      }
+      .toc .label {
+        margin-bottom: var(--space-3);
+      }
+      .toc ol {
+        list-style: none;
+        border-top: 1px solid var(--hairline);
+      }
+      @media (min-width: 560px) {
+        .toc ol {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          column-gap: var(--space-6);
+        }
+      }
+      .toc a {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-3);
+        padding-block: var(--space-2);
+        border-bottom: 1px solid var(--hairline);
+        font-size: 0.9375rem;
+        line-height: 1.4;
+        color: var(--fg-muted);
+        text-decoration: none;
+        transition: color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .toc a:hover {
+        color: var(--fg-strong);
+      }
+      .toc a span {
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        letter-spacing: 0.04em;
+        color: var(--fg-faint);
+        font-variant-numeric: tabular-nums lining-nums;
+      }
+
+      /* ─── Sections ───────────────────────────────────────────────────── */
+      .clause {
+        margin-top: var(--space-section);
+        scroll-margin-top: var(--space-8);
+      }
+      .clause::before {
+        content: "";
+        display: block;
+        height: 1px;
+        background: var(--hairline);
+        margin-bottom: clamp(1.5rem, 1.25rem + 1vw, 2rem);
+      }
+      h2 {
+        position: relative;
+        font-size: var(--step-2);
+        line-height: 1.15;
+        font-weight: 600;
+        letter-spacing: -0.022em;
+        color: var(--fg-strong);
+        text-wrap: balance;
+        margin-bottom: 0.6em;
+      }
+      h3 {
+        font-size: var(--step-0);
+        line-height: 1.35;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--fg-strong);
+        margin-top: 1.75em;
+        margin-bottom: 0.35em;
+        scroll-margin-top: var(--space-8);
+      }
+      .clause p,
+      .clause li,
+      .brief li {
+        text-wrap: pretty;
+      }
+      .clause > * + p,
+      .clause > * + ul,
+      .clause > * + .entity {
+        margin-top: 0.85em;
+      }
+      .clause > h3 + p,
+      .clause > h3 + ul {
+        margin-top: 0;
+      }
+      .clause ul,
+      .brief ul {
+        list-style: none;
+      }
+      .clause li,
+      .brief li {
+        position: relative;
+        padding-left: 1.25em;
+      }
+      .clause li + li,
+      .brief li + li {
+        margin-top: 0.45em;
+      }
+      .clause li::before,
+      .brief li::before {
+        content: "";
+        position: absolute;
+        left: 0.15em;
+        top: 0.8em;
+        width: 0.55em;
+        height: 1px;
+        background: var(--fg-faint);
+      }
+      .clause a,
+      .brief a {
+        color: var(--fg-strong);
+        text-decoration: underline;
+        text-decoration-color: var(--hairline-strong);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.22em;
+        overflow-wrap: anywhere;
+        transition: text-decoration-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .clause a:hover,
+      .brief a:hover {
+        text-decoration-color: currentColor;
+      }
+      strong {
+        font-weight: 600;
+        color: var(--fg-strong);
+      }
+      code {
+        font-family: var(--font-mono);
+        font-size: 0.82em;
+        letter-spacing: 0;
+        padding: 0.08em 0.35em;
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--fg-strong);
+        overflow-wrap: anywhere;
+        font-variant-numeric: lining-nums;
+      }
+      /* Section numbers in the left margin on wide screens only. */
+      .num {
+        display: none;
+      }
+      @media (min-width: 1100px) {
+        .num {
+          display: block;
+          position: absolute;
+          right: calc(100% + 2.5rem);
+          top: 0.55em;
+          font-family: var(--font-mono);
+          font-size: var(--step--1);
+          font-weight: 400;
+          letter-spacing: 0.04em;
+          line-height: 1;
+          color: var(--fg-faint);
+          font-variant-numeric: tabular-nums lining-nums;
+        }
+      }
+
+      /* Who is responsible. One block, so it's easy to swap later. */
+      .entity {
+        padding: var(--space-4) clamp(1rem, 0.75rem + 1vw, 1.5rem);
+        border: 1px solid var(--hairline-strong);
+        border-radius: var(--radius-md);
+        font-style: normal;
+      }
+      .entity strong {
+        display: block;
+      }
+      .entity .ids {
+        display: block;
+        margin-top: var(--space-2);
+        font-family: var(--font-mono);
+        font-size: 0.8125em;
+        line-height: 1.6;
+        letter-spacing: 0.01em;
+        color: var(--fg-muted);
+        font-variant-numeric: tabular-nums lining-nums;
+      }
+
+      /* Spec lists: what, then why. Stacked on phones, two columns wider. */
+      .specs {
+        margin-top: 1em;
+        border-top: 1px solid var(--hairline);
+      }
+      .specs > div {
+        display: grid;
+        gap: var(--space-1) var(--space-6);
+        padding-block: var(--space-4);
+        border-bottom: 1px solid var(--hairline);
+      }
+      @media (min-width: 640px) {
+        .specs > div {
+          grid-template-columns: minmax(0, 10em) minmax(0, 1fr);
+        }
+      }
+      .specs dt {
+        font-weight: 500;
+        line-height: 1.45;
+        color: var(--fg-strong);
+      }
+      /* Technical names (cookie keys) need the full width: name above, text below. */
+      .specs.is-stacked > div {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .specs dt code {
+        white-space: nowrap;
+      }
+      .specs dd p + p {
+        margin-top: 0.5em;
+      }
+      .where {
+        display: inline-block;
+        margin-top: var(--space-2);
+        padding: 0.1em 0.55em;
+        border: 1px solid var(--hairline-strong);
+        border-radius: 999px;
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        line-height: 1.6;
+        letter-spacing: 0.02em;
+        color: var(--fg-muted);
+        font-variant-numeric: lining-nums;
+      }
+
+      /* ─── After the end ──────────────────────────────────────────────── */
+      .after {
+        margin-top: var(--space-section);
+        border-top: 1px solid var(--hairline);
+        padding-block: var(--space-8) var(--space-16);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-3) var(--space-6);
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        min-height: var(--ctrl-h-lg);
+        padding-inline: 1.25rem;
+        border-radius: var(--radius-md);
+        font-size: 0.9375rem;
+        font-weight: 500;
+        text-decoration: none;
+        background: var(--primary);
+        color: var(--primary-fg);
+        transition: background-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .btn:hover {
+        background: var(--primary-hover);
+      }
+      .btn svg {
+        width: 1rem;
+        height: 1rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .back {
+        font-size: 0.9375rem;
+        color: var(--fg-muted);
+        text-decoration: underline;
+        text-decoration-color: var(--hairline);
+        text-underline-offset: 0.25em;
+        transition:
+          color var(--motion-duration-xs) var(--motion-ease-out),
+          text-decoration-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .back:hover {
+        color: var(--fg-strong);
+        text-decoration-color: currentColor;
+      }
+
+      @media (max-width: 480px) {
+        .clause p,
+        .clause li,
+        .specs dd {
+          hyphens: auto;
+          -webkit-hyphens: auto;
+        }
+      }
+
+      /* Theme switch: a circular reveal from the button (View Transitions). */
+      ::view-transition-old(root),
+      ::view-transition-new(root) {
+        animation: none;
+        mix-blend-mode: normal;
+      }
+
+      /* ─── Print ──────────────────────────────────────────────────────── */
+      @media print {
+        :root,
+        :root[data-theme] {
+          --bg: #fff;
+          --surface: #fff;
+          --fg-strong: #000;
+          --fg: #111;
+          --fg-muted: #444;
+          --fg-faint: #666;
+          --hairline: #ccc;
+          --hairline-strong: #999;
+        }
+        .top .pref,
+        .skip,
+        .num,
+        .toc,
+        .after .btn {
+          display: none !important;
+        }
+        .clause {
+          margin-top: 2rem;
+        }
+        .specs > div,
+        .entity {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="mark" viewBox="0 0 1000 1000"><path fill-rule="evenodd" d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z" /></symbol>
+    </svg>
+
+    <header class="col top">
+      <a class="brand" href="/">
+        <svg aria-hidden="true"><use href="#mark" /></svg>
+        Moduo
+      </a>
+      <button class="pref" type="button" id="pref-theme" hidden>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.25" /><path d="M8 2.75v10.5" /></svg>
+        <span id="pref-theme-label">Light</span>
+      </button>
+    </header>
+
+    <main id="main">
+      <article class="col" aria-labelledby="page-title">
+        <header class="opening">
+          <p class="eyebrow">Privacy</p>
+          <h1 id="page-title">Privacy policy</h1>
+          <p class="lede">What Moduo collects, why, who helps us run it, and what you can ask of us. This covers our website at moduo.app, the waitlist, and the Moduo apps.</p>
+          <p class="updated">Last updated <time datetime="2026-10-07">7 October 2026</time></p>
+
+          <section class="brief" aria-labelledby="brief-title">
+            <h2 class="label" id="brief-title">The short version</h2>
+            <ul>
+              <li>Website analytics run only if you click Accept. They never record what you type.</li>
+              <li>Your waitlist email is for your invite. Build updates come only if you ask for them.</li>
+              <li>If you use the app, we store your account and workspaces so Moduo works on every device.</li>
+              <li>Our database is in London, UK. Website analytics stay in the EU.</li>
+              <li>We don’t sell your data, show ads, or train AI models on your content.</li>
+              <li>You can see, export, correct or delete your data. Email <a href="mailto:privacy@moduo.app">privacy@moduo.app</a>.</li>
+            </ul>
+          </section>
+
+          <nav class="toc" aria-labelledby="toc-title">
+            <h2 class="label" id="toc-title">On this page</h2>
+            <ol>
+              <li><a href="#who"><span>01</span>Who is responsible</a></li>
+              <li><a href="#waitlist"><span>02</span>The waitlist</a></li>
+              <li><a href="#website"><span>03</span>Our website</a></li>
+              <li><a href="#analytics"><span>04</span>Analytics</a></li>
+              <li><a href="#app"><span>05</span>The Moduo app</a></li>
+              <li><a href="#booking"><span>06</span>Booking a meeting</a></li>
+              <li><a href="#processors"><span>07</span>Who helps us</a></li>
+              <li><a href="#where"><span>08</span>Where your data is stored</a></li>
+              <li><a href="#retention"><span>09</span>How long we keep it</a></li>
+              <li><a href="#rights"><span>10</span>Your rights</a></li>
+              <li><a href="#cookies"><span>11</span>Cookies</a></li>
+              <li><a href="#security"><span>12</span>Security</a></li>
+              <li><a href="#contact"><span>13</span>Changes and contact</a></li>
+            </ol>
+          </nav>
+        </header>
+
+        <section class="clause" id="who" aria-labelledby="h-who">
+          <h2 id="h-who"><span class="num" aria-hidden="true">01</span>Who is responsible</h2>
+          <!-- CONTROLLER: until Moduo has its own company, Ringdove is responsible for the data.
+               When the Moduo company exists, change this paragraph and the block below to the
+               new company, do the same in terms.html, update "Last updated", and email waitlist
+               and beta users once about the change. -->
+          <p>Moduo is made by Maciej Grzywacz and Mike Grochowski. It doesn’t have its own company yet. Until it does, Ringdove sp. z o.o., Maciej’s company, is responsible for your data. In GDPR terms, Ringdove is the controller.</p>
+          <address class="entity">
+            <strong>Ringdove sp. z o.o.</strong>
+            ul. Fatimska 41A/310, 31-831 Kraków, Poland
+            <span class="ids">KRS 0001210192 · NIP 6783233283 · REGON 543448800</span>
+            <span class="ids">Privacy contact: <a href="mailto:privacy@moduo.app">privacy@moduo.app</a></span>
+          </address>
+          <p>When Moduo’s own company is set up, it will take over. We’ll update this page and email you about it.</p>
+          <p>Moduo is for people aged 16 and over.</p>
+        </section>
+
+        <section class="clause" id="waitlist" aria-labelledby="h-waitlist">
+          <h2 id="h-waitlist"><span class="num" aria-hidden="true">02</span>The waitlist</h2>
+          <p>When you join the waitlist, we store:</p>
+          <dl class="specs">
+            <div>
+              <dt>Your email address</dt>
+              <dd>To send your invite when it’s your turn. Legal basis: you asked us to (steps before a contract, Article 6(1)(b) GDPR).</dd>
+            </div>
+            <div>
+              <dt>Spam protection details</dt>
+              <dd>Which form you used, your browser’s user agent, the website the form was on, and a scrambled (hashed) version of your IP address. We never store the IP address itself. These stop spam and abuse, such as one network signing up hundreds of addresses. Legal basis: our legitimate interest in a clean list (Article 6(1)(f)).</dd>
+            </div>
+            <div>
+              <dt>Build updates, if you ask</dt>
+              <dd>If you tick “Also send me build updates”, we store that choice and when you made it. Updates come about once a month. Before the first one, we’ll email you to confirm. Legal basis: your consent (Article 6(1)(a)), which you can withdraw any time.</dd>
+            </div>
+          </dl>
+          <p>We only email waitlist addresses about your invite, the updates you asked for, and important changes to this policy. Your browser also remembers that you joined, so the page can show you’re on the list (see <a href="#cookies">Cookies</a>).</p>
+        </section>
+
+        <section class="clause" id="website" aria-labelledby="h-website">
+          <h2 id="h-website"><span class="num" aria-hidden="true">03</span>Our website</h2>
+          <p><strong>Hosting.</strong> Our website runs on Vercel. Like any web server, it receives your IP address and browser details with each request and keeps them in logs for a short time, to deliver the site and protect it from attacks. Legal basis: our legitimate interest in running a secure website (Article 6(1)(f)).</p>
+          <p><strong>Fonts.</strong> Our pages load their fonts from jsDelivr, a public content delivery network, so jsDelivr also sees your IP address. If you try another font in the “Make it yours” demo, that font comes from Google Fonts in the same way.</p>
+          <p><strong>Analytics.</strong> Only if you say yes. See the next section.</p>
+        </section>
+
+        <section class="clause" id="analytics" aria-labelledby="h-analytics">
+          <h2 id="h-analytics"><span class="num" aria-hidden="true">04</span>Analytics</h2>
+          <p>We use PostHog to see how people use our website, so we can make it better. It runs on the main page and the manifesto, and only after you click Accept in the cookie banner. If your browser sends a Do Not Track signal, we don’t ask, and analytics stay off.</p>
+          <p>When analytics run, PostHog records:</p>
+          <ul>
+            <li>the pages you view, your clicks and scrolling, and which sections you reach</li>
+            <li>session recordings, which replay how you moved through the page. Everything you type is masked, and we hide your email address after you join.</li>
+            <li>heatmaps, clicks that don’t do anything, page errors and loading speed</li>
+            <li>your browser, device and screen size, and your IP address, which PostHog may use to estimate your location</li>
+            <li>a random ID saved in a cookie, so repeat visits can be counted</li>
+          </ul>
+          <p>We don’t link any of this to your name or email, and we don’t build a profile of you. Before you choose, your browser downloads PostHog’s code and settings from PostHog, but nothing is recorded or stored until you accept.</p>
+          <p>Legal basis: your consent (Article 6(1)(a) GDPR and the Polish rules on cookies). You can change your choice any time in <a href="/#cookie-settings">Cookie settings</a> on the main page.</p>
+        </section>
+
+        <section class="clause" id="app" aria-labelledby="h-app">
+          <h2 id="h-app"><span class="num" aria-hidden="true">05</span>The Moduo app</h2>
+          <p>Moduo is in a private beta. You can only create an account with an invite.</p>
+
+          <h3>Your account</h3>
+          <p>Your email address, name, profile picture and settings. We use them to sign you in with emailed codes and to run your account. Legal basis: our contract with you, the <a href="/terms">terms</a> (Article 6(1)(b)).</p>
+
+          <h3>Your workspaces</h3>
+          <p>Everything you put into Moduo: tasks, notes, calendar events, contacts, chat messages, and the links between them. We also store who belongs to each workspace and what they can see. We keep all this so Moduo works on all your devices and for the people you share a workspace with. Legal basis: our contract with you.</p>
+          <p>Profile pictures and workspace logos are public files, so anyone with the exact link can see them. If you publish a note, anyone with its link can read it and the pages inside it until you unpublish it.</p>
+
+          <h3>Email</h3>
+          <p>Email works in the desktop app. Messages travel straight between your email provider and your computer, and they’re stored on your computer. Your email password or sign-in token stays in your computer’s keychain. Our servers only receive:</p>
+          <ul>
+            <li>the email accounts you connect: address, provider, status, signature and unread count</li>
+            <li>a short record of the threads you link, tag, snooze, follow up on or turn into tasks: sender, subject, a short snippet, the date, and any snooze or follow-up time</li>
+          </ul>
+
+          <h3>Calendars</h3>
+          <p>When you connect a calendar from Google, Outlook, CalDAV or an ICS link, we copy its events into Moduo, including titles, times, descriptions and locations, so they show on all your devices. Sign-in tokens we keep on our servers are encrypted. Outlook and CalDAV passwords and tokens stay in your computer’s keychain.</p>
+
+          <h3>Booking pages and invites</h3>
+          <p>If you share a booking page, we store your available times and what guests send you (see <a href="#booking">Booking a meeting</a>). If you invite someone to a workspace, we email them your name, the workspace name and a link to join.</p>
+
+          <h3>Billing</h3>
+          <p>Moduo is free during the beta. When you first sign in, we start a free trial at Stripe, our payment provider. Stripe receives your email address, name and account ID, and keeps your plan and trial dates. Nobody is charged during the beta. Legal basis: our contract with you.</p>
+
+          <h3>Your AI assistant</h3>
+          <p>You can connect your own AI assistant, like Claude or ChatGPT, with an API key you create in Settings → API keys. A key can only reach what you allow, and you can revoke it any time. We store a fingerprint (hash) of the key, never the key itself. What your assistant reads is then handled by its provider under its own terms. That’s your choice, so check their privacy policy.</p>
+
+          <h3>Other services the app talks to</h3>
+          <ul>
+            <li><strong>Weather widget.</strong> If you add it, your browser sends the city you search for, or its coordinates, to Open-Meteo, a free weather service.</li>
+            <li><strong>Desktop updates.</strong> The desktop app checks GitHub for new versions, so GitHub sees your IP address.</li>
+            <li><strong>Services you connect.</strong> When you connect Google, Microsoft, Zoom, or your own email and calendar servers, data moves between them and Moduo because you asked for it. Each handles it under its own terms.</li>
+          </ul>
+          <p>The app itself doesn’t use analytics or ad trackers.</p>
+
+          <h3 id="google">Google user data</h3>
+          <p>If you connect a Google account, we use the data Google shares with us only to show and sync your calendar and email in Moduo, and to create meetings from your booking page. We don’t sell it, use it for ads, or use it to train AI models. Our use and transfer of information received from Google APIs follows the <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+        </section>
+
+        <section class="clause" id="booking" aria-labelledby="h-booking">
+          <h2 id="h-booking"><span class="num" aria-hidden="true">06</span>Booking a meeting</h2>
+          <p>Moduo users can share a booking page at moduo.app/book. If you book a meeting through one:</p>
+          <ul>
+            <li>We collect your name and email, the time you choose, your time zone, your note, your answers to the host’s questions, and the emails of any guests you add.</li>
+            <li>We use them to create the meeting for the host and to email you a confirmation with a link to cancel.</li>
+            <li>If the host uses Google Calendar, the meeting goes into their Google calendar, and Google sends you and your guests an invitation. If the host uses Zoom, we create a Zoom meeting on their account with your details in its description.</li>
+            <li>You’re added as a contact in the host’s workspace.</li>
+          </ul>
+          <p>We do this on the host’s behalf, and the host decides what happens with your details afterwards. To change or delete them, ask the host. You can also write to us and we’ll help.</p>
+        </section>
+
+        <section class="clause" id="processors" aria-labelledby="h-processors">
+          <h2 id="h-processors"><span class="num" aria-hidden="true">07</span>Who helps us</h2>
+          <p>These companies process data for us to run Moduo:</p>
+          <dl class="specs">
+            <div>
+              <dt>Supabase</dt>
+              <dd>Database, sign-in, file storage and server functions. Holds your account, your workspaces and the waitlist, and sends sign-in emails.<br /><span class="where">London, UK</span></dd>
+            </div>
+            <div>
+              <dt>Vercel</dt>
+              <dd>Hosts moduo.app and the web app.<br /><span class="where">USA, servers worldwide</span></dd>
+            </div>
+            <div>
+              <dt>PostHog</dt>
+              <dd>Website analytics, only with your consent.<br /><span class="where">Frankfurt, Germany</span></dd>
+            </div>
+            <div>
+              <dt>Resend</dt>
+              <dd>Sends our emails, like workspace invites and booking confirmations.<br /><span class="where">USA</span></dd>
+            </div>
+            <div>
+              <dt>Stripe</dt>
+              <dd>Payments and trials. During the beta it only keeps your billing record.<br /><span class="where">USA</span></dd>
+            </div>
+          </dl>
+          <p>Some services only see your IP address when your device fetches files from them: jsDelivr and Google Fonts for our website’s fonts, and GitHub for desktop updates. Services you connect yourself, like Google, Microsoft, Zoom or your AI assistant, handle data under their own terms.</p>
+          <p>We don’t sell your data, and we don’t share it with advertisers.</p>
+        </section>
+
+        <section class="clause" id="where" aria-labelledby="h-where">
+          <h2 id="h-where"><span class="num" aria-hidden="true">08</span>Where your data is stored</h2>
+          <p>Our database is in London, UK. The European Commission has confirmed that the UK protects personal data to EU standards, and it renewed that decision in December 2025. So your data can go there without extra safeguards.</p>
+          <p>Website analytics stay in the EU, in Frankfurt.</p>
+          <p>Supabase, Vercel, Resend and Stripe are US companies, so some data may be processed in the US. Their data processing terms include the EU’s standard contractual clauses, the safeguards the EU approved for these transfers. Ask us if you’d like a copy.</p>
+          <p>The desktop app also keeps data on your computer.</p>
+        </section>
+
+        <section class="clause" id="retention" aria-labelledby="h-retention">
+          <h2 id="h-retention"><span class="num" aria-hidden="true">09</span>How long we keep it</h2>
+          <dl class="specs">
+            <div>
+              <dt>Waitlist entry</dt>
+              <dd>Until you join Moduo or ask us to remove it, and at most 12 months after we send your invite. Its spam protection details go with it.</dd>
+            </div>
+            <div>
+              <dt>Build updates</dt>
+              <dd>Until you turn them off or ask us to stop.</dd>
+            </div>
+            <div>
+              <dt>Rate-limit records</dt>
+              <dd>The scrambled IP addresses we count sign-ups with are deleted after 2 days.</dd>
+            </div>
+            <div>
+              <dt>Analytics</dt>
+              <dd>Events for 12 months, session recordings for 30 days.</dd>
+            </div>
+            <div>
+              <dt>Your account and workspaces</dt>
+              <dd>As long as you have an account. When you delete it, we delete this data, including your billing record at Stripe. Copies in backups expire within 30 days.</dd>
+            </div>
+            <div>
+              <dt>Booking details</dt>
+              <dd>As long as the host keeps them in Moduo.</dd>
+            </div>
+            <div>
+              <dt>Technical logs</dt>
+              <dd>For the short time Vercel and Supabase keep them.</dd>
+            </div>
+            <div>
+              <dt>Emails with us</dt>
+              <dd>As long as we need them to handle your request.</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="clause" id="rights" aria-labelledby="h-rights">
+          <h2 id="h-rights"><span class="num" aria-hidden="true">10</span>Your rights</h2>
+          <p>Under the GDPR, you can ask us to:</p>
+          <ul>
+            <li>give you a copy of your data (access)</li>
+            <li>correct it (rectification)</li>
+            <li>delete it (erasure)</li>
+            <li>limit how we use it (restriction)</li>
+            <li>send it to you in a machine-readable file (portability)</li>
+            <li>stop using it where we rely on our legitimate interest (objection)</li>
+          </ul>
+          <p>Where we rely on your consent, you can withdraw it any time. That doesn’t affect what we did before.</p>
+          <p>To use your rights, email <a href="mailto:privacy@moduo.app">privacy@moduo.app</a>, ideally from the address you use with Moduo. It’s free. We answer within one month, and we may ask you to confirm it’s you.</p>
+          <p>You can also do some of this yourself. Export a workspace in Settings → Advanced → Export workspace data. Delete your account in Settings → Account.</p>
+          <p>If you’re unhappy with how we handle your data, you can complain to the Polish supervisory authority: the President of the Personal Data Protection Office (Prezes Urzędu Ochrony Danych Osobowych, UODO), ul. Stawki 2, 00-193 Warszawa, <a href="https://uodo.gov.pl" rel="noopener">uodo.gov.pl</a>. You can also complain to the authority where you live or work. We’d like the chance to fix it first, so please tell us too.</p>
+          <p>You don’t have to give us any data. Without an email address, though, we can’t send you an invite or create your account. We don’t make decisions about you based only on automated processing.</p>
+        </section>
+
+        <section class="clause" id="cookies" aria-labelledby="h-cookies">
+          <h2 id="h-cookies"><span class="num" aria-hidden="true">11</span>Cookies</h2>
+          <p>Cookies and local storage are small pieces of data a website saves in your browser. Here is everything ours save. We don’t use advertising cookies or third-party trackers.</p>
+
+          <h3>On moduo.app</h3>
+          <dl class="specs is-stacked">
+            <div>
+              <dt><code>moduo:consent</code></dt>
+              <dd>Local storage. Remembers whether you accepted or declined analytics, so we don’t ask again. Stays until you clear your browser data.</dd>
+            </div>
+            <div>
+              <dt><code>moduo:waitlist</code></dt>
+              <dd>Local storage, saved when you join. Remembers your email so the page can show you’re on the list. “Use a different email” removes it.</dd>
+            </div>
+            <div>
+              <dt><code>moduo:waitlist-updates</code></dt>
+              <dd>Local storage. Remembers your build updates choice.</dd>
+            </div>
+            <div>
+              <dt><code>moduo-manifesto-theme</code>, <code>moduo-manifesto-motion</code></dt>
+              <dd>Local storage. Remember light or dark, and motion, on our text pages. Saved only if you change them.</dd>
+            </div>
+            <div>
+              <dt>PostHog</dt>
+              <dd>
+                <p>Only after you accept. A cookie called <code>ph_…_posthog</code> (the middle part is our project key), the same data in local storage, and <code>ph_…</code> entries in session storage. They hold a random ID and session details, so visits can be counted and recordings pieced together. The cookie lasts up to a year.</p>
+                <p>If you decline, PostHog saves that choice in local storage (<code>__ph_opt_in_out_…</code>) so it stays off.</p>
+              </dd>
+            </div>
+          </dl>
+
+          <h3>In the Moduo app</h3>
+          <p>The web app uses no cookies. It keeps your sign-in session, your settings and a copy of your notes in your browser’s local storage and IndexedDB, so you stay signed in and pages load fast. Signing out ends the session. The desktop app keeps its data on your computer and in its keychain.</p>
+
+          <h3>Your choices</h3>
+          <p>Change your analytics choice any time in <a href="/#cookie-settings">Cookie settings</a> on the main page. You can also delete cookies and site data in your browser’s settings.</p>
+        </section>
+
+        <section class="clause" id="security" aria-labelledby="h-security">
+          <h2 id="h-security"><span class="num" aria-hidden="true">12</span>Security</h2>
+          <p>Connections to Moduo are encrypted, and our database provider encrypts stored data. Tokens for services you connect are encrypted before we store them, and API keys are stored only as hashes. If a data breach puts your rights at risk, we’ll tell you and UODO as the law requires.</p>
+        </section>
+
+        <section class="clause" id="contact" aria-labelledby="h-contact">
+          <h2 id="h-contact"><span class="num" aria-hidden="true">13</span>Changes and contact</h2>
+          <p>We’ll update this page when something changes, for example when Moduo’s company is set up or paid plans launch. The date at the top shows the current version. If a change matters for you, we’ll email you before it takes effect.</p>
+          <p>Questions or requests about your data: <a href="mailto:privacy@moduo.app">privacy@moduo.app</a>. Anything else: <a href="mailto:hello@moduo.app">hello@moduo.app</a>. By post: Ringdove sp. z o.o., ul. Fatimska 41A/310, 31-831 Kraków, Poland.</p>
+          <p>If you email us, we use your address and message to answer you, based on our legitimate interest in helping you.</p>
+        </section>
+      </article>
+
+      <nav class="col" aria-label="Next">
+        <div class="after">
+          <a class="btn" href="/terms">Read the terms<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9.5M8.5 4l4 4-4 4" /></svg></a>
+          <a class="back" href="/">Back to moduo.app</a>
+        </div>
+      </nav>
+    </main>
+
+    <script>
+      // Theme toggle, shown only once the script can honour it. Same key as the manifesto.
+      (function () {
+        var root = document.documentElement;
+        var btn = document.getElementById("pref-theme");
+        var label = document.getElementById("pref-theme-label");
+        var lightMq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+        var reduceMq = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+
+        function isLight() {
+          var t = root.getAttribute("data-theme");
+          if (t) return t === "light";
+          return !!(lightMq && lightMq.matches);
+        }
+        function motionReduced() {
+          var m = null;
+          try {
+            m = localStorage.getItem("moduo-manifesto-motion");
+          } catch (e) {}
+          if (m === "reduce") return true;
+          if (m === "full") return false;
+          return !!(reduceMq && reduceMq.matches);
+        }
+        function paint() {
+          var light = isLight();
+          label.textContent = light ? "Dark" : "Light";
+          btn.setAttribute("aria-label", light ? "Switch to dark theme" : "Switch to light theme");
+        }
+
+        btn.addEventListener("click", function (ev) {
+          var next = isLight() ? "dark" : "light";
+          var apply = function () {
+            root.setAttribute("data-theme", next);
+            try {
+              localStorage.setItem("moduo-manifesto-theme", next);
+            } catch (e) {}
+            paint();
+          };
+          if (motionReduced() || !document.startViewTransition) return apply();
+          var r = btn.getBoundingClientRect();
+          var x = ev.clientX || r.left + r.width / 2;
+          var y = ev.clientY || r.top + r.height / 2;
+          var radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+          document
+            .startViewTransition(apply)
+            .ready.then(function () {
+              root.animate(
+                { clipPath: ["circle(0px at " + x + "px " + y + "px)", "circle(" + radius + "px at " + x + "px " + y + "px)"] },
+                { duration: 760, easing: "cubic-bezier(0.22, 1, 0.36, 1)", pseudoElement: "::view-transition-new(root)" }
+              );
+            })
+            .catch(function () {});
+        });
+        if (lightMq && lightMq.addEventListener) lightMq.addEventListener("change", paint);
+
+        btn.hidden = false;
+        paint();
+      })();
+    </script>
+  </body>
+</html>
