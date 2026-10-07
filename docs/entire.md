@@ -24,10 +24,10 @@ Prefer Entire over re-deriving history:
 
 ## Capture rules
 
-- Hooks are installed for Cursor, OpenCode, and Claude Code. A session starts when the agent starts; a checkpoint attaches on commit/push.
+- Hooks are installed for Claude Code (`.claude/settings.json`). A session starts when Claude Code starts; a checkpoint attaches on commit/push.
 - Checkpoint blobs live in git as `refs/entire/checkpoints/…` (not on `main`/`develop` history). Do not delete those refs or `entire repo delete` unless the designer asked for a wipe.
 - Do not put secrets in prompts if you can avoid it; redaction is best-effort.
-- Maciej uses Claude Code; Mike uses Cursor + OpenCode. Same `AGENTS.md`; capture is per machine.
+- Both Maciej and Mike use Claude Code with the same `AGENTS.md`; capture is per machine.
 
 ## What Entire is not
 
