@@ -8,15 +8,17 @@ import { EmailPreview, type EmailPreviewMode } from "./email-preview";
  * Every built transactional email (specs/transactional-email.md), rendered by
  * the same kit the Edge Functions send with. The ratified copy and look are in
  * `.design/transactional-email/email-set.html`; this is the real output to
- * check against it. The logo shows as a broken image until the brand
- * pipeline's (BRAND-1) PNGs are deployed to app.moduo.app/email: until then
- * that URL answers with the app's HTML page, not a 404.
+ * check against it. The gallery loads the logos from public/email (the brand
+ * pipeline's exports); real emails load them from app.moduo.app/email, which
+ * only serves them once the app is deployed with them.
  */
 
 function Preview({ kind, mode }: { kind: BuiltEmailKind; mode: EmailPreviewMode }) {
   const email = renderTemplate(kind, EMAIL_FIXTURES[kind], {
     // Force the look, so the light preview stays light in a dark Storybook.
     colorScheme: mode === "dark" ? "dark" : "light",
+    // The logo files from public/email, served by Storybook (staticDirs).
+    assetBase: "/email",
   });
   return (
     <EmailPreview
