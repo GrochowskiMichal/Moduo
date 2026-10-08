@@ -75,6 +75,15 @@ describe("MCP tool args", () => {
     expect(parseToolArgs("tasks_get", {}).success).toBe(false);
   });
 
+  it("lets contacts_link start only at a contact or a company", () => {
+    const link = { contact_id: "c1", target_type: "note", target_id: "n1" };
+    expect(parseToolArgs("contacts_link", { ...link, contact_type: "company" }).success).toBe(true);
+    expect(parseToolArgs("contacts_link", { ...link, contact_type: "task" }).success).toBe(false);
+    const listed = listingJsonSchema("contacts_link");
+    const type = (listed.properties as Record<string, { enum?: string[] }>).contact_type;
+    expect(type?.enum).toEqual(["contact", "company"]);
+  });
+
   it("rejects a non-canonical date on tasks_today", () => {
     const parsed = parseToolArgs("tasks_today", { date: "17/08/2026" });
     expect(parsed.success).toBe(false);

@@ -18,13 +18,16 @@
 -- (module_activity_log's api_key branch).
 --
 -- Comments also gain author_kind / author_label, like chat_messages: a key's
--- comment belongs to its creator but reads as the app that wrote it ("App ·
--- <key name>"), never as the person. Closed set ('user', 'api_key') mirrored
--- by CONTENT_AUTHOR_KINDS in supabase/functions/_shared/contracts/vocabularies.ts.
+-- comment belongs to its creator but reads as the app that wrote it
+-- ("<key name> (app)" in the app), never as the person. Closed set ('user',
+-- 'api_key') mirrored by CONTENT_AUTHOR_KINDS in
+-- supabase/functions/_shared/contracts/vocabularies.ts.
 --
 -- Bodies are the newest definitions, which db:reconcile shows match prod
 -- (noted per function). Only the attribution expressions change, plus the
--- author columns in comments_op_add. Signatures are unchanged, so CREATE OR
+-- author columns in comments_op_add and a contact-type check in
+-- contacts_op_link (it accepted any source type, so Contacts edit access
+-- could link two unrelated items). Signatures are unchanged, so CREATE OR
 -- REPLACE keeps every grant.
 
 ALTER TABLE public.comments
@@ -145,6 +148,13 @@ DECLARE
 BEGIN
   PERFORM public.contacts_op__guard(p_workspace_id);
 
+  -- New here: Contacts may only start a link at its own items, as
+  -- contacts_op_unlink already requires. Without it, Contacts edit access
+  -- linked any two items (a task to a note) without edit access to Links.
+  IF coalesce(p_contact_type, '') NOT IN ('contact', 'company') THEN
+    RAISE EXCEPTION 'Contacts can link only a contact or a company, not %.',
+      coalesce(p_contact_type, 'nothing');
+  END IF;
   IF v_kind NOT IN ('references', 'spawned-from', 'blocks', 'attachment',
                     'mentions', 'works-at', 'follow-up', 'paid-by') THEN
     RAISE EXCEPTION 'Unknown relation kind: %', v_kind;

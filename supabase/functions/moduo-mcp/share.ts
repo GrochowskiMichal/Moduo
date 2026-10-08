@@ -88,9 +88,11 @@ export function assertLinkInScope(ctx: ToolContext, link: Record<string, unknown
 
 /** A live link in the key's workspace whose two ends the key can see — or
  * throws. A link that is gone (or was never here) passes: the op answers it
- * (delete is idempotent). */
+ * (delete is idempotent). An id that isn't a canonical uuid throws: Postgres
+ * also reads other spellings (no hyphens, braces), which this lookup would
+ * miss and the op would still find. */
 export async function assertLiveLinkInScope(ctx: ToolContext, linkId: string): Promise<void> {
-  if (!UUID.test(linkId)) return;
+  if (!UUID.test(linkId)) throw new Error("No link with that id in this workspace.");
   const { data, error } = await ctx.db
     .from("entity_links")
     .select("id, source_type, target_type")

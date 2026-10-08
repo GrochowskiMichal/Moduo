@@ -16,7 +16,7 @@
  * user owns) — mirroring how the tasks connector omits `tasks.catch_up`.
  */
 
-import { keyCanSeeEntityType } from "../../_shared/contracts/mcp-key-scopes.ts";
+import { keyCanSeeEntityType, keyVisibleEntityTypes } from "../../_shared/contracts/mcp-key-scopes.ts";
 import { RELATION_KINDS } from "../../_shared/contracts/vocabularies.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { assertLiveLinkInScope, assertReach, linksInScope, visibleIds } from "../share.ts";
@@ -140,8 +140,13 @@ export const linksConnectorModule: ConnectorModule = {
           .is("deleted_at", null);
         const query = str(args, "query", false);
         if (query) q = q.ilike("label", `%${query}%`);
-        const types = Array.isArray(args.types) ? args.types.filter((t) => typeof t === "string") : [];
-        if (types.length) q = q.in("entity_type", types);
+        // Only types whose module the key can see, filtered in the query: the
+        // page would otherwise fill with rows visibleToKey then drops.
+        const allowed = keyVisibleEntityTypes(ctx.key.scopes);
+        const asked = Array.isArray(args.types) ? args.types.filter((t) => typeof t === "string") : [];
+        const types = asked.length ? allowed.filter((t) => asked.includes(t)) : allowed;
+        if (!types.length) return [];
+        q = q.in("entity_type", types);
         // Over-fetch so dropping a teammate's private rows doesn't starve the page.
         const limit = clampLimit(args, 20, 50);
         const fetched = await rows(q.order("label").limit(limit * 4));

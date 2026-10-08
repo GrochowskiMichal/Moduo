@@ -104,3 +104,10 @@ export function keyCanSeeEntityType(
   const module = entityTypeKeyModule(type);
   return module !== null && keyScopeAllows(scopes, module, "view");
 }
+
+/** Every entity type a key with these scopes can see (for filtering a query). */
+export function keyVisibleEntityTypes(
+  scopes: Readonly<Record<string, unknown>> | null | undefined,
+): string[] {
+  return Object.keys(MCP_ENTITY_TYPE_MODULES).filter((type) => keyCanSeeEntityType(scopes, type));
+}

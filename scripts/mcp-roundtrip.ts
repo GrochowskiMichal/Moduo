@@ -7,12 +7,12 @@
  *
  * Create the key in Moduo → Settings → API keys (a test workspace is best) and
  * run it once with a View-everywhere key and once with an Edit-everywhere key.
- * Optional: MODUO_MCP_URL (defaults to the hosted connector).
+ * Optional: MODUO_MCP_URL (defaults to the hosted connector, the real one).
  *
- * --write only does what it can undo, and undoes it: commit → uncommit a task,
- * create → trash a note, create → delete a contact and an event, link → unlink,
- * follow-up → clear on an email thread. It never posts to chat and never
- * comments (neither can be removed over MCP).
+ * --write only does what it can undo, and undoes it: commit → uncommit a task
+ * that wasn't committed, create → trash a note, create → delete a contact and
+ * an event, link → unlink, follow-up → clear on a thread that had none. It
+ * never posts to chat and never comments (neither can be removed over MCP).
  */
 
 const URL_ =
@@ -73,6 +73,7 @@ const init = await rpc("initialize", {
 const access = /\(access: ([^)]*)\)/.exec(init.instructions ?? "")?.[1] ?? "?";
 const tools: string[] = ((await rpc("tools/list")).tools ?? []).map((t: Json) => t.name);
 const has = (t: string) => tools.includes(t);
+console.log(`Connector: ${URL_}`);
 console.log(`Key access: ${access}`);
 console.log(`${tools.length} tools: ${tools.join(", ")}\n`);
 
@@ -123,8 +124,9 @@ if (WRITE) {
   const stamp = `MCP round-trip ${new Date().toISOString()}`;
   if (has("tasks_commit"))
     await check("tasks", "commit → uncommit", async () => {
-      const [task] = await call("tasks_list", { limit: 1 });
-      if (!task) return "no open task to use";
+      // Never one that's already committed: uncommitting it would lose that.
+      const task = (await call("tasks_list", { limit: 50 })).find((t: Json) => !t.committed_for);
+      if (!task) return "no uncommitted open task to use";
       await call("tasks_commit", { task_id: task.id });
       await call("tasks_uncommit", { task_id: task.id });
       return task.title;
@@ -188,8 +190,9 @@ if (WRITE) {
     });
   if (has("email_follow_up"))
     await check("email", "follow-up → clear", async () => {
-      const [thread] = await call("email_list", { limit: 1 });
-      if (!thread) return "no thread to use";
+      // Never one with a follow-up already: clearing would wipe it.
+      const thread = (await call("email_list", { limit: 50 })).find((t: Json) => !t.follow_up_at);
+      if (!thread) return "no thread without a follow-up to use";
       await call("email_follow_up", {
         ref_id: thread.id,
         at: new Date(Date.now() + 86_400_000).toISOString(),

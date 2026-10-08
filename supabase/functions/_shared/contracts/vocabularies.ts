@@ -493,7 +493,8 @@ export function planHasChat(tier: unknown): boolean {
 // Content authors — who wrote a chat message or a comment. Mirrors
 // chat_messages_author_kind_check (20261006160000_chat_agent_access) and
 // comments_author_kind_check (20261008123000_key_writes_act_as_creator).
-// `api_key` = an app over MCP: shown as "App · <key name>", never as a person.
+// `api_key` = an app over MCP, shown by the key's name and marked as an app
+// (an "App" badge in chat, "<key name> (app)" on a comment), never as a person.
 // ---------------------------------------------------------------------------
 
 export const CONTENT_AUTHOR_KINDS = ["user", "api_key"] as const;

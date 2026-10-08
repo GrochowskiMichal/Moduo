@@ -8,6 +8,7 @@ import {
   entityTypeKeyModule,
   keyCanSeeEntityType,
   keyScopeAllows,
+  keyVisibleEntityTypes,
   MCP_ENTITY_TYPE_MODULES,
   MCP_KEY_MODULE_LABELS,
   MCP_TOOL_NEEDS,
@@ -71,5 +72,18 @@ describe("entity types → key modules", () => {
     expect(keyCanSeeEntityType({ tasks: "edit" }, "payment")).toBe(false);
     expect(keyCanSeeEntityType({ tasks: "view" }, "task")).toBe(true);
     expect(keyCanSeeEntityType({ tasks: "view" }, "note")).toBe(false);
+  });
+
+  it("lists exactly the types a key can see, for filtering a query", () => {
+    expect(keyVisibleEntityTypes({ tasks: "view" })).toEqual(["task", "bucket", "task_project"]);
+    expect(keyVisibleEntityTypes({ contacts: "edit", notes: "none" })).toEqual([
+      "contact",
+      "company",
+      "contact_group",
+    ]);
+    expect(keyVisibleEntityTypes({ links: "edit" })).toEqual([]);
+    expect(keyVisibleEntityTypes(null)).toEqual([]);
+    const all = keyVisibleEntityTypes(Object.fromEntries(MCP_KEY_MODULES.map((m) => [m, "view"])));
+    expect(all).toEqual(Object.keys(MCP_ENTITY_TYPE_MODULES));
   });
 });

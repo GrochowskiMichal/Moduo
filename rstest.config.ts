@@ -18,12 +18,24 @@ export default defineConfig({
       ),
     },
   },
+  // Edge Functions import from esm.sh, which only Deno can load. Leave those
+  // imports to run time, where a test that reaches one mocks it (rs.mock).
+  output: {
+    externals: [
+      ({ request }, callback) =>
+        request?.startsWith("https://esm.sh/")
+          ? callback(undefined, `commonjs ${request}`)
+          : callback(),
+    ],
+  },
   testEnvironment: "jsdom",
   include: [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
     "supabase/functions/_shared/contracts/**/*.test.ts",
     "supabase/functions/_shared/*.test.ts",
+    // The MCP connector's own tests mock its esm.sh imports (Deno-only).
+    "supabase/functions/moduo-mcp/**/*.test.ts",
   ],
   globals: true,
   setupFiles: ["./rstest.setup.ts"],

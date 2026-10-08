@@ -89,6 +89,8 @@ function KeyScopeFields({
   disabled?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;
+  /** A reason that covers every row (someone else's key), read once on entering the group. */
+  "aria-describedby"?: string;
 }) {
   const idPrefix = useId();
   const notes = scopeDependencyNotes(value);
@@ -198,6 +200,7 @@ function ApiKeyRow({
   const draftGrantsAccess = grantsAnyAccess(draft);
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const saveButtonRef = useRef<HTMLButtonElement>(null);
+  const reasonId = useId();
   const wasEditing = useRef(editing);
   const wasSaving = useRef(saving);
   // Set by this row's own close / save — never by another row's toggle closing
@@ -276,7 +279,7 @@ function ApiKeyRow({
         <>
           <div className="flex flex-col gap-3 border-t border-border pt-3">
             {owner.isMine ? null : (
-              <p className="text-xs text-muted-foreground">
+              <p id={reasonId} className="text-xs text-muted-foreground">
                 {owner.actor
                   ? `${ceilingHint({ module: "tasks", isCreator: false, myCap: "none", creatorName: owner.name })} You can lower it or revoke it.`
                   : "You can lower this key's access or revoke it."}
@@ -284,6 +287,8 @@ function ApiKeyRow({
             )}
             <KeyScopeFields
               aria-label={`${apiKey.name} access`}
+              // Disabled levels can't take focus, so the reason has to be read with the group.
+              aria-describedby={owner.isMine ? undefined : reasonId}
               value={draft}
               onChange={onDraftChange}
               ceilings={ceilings}

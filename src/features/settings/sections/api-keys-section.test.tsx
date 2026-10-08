@@ -382,12 +382,18 @@ describe("editing a key's access", () => {
     );
     expect(isDisabled(scopeOption(keyRow("Annas"), "Notes", "Edit"))).toBe(true);
     expect(isDisabled(scopeOption(keyRow("Annas"), "Email", "View"))).toBe(true);
-    // Said once above the rows, not under each one.
+    // Said once above the rows, not under each one, and read out with the
+    // group (the greyed-out levels can't take focus to say it themselves).
     expect(
       within(keyRow("Annas")).getAllByText(
         "Only Anna can give this key more access. You can lower it or revoke it.",
       ).length,
     ).toBe(1);
+    const group = within(keyRow("Annas")).getByRole("group", { name: "Annas access" });
+    const reason = document.getElementById(group.getAttribute("aria-describedby") ?? "");
+    expect(reason?.textContent).toBe(
+      "Only Anna can give this key more access. You can lower it or revoke it.",
+    );
 
     await user.click(scopeOption(keyRow("Annas"), "Tasks", "View"));
     await user.click(within(keyRow("Annas")).getByRole("button", { name: "Save" }));

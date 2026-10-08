@@ -128,7 +128,7 @@ BEGIN
                WHEN 'edit' THEN 'edit' WHEN 'view' THEN 'view' ELSE 'none' END;
     CONTINUE WHEN public.perm_rank(v_level) <= public.perm_rank(v_was);
 
-    IF NOT p_can_widen THEN
+    IF NOT coalesce(p_can_widen, false) THEN
       RAISE EXCEPTION 'Only the person who created this key can give it more access. You can still lower its access or revoke it.'
         USING ERRCODE = '42501';
     END IF;
@@ -222,9 +222,10 @@ BEGIN
   IF k.revoked_at IS NOT NULL THEN
     RAISE EXCEPTION 'This key was revoked — create a new one instead.';
   END IF;
+  -- coalesce: a key with no recorded creator can only be lowered, and says so.
   PERFORM public.workspace_api_keys__check_scopes(
     k.workspace_id, k.created_by, k.scopes, p_scopes,
-    auth.uid() IS NOT NULL AND auth.uid() = k.created_by);
+    coalesce(auth.uid() = k.created_by, false));
 
   UPDATE public.workspace_api_keys
     SET scopes = workspace_api_keys.scopes || p_scopes
