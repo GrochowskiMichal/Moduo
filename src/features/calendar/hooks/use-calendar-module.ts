@@ -60,6 +60,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [loading, setLoading] = useState(true);
   const reqRef = useRef(0);
+  const aliveRef = useRef(true); // the load effect clears it; only unmount leaves it false
   // SCALE-1: the events read is windowed instead of "all history". The window
   // only ever grows (see ensureRange), so walking back and forth over months
   // you've already visited never refetches.
@@ -89,6 +90,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     fetchWindow.toIso === allTimeCalendarWindow().toIso;
 
   const load = useCallback(async () => {
+    if (!aliveRef.current) return; // a late `reload()` after unmount reads nothing
     if (!runtime || !userId || !workspaceId || !canRead) {
       setEvents([]);
       setAccounts([]);
@@ -155,7 +157,17 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   }, [runtime, userId, workspaceId, canRead, fetchWindow]);
 
   useEffect(() => {
+    aliveRef.current = true;
     void load();
+    // Orphan the in-flight read on unmount (or when new deps supersede it):
+    // every late `set*` in `load`, the un-awaited busy overlay's included,
+    // then sees a stale `req` and bails, and a `reload()` that fires after
+    // unmount (a sync finishing late) starts nothing. Otherwise a reply landing
+    // after a test's jsdom teardown calls setState → "window is not defined".
+    return () => {
+      aliveRef.current = false;
+      reqRef.current++;
+    };
   }, [load]);
 
   /**

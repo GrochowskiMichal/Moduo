@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
-import { nestedSubtaskIds, STATUS_LABELS } from "../helpers";
+import { nestedSubtaskIds, STATUS_LABELS, showBucketPill } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task, TaskStatus } from "../model";
 import { positionForReorder } from "../reorder";
@@ -84,7 +84,7 @@ export function TaskBoardView({
 
   // Columns by bucket only make sense across buckets ("All"); otherwise status.
   const groupDim: BoardGroupBy = selection === "all" ? boardGroupBy : "status";
-  const showBucketTag = groupDim === "status" && (selection === "all" || selection === "today");
+  const showBucketTag = showBucketPill(selection, groupDim);
 
   // Subtasks whose parent is on this board stay off it — the parent card
   // carries the quiet n/m mirror and the detail panel lists them. Today stays

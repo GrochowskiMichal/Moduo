@@ -47,7 +47,7 @@ The three-pane shell visible in the first-draft screenshot:
   - **Utility area** (right): hamburger / overflow trigger.
 - **Left rail** (per-feature): each feature page renders its own left sidebar inside the shell — Notes shows the folder tree; Email shows folders; CRM shows lists; etc. The shell does not impose a single left-rail content model.
 - **Right rail** (per-feature): the screenshot shows a Relation Graph + Tags + Close Relations panel on the Notes page. Other features render their own right-rail content (or none).
-- **Bottom floating bar**: pink AI disc + global search + create. Visible across pages.
+- **Bottom floating bar**: ~~pink AI disc~~ + global search + create. Visible across pages. *(The AI disc was removed 2026-05-13 and retired for good 2026-10-08, brand decision 40 in `.design/brand/DECISIONS.md`.)*
 - **Utility navigation**: user menu, notification center, workspace settings — all triggered from the top bar.
 - **Mobile navigation**: N/A — Tauri desktop only. Window resize behavior:
   - ≥ 1280 px: full 3-pane.
