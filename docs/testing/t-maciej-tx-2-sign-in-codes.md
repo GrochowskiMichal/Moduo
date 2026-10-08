@@ -4,7 +4,7 @@
 > Run top-to-bottom after the runbook's steps 1–7; check off as you go. Each item is a step → what you should see → where.
 
 ## Before anything: logos are real
-- [ ] **Do:** run the runbook's step 1 `curl` loop → **Expect:** `content-type: image/png` four times. On 2026-10-08 (~16:30 UTC) all four still answered `text/html` (app.moduo.app last deployed 7 October), so step 1 fails until the web app is redeployed. _(terminal)_
+- [ ] **Do:** run the runbook's step 1 `curl` loop → **Expect:** `content-type: image/png` four times. On 2026-10-08 (~16:30 UTC) all four still answered `text/html` (app.moduo.app last deployed 7 October), so step 1 fails until the web app is redeployed. Rechecked ~20:50 UTC: still `text/html` on app.moduo.app (`prod-app` is 398 commits behind `staging-app`), while Vercel's build of `staging-app`'s head (bf3b7d57) served all four as `image/png`, byte-identical to `public/email/` at 192 × 44 and 26 × 26. A "Promote to production → app" run fixes it. _(terminal)_
 
 ## Sign-in on web (AC7, AC8, AC9)
 - [ ] **Do:** app.moduo.app → type your address → Continue with email → **Expect:** "Check your email", subtitle "Enter the six-digit code we sent. It works for 10 minutes.", and under the button "Resend in 1:00" counting down, greyed out. _(web)_
