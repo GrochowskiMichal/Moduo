@@ -28,7 +28,7 @@ export type MotionPref = "system" | "reduced" | "full";
 
 // ── Per-type notification toggles (DF-19f-notif · DF-21e) ─────────────────────
 // The quiet set the bell can surface. Two flavours share one prefs record:
-//   • the four MUTES (mention/assigned/dueFollowUp/unblocked) — default ON — are a
+//   • the five MUTES (mention/assigned/completed/dueFollowUp/unblocked) — default ON — are a
 //     READ-SIDE filter over the notification feed (workspace-provider + the
 //     dashboard Activity widget), keyed on each row's module_activity `op`; no
 //     generation change, fully reversible (rows persist; un-muting restores them).
@@ -41,6 +41,7 @@ export type MotionPref = "system" | "reduced" | "full";
 export type NotificationType =
   | "mention"
   | "assigned"
+  | "completed"
   | "dueFollowUp"
   | "unblocked"
   | "overdueTasks";
@@ -49,6 +50,7 @@ export type NotificationPrefs = Record<NotificationType, boolean>;
 const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "mention",
   "assigned",
+  "completed",
   "dueFollowUp",
   "unblocked",
   "overdueTasks",
@@ -57,6 +59,7 @@ const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   mention: true,
   assigned: true,
+  completed: true,
   dueFollowUp: true,
   unblocked: true,
   // Opt-in: overdue work otherwise lives in Tasks/Home, not the bell (AC9).
@@ -72,6 +75,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
 const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "comments.add": "mention",
   "tasks.assigned": "assigned",
+  "tasks.completed": "completed",
   "email.snooze_due": "dueFollowUp",
   "email.follow_up_due": "dueFollowUp",
   "tasks.unblocked": "unblocked",
@@ -125,6 +129,7 @@ const notificationPrefsSchema = z
   .object({
     mention: z.boolean().catch(true),
     assigned: z.boolean().catch(true),
+    completed: z.boolean().catch(true),
     dueFollowUp: z.boolean().catch(true),
     unblocked: z.boolean().catch(true),
     overdueTasks: z.boolean().catch(false),
@@ -300,7 +305,7 @@ export function consumeLandingRedirect(pathname: string, searchStr: string): str
 
 // ── Imperative reads for non-React consumers ──────────────────────────────────
 
-/** Master sound gate, read imperatively by the Focus chime (focus-session-store). */
+/** Master sound gate, read imperatively by the Focus chime (features/focus/phase-alert). */
 export function areSoundsEnabled(): boolean {
   return store.soundEnabled;
 }
