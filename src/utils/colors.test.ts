@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@rstest/core";
 import { normalizeHexColor } from "./colors";
 
 describe("normalizeHexColor", () => {
@@ -19,4 +19,3 @@ describe("normalizeHexColor", () => {
     expect(normalizeHexColor("not-a-color")).toBeNull();
   });
 });
-

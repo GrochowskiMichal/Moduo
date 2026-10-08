@@ -1,18 +1,13 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { parseOrError } from "@contracts/errors";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { z } from "zod";
 
 import {
   dispatchLayoutPanelsSet,
-  LAYOUT_PANELS_APPLY_EVENT,
-  readFeaturePanelState,
   type FeatureLayoutKey,
+  LAYOUT_PANELS_APPLY_EVENT,
   type LayoutPanelsApplyDetail,
+  readFeaturePanelState,
 } from "../../features/layout/panel-events";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { Sheet, SheetContent } from "../ui/sheet";
@@ -25,10 +20,21 @@ type Props = {
   /** When true the right panel is never rendered, regardless of saved state */
   hideRight?: boolean;
   /**
+   * Full-width strip above the panels — module-level state the user must see
+   * before reading the panels (today: SCALE-1's "showing N of M"). Renders
+   * nothing when absent, and the panels keep their exact previous layout.
+   */
+  notice?: ReactNode;
+  /**
    * When false, the side panels render as fixed-width columns (no drag
    * handles, no per-feature width persistence). Defaults to true.
    */
   resizable?: boolean;
+  /**
+   * The center renders edge-to-edge with no padding and no outer scroll — for
+   * surfaces that own their own scroller + sticky chrome (Chat's conversation).
+   */
+  flushCenter?: boolean;
 };
 
 type RailMode = "full" | "sheet" | "hidden";
@@ -56,19 +62,18 @@ function resolveMode(viewport: number, requested: boolean): RailMode {
   return "full";
 }
 
+const layoutSchema = z.record(z.string(), z.number().finite());
+
 function readPersistedLayout(key: string): Layout | undefined {
   if (typeof window === "undefined") return undefined;
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) return undefined;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return undefined;
-    const entries = Object.entries(parsed);
+    const parsed = parseOrError(layoutSchema, JSON.parse(raw));
+    if (!parsed.success) return undefined;
+    const entries = Object.entries(parsed.data);
     if (entries.length === 0) return undefined;
-    for (const [, value] of entries) {
-      if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
-    }
-    return parsed as Layout;
+    return parsed.data;
   } catch {
     return undefined;
   }
@@ -84,9 +89,16 @@ function writePersistedLayout(key: string, layout: Layout): void {
 }
 
 const RAIL_WRAPPER =
-  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card p-5 flex flex-col overflow-hidden";
+  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card flex flex-col overflow-hidden";
 const CENTER_WRAPPER =
-  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card p-4 overflow-auto relative";
+  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card overflow-auto relative";
+const CENTER_WRAPPER_FLUSH =
+  "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card overflow-hidden relative flex flex-col";
+
+// Density-driven, uniform padding (responds to Appearance → density). Uniform so
+// content sits equidistant from every panel edge. Rails run tighter than center.
+const RAIL_PAD = { padding: "var(--pad-x-sm)" } as const;
+const CENTER_PAD = { padding: "var(--pad-x)" } as const;
 
 export function FeaturePanelsShell({
   feature,
@@ -94,7 +106,9 @@ export function FeaturePanelsShell({
   left,
   right,
   hideRight = false,
+  notice,
   resizable = true,
+  flushCenter = false,
 }: Props) {
   const [panelState, setPanelState] = useState(() => readFeaturePanelState(feature));
   const viewport = useViewportWidth();
@@ -220,14 +234,8 @@ export function FeaturePanelsShell({
   const showLeftFull = viewportMode === "full" && panelState.left;
   const showRightFull = viewportMode === "full" && showRight;
 
-  const leftSlot = left ?? (
-    <div className="text-sm text-muted-foreground">Feature tools panel</div>
-  );
-  const rightSlot = right ?? (
-    <div className="text-sm text-muted-foreground">
-      Graph relations tree, feature coming soon.
-    </div>
-  );
+  const leftSlot = left ?? <div className="text-sm text-muted-foreground">Feature tools panel</div>;
+  const rightSlot = right ?? <div className="text-sm text-muted-foreground">Details panel</div>;
 
   const layoutKey = `${LAYOUT_STORAGE_PREFIX}:${feature}:${showLeftFull ? "l" : "-"}${showRightFull ? "r" : "-"}`;
   const defaultLayout = useMemo<Layout | undefined>(
@@ -256,10 +264,10 @@ export function FeaturePanelsShell({
         <ResizablePanel
           id={`${feature}-left`}
           defaultSize="20%"
-          minSize={resizable ? "12%" : "20%"}
+          minSize={resizable ? "240px" : "20%"}
           maxSize={resizable ? "40%" : "20%"}
         >
-          <aside className={RAIL_WRAPPER} data-rail-mode="full">
+          <aside className={RAIL_WRAPPER} data-rail-mode="full" style={RAIL_PAD}>
             {leftSlot}
           </aside>
         </ResizablePanel>
@@ -268,7 +276,12 @@ export function FeaturePanelsShell({
       {showLeftFull ? <ResizableHandle /> : null}
 
       <ResizablePanel id={`${feature}-center`} defaultSize="60%" minSize="30%">
-        <main className={CENTER_WRAPPER}>{center}</main>
+        <main
+          className={flushCenter ? CENTER_WRAPPER_FLUSH : CENTER_WRAPPER}
+          style={flushCenter ? undefined : CENTER_PAD}
+        >
+          {center}
+        </main>
       </ResizablePanel>
 
       {showRightFull ? <ResizableHandle /> : null}
@@ -277,10 +290,10 @@ export function FeaturePanelsShell({
         <ResizablePanel
           id={`${feature}-right`}
           defaultSize="20%"
-          minSize={resizable ? "12%" : "20%"}
+          minSize={resizable ? "240px" : "20%"}
           maxSize={resizable ? "40%" : "20%"}
         >
-          <aside className={RAIL_WRAPPER} data-rail-mode="full">
+          <aside className={RAIL_WRAPPER} data-rail-mode="full" style={RAIL_PAD}>
             {rightSlot}
           </aside>
         </ResizablePanel>
@@ -290,7 +303,14 @@ export function FeaturePanelsShell({
 
   return (
     <>
-      <div className="flex h-full min-h-0 bg-background px-4">{panels}</div>
+      {notice ? (
+        <div className="flex h-full min-h-0 flex-col bg-background px-4">
+          {notice}
+          <div className="flex min-h-0 flex-1">{panels}</div>
+        </div>
+      ) : (
+        <div className="flex h-full min-h-0 bg-background px-4">{panels}</div>
+      )}
 
       <Sheet open={leftSheetOpen} onOpenChange={onLeftSheetOpenChange}>
         <SheetContent side="left" className="w-[var(--width-sidebar)] max-w-[85vw] p-5">

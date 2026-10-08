@@ -1,10 +1,7 @@
-import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 
-import {
-  dispatchOpenSettings,
-  isSettingsSectionId,
-} from "../../features/settings/settings-events";
+import { dispatchOpenSettings, isSettingsSectionId } from "../../features/settings/settings-events";
 
 /**
  * The settings UI is a globally-mounted modal — see
@@ -22,9 +19,11 @@ export function SettingsPage() {
     if (typeof window !== "undefined") {
       section = new URLSearchParams(window.location.search).get("section");
     }
-    dispatchOpenSettings(
-      section && isSettingsSectionId(section) ? { section } : {},
-    );
+    // sticky: the modal remounts during boot, so the dispatch must survive
+    // in the pending-open buffer until the final mount picks it up.
+    dispatchOpenSettings(section && isSettingsSectionId(section) ? { section } : {}, {
+      sticky: true,
+    });
     void navigate({ to: "/", replace: true });
   }, [navigate]);
 

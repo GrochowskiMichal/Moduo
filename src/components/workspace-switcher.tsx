@@ -1,10 +1,9 @@
-import { useCallback, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
-
-import { useWorkspace } from "../providers/workspace-provider";
+import { useCallback, useMemo, useState } from "react";
+import { WorkspaceMark } from "../features/workspaces/ui/workspace-mark";
 import { useEntitlement } from "../hooks/use-entitlement";
-import { useShortcut } from "../lib/shortcuts";
-import { Avatar, AvatarFallback } from "./ui/avatar";
+import { formatShortcut, SHORTCUTS, useShortcut } from "../lib/shortcuts";
+import { useWorkspace } from "../providers/workspace-provider";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -37,6 +36,9 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
   } = useWorkspace();
   const { allowed: canAddWorkspace } = useEntitlement("unlimited_workspaces");
   const [open, setOpen] = useState(false);
+  // The shortcut hook must mount before the early return so React's hook
+  // order rule is respected. It becomes a no-op when the trigger is hidden
+  // (single-workspace case) because there's nothing to open.
   useShortcut(
     "workspace-switcher",
     useCallback(() => setOpen((prev) => !prev), []),
@@ -45,7 +47,9 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
   const [newWorkspaceName, setNewWorkspaceName] = useState("New Workspace");
   const [deleteCandidateWorkspaceId, setDeleteCandidateWorkspaceId] = useState<string | null>(null);
   const [deleteWorkspaceInput, setDeleteWorkspaceInput] = useState("");
-  const [deleteSubmittingWorkspaceId, setDeleteSubmittingWorkspaceId] = useState<string | null>(null);
+  const [deleteSubmittingWorkspaceId, setDeleteSubmittingWorkspaceId] = useState<string | null>(
+    null,
+  );
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [isJoiningWorkspace, setIsJoiningWorkspace] = useState(false);
   const [joinToken, setJoinToken] = useState("");
@@ -120,6 +124,18 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
     }
   };
 
+  // Show the workspace identity even for a single-workspace user (CC-10): the
+  // top-left was empty for every brand-new user, and ⌘⇧W was a no-op. We only
+  // hide when there's genuinely nothing selected yet (0 workspaces / loading).
+  // Deleting the *only* workspace stays impossible — its trash affordance is
+  // withheld below when `workspaces.length <= 1` (the provider has no last-one
+  // guard, so a zero-workspace state must never be reachable from here).
+  if (!selectedWorkspace) return null;
+
+  const switcherShortcut = SHORTCUTS.find((s) => s.id === "workspace-switcher");
+  const canDeleteWorkspaces = workspaces.length > 1;
+  const switcherHint = switcherShortcut ? formatShortcut(switcherShortcut) : "";
+
   return (
     <>
       <DropdownMenu
@@ -132,13 +148,22 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger
-              className="grid h-7 w-7 place-items-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              data-slot="chrome-fade-in"
+              className="flex h-8 flex-row items-center gap-1.5 rounded-md bg-transparent px-2 text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground aria-expanded:bg-state-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               aria-label={`Switch workspace · current: ${workspaceLabel}`}
             >
-              <ChevronDown className="size-4" aria-hidden />
+              <WorkspaceMark
+                name={workspaceLabel}
+                icon={selectedWorkspace.icon}
+                logoUrl={selectedWorkspace.logoUrl}
+              />
+              <span className="max-w-[14ch] truncate text-sm">{workspaceLabel}</span>
+              <ChevronDown className="size-4 shrink-0" aria-hidden />
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>{workspaceLabel}</TooltipContent>
+          <TooltipContent>
+            Switch workspace{switcherHint ? ` · ${switcherHint}` : ""}
+          </TooltipContent>
         </Tooltip>
 
         <DropdownMenuContent align="start" sideOffset={8} className="w-[360px]">
@@ -277,25 +302,33 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
             {workspaces.map((workspace) => {
               const active = workspace.id === selectedWorkspace?.id;
               const nameLabel = formatWorkspaceLabel(workspace.name);
-              const isDeleteOpen = deleteCandidateWorkspaceId === workspace.id;
+              // Fold the last-one guard into `isDeleteOpen` too, not just the
+              // trigger: if a background refresh drops the list to one while a
+              // delete panel is open, the panel collapses and its confirm becomes
+              // unreachable — so the zero-workspace state stays truly impossible.
+              const isDeleteOpen =
+                canDeleteWorkspaces && deleteCandidateWorkspaceId === workspace.id;
               const deleteMatches = deleteWorkspaceInput.trim() === nameLabel.trim();
 
               return (
                 <div
                   key={workspace.id}
-                  className={`rounded-md px-2 py-2 ${active ? "bg-accent" : "hover:bg-accent"}`}
+                  className={`rounded-md px-2 py-2 ${active ? "bg-state-active" : "hover:bg-state-hover"}`}
                 >
                   <button
                     type="button"
+                    aria-current={active ? "true" : undefined}
                     className="flex w-full flex-row items-center gap-2 text-left focus-visible:outline-none"
                     onClick={() => {
                       selectWorkspace(workspace.id);
                       closeMenu();
                     }}
                   >
-                    <Avatar size="sm" className="shrink-0">
-                      <AvatarFallback>{nameLabel.charAt(0).toUpperCase()}</AvatarFallback>
-                    </Avatar>
+                    <WorkspaceMark
+                      name={nameLabel}
+                      icon={workspace.icon}
+                      logoUrl={workspace.logoUrl}
+                    />
                     <span
                       className={`min-w-0 flex-1 truncate text-sm ${active ? "text-foreground" : "text-popover-foreground"}`}
                     >
@@ -305,7 +338,7 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                       <span
                         role="button"
                         tabIndex={0}
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         aria-label="Workspace settings"
                         onClick={(event) => {
                           event.stopPropagation();
@@ -316,23 +349,25 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                       >
                         <Icon name="settings" size={13} />
                       </span>
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        aria-label="Delete workspace"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (isDeleteOpen) {
-                            cancelDeleteIntent();
-                          } else {
-                            setDeleteCandidateWorkspaceId(workspace.id);
-                            setDeleteWorkspaceInput("");
-                          }
-                        }}
-                      >
-                        <Icon name="trash-2" size={13} className="text-destructive" />
-                      </span>
+                      {canDeleteWorkspaces ? (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          aria-label="Delete workspace"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (isDeleteOpen) {
+                              cancelDeleteIntent();
+                            } else {
+                              setDeleteCandidateWorkspaceId(workspace.id);
+                              setDeleteWorkspaceInput("");
+                            }
+                          }}
+                        >
+                          <Icon name="trash-2" size={13} className="text-destructive" />
+                        </span>
+                      ) : null}
                     </span>
                   </button>
 
@@ -348,7 +383,8 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                     }}
                   >
                     <p className="text-xs text-muted-foreground">
-                      Retype <span className="font-semibold text-foreground">{nameLabel}</span> to delete this workspace.
+                      Retype <span className="font-semibold text-foreground">{nameLabel}</span> to
+                      delete this workspace.
                     </p>
                     <div className="mt-2 flex flex-row items-center gap-1">
                       <Input
@@ -362,6 +398,7 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                           if (
                             event.key === "Enter" &&
                             deleteMatches &&
+                            canDeleteWorkspaces &&
                             deleteSubmittingWorkspaceId !== workspace.id
                           ) {
                             event.preventDefault();
@@ -390,7 +427,12 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                         variant="ghost"
                         size="sm"
                         onClick={async () => {
-                          if (!deleteMatches || deleteSubmittingWorkspaceId === workspace.id) return;
+                          if (
+                            !deleteMatches ||
+                            !canDeleteWorkspaces ||
+                            deleteSubmittingWorkspaceId === workspace.id
+                          )
+                            return;
                           setDeleteSubmittingWorkspaceId(workspace.id);
                           await softDeleteWorkspace(workspace.id);
                           cancelDeleteIntent();

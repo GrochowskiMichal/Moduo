@@ -1,14 +1,16 @@
 import { createContext, useContext } from "react";
+import type { NotificationItem } from "../spine/notifications";
+import type { Overrides, WorkspaceRoleDef } from "./access";
 import type {
   ModulePermission,
+  ModulePermissions,
+  PermissionKey,
+  WorkspaceBranding,
   WorkspaceInvite,
   WorkspaceMember,
-  WorkspaceNotification,
   WorkspaceRole,
   WorkspaceSummary,
 } from "./types";
-
-export type NotificationScope = "workspace" | "global";
 
 type ModuleAccessInput = Partial<Record<"notes" | "tasks", ModulePermission>>;
 
@@ -23,13 +25,21 @@ type ItemAclInput = Array<{
 export type SendWorkspaceInviteArgs = {
   email: string;
   role: WorkspaceRole;
+  /** PERM-1: the workspace role to join with. */
+  roleId?: string | null;
   modulePermissions?: ModuleAccessInput;
   itemAclTemplates?: ItemAclInput;
+  /** PERM-2b. `existing` is the first-invite step; `resources` are extra grants. */
+  sharePayload?: {
+    existing?: "none" | "view" | "edit";
+    resources?: { type: string; id: string; level: string }[];
+  };
 };
 
 export type UpdateWorkspaceInviteArgs = {
   inviteId: string;
   role: WorkspaceRole;
+  roleId?: string | null;
   modulePermissions?: ModuleAccessInput;
   itemAclTemplates?: ItemAclInput;
 };
@@ -46,31 +56,56 @@ export type WorkspaceContextValue = {
   workspaces: WorkspaceSummary[];
   selectedWorkspaceId: string | null;
   selectedWorkspace: WorkspaceSummary | null;
-  modulePermissions: { notes: ModulePermission; tasks: ModulePermission };
+  modulePermissions: ModulePermissions;
   canManageWorkspace: boolean;
+  /** The caller's effective permission keys in the selected workspace. */
+  myPerms: PermissionKey[];
+  /** Does the caller hold this permission here? (Owners: always.) */
+  can: (key: PermissionKey) => boolean;
+  /** The selected workspace's roles, system roles first. */
+  roles: WorkspaceRoleDef[];
+  upsertRole: (input: {
+    roleId: string | null;
+    name: string;
+    description: string;
+    permissions: PermissionKey[];
+    readOnly: boolean;
+    expectedUpdatedAt: string | null;
+  }) => Promise<WorkspaceRoleDef | null>;
+  deleteRole: (roleId: string, reassignTo: string) => Promise<void>;
+  setMemberAccess: (memberId: string, roleId: string, overrides: Overrides) => Promise<void>;
   members: WorkspaceMember[];
   invites: WorkspaceInvite[];
-  notificationsScope: NotificationScope;
   notificationsLoading: boolean;
-  notifications: WorkspaceNotification[];
+  /** The active event feed (current workspace, non-dismissed) — the bell dropdown. */
+  notifications: NotificationItem[];
+  /** The full current-workspace event history incl. read + dismissed — the "See all" modal (DF-21c). */
+  notificationHistory: NotificationItem[];
+  /** Legacy invite/membership feed (cross-workspace) — the dedicated Invitations area (DF-21c). */
+  workspaceInvitations: NotificationItem[];
   unreadCountWorkspace: number;
-  unreadCountGlobal: number;
-  setNotificationsScope: (scope: NotificationScope) => void;
   selectWorkspace: (workspaceId: string) => void;
-  refreshWorkspaces: () => Promise<void>;
+  refreshWorkspaces: () => Promise<WorkspaceSummary[]>;
   refreshAccessData: () => Promise<void>;
   createWorkspace: (name?: string) => Promise<string | null>;
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
+  updateWorkspaceBranding: (workspaceId: string, branding: WorkspaceBranding) => Promise<void>;
   leaveWorkspace: (workspaceId: string) => Promise<void>;
   softDeleteWorkspace: (workspaceId: string) => Promise<void>;
   sendInvite: (args: SendWorkspaceInviteArgs) => Promise<WorkspaceInvite | null>;
   joinWorkspace: (token: string) => Promise<WorkspaceSummary | null>;
   updateMemberPermissions: (args: UpdateWorkspaceMemberPermissionsArgs) => Promise<void>;
+  removeMember: (memberId: string) => Promise<void>;
+  transferOwnership: (memberId: string) => Promise<void>;
   updateInvite: (args: UpdateWorkspaceInviteArgs) => Promise<void>;
   revokeInvite: (inviteId: string) => Promise<void>;
   refreshNotifications: () => Promise<void>;
-  markNotificationRead: (notificationId: string) => Promise<void>;
+  markNotificationRead: (item: NotificationItem) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
+  /** Dismiss every row in a digest card (DF-21b) — spine rows only; refresh once. */
+  dismissNotifications: (items: NotificationItem[]) => Promise<void>;
+  /** Undo a dismiss (the 8s Undo) — restores the rows to the active feed. */
+  undismissNotifications: (items: NotificationItem[]) => Promise<void>;
 };
 
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);

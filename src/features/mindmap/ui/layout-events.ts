@@ -10,6 +10,6 @@ export function dispatchMindmapSelectMap(mindmapId: string | null, mindmapName?:
   window.dispatchEvent(
     new CustomEvent<MindmapSelectMapDetail>(MINDMAP_SELECT_MAP_EVENT, {
       detail: { mindmapId, mindmapName },
-    })
+    }),
   );
 }

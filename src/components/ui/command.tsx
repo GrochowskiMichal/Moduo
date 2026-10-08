@@ -1,8 +1,6 @@
-import * as React from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { SearchIcon } from "lucide-react";
-
-import { cn } from "@/lib/utils";
+import * as React from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,11 +8,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
-function Command({
-  className,
-  ...props
-}: React.ComponentProps<typeof CommandPrimitive>) {
+function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
   return (
     <CommandPrimitive
       data-slot="command"
@@ -32,12 +28,16 @@ function CommandDialog({
   description = "Search for a command to run.",
   children,
   className,
+  commandProps,
   showCloseButton = false,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string;
   description?: string;
   className?: string;
+  /** Forwarded to the inner cmdk `Command` — e.g. `shouldFilter: false` for a
+   * palette that filters its own items (server-side entity search, DF-10). */
+  commandProps?: React.ComponentProps<typeof CommandPrimitive>;
   showCloseButton?: boolean;
 }) {
   return (
@@ -51,13 +51,17 @@ function CommandDialog({
         showCloseButton={showCloseButton}
       >
         <Command
+          {...commandProps}
           className={cn(
             "[&_[cmdk-input-wrapper]_svg]:size-4",
             "[&_[cmdk-input]]:bg-transparent [&_[cmdk-input]]:outline-none",
-            "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase",
+            // The eyebrow recipe (see `eyebrowVariants`), applied through cmdk's
+            // own heading element — it can't be swapped for the component.
+            "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-sans [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase",
             "[&_[cmdk-group]]:px-1",
             "[&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2",
             "[&_[cmdk-item]_svg]:size-4",
+            commandProps?.className,
           )}
         >
           {children}
@@ -89,25 +93,17 @@ function CommandInput({
   );
 }
 
-function CommandList({
-  className,
-  ...props
-}: React.ComponentProps<typeof CommandPrimitive.List>) {
+function CommandList({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.List>) {
   return (
     <CommandPrimitive.List
       data-slot="command-list"
-      className={cn(
-        "max-h-[320px] scroll-py-1 overflow-x-hidden overflow-y-auto",
-        className,
-      )}
+      className={cn("max-h-[320px] scroll-py-1 overflow-x-hidden overflow-y-auto", className)}
       {...props}
     />
   );
 }
 
-function CommandEmpty({
-  ...props
-}: React.ComponentProps<typeof CommandPrimitive.Empty>) {
+function CommandEmpty({ ...props }: React.ComponentProps<typeof CommandPrimitive.Empty>) {
   return (
     <CommandPrimitive.Empty
       data-slot="command-empty"
@@ -143,17 +139,14 @@ function CommandSeparator({
   );
 }
 
-function CommandItem({
-  className,
-  ...props
-}: React.ComponentProps<typeof CommandPrimitive.Item>) {
+function CommandItem({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Item>) {
   return (
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
         "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground select-none outline-none",
         "data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
-        "data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground",
+        "data-[selected=true]:bg-state-active data-[selected=true]:text-foreground",
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         "[&_svg:not([class*='text-'])]:text-muted-foreground",
         className,
@@ -163,17 +156,11 @@ function CommandItem({
   );
 }
 
-function CommandShortcut({
-  className,
-  ...props
-}: React.ComponentProps<"span">) {
+function CommandShortcut({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="command-shortcut"
-      className={cn(
-        "ml-auto font-mono text-xs tracking-wide text-muted-foreground",
-        className,
-      )}
+      className={cn("ml-auto font-mono text-xs tracking-wide text-muted-foreground", className)}
       {...props}
     />
   );

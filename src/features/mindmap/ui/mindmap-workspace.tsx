@@ -1,57 +1,51 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  ReactFlow,
-  reconnectEdge,
-  applyNodeChanges,
   applyEdgeChanges,
-  ReactFlowProvider,
-  useReactFlow,
-  type Node,
-  type Edge,
+  applyNodeChanges,
   type Connection,
-  type NodeChange,
+  type Edge,
   type EdgeChange,
+  type Node,
+  type NodeChange,
   type NodeTypes,
+  ReactFlow,
+  ReactFlowProvider,
+  reconnectEdge,
+  useReactFlow,
 } from "@xyflow/react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
-import { MindmapCustomNode } from "./custom-node";
+import type { ModuoRuntime } from "../../../lib/runtime";
+import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
 import { MindmapMiniMap } from "./components/mindmap-mini-map";
-import { MindmapToolbar } from "./components/mindmap-toolbar";
 import { MindmapRelations } from "./components/mindmap-relations";
+import { MindmapToolbar } from "./components/mindmap-toolbar";
+import { MindmapCustomNode } from "./custom-node";
+import {
+  DEFAULT_EDGE_COLOR,
+  DEFAULT_EDGE_THICKNESS,
+  DEFAULT_THEME,
+  type EdgeMenuPanel,
+  type EdgeMenuState,
+  edgeAnimatedFromPattern,
+  edgeClassName,
+  edgeDashFromPattern,
+  edgeTypeFromStyle,
+  normalizeEdgeData,
+} from "./edge-style";
 import { EdgeStyleMenu } from "./edge-style-menu";
-import { MindmapEmptyState, MindmapLoadingState } from "./mindmap-empty-state";
-import { MINDMAP_SELECT_MAP_EVENT, type MindmapSelectMapDetail } from "./layout-events";
 import { useMindmapHistory } from "./hooks/use-mindmap-history";
+import { MINDMAP_SELECT_MAP_EVENT, type MindmapSelectMapDetail } from "./layout-events";
+import { parseMermaidToMindmap } from "./mermaid-import";
+import { MindmapEmptyState, MindmapLoadingState } from "./mindmap-empty-state";
 import {
   listMindmaps,
   loadMindmapDocument,
   readStoredActiveMindmap,
   saveMindmapDocument,
 } from "./mindmap-storage";
-import { parseMermaidToMindmap } from "./mermaid-import";
-import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
-import type { ModuoRuntime } from "../../../lib/runtime";
-import type {
-  MindmapNode,
-  MindmapEdge,
-  MindmapEdgeData,
-  EdgeStyle,
-  EdgePattern,
-} from "./types";
-import { defaultNodeData } from "./types";
 import { normalizeNodeIcon } from "./node-icons";
-import {
-  DEFAULT_EDGE_COLOR,
-  DEFAULT_EDGE_THICKNESS,
-  DEFAULT_THEME,
-  edgeAnimatedFromPattern,
-  edgeClassName,
-  edgeDashFromPattern,
-  edgeTypeFromStyle,
-  normalizeEdgeData,
-  type EdgeMenuPanel,
-  type EdgeMenuState,
-} from "./edge-style";
+import type { EdgePattern, EdgeStyle, MindmapEdge, MindmapEdgeData, MindmapNode } from "./types";
+import { defaultNodeData } from "./types";
 import "@xyflow/react/dist/style.css";
 
 /* ═══════════════════════ Constants ═══════════════════════ */
@@ -155,12 +149,22 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
         const rawNodes = Array.isArray(doc?.nodes) ? doc.nodes : [];
         const nextNodes: MindmapNode[] = rawNodes.map((n: any) => {
           const legacyData = n.data ?? {};
-          const { category: _legacyCategory, type: _legacyType, emoji: legacyEmoji, icon: rawIcon, ...restData } = legacyData;
+          const {
+            category: _legacyCategory,
+            type: _legacyType,
+            emoji: legacyEmoji,
+            icon: rawIcon,
+            ...restData
+          } = legacyData;
           const icon = normalizeNodeIcon(rawIcon, legacyEmoji);
           const legacyProgressRaw = Number(restData.progress ?? 0);
-          const legacyProgress = Number.isFinite(legacyProgressRaw) ? Math.max(0, Math.min(100, legacyProgressRaw)) : 0;
+          const legacyProgress = Number.isFinite(legacyProgressRaw)
+            ? Math.max(0, Math.min(100, legacyProgressRaw))
+            : 0;
           const progressVisible =
-            typeof restData.progressVisible === "boolean" ? restData.progressVisible : legacyProgress > 0;
+            typeof restData.progressVisible === "boolean"
+              ? restData.progressVisible
+              : legacyProgress > 0;
           return {
             ...n,
             type: "mindmap",
@@ -212,13 +216,16 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
         setSelectedEdgeId(null);
         setEdgeMenu(null);
       } finally {
-        if (!active) return;
-        isHydratingRef.current = false;
-        setIsLoadingMindmap(false);
+        if (active) {
+          isHydratingRef.current = false;
+          setIsLoadingMindmap(false);
+        }
       }
     };
     void load();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runtime, workspaceId, selectedMindmapId]);
 
@@ -235,7 +242,9 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
         edges,
         updatedAt: new Date().toISOString(),
       })
-        .then(() => { lastSavedSignatureRef.current = signature; })
+        .then(() => {
+          lastSavedSignatureRef.current = signature;
+        })
         .catch((err) => console.error("Failed to auto-save mindmap", err));
     }, 350);
     return () => window.clearTimeout(timer);
@@ -252,7 +261,12 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
   }, []);
 
   const createConnectionEdge = useCallback(
-    (source: string, target: string, sourceHandle?: string | null, targetHandle?: string | null): MindmapEdge => {
+    (
+      source: string,
+      target: string,
+      sourceHandle?: string | null,
+      targetHandle?: string | null,
+    ): MindmapEdge => {
       const data: MindmapEdgeData = {
         label: "",
         style: "bezier",
@@ -280,7 +294,7 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
         data,
       } as MindmapEdge;
     },
-    []
+    [],
   );
 
   const onConnect = useCallback(
@@ -292,15 +306,22 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
           edge.source === connection.source &&
           edge.target === connection.target &&
           (edge.sourceHandle ?? null) === (connection.sourceHandle ?? null) &&
-          (edge.targetHandle ?? null) === (connection.targetHandle ?? null)
+          (edge.targetHandle ?? null) === (connection.targetHandle ?? null),
       );
       if (duplicateExists) return;
       history.pushSnapshot(nodes, edges);
       setEdges((cur) =>
-        cur.concat(createConnectionEdge(connection.source!, connection.target!, connection.sourceHandle, connection.targetHandle))
+        cur.concat(
+          createConnectionEdge(
+            connection.source!,
+            connection.target!,
+            connection.sourceHandle,
+            connection.targetHandle,
+          ),
+        ),
       );
     },
-    [createConnectionEdge, nodes, edges, history]
+    [createConnectionEdge, nodes, edges, history],
   );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
@@ -342,8 +363,14 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey) {
       const menuWidth = 220;
       const menuHeight = 180;
-      const maxX = typeof window === "undefined" ? event.clientX : Math.max(12, window.innerWidth - menuWidth - 12);
-      const maxY = typeof window === "undefined" ? event.clientY : Math.max(12, window.innerHeight - menuHeight - 12);
+      const maxX =
+        typeof window === "undefined"
+          ? event.clientX
+          : Math.max(12, window.innerWidth - menuWidth - 12);
+      const maxY =
+        typeof window === "undefined"
+          ? event.clientY
+          : Math.max(12, window.innerHeight - menuHeight - 12);
       setSelectedNode(null);
       setSelectedEdgeId(edge.id);
       setSelectedNodeIds(new Set());
@@ -384,18 +411,21 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
           edge.source === newConnection.source &&
           edge.target === newConnection.target &&
           (edge.sourceHandle ?? null) === (newConnection.sourceHandle ?? null) &&
-          (edge.targetHandle ?? null) === (newConnection.targetHandle ?? null)
+          (edge.targetHandle ?? null) === (newConnection.targetHandle ?? null),
       );
       if (duplicateExists) return;
       history.pushSnapshot(nodes, edges);
       setEdges((current) => reconnectEdge(oldEdge, newConnection, current) as MindmapEdge[]);
     },
-    [edges, history, nodes]
+    [edges, history, nodes],
   );
 
-  const updateEdgeRecord = useCallback((edgeId: string, updater: (edge: MindmapEdge) => MindmapEdge) => {
-    setEdges((current) => current.map((edge) => (edge.id === edgeId ? updater(edge) : edge)));
-  }, []);
+  const updateEdgeRecord = useCallback(
+    (edgeId: string, updater: (edge: MindmapEdge) => MindmapEdge) => {
+      setEdges((current) => current.map((edge) => (edge.id === edgeId ? updater(edge) : edge)));
+    },
+    [],
+  );
 
   const updateEdgeLabel = useCallback(
     (edgeId: string, label: string) => {
@@ -408,7 +438,7 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
         };
       });
     },
-    [updateEdgeRecord]
+    [updateEdgeRecord],
   );
 
   const applyEdgeColor = useCallback(
@@ -431,7 +461,7 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
         };
       });
     },
-    [history, nodes, edges, updateEdgeRecord]
+    [history, nodes, edges, updateEdgeRecord],
   );
 
   const applyEdgeShape = useCallback(
@@ -455,7 +485,7 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
         };
       });
     },
-    [history, nodes, edges, updateEdgeRecord]
+    [history, nodes, edges, updateEdgeRecord],
   );
 
   const applyEdgePattern = useCallback(
@@ -479,7 +509,7 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
         };
       });
     },
-    [history, nodes, edges, updateEdgeRecord]
+    [history, nodes, edges, updateEdgeRecord],
   );
 
   const applyEdgeAnimation = useCallback(
@@ -495,7 +525,7 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
         };
       });
     },
-    [history, nodes, edges, updateEdgeRecord]
+    [history, nodes, edges, updateEdgeRecord],
   );
 
   const toggleEdgePanel = useCallback((panel: Exclude<EdgeMenuPanel, null>) => {
@@ -547,7 +577,10 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
 
     const newNode: MindmapNode = {
       id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      position: { x: centerX - 120 + Math.random() * 40 - 20, y: centerY - 40 + Math.random() * 40 - 20 },
+      position: {
+        x: centerX - 120 + Math.random() * 40 - 20,
+        y: centerY - 40 + Math.random() * 40 - 20,
+      },
       type: "mindmap",
       data: defaultNodeData({
         label: "New Node",
@@ -570,7 +603,11 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
           y: parent.position.y + Math.random() * 100 - 50,
         };
         newNode.data.depth = (parent.data.depth || 0) + 1;
-        setNodes((cur) => cur.map((n) => (n.id === newNode.id ? { ...n, position: newNode.position, data: newNode.data } : n)));
+        setNodes((cur) =>
+          cur.map((n) =>
+            n.id === newNode.id ? { ...n, position: newNode.position, data: newNode.data } : n,
+          ),
+        );
       }
     } else {
       setNodes((cur) => cur.concat(newNode));
@@ -593,8 +630,9 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
       .filter(Boolean) as MindmapNode[];
     const occupiedOffsets = siblingNodes.map((node) => node.position.x - selectedNode.position.x);
     const targetOffset =
-      childOffsetCandidates.find((offset) => occupiedOffsets.every((taken) => Math.abs(taken - offset) > horizontalStep * 0.66)) ??
-      (siblingNodes.length + 1) * horizontalStep;
+      childOffsetCandidates.find((offset) =>
+        occupiedOffsets.every((taken) => Math.abs(taken - offset) > horizontalStep * 0.66),
+      ) ?? (siblingNodes.length + 1) * horizontalStep;
     const childNode: MindmapNode = {
       id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       position: {
@@ -609,7 +647,12 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
       }),
     };
 
-    const newEdge = createConnectionEdge(selectedNode.id, childNode.id, "bottom-source", "top-target");
+    const newEdge = createConnectionEdge(
+      selectedNode.id,
+      childNode.id,
+      "bottom-source",
+      "top-target",
+    );
 
     setNodes((cur) => [...cur, childNode]);
     setEdges((cur) => [...cur, newEdge]);
@@ -678,11 +721,8 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
     setNodes((cur) => cur.filter((node) => !nodeIds.has(node.id)));
     setEdges((cur) =>
       cur.filter(
-        (edge) =>
-          !edgeIds.has(edge.id) &&
-          !nodeIds.has(edge.source) &&
-          !nodeIds.has(edge.target)
-      )
+        (edge) => !edgeIds.has(edge.id) && !nodeIds.has(edge.source) && !nodeIds.has(edge.target),
+      ),
     );
     setSelectedNode(null);
     setSelectedEdgeId(null);
@@ -744,7 +784,7 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
       };
     });
     const edgesToDuplicate = edges.filter(
-      (edge) => edgeIds.has(edge.id) || (nodeIds.has(edge.source) && nodeIds.has(edge.target))
+      (edge) => edgeIds.has(edge.id) || (nodeIds.has(edge.source) && nodeIds.has(edge.target)),
     );
     const duplicatedEdges: MindmapEdge[] = [];
     for (let i = 0; i < edgesToDuplicate.length; i += 1) {
@@ -756,7 +796,7 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
           existing.source === newSource &&
           existing.target === newTarget &&
           (existing.sourceHandle ?? null) === (edge.sourceHandle ?? null) &&
-          (existing.targetHandle ?? null) === (edge.targetHandle ?? null)
+          (existing.targetHandle ?? null) === (edge.targetHandle ?? null),
       );
       if (exists) continue;
       duplicatedEdges.push({
@@ -776,27 +816,44 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
     setSelectedNode(duplicatedNodes[0] ?? null);
     setSelectedEdgeId(duplicatedEdges[0]?.id ?? null);
     setEdgeMenu(null);
-  }, [selectedNodeIds, selectedEdgeIds, selectedNode, duplicateSelectedNode, pushHistory, nodes, edges]);
+  }, [
+    selectedNodeIds,
+    selectedEdgeIds,
+    selectedNode,
+    duplicateSelectedNode,
+    pushHistory,
+    nodes,
+    edges,
+  ]);
 
-  const deleteNodeById = useCallback((nodeId: string) => {
-    pushHistory();
-    setNodes((cur) => cur.filter((node) => node.id !== nodeId));
-    setEdges((cur) => cur.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
-    setSelectedNode((cur) => (cur?.id === nodeId ? null : cur));
-  }, [pushHistory]);
+  const deleteNodeById = useCallback(
+    (nodeId: string) => {
+      pushHistory();
+      setNodes((cur) => cur.filter((node) => node.id !== nodeId));
+      setEdges((cur) => cur.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+      setSelectedNode((cur) => (cur?.id === nodeId ? null : cur));
+    },
+    [pushHistory],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onNodeUpdate = (event: Event) => {
-      const detail = (event as CustomEvent<{ nodeId: string; key: keyof MindmapNode["data"]; value: any }>).detail;
+      const detail = (
+        event as CustomEvent<{ nodeId: string; key: keyof MindmapNode["data"]; value: any }>
+      ).detail;
       if (!detail?.nodeId) return;
       setNodes((current) =>
         current.map((node) =>
-          node.id === detail.nodeId ? { ...node, data: { ...node.data, [detail.key]: detail.value } } : node
-        )
+          node.id === detail.nodeId
+            ? { ...node, data: { ...node.data, [detail.key]: detail.value } }
+            : node,
+        ),
       );
       setSelectedNode((current) =>
-        current?.id === detail.nodeId ? { ...current, data: { ...current.data, [detail.key]: detail.value } } : current
+        current?.id === detail.nodeId
+          ? { ...current, data: { ...current.data, [detail.key]: detail.value } }
+          : current,
       );
     };
     const onNodeDelete = (event: Event) => {
@@ -823,7 +880,9 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
       setSelectedNode(null);
       setSelectedEdgeId(null);
       setEdgeMenu(null);
-      requestAnimationFrame(() => { isHydratingRef.current = false; });
+      requestAnimationFrame(() => {
+        isHydratingRef.current = false;
+      });
     }
   }, [history, nodes, edges]);
 
@@ -836,7 +895,9 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
       setSelectedNode(null);
       setSelectedEdgeId(null);
       setEdgeMenu(null);
-      requestAnimationFrame(() => { isHydratingRef.current = false; });
+      requestAnimationFrame(() => {
+        isHydratingRef.current = false;
+      });
     }
   }, [history, nodes, edges]);
 
@@ -863,7 +924,8 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
     const onKeyDown = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
       const target = e.target as HTMLElement;
-      const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+      const isInput =
+        target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 
       // Undo
       if (meta && e.key === "z" && !e.shiftKey) {
@@ -976,12 +1038,15 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
       setSelectedNode(node);
       setSelectedEdgeId(null);
       setEdgeMenu(null);
-      reactFlowInstance.setCenter(node.position.x + 120, node.position.y + 40, { zoom: 1.2, duration: 400 });
+      reactFlowInstance.setCenter(node.position.x + 120, node.position.y + 40, {
+        zoom: 1.2,
+        duration: 400,
+      });
     },
-    [nodes, reactFlowInstance]
+    [nodes, reactFlowInstance],
   );
 
-  const activeEdge = edgeMenu ? edges.find((edge) => edge.id === edgeMenu.edgeId) ?? null : null;
+  const activeEdge = edgeMenu ? (edges.find((edge) => edge.id === edgeMenu.edgeId) ?? null) : null;
   const activeEdgeData = activeEdge ? normalizeEdgeData(activeEdge, DEFAULT_EDGE_COLOR) : null;
   const renderedNodes = nodes;
   const renderedEdges = useMemo(
@@ -994,7 +1059,7 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
           className: `${base}${isSelected ? " mindmap-edge-selected" : ""}`.trim(),
         };
       }) as MindmapEdge[],
-    [edges, selectedEdgeIds]
+    [edges, selectedEdgeIds],
   );
   useEffect(() => {
     const nextNodeIds = new Set(nodes.filter((node) => node.selected).map((node) => node.id));
@@ -1020,11 +1085,12 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
         setEdgeMenu(null);
         return { ok: true };
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to parse Mermaid notation.";
+        const message =
+          error instanceof Error ? error.message : "Failed to parse Mermaid notation.";
         return { ok: false, error: message };
       }
     },
-    [pushHistory]
+    [pushHistory],
   );
 
   /* ─── Render ─── */
@@ -1127,7 +1193,13 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
 
 /* ═══════════════════════ Exported Wrapper ═══════════════════════ */
 
-export function MindmapWorkspace({ workspaceId, runtime }: { workspaceId: string; runtime: ModuoRuntime }) {
+export function MindmapWorkspace({
+  workspaceId,
+  runtime,
+}: {
+  workspaceId: string;
+  runtime: ModuoRuntime;
+}) {
   return (
     <ReactFlowProvider>
       <MindmapCanvas workspaceId={workspaceId} runtime={runtime} />

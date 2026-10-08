@@ -1,36 +1,52 @@
-import { useEffect } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
 import { EmailAuthPanel } from "@/components/auth/email-auth-panel";
+import { IS_STAGING_PORTAL } from "@/features/settings/about";
+import {
+  ACCOUNT_DELETED_NOTICE,
+  clearAccountDeletedMarker,
+  isAccountDeletedMarked,
+} from "@/features/settings/delete-account";
+import { ignoredAuthLink } from "@/lib/auth-url";
 import { useAuth } from "@/providers/auth-provider";
-
-function getSearchParam(key: string): string | null {
-  if (typeof window === "undefined") return null;
-  return new URLSearchParams(window.location.search).get(key);
-}
 
 export function AuthPage() {
   const { isSignedIn, loading } = useAuth();
   const navigate = useNavigate();
-
-  const priceId = getSearchParam("price_id");
+  const { deleted } = useSearch({ from: "/auth" });
+  // Only for the deletion this tab just made (finishAccountDeletion marks it): the
+  // flag alone, from a reload or a shared link, shows nothing.
+  const [justDeleted] = useState(() => deleted === 1 && isAccountDeletedMarked());
+  // An emailed auth link landed here and was dropped at boot (auth-url.ts). An
+  // invite link still confirms the address server-side; the code does the rest.
+  const ignoredLink = ignoredAuthLink();
+  const linkNotice =
+    ignoredLink === "session"
+      ? "Links don't sign you in here. Enter your email to get a 6-digit code."
+      : ignoredLink === "error"
+        ? "That link has expired or was already used. Enter your email to get a 6-digit code."
+        : null;
 
   useEffect(() => {
-    if (loading || !isSignedIn) return;
+    if (justDeleted && !loading && !isSignedIn) clearAccountDeletedMarker();
+  }, [justDeleted, loading, isSignedIn]);
+
+  useEffect(() => {
+    // The Danger zone lands here a moment before it signs out.
+    if (loading || !isSignedIn || justDeleted) return;
     if (window.sessionStorage.getItem("moduo:auth_resolving") === "1") return;
 
-    const pendingPriceId = priceId ?? window.localStorage.getItem("moduo:pending_price_id");
-    if (pendingPriceId) {
-      window.localStorage.removeItem("moduo:pending_price_id");
-      const supabaseUrl =
-        (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-        "https://wtoonrvuqumihpkbvwvs.supabase.co";
-      window.location.href = `${supabaseUrl}/functions/v1/create-checkout-session?price_id=${encodeURIComponent(pendingPriceId)}`;
+    // Resume a workspace invite the user opened while signed out (DF-24).
+    const pendingJoin = window.localStorage.getItem("moduo:pending_join");
+    if (pendingJoin) {
+      window.localStorage.removeItem("moduo:pending_join");
+      void navigate({ to: "/join", search: { invite: pendingJoin }, replace: true });
       return;
     }
 
     void navigate({ to: "/", replace: true });
-  }, [isSignedIn, loading, navigate, priceId]);
+  }, [isSignedIn, loading, navigate, justDeleted]);
 
   if (loading) {
     return (
@@ -46,9 +62,28 @@ export function AuthPage() {
     <div className="relative min-h-screen overflow-hidden bg-background">
       <div className="pointer-events-none absolute left-1/2 top-[-260px] h-[520px] w-[620px] -translate-x-1/2 rounded-full bg-foreground/5 blur-3xl" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[480px] items-center justify-center px-5 py-8">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[480px] flex-col items-center justify-center gap-3 px-5 py-8">
+        {IS_STAGING_PORTAL && (
+          <div className="w-full">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                STAGING
+              </span>
+              <span className="text-xs text-muted-foreground">
+                app.staging.moduo.app · invite-only
+              </span>
+            </div>
+          </div>
+        )}
+
+        {justDeleted ? (
+          <div role="status" className="w-full rounded-md border border-border bg-muted px-4 py-3">
+            <p className="text-sm leading-5 text-muted-foreground">{ACCOUNT_DELETED_NOTICE}</p>
+          </div>
+        ) : null}
+
         <div className="w-full rounded-xl border border-border bg-card px-6 py-7 shadow-xl sm:px-7 sm:py-8">
-          <EmailAuthPanel priceId={priceId} />
+          <EmailAuthPanel notice={linkNotice} />
         </div>
       </div>
     </div>

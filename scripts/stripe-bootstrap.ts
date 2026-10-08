@@ -131,9 +131,7 @@ async function getOrCreatePrice(row: PriceRow, productId: string): Promise<strin
 
 async function getOrCreateFoundersCoupon(): Promise<string> {
   const coupons = await stripe.coupons.list({ limit: 100 });
-  const existing = coupons.data.find(
-    (c) => c.metadata?.purpose === "founders" && c.valid
-  );
+  const existing = coupons.data.find((c) => c.metadata?.purpose === "founders" && c.valid);
   if (existing) {
     console.log(`  Reusing founders coupon: ${existing.id}`);
     return existing.id;
@@ -184,7 +182,6 @@ async function main() {
   }
   console.log(`supabase secrets set STRIPE_PRICE_FOUNDERS=${foundersCouponId}`);
   console.log(`supabase secrets set RESEND_API_KEY=re_...`);
-  console.log(`supabase secrets set FOUNDERS_NOTIFY_EMAIL=founders@moduo.app`);
 
   console.log("\n=== moduo_landing .env.local vars ===\n");
   for (const [key, value] of Object.entries(results)) {

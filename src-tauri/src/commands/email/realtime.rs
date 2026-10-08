@@ -9,11 +9,10 @@ use super::account_config::{ensure_account_config, select_mailbox_for_folder};
 use super::connection::{open_idle_imap_session, open_imap_session};
 use super::constants::*;
 use super::flags::flush_flag_outbox_for_account;
-use super::graph_outbox::{queue_graph_upsert_for_envelope, schedule_graph_outbox_flush};
 use super::model::StoredEmailAccount;
 use super::storage::{
     load_folder_cursor, parse_json_value, patch_account_sync_state, read_accounts,
-    save_folder_cursor, update_idle_runtime_state, upsert_envelope,
+    save_folder_cursor, update_idle_runtime_state, upsert_envelopes,
 };
 use super::sync::{
     collect_uid_range, fetch_envelopes_for_uids, resolve_uid_next, sync_account_folder_envelopes,
@@ -387,27 +386,37 @@ fn run_idle_cycle_blocking(
                             let new_uids = collect_uid_range(delta_start, latest_uid);
 
                             if !new_uids.is_empty() {
+                                let mut stored_every_chunk = true;
                                 for chunk in new_uids.chunks(50) {
-                                    if let Ok(rows) = fetch_envelopes_for_uids(
+                                    match fetch_envelopes_for_uids(
                                         &mut cmd_session,
                                         &account,
                                         folder,
                                         uid_validity,
                                         chunk,
                                     ) {
-                                        for row in rows {
-                                            let _ = upsert_envelope(&state, &row);
-                                            let _ = queue_graph_upsert_for_envelope(&state, &row);
+                                        Ok(rows) => {
+                                            if upsert_envelopes(&state, &rows).is_err() {
+                                                stored_every_chunk = false;
+                                            }
                                         }
+                                        Err(_) => stored_every_chunk = false,
                                     }
                                 }
 
-                                // Update exists count in cursor.
+                                // Update exists count in cursor. Advancing
+                                // `last_seen_uid` past a chunk we failed to store
+                                // would strand those UIDs — the delta sync starts
+                                // after the cursor and never looks back — and the
+                                // write is per-chunk now, so a single failure costs
+                                // up to 50 messages rather than one.
                                 if let Some(mut cursor) =
                                     load_folder_cursor(&state, &account.id, folder)
                                 {
                                     cursor.exists = server_exists;
-                                    cursor.last_seen_uid = Some(latest_uid);
+                                    if stored_every_chunk {
+                                        cursor.last_seen_uid = Some(latest_uid);
+                                    }
                                     cursor.last_idle_event_at = Some(now_iso());
                                     cursor.updated_at = now_iso();
                                     let _ = save_folder_cursor(&state, &cursor);
@@ -425,7 +434,6 @@ fn run_idle_cycle_blocking(
 
                 let _ = flush_flag_outbox_for_account(&state, &account);
                 let _ = patch_account_sync_state(&state, &account.id, "active", None);
-                schedule_graph_outbox_flush(&state, Some(account.id.clone()));
                 break Ok(IdleCycleOutcome::MailboxChanged);
             }
             Ok(imap::extensions::idle::WaitOutcome::TimedOut) => {
@@ -467,7 +475,6 @@ fn run_poll_sync_blocking(
     sync_account_folder_envelopes(&state, &account, folder, false)?;
     let _ = flush_flag_outbox_for_account(&state, &account);
     let _ = patch_account_sync_state(&state, &account.id, "active", None);
-    schedule_graph_outbox_flush(&state, Some(account.id.clone()));
     Ok(())
 }
 

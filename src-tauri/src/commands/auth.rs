@@ -1,8 +1,8 @@
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHasher, PasswordVerifier},
     Argon2,
 };
-use bip39::{Language, Mnemonic};
+use bip39::{Language, Mnemonic, WordCount};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -100,17 +100,15 @@ fn now_iso() -> String {
 }
 
 fn hash_secret(secret: &str) -> Result<String, String> {
-    let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
-        .hash_password(secret.as_bytes(), &salt)
+        .hash_password(secret.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|e| e.to_string())
 }
 
 fn verify_secret(secret: &str, hash: &str) -> Result<bool, String> {
-    let parsed = PasswordHash::new(hash).map_err(|e| e.to_string())?;
     Ok(Argon2::default()
-        .verify_password(secret.as_bytes(), &parsed)
+        .verify_password(secret.as_bytes(), hash)
         .is_ok())
 }
 
@@ -208,6 +206,7 @@ fn persist_active_session(
         .map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "lite")]
 fn start_sync_worker_if_needed(state: &AppState, access_token: &str) {
     if !crate::sync::is_cloud_session(access_token) {
         return;
@@ -216,14 +215,14 @@ fn start_sync_worker_if_needed(state: &AppState, access_token: &str) {
     // Plan tier gating happens inside the sync worker itself (run_worker checks at startup
     // and periodically), so we start it here for all cloud sessions. The worker will
     // self-terminate if the user is on the free tier.
-    let anon_key = std::env::var("PUBLIC_SUPABASE_ANON_KEY")
-        .or_else(|_| std::env::var("MODUO_SUPABASE_ANON_KEY"))
+    let publishable_key = std::env::var("PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+        .or_else(|_| std::env::var("MODUO_SUPABASE_PUBLISHABLE_KEY"))
         .unwrap_or_default();
 
     let handle = crate::sync::start_if_cloud(
         state.store.clone(),
         state.config.supabase_url.clone(),
-        anon_key,
+        publishable_key,
         access_token.to_string(),
     );
 
@@ -234,6 +233,11 @@ fn start_sync_worker_if_needed(state: &AppState, access_token: &str) {
         *guard = handle;
     }
 }
+
+/// No-op in the default cloud build — the redb↔cloud sync worker ships only in the
+/// future offline/"lite" build (`notesV2` owns notes sync on the cloud path).
+#[cfg(not(feature = "lite"))]
+fn start_sync_worker_if_needed(_state: &AppState, _access_token: &str) {}
 
 fn ensure_local_workspace_for_user(
     state: &AppState,
@@ -344,7 +348,7 @@ pub async fn auth_get_local_auth_state(
 /// 128 bits of entropy).
 #[tauri::command]
 pub async fn auth_generate_mnemonic() -> Result<AuthMnemonicResponse, String> {
-    let mnemonic = Mnemonic::generate_in_with(&mut rand::thread_rng(), Language::English, 12)
+    let mnemonic = Mnemonic::generate_in(Language::English, WordCount::Words12)
         .map_err(|e| format!("mnemonic_generation_failed: {}", e))?;
 
     let words: Vec<String> = mnemonic.words().map(|w| w.to_string()).collect();
@@ -553,6 +557,22 @@ pub async fn auth_forgot_reset_local(state: State<'_, AppState>) -> Result<(), S
     Ok(())
 }
 
+/// Mirrors the webview's Supabase session into AppState so invoke-backed
+/// modules (notes, email, calendar, time-tracking, graph) attribute work to
+/// the cloud user. The webview owns the session lifecycle (supabase-js);
+/// Rust only holds it in memory — `None` clears it on sign-out.
+#[tauri::command]
+pub async fn auth_set_cloud_session(
+    state: State<'_, AppState>,
+    session: Option<auth::AuthSession>,
+) -> Result<(), String> {
+    if session.is_none() {
+        crate::commands::email::stop_all_idle_workers();
+    }
+    *state.session.lock().map_err(|e| e.to_string())? = session;
+    Ok(())
+}
+
 /// Returns the current in-memory session without touching the keychain.
 #[tauri::command]
 pub async fn auth_refresh_session(
@@ -583,7 +603,8 @@ pub async fn auth_sign_out(state: State<'_, AppState>) -> Result<(), String> {
     let _ = state.store.kv_remove("auth", "current-profile");
     crate::commands::email::stop_all_idle_workers();
     *state.session.lock().map_err(|e| e.to_string())? = None;
-    // Stop the cloud sync worker on sign-out.
+    // Stop the cloud sync worker on sign-out (lite build only).
+    #[cfg(feature = "lite")]
     if let Ok(mut guard) = state.sync_worker.lock() {
         if let Some(worker) = guard.take() {
             worker.shutdown();

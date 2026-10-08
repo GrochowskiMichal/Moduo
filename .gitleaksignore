@@ -1,0 +1,9 @@
+# False positives that checks.yml's PR-wide secret scan keeps re-reading from
+# history (a later commit can't remove them). Format: <commit>:<file>:<rule>:<line>.
+# Never list a real secret here: delete it and rotate it (AGENTS.md rule 2).
+
+# A test fixture's fake key prefix ("moduo_sk_ab12cd"); low-entropy since.
+4b9a0b3c6ce0c4c0ec278fd2cb52ecce260baedf:src/features/settings/sections/api-keys-section.test.tsx:generic-api-key:65
+
+# A provider key in a since-removed backup file (removed 2026-10-07 in b7645011), rotated at the provider.
+795f4c3c944630afba9e2f5824dd2a69003716f0:opencode.json.openchamber.backup:generic-api-key:10

@@ -27,10 +27,12 @@ t/maciej/* t/mike/* ← task / milestone branches. Short-lived.
 | --- | --- | --- |
 | `main` | shared | `develop` only, at release time, both devs sign off |
 | `develop` | shared | `mike` and `maciej`, via PR, self-merge OK (review optional) |
-| `maciej` | Maciej | `t/maciej/*` task branches, via PR or fast-forward |
-| `mike` | Mike | `t/mike/*` task branches, via PR or fast-forward |
+| `maciej` | Maciej | `t/maciej/*` task branches, via PR with a merge commit (never fast-forward) |
+| `mike` | Mike | `t/mike/*` task branches, via PR with a merge commit (never fast-forward) |
 
-Nobody pushes directly to `main` or `develop`. Personal branches can be
+Nobody pushes directly to `main`. Agents **do** merge into `develop` via PR
+as part of `/s3` when the chunk should show on Entire (standing
+authorization, 2026-08-17) — never to `main`. Personal branches can be
 pushed to directly by their owner; PRs are preferred when an LLM did the work
 so there's a diff to review.
 
@@ -59,14 +61,22 @@ task branch  →  personal branch  →  develop  →  main
 ```
 
 - **Task → personal**: as soon as the task is complete and passes its own
-  testing. Squash-merge or rebase-merge, your choice. Delete the task branch
-  after merge.
-- **Personal → develop**: **owner's call.** A 1-day fix can sync immediately;
-  a 2-week feature can sync the moment it's testable. The rule is "when ready",
-  not "on a clock." Open a PR so there's a diff record, run the testing gate,
-  then self-merge — peer review is welcome but never blocking, so nobody
-  stalls waiting on the other dev. Use rebase-merge to keep `develop` history
-  linear. The personal branch stays after the merge.
+  testing. Open a PR and merge it with a **merge commit — never fast-forward**
+  (personal branches are hot; parallel sessions need the merge boundary). Delete
+  the task branch after merge.
+- **Personal → develop**: **do this often.** GitHub's default branch is
+  `develop`. Entire.io repo Overview/Analytics only count checkpoints that
+  have landed there, so bigger chunks (a finished `/s2` block, any
+  user-visible or schema change) should reach `develop` in the same wrap
+  that lands them on the personal branch — agents have standing
+  authorization to open the PR and self-merge (2026-08-17). A 1-day fix can
+  sync immediately; do not wait for a "big bang" personal-branch dump.
+  Open a PR so there's a diff record, run `bun run verify`, then self-merge.
+  Peer review is welcome but never blocking. Prefer a merge commit when the
+  personal branch is hot. The personal branch stays; refresh it from
+  `develop` after so the two don't drift. Skip the develop sync only when
+  the designer said to keep the work on a task branch, or a duplication-guard
+  conflict is unresolved.
 - **Develop → main**: only at a tagged release. **This is the gated
   checkpoint** — both devs sign off in the PR. Tag the merge commit per the
   release scheme below.
@@ -162,34 +172,34 @@ the dev whose work caused the conflict resolves and re-requests review.
 These apply to every AI session in this repo regardless of tool:
 
 1. **Default base branch is the user's personal branch.** Unless told otherwise,
-   `git checkout -b <owner>/<task> <owner>` is the right starting point. Never
+   `git checkout -b t/<owner>/<task> <owner>` is the right starting point. Never
    branch from `main`. Never branch from `develop` unless explicitly
    instructed.
 2. **Never push to `main` or `develop` directly.** Always go through a PR.
-3. **Never merge or close PRs without explicit authorization.** Even when auto
-   mode is active. Merging is a shared-state action that needs the human's
-   "yes."
+3. **Merging:** `/s3` has standing authorization to merge into the **personal**
+   branch and, for bigger chunks, **personal → `develop`** (see AGENTS.md and
+   `/s3`). Never merge to `main` without both-devs sign-off. Never merge or
+   close *someone else's* PRs.
 4. **Never delete branches without explicit authorization.** Especially personal
    or long-running ones.
 5. **`--force-push` only with `--force-with-lease`** and only on task branches
    you own. Never force-push personal branches, `develop`, or `main`.
-6. **Run the testing gate for the merge you're targeting.** Don't open a PR
-   into `develop` if you've only run the task-tier checks; either run the
-   personal-tier walkthrough or flag in the PR description that the human
-   still owes the walkthrough.
-7. **Reference [CLAUDE.md](./CLAUDE.md) and [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)
+6. **Run `bun run verify` before any develop PR.** Flag in the PR if the
+   heavier personal→develop walkthrough (visual snapshots, desktop golden
+   path) was skipped — Entire-sync merges should not stall on that suite.
+7. **Reference [AGENTS.md](./AGENTS.md) and [DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md)
    before touching UI.** They're the design contract.
 
 ### Session start checklist
 
 The first thing an LLM session should do, before any other action:
 
-1. Confirm whose session this is — Maciej or Mike. (CLAUDE.md says "the user
-   is Maciej" by default; Mike's CLAUDE.md fork or session prompt overrides.)
+1. Confirm whose session this is — Maciej or Mike. (AGENTS.md says "the user
+   is Maciej" by default; Mike's AGENTS.md fork or session prompt overrides.)
 2. `git fetch && git checkout <owner>` to land on the correct personal branch.
 3. `git pull` to refresh.
-4. `git checkout -b <owner>/<task>` for new work.
-5. Skim CLAUDE.md + this file's "Rules for LLM agents" + DESIGN_SYSTEM.md
+4. `git checkout -b t/<owner>/<task>` for new work.
+5. Skim AGENTS.md + this file's "Rules for LLM agents" + DESIGN_SYSTEM.md
    if the task is UI.
 
 If any of the above can't be done (no personal branch yet, untracked work

@@ -9,7 +9,8 @@
 //!
 //! Conflict resolution:
 //! - Scalars: last-writer-wins via `updated_at` timestamps.
-//! - Note CRDT: `doc_state` field is left to the existing `notes_apply_crdt_updates` path.
+//! - Note CRDT: `doc_state` writes moved to the Wave-3 cloud sync engine
+//!   (`notesV2` in the JS layer); the old `notes_apply_crdt_updates` command is gone.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,16 +32,10 @@ const MAX_ATTEMPTS: u8 = 5;
 
 // Tables that are synced outbound from redb → Supabase.
 // Keys are redb table names → Supabase REST endpoint path segments.
-const SYNC_TABLES: &[(&str, &str)] = &[
-    ("notes_meta", "notes"),
-    ("tasks_projects", "tasks_projects"),
-    ("tasks_items", "tasks_items"),
-    ("tasks_comments", "tasks_comments"),
-    ("calendar_events", "calendar_events"),
-];
+const SYNC_TABLES: &[(&str, &str)] = &[("notes_meta", "notes")];
 
 // Tables pulled from Supabase → redb (read-only inbound merge).
-const PULL_TABLES: &[&str] = &["notes", "tasks_items", "tasks_projects"];
+const PULL_TABLES: &[&str] = &["notes"];
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -476,14 +471,6 @@ fn apply_inbound_row(store: &RedbStore, table_name: &str, row: &serde_json::Valu
                 };
                 let _ = store.put_note_doc_state(id, &doc_state);
             }
-        }
-    } else if table_name == "tasks_items" {
-        if let Ok(task) = serde_json::from_value::<crate::domain::TaskItem>(row.clone()) {
-            let _ = store.put_task_item(&task);
-        }
-    } else if table_name == "tasks_projects" {
-        if let Ok(project) = serde_json::from_value::<crate::domain::TaskProject>(row.clone()) {
-            let _ = store.put_task_project(&project);
         }
     }
 }

@@ -1,5 +1,5 @@
-import * as React from "react";
 import { ScrollArea as ScrollAreaPrimitive } from "radix-ui";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -46,9 +46,10 @@ function ScrollBar({
       )}
       {...props}
     >
+      {/* Same thumb tokens as the native scrollbars (global.css). */}
       <ScrollAreaPrimitive.ScrollAreaThumb
         data-slot="scroll-area-thumb"
-        className="relative flex-1 rounded-full bg-border hover:bg-muted-foreground/40"
+        className="relative flex-1 rounded-full bg-[var(--scroll-thumb)] hover:bg-[var(--scroll-thumb-hover)]"
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
   );

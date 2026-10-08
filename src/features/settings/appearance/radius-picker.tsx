@@ -1,5 +1,5 @@
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
-import { type Radius } from "../../../lib/appearance";
+import type { Radius } from "../../../lib/appearance";
 
 import { AppearancePickerRow } from "./picker-row";
 
@@ -36,14 +36,11 @@ export function RadiusPicker({ value, onChange }: Props) {
               data-radius={optionValue}
               className={
                 checked
-                  ? "flex cursor-pointer flex-col items-center gap-3 rounded-md border border-primary bg-accent px-3 py-3 transition-colors"
-                  : "flex cursor-pointer flex-col items-center gap-3 rounded-md border border-border bg-card px-3 py-3 transition-colors hover:bg-accent"
+                  ? "flex cursor-pointer flex-col items-center gap-3 rounded-md border border-foreground/30 bg-accent px-3 py-3 transition-colors duration-(--motion-fade) ease-(--ease-out)"
+                  : "flex cursor-pointer flex-col items-center gap-3 rounded-md border border-border bg-card px-3 py-3 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-accent/60"
               }
             >
-              <span
-                aria-hidden
-                className="h-9 w-12 rounded-md border border-border bg-muted"
-              />
+              <span aria-hidden className="h-9 w-12 rounded-md border border-border bg-muted" />
               <span className="flex items-center gap-2 text-sm text-foreground">
                 <RadioGroupItem id={id} value={optionValue} />
                 {label}

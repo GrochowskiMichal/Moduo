@@ -1,97 +1,160 @@
-import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Calendar, Video } from "lucide-react";
-
-import type { CalendarAccount, CalendarSource } from "../../calendar/types";
-import {
-  CALENDAR_ACCOUNTS_UPDATED_EVENT,
-  readLocalAccounts,
-  readLocalSources,
-  writeLocalAccounts,
-  writeLocalSources,
-} from "../../calendar/hooks/use-calendar";
+import { Bot, Calendar, Globe, Mail } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
+import { Eyebrow } from "../../../components/ui/eyebrow";
+import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
+import { connectedLoginCount, groupRailAccounts } from "../../calendar/accounts";
+import { cleanupCredentialsForRemoval } from "../../calendar/caldav-connect";
+import type { CalendarAccountModel } from "../../calendar/events";
+import {
+  disconnectGoogleLogin,
+  ensureGoogleCalendarAccounts,
+  startWebGoogleConnect,
+} from "../../calendar/google-web";
+import { CalendarConnectDialog, IcsFeedDialog } from "../../calendar/ui/calendar-connect-dialog";
+import {
+  asHistoryDepth,
+  describeDepthChange,
+  EMAIL_HISTORY_DEPTHS,
+  type EmailHistoryDepth,
+} from "../../email/history-depth";
+import type { SavedAccount } from "../../email/model/email-types";
+import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
+import { EmailHistoryDepthSelect } from "../../email/ui/email-history-depth-select";
+import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
+import { dispatchOpenSettings } from "../settings-events";
 
 import { SettingsSectionShell } from "./section-shell";
 
-type IntegrationStatus = { provider: string; connected: boolean };
+/** Outlook, CalDAV, and ICS still use the desktop keychain. Google works on the web. */
+const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+type OAuthResult = {
+  accountId: string;
+  email: string;
+  displayName: string;
+  calendars: { id: string; name: string; color: string }[];
+};
+
+const CAL_PROVIDERS = [
+  { key: "google" as const, label: "Google Calendar", command: "calendar_google_oauth_start" },
+  { key: "microsoft" as const, label: "Outlook Calendar", command: "calendar_outlook_oauth_start" },
+];
 
 export function IntegrationsSection() {
-  const [calAccounts, setCalAccounts] = useState<CalendarAccount[]>([]);
-  const [calSources, setCalSources] = useState<CalendarSource[]>([]);
+  const { runtime } = useAuth();
+  const { selectedWorkspaceId: workspaceId } = useWorkspace();
+
+  const [calAccounts, setCalAccounts] = useState<CalendarAccountModel[]>([]);
   const [calBusy, setCalBusy] = useState<string | null>(null);
   const [calError, setCalError] = useState<string | null>(null);
+  const [caldavOpen, setCaldavOpen] = useState(false);
+  const [icsOpen, setIcsOpen] = useState(false);
+  const [reconnectTarget, setReconnectTarget] = useState<CalendarAccountModel | null>(null);
 
-  const [videoStatuses, setVideoStatuses] = useState<IntegrationStatus[]>([]);
-  const [videoLoading, setVideoLoading] = useState(false);
-  const [videoBusy, setVideoBusy] = useState<string | null>(null);
-  const [videoError, setVideoError] = useState<string | null>(null);
+  const [emailAccounts, setEmailAccounts] = useState<SavedAccount[]>([]);
+  const [emailBusy, setEmailBusy] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailConnectOpen, setEmailConnectOpen] = useState(false);
+  const [emailReconnectTarget, setEmailReconnectTarget] = useState<SavedAccount | null>(null);
+  /** Depth edits not yet committed, per account — so the consequence line can
+   *  compare the pick against what is actually stored. */
+  const [depthDraft, setDepthDraft] = useState<Record<string, EmailHistoryDepth>>({});
+  const [depthBusy, setDepthBusy] = useState<string | null>(null);
+  /** What the last committed depth change means, per account. Kept AFTER the
+   *  write lands — the reassurance that lowering deletes nothing is useless if it
+   *  disappears the moment the round-trip finishes. */
+  const [depthNote, setDepthNote] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    setCalAccounts(readLocalAccounts());
-    setCalSources(readLocalSources());
-    const loadVideo = async () => {
-      setVideoLoading(true);
-      setVideoError(null);
+  // AI/MCP connector status: count of active (non-revoked) API keys for this
+  // workspace. `null` = not yet loaded or unreadable (e.g. a non-admin) — the
+  // card then avoids asserting a connection state either way.
+  const [mcpKeyCount, setMcpKeyCount] = useState<number | null>(null);
+
+  const loadAccounts = useCallback(async () => {
+    if (!runtime || !workspaceId) return;
+    try {
+      const bundle = await runtime.calendar.listModule(workspaceId);
+      let accounts = bundle.accounts.filter((a) => a.provider !== "moduo");
       try {
-        const result = await invoke<IntegrationStatus[]>("integration_get_status");
-        setVideoStatuses(result);
-      } catch (e) {
-        setVideoError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setVideoLoading(false);
+        const added = await ensureGoogleCalendarAccounts({
+          runtime,
+          workspaceId,
+          accounts,
+        });
+        if (added) {
+          const again = await runtime.calendar.listModule(workspaceId);
+          accounts = again.accounts.filter((a) => a.provider !== "moduo");
+        }
+      } catch (err) {
+        console.warn("[integrations] google link", err);
       }
-    };
-    void loadVideo();
-  }, []);
+      setCalAccounts(accounts);
+    } catch (e) {
+      setCalError(e instanceof Error ? e.message : String(e));
+    }
+  }, [runtime, workspaceId]);
+
+  const loadEmailAccounts = useCallback(async () => {
+    if (!IS_DESKTOP || !runtime) return;
+    setEmailError(null);
+    try {
+      setEmailAccounts((await runtime.email.listAccounts()) as SavedAccount[]);
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e));
+    }
+  }, [runtime]);
+
+  const loadMcpKeys = useCallback(async () => {
+    if (!runtime || !workspaceId) return;
+    try {
+      const keys = await runtime.workspace.listApiKeys(workspaceId);
+      setMcpKeyCount(keys.length);
+    } catch {
+      // Non-admins can't list keys (RLS) and reads can transiently fail — keep
+      // the status neutral rather than falsely reporting "not connected".
+      setMcpKeyCount(null);
+    }
+  }, [runtime, workspaceId]);
 
   useEffect(() => {
-    const handler = () => {
-      setCalAccounts(readLocalAccounts());
-      setCalSources(readLocalSources());
-    };
-    window.addEventListener(CALENDAR_ACCOUNTS_UPDATED_EVENT, handler);
-    return () => window.removeEventListener(CALENDAR_ACCOUNTS_UPDATED_EVENT, handler);
-  }, []);
+    void loadAccounts();
+    void loadEmailAccounts();
+    void loadMcpKeys();
+  }, [loadAccounts, loadEmailAccounts, loadMcpKeys]);
 
-  const handleConnectGoogleCalendar = async () => {
-    setCalBusy("google");
+  const handleConnect = async (provider: "google" | "microsoft", command: string) => {
+    if (!runtime || !workspaceId) return;
+    if (!IS_DESKTOP && provider === "google") {
+      setCalBusy(provider);
+      setCalError(null);
+      try {
+        await startWebGoogleConnect();
+      } catch (e) {
+        setCalError(e instanceof Error ? e.message : String(e));
+        setCalBusy(null);
+      }
+      return;
+    }
+    if (!IS_DESKTOP) return;
+    setCalBusy(provider);
     setCalError(null);
     try {
-      const result = await invoke<{
-        accountId: string;
-        email: string;
-        displayName: string;
-        calendars: { id: string; name: string; color: string }[];
-      }>("calendar_google_oauth_start");
-      const newAccount: CalendarAccount = {
-        id: result.accountId,
-        provider: "google",
-        email: result.email,
-        displayName: result.displayName,
-        connected: true,
+      const result = await invoke<OAuthResult>(command);
+      // Register the account in Supabase so web + desktop both see it. The
+      // provider event sync (fetch → mirror) runs from the desktop engine.
+      await runtime.calendar.upsertAccount({
+        workspaceId,
+        provider,
+        externalId: result.accountId,
+        displayLabel: result.email || result.displayName,
+        color: null,
+        status: "ok",
         lastSyncAt: new Date().toISOString(),
-      };
-      const newSrcs: CalendarSource[] = result.calendars.map((c) => ({
-        id: c.id,
-        accountId: result.accountId,
-        name: c.name,
-        color: c.color || "#4285f4",
-        visible: true,
-      }));
-      const cur = readLocalAccounts();
-      const idx = cur.findIndex((a) => a.id === newAccount.id);
-      const nextAccounts =
-        idx === -1 ? [...cur, newAccount] : cur.map((a, i) => (i === idx ? newAccount : a));
-      const curSrcs = readLocalSources();
-      const byId = new Map(curSrcs.map((s) => [s.id, s]));
-      for (const s of newSrcs) byId.set(s.id, s);
-      const nextSources = Array.from(byId.values());
-      writeLocalAccounts(nextAccounts);
-      writeLocalSources(nextSources);
-      setCalAccounts(nextAccounts);
-      setCalSources(nextSources);
-      window.dispatchEvent(new CustomEvent(CALENDAR_ACCOUNTS_UPDATED_EVENT));
+      });
+      await loadAccounts();
     } catch (e) {
       setCalError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -99,113 +162,392 @@ export function IntegrationsSection() {
     }
   };
 
-  const handleDisconnectCalendarAccount = (accountId: string) => {
-    const nextAccounts = readLocalAccounts().filter((a) => a.id !== accountId);
-    const nextSources = readLocalSources().filter((s) => s.accountId !== accountId);
-    writeLocalAccounts(nextAccounts);
-    writeLocalSources(nextSources);
-    setCalAccounts(nextAccounts);
-    setCalSources(nextSources);
-    window.dispatchEvent(new CustomEvent(CALENDAR_ACCOUNTS_UPDATED_EVENT));
-  };
-
-  const handleVideoConnect = async (provider: "zoom" | "google_meet") => {
-    setVideoBusy(provider);
-    setVideoError(null);
+  const handleDisconnect = async (account: CalendarAccountModel) => {
+    if (!runtime || !workspaceId) return;
+    setCalBusy(account.id);
     try {
-      await invoke(
-        provider === "zoom" ? "integration_connect_zoom" : "integration_connect_google_meet",
-      );
-      setVideoStatuses(await invoke<IntegrationStatus[]>("integration_get_status"));
+      // Clean up the OS-keychain secret first (CalDAV: only when this is the
+      // account's last calendar; ICS: always) — before the row is gone so the
+      // last-row check can still see it. Then cascade-remove in Supabase.
+      await cleanupCredentialsForRemoval({
+        isDesktop: IS_DESKTOP,
+        removed: account,
+        allAccounts: calAccounts,
+      });
+      await runtime.calendar.removeAccount({ workspaceId, accountId: account.id });
+      await loadAccounts();
     } catch (e) {
-      setVideoError(e instanceof Error ? e.message : String(e));
+      setCalError(e instanceof Error ? e.message : String(e));
     } finally {
-      setVideoBusy(null);
+      setCalBusy(null);
     }
   };
 
-  const handleVideoDisconnect = async (provider: string) => {
-    setVideoBusy(provider);
-    setVideoError(null);
+  const handleDisconnectLogin = async (rows: CalendarAccountModel[]) => {
+    if (!runtime || !workspaceId || rows.length === 0) return;
+    setCalBusy(rows[0].id);
+    setCalError(null);
     try {
-      await invoke("integration_disconnect", { provider });
-      setVideoStatuses(await invoke<IntegrationStatus[]>("integration_get_status"));
+      const email = rows[0].externalId.startsWith("google:")
+        ? rows[0].externalId.slice("google:".length).split(":")[0]
+        : "";
+      if (email) await disconnectGoogleLogin(email);
+      for (const row of rows) {
+        await cleanupCredentialsForRemoval({
+          isDesktop: IS_DESKTOP,
+          removed: row,
+          allAccounts: calAccounts,
+        });
+        await runtime.calendar.removeAccount({ workspaceId, accountId: row.id });
+      }
+      await loadAccounts();
     } catch (e) {
-      setVideoError(e instanceof Error ? e.message : String(e));
+      setCalError(e instanceof Error ? e.message : String(e));
     } finally {
-      setVideoBusy(null);
+      setCalBusy(null);
     }
   };
 
-  const googleAccounts = calAccounts.filter((a) => a.provider === "google");
+  const handleDepthChange = async (account: SavedAccount, depth: EmailHistoryDepth) => {
+    if (!runtime) return;
+    const previous = asHistoryDepth(account.historyDepth);
+    if (depth === previous) return;
+    setDepthDraft((prev) => ({ ...prev, [account.id]: depth }));
+    setDepthBusy(account.id);
+    setEmailError(null);
+    const clearDraft = () =>
+      setDepthDraft((prev) => {
+        const next = { ...prev };
+        delete next[account.id];
+        return next;
+      });
+    try {
+      await runtime.email.setHistoryDepth({ accountId: account.id, depth });
+      // Say what happened, and keep saying it — this is the only place the user
+      // learns that lowering the depth is not destructive.
+      setDepthNote((prev) => ({
+        ...prev,
+        [account.id]: describeDepthChange(previous, depth) ?? "",
+      }));
+      // Raising the depth re-opens the backfill, but only when a sync round
+      // actually runs — and an IDLE account can sit parked for ~29 minutes. Kick
+      // one now so "starts fetching older mail" is true at the moment we say it.
+      if (EMAIL_HISTORY_DEPTHS.indexOf(depth) > EMAIL_HISTORY_DEPTHS.indexOf(previous)) {
+        void runtime.email.syncNow({ accountId: account.id }).catch(() => {
+          /* best-effort: the next round picks the new depth up regardless */
+        });
+      }
+      await loadEmailAccounts();
+      clearDraft();
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e));
+      // Roll the picker back to what is actually stored, or it would claim a
+      // depth the engine isn't using.
+      clearDraft();
+    } finally {
+      setDepthBusy(null);
+    }
+  };
+
+  const handleEmailDisconnect = async (account: SavedAccount) => {
+    if (!IS_DESKTOP || !runtime) return;
+    setEmailBusy(account.id);
+    setEmailError(null);
+    try {
+      await runtime.email.disconnect(account.id);
+      await loadEmailAccounts();
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEmailBusy(null);
+    }
+  };
+
+  const mcpStatus = mcpConnectorStatus(mcpKeyCount);
+
+  const caldavIcsGroups = groupRailAccounts(
+    calAccounts.filter((a) => a.provider === "caldav" || a.provider === "ics"),
+  );
 
   return (
     <SettingsSectionShell
       title="Integrations"
-      description="Connect your calendars and video meeting tools."
+      description="Connect your calendars, email, and AI assistants."
     >
+      {runtime && workspaceId ? (
+        <>
+          <CalendarConnectDialog
+            open={caldavOpen}
+            onOpenChange={setCaldavOpen}
+            runtime={runtime}
+            workspaceId={workspaceId}
+            onDone={() => void loadAccounts()}
+          />
+          <CalendarConnectDialog
+            open={reconnectTarget !== null}
+            onOpenChange={(open) => {
+              if (!open) setReconnectTarget(null);
+            }}
+            runtime={runtime}
+            workspaceId={workspaceId}
+            reconnect={reconnectTarget ?? undefined}
+            onDone={() => void loadAccounts()}
+          />
+          <IcsFeedDialog
+            open={icsOpen}
+            onOpenChange={setIcsOpen}
+            runtime={runtime}
+            workspaceId={workspaceId}
+            onDone={() => void loadAccounts()}
+          />
+        </>
+      ) : null}
+      {IS_DESKTOP ? (
+        <>
+          <EmailConnectDialog
+            open={emailConnectOpen}
+            onOpenChange={setEmailConnectOpen}
+            onConnected={() => void loadEmailAccounts()}
+          />
+          <EmailConnectDialog
+            open={emailReconnectTarget !== null}
+            onOpenChange={(open) => {
+              if (!open) setEmailReconnectTarget(null);
+            }}
+            isReconnect={emailReconnectTarget ?? undefined}
+            onConnected={() => void loadEmailAccounts()}
+          />
+        </>
+      ) : null}
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-base text-foreground">Calendar</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Google Calendar is a two-way copy — events you add on a linked Google calendar are created
+          in Google too. Outlook and CalDAV still connect from the desktop app.
+        </p>
 
-        <div className="mt-4 rounded-md border border-border bg-muted/40 p-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
-                <Calendar className="size-4" />
-              </span>
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-foreground">Google Calendar</span>
-                <span className="text-xs text-muted-foreground">
-                  {googleAccounts.length > 0
-                    ? `${googleAccounts.length} account${googleAccounts.length === 1 ? "" : "s"} connected`
-                    : "Not connected"}
-                </span>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleConnectGoogleCalendar()}
-              disabled={calBusy === "google"}
-            >
-              {calBusy === "google" ? "Connecting…" : "Connect account"}
-            </Button>
-          </div>
-
-          {googleAccounts.length > 0 ? (
-            <ul className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
-              {googleAccounts.map((acc) => {
-                const sources = calSources.filter((s) => s.accountId === acc.id);
-                return (
-                  <li
-                    key={acc.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-foreground">{acc.email}</p>
-                      {sources.length > 0 ? (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {sources.map((s) => s.name).join(", ")}
-                        </p>
-                      ) : null}
+        <div className="mt-4 flex flex-col gap-2">
+          {CAL_PROVIDERS.map(({ key, label, command }) => {
+            const connected = calAccounts.filter((a) => a.provider === key);
+            const logins = groupRailAccounts(connected);
+            const loginCount = connectedLoginCount(connected);
+            const canConnect = IS_DESKTOP || key === "google";
+            return (
+              <div key={key} className="rounded-md border border-border bg-muted/40 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
+                      <Calendar className="size-4" />
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-foreground">{label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {loginCount > 0
+                          ? `${loginCount} account${loginCount === 1 ? "" : "s"} connected`
+                          : canConnect
+                            ? "Not connected"
+                            : "Connect from the desktop app"}
+                      </span>
                     </div>
+                  </div>
+                  {canConnect ? (
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      onClick={() => handleDisconnectCalendarAccount(acc.id)}
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => void handleConnect(key, command)}
+                      disabled={calBusy === key}
                     >
-                      Disconnect
+                      {calBusy === key ? "Connecting…" : "Connect account"}
                     </Button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
+                  ) : (
+                    <Button type="button" variant="outline" size="sm" disabled>
+                      Desktop only
+                    </Button>
+                  )}
+                </div>
+
+                {logins.length > 0 ? (
+                  <ul className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+                    {logins.map((group) => {
+                      const rows = group.kind === "group" ? group.rows : [group.row];
+                      const mailbox = group.kind === "group" ? group.detail : null;
+                      const platform = group.kind === "group" ? group.header : label;
+                      return (
+                        <li
+                          key={group.kind === "group" ? group.key : group.row.account.id}
+                          className="rounded-md border border-border bg-card px-3 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <Eyebrow as="p">{platform}</Eyebrow>
+                              <p className="truncate text-sm text-foreground">
+                                {mailbox || rows[0].label}
+                              </p>
+                            </div>
+                            {group.kind === "group" &&
+                            rows.some((row) => row.scope === "calendar") ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  void handleDisconnectLogin(rows.map((row) => row.account))
+                                }
+                                disabled={rows.some((row) => calBusy === row.account.id)}
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                Disconnect
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleDisconnect(rows[0].account)}
+                                disabled={calBusy === rows[0].account.id}
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                {calBusy === rows[0].account.id ? "Removing…" : "Disconnect"}
+                              </Button>
+                            )}
+                          </div>
+                          {group.kind === "group" &&
+                          rows.some((row) => row.scope === "calendar") ? (
+                            <ul className="mt-2 flex flex-col border-t border-border">
+                              {rows.map((row) => (
+                                <li
+                                  key={row.account.id}
+                                  className="flex items-center justify-between gap-3 py-1.5"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm text-foreground">{row.label}</p>
+                                    {row.account.status === "error" ? (
+                                      <p className="truncate text-xs text-warning">
+                                        Sync error — reconnect
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => void handleDisconnect(row.account)}
+                                    disabled={calBusy === row.account.id}
+                                    className="text-muted-foreground"
+                                  >
+                                    {calBusy === row.account.id ? "Removing…" : "Remove"}
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
+          {/* CalDAV + ICS (basic-auth, no OAuth) — iCloud / Fastmail / Nextcloud / feeds */}
+          <div className="rounded-md border border-border bg-muted/40 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
+                  <Globe className="size-4" />
+                </span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-foreground">
+                    CalDAV &amp; ICS feeds
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {IS_DESKTOP
+                      ? "iCloud, Fastmail, Nextcloud, or any calendar address"
+                      : "Connect from the desktop app"}
+                  </span>
+                </div>
+              </div>
+              {IS_DESKTOP ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCaldavOpen(true)}
+                  >
+                    Connect CalDAV
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIcsOpen(true)}
+                  >
+                    Add ICS feed
+                  </Button>
+                </div>
+              ) : (
+                <Button type="button" variant="outline" size="sm" disabled>
+                  Desktop only
+                </Button>
+              )}
+            </div>
+
+            {caldavIcsGroups.length > 0 ? (
+              <ul className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+                {caldavIcsGroups.flatMap((group) => {
+                  const rows = group.kind === "group" ? group.rows : [group.row];
+                  const header = group.kind === "group" ? group.header : null;
+                  return rows.map((row, i) => (
+                    <li
+                      key={row.account.id}
+                      className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        {header && i === 0 ? (
+                          <Eyebrow as="p" className="truncate">
+                            {header}
+                          </Eyebrow>
+                        ) : null}
+                        <p className="truncate text-sm text-foreground">{row.label}</p>
+                        {row.account.status === "error" ? (
+                          <p className="truncate text-xs text-warning">
+                            Sync error — reconnect to fix
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {row.account.provider === "caldav" && row.account.status === "error" ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setReconnectTarget(row.account)}
+                          >
+                            Reconnect
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void handleDisconnect(row.account)}
+                          disabled={calBusy === row.account.id}
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          {calBusy === row.account.id ? "Removing…" : "Remove"}
+                        </Button>
+                      </div>
+                    </li>
+                  ));
+                })}
+              </ul>
+            ) : null}
+          </div>
+
           {calError ? (
-            <p className="mt-3 text-xs text-destructive" role="alert">
+            <p className="text-xs text-destructive" role="alert">
               {calError}
             </p>
           ) : null}
@@ -213,59 +555,143 @@ export function IntegrationsSection() {
       </section>
 
       <section className="rounded-lg border border-border bg-card p-6">
-        <h3 className="font-display text-base text-foreground">Video meetings</h3>
-        {videoError ? (
-          <p className="mt-2 text-xs text-destructive" role="alert">
-            {videoError}
-          </p>
-        ) : null}
+        <h3 className="font-display text-base text-foreground">Email</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {IS_DESKTOP
+            ? "Connect Gmail, iCloud, or any IMAP mailbox. Credentials are stored in your device keychain."
+            : "Email accounts are managed on the desktop app."}
+        </p>
+
         <div className="mt-4 flex flex-col gap-2">
-          {(["zoom", "google_meet"] as const).map((provider) => {
-            const status = videoStatuses.find((s) => s.provider === provider);
-            const connected = status?.connected ?? false;
-            const busy = videoBusy === provider;
-            const label = provider === "zoom" ? "Zoom" : "Google Meet";
-            return (
-              <div
-                key={provider}
-                className="flex items-center justify-between gap-4 rounded-md border border-border bg-muted/40 px-4 py-3"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
-                    <Video className="size-4" />
+          <div className="rounded-md border border-border bg-muted/40 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
+                  <Mail className="size-4" />
+                </span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-foreground">Mailboxes</span>
+                  <span className="text-xs text-muted-foreground">
+                    {emailAccounts.length > 0
+                      ? `${emailAccounts.length} account${emailAccounts.length === 1 ? "" : "s"} connected`
+                      : IS_DESKTOP
+                        ? "Not connected"
+                        : "Connect from the desktop app"}
                   </span>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-foreground">{label}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {videoLoading ? "Loading…" : connected ? "Connected" : "Not connected"}
-                    </span>
-                  </div>
                 </div>
-                {connected ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void handleVideoDisconnect(provider)}
-                    disabled={busy}
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    {busy ? "Disconnecting…" : "Disconnect"}
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleVideoConnect(provider)}
-                    disabled={busy || videoLoading}
-                  >
-                    {busy ? "Connecting…" : "Connect"}
-                  </Button>
-                )}
               </div>
-            );
-          })}
+              {IS_DESKTOP ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEmailConnectOpen(true)}
+                >
+                  Connect email account
+                </Button>
+              ) : null}
+            </div>
+
+            {emailAccounts.length > 0 ? (
+              <ul className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+                {emailAccounts.map((acc) => (
+                  <li
+                    key={acc.id}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-foreground">{acc.email}</p>
+                      {acc.status === "active" ? (
+                        <p className="text-xs text-success">Connected</p>
+                      ) : acc.status === "reauth_required" ? (
+                        <p className="text-xs text-warning">Sign-in expired — reconnect to fix</p>
+                      ) : (
+                        <p className="truncate text-xs text-destructive">
+                          {acc.lastError ? `Error — ${acc.lastError}` : "Connection error"}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {/* AC8: depth is changeable per account, after connecting.
+                          "This device" because the mail store is local — the
+                          other machine keeps its own depth. */}
+                      <div className="flex flex-col items-end gap-0.5">
+                        <Eyebrow asChild>
+                          <label htmlFor={`email-depth-${acc.id}`}>
+                            Inbox history · this device
+                          </label>
+                        </Eyebrow>
+                        <EmailHistoryDepthSelect
+                          id={`email-depth-${acc.id}`}
+                          value={depthDraft[acc.id] ?? asHistoryDepth(acc.historyDepth)}
+                          committed={asHistoryDepth(acc.historyDepth)}
+                          onChange={(depth) => void handleDepthChange(acc, depth)}
+                          disabled={depthBusy === acc.id}
+                          note={depthNote[acc.id]}
+                        />
+                      </div>
+                      {acc.status === "reauth_required" ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEmailReconnectTarget(acc)}
+                        >
+                          Reconnect
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void handleEmailDisconnect(acc)}
+                        disabled={emailBusy === acc.id}
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        {emailBusy === acc.id ? "Removing…" : "Disconnect"}
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+
+          {emailError ? (
+            <p className="text-xs text-destructive" role="alert">
+              {emailError}
+            </p>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-6">
+        <h3 className="font-display text-base text-foreground">AI &amp; MCP</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Connect Claude and other AI assistants to this workspace over MCP. They reach your tasks
+          and notes through a scoped API key you create and can revoke anytime.
+        </p>
+
+        <div className="mt-4 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground">
+                <Bot className="size-4" />
+              </span>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-foreground">AI assistants (MCP)</span>
+                <span className="text-xs text-muted-foreground">{mcpStatus.label}</span>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => dispatchOpenSettings({ section: MCP_KEYS_SECTION })}
+            >
+              {mcpStatus.connected ? "Manage keys" : "Set up"}
+            </Button>
+          </div>
         </div>
       </section>
     </SettingsSectionShell>

@@ -5,20 +5,27 @@ const projectRoot = path.resolve(process.cwd());
 
 const config: StorybookConfig = {
   stories: ["../src/**/*.mdx", "../src/**/*.stories.@(js|jsx|ts|tsx)"],
-  addons: ["@storybook/addon-essentials", "@storybook/addon-interactions"],
+  addons: ["@storybook/addon-docs", "@storybook/addon-mcp"],
+  // Serves public/ (the app's static files) so stories can load real assets,
+  // such as the email logos in public/email/.
+  staticDirs: ["../public"],
+
   framework: {
     name: "@storybook/react-vite",
     options: {},
   },
-  docs: {
-    autodocs: "tag",
-  },
+
   viteFinal: async (cfg) => {
     cfg.resolve = cfg.resolve ?? {};
     const existingAlias = cfg.resolve.alias;
+    // Mirror tsconfig `paths` exactly (`@/*` → src, `@contracts/*` → the shared
+    // Zod layer, `@email/*` → the email kit). `@` used to point at the repo root, so every `@/lib/utils`
+    // import 404'd and no story rendered (gotchas §Storybook).
     const aliasMap: Record<string, string> = {
+      "@contracts": path.resolve(projectRoot, "supabase/functions/_shared/contracts"),
+      "@email": path.resolve(projectRoot, "supabase/functions/_shared/email"),
       "@/src": path.resolve(projectRoot, "src"),
-      "@": projectRoot,
+      "@": path.resolve(projectRoot, "src"),
     };
     if (Array.isArray(existingAlias)) {
       cfg.resolve.alias = [

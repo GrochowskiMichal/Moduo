@@ -1,8 +1,22 @@
-import { createContext, PropsWithChildren, useContext, useEffect, useState } from "react";
-import { initRuntime, runtimeConfigError, type ModuoRuntime, type RuntimeSession } from "../lib/runtime";
-import { Analytics, identify, resetIdentity } from "../lib/analytics";
+import { normalizePlanTier, type PlanTier } from "@contracts/vocabularies";
+import {
+  createContext,
+  type PropsWithChildren,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { attachFocusUser } from "../features/focus/engine";
+import { Analytics, setAnalyticsUser } from "../lib/analytics";
+import {
+  initRuntime,
+  type ModuoRuntime,
+  type RuntimeSession,
+  runtimeConfigError,
+} from "../lib/runtime";
 
-export type PlanTier = "free" | "pro" | "team" | "founders";
+export type { PlanTier } from "@contracts/vocabularies";
 
 export type AuthContextValue = {
   userId: string | null;
@@ -15,7 +29,6 @@ export type AuthContextValue = {
   planTier: PlanTier;
   signOut: () => Promise<void>;
   refreshPlanTier: () => Promise<void>;
-  syncSubscription: () => Promise<PlanTier>;
 };
 
 export const AuthContext = createContext<AuthContextValue>({
@@ -29,14 +42,48 @@ export const AuthContext = createContext<AuthContextValue>({
   planTier: "free",
   signOut: async () => {},
   refreshPlanTier: async () => {},
-  syncSubscription: async () => "free",
 });
+
+/** What a profile read says about the account: there (a row), gone (the read worked and
+ *  found no row, PostgREST's PGRST116 for `.single()`), or unknown (offline, an outage). */
+type AccountCheck = "exists" | "gone" | "unknown";
+
+function accountCheck(result: { data: unknown; error: unknown }): AccountCheck {
+  if (result.data) return "exists";
+  return (result.error as { code?: unknown } | null)?.code === "PGRST116" ? "gone" : "unknown";
+}
+
+/**
+ * Analytics knows the person by user id only (never email) and stays off unless they opted
+ * in — see lib/analytics.ts. It also starts only for an account the server still has: a
+ * session cached on this device outlives an account deleted elsewhere by up to an hour, and
+ * identifying it would bring the erased PostHog person back (PRIV-3). A deleted account has
+ * no profile, so the profile read the plan tier needs anyway is the check. A confirmed
+ * absence stops analytics; a failed read leaves it as it is, so a blip mid-session never
+ * resets a consenting person's PostHog identity. Nothing happens if the session changed
+ * while it ran. Returns whether analytics started for `userId`.
+ */
+function startAnalyticsIfAccountExists(
+  sessionUser: { current: string | null },
+  userId: string,
+  check: AccountCheck,
+): boolean {
+  if (sessionUser.current !== userId) return false;
+  if (check === "exists") {
+    void setAnalyticsUser(userId);
+    return true;
+  }
+  if (check === "gone") void setAnalyticsUser(null);
+  return false;
+}
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<RuntimeSession | null>(null);
   const [rt, setRt] = useState<ModuoRuntime | null>(null);
   const [planTier, setPlanTier] = useState<PlanTier>("free");
+  // Whose session is current, for the checks above that resolve later.
+  const sessionUser = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -51,29 +98,38 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (!active) return;
 
       const finalSession = data.session ?? null;
+      const uid = finalSession?.user?.id ?? null;
+      sessionUser.current = uid;
 
       setSession(finalSession);
       setLoading(false);
 
-      if (finalSession?.user?.id) {
-        void identify(finalSession.user.id, { email: finalSession.user.email });
-        void Analytics.app.signedIn("cloud");
+      if (!uid) {
+        void setAnalyticsUser(null);
+        return;
       }
 
-      // Non-critical: fetch plan tier from profile.
-      const uid = finalSession?.user?.id;
-      if (uid) {
-        try {
-          const { data: profile } = await client.workspace.getProfile(uid);
-          if (active && profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
-        } catch {
-          // ignore — keep "free" default
-        }
+      // Non-critical: fetch plan tier from profile. The same read decides analytics.
+      let profile: { plan_tier?: string | null } | null = null;
+      let check: AccountCheck = "unknown";
+      try {
+        const result = await client.workspace.getProfile(uid);
+        profile = result.data;
+        check = accountCheck(result);
+      } catch {
+        // ignore — keep "free" default, and analytics off until a later read works
+      }
+      if (!active) return;
+      if (profile?.plan_tier) setPlanTier(normalizePlanTier(profile.plan_tier));
+      if (startAnalyticsIfAccountExists(sessionUser, uid, check)) {
+        void Analytics.app.signedIn("cloud");
       }
     };
 
     void bootstrap();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Once runtime is available, subscribe to auth state changes.
@@ -87,6 +143,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (!active) return;
       setSession(nextSession ?? null);
       setLoading(false);
+      const uid = event === "SIGNED_OUT" ? null : (nextSession?.user?.id ?? null);
+      sessionUser.current = uid;
 
       if (event === "TOKEN_REFRESHED") {
         console.debug("[auth] token refreshed", {
@@ -95,20 +153,30 @@ export function AuthProvider({ children }: PropsWithChildren) {
         });
       }
 
-      // Refresh plan tier on sign-in events.
-      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && nextSession?.user?.id) {
-        rt.workspace.getProfile(nextSession.user.id)
-          .then(({ data: profile }) => {
-            if (active && profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
+      // Refresh plan tier on sign-in events, and start analytics once the account is confirmed.
+      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && uid) {
+        rt.workspace
+          .getProfile(uid)
+          .then((result) => {
+            if (!active) return;
+            if (result.data?.plan_tier) setPlanTier(normalizePlanTier(result.data.plan_tier));
+            startAnalyticsIfAccountExists(sessionUser, uid, accountCheck(result));
           })
           .catch(() => {});
       }
 
       if (event === "SIGNED_OUT") {
         setPlanTier("free");
-        void resetIdentity();
-        void Analytics.app.signedOut();
+        // Analytics opts out and forgets them. `app_signed_out` is tracked in signOut(),
+        // only when the person signs out: one auth-js does on its own, like a refused
+        // refresh after the account was deleted elsewhere, must not send an event that
+        // brings back the PostHog person the deletion erased (PRIV-3).
+        void setAnalyticsUser(null);
+      } else if (!uid) {
+        void setAnalyticsUser(null);
       }
+      // Any other event keeps the same person: analytics already follows them, or waits for
+      // the next sign-in or launch if their account couldn't be confirmed.
     });
 
     return () => {
@@ -117,8 +185,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, [rt]);
 
+  // The focus session is persisted per person: resume it on sign-in, hand it
+  // back on sign-out (TV-F1). Skipped while the cached session is still loading.
+  const sessionUserId = session?.user?.id ?? null;
+  useEffect(() => {
+    if (!loading) attachFocusUser(sessionUserId);
+  }, [loading, sessionUserId]);
+
   const signOut = async () => {
     if (!rt) return;
+    // Tracked first (if they opted in); the SIGNED_OUT that follows opts analytics out.
+    void Analytics.app.signedOut();
     await rt.auth.signOut();
     setSession(null);
   };
@@ -128,27 +205,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!rt || !uid) return;
     try {
       const { data: profile } = await rt.workspace.getProfile(uid);
-      if (profile?.plan_tier) setPlanTier(profile.plan_tier as PlanTier);
-    } catch { /* ignore */ }
-  };
-
-  const syncSubscription = async (): Promise<PlanTier> => {
-    const token = session?.access_token;
-    if (!token) return planTier;
-    const SUPABASE_URL = (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ??
-      "https://wtoonrvuqumihpkbvwvs.supabase.co";
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-subscription`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const { plan_tier, error } = await res.json();
-      if (error) throw new Error(error);
-      if (plan_tier) setPlanTier(plan_tier as PlanTier);
-      return (plan_tier as PlanTier) ?? planTier;
-    } catch (err) {
-      console.error("[auth] syncSubscription failed:", err);
-      return planTier;
+      if (profile?.plan_tier) setPlanTier(normalizePlanTier(profile.plan_tier));
+    } catch {
+      /* ignore */
     }
   };
 
@@ -165,7 +224,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
         planTier,
         signOut,
         refreshPlanTier,
-        syncSubscription,
       }}
     >
       {children}

@@ -1,33 +1,42 @@
-import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
   cn(
-    "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap",
-    "rounded-md font-sans text-sm font-medium",
-    "transition-colors outline-none",
-    "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap",
+    "rounded-md font-display text-base font-medium",
+    "transition-[color,background-color,border-color,box-shadow] duration-(--motion-fade) ease-(--ease-out) outline-none",
+    "focus-visible:ring-2 focus-visible:ring-ring/50",
     "disabled:pointer-events-none disabled:opacity-50",
-    "aria-invalid:ring-2 aria-invalid:ring-destructive",
-    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+    "aria-invalid:ring-2 aria-invalid:ring-destructive/40",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-icon-sm",
   ),
   {
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-accent",
-        outline: "border border-border bg-transparent text-foreground hover:bg-accent",
-        ghost: "bg-transparent text-foreground hover:bg-accent",
+        // Neutral variants ride the state layer (tokens.css §5b): each hover
+        // is one step up from its rest fill on every shade. The old
+        // bg-secondary → hover:bg-accent pair was one grey on dark (a no-op).
+        secondary: "bg-state-active text-foreground hover:bg-state-active-hover",
+        // A toggle (aria-pressed) stays on the active step while on and
+        // hovers one step up, so call sites never force a fill by className.
+        outline:
+          "border border-hairline bg-transparent text-foreground hover:bg-state-hover active:bg-state-active aria-pressed:bg-state-active aria-pressed:hover:bg-state-active-hover",
+        ghost:
+          "bg-transparent text-foreground hover:bg-state-hover active:bg-state-active aria-pressed:bg-state-active aria-pressed:hover:bg-state-active-hover",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         link: "bg-transparent text-primary underline-offset-4 hover:underline",
       },
+      // Size changes height (via --ctrl-h* below) + padding only; font stays
+      // text-base across rungs so any two controls on a rung share a baseline.
       size: {
-        sm: "px-3 text-xs",
+        sm: "px-2.5",
         md: "px-4",
-        lg: "px-6 text-base",
+        lg: "px-6 [&_svg:not([class*='size-'])]:size-icon",
         icon: "aspect-square px-0",
       },
     },
@@ -54,11 +63,7 @@ function Button({
   const Comp = asChild ? Slot.Root : "button";
 
   const sizeVar =
-    size === "sm"
-      ? "var(--ctrl-h-sm)"
-      : size === "lg"
-        ? "var(--ctrl-h-lg)"
-        : "var(--ctrl-h)";
+    size === "sm" ? "var(--ctrl-h-sm)" : size === "lg" ? "var(--ctrl-h-lg)" : "var(--ctrl-h)";
 
   return (
     <Comp
@@ -72,5 +77,5 @@ function Button({
   );
 }
 
-export { Button, buttonVariants };
 export type { ButtonProps };
+export { Button, buttonVariants };

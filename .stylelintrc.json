@@ -1,22 +1,12 @@
 {
   "extends": ["stylelint-config-standard"],
   "plugins": ["stylelint-declaration-strict-value"],
-  "ignoreFiles": [
-    "node_modules/**",
-    "dist/**",
-    "src-tauri/**",
-    "src/styles/tokens.css"
-  ],
+  "ignoreFiles": ["node_modules/**", "dist/**", "src-tauri/**", "src/styles/tokens.css"],
   "defaultSeverity": "warning",
   "rules": {
     "color-no-hex": [true, { "severity": "error" }],
     "scale-unlimited/declaration-strict-value": [
-      [
-        "/color$/",
-        "fill",
-        "stroke",
-        "background-color"
-      ],
+      ["/color$/", "fill", "stroke", "background-color"],
       {
         "ignoreValues": [
           "transparent",
@@ -68,19 +58,11 @@
   },
   "overrides": [
     {
-      "files": [
-        "src/global.css",
-        "src/features/timetracking/**/*.css"
-      ],
+      "files": ["src/global.css", "src/features/timetracking/**/*.css"],
       "rules": {
         "color-no-hex": [true, { "severity": "warning" }],
         "scale-unlimited/declaration-strict-value": [
-          [
-            "/color$/",
-            "fill",
-            "stroke",
-            "background-color"
-          ],
+          ["/color$/", "fill", "stroke", "background-color"],
           {
             "ignoreValues": [
               "transparent",

@@ -1,225 +1,210 @@
+// DB-6 — "Weather" widget (S/M). Current conditions from open-meteo (no API key).
+// Configured inline via a city search (no popover until DB-8); persisted via
+// updateConfig; refetched every 10 minutes. Degrades to a quiet retry on failure.
+
+import { parseOrError } from "@contracts/errors";
+import { openMeteoForecastSchema, openMeteoGeocodeSchema } from "@contracts/rows";
+import { MapPin, Pencil } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { WidgetConfig } from "../../types";
-import { WidgetShell } from "./widget-shell";
+import { cn } from "@/lib/utils";
 
-type WeatherData = {
-  temperature: number;
-  windspeed: number;
-  weathercode: number;
-  isDay: boolean;
-};
+import type { WidgetComponentProps } from "../../registry/types";
+import { forecastUrl, geocodeUrl, weatherEmoji, weatherLabel } from "../../weather";
+import { WidgetLoading } from "./widget-primitives";
 
-type GeoResult = {
-  name: string;
-  country: string;
-  latitude: number;
-  longitude: number;
-};
+type GeoResult = { name: string; country: string; latitude: number; longitude: number };
+type Current = { tempC: number; code: number; isDay: boolean };
 
-type Props = {
-  config: WidgetConfig;
-  isLocked: boolean;
-  onUpdateConfig: (patch: Partial<WidgetConfig>) => void;
-};
-
-const WMO_CODES: Record<number, string> = {
-  0: "Clear sky",
-  1: "Mainly clear",
-  2: "Partly cloudy",
-  3: "Overcast",
-  45: "Foggy",
-  48: "Rime fog",
-  51: "Light drizzle",
-  53: "Drizzle",
-  55: "Dense drizzle",
-  61: "Light rain",
-  63: "Rain",
-  65: "Heavy rain",
-  71: "Light snow",
-  73: "Snow",
-  75: "Heavy snow",
-  80: "Light showers",
-  81: "Showers",
-  82: "Heavy showers",
-  95: "Thunderstorm",
-};
-
-function weatherIcon(code: number, isDay: boolean): string {
-  if (code === 0) return isDay ? "\u2600" : "\u263E";
-  if (code <= 2) return isDay ? "\u26C5" : "\u2601";
-  if (code === 3) return "\u2601";
-  if (code <= 48) return "\u2601";
-  if (code <= 55) return "\uD83C\uDF27";
-  if (code <= 65) return "\uD83C\uDF27";
-  if (code <= 75) return "\u2744";
-  if (code <= 82) return "\uD83C\uDF26";
-  return "\u26C8";
+function num(config: Record<string, unknown>, key: string): number | null {
+  const v = config[key];
+  return typeof v === "number" ? v : null;
+}
+function str(config: Record<string, unknown>, key: string): string {
+  const v = config[key];
+  return typeof v === "string" ? v : "";
 }
 
-const DEFAULT_LAT = 40.71;
-const DEFAULT_LON = -74.01;
-const DEFAULT_CITY = "New York";
-
-export function WeatherWidget({ config, isLocked, onUpdateConfig }: Props) {
-  const [weather, setWeather] = useState<WeatherData | null>(null);
+function CitySearch({ onPick }: { onPick: (r: GeoResult) => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<GeoResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<GeoResult[]>([]);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const seq = useRef(0);
 
-  const lat = config.weatherLat ?? DEFAULT_LAT;
-  const lon = config.weatherLon ?? DEFAULT_LON;
-  const cityLabel = config.weatherCity ?? DEFAULT_CITY;
-
-  const fetchWeather = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data = await res.json();
-      const cw = data.current_weather;
-      setWeather({
-        temperature: cw.temperature,
-        windspeed: cw.windspeed,
-        weathercode: cw.weathercode,
-        isDay: cw.is_day === 1,
-      });
-    } catch {
-      setError("Could not load weather");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setResults([]);
+      return;
     }
+    const mine = ++seq.current;
+    const t = window.setTimeout(() => {
+      setLoading(true);
+      void fetch(geocodeUrl(q))
+        .then((r) => r.json())
+        .then((data) => {
+          if (mine !== seq.current) return;
+          const parsed = parseOrError(openMeteoGeocodeSchema, data);
+          if (!parsed.success) {
+            setResults([]);
+            return;
+          }
+          const list = parsed.data.results ?? [];
+          setResults(
+            list.map((r) => ({
+              name: r.name,
+              country: r.country ?? "",
+              latitude: r.latitude,
+              longitude: r.longitude,
+            })),
+          );
+        })
+        .catch(() => {
+          if (mine === seq.current) setResults([]);
+        })
+        .finally(() => {
+          if (mine === seq.current) setLoading(false);
+        });
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
+  return (
+    <div className="flex h-full flex-col gap-1.5 p-2">
+      <input
+        value={query}
+        autoFocus
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search a city…"
+        className="h-[var(--ctrl-h-sm)] w-full shrink-0 rounded-md border border-border bg-muted px-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      <ul className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+        {loading && results.length === 0 ? (
+          <li className="px-2 py-1 text-xs text-muted-foreground">Searching…</li>
+        ) : null}
+        {results.map((r, i) => (
+          <li key={`${r.latitude},${r.longitude},${i}`}>
+            <button
+              type="button"
+              onClick={() => onPick(r)}
+              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <MapPin className="size-icon-xs shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 truncate">
+                {r.name}
+                {r.country ? <span className="text-muted-foreground">, {r.country}</span> : null}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function WeatherWidget({ widget, size, updateConfig }: WidgetComponentProps) {
+  const lat = num(widget.config, "weatherLat");
+  const lon = num(widget.config, "weatherLon");
+  const city = str(widget.config, "weatherCity");
+  const [editing, setEditing] = useState(lat == null || lon == null);
+  const [current, setCurrent] = useState<Current | null>(null);
+  const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  const seq = useRef(0);
+
+  const load = useCallback(() => {
+    if (lat == null || lon == null) return;
+    const mine = ++seq.current;
+    setState("loading");
+    void fetch(forecastUrl(lat, lon))
+      .then((r) => r.json())
+      .then((data) => {
+        if (mine !== seq.current) return;
+        const parsed = parseOrError(openMeteoForecastSchema, data);
+        const cw = parsed.success ? parsed.data.current_weather : undefined;
+        if (!cw || typeof cw.temperature !== "number") throw new Error("no data");
+        setCurrent({ tempC: cw.temperature, code: cw.weathercode ?? 0, isDay: cw.is_day !== 0 });
+        setState("ok");
+      })
+      .catch(() => {
+        if (mine === seq.current) setState("error");
+      });
   }, [lat, lon]);
 
   useEffect(() => {
-    void fetchWeather();
-    const interval = window.setInterval(fetchWeather, 10 * 60 * 1000);
+    if (editing) return;
+    load();
+    const interval = window.setInterval(load, 10 * 60 * 1000);
     return () => window.clearInterval(interval);
-  }, [fetchWeather]);
+  }, [editing, load]);
 
-  const searchCity = useCallback(async (query: string) => {
-    if (query.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    try {
-      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=en&format=json`;
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const data = await res.json();
-      const results: GeoResult[] = (data.results ?? []).map((r: any) => ({
-        name: r.name,
-        country: r.country ?? "",
-        latitude: r.latitude,
-        longitude: r.longitude,
-      }));
-      setSearchResults(results);
-    } catch {
-      setSearchResults([]);
-    }
-  }, []);
+  if (editing || lat == null || lon == null) {
+    return (
+      <CitySearch
+        onPick={(r) => {
+          updateConfig({
+            weatherCity: r.country ? `${r.name}, ${r.country}` : r.name,
+            weatherLat: r.latitude,
+            weatherLon: r.longitude,
+          });
+          setEditing(false);
+        }}
+      />
+    );
+  }
 
-  const handleSearchInput = useCallback(
-    (value: string) => {
-      setSearchQuery(value);
-      setSearchOpen(true);
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-      searchTimerRef.current = setTimeout(() => {
-        void searchCity(value);
-      }, 300);
-    },
-    [searchCity]
-  );
-
-  const selectResult = useCallback(
-    (result: GeoResult) => {
-      const label = result.country ? `${result.name}, ${result.country}` : result.name;
-      onUpdateConfig({ weatherCity: label, weatherLat: result.latitude, weatherLon: result.longitude });
-      setSearchQuery("");
-      setSearchResults([]);
-      setSearchOpen(false);
-    },
-    [onUpdateConfig]
-  );
-
-  useEffect(() => {
-    if (!searchOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setSearchOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [searchOpen]);
-
-  return (
-    <WidgetShell
-      config={config}
-      title="Weather"
-      controls={
-        !isLocked ? (
-          <div className="relative" ref={dropdownRef}>
-            <input
-              value={searchQuery}
-              onChange={(e) => handleSearchInput(e.target.value)}
-              onFocus={() => searchQuery.length >= 2 && setSearchOpen(true)}
-              placeholder="Search city..."
-              className="w-[120px] rounded border border-[#2b2b2b] bg-[#141414] px-2 py-1 text-[11px] text-[#cfcfcf] outline-none placeholder:text-[#555] focus:border-[#444]"
-            />
-            {searchOpen && searchResults.length > 0 ? (
-              <div className="absolute right-0 top-full z-50 mt-1 w-[200px] rounded-lg border border-[#2a2a2a] bg-[#141414] py-1 shadow-xl shadow-black/50">
-                {searchResults.map((result, i) => (
-                  <button
-                    key={`${result.latitude}-${result.longitude}-${i}`}
-                    onClick={() => selectResult(result)}
-                    className="w-full px-3 py-1.5 text-left text-[11px] text-[#c0c0c0] hover:bg-[#1e1e1e] hover:text-[#f0f0f0] transition-colors"
-                  >
-                    {result.name}
-                    {result.country ? <span className="text-[#666] ml-1">{result.country}</span> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null
-      }
+  const editButton = (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      aria-label="Change city"
+      className="absolute right-1.5 top-1.5 rounded-sm text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/70 hover:!text-foreground focus-visible:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
+      <Pencil className="size-icon-xs" aria-hidden />
+    </button>
+  );
 
-      <div className="flex-1 flex flex-col items-center justify-center px-3 py-3">
-        {loading && !weather ? (
-          <p className="text-[12px] text-[#707070]">Loading...</p>
-        ) : error ? (
-          <div className="text-center">
-            <p className="text-[12px] text-[#a06060]">{error}</p>
-            <button
-              onClick={() => void fetchWeather()}
-              className="mt-2 text-[11px] text-[#8a8a8a] hover:text-[#cfcfcf]"
-            >
-              Retry
-            </button>
-          </div>
-        ) : weather ? (
-          <>
-            <p className="text-[11px] text-[#8d8d8d] mb-1">{cityLabel}</p>
-            <p className="text-[36px] leading-none">{weatherIcon(weather.weathercode, weather.isDay)}</p>
-            <p className="mt-2 text-[28px] font-bold text-[#f1f1f1] leading-none">
-              {Math.round(weather.temperature)}°C
-            </p>
-            <p className="mt-1 text-[12px] text-[#8d8d8d]">
-              {WMO_CODES[weather.weathercode] ?? "Unknown"}
-            </p>
-            <p className="mt-1 text-[10px] text-[#6a6a6a]">
-              Wind {weather.windspeed} km/h
-            </p>
-          </>
-        ) : null}
+  if (state === "loading" && !current) {
+    return (
+      <div className="group relative h-full">
+        {editButton}
+        <WidgetLoading />
       </div>
-    </WidgetShell>
+    );
+  }
+
+  if (state === "error" && !current) {
+    return (
+      <div className="group relative grid h-full place-items-center gap-1.5 px-3 text-center">
+        {editButton}
+        <p className="text-sm text-muted-foreground">Weather unavailable.</p>
+        <button
+          type="button"
+          onClick={load}
+          className="rounded-sm text-xs text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const cur = current!;
+  return (
+    <div className={cn("group relative grid h-full place-items-center px-3 text-center")}>
+      {editButton}
+      <div className={cn("flex items-center", size === "S" ? "flex-col gap-0.5" : "gap-3")}>
+        <span className={size === "S" ? "text-4xl" : "text-5xl"} aria-hidden>
+          {weatherEmoji(cur.code, cur.isDay)}
+        </span>
+        <div className="flex flex-col items-center">
+          <p className="font-display text-3xl font-semibold tabular-nums text-foreground">
+            {Math.round(cur.tempC)}°
+          </p>
+          <p className="text-xs text-muted-foreground">{weatherLabel(cur.code)}</p>
+          {city ? (
+            <p className="max-w-full truncate text-2xs text-muted-foreground/70">{city}</p>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }

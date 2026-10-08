@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Build src-tauri/icons/icon.icns + the cross-platform PNG fallbacks from
  * scripts/icons/source/macos-icon-1024.svg.
@@ -10,11 +11,11 @@
  *   bun scripts/icons/build-macos-icon.ts
  */
 
-import { Resvg } from "@resvg/resvg-js";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { Resvg } from "@resvg/resvg-js";
 
 const repoRoot = process.cwd();
 const sourceSvg = join(repoRoot, "scripts/icons/source/macos-icon-1024.svg");

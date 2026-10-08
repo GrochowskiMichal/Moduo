@@ -26,6 +26,11 @@ pub struct EmailConfig {
     pub provider: String,
     pub email: String,
     pub password: String,
+    /// When set, the account authenticates via XOAUTH2 (Gmail OAuth) using this
+    /// access token instead of `password` (which is empty for OAuth accounts). The
+    /// caller refreshes it before building the config (EM-2).
+    #[serde(default)]
+    pub oauth_access_token: Option<String>,
     pub imap_host: Option<String>,
     pub smtp_host: Option<String>,
     pub imap_port: Option<u16>,
@@ -39,6 +44,9 @@ pub struct EmailAccountConnectInput {
     pub email: String,
     pub password: String,
     pub workspace_id: Option<String>,
+    /// Connect-time history depth (AC6). Absent → the 12-month default.
+    #[serde(default)]
+    pub history_depth: Option<String>,
     pub imap_host: Option<String>,
     pub smtp_host: Option<String>,
     pub imap_port: Option<u16>,
@@ -59,6 +67,39 @@ pub struct EmailAccountPublic {
     pub last_sync_at: Option<String>,
     pub status: String,
     pub last_error: Option<String>,
+    /// How far back this device syncs the mailbox (IM-2c). Surfaced so the
+    /// connect dialog and Settings → Integrations can show and change it.
+    pub history_depth: EmailHistoryDepth,
+}
+
+/// How far back a mailbox syncs envelopes (IM-2b/2c).
+///
+/// **Per-device on purpose:** the redb store is per-machine, so two devices may
+/// legitimately hold different depths and neither truncates the other
+/// (specs/import.md assumption 4). That is also why this is not in the cloud
+/// `email_accounts` row.
+///
+/// Depth is a **floor** — a promise about what *is* synced — never a ceiling that
+/// evicts. Lowering it stops fetching and deletes nothing (AC8).
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum EmailHistoryDepth {
+    ThreeMonths,
+    SixMonths,
+    /// The connect-time default (AC6).
+    #[default]
+    TwelveMonths,
+    Everything,
+}
+
+/// Deserialize a depth, falling back to the default for any value this build does
+/// not know — see the field's note on why an error here is unacceptable.
+fn depth_or_default<'de, D>(deserializer: D) -> Result<EmailHistoryDepth, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(raw).unwrap_or_default())
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -80,6 +121,15 @@ pub(super) struct StoredEmailAccount {
     pub(super) last_sync_at: Option<String>,
     pub(super) status: String,
     pub(super) last_error: Option<String>,
+    /// **Must stay defaulted AND tolerant of unknown values.** `read_accounts`
+    /// swallows a deserialize error into an EMPTY list, so anything unparseable here
+    /// silently disconnects every account (specs/import.md assumption 4). Missing is
+    /// covered by `default`; an *unknown* value matters too, because the desktop
+    /// binary is drop-in replaced — rolling back past a future depth variant must not
+    /// wipe the user's accounts. Guarded by
+    /// `storage::tests::accounts_v1_old_shape_still_loads`.
+    #[serde(default, deserialize_with = "depth_or_default")]
+    pub(super) history_depth: EmailHistoryDepth,
 }
 
 impl StoredEmailAccount {
@@ -96,6 +146,23 @@ impl StoredEmailAccount {
             last_sync_at: self.last_sync_at.clone(),
             status: self.status.clone(),
             last_error: self.last_error.clone(),
+            history_depth: self.history_depth,
+        }
+    }
+}
+
+impl EmailHistoryDepth {
+    /// Parse a depth from the wire. Returns `None` for anything this build does
+    /// not know, so a bad value is a rejected command rather than a silent reset
+    /// to the default (which, on the *stored* side, is what we deliberately do —
+    /// there the alternative is disconnecting every account).
+    pub fn from_wire(raw: &str) -> Option<Self> {
+        match raw {
+            "threeMonths" => Some(Self::ThreeMonths),
+            "sixMonths" => Some(Self::SixMonths),
+            "twelveMonths" => Some(Self::TwelveMonths),
+            "everything" => Some(Self::Everything),
+            _ => None,
         }
     }
 }
@@ -133,6 +200,10 @@ pub(super) struct StoredEnvelope {
     pub(super) sender: String,
     pub(super) sender_email: String,
     pub(super) to: String,
+    /// The `Cc` recipients (comma-joined emails), captured so reply-all keeps
+    /// everyone who was CC'd. Defaulted for pre-Cc rows.
+    #[serde(default)]
+    pub(super) cc: String,
     pub(super) subject: String,
     pub(super) preview: String,
     pub(super) date: String,
@@ -142,6 +213,19 @@ pub(super) struct StoredEnvelope {
     pub(super) size: Option<u32>,
     pub(super) message_id: Option<String>,
     pub(super) in_reply_to: Option<String>,
+    /// The `References` header chain (root-first), stored so threading survives a
+    /// missing intermediate message (EM-4). Defaulted for pre-EM-4 rows.
+    #[serde(default)]
+    pub(super) references: Vec<String>,
+    /// Smart-inbox classification signals (EM-10), parsed from HEADER.FIELDS.
+    /// `List-Unsubscribe` present → newsletter; `Precedence` bulk/list/auto and
+    /// `Auto-Submitted` (≠ no) → notification. Defaulted for pre-EM-10 rows.
+    #[serde(default)]
+    pub(super) list_unsubscribe: Option<String>,
+    #[serde(default)]
+    pub(super) precedence: Option<String>,
+    #[serde(default)]
+    pub(super) auto_submitted: Option<String>,
     pub(super) thread_id: String,
     pub(super) updated_at: String,
 }
@@ -171,6 +255,18 @@ pub(super) struct StoredBodyLru {
     pub(super) last_accessed_at: String,
 }
 
+/// Local-search body-text sidecar row (EM-9): an 8KB-truncated lowercase copy of a
+/// cached body, keyed like the body cache so it co-prunes with the body LRU.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct StoredBodyText {
+    pub(super) key: String,
+    pub(super) account_id: String,
+    pub(super) folder: String,
+    pub(super) uid: u32,
+    pub(super) text: String,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct StoredFlagOutboxEntry {
@@ -187,13 +283,23 @@ pub(super) struct StoredFlagOutboxEntry {
     pub(super) updated_at: String,
 }
 
+/// A queued triage op (archive/move/delete) — the generalized sibling of
+/// [`StoredFlagOutboxEntry`]. Optimistic-local + queued-remote (EM-5).
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct StoredGraphOutboxEntry {
+pub(super) struct StoredMailOpEntry {
     pub(super) id: String,
     pub(super) account_id: String,
-    pub(super) workspace_id: String,
-    pub(super) payload: serde_json::Value,
+    pub(super) folder: String,
+    pub(super) uid: u32,
+    /// `"archive"` | `"move"` | `"delete"`.
+    pub(super) op: String,
+    /// Destination folder for a `move` (the UI-level folder or a raw mailbox name).
+    pub(super) dest_folder: Option<String>,
+    /// Set once the COPY step has committed, so a retry after an EXPUNGE failure
+    /// skips it (else the message would be copied to the destination twice).
+    #[serde(default)]
+    pub(super) copied: bool,
     pub(super) retry_count: u32,
     pub(super) next_retry_at: String,
     pub(super) last_error: Option<String>,
@@ -221,6 +327,8 @@ pub struct EmailEnvelopeDto {
     pub sender: String,
     pub sender_email: String,
     pub to: String,
+    #[serde(default)]
+    pub cc: String,
     pub subject: String,
     pub preview: String,
     pub date: String,
@@ -229,6 +337,16 @@ pub struct EmailEnvelopeDto {
     pub size: Option<u32>,
     pub message_id: Option<String>,
     pub in_reply_to: Option<String>,
+    #[serde(default)]
+    pub references: Vec<String>,
+    /// Smart-inbox signals (EM-10). Presence of `list_unsubscribe` and the
+    /// `precedence` / `auto_submitted` values drive the client classifier.
+    #[serde(default)]
+    pub list_unsubscribe: Option<String>,
+    #[serde(default)]
+    pub precedence: Option<String>,
+    #[serde(default)]
+    pub auto_submitted: Option<String>,
     pub thread_id: String,
     pub has_cached_body: bool,
 }
@@ -239,6 +357,61 @@ pub struct EmailListEnvelopesResult {
     pub envelopes: Vec<EmailEnvelopeDto>,
     pub total: usize,
     pub synced_at: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailGetThreadInput {
+    pub account_id: String,
+    pub thread_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailGetThreadResult {
+    pub thread_id: String,
+    /// The thread's messages across all folders, oldest → newest.
+    pub messages: Vec<EmailEnvelopeDto>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailListFoldersInput {
+    pub account_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailFolderDto {
+    /// The raw IMAP mailbox name (what a move targets).
+    pub name: String,
+    /// A friendlier leaf label for display.
+    pub display_name: String,
+    /// The hierarchy delimiter reported by LIST (e.g. `/` or `.`), if any.
+    pub delimiter: Option<String>,
+    /// True for a `\Noselect` container that can't hold messages.
+    pub selectable: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailApplyMessageOpInput {
+    pub account_id: String,
+    pub folder: String,
+    pub uid: u32,
+    /// `"archive"` | `"move"` | `"delete"`.
+    pub op: String,
+    /// Destination for a `move` (required for `move`, ignored otherwise).
+    #[serde(default)]
+    pub dest_folder: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailApplyMessageOpResult {
+    pub accepted: bool,
+    /// True if the IMAP step ran immediately (else it's queued for retry).
+    pub synced: bool,
 }
 
 #[derive(Deserialize)]
@@ -331,6 +504,131 @@ pub struct EmailMailboxStatusRow {
     pub starred: usize,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSendAttachmentInput {
+    pub filename: String,
+    pub mime_type: String,
+    /// Absolute path on disk; bytes are read at send time (never held in redb).
+    pub path: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSendMessageInput {
+    pub account_id: String,
+    pub to: Vec<String>,
+    #[serde(default)]
+    pub cc: Vec<String>,
+    #[serde(default)]
+    pub bcc: Vec<String>,
+    #[serde(default)]
+    pub subject: String,
+    #[serde(default)]
+    pub text_body: String,
+    #[serde(default)]
+    pub html_body: Option<String>,
+    /// Parent Message-ID for a reply.
+    #[serde(default)]
+    pub in_reply_to: Option<String>,
+    /// The thread's Message-ID chain.
+    #[serde(default)]
+    pub references: Vec<String>,
+    #[serde(default)]
+    pub attachments: Vec<EmailSendAttachmentInput>,
+    /// Optional client-supplied Message-ID; generated if absent.
+    #[serde(default)]
+    pub message_id: Option<String>,
+    #[serde(default)]
+    pub from_name: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSendMessageResult {
+    /// The bracketed Message-ID the mail was sent with (for Sent-matching / follow-ups).
+    pub message_id: String,
+    /// Whether a copy was APPENDed to Sent (false for Gmail, which auto-saves).
+    pub saved_to_sent: bool,
+}
+
+// ── Attachments (EM-7) ─────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailListAttachmentsInput {
+    pub account_id: String,
+    pub folder: String,
+    pub uid: u32,
+}
+
+/// Metadata for one attachment on a received message. Bytes are NEVER carried
+/// here — they're fetched on demand by [`EmailSaveAttachmentInput`].
+#[derive(Serialize, Clone, PartialEq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailAttachmentMeta {
+    /// Stable id = the part's dotted index path through the MIME tree (e.g. `"1.2"`),
+    /// so a save can re-locate the exact part deterministically.
+    pub id: String,
+    pub filename: String,
+    pub mime: String,
+    /// Decoded byte length (Content-Transfer-Encoding unapplied).
+    pub size: u32,
+    pub is_inline: bool,
+    pub content_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSaveAttachmentInput {
+    pub account_id: String,
+    pub folder: String,
+    pub uid: u32,
+    /// The [`EmailAttachmentMeta::id`] (index path) to save.
+    pub attachment_id: String,
+    /// Prefilled name for the Save dialog.
+    pub default_filename: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSaveAttachmentResult {
+    /// False when the user cancels the Save dialog.
+    pub saved: bool,
+    /// The chosen path (absolute), present only when `saved`.
+    pub path: Option<String>,
+}
+
+/// A file the user picked in the compose OPEN dialog. The send path reads the bytes
+/// from `path` at send time — nothing is held in redb.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailPickedAttachment {
+    pub path: String,
+    pub filename: String,
+    pub mime_type: String,
+    pub size: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailGetInlineImagesInput {
+    pub account_id: String,
+    pub folder: String,
+    pub uid: u32,
+}
+
+/// A small inline `cid:` image, base64-encoded, for substituting
+/// `<img src="cid:...">` in the reader HTML.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailInlineImage {
+    /// The Content-ID WITHOUT the surrounding angle brackets.
+    pub content_id: String,
+    pub mime: String,
+    pub data_base64: String,
+}
+
 impl EmailConfig {
     pub(super) fn imap_host(&self) -> &str {
         if let Some(custom) = self.imap_host.as_deref() {
@@ -362,5 +660,108 @@ impl EmailConfig {
 
     pub(super) fn smtp_port(&self) -> u16 {
         self.smtp_port.unwrap_or(587)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The depth wire format lives in THREE places with no shared source:
+    /// serde's `rename_all = "camelCase"` on the enum, `from_wire`'s hardcoded
+    /// match, and `EMAIL_HISTORY_DEPTHS` in `src/features/email/history-depth.ts`.
+    /// This pins the two Rust ones to each other, so adding a variant can only
+    /// break the TS side — which is a visible type error, not a silent default.
+    #[test]
+    fn history_depth_wire_format_round_trips() {
+        let all = [
+            EmailHistoryDepth::ThreeMonths,
+            EmailHistoryDepth::SixMonths,
+            EmailHistoryDepth::TwelveMonths,
+            EmailHistoryDepth::Everything,
+        ];
+        for depth in all {
+            let wire = serde_json::to_value(depth).expect("serialize");
+            let raw = wire.as_str().expect("depths serialize as strings");
+            assert_eq!(
+                EmailHistoryDepth::from_wire(raw),
+                Some(depth),
+                "from_wire must accept exactly what serde emits ({raw})"
+            );
+        }
+        // The literals the frontend sends, spelled out — a rename on either side
+        // has to fail here rather than silently falling back to 12 months.
+        assert_eq!(
+            all.map(|d| serde_json::to_value(d).unwrap().as_str().unwrap().to_string()),
+            ["threeMonths", "sixMonths", "twelveMonths", "everything"].map(String::from)
+        );
+        // Unknown values are REJECTED on the wire (the command errors) — unlike the
+        // stored side, where a parse failure would empty the whole account list.
+        assert_eq!(EmailHistoryDepth::from_wire("twentyFourMonths"), None);
+        assert_eq!(EmailHistoryDepth::from_wire("TwelveMonths"), None);
+        assert_eq!(EmailHistoryDepth::from_wire(""), None);
+    }
+
+    /// The connect input carries the picker's choice. `historyDepth` is optional,
+    /// so a misspelled key would be silently swallowed and fall back to the
+    /// default — exactly the silent-default failure this block exists to prevent.
+    #[test]
+    fn connect_input_carries_the_picked_depth() {
+        let with_depth = serde_json::json!({
+            "provider": "gmail",
+            "email": "a@x.com",
+            "password": "pw",
+            "workspaceId": null,
+            "historyDepth": "everything",
+            "imapHost": null,
+            "smtpHost": null,
+            "imapPort": null,
+            "smtpPort": null,
+        });
+        let parsed =
+            serde_json::from_value::<EmailAccountConnectInput>(with_depth).expect("deserialize");
+        assert_eq!(parsed.history_depth.as_deref(), Some("everything"));
+        assert_eq!(
+            parsed
+                .history_depth
+                .as_deref()
+                .and_then(EmailHistoryDepth::from_wire),
+            Some(EmailHistoryDepth::Everything)
+        );
+
+        // Absent → the 12-month default (AC6), not an error.
+        let without = serde_json::json!({
+            "provider": "gmail",
+            "email": "a@x.com",
+            "password": "pw",
+            "workspaceId": null,
+            "imapHost": null,
+            "smtpHost": null,
+            "imapPort": null,
+            "smtpPort": null,
+        });
+        let parsed =
+            serde_json::from_value::<EmailAccountConnectInput>(without).expect("deserialize");
+        assert_eq!(parsed.history_depth, None);
+        assert_eq!(
+            parsed
+                .history_depth
+                .as_deref()
+                .and_then(EmailHistoryDepth::from_wire)
+                .unwrap_or_default(),
+            EmailHistoryDepth::TwelveMonths
+        );
+    }
+
+    /// The Gmail OAuth connect runs through its own input type — the picker sits
+    /// in the same dialog, so dropping the field here silently gave every Gmail
+    /// account the default no matter what the user chose.
+    #[test]
+    fn oauth_start_input_carries_the_picked_depth() {
+        let parsed = serde_json::from_value::<super::super::oauth::EmailGmailOAuthStartInput>(
+            serde_json::json!({ "workspaceId": null, "historyDepth": "threeMonths" }),
+        )
+        .expect("deserialize");
+        assert_eq!(parsed.history_depth.as_deref(), Some("threeMonths"));
     }
 }

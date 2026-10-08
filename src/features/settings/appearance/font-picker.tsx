@@ -1,112 +1,60 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../components/ui/select";
-import { type BodyFont, type DisplayFont } from "../../../lib/appearance";
+import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
+import type { Font } from "../../../lib/appearance";
 
 import { AppearancePickerRow } from "./picker-row";
 
-type FontRole = "display" | "body";
-
-type Option<V extends string> = {
-  value: V;
-  label: string;
-  fontVar: string;
-  sample: string;
-};
-
-const DISPLAY_OPTIONS: ReadonlyArray<Option<DisplayFont>> = [
-  { value: "pilat", label: "Pilat Extended", fontVar: "var(--font-display-pilat)", sample: "Aa" },
-  { value: "geist", label: "Geist", fontVar: "var(--font-display-geist)", sample: "Aa" },
-  { value: "cal", label: "Cal Sans", fontVar: "var(--font-display-cal)", sample: "Aa" },
-  {
-    value: "fraunces",
-    label: "Fraunces",
-    fontVar: "var(--font-display-fraunces)",
-    sample: "Aa",
-  },
+const OPTIONS: ReadonlyArray<{ value: Font; label: string }> = [
+  { value: "geist", label: "Geist" },
+  { value: "inter", label: "Inter" },
+  { value: "pilat", label: "Pilat" },
+  { value: "cal", label: "Cal Sans" },
+  { value: "fraunces", label: "Fraunces" },
+  { value: "serif", label: "Source Serif" },
+  { value: "mono", label: "Geist Mono" },
 ];
 
-const BODY_OPTIONS: ReadonlyArray<Option<BodyFont>> = [
-  { value: "geist", label: "Geist", fontVar: "var(--font-body-geist)", sample: "Aa" },
-  { value: "inter", label: "Inter", fontVar: "var(--font-body-inter)", sample: "Aa" },
-  { value: "serif", label: "Source Serif Pro", fontVar: "var(--font-body-serif)", sample: "Aa" },
-  { value: "mono", label: "Geist Mono", fontVar: "var(--font-body-mono)", sample: "Aa" },
-];
-
-const ROLE_LABEL: Record<FontRole, string> = {
-  display: "Display font",
-  body: "Body font",
+type Props = {
+  value: Font;
+  onChange: (value: Font) => void;
 };
 
-const ROLE_DESCRIPTION: Record<FontRole, string> = {
-  display: "Used for page titles, section headers, and the wordmark.",
-  body: "Used for note bodies, paragraphs, and most UI text.",
-};
-
-const PREVIEW_LINE: Record<FontRole, string> = {
-  display: "The quick brown fox jumps over the lazy dog.",
-  body: "The quick brown fox jumps over the lazy dog.",
-};
-
-type Props =
-  | {
-      role: "display";
-      value: DisplayFont;
-      onChange: (value: DisplayFont) => void;
-    }
-  | {
-      role: "body";
-      value: BodyFont;
-      onChange: (value: BodyFont) => void;
-    };
-
-export function FontPicker(props: Props) {
-  const { role } = props;
-  const options = role === "display" ? DISPLAY_OPTIONS : BODY_OPTIONS;
-  const triggerId = `font-${role}-trigger`;
-  const activeOption = options.find((o) => o.value === props.value) ?? options[0];
-
+export function FontPicker({ value, onChange }: Props) {
   return (
     <AppearancePickerRow
-      title={ROLE_LABEL[role]}
-      description={ROLE_DESCRIPTION[role]}
-      htmlFor={triggerId}
+      title="Font"
+      description="One typeface for the whole app. Hierarchy comes from weight and size, not a second face."
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-        <Select
-          value={props.value}
-          onValueChange={(next) => {
-            if (role === "display") props.onChange(next as DisplayFont);
-            else props.onChange(next as BodyFont);
-          }}
-        >
-          <SelectTrigger id={triggerId} className="w-full sm:w-64">
-            <SelectValue placeholder={activeOption.label} />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                <span style={{ fontFamily: option.fontVar }}>{option.label}</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p
-          aria-hidden
-          className={
-            role === "display"
-              ? "min-h-9 flex-1 truncate text-xl text-foreground"
-              : "min-h-9 flex-1 truncate text-base text-foreground"
-          }
-          style={{ fontFamily: activeOption.fontVar }}
-        >
-          {PREVIEW_LINE[role]}
-        </p>
-      </div>
+      <RadioGroup
+        value={value}
+        onValueChange={(next) => onChange(next as Font)}
+        className="grid grid-cols-3 gap-2"
+        aria-label="Font"
+      >
+        {OPTIONS.map(({ value: optionValue, label }) => {
+          const id = `font-${optionValue}`;
+          const checked = optionValue === value;
+          return (
+            <label
+              key={optionValue}
+              htmlFor={id}
+              data-font={optionValue}
+              className={
+                checked
+                  ? "flex cursor-pointer flex-col items-center gap-2 rounded-md border border-foreground/30 bg-accent px-3 py-3 transition-colors duration-(--motion-fade) ease-(--ease-out)"
+                  : "flex cursor-pointer flex-col items-center gap-2 rounded-md border border-border bg-card px-3 py-3 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-accent/60"
+              }
+            >
+              <span aria-hidden className="font-sans text-2xl leading-none text-foreground">
+                Ag
+              </span>
+              <span className="flex items-center gap-2 text-sm text-foreground">
+                <RadioGroupItem id={id} value={optionValue} />
+                {label}
+              </span>
+            </label>
+          );
+        })}
+      </RadioGroup>
     </AppearancePickerRow>
   );
 }

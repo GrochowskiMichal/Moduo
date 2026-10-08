@@ -1,0 +1,164 @@
+/**
+ * Advanced settings — pure logic (DF-19g, AC11).
+ *
+ * The reset/export/diagnostics *effects* (IndexedDB, localStorage, fflate zip,
+ * clipboard) live in the `advanced-section.tsx` component; the shaping and the
+ * key/name lists that need proving live here so they can be unit-tested without
+ * dragging a component `.tsx` (and its `@/lib/utils` import) into the vitest
+ * graph — see docs/gotchas.md, the "unit test must not import a component .tsx"
+ * bullet. Nothing in this file touches `window`/`localStorage`/`indexedDB`.
+ */
+
+// ── Data export ──────────────────────────────────────────────────────────────
+
+/** The modules a workspace export gathers (Assumption 6). */
+export type ExportModuleKey = "tasks" | "notes" | "contacts" | "calendar" | "habits";
+
+/** One module's read outcome — the impure gather wraps every runtime read in a
+ * try/catch and reports failures here rather than throwing the whole export. */
+export type ModuleReadResult =
+  | { module: ExportModuleKey; ok: true; data: unknown }
+  | { module: ExportModuleKey; ok: false; error: string };
+
+/** Metadata stamped into the export's `_manifest.json`. */
+export type ExportMeta = {
+  workspaceId: string;
+  workspaceName?: string | null;
+  /** ISO timestamp — supplied by the caller (pure code stamps no clock). */
+  exportedAt: string;
+  appVersion: string;
+  appBuild: string;
+  platform: "web" | "desktop";
+};
+
+export type ExportBundle = {
+  /** zip-relative filename → JSON string. The component encodes these to bytes. */
+  entries: Record<string, string>;
+  /** module → error message for any read that failed (mirrors `_errors.json`). */
+  errors: Record<string, string>;
+};
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
+
+/**
+ * Shape a workspace export from the per-module read results. Every module is
+ * accounted for: a successful read becomes `<module>.json`; a failed read lands
+ * in the `_errors.json` manifest (never silently dropped, AC11 / edge case).
+ * `_manifest.json` always lists all modules with an ok/error status.
+ */
+export function buildExportBundle(results: ModuleReadResult[], meta: ExportMeta): ExportBundle {
+  const entries: Record<string, string> = {};
+  const errors: Record<string, string> = {};
+  const modules: Record<string, "ok" | "error"> = {};
+
+  for (const result of results) {
+    if (result.ok) {
+      modules[result.module] = "ok";
+      entries[`${result.module}.json`] = stableJson(result.data);
+    } else {
+      modules[result.module] = "error";
+      errors[result.module] = result.error;
+    }
+  }
+
+  entries["_manifest.json"] = stableJson({
+    app: "Moduo",
+    ...meta,
+    modules,
+  });
+
+  // Only write the errors file when something actually failed — but never drop
+  // a failure silently: if `errors` is non-empty it is always surfaced here.
+  if (Object.keys(errors).length > 0) {
+    entries["_errors.json"] = stableJson(errors);
+  }
+
+  return { entries, errors };
+}
+
+/** Safe filename stem for a workspace name (no separators / control chars). */
+function safeName(name: string | null | undefined): string {
+  const clean = (name || "workspace")
+    .replace(/[/\\:*?"<>|]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
+  return clean || "workspace";
+}
+
+/** `moduo-<workspace>-<YYYY-MM-DD>.zip`, derived from the export meta. Pure. */
+export function exportZipName(meta: ExportMeta): string {
+  const date = (meta.exportedAt || "").slice(0, 10) || "export";
+  return `moduo-${safeName(meta.workspaceName)}-${date}.zip`;
+}
+
+// ── Reset local cache ────────────────────────────────────────────────────────
+
+/** Every on-device Moduo cache key shares this localStorage prefix. */
+export const MODUO_CACHE_PREFIX = "moduo.";
+
+/**
+ * The localStorage keys a cache reset clears: Moduo's own `moduo.*` caches
+ * only. The Supabase auth session (`sb-*-auth-token`) and any non-Moduo keys
+ * are deliberately left untouched, so the reset never signs the user out and
+ * cloud data re-syncs on the reload that follows.
+ */
+export function moduoCacheKeysToClear(allKeys: string[]): string[] {
+  return allKeys.filter((key) => key.startsWith(MODUO_CACHE_PREFIX));
+}
+
+/**
+ * Whether an IndexedDB database name belongs to Moduo's Notes v2 sync layer —
+ * the meta/outbox DB (`moduo-notes-v2`) and every per-note y-indexeddb doc DB
+ * (`moduo:notes-v2:doc:<ws>:<note>`). The reset deletes exactly these; other
+ * apps' databases are left alone.
+ */
+export function isModuoIdbName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  return name === "moduo-notes-v2" || name.startsWith("moduo:notes-v2:");
+}
+
+// ── Diagnostics ──────────────────────────────────────────────────────────────
+
+export type Diagnostics = {
+  appVersion: string;
+  appBuild: string;
+  platform: "web" | "desktop";
+  online: boolean;
+  workspaceId: string | null;
+  /** Human sync summary from describeSyncStatus. */
+  syncStatus: string;
+  /** ISO of the most recent prefs sync, or null when never synced. */
+  lastSyncAt: string | null;
+};
+
+/**
+ * A short human sync summary for the diagnostics readout. Pending (unpushed)
+ * note edits are the only local-write lane a user can lose, so they lead the
+ * message; otherwise it reflects connectivity.
+ */
+export function describeSyncStatus(input: { online: boolean; pendingNotes: number }): string {
+  const { online, pendingNotes } = input;
+  if (pendingNotes > 0) {
+    const noun = pendingNotes === 1 ? "change" : "changes";
+    return online
+      ? `Syncing ${pendingNotes} ${noun}…`
+      : `${pendingNotes} unsynced ${noun} (offline)`;
+  }
+  return online ? "Synced" : "Offline";
+}
+
+/** The plain-text blob behind "Copy debug info" (version + platform + ids). */
+export function formatDebugInfo(d: Diagnostics): string {
+  return [
+    `Moduo ${d.appVersion} (build ${d.appBuild})`,
+    `Platform: ${d.platform}`,
+    `Online: ${d.online ? "yes" : "no"}`,
+    `Workspace: ${d.workspaceId ?? "—"}`,
+    `Sync: ${d.syncStatus}`,
+    `Last sync: ${d.lastSyncAt ?? "—"}`,
+  ].join("\n");
+}

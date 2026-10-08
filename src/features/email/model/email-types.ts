@@ -1,7 +1,8 @@
-export type ConnectionStatus = "disconnected" | "connecting" | "connected";
-export type MailboxProvider = "gmail" | "outlook" | "icloud" | "custom";
+import type { EmailAccountStatus as AccountStatus, MailboxProvider } from "@contracts/vocabularies";
+
+export type { ConnectionStatus, MailboxProvider } from "@contracts/vocabularies";
 export type FolderType = "inbox" | "sent" | "drafts" | "trash" | "spam";
-export type AccountStatus = "active" | "reauth_required" | "error";
+export type { EmailAccountStatus as AccountStatus } from "@contracts/vocabularies";
 
 export interface Email {
   id: string;
@@ -36,4 +37,74 @@ export interface SavedAccount {
   lastSyncAt: string | null;
   status: AccountStatus;
   lastError: string | null;
+  /** How far back this device syncs the mailbox (IM-2c). Optional so a stale
+   *  cached account (or the web stub) still type-checks; `asHistoryDepth`
+   *  coerces it. */
+  historyDepth?: string;
+}
+
+/** A synced message envelope (the `email_list_envelopes` / `email_get_thread` DTO). */
+export interface EmailEnvelope {
+  id: string;
+  messageKey: string;
+  accountId: string;
+  folder: string;
+  uid: number;
+  sender: string;
+  senderEmail: string;
+  to: string;
+  /** Cc recipients (comma-joined) — captured so reply-all keeps them (EM-8). */
+  cc?: string;
+  subject: string;
+  preview: string;
+  date: string;
+  read: boolean;
+  starred: boolean;
+  size?: number | null;
+  messageId?: string | null;
+  inReplyTo?: string | null;
+  references?: string[];
+  /** Smart-inbox signals (EM-10), parsed from HEADER.FIELDS. */
+  listUnsubscribe?: string | null;
+  precedence?: string | null;
+  autoSubmitted?: string | null;
+  threadId: string;
+  hasCachedBody: boolean;
+}
+
+/** A conversation row for the unified inbox — one per (account, thread). */
+export interface EmailThread {
+  threadId: string;
+  accountId: string;
+  accountEmail: string;
+  subject: string;
+  /** Unique sender display names in chronological order (oldest → newest). */
+  participants: string[];
+  /** Most-recent sender (for the row + contact resolution). */
+  fromName: string;
+  fromEmail: string;
+  snippet: string;
+  /** Most-recent message date (raw string) + its epoch-ms for sorting. */
+  date: string;
+  timestampMs: number;
+  messageCount: number;
+  unread: boolean;
+  unreadCount: number;
+  /** Any message flagged (pin/star). */
+  starred: boolean;
+  folder: string;
+  /** UID of the newest message (for opening / prefetch). */
+  latestUid: number;
+  /** Smart-inbox signals from the newest message (EM-10) — drive classification. */
+  listUnsubscribe?: string | null;
+  precedence?: string | null;
+  autoSubmitted?: string | null;
+}
+
+/** A server folder from `email_list_folders` (for the move popover). */
+export interface EmailFolderInfo {
+  name: string;
+  displayName: string;
+  delimiter?: string | null;
+  selectable: boolean;
 }

@@ -4,13 +4,13 @@
 > bottom. The agent has no memory of prior sessions; treat the prompt as the
 > only context.
 
-You are joining the moduo design polish run. The design foundation is already shipped — tokens, primitives, shell, settings modal, top + bottom bars, the chrome surface model — all merged to main. Your job is to polish ONE feature. Read [CLAUDE.md](./CLAUDE.md) and [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) first; treat both as the contract.
+You are joining the moduo design polish run. The design foundation is already shipped — tokens, primitives, shell, settings modal, top + bottom bars, the chrome surface model — all merged to main. Your job is to polish ONE feature. Read [CLAUDE.md](../../AGENTS.md) and [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md) first; treat both as the contract.
 
 ## Process
 
 Step through the design-flow skills in this order: /grill-me → /design-brief → /brief-to-tasks → /frontend-design → /design-review.
 
-Tell the /design-brief skill explicitly that the foundation is done. Point it at [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md). It must not propose new tokens.
+Tell the /design-brief skill explicitly that the foundation is done. Point it at [DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md). It must not propose new tokens.
 
 ## Composition rules
 

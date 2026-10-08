@@ -54,7 +54,10 @@ async function writeMindmaps(runtime: ModuoRuntime, workspaceId: string, maps: M
   await runtime.localStore.set(MINDMAPS_NAMESPACE, mindmapsListKey(workspaceId), maps);
 }
 
-export async function listMindmaps(runtime: ModuoRuntime, workspaceId: string): Promise<MindmapOption[]> {
+export async function listMindmaps(
+  runtime: ModuoRuntime,
+  workspaceId: string,
+): Promise<MindmapOption[]> {
   const raw = await runtime.localStore.get(MINDMAPS_NAMESPACE, mindmapsListKey(workspaceId));
   const parsed = Array.isArray(raw) ? raw : [];
   return parsed
@@ -65,7 +68,7 @@ export async function listMindmaps(runtime: ModuoRuntime, workspaceId: string): 
 
 export async function createMindmap(
   runtime: ModuoRuntime,
-  input: { workspaceId: string; ownerId: string; name?: string }
+  input: { workspaceId: string; ownerId: string; name?: string },
 ): Promise<MindmapOption> {
   const existing = await listMindmaps(runtime, input.workspaceId);
   const timestamp = nowIso();
@@ -93,7 +96,7 @@ export async function deleteMindmap(runtime: ModuoRuntime, workspaceId: string, 
   await writeMindmaps(
     runtime,
     workspaceId,
-    existing.filter((mindmap) => mindmap.id !== mindmapId)
+    existing.filter((mindmap) => mindmap.id !== mindmapId),
   );
   await runtime.localStore.remove(MINDMAPS_NAMESPACE, mindmapDocKey(workspaceId, mindmapId));
 }
@@ -101,9 +104,12 @@ export async function deleteMindmap(runtime: ModuoRuntime, workspaceId: string, 
 export async function loadMindmapDocument(
   runtime: ModuoRuntime,
   workspaceId: string,
-  mindmapId: string
+  mindmapId: string,
 ): Promise<MindmapDocument | null> {
-  const raw = await runtime.localStore.get(MINDMAPS_NAMESPACE, mindmapDocKey(workspaceId, mindmapId));
+  const raw = await runtime.localStore.get(
+    MINDMAPS_NAMESPACE,
+    mindmapDocKey(workspaceId, mindmapId),
+  );
   if (!raw || typeof raw !== "object") return null;
   return {
     nodes: Array.isArray((raw as any).nodes) ? (raw as any).nodes : [],
@@ -116,7 +122,7 @@ export async function saveMindmapDocument(
   runtime: ModuoRuntime,
   workspaceId: string,
   mindmapId: string,
-  document: MindmapDocument
+  document: MindmapDocument,
 ) {
   await runtime.localStore.set(MINDMAPS_NAMESPACE, mindmapDocKey(workspaceId, mindmapId), document);
 }

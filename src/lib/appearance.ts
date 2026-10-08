@@ -1,75 +1,138 @@
-import { useCallback, useEffect, useState } from "react";
-import { runtime } from "./runtime";
+// Appearance settings (theme, shade, accent, density, radius, font, text size,
+// tabs). Two-layer persistence: a localStorage mirror — read synchronously by
+// main.tsx for a flash-free first paint, and the offline cache — plus Supabase
+// `user_preferences` for cross-device sync. theme/shade/accent/radius/font
+// follow the user; density/textSize/tabs stay per-device. The reconcile/LWW
+// engine lives in prefs-sync.ts. The paused redb local store is not used.
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { z } from "zod";
+import { useDomainSync } from "./prefs-sync";
 
 export type Theme = "dark" | "light";
+export type Shade = "black" | "warm" | "cool" | "slate" | "plum" | "forest";
 export type Accent = "pink" | "violet" | "blue" | "green" | "amber" | "red" | "teal" | "mono";
-export type Density = "comfortable" | "compact";
+export type Density = "comfortable" | "compact" | "dense";
 export type Radius = "sharp" | "soft" | "round";
-export type DisplayFont = "pilat" | "geist" | "cal" | "fraunces";
-export type BodyFont = "geist" | "inter" | "serif" | "mono";
+export type Font = "geist" | "inter" | "pilat" | "cal" | "fraunces" | "serif" | "mono";
 export type TextSize = "small" | "normal" | "large";
 export type Tabs = "auto" | "icons";
 
 export interface Appearance {
   theme: Theme;
+  shade: Shade;
   accent: Accent;
   density: Density;
   radius: Radius;
-  fontDisplay: DisplayFont;
-  fontBody: BodyFont;
+  font: Font;
   textSize: TextSize;
   tabs: Tabs;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
   theme: "dark",
-  accent: "pink",
+  shade: "black",
+  // Monochrome by default — the app is black+gray+white out of the box and a
+  // hue is an opt-in choice (Settings → Appearance → Accent). Mirrors the
+  // `:root` --primary default in tokens.css; change both together.
+  accent: "mono",
   density: "comfortable",
   radius: "soft",
-  fontDisplay: "pilat",
-  fontBody: "geist",
+  font: "geist",
   textSize: "normal",
   tabs: "auto",
 };
 
 const LOCAL_STORAGE_KEY = "moduo.appearance";
-const TAURI_NAMESPACE = "appearance";
-const TAURI_KEY = "settings";
+
+// Fields that follow the user across devices. The rest (density, textSize, tabs)
+// are per-device ergonomics and stay localStorage-only — never pushed to cloud.
+const SYNCED_KEYS = ["theme", "shade", "accent", "radius", "font"] as const;
+const SYNCED_KEY_SET: ReadonlySet<string> = new Set(SYNCED_KEYS);
 
 const DATA_ATTR_MAP: Record<keyof Appearance, string> = {
   theme: "data-theme",
+  shade: "data-shade",
   accent: "data-accent",
   density: "data-density",
   radius: "data-radius",
-  fontDisplay: "data-font-display",
-  fontBody: "data-font-body",
+  font: "data-font",
   textSize: "data-text-size",
   tabs: "data-tabs",
 };
 
-const VALID_VALUES: Record<keyof Appearance, ReadonlyArray<string>> = {
+/** Every valid value per appearance key. The sanitizers below validate against
+ * it, and the Storybook appearance toolbar (.storybook/preview.tsx) builds its
+ * menus from it, so a new option shows up there without a second list. */
+export const APPEARANCE_OPTIONS: Record<keyof Appearance, ReadonlyArray<string>> = {
   theme: ["dark", "light"],
+  shade: ["black", "warm", "cool", "slate", "plum", "forest"],
   accent: ["pink", "violet", "blue", "green", "amber", "red", "teal", "mono"],
-  density: ["comfortable", "compact"],
+  density: ["comfortable", "compact", "dense"],
   radius: ["sharp", "soft", "round"],
-  fontDisplay: ["pilat", "geist", "cal", "fraunces"],
-  fontBody: ["geist", "inter", "serif", "mono"],
+  font: ["geist", "inter", "pilat", "cal", "fraunces", "serif", "mono"],
   textSize: ["small", "normal", "large"],
   tabs: ["auto", "icons"],
 };
 
-function sanitize(raw: unknown): Appearance {
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_APPEARANCE };
-  const candidate = raw as Record<string, unknown>;
-  const result = { ...DEFAULT_APPEARANCE };
-  for (const key of Object.keys(VALID_VALUES) as (keyof Appearance)[]) {
-    const value = candidate[key];
-    if (typeof value === "string" && VALID_VALUES[key].includes(value)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (result as any)[key] = value;
+const appearanceSchema = z.object({
+  theme: z.enum(["dark", "light"]).catch(DEFAULT_APPEARANCE.theme),
+  shade: z
+    .enum(["black", "warm", "cool", "slate", "plum", "forest"])
+    .catch(DEFAULT_APPEARANCE.shade),
+  accent: z
+    .enum(["pink", "violet", "blue", "green", "amber", "red", "teal", "mono"])
+    .catch(DEFAULT_APPEARANCE.accent),
+  density: z.enum(["comfortable", "compact", "dense"]).catch(DEFAULT_APPEARANCE.density),
+  radius: z.enum(["sharp", "soft", "round"]).catch(DEFAULT_APPEARANCE.radius),
+  font: z
+    .enum(["geist", "inter", "pilat", "cal", "fraunces", "serif", "mono"])
+    .catch(DEFAULT_APPEARANCE.font),
+  textSize: z.enum(["small", "normal", "large"]).catch(DEFAULT_APPEARANCE.textSize),
+  tabs: z.enum(["auto", "icons"]).catch(DEFAULT_APPEARANCE.tabs),
+});
+
+/** A full, valid Appearance from anything: unknown or invalid fields fall back to
+ * DEFAULT_APPEARANCE. Used for the localStorage mirror and Storybook's toolbar. */
+export function parseAppearance(raw: unknown): Appearance {
+  const candidate = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const result = appearanceSchema.parse(candidate);
+  const hasValidFont =
+    typeof candidate.font === "string" && APPEARANCE_OPTIONS.font.includes(candidate.font);
+  if (!hasValidFont) {
+    const legacy = candidate.fontBody ?? candidate.fontDisplay;
+    if (typeof legacy === "string" && APPEARANCE_OPTIONS.font.includes(legacy)) {
+      result.font = legacy as Font;
     }
   }
   return result;
+}
+
+/** The syncable subset (cloud jsonb payload) of a full Appearance. */
+function pickSynced(a: Appearance): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of SYNCED_KEYS) out[key] = a[key];
+  return out;
+}
+
+/** Validated synced subset from a cloud jsonb blob; ignores per-device keys. */
+function sanitizeSynced(raw: Record<string, unknown>): Partial<Appearance> {
+  const out: Partial<Appearance> = {};
+  for (const key of SYNCED_KEYS) {
+    const value = raw[key];
+    if (typeof value === "string" && APPEARANCE_OPTIONS[key].includes(value)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (out as any)[key] = value;
+    }
+  }
+  // Honour the retired two-font model if an older client synced it.
+  if (out.font === undefined) {
+    const legacy = raw.fontBody ?? raw.fontDisplay;
+    if (typeof legacy === "string" && APPEARANCE_OPTIONS.font.includes(legacy)) {
+      out.font = legacy as Font;
+    }
+  }
+  return out;
 }
 
 export function readLocalAppearance(): Appearance {
@@ -77,7 +140,7 @@ export function readLocalAppearance(): Appearance {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_APPEARANCE };
-    return sanitize(JSON.parse(raw));
+    return parseAppearance(JSON.parse(raw));
   } catch {
     return { ...DEFAULT_APPEARANCE };
   }
@@ -91,6 +154,10 @@ export function applyAppearance(appearance: Appearance): void {
   }
 }
 
+function syncsField(patch: Partial<Appearance>): boolean {
+  return Object.keys(patch).some((key) => SYNCED_KEY_SET.has(key));
+}
+
 function writeLocalMirror(appearance: Appearance): void {
   if (typeof localStorage === "undefined") return;
   try {
@@ -100,41 +167,14 @@ function writeLocalMirror(appearance: Appearance): void {
   }
 }
 
-async function readPersisted(): Promise<Appearance | null> {
-  if (!runtime) return null;
-  try {
-    const raw = await runtime.localStore.get(TAURI_NAMESPACE, TAURI_KEY);
-    if (!raw) return null;
-    if (typeof raw === "string") {
-      try {
-        return sanitize(JSON.parse(raw));
-      } catch {
-        return null;
-      }
-    }
-    return sanitize(raw);
-  } catch {
-    return null;
-  }
-}
-
-async function writePersisted(appearance: Appearance): Promise<void> {
-  if (!runtime) return;
-  try {
-    await runtime.localStore.set(TAURI_NAMESPACE, TAURI_KEY, appearance);
-  } catch {
-    /* non-fatal — the localStorage mirror still holds the value */
-  }
-}
-
 export interface UseAppearance {
   appearance: Appearance;
   setTheme: (value: Theme) => void;
+  setShade: (value: Shade) => void;
   setAccent: (value: Accent) => void;
   setDensity: (value: Density) => void;
   setRadius: (value: Radius) => void;
-  setFontDisplay: (value: DisplayFont) => void;
-  setFontBody: (value: BodyFont) => void;
+  setFont: (value: Font) => void;
   setTextSize: (value: TextSize) => void;
   setTabs: (value: Tabs) => void;
   setAppearance: (patch: Partial<Appearance>) => void;
@@ -143,38 +183,52 @@ export interface UseAppearance {
 
 export function useAppearance(): UseAppearance {
   const [appearance, setAppearanceState] = useState<Appearance>(readLocalAppearance);
-
+  const appearanceRef = useRef(appearance);
   useEffect(() => {
-    let cancelled = false;
-    void readPersisted().then((persisted) => {
-      if (cancelled || !persisted) return;
-      setAppearanceState(persisted);
-      applyAppearance(persisted);
-      writeLocalMirror(persisted);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    appearanceRef.current = appearance;
+  }, [appearance]);
 
-  const update = useCallback((patch: Partial<Appearance>) => {
+  // Merge a cloud-won synced subset over local state, preserving the per-device
+  // fields (density/textSize/tabs), then apply to the DOM + localStorage mirror.
+  const applyFromCloud = useCallback((value: Record<string, unknown>) => {
     setAppearanceState((prev) => {
-      const next: Appearance = { ...prev, ...patch };
+      const next: Appearance = { ...prev, ...(value as Partial<Appearance>) };
       applyAppearance(next);
       writeLocalMirror(next);
-      void writePersisted(next);
       return next;
     });
   }, []);
 
+  const { pushLocalChange } = useDomainSync({
+    domain: "appearance",
+    getLocalSyncable: () => pickSynced(appearanceRef.current),
+    defaults: pickSynced(DEFAULT_APPEARANCE),
+    sanitizeCloud: (raw) => sanitizeSynced(raw) as Record<string, unknown>,
+    apply: applyFromCloud,
+  });
+
+  const update = useCallback(
+    (patch: Partial<Appearance>) => {
+      setAppearanceState((prev) => {
+        const next: Appearance = { ...prev, ...patch };
+        applyAppearance(next);
+        writeLocalMirror(next);
+        // Push only when a syncable field changed; per-device fields stay local.
+        if (syncsField(patch)) pushLocalChange(pickSynced(next));
+        return next;
+      });
+    },
+    [pushLocalChange],
+  );
+
   return {
     appearance,
     setTheme: (value) => update({ theme: value }),
+    setShade: (value) => update({ shade: value }),
     setAccent: (value) => update({ accent: value }),
     setDensity: (value) => update({ density: value }),
     setRadius: (value) => update({ radius: value }),
-    setFontDisplay: (value) => update({ fontDisplay: value }),
-    setFontBody: (value) => update({ fontBody: value }),
+    setFont: (value) => update({ font: value }),
     setTextSize: (value) => update({ textSize: value }),
     setTabs: (value) => update({ tabs: value }),
     setAppearance: update,

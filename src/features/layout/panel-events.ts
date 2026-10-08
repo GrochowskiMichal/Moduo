@@ -1,26 +1,14 @@
+import { useEffect, useState } from "react";
+
 export type FeatureLayoutKey =
   | "grid"
   | "notes"
   | "tasks"
-  | "ground"
   | "mindmap"
-  | "templates"
   | "email"
   | "calendar"
-  | "crm"
-  | "forms"
-  | "activity"
-  | "feed"
-  | "files"
-  | "brainstorm"
-  | "expanses"
-  | "revenue"
-  | "kpi-okr"
-  | "stats"
-  | "analytics"
-  | "recordings"
-  | "timetracking"
-  | "roadmap"
+  | "contacts"
+  | "chat"
   | "settings";
 
 export type FeaturePanelState = {
@@ -38,54 +26,27 @@ const defaultState: FeaturePanelState = { left: true, right: true };
 
 function cloneDefaultMap(): FeaturePanelsMap {
   return {
-    grid: { ...defaultState },
+    // Home ("grid" key) is full-bleed — no side panels.
+    grid: { left: false, right: false },
     notes: { ...defaultState },
     tasks: { ...defaultState },
-    ground: { left: false, right: false },
     mindmap: { ...defaultState },
-    templates: { ...defaultState },
     email: { ...defaultState },
     calendar: { ...defaultState },
-    crm: { ...defaultState },
-    forms: { ...defaultState },
-    activity: { ...defaultState },
-    feed: { ...defaultState },
-    files: { ...defaultState },
-    brainstorm: { ...defaultState },
-    expanses: { ...defaultState },
-    revenue: { ...defaultState },
-    "kpi-okr": { ...defaultState },
-    stats: { ...defaultState },
-    analytics: { ...defaultState },
-    recordings: { ...defaultState },
-    timetracking: { ...defaultState },
-    roadmap: { ...defaultState },
+    contacts: { ...defaultState },
+    chat: { ...defaultState },
     settings: { left: true, right: false },
   };
 }
 
 export function routeToFeatureLayout(pathname: string): FeatureLayoutKey {
   if (pathname === "/") return "grid";
-  if (pathname === "/tasks") return "ground";
-  if (pathname === "/ground") return "ground";
+  if (pathname === "/tasks") return "tasks";
+  if (pathname === "/calendar") return "calendar";
   if (pathname === "/mindmap") return "mindmap";
-  if (pathname === "/templates") return "templates";
   if (pathname === "/email") return "email";
-  if (pathname === "/calendar") return "ground";
-  if (pathname === "/crm") return "crm";
-  if (pathname === "/forms") return "forms";
-  if (pathname === "/activity") return "activity";
-  if (pathname === "/feed") return "feed";
-  if (pathname === "/files") return "files";
-  if (pathname === "/brainstorm") return "brainstorm";
-  if (pathname === "/expanses") return "expanses";
-  if (pathname === "/revenue") return "revenue";
-  if (pathname === "/kpi-okr") return "kpi-okr";
-  if (pathname === "/stats") return "stats";
-  if (pathname === "/analytics") return "analytics";
-  if (pathname === "/recordings") return "recordings";
-  if (pathname === "/timetracking") return "timetracking";
-  if (pathname === "/roadmap") return "roadmap";
+  if (pathname === "/contacts") return "contacts";
+  if (pathname === "/chat") return "chat";
   if (pathname === "/settings") return "settings";
   return "notes";
 }
@@ -126,10 +87,36 @@ export type LayoutPanelsApplyDetail = {
 
 export function dispatchLayoutPanelsApply(detail: LayoutPanelsApplyDetail) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_APPLY_EVENT, { detail }));
+  window.dispatchEvent(
+    new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_APPLY_EVENT, { detail }),
+  );
 }
 
 export function dispatchLayoutPanelsSet(detail: LayoutPanelsApplyDetail) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_SET_EVENT, { detail }));
+  window.dispatchEvent(
+    new CustomEvent<LayoutPanelsApplyDetail>(LAYOUT_PANELS_SET_EVENT, { detail }),
+  );
+}
+
+/**
+ * Live, render-side view of one feature's panel state: seeded from storage,
+ * kept in sync by the app-chrome's APPLY broadcasts. The ONE mirror of the
+ * panel event contract — the shell and any per-page summon affordance consume
+ * this instead of hand-rolling the listener. Mutate via dispatchLayoutPanelsSet.
+ */
+export function useFeaturePanelState(feature: FeatureLayoutKey): FeaturePanelState {
+  const [state, setState] = useState<FeaturePanelState>(() => readFeaturePanelState(feature));
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Re-seed on a feature switch — the initializer only ran for the first one.
+    setState(readFeaturePanelState(feature));
+    const onApply = (event: Event) => {
+      const detail = (event as CustomEvent<LayoutPanelsApplyDetail>).detail;
+      if (detail?.feature === feature) setState({ left: detail.left, right: detail.right });
+    };
+    window.addEventListener(LAYOUT_PANELS_APPLY_EVENT, onApply);
+    return () => window.removeEventListener(LAYOUT_PANELS_APPLY_EVENT, onApply);
+  }, [feature]);
+  return state;
 }

@@ -11,10 +11,9 @@ use redb::{Database, ReadableTable, TableDefinition};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::domain::{
-    CategoryRule, FocusSession, GraphEdge, GraphNode, ModulePermissions, NoteCrdtUpdate,
-    NoteDocState, NoteMeta, TaskActivity, TaskComment, TaskItem, TaskProject, TaskWorkflowState,
-    TasksBundle, TimeCategory, TimeEntry, TimeProject, TimetrackingBundle, WorkspaceInvite,
-    WorkspaceMember, WorkspaceNotification, WorkspaceSummary,
+    Bucket, CategoryRule, FocusSession, ModulePermissions, NoteCrdtUpdate, NoteDocState, NoteMeta,
+    Tag, TagLink, Task, TasksModuleBundle, TimeCategory, TimeEntry, TimeProject, TimetrackingBundle,
+    WorkspaceInvite, WorkspaceMember, WorkspaceNotification, WorkspaceSummary,
 };
 
 pub const NOTES_META: TableDefinition<&str, &str> = TableDefinition::new("notes_meta");
@@ -23,13 +22,12 @@ pub const NOTES_DOC_STATE: TableDefinition<&str, &str> = TableDefinition::new("n
 pub const NOTES_OUTBOX: TableDefinition<&str, &str> = TableDefinition::new("notes_outbox");
 pub const NOTES_OPLOG: TableDefinition<&str, &str> = TableDefinition::new("notes_oplog");
 
-pub const TASKS_PROJECTS: TableDefinition<&str, &str> = TableDefinition::new("tasks_projects");
-pub const TASKS_STATES: TableDefinition<&str, &str> = TableDefinition::new("tasks_states");
-pub const TASKS_ITEMS: TableDefinition<&str, &str> = TableDefinition::new("tasks_items");
-pub const TASKS_COMMENTS: TableDefinition<&str, &str> = TableDefinition::new("tasks_comments");
-pub const TASKS_OUTBOX: TableDefinition<&str, &str> = TableDefinition::new("tasks_outbox");
-pub const TASKS_OPLOG: TableDefinition<&str, &str> = TableDefinition::new("tasks_oplog");
-pub const TASKS_ACTIVITY: TableDefinition<&str, &str> = TableDefinition::new("tasks_activity");
+// Tasks module v1 (ADHD bucket / commit / execute model). The only Tasks model;
+// the legacy tasks_projects/tasks_states/tasks_items/... tables were removed.
+pub const BUCKETS: TableDefinition<&str, &str> = TableDefinition::new("buckets");
+pub const TASKS: TableDefinition<&str, &str> = TableDefinition::new("tasks");
+pub const TAGS: TableDefinition<&str, &str> = TableDefinition::new("tags");
+pub const TAG_LINKS: TableDefinition<&str, &str> = TableDefinition::new("tag_links");
 
 pub const WORKSPACE_MEMBERSHIP: TableDefinition<&str, &str> =
     TableDefinition::new("workspace_membership");
@@ -44,10 +42,6 @@ pub const DEVICE_IDENTITY: TableDefinition<&str, &str> = TableDefinition::new("d
 pub const MIGRATION_MARKERS: TableDefinition<&str, &str> =
     TableDefinition::new("migration_markers");
 
-pub const GRAPH_NODES: TableDefinition<&str, &str> = TableDefinition::new("graph_nodes");
-pub const GRAPH_EDGES: TableDefinition<&str, &str> = TableDefinition::new("graph_edges");
-pub const GRAPH_VECTORS: TableDefinition<&str, &str> = TableDefinition::new("graph_vectors");
-
 pub const OP_IDEMPOTENCY: TableDefinition<&str, &str> = TableDefinition::new("op_idempotency");
 pub const DEVICE_SEQ: TableDefinition<&str, &str> = TableDefinition::new("device_seq");
 pub const AUDIT_LOG: TableDefinition<&str, &str> = TableDefinition::new("audit_log");
@@ -61,13 +55,15 @@ pub const EMAIL_ENVELOPE_ORDER: TableDefinition<&str, &str> =
     TableDefinition::new("email_envelope_order");
 pub const EMAIL_BODIES: TableDefinition<&str, &str> = TableDefinition::new("email_bodies");
 pub const EMAIL_BODY_LRU: TableDefinition<&str, &str> = TableDefinition::new("email_body_lru");
+/// Local-search body-text sidecar (EM-9): an 8KB-truncated lowercase copy of each
+/// cached body, keyed like the body cache (`account::folder::uid`) and co-pruned
+/// with the body LRU so it never outlives its body.
+pub const EMAIL_BODY_TEXT: TableDefinition<&str, &str> = TableDefinition::new("email_body_text");
 pub const EMAIL_FLAG_OUTBOX: TableDefinition<&str, &str> =
     TableDefinition::new("email_flag_outbox");
-pub const EMAIL_GRAPH_OUTBOX: TableDefinition<&str, &str> =
-    TableDefinition::new("email_graph_outbox");
+/// Triage op outbox (archive/move/delete), mirrors the flag outbox (EM-5).
+pub const EMAIL_OP_OUTBOX: TableDefinition<&str, &str> = TableDefinition::new("email_op_outbox");
 pub const EMAIL_UI_STATE: TableDefinition<&str, &str> = TableDefinition::new("email_ui_state");
-
-pub const CALENDAR_EVENTS: TableDefinition<&str, &str> = TableDefinition::new("calendar_events");
 
 // Cloud sync tables
 pub const SYNC_CLOUD_OUTBOX: TableDefinition<&str, &str> =
@@ -85,6 +81,16 @@ pub struct RedbStore {
     write_guard: Mutex<()>,
 }
 
+/// One envelope row plus the order-index row that mirrors it, ready to be written
+/// in a single transaction. Keys and payloads are both minted by the caller —
+/// `commands::email` owns the key formats, the store writes what it is handed.
+pub struct EnvelopeWrite {
+    pub envelope_key: String,
+    pub envelope_json: String,
+    pub order_key: String,
+    pub order_json: String,
+}
+
 impl RedbStore {
     fn ensure_schema(db: &Database) -> anyhow::Result<()> {
         let write_txn = db.begin_write()?;
@@ -94,13 +100,10 @@ impl RedbStore {
         let _ = write_txn.open_table(NOTES_OUTBOX)?;
         let _ = write_txn.open_table(NOTES_OPLOG)?;
 
-        let _ = write_txn.open_table(TASKS_PROJECTS)?;
-        let _ = write_txn.open_table(TASKS_STATES)?;
-        let _ = write_txn.open_table(TASKS_ITEMS)?;
-        let _ = write_txn.open_table(TASKS_COMMENTS)?;
-        let _ = write_txn.open_table(TASKS_OUTBOX)?;
-        let _ = write_txn.open_table(TASKS_OPLOG)?;
-        let _ = write_txn.open_table(TASKS_ACTIVITY)?;
+        let _ = write_txn.open_table(BUCKETS)?;
+        let _ = write_txn.open_table(TASKS)?;
+        let _ = write_txn.open_table(TAGS)?;
+        let _ = write_txn.open_table(TAG_LINKS)?;
 
         let _ = write_txn.open_table(WORKSPACES)?;
         let _ = write_txn.open_table(WORKSPACE_MEMBERSHIP)?;
@@ -110,10 +113,6 @@ impl RedbStore {
 
         let _ = write_txn.open_table(DEVICE_IDENTITY)?;
         let _ = write_txn.open_table(MIGRATION_MARKERS)?;
-
-        let _ = write_txn.open_table(GRAPH_NODES)?;
-        let _ = write_txn.open_table(GRAPH_EDGES)?;
-        let _ = write_txn.open_table(GRAPH_VECTORS)?;
 
         let _ = write_txn.open_table(OP_IDEMPOTENCY)?;
         let _ = write_txn.open_table(DEVICE_SEQ)?;
@@ -125,11 +124,10 @@ impl RedbStore {
         let _ = write_txn.open_table(EMAIL_ENVELOPE_ORDER)?;
         let _ = write_txn.open_table(EMAIL_BODIES)?;
         let _ = write_txn.open_table(EMAIL_BODY_LRU)?;
+        let _ = write_txn.open_table(EMAIL_BODY_TEXT)?;
         let _ = write_txn.open_table(EMAIL_FLAG_OUTBOX)?;
-        let _ = write_txn.open_table(EMAIL_GRAPH_OUTBOX)?;
+        let _ = write_txn.open_table(EMAIL_OP_OUTBOX)?;
         let _ = write_txn.open_table(EMAIL_UI_STATE)?;
-
-        let _ = write_txn.open_table(CALENDAR_EVENTS)?;
 
         let _ = write_txn.open_table(SYNC_CLOUD_OUTBOX)?;
         let _ = write_txn.open_table(SYNC_PULL_CURSOR)?;
@@ -220,13 +218,10 @@ impl RedbStore {
             NOTES_DOC_STATE,
             NOTES_OUTBOX,
             NOTES_OPLOG,
-            TASKS_PROJECTS,
-            TASKS_STATES,
-            TASKS_ITEMS,
-            TASKS_COMMENTS,
-            TASKS_OUTBOX,
-            TASKS_OPLOG,
-            TASKS_ACTIVITY,
+            BUCKETS,
+            TASKS,
+            TAGS,
+            TAG_LINKS,
             WORKSPACES,
             WORKSPACE_MEMBERSHIP,
             WORKSPACE_ACL,
@@ -234,9 +229,6 @@ impl RedbStore {
             WORKSPACE_NOTIFICATIONS,
             DEVICE_IDENTITY,
             MIGRATION_MARKERS,
-            GRAPH_NODES,
-            GRAPH_EDGES,
-            GRAPH_VECTORS,
             OP_IDEMPOTENCY,
             DEVICE_SEQ,
             AUDIT_LOG,
@@ -246,8 +238,9 @@ impl RedbStore {
             EMAIL_ENVELOPE_ORDER,
             EMAIL_BODIES,
             EMAIL_BODY_LRU,
+            EMAIL_BODY_TEXT,
             EMAIL_FLAG_OUTBOX,
-            EMAIL_GRAPH_OUTBOX,
+            EMAIL_OP_OUTBOX,
             EMAIL_UI_STATE,
             TT_ENTRIES,
             TT_CATEGORIES,
@@ -331,6 +324,27 @@ impl RedbStore {
             let (_, value) = result?;
             let parsed = serde_json::from_str::<T>(value.value())?;
             items.push(parsed);
+        }
+        Ok(items)
+    }
+
+    /// Rows whose key starts with `prefix`, in key order. Seeks straight to the
+    /// prefix and stops at the first key past it, so rows outside the prefix are
+    /// never read — let alone deserialized.
+    fn scan_json_prefix<T: DeserializeOwned>(
+        &self,
+        table_def: TableDefinition<&str, &str>,
+        prefix: &str,
+    ) -> anyhow::Result<Vec<T>> {
+        let read_txn = self.db.begin_read()?;
+        let table = read_txn.open_table(table_def)?;
+        let mut items = Vec::new();
+        for result in table.range(prefix..)? {
+            let (key, value) = result?;
+            if !key.value().starts_with(prefix) {
+                break;
+            }
+            items.push(serde_json::from_str::<T>(value.value())?);
         }
         Ok(items)
     }
@@ -462,71 +476,84 @@ impl RedbStore {
         self.put_json(NOTES_OPLOG, key.as_str(), update)
     }
 
-    pub fn put_task_project(&self, project: &TaskProject) -> anyhow::Result<()> {
-        self.put_json(TASKS_PROJECTS, &project.id, project)
+    // ─── Tasks module v1 (buckets / tasks / tags) ──────────────────────────────
+
+    pub fn put_bucket(&self, bucket: &Bucket) -> anyhow::Result<()> {
+        self.put_json(BUCKETS, &bucket.id, bucket)
     }
 
-    pub fn put_task_state(&self, state: &TaskWorkflowState) -> anyhow::Result<()> {
-        self.put_json(TASKS_STATES, &state.id, state)
+    pub fn get_bucket(&self, id: &str) -> anyhow::Result<Option<Bucket>> {
+        self.get_json(BUCKETS, id)
     }
 
-    pub fn put_task_item(&self, task: &TaskItem) -> anyhow::Result<()> {
-        self.put_json(TASKS_ITEMS, &task.id, task)
-    }
-
-    pub fn put_task_comment(&self, comment: &TaskComment) -> anyhow::Result<()> {
-        self.put_json(TASKS_COMMENTS, &comment.id, comment)
-    }
-
-    pub fn put_task_activity(&self, activity: &TaskActivity) -> anyhow::Result<()> {
-        self.put_json(TASKS_ACTIVITY, &activity.id, activity)
-    }
-
-    pub fn get_task_item(&self, task_id: &str) -> anyhow::Result<Option<TaskItem>> {
-        self.get_json(TASKS_ITEMS, task_id)
-    }
-
-    pub fn get_task_comment(&self, comment_id: &str) -> anyhow::Result<Option<TaskComment>> {
-        self.get_json(TASKS_COMMENTS, comment_id)
-    }
-
-    pub fn remove_task_comment(&self, comment_id: &str) -> anyhow::Result<()> {
-        self.remove_key(TASKS_COMMENTS, comment_id)
-    }
-
-    pub fn list_tasks_bundle(&self, workspace_id: &str) -> anyhow::Result<TasksBundle> {
-        let projects = self
-            .list_json::<TaskProject>(TASKS_PROJECTS)?
+    pub fn list_buckets(&self, workspace_id: &str) -> anyhow::Result<Vec<Bucket>> {
+        Ok(self
+            .list_json::<Bucket>(BUCKETS)?
             .into_iter()
-            .filter(|x| x.workspace_id == workspace_id)
-            .collect();
-        let states = self
-            .list_json::<TaskWorkflowState>(TASKS_STATES)?
-            .into_iter()
-            .filter(|x| x.workspace_id == workspace_id)
-            .collect();
-        let tasks = self
-            .list_json::<TaskItem>(TASKS_ITEMS)?
-            .into_iter()
-            .filter(|x| x.workspace_id == workspace_id)
-            .collect();
-        let comments = self
-            .list_json::<TaskComment>(TASKS_COMMENTS)?
-            .into_iter()
-            .filter(|x| x.workspace_id == workspace_id)
-            .collect();
-        let activities = self
-            .list_json::<TaskActivity>(TASKS_ACTIVITY)?
-            .into_iter()
-            .filter(|x| x.workspace_id == workspace_id)
-            .collect();
+            .filter(|b| b.workspace_id == workspace_id)
+            .collect())
+    }
 
-        Ok(TasksBundle {
-            projects,
-            states,
-            tasks,
-            comments,
-            activities,
+    pub fn put_task(&self, task: &Task) -> anyhow::Result<()> {
+        self.put_json(TASKS, &task.id, task)
+    }
+
+    pub fn get_task(&self, id: &str) -> anyhow::Result<Option<Task>> {
+        self.get_json(TASKS, id)
+    }
+
+    pub fn list_tasks(&self, workspace_id: &str) -> anyhow::Result<Vec<Task>> {
+        Ok(self
+            .list_json::<Task>(TASKS)?
+            .into_iter()
+            .filter(|t| t.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn put_tag(&self, tag: &Tag) -> anyhow::Result<()> {
+        self.put_json(TAGS, &tag.id, tag)
+    }
+
+    pub fn get_tag(&self, id: &str) -> anyhow::Result<Option<Tag>> {
+        self.get_json(TAGS, id)
+    }
+
+    pub fn list_tags(&self, workspace_id: &str) -> anyhow::Result<Vec<Tag>> {
+        Ok(self
+            .list_json::<Tag>(TAGS)?
+            .into_iter()
+            .filter(|t| t.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn put_tag_link(&self, link: &TagLink) -> anyhow::Result<()> {
+        self.put_json(TAG_LINKS, &link.id, link)
+    }
+
+    pub fn remove_tag_link(&self, id: &str) -> anyhow::Result<()> {
+        self.remove_key(TAG_LINKS, id)
+    }
+
+    pub fn list_tag_links(&self, workspace_id: &str) -> anyhow::Result<Vec<TagLink>> {
+        Ok(self
+            .list_json::<TagLink>(TAG_LINKS)?
+            .into_iter()
+            .filter(|l| l.workspace_id == workspace_id)
+            .collect())
+    }
+
+    pub fn list_tasks_module_bundle(
+        &self,
+        workspace_id: &str,
+    ) -> anyhow::Result<TasksModuleBundle> {
+        Ok(TasksModuleBundle {
+            buckets: self.list_buckets(workspace_id)?,
+            tasks: self.list_tasks(workspace_id)?,
+            tags: self.list_tags(workspace_id)?,
+            tag_links: self.list_tag_links(workspace_id)?,
+            // Blocked-by edges live in Supabase only (desktop tasks ride the
+            // web runtime); a redb table comes with the lite/offline version.
+            task_relations: Vec::new(),
         })
     }
 
@@ -563,30 +590,6 @@ impl RedbStore {
         let read_txn = self.db.begin_read()?;
         let table = read_txn.open_table(MIGRATION_MARKERS)?;
         Ok(table.get(key)?.map(|v| v.value().to_string()))
-    }
-
-    pub fn put_graph_node(&self, node: &GraphNode) -> anyhow::Result<()> {
-        self.put_json(GRAPH_NODES, &node.id, node)
-    }
-
-    pub fn put_graph_edge(&self, edge: &GraphEdge) -> anyhow::Result<()> {
-        self.put_json(GRAPH_EDGES, &edge.id, edge)
-    }
-
-    pub fn list_graph_nodes(&self, workspace_id: &str) -> anyhow::Result<Vec<GraphNode>> {
-        Ok(self
-            .list_json::<GraphNode>(GRAPH_NODES)?
-            .into_iter()
-            .filter(|n| n.workspace_id == workspace_id)
-            .collect())
-    }
-
-    pub fn list_graph_edges(&self, workspace_id: &str) -> anyhow::Result<Vec<GraphEdge>> {
-        Ok(self
-            .list_json::<GraphEdge>(GRAPH_EDGES)?
-            .into_iter()
-            .filter(|n| n.workspace_id == workspace_id)
-            .collect())
     }
 
     pub fn upsert_workspace_acl(
@@ -644,10 +647,6 @@ impl RedbStore {
         self.remove_key(EMAIL_FOLDER_STATE, key)
     }
 
-    pub fn put_email_envelope(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
-        self.put_json(EMAIL_ENVELOPES, key, value)
-    }
-
     pub fn get_email_envelope(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
         self.get_json(EMAIL_ENVELOPES, key)
     }
@@ -656,24 +655,156 @@ impl RedbStore {
         self.list_json(EMAIL_ENVELOPES)
     }
 
-    pub fn remove_email_envelope(&self, key: &str) -> anyhow::Result<()> {
-        self.remove_key(EMAIL_ENVELOPES, key)
-    }
-
-    pub fn put_email_envelope_order(
+    /// Envelope rows under one `{account}::{folder}::` key prefix.
+    pub fn scan_email_envelopes_prefix(
         &self,
-        key: &str,
-        value: &serde_json::Value,
-    ) -> anyhow::Result<()> {
-        self.put_json(EMAIL_ENVELOPE_ORDER, key, value)
+        prefix: &str,
+    ) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.scan_json_prefix(EMAIL_ENVELOPES, prefix)
     }
 
+    /// Envelope rows for one folder across *every* account in the table.
+    ///
+    /// Keys are `{account}::{folder}::{uid}` and the account segment isn't known up
+    /// front, so this walks the key index rather than seeking a prefix — but it only
+    /// **deserializes** a row whose key carries the folder, which is where the cost
+    /// is. `needle` may over-match (an account id that itself contains
+    /// `::{folder}::`); callers field-filter, so a false positive can't change the
+    /// result set — though, like the old whole-table read, an unparseable value on a
+    /// matched key still fails the listing. Never *under*-matching is what keeps
+    /// this exactly equivalent to that read.
+    pub fn scan_email_envelopes_in_folder(
+        &self,
+        needle: &str,
+    ) -> anyhow::Result<Vec<serde_json::Value>> {
+        let read_txn = self.db.begin_read()?;
+        let table = read_txn.open_table(EMAIL_ENVELOPES)?;
+        let mut items = Vec::new();
+        for result in table.iter()? {
+            let (key, value) = result?;
+            if !key.value().contains(needle) {
+                continue;
+            }
+            items.push(serde_json::from_str(value.value())?);
+        }
+        Ok(items)
+    }
+
+    /// Test-only: write an envelope row's value verbatim, bypassing JSON encoding.
+    /// Lets a test plant an unparseable row *outside* a scan's prefix, so "the
+    /// prefix scan never touched it" is provable rather than assumed.
+    #[cfg(test)]
+    pub fn put_email_envelope_raw(&self, key: &str, value: &str) -> anyhow::Result<()> {
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(EMAIL_ENVELOPES)?;
+            table.insert(key, value)?;
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    /// Write a batch of envelopes and their order-index rows in ONE transaction.
+    ///
+    /// The old path took the write guard and ran a full `begin_write` + `commit`
+    /// twice per envelope (once for the row, once for its order row), so a 50-UID
+    /// sync chunk cost 100 commits; this costs one.
+    ///
+    /// `stale_order_key` maps the *raw stored JSON* of an envelope to the order key
+    /// it was written under. A message whose timestamp moves — most commonly one
+    /// with no `Date` header, which falls back to "now" on every refetch — would
+    /// otherwise leave its previous order row behind on each sync; here it is
+    /// removed in the same transaction, so an envelope written through this path
+    /// always has exactly one order row. (Rows orphaned by the *old* two-commit
+    /// write predate this and are not swept — see `remove_email_envelope_with_order`.)
+    pub fn write_email_envelopes<F>(
+        &self,
+        rows: &[EnvelopeWrite],
+        stale_order_key: F,
+    ) -> anyhow::Result<()>
+    where
+        F: Fn(&str) -> Option<String>,
+    {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut envelopes = write_txn.open_table(EMAIL_ENVELOPES)?;
+            let mut order = write_txn.open_table(EMAIL_ENVELOPE_ORDER)?;
+            for row in rows {
+                // Read the previous row into an owned String first: the access
+                // guard borrows the table, and the insert below needs it mutably.
+                let previous: Option<String> = envelopes
+                    .get(row.envelope_key.as_str())?
+                    .map(|value| value.value().to_string());
+                if let Some(stale) = previous.as_deref().and_then(&stale_order_key) {
+                    if stale != row.order_key {
+                        let _ = order.remove(stale.as_str())?;
+                    }
+                }
+                envelopes.insert(row.envelope_key.as_str(), row.envelope_json.as_str())?;
+                order.insert(row.order_key.as_str(), row.order_json.as_str())?;
+            }
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    /// Remove an envelope and its order-index row in one transaction.
+    ///
+    /// The order key is derived from the stored row *inside* the transaction, so a
+    /// concurrent upsert can't move the timestamp between the read and the delete.
+    /// This stays a point delete — the old path scanned the entire order table per
+    /// removal, which made a full-reset prune of n envelopes O(n²). The flip side:
+    /// only the row this envelope currently points at is removed, so index rows
+    /// orphaned before IM-2a survive. Nothing reads the index yet; IM-2b, its first
+    /// consumer, has to reconcile or rebuild it before trusting the invariant.
+    ///
+    /// The envelope row itself is removed unconditionally — a row whose JSON no
+    /// longer parses must still be deletable.
+    pub fn remove_email_envelope_with_order<F>(
+        &self,
+        envelope_key: &str,
+        order_key_for: F,
+    ) -> anyhow::Result<()>
+    where
+        F: Fn(&str) -> Option<String>,
+    {
+        let _lock = self
+            .write_guard
+            .lock()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let write_txn = self.db.begin_write()?;
+        {
+            let mut envelopes = write_txn.open_table(EMAIL_ENVELOPES)?;
+            let stored: Option<String> = envelopes
+                .get(envelope_key)?
+                .map(|value| value.value().to_string());
+            let _ = envelopes.remove(envelope_key)?;
+            if let Some(order_key) = stored.as_deref().and_then(&order_key_for) {
+                let mut order = write_txn.open_table(EMAIL_ENVELOPE_ORDER)?;
+                let _ = order.remove(order_key.as_str())?;
+            }
+        }
+        write_txn.commit()?;
+        Ok(())
+    }
+
+    /// The order index is written by [`Self::write_email_envelopes`] and not yet
+    /// read by any product path — IM-2b's backward backfill is its first consumer.
+    /// Kept (and covered by the storage tests) so that consumer inherits a write
+    /// path that keeps exactly one row per envelope going forward.
     pub fn list_email_envelope_order(&self) -> anyhow::Result<Vec<serde_json::Value>> {
         self.list_json(EMAIL_ENVELOPE_ORDER)
-    }
-
-    pub fn remove_email_envelope_order(&self, key: &str) -> anyhow::Result<()> {
-        self.remove_key(EMAIL_ENVELOPE_ORDER, key)
     }
 
     pub fn put_email_body(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
@@ -704,6 +835,18 @@ impl RedbStore {
         self.remove_key(EMAIL_BODY_LRU, key)
     }
 
+    pub fn put_email_body_text(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+        self.put_json(EMAIL_BODY_TEXT, key, value)
+    }
+
+    pub fn list_email_body_text(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_BODY_TEXT)
+    }
+
+    pub fn remove_email_body_text(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_BODY_TEXT, key)
+    }
+
     pub fn put_email_flag_outbox(
         &self,
         key: &str,
@@ -720,20 +863,16 @@ impl RedbStore {
         self.remove_key(EMAIL_FLAG_OUTBOX, key)
     }
 
-    pub fn put_email_graph_outbox(
-        &self,
-        key: &str,
-        value: &serde_json::Value,
-    ) -> anyhow::Result<()> {
-        self.put_json(EMAIL_GRAPH_OUTBOX, key, value)
+    pub fn put_email_op_outbox(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+        self.put_json(EMAIL_OP_OUTBOX, key, value)
     }
 
-    pub fn list_email_graph_outbox(&self) -> anyhow::Result<Vec<serde_json::Value>> {
-        self.list_json(EMAIL_GRAPH_OUTBOX)
+    pub fn list_email_op_outbox(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        self.list_json(EMAIL_OP_OUTBOX)
     }
 
-    pub fn remove_email_graph_outbox(&self, key: &str) -> anyhow::Result<()> {
-        self.remove_key(EMAIL_GRAPH_OUTBOX, key)
+    pub fn remove_email_op_outbox(&self, key: &str) -> anyhow::Result<()> {
+        self.remove_key(EMAIL_OP_OUTBOX, key)
     }
 
     pub fn put_email_ui_state(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
@@ -742,18 +881,6 @@ impl RedbStore {
 
     pub fn get_email_ui_state(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
         self.get_json(EMAIL_UI_STATE, key)
-    }
-
-    pub fn put_calendar_event(&self, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
-        self.put_json(CALENDAR_EVENTS, key, value)
-    }
-
-    pub fn list_calendar_events(&self) -> anyhow::Result<Vec<serde_json::Value>> {
-        self.list_json(CALENDAR_EVENTS)
-    }
-
-    pub fn remove_calendar_event(&self, key: &str) -> anyhow::Result<()> {
-        self.remove_key(CALENDAR_EVENTS, key)
     }
 
     // ─── Timetracking ─────────────────────────────────────────────────────────
@@ -1078,14 +1205,14 @@ impl RedbStore {
         workspace_id: &str,
     ) -> anyhow::Result<HashMap<String, String>> {
         let notes = self.list_notes(workspace_id)?;
-        let tasks = self.list_tasks_bundle(workspace_id)?;
+        let bundle = self.list_tasks_module_bundle(workspace_id)?;
         let notes_hash = format!("{}:{}", notes.len(), stable_hash(&notes)?);
         let task_hash = format!(
             "{}:{}:{}:{}",
-            tasks.projects.len() + tasks.states.len() + tasks.tasks.len() + tasks.comments.len(),
-            stable_hash(&tasks.projects)?,
-            stable_hash(&tasks.tasks)?,
-            stable_hash(&tasks.comments)?
+            bundle.buckets.len() + bundle.tasks.len() + bundle.tags.len() + bundle.tag_links.len(),
+            stable_hash(&bundle.buckets)?,
+            stable_hash(&bundle.tasks)?,
+            stable_hash(&bundle.tags)?
         );
 
         let mut out = HashMap::new();

@@ -31,6 +31,16 @@ isProject: false
 
 # moduo Hybrid: Web + Desktop, End-to-End Plan
 
+> **⚠️ RETIRED (2026-06-12, improvement-plan Session 2).** This plan specced the
+> local-first hybrid: redb as desktop source of truth, an `auth_link_to_cloud`
+> upgrade flow, and a delta-sync engine. That architecture was **superseded by
+> the cloud-first pivot (2026-06-11)**: desktop now runs the Supabase-backed web
+> runtime directly for auth/workspaces/tasks (see `docs/improvement-plan.md`),
+> the `auth_link_to_cloud` Rust command was never built, and the sync-engine
+> skeleton in `src-tauri/src/sync/` is paused. Do **not** implement the pending
+> todos below. Kept for the billing/landing context and as input to the future
+> free local-first **lite** version.
+
 A consolidated direction across five axes (architecture, onboarding, billing, tooling, framework review), built on the decisions you locked in:
 
 - **Storage model: B — Thin web client.** Web talks to Supabase directly. Desktop stays local-first on `redb` and pushes deltas to Supabase for cloud-synced users.

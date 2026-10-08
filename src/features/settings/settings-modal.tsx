@@ -1,34 +1,43 @@
-import { useEffect, useState, type ComponentType } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { Dialog as DialogPrimitive } from "radix-ui";
 import {
   Building2,
+  CreditCard,
   Info,
-  LogOut,
+  KeyRound,
+  type LucideIcon,
   Palette,
   Plug,
   Sliders,
   TerminalSquare,
+  Timer,
   User,
+  Users,
   X,
-  type LucideIcon,
 } from "lucide-react";
+import { Dialog as DialogPrimitive } from "radix-ui";
+import { type ComponentType, useEffect, useState } from "react";
 
-import { cn } from "../../lib/utils";
+import { Eyebrow } from "../../components/ui/eyebrow";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useShortcut } from "../../lib/shortcuts";
-import { useAuth } from "../../providers/auth-provider";
+import { cn } from "../../lib/utils";
 
 import { AboutSection } from "./sections/about-section";
+import { AccessSection } from "./sections/access-section";
 import { AccountSection } from "./sections/account-section";
 import { AdvancedSection } from "./sections/advanced-section";
+import { ApiKeysSection } from "./sections/api-keys-section";
 import { AppearanceSection } from "./sections/appearance-section";
+import { BillingSection } from "./sections/billing-section";
+import { FocusSection } from "./sections/focus-section";
 import { IntegrationsSection } from "./sections/integrations-section";
 import { PreferencesSection } from "./sections/preferences-section";
 import { WorkspaceSection } from "./sections/workspace-section";
 import {
-  SETTINGS_OPEN_EVENT,
+  clearPendingOpenSettings,
   isSettingsSectionId,
+  pendingOpenSettings,
+  SETTINGS_GROUPS,
+  SETTINGS_OPEN_EVENT,
   type SettingsOpenDetail,
   type SettingsSectionId,
 } from "./settings-events";
@@ -43,14 +52,18 @@ type SectionEntry = {
 const SECTIONS: SectionEntry[] = [
   { id: "appearance", label: "Appearance", icon: Palette, Component: AppearanceSection },
   { id: "account", label: "Account", icon: User, Component: AccountSection },
+  { id: "billing", label: "Billing", icon: CreditCard, Component: BillingSection },
   { id: "workspace", label: "Workspace", icon: Building2, Component: WorkspaceSection },
+  { id: "access", label: "Members and access", icon: Users, Component: AccessSection },
   { id: "integrations", label: "Integrations", icon: Plug, Component: IntegrationsSection },
+  { id: "apikeys", label: "API keys", icon: KeyRound, Component: ApiKeysSection },
   {
     id: "preferences",
     label: "Preferences",
     icon: Sliders,
     Component: PreferencesSection,
   },
+  { id: "focus", label: "Focus", icon: Timer, Component: FocusSection },
   {
     id: "advanced",
     label: "Advanced",
@@ -60,26 +73,41 @@ const SECTIONS: SectionEntry[] = [
   { id: "about", label: "About", icon: Info, Component: AboutSection },
 ];
 
+const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((s) => [s.id, s])) as Record<
+  SettingsSectionId,
+  SectionEntry
+>;
+
 export function SettingsModal() {
-  const { signOut } = useAuth();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSectionId>("appearance");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<SettingsOpenDetail>).detail ?? {};
+    const applyDetail = (detail: SettingsOpenDetail) => {
       if (detail.section && isSettingsSectionId(detail.section)) {
         setSection(detail.section);
       }
       setOpen(true);
     };
+    const handler = (event: Event) => {
+      applyDetail((event as CustomEvent<SettingsOpenDetail>).detail ?? {});
+    };
     window.addEventListener(SETTINGS_OPEN_EVENT, handler);
+    // A cold-load `/settings?section=…` dispatch fires while this modal is
+    // unmounted (boot remount churn) — re-apply the sticky dispatch on every
+    // mount so the deep link still opens the right section.
+    const pending = pendingOpenSettings();
+    if (pending) applyDetail(pending);
     return () => window.removeEventListener(SETTINGS_OPEN_EVENT, handler);
   }, []);
 
-  useShortcut("settings", () => setOpen((prev) => !prev));
+  useShortcut("settings", () =>
+    setOpen((prev) => {
+      if (prev) clearPendingOpenSettings();
+      return !prev;
+    }),
+  );
 
   // Appearance still leans on the visible app behind for the live preview, so
   // its backdrop drops the blur — content stays legible while the modal sits
@@ -88,17 +116,15 @@ export function SettingsModal() {
   // "you're in a panel."
   const isAppearance = section === "appearance";
 
-  const handleSignOut = async () => {
-    setOpen(false);
-    try {
-      await signOut();
-    } finally {
-      void navigate({ to: "/auth" });
-    }
+  const handleOpenChange = (next: boolean) => {
+    // A user dismissal must also disarm the deep-link sticky buffer, or a
+    // modal remount inside the TTL would re-open what was explicitly closed.
+    if (!next) clearPendingOpenSettings();
+    setOpen(next);
   };
 
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+    <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
           className={cn(
@@ -126,7 +152,7 @@ export function SettingsModal() {
         >
           <DialogPrimitive.Title className="sr-only">Settings</DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">
-            Customize appearance, account, workspace, integrations, and preferences.
+            Customize appearance, account, billing, workspace, integrations, and preferences.
           </DialogPrimitive.Description>
 
           <Tabs
@@ -137,55 +163,48 @@ export function SettingsModal() {
           >
             <nav
               aria-label="Settings sections"
-              className="flex h-full min-h-0 flex-col gap-3 border-r border-border bg-muted/40 p-3"
+              className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto border-r border-border bg-muted/40 p-3"
             >
               <div className="flex items-center justify-between px-2 pt-1">
-                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Settings
-                </span>
+                <Eyebrow>Settings</Eyebrow>
                 <DialogPrimitive.Close
-                  className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                  className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
                   aria-label="Close settings"
                 >
                   <X className="size-4" />
                 </DialogPrimitive.Close>
               </div>
 
-              <TabsList
-                variant="default"
-                className="rounded-none bg-transparent p-0 gap-1"
-              >
-                {SECTIONS.map(({ id, label, icon: Icon }) => (
-                  <TabsTrigger
-                    key={id}
-                    value={id}
-                    className="flex items-center justify-start gap-2 rounded-md px-3 font-sans text-sm font-normal text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-[state=active]:bg-accent data-[state=active]:text-foreground data-[state=active]:shadow-none"
-                    style={{ height: "var(--row-h)" }}
+              {SETTINGS_GROUPS.map((group) => (
+                <div key={group.label} className="flex flex-col gap-1">
+                  <Eyebrow className="px-3">{group.label}</Eyebrow>
+                  <TabsList
+                    variant="default"
+                    aria-label={group.label}
+                    className="rounded-none bg-transparent p-0 gap-1"
                   >
-                    <Icon className="size-4" aria-hidden />
-                    <span>{label}</span>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-
-              <button
-                type="button"
-                onClick={() => void handleSignOut()}
-                className="mt-auto flex items-center gap-2 rounded-md px-3 font-sans text-sm font-normal text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-                style={{ height: "var(--row-h)" }}
-              >
-                <LogOut className="size-4" aria-hidden />
-                <span>Log out</span>
-              </button>
+                    {group.ids.map((id) => {
+                      const { label, icon: Icon } = SECTION_BY_ID[id];
+                      return (
+                        <TabsTrigger
+                          key={id}
+                          value={id}
+                          className="flex items-center justify-start gap-2 rounded-md px-3 font-sans text-sm font-normal text-muted-foreground hover:bg-state-hover hover:text-foreground data-[state=active]:bg-state-active data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                          style={{ height: "var(--row-h)" }}
+                        >
+                          <Icon className="size-4" aria-hidden />
+                          <span>{label}</span>
+                        </TabsTrigger>
+                      );
+                    })}
+                  </TabsList>
+                </div>
+              ))}
             </nav>
 
-            <div className="min-h-0 overflow-y-auto px-2 py-4">
+            <div className="pane-scroll h-full min-h-0 overflow-y-auto px-2 py-4">
               {SECTIONS.map(({ id, Component }) => (
-                <TabsContent
-                  key={id}
-                  value={id}
-                  className="data-[state=inactive]:hidden"
-                >
+                <TabsContent key={id} value={id} className="data-[state=inactive]:hidden">
                   {id === section ? <Component /> : null}
                 </TabsContent>
               ))}

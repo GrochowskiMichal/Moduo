@@ -1,0 +1,62 @@
+name: Promote to production
+
+# Manual gate: promotes staging-app → prod-app or staging-landing → prod-landing.
+# Run this when you're ready to cut a production release.
+# Vercel watches prod-app / prod-landing and deploys on push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which surface to promote"
+        required: true
+        type: choice
+        options:
+          - app   # staging-app → prod-app  (app.moduo.app)
+          - landing  # staging-landing → prod-landing  (moduo.app)
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Promote app — staging-app → prod-app
+        if: ${{ inputs.target == 'app' }}
+        run: |
+          git fetch origin prod-app staging-app || true
+          if git ls-remote --exit-code origin prod-app; then
+            git checkout -b prod-app origin/prod-app
+            git merge origin/staging-app --ff-only \
+              || git merge origin/staging-app --no-ff -m "chore: promote staging-app → prod-app"
+          else
+            git checkout -b prod-app origin/staging-app
+          fi
+          git push origin prod-app
+          echo "✅ prod-app updated from staging-app — Vercel will deploy to app.moduo.app"
+
+      - name: Promote landing — staging-landing → prod-landing
+        if: ${{ inputs.target == 'landing' }}
+        run: |
+          git fetch origin prod-landing staging-landing || true
+          if git ls-remote --exit-code origin prod-landing; then
+            git checkout -b prod-landing origin/prod-landing
+            git merge origin/staging-landing --ff-only \
+              || git merge origin/staging-landing --no-ff -m "chore: promote staging-landing → prod-landing"
+          else
+            git checkout -b prod-landing origin/staging-landing
+          fi
+          git push origin prod-landing
+          echo "✅ prod-landing updated from staging-landing — Vercel will deploy to moduo.app"

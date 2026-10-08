@@ -1,30 +1,32 @@
-import { createRootRoute, createRoute, Navigate, Outlet, redirect } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  lazyRouteComponent,
+  Outlet,
+  redirect,
+} from "@tanstack/react-router";
+import { validateCalendarSearch } from "../../features/calendar/search";
+import { validateChatSearch } from "../../features/chat/search";
+import { validateContactsSearch } from "../../features/contacts/search";
+import { validateEmailSearch } from "../../features/email/url-search";
+import { validateNotesSearch } from "../../features/notes/search";
+import { validateAuthSearch } from "../../features/settings/delete-account";
+import { validateTasksSearch } from "../../features/tasks/search";
+import { consumeLandingRedirect } from "../../lib/preferences";
 import { AuthProvider } from "../../providers/auth-provider";
 import { AppGate } from "../../routes/layouts/app-gate";
 import { AuthPage } from "../../routes/pages/auth-page";
+import { BookCancelPage } from "../../routes/pages/book-cancel-page";
+import { BookPage } from "../../routes/pages/book-page";
+import { CalendarPage } from "../../routes/pages/calendar-page";
+import { ChatPage } from "../../routes/pages/chat-page";
+import { ContactsPage } from "../../routes/pages/contacts-page";
+import { HomePage } from "../../routes/pages/home-page";
+import { JoinPage } from "../../routes/pages/join-page";
 import { OnboardingPage } from "../../routes/pages/onboarding-page";
-import { GridPage } from "../../routes/pages/grid-page";
-import { NotesPage } from "../../routes/pages/notes-page";
-import { MindmapPage } from "../../routes/pages/mindmap-page";
-import { TemplatesPage } from "../../routes/pages/templates-page";
-import { EmailPage } from "../../routes/pages/email-page";
-import { GroundPage } from "../../routes/pages/ground-page";
-import { CrmPage } from "../../routes/pages/crm-page";
-import { FormsPage } from "../../routes/pages/forms-page";
-import { ActivityPage } from "../../routes/pages/activity-page";
-import { FeedPage } from "../../routes/pages/feed-page";
-import { FilesPage } from "../../routes/pages/files-page";
-import { BrainstormPage } from "../../routes/pages/brainstorm-page";
-import { ExpansesPage } from "../../routes/pages/expanses-page";
-import { RevenuePage } from "../../routes/pages/revenue-page";
-import { KpiOkrPage } from "../../routes/pages/kpi-okr-page";
-import { StatsPage } from "../../routes/pages/stats-page";
-import { AnalyticsPage } from "../../routes/pages/analytics-page";
-import { RecordingsPage } from "../../routes/pages/recordings-page";
-import { TimetrackingPage } from "../../routes/pages/timetracking-page";
-import { RoadmapPage } from "../../routes/pages/roadmap-page";
-import { SettingsPage } from "../../routes/pages/settings-page";
 import { PaywallPage } from "../../routes/pages/paywall-page";
+import { SettingsPage } from "../../routes/pages/settings-page";
+import { TasksPage } from "../../routes/pages/tasks-page";
 
 function RootLayout() {
   return (
@@ -34,6 +36,27 @@ function RootLayout() {
   );
 }
 
+/**
+ * Wrap a route that renders OUTSIDE the app gate (auth, onboarding, paywall,
+ * join, the public note reader) so it stays monochrome.
+ *
+ * The accent is a personal, in-workspace choice: a returning user whose accent
+ * is a hue must not see that hue on sign-in / setup / a public page. Scoping the
+ * attribute here rather than on each page root means a page's individual return
+ * branches (loading vs loaded vs error) can't drift apart — which is exactly how
+ * these surfaces got inconsistent before. `display: contents` adds no box, so
+ * layout is untouched while custom properties still inherit through it.
+ */
+function preWorkspace(Component: React.ComponentType) {
+  return function PreWorkspaceRoute() {
+    return (
+      <div data-accent="mono" className="contents">
+        <Component />
+      </div>
+    );
+  };
+}
+
 const rootRoute = createRootRoute({
   component: RootLayout,
 });
@@ -41,19 +64,66 @@ const rootRoute = createRootRoute({
 const authRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth",
-  component: AuthPage,
+  component: preWorkspace(AuthPage),
+  validateSearch: validateAuthSearch,
 });
 
 const onboardingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/onboarding",
-  component: OnboardingPage,
+  component: preWorkspace(OnboardingPage),
 });
 
 const paywallRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/paywall",
-  component: PaywallPage,
+  component: preWorkspace(PaywallPage),
+});
+
+// Public, unauthenticated reader for a published note (NO-9b). Direct child of
+// the root route — a sibling of /auth, OUTSIDE the app gate, so an anonymous
+// visitor can read it. `?note=<id>` selects a child page within the subtree.
+const publishedNoteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/p/$token",
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/published-note-page"), "PublishedNotePage"),
+  ),
+  validateSearch: (search: Record<string, unknown>): { note?: string } => {
+    const note = typeof search.note === "string" && search.note ? search.note : undefined;
+    return note ? { note } : {};
+  },
+});
+
+const bookCancelRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/book/cancel",
+  component: preWorkspace(BookCancelPage),
+  validateSearch: (search: Record<string, unknown>): { token?: string } => {
+    const token = typeof search.token === "string" && search.token ? search.token : undefined;
+    return token ? { token } : {};
+  },
+});
+
+const bookRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/book/$slug",
+  component: preWorkspace(BookPage),
+});
+
+// Workspace invite accept surface (DF-24). Sibling of /auth, OUTSIDE the app
+// gate, so a brand-new invitee (0–1 workspaces) can redeem before the
+// WorkspaceGate would bounce them to /onboarding and before AppChrome's nav
+// redirect guard runs. Token rides in `?invite=` (base64 tokens break a path
+// param). Not in the nav, so it needs none of the five in-chrome route wirings.
+const joinRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/join",
+  component: preWorkspace(JoinPage),
+  validateSearch: (search: Record<string, unknown>): { invite?: string } => {
+    const invite = typeof search.invite === "string" && search.invite ? search.invite : undefined;
+    return invite ? { invite } : {};
+  },
 });
 
 const appGateRoute = createRoute({
@@ -65,140 +135,91 @@ const appGateRoute = createRoute({
 const homeRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/",
-  component: GridPage,
+  // Default landing view (DF-19f): on the first authenticated launch at "/", the
+  // landing preference may redirect to another module. One-shot — later in-app
+  // navigations to Home never redirect. Explicit deep-links (a query string, or
+  // any non-"/" path) still win; the guard lives in consumeLandingRedirect.
+  beforeLoad: ({ location }) => {
+    const target = consumeLandingRedirect(location.pathname, location.searchStr);
+    if (target) throw redirect({ to: target, replace: true });
+  },
+  component: HomePage,
 });
 
 const legacyGridRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/product-demo",
-  beforeLoad: () => { throw redirect({ to: "/", replace: true }); },
+  beforeLoad: () => {
+    throw redirect({ to: "/", replace: true });
+  },
   component: () => null,
 });
 
 const notesRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/notes",
-  component: NotesPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/notes-page"), "NotesPage"),
+  validateSearch: validateNotesSearch,
 });
 
 const tasksRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/tasks",
-  component: () => <Navigate to="/ground" replace />,
+  component: TasksPage,
+  // URL-held task selection (?id=) — deep links + refresh keep it (DF-1).
+  validateSearch: validateTasksSearch,
+});
+
+// The Wave 2 calendar (specs/calendar.md AC1) — the rebuild of the legacy
+// exploratory calendar, sanctioned as a top-level route in the plan round.
+const calendarRoute = createRoute({
+  getParentRoute: () => appGateRoute,
+  path: "/calendar",
+  component: CalendarPage,
+  // `?event=` deep link → navigate to the event's day + select + open detail (DF-2).
+  validateSearch: validateCalendarSearch,
 });
 
 const mindmapRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/mindmap",
-  component: MindmapPage,
-});
-
-const templatesRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/templates",
-  component: TemplatesPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/mindmap-page"), "MindmapPage"),
 });
 
 const emailRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/email",
-  component: EmailPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/email-page"), "EmailPage"),
+  // `?thread=` deep link → select + scroll the thread (desktop) / tissue card (web) (DF-2).
+  validateSearch: validateEmailSearch,
 });
 
-const calendarRoute = createRoute({
+// Chat (specs/chat.md) — Duo / Team / Founder workspaces; others see the
+// locked explainer. `?c` conversation · `?t` thread · `?m` message to focus.
+const chatRoute = createRoute({
   getParentRoute: () => appGateRoute,
-  path: "/calendar",
-  component: () => <Navigate to="/ground" replace />,
+  path: "/chat",
+  component: ChatPage,
+  validateSearch: validateChatSearch,
 });
 
-const groundRoute = createRoute({
+const contactsRoute = createRoute({
   getParentRoute: () => appGateRoute,
-  path: "/ground",
-  component: GroundPage,
+  path: "/contacts",
+  component: ContactsPage,
+  // URL-held selection + palette action (fix pack FX-1 AC1/AC2).
+  validateSearch: validateContactsSearch,
 });
 
-const crmRoute = createRoute({
+// /crm is the throwaway exploratory route; /contacts is its planned destination
+// (specs/contacts.md AC10). Redirect stale deep-links so they don't 404.
+const legacyCrmRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/crm",
-  component: CrmPage,
-});
-
-const formsRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/forms",
-  component: FormsPage,
-});
-
-const activityRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/activity",
-  component: ActivityPage,
-});
-
-const feedRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/feed",
-  component: FeedPage,
-});
-
-const filesRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/files",
-  component: FilesPage,
-});
-
-const brainstormRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/brainstorm",
-  component: BrainstormPage,
-});
-
-const expansesRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/expanses",
-  component: ExpansesPage,
-});
-
-const revenueRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/revenue",
-  component: RevenuePage,
-});
-
-const kpiOkrRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/kpi-okr",
-  component: KpiOkrPage,
-});
-
-const statsRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/stats",
-  component: StatsPage,
-});
-
-const analyticsRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/analytics",
-  component: AnalyticsPage,
-});
-
-const recordingsRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/recordings",
-  component: RecordingsPage,
-});
-
-const timetrackingRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/timetracking",
-  component: TimetrackingPage,
-});
-
-const roadmapRoute = createRoute({
-  getParentRoute: () => appGateRoute,
-  path: "/roadmap",
-  component: RoadmapPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/contacts", replace: true });
+  },
+  component: () => null,
 });
 
 const settingsRoute = createRoute({
@@ -211,30 +232,21 @@ export const routeTree = rootRoute.addChildren([
   authRoute,
   onboardingRoute,
   paywallRoute,
+  publishedNoteRoute,
+  bookCancelRoute,
+  bookRoute,
+  joinRoute,
   appGateRoute.addChildren([
     homeRoute,
     legacyGridRoute,
     notesRoute,
     tasksRoute,
-    groundRoute,
-    mindmapRoute,
-    templatesRoute,
-    emailRoute,
     calendarRoute,
-    crmRoute,
-    formsRoute,
-    activityRoute,
-    feedRoute,
-    filesRoute,
-    brainstormRoute,
-    expansesRoute,
-    revenueRoute,
-    kpiOkrRoute,
-    statsRoute,
-    analyticsRoute,
-    recordingsRoute,
-    timetrackingRoute,
-    roadmapRoute,
+    mindmapRoute,
+    emailRoute,
+    contactsRoute,
+    chatRoute,
+    legacyCrmRoute,
     settingsRoute,
   ]),
 ]);

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 /**
  * Visual regression pattern. Each entry points at a Storybook story id
@@ -31,6 +31,21 @@ const STORIES = [
   { name: "avatar-default", id: "components-ui-avatar--default" },
   { name: "icon-default", id: "components-ui-icon--default" },
   { name: "tooltip-default", id: "components-ui-tooltip--default" },
+  // Session 11 primitives. Baselines are generated on the next intentional
+  // `--update-snapshots` run (Storybook must be serving) and committed by a human.
+  { name: "input-variants", id: "components-ui-input--variants" },
+  { name: "segmented-control-default", id: "components-ui-segmented-control--default" },
+  { name: "icon-button-variants", id: "components-ui-icon-button--variants" },
+  { name: "toolbar-default", id: "components-ui-toolbar--default" },
+  { name: "complete-toggle-done", id: "components-ui-complete-toggle--done" },
+  {
+    name: "empty-state-with-icon-and-action",
+    id: "components-ui-empty-state--with-icon-and-action",
+  },
+  { name: "calendar-default", id: "components-ui-calendar--default" },
+  { name: "date-field-date-only", id: "components-ui-date-field--date-only" },
+  { name: "tag-chip-all-hues", id: "components-tag-chip--all-hues" },
+  { name: "property-row-grid", id: "components-ui-property-row--grid" },
 ];
 
 test.describe("primitives — visual snapshots", () => {

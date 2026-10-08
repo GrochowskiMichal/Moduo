@@ -1,7 +1,7 @@
-import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
+import { type LucideIcon, Monitor, Moon, Sun } from "lucide-react";
 
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
-import { type Theme } from "../../../lib/appearance";
+import type { Theme } from "../../../lib/appearance";
 
 import { AppearancePickerRow } from "./picker-row";
 
@@ -60,8 +60,8 @@ export function ThemePicker({ value, onChange }: Props) {
               htmlFor={id}
               className={
                 checked
-                  ? "flex cursor-pointer items-center gap-3 rounded-md border border-primary bg-accent px-3 py-2 transition-colors"
-                  : "flex cursor-pointer items-center gap-3 rounded-md border border-border bg-card px-3 py-2 transition-colors hover:bg-accent"
+                  ? "flex cursor-pointer items-center gap-3 rounded-md border border-foreground/30 bg-accent px-3 py-2 transition-colors duration-(--motion-fade) ease-(--ease-out)"
+                  : "flex cursor-pointer items-center gap-3 rounded-md border border-border bg-card px-3 py-2 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-accent/60"
               }
             >
               <RadioGroupItem id={id} value={optionValue} />

@@ -11,6 +11,20 @@ use super::{
 pub(super) type ImapSession = imap::Session<native_tls::TlsStream<TcpStream>>;
 type ImapTlsStream = native_tls::TlsStream<TcpStream>;
 
+/// SASL `XOAUTH2` authenticator for the `imap` crate. `process` returns the RAW
+/// SASL string — the crate base64-encodes it before sending (EM-2).
+struct Xoauth2 {
+    user: String,
+    access_token: String,
+}
+
+impl imap::Authenticator for Xoauth2 {
+    type Response = String;
+    fn process(&self, _challenge: &[u8]) -> Self::Response {
+        crate::commands::oauth_flow::xoauth2_sasl(&self.user, &self.access_token)
+    }
+}
+
 enum ImapSessionProfile {
     CommandProfile,
     IdleProfile,
@@ -62,9 +76,21 @@ impl ImapSessionFactory {
         client
             .read_greeting()
             .map_err(|e| format!("imap_greeting_failed:{e}"))?;
-        let session = client
-            .login(&config.email, &config.password)
-            .map_err(|e| e.0.to_string())?;
+        // OAuth accounts authenticate via XOAUTH2 with a (pre-refreshed) access
+        // token; password accounts use LOGIN. No plaintext-fallback path exists.
+        let session = if let Some(token) = config.oauth_access_token.as_deref() {
+            let auth = Xoauth2 {
+                user: config.email.clone(),
+                access_token: token.to_string(),
+            };
+            client
+                .authenticate("XOAUTH2", &auth)
+                .map_err(|e| e.0.to_string())?
+        } else {
+            client
+                .login(&config.email, &config.password)
+                .map_err(|e| e.0.to_string())?
+        };
         Ok(ImapSessionOpenResult {
             session,
             socket_control,

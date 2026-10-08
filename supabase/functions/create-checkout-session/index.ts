@@ -1,294 +1,175 @@
 /**
  * Edge Function: create-checkout-session
  *
- * Creates a Stripe Checkout Session for the authenticated user.
- * Called by the frontend when the user clicks a pricing CTA.
+ * Starts a paid plan for the authenticated user. Entitlements are resolved by the
+ * Stripe Sync Engine + DB trigger, never written here.
  *
- * Accepts both POST (JSON body) and GET (query params) for flexibility.
+ * POST { plan: "pro"|"duo"|"team", interval?: "monthly"|"yearly", seats?: number (team, min 3),
+ *        withCard?: boolean, successUrl?, cancelUrl?, coupon? }
+ * Returns { url }              — redirect to Stripe Checkout or the Billing Portal, or
+ *         { switched: true }   — a trialing user changed plan in place (trial kept, no redirect).
  *
- * POST body / GET query (prefer plan-based checkout — uses server STRIPE_PRICE_* secrets):
- *   plan        — "pro" | "team"
- *   interval    — "monthly" | "yearly" (optional, default monthly)
- *   priceId     — legacy Stripe price_… (must match a configured STRIPE_PRICE_* if any are set)
- *   successUrl  — URL to redirect to after successful checkout
- *   cancelUrl   — URL to redirect to if the user cancels
- *   access_token — (GET only) JWT when Authorization header cannot be set (browser redirect)
- *
- * Returns: { url: string } — redirect to Stripe Checkout
- *
- * If the user already has an active/trialing subscription, redirects them to the
- * Stripe Billing Portal instead so they can manage their plan.
+ * Rules (no edge cases):
+ *  - Live paid subscription (active / past_due)        → Billing Portal (change plan / card there).
+ *  - Trialing, different plan                          → switch the subscription in place; trial end unchanged.
+ *  - Trialing, same plan                               → Billing Portal (add a card, cancel).
+ *  - No live subscription, never subscribed before     → Checkout with a trial (14d, or 30d with a card).
+ *  - No live subscription, had a subscription before   → Checkout, no trial, card required (no trial recycling).
+ * Deploy with verify_jwt = false — the caller's JWT is verified in code.
  */
 
-import Stripe from "https://esm.sh/stripe@14?target=deno";
+import type Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
-  apiVersion: "2023-10-16",
-  httpClient: Stripe.createFetchHttpClient(),
-});
+import {
+  authenticate,
+  CORS_HEADERS,
+  formatStripeErr,
+  getOrCreateCustomer,
+  isPaidPlan,
+  json,
+  lookupKey,
+  makeStripe,
+  priceForLookupKey,
+  quantityFor,
+  safeRedirect,
+  stripeSecretKeyConfigError,
+  TEAM_MAX_SEATS,
+  TEAM_MIN_SEATS,
+  TRIAL_DAYS_NO_CARD,
+  TRIAL_DAYS_WITH_CARD,
+} from "../_shared/billing.ts";
+import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
-};
-
-function stripeSecretKeyConfigError(): string | null {
-  const k = (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
-  if (!k) return "STRIPE_SECRET_KEY is not set in Edge Function secrets.";
-  if (k.startsWith("pk_")) {
-    return "STRIPE_SECRET_KEY is a publishable key (pk_…). Set your Stripe secret key (sk_test_… or sk_live_…) in Supabase Edge Function secrets — not the publishable key.";
-  }
-  if (!k.startsWith("sk_") && !k.startsWith("rk_")) {
-    return "STRIPE_SECRET_KEY must start with sk_ or rk_.";
-  }
-  return null;
-}
-
-function normalizeInterval(v: string | null | undefined): "monthly" | "yearly" {
-  const s = (v ?? "monthly").toLowerCase();
-  return s === "yearly" || s === "annual" ? "yearly" : "monthly";
-}
-
-function configuredStripePriceIds(): string[] {
-  return [
-    Deno.env.get("STRIPE_PRICE_PRO_MONTHLY"),
-    Deno.env.get("STRIPE_PRICE_PRO_YEARLY"),
-    Deno.env.get("STRIPE_PRICE_TEAM_MONTHLY"),
-    Deno.env.get("STRIPE_PRICE_TEAM_YEARLY"),
-  ]
-    .map((s) => (s ?? "").trim())
-    .filter(Boolean);
-}
-
-function resolveCheckoutPriceId(args: {
-  plan?: string | null;
-  interval?: string | null;
-  priceId?: string | null;
-}): { priceId: string } | { error: string } {
-  const plan = args.plan?.toLowerCase().trim();
-  const interval = normalizeInterval(args.interval);
-
-  if (plan === "pro" || plan === "team") {
-    const envKey =
-      plan === "pro"
-        ? interval === "yearly"
-          ? "STRIPE_PRICE_PRO_YEARLY"
-          : "STRIPE_PRICE_PRO_MONTHLY"
-        : interval === "yearly"
-        ? "STRIPE_PRICE_TEAM_YEARLY"
-        : "STRIPE_PRICE_TEAM_MONTHLY";
-    const id = (Deno.env.get(envKey) ?? "").trim();
-    if (!id) {
-      return {
-        error:
-          `Billing is not fully configured: set ${envKey} in Supabase Edge Function secrets to a recurring price_… id from the same Stripe account as STRIPE_SECRET_KEY.`,
-      };
-    }
-    return { priceId: id };
-  }
-
-  const raw = (args.priceId ?? "").trim();
-  if (!raw) {
-    return {
-      error:
-        'Missing checkout target. Send JSON { plan: "pro"|"team", interval?: "monthly"|"yearly" } or a legacy priceId.',
-    };
-  }
-
-  const configured = configuredStripePriceIds();
-  if (configured.length > 0 && !configured.includes(raw)) {
-    return {
-      error:
-        "This price ID is not allowed for this project. Use plan+interval checkout, or set STRIPE_PRICE_* secrets and PUBLIC_STRIPE_PRICE_* to the same price_… values.",
-    };
-  }
-
-  return { priceId: raw };
-}
-
-function formatStripeErr(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (/no such price/i.test(msg) || /resource_missing.*price/i.test(msg)) {
-    return "Stripe could not find this price. In Supabase → Edge Functions → Secrets, set STRIPE_PRICE_* to price_… ids that exist in the Stripe account for your STRIPE_SECRET_KEY (test vs live must match). Run scripts/stripe-bootstrap.ts or copy ids from Stripe → Products.";
-  }
-  return msg;
-}
+const stripe = makeStripe();
+const DEFAULT_ORIGIN = "https://app.moduo.app";
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: CORS_HEADERS });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
 
   try {
     const keyErr = stripeSecretKeyConfigError();
-    if (keyErr) {
-      return Response.json({ error: keyErr }, { status: 500, headers: CORS_HEADERS });
-    }
+    if (keyErr) return json({ error: keyErr }, { status: 500 });
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
-    );
-
-    const authFromQuery = (() => {
-      try {
-        const t = new URL(req.url).searchParams.get("access_token")?.trim();
-        return t ? `Bearer ${t}` : null;
-      } catch {
-        return null;
-      }
-    })();
-    const authHeader = req.headers.get("Authorization") ?? authFromQuery;
-    if (!authHeader) {
-      return Response.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
-    }
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace(/^Bearer\s+/i, "")
-    );
-    if (authError || !user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
-    }
-
-    // Parse params from either GET query string or POST JSON body.
-    let plan: string | undefined;
-    let interval: string | undefined;
-    let priceId: string | undefined;
-    let successUrl: string | undefined;
-    let cancelUrl: string | undefined;
-    let couponCode: string | undefined;
-
-    if (req.method === "GET") {
-      const url = new URL(req.url);
-      plan = url.searchParams.get("plan") ?? undefined;
-      interval = url.searchParams.get("interval") ?? url.searchParams.get("billing") ?? undefined;
-      priceId = url.searchParams.get("price_id") ?? url.searchParams.get("priceId") ?? undefined;
-      successUrl = url.searchParams.get("successUrl") ?? undefined;
-      cancelUrl = url.searchParams.get("cancelUrl") ?? undefined;
-      couponCode = url.searchParams.get("coupon") ?? undefined;
-    } else {
-      const body = await req.json().catch(() => ({}));
-      plan = body.plan;
-      interval = body.interval ?? body.billing_cycle ?? body.billing;
-      priceId = body.priceId ?? body.price_id;
-      successUrl = body.successUrl;
-      cancelUrl = body.cancelUrl;
-      couponCode = body.coupon ?? body.couponCode;
-    }
-
-    const resolved = resolveCheckoutPriceId({ plan, interval, priceId });
-    if ("error" in resolved) {
-      return Response.json({ error: resolved.error }, { status: 400, headers: CORS_HEADERS });
-    }
-    priceId = resolved.priceId;
-
-    // Derive success/cancel URLs from Referer header if not supplied.
-    const referer = req.headers.get("Referer") ?? "https://app.moduo.app";
-    const origin = (() => { try { return new URL(referer).origin; } catch { return "https://app.moduo.app"; } })();
-    successUrl = successUrl ?? `${origin}/?upgrade=success`;
-    cancelUrl = cancelUrl ?? `${origin}/?upgrade=cancelled`;
-
-    // Get or create Stripe customer.
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("stripe_customer_id, display_name")
-      .eq("id", user.id)
-      .single();
-
-    let customerId: string | undefined = profile?.stripe_customer_id ?? undefined;
-
-    // If we have a stored customer ID, verify it still exists in this Stripe account.
-    if (customerId) {
-      try {
-        await stripe.customers.retrieve(customerId);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (/no such customer/i.test(msg)) {
-          console.warn(`[create-checkout-session] stale stripe_customer_id ${customerId} for user ${user.id}, creating fresh customer`);
-          customerId = undefined;
-          await supabase.from("profiles").update({ stripe_customer_id: null }).eq("id", user.id);
-        } else {
-          throw e;
-        }
-      }
-    }
-
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        name: profile?.display_name ?? undefined,
-        metadata: { supabase_user_id: user.id },
-      });
-      customerId = customer.id;
-      await supabase
-        .from("profiles")
-        .update({ stripe_customer_id: customerId })
-        .eq("id", user.id);
-    }
-
-    // Idempotency: if the user already has an active/trialing subscription,
-    // check whether they're requesting a different plan (upgrade/change).
-    // If same plan → billing portal. If different plan → let Stripe Checkout handle the upgrade.
-    const existingSubs = await stripe.subscriptions.list({
-      customer: customerId,
-      status: "all",
-      limit: 5,
+    const supabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", getDefaultSecretKey(), {
+      auth: { persistSession: false },
     });
-    const activeSub = existingSubs.data.find((s) =>
-      ["active", "trialing"].includes(s.status)
+
+    const queryToken = new URL(req.url).searchParams.get("access_token")?.trim();
+    const user = await authenticate(
+      supabase,
+      req.headers.get("Authorization") ?? (queryToken ? `Bearer ${queryToken}` : null),
     );
-    if (activeSub) {
-      const currentPriceId = activeSub.items.data[0]?.price?.id;
-      const isSamePlan = currentPriceId === priceId;
-      if (isSamePlan) {
-        // Already on this exact plan → manage via portal
-        console.log(`[create-checkout-session] user ${user.id} already on this plan (${activeSub.id}), redirecting to portal`);
-        const portalSession = await stripe.billingPortal.sessions.create({
-          customer: customerId,
-          return_url: successUrl,
-        });
-        return Response.json(
-          { url: portalSession.url, already_subscribed: true },
-          { headers: CORS_HEADERS }
-        );
-      }
-      // Different plan requested → proceed to Stripe Checkout for upgrade (Stripe handles proration)
-      console.log(`[create-checkout-session] user ${user.id} upgrading from ${currentPriceId} to ${priceId}`);
+    if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+
+    let rawInput: unknown;
+    if (req.method === "GET") {
+      const q = new URL(req.url).searchParams;
+      rawInput = {
+        plan: q.get("plan") ?? undefined,
+        interval: q.get("interval") ?? q.get("billing") ?? undefined,
+        seats: q.get("seats") ? Number(q.get("seats")) : undefined,
+        withCard: q.get("withCard") === "true" ? true : undefined,
+        successUrl: q.get("successUrl") ?? undefined,
+        cancelUrl: q.get("cancelUrl") ?? undefined,
+        coupon: q.get("coupon") ?? undefined,
+      };
+    } else {
+      rawInput = await req.json().catch(() => ({}));
+    }
+    const input = (typeof rawInput === "object" && rawInput !== null ? rawInput : {}) as Record<string, unknown>;
+    const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+    const body = {
+      plan: str(input.plan),
+      interval: str(input.interval) ?? str(input.billing_cycle) ?? str(input.billing),
+      seats: typeof input.seats === "number" && Number.isInteger(input.seats) ? input.seats : undefined,
+      withCard: input.withCard === true,
+      successUrl: str(input.successUrl),
+      cancelUrl: str(input.cancelUrl),
+      coupon: str(input.coupon) ?? str(input.couponCode),
+    };
+
+    const plan = body.plan?.toLowerCase().trim();
+    if (!isPaidPlan(plan)) {
+      return json({ error: 'Choose a plan: "pro", "duo" or "team".' }, { status: 400 });
+    }
+    const interval = body.interval;
+    if (plan === "team" && body.seats !== undefined && body.seats < TEAM_MIN_SEATS) {
+      return json({ error: `Team needs at least ${TEAM_MIN_SEATS} seats.` }, { status: 400 });
+    }
+    if (plan === "team" && body.seats !== undefined && body.seats > TEAM_MAX_SEATS) {
+      return json({ error: `Team supports up to ${TEAM_MAX_SEATS} seats.` }, { status: 400 });
     }
 
-    // Create Checkout Session with a 7-day trial (no card required to start).
-    // If a coupon code is supplied, apply it as a discount (disables allow_promotion_codes
-    // since Stripe doesn't allow both at once).
-    const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
+    const referer = req.headers.get("Referer");
+    const refererOrigin = (() => { try { return referer ? new URL(referer).origin : DEFAULT_ORIGIN; } catch { return DEFAULT_ORIGIN; } })();
+    const fallbackOrigin = safeRedirect(refererOrigin, DEFAULT_ORIGIN);
+    const successUrl = safeRedirect(body.successUrl, `${fallbackOrigin}/?upgrade=success`);
+    const cancelUrl = safeRedirect(body.cancelUrl, `${fallbackOrigin}/?upgrade=cancelled`);
+
+    // Founders never pay and never need a checkout.
+    const { data: me } = await supabase.from("profiles").select("plan_tier").eq("id", user.id).single();
+    if (me?.plan_tier === "founder") {
+      return json({ error: "Your account is a Founder account — no plan needed." }, { status: 409 });
+    }
+
+    const price = await priceForLookupKey(stripe, lookupKey(plan, interval));
+    const quantity = quantityFor(plan, body.seats);
+    const customerId = await getOrCreateCustomer(stripe, supabase, user);
+
+    const subs = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 20 });
+    const live = subs.data.filter((s: Stripe.Subscription) => ["active", "trialing", "past_due"].includes(s.status));
+    const paid = live.find((s: Stripe.Subscription) => s.status !== "trialing");
+    const trialing = live.find((s: Stripe.Subscription) => s.status === "trialing");
+
+    const portal = async () => {
+      const session = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: successUrl });
+      return json({ url: session.url, portal: true });
+    };
+
+    if (paid) return await portal();
+
+    if (trialing) {
+      const item = trialing.items.data[0];
+      if (item.price.id === price.id && (item.quantity ?? 1) === quantity) return await portal();
+      await stripe.subscriptions.update(trialing.id, {
+        items: [{ id: item.id, price: price.id, quantity }],
+        proration_behavior: "none",
+      });
+      return json({ switched: true });
+    }
+
+    // No live subscription. Trials are one per customer, ever.
+    const everSubscribed = subs.data.length > 0;
+    const withCard = body.withCard;
+    const couponCode = body.coupon;
+
+    const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [
+        plan === "team"
+          ? { price: price.id, quantity, adjustable_quantity: { enabled: true, minimum: TEAM_MIN_SEATS, maximum: TEAM_MAX_SEATS } }
+          : { price: price.id, quantity },
+      ],
       success_url: successUrl,
       cancel_url: cancelUrl,
-      payment_method_collection: "if_required",
+      payment_method_collection: everSubscribed || withCard ? "always" : "if_required",
       subscription_data: {
-        trial_period_days: 7,
-        trial_settings: {
-          end_behavior: { missing_payment_method: "cancel" },
-        },
+        ...(everSubscribed
+          ? {}
+          : {
+              trial_period_days: withCard ? TRIAL_DAYS_WITH_CARD : TRIAL_DAYS_NO_CARD,
+              trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
+            }),
         metadata: { supabase_user_id: user.id },
       },
-    };
-    if (couponCode) {
-      sessionParams.discounts = [{ coupon: couponCode }];
-    } else {
-      sessionParams.allow_promotion_codes = true;
-    }
-    const session = await stripe.checkout.sessions.create(sessionParams);
+      ...(couponCode ? { discounts: [{ coupon: couponCode }] } : { allow_promotion_codes: true }),
+    });
 
-    return Response.json({ url: session.url }, { headers: CORS_HEADERS });
+    return json({ url: session.url });
   } catch (err) {
     console.error("[create-checkout-session]", err);
-    return Response.json(
-      { error: formatStripeErr(err) },
-      { status: 500, headers: CORS_HEADERS }
-    );
+    return json({ error: formatStripeErr(err) }, { status: 500 });
   }
 });

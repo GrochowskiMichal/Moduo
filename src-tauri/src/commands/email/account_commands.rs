@@ -1,13 +1,14 @@
 use tauri::State;
 
 use super::account_config::{
-    account_id, account_secret_key, get_password_for_account, normalize_email,
-    normalize_optional_host, normalize_optional_port, normalize_provider, validate_connection,
+    account_id, normalize_email, normalize_optional_host, normalize_optional_port,
+    normalize_provider, validate_connection,
 };
-use super::constants::EMAIL_NAMESPACE;
 use super::model::{
-    EmailAccountConnectInput, EmailAccountPublic, EmailConfig, StoredEmailAccount,
+    EmailAccountConnectInput, EmailAccountPublic, EmailConfig, EmailHistoryDepth,
+    StoredEmailAccount,
 };
+use super::secrets;
 use super::realtime::schedule_idle_worker_reconcile;
 use super::storage::{
     read_accounts, remove_account_v2, upsert_account_v2, write_accounts,
@@ -22,7 +23,9 @@ pub async fn email_accounts_list(
     let mut changed = false;
 
     for account in accounts.iter_mut() {
-        let has_secret = get_password_for_account(&state, &account.id)?.is_some();
+        // "any secret" (password OR oauth) — an OAuth account carries no password,
+        // so a password-only check would wrongly flag it reauth_required.
+        let has_secret = secrets::account_has_secret(&state, &account.id)?;
         if has_secret {
             if account.status == "reauth_required" {
                 account.status = "active".to_string();
@@ -78,6 +81,7 @@ pub async fn email_account_connect_and_save(
         provider: provider.clone(),
         email: email.clone(),
         password: input.password.clone(),
+        oauth_access_token: None,
         imap_host: imap_host.clone(),
         smtp_host: smtp_host.clone(),
         imap_port,
@@ -89,14 +93,8 @@ pub async fn email_account_connect_and_save(
         .map_err(|e| format!("connect_task_failed:{e}"))??;
 
     let id = account_id(&provider, &email, imap_host.as_deref());
-    state
-        .store
-        .kv_set(
-            EMAIL_NAMESPACE,
-            &account_secret_key(&id),
-            &serde_json::to_value(&input.password).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| format!("email_secret_store_failed:{e}"))?;
+    // Secret goes to the OS keychain — never redb-cleartext, never the cloud.
+    secrets::save_password(&state, &id, &input.password)?;
 
     let mut accounts = read_accounts(&state)?;
     if let Some(existing) = accounts.iter_mut().find(|account| account.id == id) {
@@ -109,6 +107,17 @@ pub async fn email_account_connect_and_save(
         existing.smtp_port = smtp_port;
         existing.status = "active".to_string();
         existing.last_error = None;
+        // Re-connecting an address that already has a row still shows the picker
+        // (only a credential *repair* hides it), so an explicit pick has to land
+        // here as well — otherwise Settings shows the old depth and the choice
+        // is silently ignored.
+        if let Some(depth) = input
+            .history_depth
+            .as_deref()
+            .and_then(EmailHistoryDepth::from_wire)
+        {
+            existing.history_depth = depth;
+        }
     } else {
         accounts.push(StoredEmailAccount {
             id: id.clone(),
@@ -122,6 +131,13 @@ pub async fn email_account_connect_and_save(
             last_sync_at: None,
             status: "active".to_string(),
             last_error: None,
+            // The connect-time picker's choice (AC6); absent or unrecognised
+            // falls back to the 12-month default.
+            history_depth: input
+                .history_depth
+                .as_deref()
+                .and_then(EmailHistoryDepth::from_wire)
+                .unwrap_or_default(),
         });
     }
 
@@ -149,11 +165,34 @@ pub async fn email_account_disconnect(
     accounts.retain(|account| account.id != account_id);
     write_accounts(&state, &accounts)?;
 
-    let _ = state
-        .store
-        .kv_remove(EMAIL_NAMESPACE, &account_secret_key(&account_id));
+    let _ = secrets::delete_account_secret(&state, &account_id);
     remove_account_v2(&state, &account_id);
     schedule_idle_worker_reconcile(&app, false);
     Ok(())
 }
 
+
+/// Change how far back an account syncs (AC8).
+///
+/// Per-device: the depth lives in the local redb store, so changing it here does
+/// not touch the other machine's setting. **Raising** it re-opens a completed
+/// backfill on the next sync round (the cursor's recorded floor is now shallower
+/// than the configured one, which `depth_gap_reopens` detects) — no cursor
+/// surgery needed here. **Lowering** it stops fetching and deletes nothing: the
+/// prune is gated on the depth already *reached*, not the one configured.
+#[tauri::command]
+pub async fn email_account_set_history_depth(
+    state: State<'_, AppState>,
+    account_id: String,
+    depth: String,
+) -> Result<EmailAccountPublic, String> {
+    let parsed = EmailHistoryDepth::from_wire(&depth).ok_or("unsupported_history_depth")?;
+    let mut accounts = read_accounts(&state)?;
+    let Some(account) = accounts.iter_mut().find(|item| item.id == account_id) else {
+        return Err("account_not_found".to_string());
+    };
+    account.history_depth = parsed;
+    let updated = account.to_public();
+    write_accounts(&state, &accounts)?;
+    Ok(updated)
+}

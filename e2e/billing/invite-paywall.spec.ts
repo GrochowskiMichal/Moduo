@@ -11,15 +11,15 @@
  * is covered by Supabase integration tests via the migration assertions.
  */
 
-import { test, expect } from '@playwright/test';
-import { BASE_URL } from './helpers';
+import { expect, test } from "@playwright/test";
+import { BASE_URL } from "./helpers";
 
-test.describe('Invite paywall', () => {
-  test('paywall page renders the Team plan invite features', async ({ page }) => {
+test.describe("Invite paywall", () => {
+  test("paywall page renders the Team plan invite features", async ({ page }) => {
     await page.goto(`${BASE_URL}/paywall`);
 
     // The Team plan features list should mention collaboration / sharing.
-    const teamSection = page.locator('text=Real-time collaboration').first();
+    const teamSection = page.locator("text=Real-time collaboration").first();
     await expect(teamSection).toBeVisible();
   });
 
@@ -27,7 +27,7 @@ test.describe('Invite paywall', () => {
     // Navigate to paywall which itself contains upgrade CTAs.
     await page.goto(`${BASE_URL}/paywall`);
 
-    const upgradeButtons = page.getByRole('button', { name: /upgrade/i });
+    const upgradeButtons = page.getByRole("button", { name: /upgrade/i });
     // There may be zero or more such buttons depending on auth state.
     // We just assert the page loaded without error.
     await expect(page).toHaveURL(`${BASE_URL}/paywall`);

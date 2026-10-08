@@ -10,7 +10,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -18,7 +18,10 @@ jobs:
           bun-version: latest
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-10-06
+          components: rustfmt, clippy
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -42,7 +45,7 @@ jobs:
           MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
 
       - name: Upload portable exe
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: moduo-windows-portable
           path: src-tauri/target/release/moduo.exe

@@ -7,15 +7,15 @@
  *
  * Variant attributes on <html>:
  *   data-theme=dark|light             (default: dark)
- *   data-accent=pink|violet|blue|green|amber|red|teal|mono   (default: pink)
- *   data-density=comfortable|compact  (default: comfortable)
+ *   data-shade=black|warm|cool|slate|plum|forest   (default: black, dark only)
+ *   data-accent=mono|pink|violet|blue|green|amber|red|teal   (default: mono)
+ *   data-density=comfortable|compact|dense   (default: comfortable)
  *   data-radius=sharp|soft|round      (default: soft)
- *   data-font-display=pilat|geist|cal|fraunces   (default: pilat)
- *   data-font-body=geist|inter|serif|mono        (default: geist)
- *   data-text-size=small|normal|large            (default: normal)
+ *   data-font=geist|inter|pilat|cal|fraunces|serif|mono   (default: geist)
+ *   (data-text-size retired 2026-06-13 — density is the size axis.)
  *
- * This file is intentionally not imported yet. Wiring it into global.css and
- * removing the hardcoded styles is a /frontend-design task.
+ * Imported via src/global.css. The @theme block at the bottom maps these tokens
+ * to Tailwind utilities. See DESIGN_RULES.md for the relational rules.
  * ==========================================================================*/
 
 /* ─── 1. Font face loading TODO ─────────────────────────────────────────────
@@ -103,6 +103,10 @@
 
 :root,
 [data-theme="dark"] {
+  /* Native chrome (scrollbars, form controls, date pickers) follows the theme —
+     without this they render light-on-dark. */
+  color-scheme: dark;
+
   /* Surface elevation — Spotify-derived 3-layer.            */
   --background:           oklch(0 0 0);         /* pure black canvas   */
   --foreground:           var(--neutral-50);    /* primary text        */
@@ -129,12 +133,20 @@
   --border:               var(--neutral-800);   /* hairlines           */
   --input:                var(--neutral-850);   /* input bg            */
 
-  /* Primary = the user-selected accent. Default = pink.    */
-  --primary:              var(--pink-base);
-  --primary-hover:        var(--pink-hover);
-  --primary-active:       var(--pink-active);
-  --primary-foreground:   oklch(0.12 0 0);      /* dark text on accent */
-  --ring:                 var(--pink-base);
+  /* Primary = the user-selected accent. Default = MONO (white).
+     The app is monochrome black+gray+white out of the box; a hue is an opt-in
+     choice in Settings → Appearance → Accent. Never default to a hue here.
+     Kept value-identical to [data-accent="mono"] below so the pre-hydration
+     paint (before appearance.ts stamps data-accent) matches the resolved one. */
+  --primary:              var(--mono-base);
+  --primary-hover:        var(--mono-hover);
+  --primary-active:       var(--mono-active);
+  --primary-foreground:   oklch(0.10 0 0);      /* dark text on accent */
+  --ring:                 var(--mono-base);
+
+  /* The selection recipe (--selected-bg / --selected-border) and the state
+     layer derived from these surfaces live in §5b, so they re-resolve inside
+     scoped data-accent / data-shade / data-theme wrappers. */
 
   /* Status — same on both themes for now; light may dial down. */
   --success: var(--status-success);
@@ -154,6 +166,8 @@
  * ==========================================================================*/
 
 [data-theme="light"] {
+  color-scheme: light;
+
   --background:           var(--neutral-50);
   --foreground:           var(--neutral-950);
 
@@ -192,6 +206,102 @@
   :root:not([data-theme="light"]) {
     /* Inherits the default :root values which are dark.   */
   }
+}
+
+/* ============================================================================
+ * 4b. Shade variants — user-selectable tinted-dark surface presets
+ *     (Discord-style app-wide tint). Each preset re-tints the dark surface
+ *     ladder with one hue at low chroma; foregrounds stay near-white except
+ *     --muted-foreground, which takes a faint matching tint so secondary text
+ *     harmonizes with the tinted surfaces. Status colors, accents, and label
+ *     hues are untouched.
+ *
+ *     "black" is the default — the achromatic pure-black ladder above; it has
+ *     no override block. Tinted presets lift --background slightly off pure
+ *     black (a tint needs lightness to be visible) while keeping the
+ *     card → popover → border elevation steps.
+ *
+ *     Guarded with :not([data-theme="light"]) — shades are a dark-theme axis;
+ *     light mode keeps its placeholder ladder untinted. Same cascade
+ *     mechanism as data-accent (§5).
+ * ==========================================================================*/
+
+/* "black" restates the §3 defaults so a scoped data-shade="black" (e.g. a
+   Settings swatch) previews correctly inside a tinted page. */
+[data-shade="black"]:not([data-theme="light"]) {
+  --background:       oklch(0 0 0);
+  --card:             var(--neutral-900);
+  --popover:          var(--neutral-850);
+  --muted:            var(--neutral-850);
+  --input:            var(--neutral-850);
+  --accent:           var(--neutral-800);
+  --secondary:        var(--neutral-800);
+  --border:           var(--neutral-800);
+  --muted-foreground: var(--neutral-400);
+}
+
+/* Chroma is tuned per hue (live-verified on the Tasks shell): warm hues need
+   more chroma to read than blues/greens at the same lightness; slate is
+   deliberately the quietest preset. */
+
+[data-shade="warm"]:not([data-theme="light"]) {
+  --background:       oklch(0.13  0.020 60);
+  --card:             oklch(0.185 0.026 60);
+  --popover:          oklch(0.225 0.029 60);
+  --muted:            oklch(0.225 0.029 60);
+  --input:            oklch(0.225 0.029 60);
+  --accent:           oklch(0.27  0.032 60);
+  --secondary:        oklch(0.27  0.032 60);
+  --border:           oklch(0.27  0.032 60);
+  --muted-foreground: oklch(0.72  0.035 60);
+}
+
+[data-shade="cool"]:not([data-theme="light"]) {
+  --background:       oklch(0.13  0.018 245);
+  --card:             oklch(0.185 0.024 245);
+  --popover:          oklch(0.225 0.026 245);
+  --muted:            oklch(0.225 0.026 245);
+  --input:            oklch(0.225 0.026 245);
+  --accent:           oklch(0.27  0.028 245);
+  --secondary:        oklch(0.27  0.028 245);
+  --border:           oklch(0.27  0.028 245);
+  --muted-foreground: oklch(0.72  0.030 245);
+}
+
+[data-shade="slate"]:not([data-theme="light"]) {
+  --background:       oklch(0.13  0.010 260);
+  --card:             oklch(0.185 0.013 260);
+  --popover:          oklch(0.225 0.015 260);
+  --muted:            oklch(0.225 0.015 260);
+  --input:            oklch(0.225 0.015 260);
+  --accent:           oklch(0.27  0.016 260);
+  --secondary:        oklch(0.27  0.016 260);
+  --border:           oklch(0.27  0.016 260);
+  --muted-foreground: oklch(0.72  0.014 260);
+}
+
+[data-shade="plum"]:not([data-theme="light"]) {
+  --background:       oklch(0.13  0.018 325);
+  --card:             oklch(0.185 0.024 325);
+  --popover:          oklch(0.225 0.027 325);
+  --muted:            oklch(0.225 0.027 325);
+  --input:            oklch(0.225 0.027 325);
+  --accent:           oklch(0.27  0.030 325);
+  --secondary:        oklch(0.27  0.030 325);
+  --border:           oklch(0.27  0.030 325);
+  --muted-foreground: oklch(0.72  0.028 325);
+}
+
+[data-shade="forest"]:not([data-theme="light"]) {
+  --background:       oklch(0.13  0.014 160);
+  --card:             oklch(0.185 0.019 160);
+  --popover:          oklch(0.225 0.022 160);
+  --muted:            oklch(0.225 0.022 160);
+  --input:            oklch(0.225 0.022 160);
+  --accent:           oklch(0.27  0.024 160);
+  --secondary:        oklch(0.27  0.024 160);
+  --border:           oklch(0.27  0.024 160);
+  --muted-foreground: oklch(0.72  0.025 160);
 }
 
 /* ============================================================================
@@ -255,32 +365,115 @@
   --primary-foreground: oklch(0.10 0 0);
 }
 
-/* ============================================================================
- * 6. Spacing — 4px base. Token names map 1:1 to Tailwind v4 spacing scale.
- * ==========================================================================*/
-
-:root {
-  --space-0:    0;
-  --space-px:   1px;
-  --space-0_5:  0.125rem; /* 2  */
-  --space-1:    0.25rem;  /* 4  */
-  --space-1_5:  0.375rem; /* 6  */
-  --space-2:    0.5rem;   /* 8  */
-  --space-2_5:  0.625rem; /* 10 */
-  --space-3:    0.75rem;  /* 12 */
-  --space-4:    1rem;     /* 16 */
-  --space-5:    1.25rem;  /* 20 */
-  --space-6:    1.5rem;   /* 24 */
-  --space-8:    2rem;     /* 32 */
-  --space-10:   2.5rem;   /* 40 */
-  --space-12:   3rem;     /* 48 */
-  --space-16:   4rem;     /* 64 */
-  --space-20:   5rem;     /* 80 */
-  --space-24:   6rem;     /* 96 */
+/* Mono INVERTS on light: the accent is "maximum contrast against the surface",
+   which is near-white on a dark canvas and near-black on a light one. Without
+   this, light + mono paints a 0.95 button on a 1.0 card (~1.16:1) — a primary
+   action that reads as floating text with no button.
+   TWO selectors, both (0,2,0) so they beat the plain [data-accent="mono"] (0,1,0)
+   regardless of source order:
+     1. both attributes on <html> — the normal case;
+     2. a SCOPED mono wrapper inside a light document (preWorkspace() in
+        route-tree.tsx). The wrapper carries only data-accent, so without the
+        descendant form its own (0,1,0) rule would win — it sits closer to the
+        element than <html> — and re-break the button it was meant to fix.
+   Hue accents are unaffected — they stay legible on both themes. */
+[data-theme="light"][data-accent="mono"],
+[data-theme="light"] [data-accent="mono"] {
+  --primary: var(--neutral-950);
+  --primary-hover: var(--neutral-900);
+  --primary-active: var(--neutral-800);
+  --ring: var(--neutral-950);
+  --primary-foreground: oklch(0.97 0 0);
 }
 
 /* ============================================================================
+ * 5b. State layer — hover / active / selected, hairline, raised plate,
+ *     scrollbar thumb (DS-1, specs/design-state-layer.md).
+ *
+ *     Why: on dark, --accent, --secondary and --border are the same grey on
+ *     all six shades, so hover reads as active, a secondary button's hover is
+ *     a no-op and badges melt into hovered rows. These tokens are translucent
+ *     overlays (foreground or primary over transparent), so the three states
+ *     stay distinct from each other on whatever surface they sit on — card,
+ *     background, popover or muted — on every shade, accent, theme and density.
+ *
+ *     Added BESIDE the old tokens. Never redefine --accent / --secondary /
+ *     --border in place: they back ~300 hovers and their /60-style variants.
+ *     The primitives and every selection moved onto these in DS-2.
+ *
+ *     The ladder: rest → hover (5%) → active / current / pressed (9%) →
+ *     active-hover (14%, hovering a control that is already filled, e.g. a
+ *     secondary button or an "on" toggle). Selected is the accent tint, kept
+ *     apart from the neutral steps: list rows add the --state-selected-edge
+ *     hairline, cards always carry the --state-selected-ring.
+ *
+ *     Scoping: a custom property that uses var() is computed where it is
+ *     declared and inherits already resolved — declared only on :root, a
+ *     scoped data-accent (preWorkspace()'s mono wrapper in route-tree.tsx, the
+ *     accent swatches) would still see the outer accent. So the block is
+ *     re-declared on every element that carries an appearance attribute and
+ *     re-resolves against that scope's own --primary / --foreground / --muted.
+ *     A new scoped wrapper must set one of these attributes; setting --primary
+ *     any other way leaves the derived tokens on the outer value. The list is
+ *     wrapped in :where() (zero specificity), so a theme override such as the
+ *     light --control-raised below wins wherever the two blocks sit in the file.
+ *
+ *     Utilities (via @theme below): bg-state-hover · bg-state-active ·
+ *     bg-state-active-hover · bg-state-selected · ring-state-selected (the 32%
+ *     ring) · ring-state-selected-edge (the row hairline switch) ·
+ *     border-hairline (also bg-/ring-/divide-hairline) · bg-control-raised
+ *     with shadow-control-raised. --scroll-thumb / --scroll-thumb-hover are
+ *     var()-only (global.css scrollbars, the ScrollArea thumb).
+ * ==========================================================================*/
+
+:where(:root, [data-theme], [data-shade], [data-accent]) {
+  --state-hover:         color-mix(in oklab, var(--foreground) 5%, transparent);
+  --state-active:        color-mix(in oklab, var(--foreground) 9%, transparent);
+  --state-active-hover:  color-mix(in oklab, var(--foreground) 14%, transparent);
+  --state-selected:      color-mix(in oklab, var(--primary) 13%, transparent);
+  --state-selected-ring: color-mix(in oklab, var(--primary) 32%, transparent);
+  /* The 1px inset hairline a selected LIST ROW draws with its tint. The
+     designer's switch between the two selection looks: keep it for
+     "tint + hairline", set it to `transparent` for "tint only". On the mono
+     accent the tint alone sits close to --state-active, so it ships on. */
+  --state-selected-edge: var(--state-selected-ring);
+  --hairline:            color-mix(in oklab, var(--foreground) 10%, transparent);
+  /* The current segment of a segmented control / tab list sits on a --muted
+     track and must read LIGHTER than it on dark (the old bg-card plate
+     rendered darker, so an icon-only switcher lost its current view). */
+  --control-raised:      color-mix(in oklab, var(--foreground) 14%, var(--muted));
+  --scroll-thumb:        color-mix(in oklab, var(--foreground) 16%, transparent);
+  --scroll-thumb-hover:  color-mix(in oklab, var(--foreground) 32%, transparent);
+
+  /* DEPRECATED legacy selection recipe (an opaque accent tint + an accent
+     bar/border). DS-2 moved every consumer to the state layer and
+     src/components/selection-guard.test.ts fails on any new use. Kept only so
+     a branch cut before DS-2 still renders until it merges; delete in DS-5. */
+  --selected-bg:     color-mix(in oklab, var(--primary) 14%, var(--card));
+  --selected-border: var(--primary);
+}
+
+/* Light: the raised plate is the white card lifted by --shadow-control-raised
+   (§11) — foreground-over-muted would paint it darker than its track. The
+   descendant forms cover a scoped wrapper inside a light document, which the
+   block above would otherwise reset to the dark formula. */
+[data-theme="light"],
+[data-theme="light"] [data-shade],
+[data-theme="light"] [data-accent] {
+  --control-raised: var(--card);
+}
+
+/* ============================================================================
+ * 6. Spacing — Tailwind v4's built-in 4px scale is the source (p-4, gap-2, …).
+ *    The former --space-* mirror tokens were removed 2026-06-25 (0 refs, never
+ *    in @theme). Re-add a scale here only if a density-driven spacing axis ships.
+ * ==========================================================================*/
+
+/* ============================================================================
  * 7. Density variants — drive row heights, control heights, paddings.
+ *    Three steps, an even 4px row ladder (36 / 32 / 28). The dense end
+ *    matches Linear/Notion chrome (density is the size axis). The loose end
+ *    stays the comfortable default.
  * ==========================================================================*/
 
 :root,
@@ -294,18 +487,49 @@
   --pad-y:   0.625rem; /* 10 — primary vertical padding       */
   --pad-x-sm: 0.75rem; /* 12 */
   --pad-y-sm: 0.375rem;/* 6  */
+  /* Icon-size ladder — scales with density, paired to the control/row rungs.
+     Use via size-icon-xs / size-icon-sm / size-icon / size-icon-lg. */
+  --icon-xs:  0.75rem;   /* 12 — dense inline meta            */
+  --icon-sm:  0.875rem;  /* 14 — default control + row icon   */
+  --icon:     1rem;      /* 16 — primary / standalone         */
+  --icon-lg:  1.25rem;   /* 20 — emphasis                     */
+  /* Calendar grid: height of one hour row. Density-scaled so the grid's
+     rhythm follows the density axis like rows/controls do. */
+  --cal-hour-h: 3.5rem;  /* 56 */
 }
 
 [data-density="compact"] {
-  --row-h:   1.75rem;  /* 28 */
-  --row-h-sm: 1.5rem;  /* 24 */
-  --ctrl-h:  1.75rem;  /* 28 */
-  --ctrl-h-sm: 1.5rem; /* 24 */
-  --ctrl-h-lg: 2.125rem;/* 34 */
-  --pad-x:   0.75rem;  /* 12 */
-  --pad-y:   0.375rem; /* 6  */
-  --pad-x-sm: 0.5rem;  /* 8  */
-  --pad-y-sm: 0.25rem; /* 4  */
+  --row-h:   2rem;      /* 32 */
+  --row-h-sm: 1.625rem; /* 26 */
+  --ctrl-h:  1.875rem;  /* 30 */
+  --ctrl-h-sm: 1.5rem;  /* 24 */
+  --ctrl-h-lg: 2.25rem; /* 36 */
+  --pad-x:   0.875rem;  /* 14 */
+  --pad-y:   0.5rem;    /* 8  */
+  --pad-x-sm: 0.625rem; /* 10 */
+  --pad-y-sm: 0.3125rem;/* 5  */
+  --icon-xs:  0.75rem;     /* 12   */
+  --icon-sm:  0.875rem;    /* 14   */
+  --icon:     0.9375rem;   /* 15   */
+  --icon-lg:  1.125rem;    /* 18   */
+  --cal-hour-h: 3rem;      /* 48   */
+}
+
+[data-density="dense"] {
+  --row-h:   1.75rem;   /* 28 — Linear sidebar / Notion list level */
+  --row-h-sm: 1.5rem;   /* 24 */
+  --ctrl-h:  1.625rem;  /* 26 */
+  --ctrl-h-sm: 1.375rem;/* 22 */
+  --ctrl-h-lg: 2rem;    /* 32 */
+  --pad-x:   0.75rem;   /* 12 */
+  --pad-y:   0.375rem;  /* 6  */
+  --pad-x-sm: 0.5rem;   /* 8  */
+  --pad-y-sm: 0.25rem;  /* 4  */
+  --icon-xs:  0.6875rem;   /* 11      */
+  --icon-sm:  0.78125rem;  /* 12.5    */
+  --icon:     0.875rem;    /* 14      */
+  --icon-lg:  1rem;        /* 16      */
+  --cal-hour-h: 2.75rem;   /* 44      */
 }
 
 /* ============================================================================
@@ -363,17 +587,25 @@
   --font-body-serif:  "Source Serif Pro", Georgia, serif;
   --font-body-mono:   "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Resolved font family — overridden by [data-font-*] below */
-  --font-display: var(--font-display-pilat);
-  --font-body:    var(--font-body-geist);
+  /* ONE customizable family everywhere: the user picks a single typeface
+     (data-font) that drives both the display and body roles — hierarchy comes
+     from weight/size, not a second typeface. --font-ui is the single axis the
+     [data-font=...] selectors below remap; display + body both follow it.
+     Default = Geist. */
+  --font-ui:      var(--font-body-geist);
+  --font-display: var(--font-ui);
+  --font-body:    var(--font-ui);
   --font-mono:    var(--font-body-mono); /* always mono — for code, not user-customizable */
 
   /* Type scale — base case (data-text-size="normal").
-     Sizes use rem so the user's OS text-size pref still applies. */
+     Sizes use rem so the user's OS text-size pref still applies.
+     The body-tier ladder across text-size settings is 13 / 14 / 16 base —
+     small ≈ Linear UI text, normal ≈ Notion chrome, large stays generous. */
+  --text-2xs:  0.6875rem; /* 11 — eyebrow / section labels */
   --text-xs:   0.75rem;   /* 12 — labels, captions   */
   --text-sm:   0.8125rem; /* 13 — secondary UI       */
-  --text-base: 0.9375rem; /* 15 — body text          */
-  --text-md:   1rem;      /* 16 — emphasised body    */
+  --text-base: 0.875rem;  /* 14 — body text          */
+  --text-md:   0.9375rem; /* 15 — emphasised body    */
   --text-lg:   1.125rem;  /* 18 — small headings     */
   --text-xl:   1.25rem;   /* 20                       */
   --text-2xl:  1.5rem;    /* 24 — page headings      */
@@ -396,37 +628,21 @@
   --font-weight-bold:    700;
 }
 
-/* Display font variants */
-[data-font-display="pilat"]    { --font-display: var(--font-display-pilat); }
-[data-font-display="geist"]    { --font-display: var(--font-display-geist); }
-[data-font-display="cal"]      { --font-display: var(--font-display-cal); }
-[data-font-display="fraunces"] { --font-display: var(--font-display-fraunces); }
+/* Single font picker (data-font): one typeface drives the whole UI. Each option
+   remaps --font-ui; --font-display and --font-body both follow it (hierarchy is
+   weight/size, not a second face). Scoped per-element, so a [data-font] on a
+   preview swatch renders that subtree in the chosen face. */
+[data-font="geist"]    { --font-ui: var(--font-body-geist); }
+[data-font="inter"]    { --font-ui: var(--font-body-inter); }
+[data-font="pilat"]    { --font-ui: var(--font-display-pilat); }
+[data-font="cal"]      { --font-ui: var(--font-display-cal); }
+[data-font="fraunces"] { --font-ui: var(--font-display-fraunces); }
+[data-font="serif"]    { --font-ui: var(--font-body-serif); }
+[data-font="mono"]     { --font-ui: var(--font-body-mono); }
 
-/* Body font variants */
-[data-font-body="geist"] { --font-body: var(--font-body-geist); }
-[data-font-body="inter"] { --font-body: var(--font-body-inter); }
-[data-font-body="serif"] { --font-body: var(--font-body-serif); }
-[data-font-body="mono"]  { --font-body: var(--font-body-mono); }
-
-/* Text-size variants — only the body-tier sizes shift. Display sizes stay
-   fixed so page titles don't change with user-text-size prefs. */
-[data-text-size="small"] {
-  --text-xs:   0.6875rem;  /* 11 */
-  --text-sm:   0.75rem;    /* 12 */
-  --text-base: 0.8125rem;  /* 13 */
-  --text-md:   0.9375rem;  /* 15 */
-}
-
-[data-text-size="normal"] {
-  /* defaults */
-}
-
-[data-text-size="large"] {
-  --text-xs:   0.8125rem;  /* 13 */
-  --text-sm:   0.875rem;   /* 14 */
-  --text-base: 1.0625rem;  /* 17 */
-  --text-md:   1.125rem;   /* 18 */
-}
+/* Text-size picker retired (2026-06-13): one type scale (the values in :root
+   above). Density is the size axis. The [data-text-size] variant selectors are
+   intentionally removed so any persisted pick is inert. */
 
 /* ============================================================================
  * 10. Layout — content widths, sidebar widths, breakpoints
@@ -461,6 +677,11 @@
 
   /* Focus ring shadow composes with --ring */
   --shadow-focus: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+
+  /* Raised control plate (§5b): none on dark — the plate reads by being
+     lighter than its track. A zero shadow, not `none`, so it stays valid
+     inside Tailwind's comma-separated box-shadow stack. */
+  --shadow-control-raised: 0 0 0 0 transparent;
 }
 
 [data-theme="light"] {
@@ -470,6 +691,10 @@
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.14);
   --shadow-overlay: 0 24px 64px rgb(0 0 0 / 0.20);
   --shadow-focus: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+
+  /* Raised control plate (§5b): the white card needs a shadow to lift off
+     its light track. */
+  --shadow-control-raised: var(--shadow-sm);
 }
 
 /* ============================================================================
@@ -477,11 +702,20 @@
  * ==========================================================================*/
 
 :root {
+  /* Movement durations — used for transforms/size/position. Zeroed under
+     reduced-motion (see below) so no element travels. */
   --motion-instant: 0ms;
   --motion-fast:    100ms;
   --motion-base:    180ms;
   --motion-slow:    320ms;
   --motion-slower:  500ms;
+
+  /* Fade duration — used for opacity & color (and the blur-in motif). Kept
+     non-zero under reduced-motion so state changes still register softly. */
+  --motion-fade:    100ms;
+  /* Blur amount for the overlay/popover/mode-shift fade+blur-in motif.
+     Animate from blur(var(--blur-veil)) → blur(0) alongside the opacity fade. */
+  --blur-veil:      0.25rem; /* 4px */
 
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);    /* drift-in */
   --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
@@ -489,14 +723,33 @@
   --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1); /* gentle overshoot */
 }
 
-/* Honour user reduced-motion preference globally. */
+/* Reduced motion = kill movement, keep tiny fades. Transforms/springs collapse
+   to 0ms (no travel); opacity/color fades stay ~80ms so feedback still reads;
+   the blur-in motif is disabled (veil → 0). The `data-motion` app override
+   (Settings → Preferences, DF-19f) layers on top of the OS setting:
+     • data-motion="reduced" forces reduced regardless of the OS.
+     • data-motion="full" opts out of the OS reduce (the media query below
+       excludes it), so a user who wants motion keeps it even under OS reduce.
+     • data-motion="system" / unset follows the OS (the media query applies). */
+:root[data-motion="reduced"] {
+  --motion-instant: 0ms;
+  --motion-fast:    0ms;
+  --motion-base:    0ms;
+  --motion-slow:    0ms;
+  --motion-slower:  0ms;
+  --motion-fade:    80ms;
+  --blur-veil:      0;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  :root {
+  :root:not([data-motion="full"]) {
     --motion-instant: 0ms;
     --motion-fast:    0ms;
     --motion-base:    0ms;
     --motion-slow:    0ms;
     --motion-slower:  0ms;
+    --motion-fade:    80ms;
+    --blur-veil:      0;
   }
 }
 
@@ -509,14 +762,43 @@
   --z-sticky:  10;
   --z-rail:    20;
   --z-header:  30;
-  --z-dropdown: 40;
   --z-overlay: 50;
   --z-dialog:  60;
+  /* Dropdowns layer with popovers: both are floating content that must sit
+   * above a dialog when spawned from inside one (drift triage's per-task
+   * menus were unclickable at 40 — below the dialog overlay). */
+  --z-dropdown: 70;
   --z-popover: 70;
   --z-tooltip: 80;
   --z-toast:   90;
   --z-debug:  100;
 }
+
+/* ============================================================================
+ * 13b. Label colors — tag chips (cross-module).
+ *      Eight named hues reusing the raw accent palette bases. Each
+ *      [data-label="…"] sets two vars consumed by .tag-chip / .tag-dot
+ *      (global.css): `--label` (solid hue → the dot + ring) and
+ *      `--label-surface` (a faint tint → the chip background). Surfaces are
+ *      precomputed oklch-with-alpha (kept here, the sanctioned color file, so
+ *      component code stays hex/arbitrary-free per the design-system rules).
+ *      `gray` is the default / fallback when a tag has no stored color.
+ * ==========================================================================*/
+
+:root {
+  /* fallbacks when no [data-label] is set */
+  --label:         var(--neutral-400);
+  --label-surface: oklch(0.70 0 0 / 0.16);
+}
+
+[data-label="gray"]   { --label: var(--neutral-400); --label-surface: oklch(0.70 0    0   / 0.16); }
+[data-label="blue"]   { --label: var(--blue-base);    --label-surface: oklch(0.66 0.18 245 / 0.18); }
+[data-label="green"]  { --label: var(--green-base);   --label-surface: oklch(0.72 0.17 150 / 0.18); }
+[data-label="amber"]  { --label: var(--amber-base);   --label-surface: oklch(0.80 0.16 75  / 0.18); }
+[data-label="red"]    { --label: var(--red-base);     --label-surface: oklch(0.66 0.22 25  / 0.18); }
+[data-label="violet"] { --label: var(--violet-base);  --label-surface: oklch(0.66 0.20 295 / 0.18); }
+[data-label="teal"]   { --label: var(--teal-base);    --label-surface: oklch(0.72 0.13 200 / 0.18); }
+[data-label="pink"]   { --label: var(--pink-base);    --label-surface: oklch(0.71 0.20 350 / 0.18); }
 
 /* ============================================================================
  * 14. Tailwind v4 @theme mapping
@@ -554,6 +836,19 @@
   --color-info:                 var(--info);
   --color-info-foreground:      var(--info-foreground);
 
+  /* State layer (§5b). Each utility emits var(--state-…), which resolves
+     against the nearest element carrying an appearance attribute, so scoped
+     accents are honoured. ring-state-selected reads the ring namespace first,
+     so it is the 32% ring while bg-state-selected is the 13% tint. */
+  --color-state-hover:          var(--state-hover);
+  --color-state-active:         var(--state-active);
+  --color-state-active-hover:   var(--state-active-hover);
+  --color-state-selected:       var(--state-selected);
+  --ring-color-state-selected:  var(--state-selected-ring);
+  --ring-color-state-selected-edge: var(--state-selected-edge);
+  --color-hairline:             var(--hairline);
+  --color-control-raised:       var(--control-raised);
+
   --radius-sm: var(--radius-sm);
   --radius:    var(--radius);
   --radius-md: var(--radius-md);
@@ -566,6 +861,14 @@
   --font-sans:    var(--font-body);
   --font-mono:    var(--font-mono);
 
+  /* Icon sizes as spacing keys → size-icon-xs / size-icon-sm / size-icon /
+     size-icon-lg (and w-/h-). Inline so they track the density-scaling vars. */
+  --spacing-icon-xs: var(--icon-xs);
+  --spacing-icon-sm: var(--icon-sm);
+  --spacing-icon:    var(--icon);
+  --spacing-icon-lg: var(--icon-lg);
+
+  --text-2xs:  var(--text-2xs);
   --text-xs:   var(--text-xs);
   --text-sm:   var(--text-sm);
   --text-base: var(--text-base);
@@ -582,4 +885,5 @@
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
   --shadow-overlay: var(--shadow-overlay);
+  --shadow-control-raised: var(--shadow-control-raised);
 }

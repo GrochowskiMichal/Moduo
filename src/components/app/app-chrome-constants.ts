@@ -1,4 +1,4 @@
-import type { ModuleNavItem, TaskProjectOption } from "./app-chrome-types";
+import type { ModuleNavItem } from "./app-chrome-types";
 
 export function safeId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -9,43 +9,26 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
-export function normalizeTaskProject(raw: any): TaskProjectOption {
-  return {
-    id: raw.id,
-    workspaceId: raw.workspaceId ?? raw.workspace_id,
-    ownerId: raw.ownerId ?? raw.owner_id,
-    name: raw.name ?? "New Project",
-    description: raw.description ?? "",
-    logoUrl: raw.logoUrl ?? raw.logo_url ?? null,
-    position: raw.position ?? `m${Date.now().toString(36)}`,
-    createdAt: raw.createdAt ?? raw.created_at ?? nowIso(),
-    updatedAt: raw.updatedAt ?? raw.updated_at ?? nowIso(),
-    deletedAt: raw.deletedAt ?? raw.deleted_at ?? null,
-  };
-}
-
 export const baseModulesNavItems: ModuleNavItem[] = [
-  { label: "Grid", iconName: "grid", href: "/" },
+  { label: "Home", iconName: "home", href: "/" },
   { label: "Notes", iconName: "file-text", href: "/notes", module: "notes" },
-  { label: "Ground", iconName: "ground-roots", href: "/ground" },
-  { label: "Mindmap", iconName: "git-branch", href: "/mindmap", module: "mindmap" },
-  { label: "Templates", iconName: "edit-3", href: "/templates", module: "templates" },
-  { label: "Email", iconName: "mail", href: "/email", module: "email", desktopOnly: true },
-  { label: "CRM", iconName: "folder", href: "/crm" },
-  { label: "Forms", iconName: "edit-2", href: "/forms" },
-  { label: "Activity", iconName: "bar-chart-2", href: "/activity" },
-  { label: "Feed", iconName: "bar-chart-2", href: "/feed" },
-  { label: "Files", iconName: "folder", href: "/files" },
-  { label: "Brainstorm", iconName: "pen-tool", href: "/brainstorm" },
-  { label: "Expanses", iconName: "dollar-sign", href: "/expanses" },
-  { label: "Revenue", iconName: "dollar-sign", href: "/revenue" },
-  { label: "KPI/OKR", iconName: "tag", href: "/kpi-okr" },
-  { label: "Stats", iconName: "bar-chart-2", href: "/stats" },
-  { label: "Analytics", iconName: "search", href: "/analytics" },
-  { label: "Recordings", iconName: "file-text", href: "/recordings" },
-  { label: "Timetracking", iconName: "clock", href: "/timetracking", desktopOnly: true },
-  { label: "Roadmap", iconName: "git-branch", href: "/roadmap" },
+  { label: "Tasks", iconName: "check-square", href: "/tasks", module: "tasks" },
+  { label: "Calendar", iconName: "calendar", href: "/calendar", module: "calendar" },
+  // Mindmap is hidden from the alpha nav (DF-4) — the module rethink is scheduled
+  // after Email + Dashboard. The /mindmap route + its layout entry stay wired
+  // (route-tree.tsx, routeToFeatureLayout) so it's still reachable directly.
+  { label: "Email", iconName: "mail", href: "/email", module: "email" },
+  { label: "Contacts", iconName: "contact", href: "/contacts", module: "contacts" },
+  // Chat (specs/chat.md): always listed — Duo/Team/Founder workspaces get the
+  // module, everyone else gets the locked explainer + upgrade path.
+  { label: "Chat", iconName: "message-square", href: "/chat", module: "chat" },
 ];
+
+// Routes that are intentionally reachable but NOT shown in the nav — kept wired
+// for later work but hidden from the alpha. The app-chrome "bounce unknown
+// routes home" guard must exempt these, or a direct visit gets redirected to the
+// first nav tab. Mindmap is hidden pending its post-Email/Dashboard rethink (DF-4).
+export const hiddenReachableRoutes: readonly string[] = ["/mindmap"];
 
 export const rowStyle = { display: "flex", flexDirection: "row" as const, alignItems: "center" };
 export const itemRowStyle = {

@@ -60,7 +60,9 @@ function isCandidateComponentFile(filePath: string) {
   return rel.includes("/components/") || rel.startsWith("components/") || rel.includes("/ui/");
 }
 
-function guessExportedComponentName(source: string): { kind: "named"; name: string } | { kind: "default" } | null {
+function guessExportedComponentName(
+  source: string,
+): { kind: "named"; name: string } | { kind: "default" } | null {
   // Default export (common for leaf components)
   if (/\bexport\s+default\b/.test(source)) return { kind: "default" };
 
@@ -89,7 +91,7 @@ function storyFilePathFor(componentFilePath: string) {
 
 function storySourceFor(
   componentFilePath: string,
-  exportInfo: { kind: "named"; name: string } | { kind: "default" }
+  exportInfo: { kind: "named"; name: string } | { kind: "default" },
 ) {
   const importPath = "./" + path.basename(componentFilePath, ".tsx");
   const title = storyTitleFromPath(componentFilePath);
@@ -179,7 +181,7 @@ async function main() {
   const mode = options.dryRun ? "DRY RUN" : "DONE";
   // eslint-disable-next-line no-console
   console.log(
-    `[storybook:gen] ${mode} - created ${created}, overwritten ${overwritten}, skipped ${skipped} (use --force to overwrite, --dry-run to preview)`
+    `[storybook:gen] ${mode} - created ${created}, overwritten ${overwritten}, skipped ${skipped} (use --force to overwrite, --dry-run to preview)`,
   );
 }
 
@@ -188,4 +190,3 @@ main().catch((err) => {
   console.error("[storybook:gen] FAILED", err);
   process.exitCode = 1;
 });
-

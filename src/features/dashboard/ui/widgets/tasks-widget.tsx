@@ -1,67 +1,147 @@
-import { useMemo } from "react";
-import type { Task, TaskProject, TaskWorkflowState } from "../../../tasks/types";
-import type { WidgetConfig } from "../../types";
-import { WidgetShell } from "./widget-shell";
+// DB-5 — "Tasks" widget. Today's committed work (falls back to the open queue),
+// with inline check-off — the one write this widget does, gated by `canWrite`
+// (a "view" member sees disabled checkboxes). Rows open the task in /tasks.
 
-type Props = {
-  tasks: Task[];
-  projects: TaskProject[];
-  states: TaskWorkflowState[];
-  config: WidgetConfig;
-  isLocked: boolean;
-  onUpdateConfig: (patch: Partial<WidgetConfig>) => void;
-};
+import { Check } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { todayStr } from "@/features/tasks/helpers";
+import type { Task } from "@/features/tasks/model";
+import { getRuntime } from "@/lib/runtime";
+import { cn } from "@/lib/utils";
 
-export function TasksWidget({ tasks, projects, states, config, isLocked, onUpdateConfig }: Props) {
-  const activeProjects = useMemo(() => projects.filter((project) => !project.deletedAt), [projects]);
-  const stateMap = useMemo(() => new Map(states.map((state) => [state.id, state])), [states]);
+import {
+  requestDashboardDataRefresh,
+  useDashboardData,
+} from "../../context/dashboard-data-context";
+import { useDensity } from "../../hooks/use-density";
+import type { WidgetComponentProps } from "../../registry/types";
+import { widgetRowBudget } from "../../widget-density";
+import { openEntity, openModuleRoute } from "../../widget-nav";
+import {
+  WidgetBodyRoot,
+  WidgetEmpty,
+  WidgetLoading,
+  WidgetMore,
+  WidgetSectionLabel,
+} from "./widget-primitives";
 
-  const filtered = useMemo(() => {
-    let current = tasks.filter((task) => !task.deletedAt);
-    if (config.projectIds?.length) {
-      current = current.filter((task) => config.projectIds?.includes(task.projectId));
-    }
-    return [...current].sort((a, b) => a.priority - b.priority || a.position.localeCompare(b.position));
-  }, [config.projectIds, tasks]);
+function selectTodayTasks(tasks: Task[], projectIds: string[]): { rows: Task[]; heading: string } {
+  const today = todayStr();
+  const open = tasks.filter(
+    (t) =>
+      !t.deletedAt &&
+      (t.status === "todo" || t.status === "in_progress") &&
+      (projectIds.length === 0 || projectIds.includes(t.bucketId)),
+  );
+  const committed = open
+    .filter((t) => t.committedFor === today)
+    .sort((a, b) => (a.commitOrder ?? 0) - (b.commitOrder ?? 0));
+  if (committed.length > 0) return { rows: committed, heading: "Today" };
+  const queue = open
+    .filter((t) => !t.committedFor)
+    .sort((a, b) => a.position.localeCompare(b.position));
+  return { rows: queue, heading: "Queue" };
+}
+
+function TaskRow({
+  task,
+  canWrite,
+  onDone,
+}: {
+  task: Task;
+  canWrite: boolean;
+  onDone: (task: Task) => void;
+}) {
+  return (
+    <li className="flex min-h-[var(--row-h)] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
+      <button
+        type="button"
+        disabled={!canWrite}
+        onClick={() => onDone(task)}
+        aria-label={`Mark "${task.title}" done`}
+        className={cn(
+          "grid size-icon-lg shrink-0 place-items-center rounded-full border border-border text-transparent",
+          canWrite
+            ? "hover:border-foreground/40 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            : "opacity-50",
+        )}
+      >
+        <Check className="size-icon-xs" aria-hidden />
+      </button>
+      <button
+        type="button"
+        onClick={() => openEntity("task", task.id)}
+        className="min-w-0 flex-1 truncate rounded-sm text-left text-sm text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {task.title}
+      </button>
+    </li>
+  );
+}
+
+export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
+  const { tasks: taskSource, workspaceId } = useDashboardData();
+  const density = useDensity();
+  const [doneIds, setDoneIds] = useState<Set<string>>(() => new Set());
+
+  const projectIds = useMemo(
+    () =>
+      Array.isArray(widget.config.projectIds)
+        ? (widget.config.projectIds as unknown[]).filter(
+            (id): id is string => typeof id === "string",
+          )
+        : [],
+    [widget.config.projectIds],
+  );
+
+  const { rows, heading } = useMemo(
+    () => selectTodayTasks(taskSource.data.tasks, projectIds),
+    [taskSource.data.tasks, projectIds],
+  );
+
+  const markDone = useCallback(
+    (task: Task) => {
+      const runtime = getRuntime();
+      if (!canWrite || !workspaceId || !runtime) return;
+      setDoneIds((prev) => new Set(prev).add(task.id));
+      void runtime.tasks
+        .opSetStatus({ workspaceId, taskId: task.id, status: "done" })
+        .then(() => requestDashboardDataRefresh())
+        .catch(() => {
+          setDoneIds((prev) => {
+            const next = new Set(prev);
+            next.delete(task.id);
+            return next;
+          });
+          toast.error("Couldn't complete that task.");
+        });
+    },
+    [canWrite, workspaceId],
+  );
+
+  const visible = rows.filter((t) => !doneIds.has(t.id));
+
+  if (taskSource.loading && rows.length === 0) return <WidgetLoading />;
+  if (visible.length === 0) {
+    return <WidgetEmpty>No open tasks. Enjoy the calm.</WidgetEmpty>;
+  }
+
+  const budget = widgetRowBudget(size, density);
+  const shown = visible.slice(0, budget);
+  const overflow = visible.length - shown.length;
 
   return (
-    <WidgetShell
-      config={config}
-      title={`Tasks (${filtered.length})`}
-      controls={
-        !isLocked ? (
-          <select
-            value={config.projectIds?.[0] ?? ""}
-            onChange={(event) => onUpdateConfig({ projectIds: event.target.value ? [event.target.value] : undefined })}
-            className="max-w-[65%] rounded border border-[#2b2b2b] bg-[#141414] px-2 py-1 text-[11px] text-[#cfcfcf] outline-none"
-          >
-            <option value="">All projects</option>
-            {activeProjects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        ) : null
-      }
-    >
-      <div className="flex-1 overflow-y-auto px-2 py-2">
-        {filtered.length === 0 ? (
-          <p className="px-1 text-[12px] text-[#808080]">No tasks found.</p>
-        ) : (
-          filtered.slice(0, 30).map((task) => {
-            const state = stateMap.get(task.stateId);
-            return (
-              <div key={task.id} className="mb-1 rounded-lg border border-transparent px-2 py-1 hover:border-[#232323] hover:bg-[#171717]">
-                <p className="truncate text-[12px] text-[#e8e8e8]">{task.title}</p>
-                <p className="mt-0.5 text-[10px] text-[#878787]">
-                  {state?.name ?? "Unknown"} {task.dueDate ? `• ${task.dueDate}` : ""}
-                </p>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </WidgetShell>
+    <WidgetBodyRoot>
+      {size !== "S" ? (
+        <WidgetSectionLabel count={visible.length}>{heading}</WidgetSectionLabel>
+      ) : null}
+      <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto scrollbar-thin p-1.5 pt-0.5">
+        {shown.map((task) => (
+          <TaskRow key={task.id} task={task} canWrite={canWrite} onDone={markDone} />
+        ))}
+      </ul>
+      <WidgetMore count={overflow} onClick={() => openModuleRoute("/tasks")} />
+    </WidgetBodyRoot>
   );
 }

@@ -1,0 +1,36 @@
+name: Desktop Release (staging)
+
+# Runs when src-tauri changes land on develop, nightly at 02:00 UTC, or on demand.
+# Builds the signed Mac universal .dmg + Windows NSIS installer from develop and publishes them
+# to the rolling `staging-latest` release. The build itself lives in _desktop-release.yml.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly at 02:00 UTC so a fresh install is never weeks behind on UI-only days
+    - cron: "0 2 * * *"
+  push:
+    branches:
+      - develop
+    paths:
+      - "src-tauri/**"
+
+# A newer staging build supersedes an older one still waiting on Apple.
+concurrency:
+  group: desktop-release-staging
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    uses: ./.github/workflows/_desktop-release.yml
+    secrets: inherit
+    with:
+      channel: staging
+      release_tag: staging-latest
+      release_name: "Staging — latest build"
+      prerelease: true
+      web_origin: "https://app.staging.moduo.app"
+      staging_portal: true

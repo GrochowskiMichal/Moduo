@@ -2,7 +2,6 @@ use std::sync::Mutex;
 
 use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine as _};
 use ed25519_dalek::SigningKey;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::store_redb::RedbStore;
@@ -101,8 +100,8 @@ impl AclManager {
     pub fn rotate_identity(&self, store: &RedbStore) -> anyhow::Result<LocalIdentity> {
         let mut public_key = [0_u8; 32];
         let mut private_key = [0_u8; 32];
-        rand::thread_rng().fill_bytes(&mut public_key);
-        rand::thread_rng().fill_bytes(&mut private_key);
+        rand::fill(&mut public_key);
+        rand::fill(&mut private_key);
 
         let identity = LocalIdentity {
             device_id: uuid::Uuid::new_v4().to_string(),

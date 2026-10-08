@@ -1,0 +1,72 @@
+{
+  "framework": null,
+  "installCommand": "bun install --frozen-lockfile",
+  "buildCommand": "node scripts/vercel-build.mjs",
+  "outputDirectory": "dist/web",
+  "rewrites": [
+    {
+      "source": "/book",
+      "has": [{ "type": "host", "value": "staging.moduo.app" }],
+      "destination": "/app.html"
+    },
+    {
+      "source": "/book/:path*",
+      "has": [{ "type": "host", "value": "staging.moduo.app" }],
+      "destination": "/app.html"
+    },
+    {
+      "source": "/book",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/app.html"
+    },
+    {
+      "source": "/book/:path*",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/app.html"
+    },
+    {
+      "source": "/book",
+      "has": [{ "type": "host", "value": "www.moduo.app" }],
+      "destination": "/app.html"
+    },
+    {
+      "source": "/book/:path*",
+      "has": [{ "type": "host", "value": "www.moduo.app" }],
+      "destination": "/app.html"
+    },
+    {
+      "source": "/manifesto",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/manifesto.html"
+    },
+    {
+      "source": "/manifesto",
+      "has": [{ "type": "host", "value": "www.moduo.app" }],
+      "destination": "/manifesto.html"
+    },
+    {
+      "source": "/privacy",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/privacy",
+      "has": [{ "type": "host", "value": "www.moduo.app" }],
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/terms",
+      "has": [{ "type": "host", "value": "www.moduo.app" }],
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/((?!assets|favicon|manifest|sw\\.|app\\.html|landing\\.html).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

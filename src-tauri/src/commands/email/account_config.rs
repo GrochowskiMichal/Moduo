@@ -1,6 +1,7 @@
 use super::connection::{open_imap_session, ImapSession};
-use super::constants::{EMAIL_NAMESPACE, EMAIL_SECRET_KEY_PREFIX};
+use super::constants::EMAIL_SECRET_KEY_PREFIX;
 use super::model::{EmailConfig, StoredEmailAccount};
+use super::secrets::StoredMailSecret;
 use crate::AppState;
 
 pub(super) fn normalize_provider(provider: &str) -> Result<String, String> {
@@ -38,23 +39,6 @@ pub(super) fn account_id(provider: &str, email: &str, imap_host: Option<&str>) -
 
 pub(super) fn account_secret_key(account_id: &str) -> String {
     format!("{}{}", EMAIL_SECRET_KEY_PREFIX, account_id)
-}
-
-pub(super) fn get_password_for_account(
-    state: &AppState,
-    account_id: &str,
-) -> Result<Option<String>, String> {
-    let key = account_secret_key(account_id);
-    let raw = state
-        .store
-        .kv_get(EMAIL_NAMESPACE, &key)
-        .map_err(|e| e.to_string())?;
-    match raw {
-        None => Ok(None),
-        Some(value) => serde_json::from_value::<String>(value)
-            .map(Some)
-            .map_err(|e| e.to_string()),
-    }
 }
 
 pub(super) fn mailbox_candidates(provider: &str, folder: &str) -> Vec<String> {
@@ -113,6 +97,21 @@ pub(super) fn mailbox_candidates(provider: &str, folder: &str) -> Vec<String> {
             ],
             _ => vec!["Trash".to_string()],
         },
+        "archive" => match provider {
+            // Gmail archive is expunge-from-INBOX (the message stays in All Mail) —
+            // these candidates are only used by the generic copy-to-Archive path.
+            "gmail" => vec!["[Gmail]/All Mail".to_string(), "All Mail".to_string()],
+            "outlook" => vec!["Archive".to_string()],
+            "icloud" => vec!["Archive".to_string()],
+            "custom" => vec![
+                "Archive".to_string(),
+                "Archives".to_string(),
+                "INBOX.Archive".to_string(),
+                "INBOX/Archive".to_string(),
+                "archive".to_string(),
+            ],
+            _ => vec!["Archive".to_string()],
+        },
         "spam" => match provider {
             "gmail" => vec!["[Gmail]/Spam".to_string(), "Spam".to_string()],
             "outlook" => vec![
@@ -162,13 +161,20 @@ pub(super) fn ensure_account_config(
     state: &AppState,
     account: &StoredEmailAccount,
 ) -> Result<EmailConfig, String> {
-    let Some(password) = get_password_for_account(state, &account.id)? else {
+    // Reads the (already-refreshed, for OAuth) secret from the keychain — the async
+    // `oauth::ensure_fresh_access` step runs before any config build.
+    let Some(secret) = super::secrets::get_secret(state, &account.id)? else {
         return Err("account_reauth_required".to_string());
+    };
+    let (password, oauth_access_token) = match secret {
+        StoredMailSecret::Password { password } => (password, None),
+        StoredMailSecret::Oauth { access_token, .. } => (String::new(), Some(access_token)),
     };
     Ok(EmailConfig {
         provider: account.provider.clone(),
         email: account.email.clone(),
         password,
+        oauth_access_token,
         imap_host: account.imap_host.clone(),
         smtp_host: account.smtp_host.clone(),
         imap_port: account.imap_port,

@@ -4,23 +4,7 @@ export type ModuleNavItem = {
   label: string;
   iconName: IconName;
   href: string;
-  module?: "notes" | "tasks" | "mindmap" | "templates" | "email";
-  /** If true, hidden on web builds (Tauri-only feature). */
-  desktopOnly?: boolean;
-};
-
-/** Used by the legacy per-route picker menus (see AppChromeMenus). */
-export type TaskProjectOption = {
-  id: string;
-  workspaceId: string;
-  ownerId: string;
-  name: string;
-  description: string;
-  logoUrl: string | null;
-  position: string;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
+  module?: "notes" | "tasks" | "calendar" | "contacts" | "mindmap" | "templates" | "email" | "chat";
 };
 
 /** Anchor coordinates for a floating menu attached to a chip in the top bar. */
