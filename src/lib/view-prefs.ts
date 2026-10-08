@@ -112,7 +112,10 @@ export function clearViewPrefs(key: string | null | undefined): void {
 /**
  * React state backed by a view-prefs key: read once when the key (scope)
  * mounts or changes, written on every set. Switching scope re-reads the new
- * scope's prefs instead of carrying the old ones over.
+ * scope's prefs instead of carrying the old ones over. Call `set` from event
+ * handlers or effects, not from a child's layout effect on the render that
+ * changes the scope: that runs before this hook syncs, so it would still
+ * write to the old scope.
  */
 export function useViewPrefs<T>(
   key: string | null | undefined,

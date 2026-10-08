@@ -177,6 +177,14 @@ describe("sanitizeDisplayValue", () => {
     });
   });
 
+  it("keeps a field without a control when it has the default's shape", () => {
+    type WithDir = View & { dir: string };
+    const defaults: WithDir = { ...DEFAULTS, dir: "asc" };
+    const controls = CONTROLS as unknown as DisplayControl<WithDir>[];
+    expect(sanitizeDisplayValue({ dir: "desc" }, controls, defaults).dir).toBe("desc");
+    expect(sanitizeDisplayValue({ dir: 3 }, controls, defaults).dir).toBe("asc");
+  });
+
   it("returns the defaults for junk", () => {
     expect(sanitizeDisplayValue("nope", CONTROLS, DEFAULTS)).toEqual(DEFAULTS);
     expect(sanitizeDisplayValue(null, CONTROLS, DEFAULTS)).toEqual(DEFAULTS);

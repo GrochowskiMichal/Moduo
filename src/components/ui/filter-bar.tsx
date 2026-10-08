@@ -405,10 +405,13 @@ function FilterBar({
 }: FilterBarProps) {
   const addRef = React.useRef<HTMLButtonElement>(null);
   const refocus = React.useRef(false);
+  const prevLength = React.useRef(value.length);
   React.useEffect(() => {
-    if (!refocus.current) return;
+    // Only when the list really got shorter: a parent that rejects or delays
+    // the removal mustn't have focus pulled on some later render.
+    if (refocus.current && value.length < prevLength.current) addRef.current?.focus();
     refocus.current = false;
-    addRef.current?.focus();
+    prevLength.current = value.length;
   });
 
   const chips = value.flatMap((condition, index) => {

@@ -2,6 +2,7 @@ import { SlidersHorizontal } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { mergeViewPrefs } from "@/lib/view-prefs";
 import { Button } from "./button";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { SegmentedControl, type SegmentedItem } from "./segmented-control";
@@ -80,7 +81,8 @@ function sameValue(a: DisplayValues, b: DisplayValues): boolean {
  * Reads a stored Display value back against the controls that will show it:
  * a choice the config no longer offers (a removed layout, a renamed grouping)
  * falls back to the default, and toggles keep only known options, deduped, in
- * the config's order. Pass it as the view-prefs sanitiser:
+ * the config's order. Other fields keep a stored value of the default's shape
+ * (`mergeViewPrefs`). Pass it as the view-prefs sanitiser:
  * `readViewPrefs(key, DEFAULTS, (raw, d) => sanitizeDisplayValue(raw, CONTROLS, d))`.
  */
 function sanitizeDisplayValue<V extends DisplayValues>(
@@ -92,10 +94,13 @@ function sanitizeDisplayValue<V extends DisplayValues>(
     typeof raw === "object" && raw !== null && !Array.isArray(raw)
       ? (raw as Record<string, unknown>)
       : {};
-  const out: DisplayValues = { ...defaults };
+  // Fields with no control (a sort direction kept in the same object) take
+  // the generic shape check; the controls then decide their own fields.
+  const out: DisplayValues = { ...mergeViewPrefs(raw, defaults) };
   for (const control of controls) {
     const value = stored[control.id];
     const offered = control.options.map((o) => o.value);
+    out[control.id] = defaults[control.id];
     if (control.type === "toggles") {
       if (Array.isArray(value)) out[control.id] = offered.filter((v) => value.includes(v));
     } else if (typeof value === "string" && offered.includes(value)) {
