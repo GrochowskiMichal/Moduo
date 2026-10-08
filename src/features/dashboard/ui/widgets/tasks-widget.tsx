@@ -1,14 +1,15 @@
-// DB-5 — "Tasks" widget. Today's committed work (falls back to the open queue),
+// DB-5 — "Tasks" widget. My queue (TV-D4; falls back to the open tasks),
 // with inline check-off — the one write this widget does, gated by `canWrite`
 // (a "view" member sees disabled checkboxes). Rows open the task in /tasks.
 
 import { Check } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { todayStr } from "@/features/tasks/helpers";
 import type { Task } from "@/features/tasks/model";
+import { queueOrOpen } from "@/features/tasks/queue";
 import { getRuntime } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 import {
   requestDashboardDataRefresh,
@@ -25,24 +26,6 @@ import {
   WidgetMore,
   WidgetSectionLabel,
 } from "./widget-primitives";
-
-function selectTodayTasks(tasks: Task[], projectIds: string[]): { rows: Task[]; heading: string } {
-  const today = todayStr();
-  const open = tasks.filter(
-    (t) =>
-      !t.deletedAt &&
-      (t.status === "todo" || t.status === "in_progress") &&
-      (projectIds.length === 0 || projectIds.includes(t.bucketId)),
-  );
-  const committed = open
-    .filter((t) => t.committedFor === today)
-    .sort((a, b) => (a.commitOrder ?? 0) - (b.commitOrder ?? 0));
-  if (committed.length > 0) return { rows: committed, heading: "Today" };
-  const queue = open
-    .filter((t) => !t.committedFor)
-    .sort((a, b) => a.position.localeCompare(b.position));
-  return { rows: queue, heading: "Queue" };
-}
 
 function TaskRow({
   task,
@@ -81,7 +64,8 @@ function TaskRow({
 }
 
 export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
-  const { tasks: taskSource, workspaceId } = useDashboardData();
+  const { tasks: taskSource, taskQueue, workspaceId } = useDashboardData();
+  const { userId } = useAuth();
   const density = useDensity();
   const [doneIds, setDoneIds] = useState<Set<string>>(() => new Set());
 
@@ -96,8 +80,8 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
   );
 
   const { rows, heading } = useMemo(
-    () => selectTodayTasks(taskSource.data.tasks, projectIds),
-    [taskSource.data.tasks, projectIds],
+    () => queueOrOpen(taskSource.data.tasks, taskQueue.data, userId, projectIds),
+    [taskSource.data.tasks, taskQueue.data, userId, projectIds],
   );
 
   const markDone = useCallback(
@@ -122,7 +106,7 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
 
   const visible = rows.filter((t) => !doneIds.has(t.id));
 
-  if (taskSource.loading && rows.length === 0) return <WidgetLoading />;
+  if ((taskSource.loading || taskQueue.loading) && rows.length === 0) return <WidgetLoading />;
   if (visible.length === 0) {
     return <WidgetEmpty>No open tasks. Enjoy the calm.</WidgetEmpty>;
   }

@@ -1,38 +1,11 @@
 // Pure ordering math for drag-to-reorder. No React, no IO — unit-tested.
 //
-// Two ordering schemes live in the Tasks model:
-//   • the commit queue is ordered by `commitOrder` (an integer column), so a
-//     reorder renumbers the affected rows;
-//   • lists/boards are ordered by `position` (a Lexorank-style text column), so
-//     a reorder slots a fractional key between the new neighbours.
-// These helpers compute the *minimum* set of writes for a move under each scheme
-// and are shared by every drag surface (queue, board, …).
+// Lists and boards are ordered by `position` (a Lexorank-style text column), so
+// a reorder slots a fractional key between the new neighbours. The personal
+// Queue moves through its own op (see queue.ts).
 
 import { betweenPositions } from "./helpers";
 import type { Task } from "./model";
-
-/**
- * Renumber a committed queue to `orderedIds`. Returns only the `(id,
- * commitOrder)` pairs whose order actually changed — 1-based and contiguous —
- * so a reorder persists the fewest rows (and self-heals any sparse/legacy
- * numbering on the first move). Ids not present in `current` are ignored.
- *
- * `current` is the queue in its existing order (already `commitOrder`-sorted).
- */
-export function commitOrderUpdates(
-  orderedIds: string[],
-  current: Array<Pick<Task, "id" | "commitOrder">>,
-): Array<{ id: string; commitOrder: number }> {
-  const currentById = new Map(current.map((t) => [t.id, t.commitOrder ?? null]));
-  const updates: Array<{ id: string; commitOrder: number }> = [];
-  let rank = 0;
-  for (const id of orderedIds) {
-    if (!currentById.has(id)) continue;
-    rank += 1;
-    if (currentById.get(id) !== rank) updates.push({ id, commitOrder: rank });
-  }
-  return updates;
-}
 
 /**
  * The `position` string for a task placed at `toIndex` within `ordered` — the

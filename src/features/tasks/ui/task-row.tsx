@@ -8,7 +8,6 @@ import {
   Clock,
   CornerDownRight,
   Inbox,
-  ListChecks,
   Repeat,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -49,6 +48,7 @@ import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
 import { LevelDots } from "./level-icons";
 import { ROW_TITLE_ATTR } from "./list-keys";
+import { QueueToggle } from "./queue-toggle";
 
 /** Which inline popover the keyboard asked to open on this row. */
 export type RowCommand = "bucket" | "schedule" | "due" | null;
@@ -96,6 +96,8 @@ type Props = {
   /** Highlight as the live drop target during a drag-to-nest (quiet accent +
    * ring, mirrors the board column's drag-over treatment). */
   dropActive?: boolean;
+  /** False in My tasks, where every row is mine (D4-4). */
+  showAssignee?: boolean;
   api: TasksModuleApi;
 };
 
@@ -125,11 +127,12 @@ export function TaskRow({
   dragListeners,
   dragActivatorRef,
   dropActive = false,
+  showAssignee = true,
   api,
 }: Props) {
   const done = task.status === "done";
   const drifted = isDrifted(task);
-  const committed = !!task.committedFor && task.committedFor === api.today;
+  const queued = api.queuedTaskIds.has(task.id);
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
   const tags = api.tagsByTask.get(task.id) ?? [];
@@ -282,7 +285,7 @@ export function TaskRow({
         <LevelDots task={task} />
 
         {/* Solo workspaces have nobody to tell apart — the avatar only appears with teammates. */}
-        {assignees.length > 1 ? (
+        {showAssignee && assignees.length > 1 ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="flex items-center" aria-label={`Assignee: ${assigneeName}`}>
@@ -326,36 +329,10 @@ export function TaskRow({
           />
         ) : null}
 
-        {/* Queue toggle — pinned to the far right so it has one predictable,
-            targetable home (the marker IS the action). Committed → accent; idle →
-            faint, darkens on hover/focus. */}
-        {canEdit ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={committed ? "Remove from queue" : "Add to queue"}
-                aria-pressed={committed}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  api.toggleCommit(task.id);
-                }}
-                className={cn(
-                  "flex size-icon items-center justify-center rounded transition-colors duration-(--motion-fade) ease-(--ease-out)",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                  committed ? "text-primary" : "text-muted-foreground/40 hover:text-foreground",
-                )}
-              >
-                <ListChecks className="size-3.5" aria-hidden />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{committed ? "Remove from queue" : "Add to queue"}</TooltipContent>
-          </Tooltip>
-        ) : committed ? (
-          <span className="flex items-center text-primary" aria-label="Queued">
-            <ListChecks className="size-3.5" aria-hidden />
-          </span>
-        ) : null}
+        {/* Queue mark — pinned to the far right so it has one predictable,
+            targetable home (the marker IS the action): my queue toggle, or a
+            teammate's ringed avatar when it's in their queue (TV-D4). */}
+        <QueueToggle task={task} api={api} canEdit={canEdit} />
       </div>
     </div>
   );
@@ -379,9 +356,11 @@ export function TaskRow({
         <ContextMenuItem onSelect={() => api.toggleDone(task)}>
           {done ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => api.toggleCommit(task.id)}>
-          {committed ? "Remove from queue" : "Add to queue"}
-        </ContextMenuItem>
+        {!done && task.status !== "archived" ? (
+          <ContextMenuItem onSelect={() => api.toggleQueue(task.id)}>
+            {queued ? "Remove from queue" : "Add to queue"}
+          </ContextMenuItem>
+        ) : null}
         {task.recurrence && !done && task.status !== "archived" ? (
           <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
             Skip occurrence

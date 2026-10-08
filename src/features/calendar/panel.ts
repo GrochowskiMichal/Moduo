@@ -1,6 +1,6 @@
 // Pure selectors for the right panel's Tasks view (DESIGN_BRIEF §5, AC11):
-// Today (committed, commit order) · Due soon (overdue + next 7 days, open) ·
-// Backlog (open, unscheduled, uncommitted — capped + search). Scheduled rows
+// Queue (my personal queue, in order — TV-D4) · Due soon (overdue + next 7
+// days, open) · Backlog (open, unscheduled, not queued — capped + search). Scheduled rows
 // show their time and sort to the BOTTOM of their group rather than vanishing
 // (visibility beats purity — the row is how you find what's already placed).
 
@@ -8,7 +8,8 @@ import type { Task } from "../tasks/model";
 import { addDays, localDayKey } from "./lens";
 
 export type PanelGroups = {
-  today: Task[];
+  /** My queue's open tasks, in line-up order. */
+  queue: Task[];
   dueSoon: Task[];
   backlog: Task[];
   /** True when a non-empty query filtered everything out. */
@@ -42,8 +43,8 @@ function scheduledLast(list: Task[]): Task[] {
 export function groupPanelTasks(input: {
   /** Live tasks (position-sorted; deleted already filtered by the hook). */
   tasks: Task[];
-  /** Today's committed queue, already in commit order. */
-  committedTasks: Task[];
+  /** My queue, already in line-up order. */
+  queuedTasks: Task[];
   query?: string;
   now?: Date;
   backlogCap?: number;
@@ -54,15 +55,15 @@ export function groupPanelTasks(input: {
 
   const horizonKey = localDayKey(addDays(now, 7));
 
-  const today = input.committedTasks.filter((t) => isOpen(t) && (!query || matches(t, query)));
-  const inToday = new Set(today.map((t) => t.id));
-  // Committed-but-filtered-out rows must not resurface in other groups.
-  for (const t of input.committedTasks) inToday.add(t.id);
+  const queue = input.queuedTasks.filter((t) => isOpen(t) && (!query || matches(t, query)));
+  const inQueue = new Set(queue.map((t) => t.id));
+  // Queued-but-filtered-out rows must not resurface in other groups.
+  for (const t of input.queuedTasks) inQueue.add(t.id);
 
   const dueSoon: Task[] = [];
   const backlog: Task[] = [];
   for (const t of input.tasks) {
-    if (!isOpen(t) || inToday.has(t.id)) continue;
+    if (!isOpen(t) || inQueue.has(t.id)) continue;
     if (t.parentId) continue; // subtasks stay under their parent, not here
     if (query && !matches(t, query)) continue;
     const due = dueDayKey(t);
@@ -76,10 +77,10 @@ export function groupPanelTasks(input: {
   }
 
   const grouped = {
-    today: scheduledLast(today),
+    queue: scheduledLast(queue),
     dueSoon: scheduledLast(dueSoon),
     backlog: backlog.slice(0, cap),
   };
-  const total = grouped.today.length + grouped.dueSoon.length + grouped.backlog.length;
+  const total = grouped.queue.length + grouped.dueSoon.length + grouped.backlog.length;
   return { ...grouped, emptyBySearch: query !== "" && total === 0 };
 }

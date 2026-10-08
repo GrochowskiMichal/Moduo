@@ -26,20 +26,21 @@ function task(id: string, order: number): Task {
   return {
     ...makeTask({ workspaceId: WS, bucketId: "b1", title: `Task ${id}`, position: `a${order}` }),
     id,
-    committedFor: "2026-10-08",
-    commitOrder: order,
   };
 }
 
-function renderView(handlers: {
-  onMarkDone?: (id: string) => void;
-  onSkip?: (id: string) => void;
-}) {
+function renderView(
+  handlers: {
+    onMarkDone?: (id: string) => void;
+    onSkip?: (id: string) => void;
+  },
+  queued: Task[] = [task("t1", 1), task("t2", 2)],
+) {
   return render(
     <TooltipProvider>
       <ExecuteView
         workspaceId={WS}
-        committedTasks={[task("t1", 1), task("t2", 2)]}
+        queuedTasks={queued}
         bucketNameById={() => "Inbox"}
         parentTitleFor={() => null}
         blockedNoteFor={() => null}
@@ -92,6 +93,15 @@ describe("Focus view — Done / Skip move the session", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Skip$/ }));
     expect(onSkip).toHaveBeenCalledWith("t1");
     expect(getFocusSession().taskId).toBe("t2");
+  });
+
+  it("Skip on the only queued task keeps the session on it (it goes to the end: still Now)", () => {
+    const onSkip = rs.fn();
+    renderView({ onSkip }, [task("t1", 1)]);
+    act(() => startFocus());
+    fireEvent.click(screen.getByRole("button", { name: /^Skip$/ }));
+    expect(onSkip).toHaveBeenCalledWith("t1");
+    expect(getFocusSession()).toMatchObject({ taskId: "t1", running: true });
   });
 
   it("Done here takes the clock from another tab and moves the session", () => {

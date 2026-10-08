@@ -103,6 +103,7 @@ function fakeServer(
     tasks: {
       list,
       getTimeBlocks: rs.fn(() => Promise.resolve({})),
+      listQueue: rs.fn(() => Promise.resolve([])),
       upsertTask,
       updateTask,
       trackTime,

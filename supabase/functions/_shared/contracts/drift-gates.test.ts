@@ -10,6 +10,9 @@ import { TOOL_ARG_SCHEMAS } from "./mcp-tool-args.ts";
 import {
   CALENDAR_ACCOUNT_STATUSES,
   CONTENT_AUTHOR_KINDS,
+  EMAIL_KINDS,
+  EMAIL_OUTBOX_STATUSES,
+  EMAIL_STREAMS,
   CALENDAR_PROVIDERS,
   EMAIL_ACCOUNT_STATUSES,
   EMAIL_PROVIDERS,
@@ -58,6 +61,14 @@ describe("cross-runtime drift guards", () => {
     expect(latest).toContain(`source IN (${inList(WAITLIST_SOURCES)})`);
     expect(latest).toContain(`p_source NOT IN (${inList(WAITLIST_SOURCES)})`);
     expect(base).toContain(`status IN (${inList(WAITLIST_STATUSES)})`);
+  });
+
+  it("email_outbox CHECKs list the canonical email vocabularies", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261008160000_email_outbox.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`kind IN (${inList(EMAIL_KINDS)})`);
+    expect(sql).toContain(`stream IN (${inList(EMAIL_STREAMS)})`);
+    expect(sql).toContain(`status IN (${inList(EMAIL_OUTBOX_STATUSES)})`);
   });
 
   it("content author kinds match the chat_messages and comments CHECKs", () => {
