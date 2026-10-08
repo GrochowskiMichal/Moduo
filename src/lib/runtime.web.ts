@@ -90,6 +90,7 @@ import type {
   IntegrationStatusItem,
   LocalAuthState,
   ModuoRuntime,
+  OtpSendError,
   RuntimeCapabilities,
   RuntimeSession,
   SpineComment,
@@ -223,6 +224,17 @@ function toError(error: unknown): { message: string } {
   if (error && typeof error === "object" && "message" in error)
     return { message: String((error as any).message) };
   return { message: String(error) };
+}
+
+/** toError, keeping auth-js's `code` and `status` (AuthApiError) for the sign-in screen. */
+function toOtpSendError(error: unknown): OtpSendError {
+  const base: OtpSendError = toError(error);
+  if (error && typeof error === "object") {
+    const { code, status } = error as { code?: unknown; status?: unknown };
+    if (typeof code === "string" && code) base.code = code;
+    if (typeof status === "number") base.status = status;
+  }
+  return base;
 }
 
 function desktopOnly(): { message: string } {
@@ -511,10 +523,10 @@ export const webRuntime: ModuoRuntime = {
           // ("Signups not allowed for this instance"). Never create a user from here.
           options: { shouldCreateUser: false },
         });
-        if (error) return { data: {}, error: toError(error) };
+        if (error) return { data: {}, error: toOtpSendError(error) };
         return { data: {}, error: null };
       } catch (error) {
-        return { data: {}, error: toError(error) };
+        return { data: {}, error: toOtpSendError(error) };
       }
     },
 

@@ -14,6 +14,7 @@ export type {
   IntegrationStatusItem,
   LocalAuthState,
   ModuoRuntime,
+  OtpSendError,
   RuntimeCapabilities,
   RuntimeResult,
   RuntimeSession,
