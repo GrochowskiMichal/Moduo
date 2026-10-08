@@ -115,6 +115,12 @@
       "linter": {
         "rules": {}
       }
+    },
+    {
+      "includes": ["landing/**"],
+      "linter": {
+        "enabled": false
+      }
     }
   ]
 }
