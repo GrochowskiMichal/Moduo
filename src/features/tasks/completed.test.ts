@@ -8,6 +8,7 @@ import {
   type JustCompleted,
   partitionCompleted,
   trackJustCompleted,
+  trackOpened,
 } from "./completed";
 import type { TaskStatus } from "./model";
 
@@ -105,5 +106,27 @@ describe("trackJustCompleted (a checked-off task stays until the scope changes)"
     expect([...r.ids]).toEqual(["a"]);
     r = trackJustCompleted(r, "bucket-2", [t("a", "done")]);
     expect([...r.ids]).toEqual([]);
+  });
+});
+
+describe("trackOpened (a task opened here stays until the scope changes)", () => {
+  it("records the selected task and its parent, and keeps them as the selection moves", () => {
+    let r = trackOpened(null, "inbox", { id: "c", parentId: "p" });
+    expect([...r.ids].sort()).toEqual(["c", "p"]);
+    r = trackOpened(r, "inbox", { id: "a", parentId: null });
+    expect([...r.ids].sort()).toEqual(["a", "c", "p"]);
+    r = trackOpened(r, "inbox", null);
+    expect(r.ids.has("c")).toBe(true);
+  });
+
+  it("returns the same record when nothing new was opened", () => {
+    const r = trackOpened(null, "inbox", { id: "a", parentId: null });
+    expect(trackOpened(r, "inbox", { id: "a", parentId: null })).toBe(r);
+    expect(trackOpened(r, "inbox", null)).toBe(r);
+  });
+
+  it("starts over in a new scope", () => {
+    const r = trackOpened(null, "inbox", { id: "a", parentId: null });
+    expect([...trackOpened(r, "b2", null).ids]).toEqual([]);
   });
 });

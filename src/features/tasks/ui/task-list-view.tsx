@@ -75,8 +75,11 @@ type Props = {
   completed?: CompletedMode;
   /** Display → "Show on rows". */
   properties?: readonly string[];
-  /** Checked off while this scope has been showing: stays until it changes. */
-  justCompletedIds?: ReadonlySet<string>;
+  /**
+   * Tasks that stay listed whatever Display says, until the scope changes:
+   * checked off here, or opened here (selected, deep-linked).
+   */
+  stayingIds?: ReadonlySet<string>;
   /** Enable drag-to-reorder (the Queue): a flat, ungrouped, ordered list. */
   reorderable?: boolean;
   /** Persist a reorder — receives the task ids in their new order. */
@@ -126,7 +129,7 @@ export function TaskListView({
   displayControl,
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
-  justCompletedIds = NO_IDS,
+  stayingIds = NO_IDS,
   reorderable = false,
   onReorder,
   nestable = false,
@@ -191,12 +194,15 @@ export function TaskListView({
     const all = groupTasks(topLevelTasks, groupBy, { bucketName: bucketNameById });
     if (selection === "today") return all.map((g) => ({ ...g, hidden: [] as Task[] }));
     const now = new Date();
-    // Kept even when done: just checked off; the selected task (a deep link or
-    // the panel must never point at a row that isn't there); a parent with
-    // open subtasks (they nest under it).
+    // Kept even when done: staying (checked off or opened in this scope); the
+    // selected task and its parent (a deep link or the panel must never point
+    // at a row that isn't there, and a subtask nests under its parent); a
+    // parent with open subtasks (they nest under it).
+    const selectedParentId = selectedId ? (taskById.get(selectedId)?.parentId ?? null) : null;
     const keep = (t: Task) =>
-      justCompletedIds.has(t.id) ||
+      stayingIds.has(t.id) ||
       t.id === selectedId ||
+      t.id === selectedParentId ||
       (api.subtasksByParent.get(t.id) ?? []).some(isOpen);
     return all.map((g) => {
       const { shown, hidden } = partitionCompleted(g.tasks, { mode: completed, now, keep });
@@ -208,8 +214,9 @@ export function TaskListView({
     bucketNameById,
     selection,
     completed,
-    justCompletedIds,
+    stayingIds,
     selectedId,
+    taskById,
     revealedGroups,
     api.subtasksByParent,
   ]);

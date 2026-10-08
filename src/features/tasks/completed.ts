@@ -117,6 +117,42 @@ export function useJustCompleted(
   return next.ids;
 }
 
+// ── Opened here: a deep-linked or selected task stays until the scope changes ─
+
+export type OpenedHere = { scope: string; ids: ReadonlySet<string> };
+
+/**
+ * Advances the set of tasks opened while `scope` shows: the selected task and
+ * its parent (a subtask nests under it, so a hidden parent would hide it). A
+ * new scope starts empty. Returns `prev` when nothing changed. Keeping them
+ * means a deep link to finished work lands on a row, and moving the selection
+ * on doesn't pull that row out from under the cursor.
+ */
+export function trackOpened(
+  prev: OpenedHere | null,
+  scope: string,
+  selected: { id: string; parentId: string | null } | null,
+): OpenedHere {
+  const base = !prev || prev.scope !== scope ? { scope, ids: new Set<string>() } : prev;
+  if (!selected) return base;
+  const add = [selected.id, selected.parentId].filter(
+    (id): id is string => !!id && !base.ids.has(id),
+  );
+  if (add.length === 0) return base;
+  return { scope, ids: new Set([...base.ids, ...add]) };
+}
+
+/** `trackOpened` as state, derived during render (no frame without the row). */
+export function useOpenedHere(
+  scope: string,
+  selected: { id: string; parentId: string | null } | null,
+): ReadonlySet<string> {
+  const [record, setRecord] = useState<OpenedHere>(() => trackOpened(null, scope, selected));
+  const next = trackOpened(record, scope, selected);
+  if (next !== record) setRecord(next);
+  return next.ids;
+}
+
 /** The quiet line under a list or group: "5 completed". */
 export function completedLabel(count: number): string {
   return `${count} completed`;

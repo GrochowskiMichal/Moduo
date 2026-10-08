@@ -60,8 +60,11 @@ type Props = {
   completed?: CompletedMode;
   /** Display → "Show on rows" — cards follow it too. */
   properties?: readonly string[];
-  /** Checked off while this scope has been showing: stays until it changes. */
-  justCompletedIds?: ReadonlySet<string>;
+  /**
+   * Tasks that stay listed whatever Display says, until the scope changes:
+   * checked off here, or opened here (selected, deep-linked).
+   */
+  stayingIds?: ReadonlySet<string>;
   /** "external" = an ancestor owns the DndContext (DF-22: so a card can be
    * dragged onto the right-pane hub to link it); board move/reorder binds via a
    * monitor. Default "internal" (own DndContext) keeps standalone mounts working. */
@@ -109,7 +112,7 @@ export function TaskBoardView({
   displayControl,
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
-  justCompletedIds = NO_IDS,
+  stayingIds = NO_IDS,
   dndMode = "internal",
   api,
 }: Props) {
@@ -143,12 +146,17 @@ export function TaskBoardView({
 
   const columns = useMemo<Column[]>(() => {
     const now = new Date();
-    // Kept even when done: just checked off; the selected card (a deep link
-    // or the panel must never point at a card that isn't there); a parent
-    // with open subtasks (they live on its card's n/m).
+    // Kept even when done: staying (checked off or opened in this scope); the
+    // selected card and its parent (a deep link or the panel must never point
+    // at a card that isn't there); a parent with open subtasks (they live on
+    // its card's n/m).
+    const selectedParentId = selectedTaskId
+      ? (api.tasks.find((t) => t.id === selectedTaskId)?.parentId ?? null)
+      : null;
     const keep = (t: Task) =>
-      justCompletedIds.has(t.id) ||
+      stayingIds.has(t.id) ||
       t.id === selectedTaskId ||
+      t.id === selectedParentId ||
       (api.subtasksByParent.get(t.id) ?? []).some(isOpen);
     const column = (id: string, label: string, dim: BoardGroupBy, value: string, all: Task[]) => {
       const { shown, hidden } = partitionCompleted(all, { mode: completed, now, keep });
@@ -182,9 +190,10 @@ export function TaskBoardView({
     inbox,
     bucketNameById,
     completed,
-    justCompletedIds,
+    stayingIds,
     selectedTaskId,
     revealed,
+    api.tasks,
     api.subtasksByParent,
   ]);
 

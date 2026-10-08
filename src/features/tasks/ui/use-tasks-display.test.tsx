@@ -55,11 +55,29 @@ describe("useTasksDisplay", () => {
     );
     const done = [task("a", { status: "done" })];
     rerender({ tasks: done, scope: "b1" });
-    expect([...result.current.viewProps.justCompletedIds]).toEqual(["a"]);
+    expect([...result.current.viewProps.stayingIds]).toEqual(["a"]);
     expect(result.current.isHidden(done[0])).toBe(false);
 
     rerender({ tasks: done, scope: "b2" });
     expect(result.current.isHidden(done[0])).toBe(true);
+  });
+
+  it("a done task opened here (deep link, selection) stays after the selection moves on", () => {
+    const tasks = [
+      task("a"),
+      task("p", { status: "done" }),
+      task("c", { status: "done", parentId: "p" }),
+    ];
+    const { result, rerender } = renderHook(
+      ({ selected, scope }) => useTasksDisplay("w1", scope, tasks, selected),
+      { initialProps: { selected: "c" as string | null, scope: "b1" } },
+    );
+    expect(result.current.isHidden(tasks[2])).toBe(false);
+    expect(result.current.isHidden(tasks[1])).toBe(false); // its parent too
+    rerender({ selected: "a", scope: "b1" });
+    expect([...result.current.viewProps.stayingIds].sort()).toEqual(["a", "c", "p"]);
+    rerender({ selected: null, scope: "b2" });
+    expect(result.current.isHidden(tasks[2])).toBe(true);
   });
 
   it("the Queue never hides a task", () => {

@@ -169,8 +169,10 @@ describe("rowDate (U1-1: one date column)", () => {
     expect(sameDay?.kind).toBe("scheduled");
   });
 
-  it("describes both dates for the tooltip", () => {
-    const date = rowDate(task("a", { scheduledAt: at(10, 10), dueDate: at(14) }), now);
-    expect(date?.description).toMatch(/^Scheduled .+ · Due .+$/);
+  it("describes both dates, the shown one first (the cell's name matches its editor)", () => {
+    const scheduledShown = rowDate(task("a", { scheduledAt: at(10, 10), dueDate: at(14) }), now);
+    expect(scheduledShown?.description).toMatch(/^Scheduled .+ · Due .+$/);
+    const dueShown = rowDate(task("a", { scheduledAt: at(14, 10), dueDate: at(12) }), now);
+    expect(dueShown?.description).toMatch(/^Due .+ · Scheduled .+$/);
   });
 });

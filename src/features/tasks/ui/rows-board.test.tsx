@@ -245,7 +245,7 @@ describe("Done and completed (U1-3)", () => {
   });
 
   it("a task just checked off stays listed, struck through", () => {
-    renderList(tasks(), { justCompletedIds: new Set(["old-done"]) });
+    renderList(tasks(), { stayingIds: new Set(["old-done"]) });
     expect(screen.getAllByRole("row")).toHaveLength(2);
     const row = rowOf("Task old-done");
     expect(screen.getByRole("button", { name: "Task old-done" }).className).toContain(
@@ -264,6 +264,20 @@ describe("Done and completed (U1-3)", () => {
     expect(rowOf("Task b")).toBeTruthy();
     expect(onSelectTask).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /completed/ })).toBeNull();
+  });
+
+  it("a deep link to a done subtask of a done parent lands: the parent stays and expands", () => {
+    const onSelectTask = rs.fn();
+    const parent = task("p", { status: "done" });
+    const child = task("c", { status: "done", parentId: "p" });
+    renderList(
+      [task("a"), parent, child],
+      { selectedTaskId: "c", onSelectTask, revealRequest: { id: "c", seq: 1 } },
+      { tasks: [task("a"), parent, child], subtasksByParent: new Map([["p", [child]]]) },
+    );
+    expect(rowOf("Task p")).toBeTruthy();
+    expect(rowOf("Task c")).toBeTruthy();
+    expect(onSelectTask).not.toHaveBeenCalled();
   });
 
   it("a done row dims as a whole except its checkbox", () => {

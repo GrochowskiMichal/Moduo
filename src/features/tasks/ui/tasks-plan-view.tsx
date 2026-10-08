@@ -469,9 +469,9 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
 
   // Display (tasks-v2 §7): Completed + "Show on rows", remembered per
-  // workspace and scope on this device; a task checked off here stays listed
-  // until the scope changes (TV-U1). TV-U2 adds the rest.
-  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks);
+  // workspace and scope on this device; a task checked off or opened here
+  // stays listed until the scope changes (TV-U1). TV-U2 adds the rest.
+  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks, selectedTaskId);
   const isHiddenByDisplay = tasksDisplay.isHidden;
 
   // Resolve the selected task live from the bundle so the rail follows edits and

@@ -76,7 +76,7 @@ export type RowDate = {
   label: string;
   /** Scheduled time has passed on an open task: quiet emphasis, never red. */
   drifted: boolean;
-  /** Both dates in full, for the tooltip and screen readers. */
+  /** Both dates in full, the shown one first: the tooltip and the cell's name. */
   description: string;
 };
 
@@ -126,11 +126,12 @@ export function rowDate(
   const scheduled = validDate(task.scheduledAt);
   const due = validDate(task.dueDate);
   if (!scheduled && !due) return null;
+  const useDue = due && (!scheduled || startOfDay(due) < startOfDay(scheduled));
+  // The date shown comes first, so the cell's name matches the editor it opens.
   const parts: string[] = [];
   if (scheduled) parts.push(`Scheduled ${formatTimestamp(task.scheduledAt)}`);
-  if (due) parts.push(`Due ${DAY_YEAR_FMT.format(due)}`);
+  if (due) parts[useDue ? "unshift" : "push"](`Due ${DAY_YEAR_FMT.format(due)}`);
   const description = parts.join(" · ");
-  const useDue = due && (!scheduled || startOfDay(due) < startOfDay(scheduled));
   if (useDue && task.dueDate) {
     return { kind: "due", label: formatShortDate(task.dueDate, now), drifted: false, description };
   }
