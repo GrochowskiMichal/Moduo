@@ -1,6 +1,6 @@
 # Manual test checklist — client-callable SECURITY DEFINER helpers + "Delete forever" (SEC-1)
 
-> Generated 2026-10-08 · branch `t/maciej/definer-helper-grants` · **Live-verified:** on the database, not in the app UI. All five migrations are applied to production (designer's OK for each). Before each apply, a rehearsal ran the migration's exact SQL on production inside a transaction that always rolls back. It called the real RPCs as the disposable test account (owner of "Claude Test S2"), as a random signed-in outsider, and as anon. After each apply the same checks ran against the committed state, again rolled back. No probe rows were left behind; that was checked each time. The app itself was not driven: signing in as the test account would send its password to the hosted auth server, which agents don't do. Sections 1–3 are for you.
+> Generated 2026-10-08 · branch `t/maciej/definer-helper-grants` · **Live-verified:** on the database, not in the app UI. All six migrations are applied to production (designer's OK for each). Before each apply, a rehearsal ran the migration's exact SQL on production inside a transaction that always rolls back. It called the real RPCs as the disposable test account (owner of "Claude Test S2"), as a random signed-in outsider, and as anon. After each apply the same checks ran against the committed state, again rolled back. No probe rows were left behind; that was checked each time. The app itself was not driven: signing in as the test account would send its password to the hosted auth server, which agents don't do. Sections 1–3 are for you.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## 1. Notes: the trash and "Delete forever"
@@ -22,6 +22,12 @@ Before 2026-10-08, "Delete forever" failed with "You don't have access to this n
 - [ ] **Do:** invite someone, or accept an invite into a workspace → **Expect:** the join completes and "share existing" behaves as before (`share_member_count`). _(web)_
 - [ ] **Do:** in a Duo/Team workspace, post a chat message, create a public and a private channel, delete someone else's message as an admin, and @channel → **Expect:** each is allowed or refused exactly as your role says. These checks run `chat_has_cap`, which clients can no longer call directly. _(web)_
 - [ ] **Do:** open an item's activity and comments, and its links → **Expect:** they load as before (the policies behind them use `perm_can_see_entity`). _(both)_
+
+## 2b. Collective booking links (needs a Duo/Team workspace and a second member)
+- [ ] **Do:** make a collective booking link with the other member as co-host → **Expect:** the link shows as paused until they answer. _(web)_
+- [ ] **Do:** as the co-host, accept the request → **Expect:** the link un-pauses and is bookable. _(web)_
+- [ ] **Do:** as the owner, pause the link with the Paused switch; then, as the co-host, click accept again if the request still shows → **Expect:** the link stays paused. Before 2026-10-08 any signed-in user could un-pause it this way. _(web)_
+- [ ] **Do:** as the co-host, decline a new request on another collective link → **Expect:** that link stays paused. _(web)_
 
 ## 3. Direct calls are refused (optional, terminal)
 Uses the public key from `.env.local` (`PUBLIC_SUPABASE_PUBLISHABLE_KEY`). The ids are zeros, so nothing could change even if a call got through.
@@ -45,7 +51,7 @@ Uses the public key from `.env.local` (`PUBLIC_SUPABASE_PUBLISHABLE_KEY`). The i
   ```
   → **Expect:** anon `false` everywhere; authenticated `true` only for `perm_can_see_entity` (three RLS policies need it); service_role `true` everywhere. **2026-10-08 result:** exactly that.
 - [x] **Do:** `bun run db:reconcile`, paste query 4 into `execute_sql` → **Expect:** no rows. **2026-10-08 result:** no rows. Before the fixes it would have listed seven functions (the three notes helpers, and the four sharing helpers anon could run).
-- [x] **Do:** `list_migrations` → **Expect:** `revoke_notes_internal_helpers` (20261007223443), `notes_purge_leaves_first` (20261007231900), `revoke_sharing_helper_grants` (20261008002050), `revoke_chat_has_cap_authenticated` (20261008010323), `notes_purge_history_first` (20261008013906). Each file matches what prod recorded (md5 of `schema_migrations.statements`).
+- [x] **Do:** `list_migrations` → **Expect:** `revoke_notes_internal_helpers` (20261007223443), `notes_purge_leaves_first` (20261007231900), `revoke_sharing_helper_grants` (20261008002050), `revoke_chat_has_cap_authenticated` (20261008010323), `notes_purge_history_first` (20261008013906), `booking_host_respond_guard` (20261008015554). Each file matches what prod recorded (md5 of `schema_migrations.statements`).
 - [x] **Do:** compare the repo's newest bodies with prod (query 2 of `db:reconcile`) → **Expect:** no drift for `notes__purge_ids`, `notes__subtree_ids`, `notes_op__guard_note`, `share_grant_workspace`, `chat_has_cap`. **2026-10-08 result:** all match.
 
 ## Known gaps / not-yet-testable
@@ -54,7 +60,7 @@ Uses the public key from `.env.local` (`PUBLIC_SUPABASE_PUBLISHABLE_KEY`). The i
 - The sharing insert path only runs in workspaces with 2+ members, and the test workspace has one. The rehearsal ran the trigger that calls `share_grant_workspace`, which works for a definer caller whatever the member count. But the first real 2+ member insert after the change is §2's.
 - The "restored mid-purge" race can't be staged in a single transaction. The fix is the `deleted_at IS NOT NULL` re-check on every delete, plus tombstones only for what was actually deleted.
 - `notes__purge_ids` was callable by any signed-in user from 2026-07-04 to 2026-10-06 and leaves no activity row. API logs only go back 7 days, so use in July–September can't be ruled out (it needed the workspace id and the trashed note ids).
-- Found and **not** fixed (see `specs/BUILD_LOG.md` SEC-1): OPS-2 group 3; `can_access` losing the workspace when an ancestor row is gone; `booking_host_respond` un-pausing a fully-accepted collective link by id; and, worth checking, whether the 30-day sweep fails for a member who lacks full access to someone else's expired private note.
+- Found and **not** fixed (see `specs/BUILD_LOG.md` SEC-1): OPS-2 group 3; `can_access` losing the workspace when an ancestor row is gone; and, worth checking, whether the 30-day sweep fails for a member who lacks full access to someone else's expired private note.
 
 ---
 *Convention defined in [AGENTS.md](../../AGENTS.md) → "Wrap (`/s3`)". One file per sprint/branch so history is preserved.*
