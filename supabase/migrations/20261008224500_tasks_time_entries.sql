@@ -12,8 +12,9 @@
 --     makes the app resend it) carries the same key and is recorded once.
 --   * A task's total is everything except waiting time. tasks.time_spent_seconds
 --     keeps that total, so every surface and old app versions read the same
---     number. The op writes only that column: never the rest of the row, never
---     updated_at, so it can't put back anyone's edit.
+--     number. The op writes only that column (and updated_at, so live updates
+--     carry the new total): never the rest of the row, so it can't put back
+--     anyone's edit.
 --   * Totals: everyone who can see a task sees its total; tasks_time_totals adds
 --     the caller's own share. Raw entries are readable by their author only.
 --   * Old app versions keep writing time_spent_seconds. A trigger turns each
@@ -131,7 +132,8 @@ AS $$
   WHERE e.task_id = p_task_id AND e.user_id = p_user AND e.kind IN ('focus', 'adjustment')
 $$;
 
--- Write the total to tasks.time_spent_seconds, and nothing else on the row.
+-- Write the total to tasks.time_spent_seconds and bump updated_at (live
+-- updates apply a row only when it is newer, TV-D5), nothing else on the row.
 -- The setting tells the shim (§6) this isn't an old app's write.
 CREATE OR REPLACE FUNCTION public.tasks_time__store_total(p_task_id uuid)
 RETURNS integer
@@ -142,7 +144,7 @@ DECLARE
   v_total integer := public.tasks_time__total(p_task_id);
 BEGIN
   PERFORM set_config('tasks.time_op', 'op', true);
-  UPDATE public.tasks SET time_spent_seconds = v_total
+  UPDATE public.tasks SET time_spent_seconds = v_total, updated_at = now()
   WHERE id = p_task_id AND time_spent_seconds IS DISTINCT FROM v_total;
   PERFORM set_config('tasks.time_op', '', true);
   RETURN v_total;

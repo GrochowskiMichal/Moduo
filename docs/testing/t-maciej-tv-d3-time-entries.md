@@ -7,7 +7,7 @@ No screen looks different in this block: totals read the same, and "you 50m" / "
 
 ## Focus (Tasks → Queue → Focus)
 - [ ] **Do:** Start Focus on a task for 2 minutes, then pause → **Expect:** the task's time goes up by 2m; in Supabase, `select kind, seconds, started_at, ended_at, client_key from task_time_entries where task_id = '<id>' order by created_at` shows `focus` rows that add up to it, with your user id _(web + desktop)_
-- [ ] **Do:** While Focus runs, rename the task in the detail panel, and from a second account change its priority → **Expect:** after the next save (each minute, or pause), the new title and priority stay; the task's `updated_at` doesn't move when only time is saved _(web)_
+- [ ] **Do:** While Focus runs, rename the task in the detail panel, and from a second account change its priority → **Expect:** after the next save (each minute, or pause), the new title and priority stay; only the time (and `updated_at`) changed _(web)_
 - [ ] **Do:** Start Focus, run 1 minute, turn the network off (devtools → Offline), pause → **Expect:** "not saved yet"; turn the network on → it saves; the task has exactly one new `focus` entry for that minute (not two) _(web)_
 - [ ] **Do:** Start Focus, run 1 minute, pause and reload the page at once (before the save answers) → **Expect:** after reload (within ~2 minutes) the minute is saved once: one entry, the same `client_key` sent twice at most _(web)_
 - [ ] **Do:** Track time on the same task from two devices (or two accounts) at once for a few minutes → **Expect:** the task's total is the sum of both; neither device's save overwrites the other's _(web + desktop)_

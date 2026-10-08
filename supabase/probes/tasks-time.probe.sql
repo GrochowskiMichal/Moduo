@@ -126,9 +126,11 @@ BEGIN
           FROM public.task_time_entries WHERE client_key = 'ada-laptop-0001'), 'focus: the stretch''s end';
   ASSERT (SELECT user_id FROM public.task_time_entries WHERE client_key = 'bea-laptop-0001') = probe.id('B'),
     'focus: whose stretch';
-  -- Only the time changed: not the title Bea wrote, not updated_at.
-  ASSERT (SELECT t.title = before_row.title AND t.updated_at = before_row.updated_at
-                 AND t.status = before_row.status AND t.assignee_id IS NOT DISTINCT FROM before_row.assignee_id
+  -- Only the time changed (and updated_at, for live updates): not the title
+  -- Bea wrote, nor anything else.
+  ASSERT (SELECT (to_jsonb(t) - 'time_spent_seconds' - 'updated_at')
+                 = (to_jsonb(before_row) - 'time_spent_seconds' - 'updated_at')
+                 AND t.title = 'T2 renamed by Bea' AND t.updated_at >= before_row.updated_at
           FROM public.tasks t WHERE t.id = probe.id('T2 no time yet')), 'focus: the op touched more than the time';
   ASSERT (SELECT count(*) FROM public.module_activity WHERE entity_id = probe.id('T2 no time yet')
             AND op NOT LIKE 'tasks.queue%') = 0, 'focus: time wrote to the trail';
