@@ -845,7 +845,12 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     { id: "details", label: "Details", render: () => details },
   ];
   const right = (
-    <RightPanelSwitcher variants={panelVariants} activeId={panelView} onChange={setPanelView} />
+    <RightPanelSwitcher
+      variants={panelVariants}
+      activeId={panelView}
+      onChange={setPanelView}
+      hideWhenSingle
+    />
   );
 
   return (

@@ -159,6 +159,7 @@ export function CommentComposer({
   // The `@` whose list was dismissed with Esc stays closed until the query changes.
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   const postingRef = useRef(false);
   const pendingCaret = useRef<number | null>(null);
   const listId = useId();
@@ -245,6 +246,7 @@ export function CommentComposer({
     <Popover open={listOpen}>
       <PopoverAnchor asChild>
         <div
+          ref={boxRef}
           className={cn(
             "rounded-lg border border-hairline bg-transparent transition-[border-color] duration-(--motion-fade) ease-(--ease-out)",
             "focus-within:border-border",
@@ -327,7 +329,11 @@ export function CommentComposer({
           e.preventDefault();
           setDismissedAt(at?.start ?? null);
         }}
-        onPointerDownOutside={() => setDismissedAt(at?.start ?? null)}
+        onPointerDownOutside={(e) => {
+          // Moving the caret in the box itself isn't leaving the list.
+          if (boxRef.current?.contains(e.target as Node)) return;
+          setDismissedAt(at?.start ?? null);
+        }}
       >
         <div role="listbox" id={listId} aria-label="People">
           {matches.map((p, i) => (

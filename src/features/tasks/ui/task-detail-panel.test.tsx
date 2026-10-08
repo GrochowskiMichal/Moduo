@@ -271,6 +271,7 @@ describe("the queue toggle lives in the header (U3-3)", () => {
     const queue = screen.getAllByRole("button", { name: /queue/i });
     expect(queue).toHaveLength(1);
     expect(queue[0].textContent).toBe("Queue");
+    expect(queue[0].getAttribute("aria-pressed")).toBe("false");
     expect(screen.queryByText("Commit to Queue")).toBeNull();
     expect(screen.queryByText("Add to queue")).toBeNull();
     const header = queue[0].parentElement as HTMLElement;
@@ -285,7 +286,8 @@ describe("the queue toggle lives in the header (U3-3)", () => {
 
   it("reads 'In queue' once queued, and offers nothing for a done task", () => {
     renderPanel(task(), api(task(), { queuedTaskIds: new Set(["t1"]) }));
-    expect(screen.getByRole("button", { name: "Remove from queue" }).textContent).toBe("In queue");
+    const toggle = screen.getByRole("button", { name: "In queue" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
     cleanup();
     const done = task({ status: "done" });
     renderPanel(done, api(done));
@@ -368,5 +370,53 @@ describe("comments on a task (U3-2)", () => {
     });
     await waitFor(() => expect(addComment).toHaveBeenCalledTimes(1));
     expect(addComment.mock.calls[0][0]).toMatchObject({ body: "never mind", mentionedUserIds: [] });
+  });
+});
+
+describe("validator round", () => {
+  it("never writes back the tracked total the Time editor opened with", async () => {
+    const before = task({ timeSpentSeconds: 4800, durationMinutes: 240 });
+    const a = api(before);
+    const view = renderPanel(before, a);
+    fireEvent.click(screen.getByRole("button", { name: /^Time: 1h 20m/ }));
+    const estimate = (await screen.findByLabelText("Estimate")) as HTMLInputElement;
+    // Focus saves a minute while the editor is open.
+    const after = { ...before, timeSpentSeconds: 4860 };
+    view.rerender(
+      <TooltipProvider>
+        <TaskDetailPanel
+          task={after}
+          buckets={[APP]}
+          inbox={INBOX}
+          canEdit
+          onRequestCapture={() => {}}
+          onSelectTask={() => {}}
+          api={{ ...a, tasks: [after] } as TasksModuleApi}
+          runtime={null}
+          workspaceId={null}
+        />
+      </TooltipProvider>,
+    );
+    fireEvent.change(estimate, { target: { value: "5h" } });
+    fireEvent.keyDown(estimate, { key: "Enter" });
+    expect(a.patchTask).toHaveBeenCalledWith("t1", { durationMinutes: 300 });
+    expect(a.setTimeSpent).not.toHaveBeenCalled();
+  });
+
+  it("reads a task's comments once when it opens", async () => {
+    const { runtime, spine } = fakeRuntime();
+    renderPanel(task(), api(task(), { activityStamp: 3 }), runtime);
+    await waitFor(() => expect(spine.listComments).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(spine.listComments).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't read the workspace's time totals for a task with no time", async () => {
+    const { runtime } = fakeRuntime({ mySeconds: 0 });
+    renderPanel(task(), api(task()), runtime);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(
+      (runtime.tasks.listTimeTotals as unknown as { mock: { calls: unknown[] } }).mock.calls,
+    ).toHaveLength(0);
   });
 });

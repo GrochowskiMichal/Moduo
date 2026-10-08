@@ -9,9 +9,11 @@ import { expect, test } from "@playwright/test";
  * Baselines are a deliberate human capture (docs/gotchas/ui.md):
  *   bun run storybook
  *   bunx playwright test --project=visual tests/visual/tasks-detail.spec.ts --update-snapshots
- * Times in the feed are relative to now, so captures at different hours read
- * the same.
+ * The stories use a fixed "now" and the page clock is frozen at it, so the
+ * feed's times and the metadata line read the same at every capture.
  */
+
+const NOW = new Date("2026-10-09T15:00:00");
 
 const STORIES = [
   { name: "tasks-detail-populated", id: "tasks-taskdetailpanel--populated" },
@@ -23,6 +25,7 @@ const STORIES = [
 test.describe("tasks detail panel — visual snapshots", () => {
   for (const story of STORIES) {
     test(story.name, async ({ page }) => {
+      await page.clock.setFixedTime(NOW);
       await page.goto(`/iframe.html?id=${story.id}&viewMode=story`);
       const root = page.locator("#storybook-root, #root").first();
       await root.waitFor({ state: "visible", timeout: 15_000 });

@@ -61,8 +61,12 @@ export function TaskDetailHeader({
   const open = task.status !== "done" && task.status !== "archived";
 
   const copyLink = () => {
+    if (!navigator.clipboard) {
+      toast("Couldn't copy the link.");
+      return;
+    }
     void navigator.clipboard
-      ?.writeText(taskUrl(task.id))
+      .writeText(taskUrl(task.id))
       .then(() => toast("Link copied"))
       .catch(() => toast("Couldn't copy the link."));
   };
@@ -223,8 +227,9 @@ function QueueButton({
             type="button"
             variant={queued ? "secondary" : "ghost"}
             size="sm"
+            // Named by its visible text ("Queue" / "In queue") with the pressed
+            // state; the action and any claim are in the tooltip and the avatar.
             aria-pressed={queued}
-            aria-label={note ? `${action}. ${note}` : action}
             onClick={() => api.toggleQueue(task.id)}
             className="shrink-0 px-2"
           >

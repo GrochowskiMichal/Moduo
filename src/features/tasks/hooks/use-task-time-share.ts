@@ -38,11 +38,16 @@ export function useTaskTimeShare(
       setMine(null);
       return;
     }
+    // No time on the task, no share to read (and the row says nothing about it).
+    if (totalSeconds <= 0) {
+      setMine(0);
+      return;
+    }
     const key = snapshotKey(userId, workspaceId);
     const hit = snapshots.get(key);
     const row = hit?.rows.get(taskId);
     const fresh = hit && Date.now() - hit.at < FRESH_MS;
-    if (fresh && (row ? row.totalSeconds === totalSeconds : totalSeconds === 0)) {
+    if (fresh && row && row.totalSeconds === totalSeconds) {
       setMine(row?.mySeconds ?? 0);
       return;
     }

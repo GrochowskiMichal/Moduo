@@ -21,16 +21,23 @@ type Props = {
   variants: RightPanelVariant[];
   activeId: string;
   onChange: (id: string) => void;
+  /**
+   * With one variant, show only its body (no one-option control). A module
+   * that lists its views here from the start gets the switcher back as soon as
+   * it adds a second one.
+   */
+  hideWhenSingle?: boolean;
 };
 
-/**
- * The panel-header control + the active variant's body. With one variant there
- * is nothing to switch, so only its body renders (a module lists its variants
- * here from the start, so adding a second one brings the switcher back).
- */
-export function RightPanelSwitcher({ variants, activeId, onChange }: Props) {
+/** The panel-header control + the active variant's body. */
+export function RightPanelSwitcher({
+  variants,
+  activeId,
+  onChange,
+  hideWhenSingle = false,
+}: Props) {
   const active = variants.find((v) => v.id === activeId) ?? variants[0];
-  if (variants.length <= 1) {
+  if (hideWhenSingle && variants.length <= 1) {
     return <div className="flex h-full min-h-0 flex-col">{active?.render()}</div>;
   }
   return (

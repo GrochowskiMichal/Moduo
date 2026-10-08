@@ -535,8 +535,15 @@ function TimeEditor({
   api: TasksModuleApi;
   onDone: () => void;
 }) {
-  const initialEstimate = task.durationMinutes != null ? formatMinutes(task.durationMinutes) : "";
-  const initialTracked = formatTracked(task.timeSpentSeconds);
+  // What the fields opened with, fixed for the editor's life: Focus can save
+  // while it's open, and an untouched field must never write back the total
+  // it showed (that would take away the time saved meanwhile).
+  const [opened] = useState(() => ({
+    estimate: task.durationMinutes != null ? formatMinutes(task.durationMinutes) : "",
+    tracked: formatTracked(task.timeSpentSeconds),
+  }));
+  const initialEstimate = opened.estimate;
+  const initialTracked = opened.tracked;
   const [estimate, setEstimate] = useState(initialEstimate);
   const [tracked, setTracked] = useState(initialTracked);
 

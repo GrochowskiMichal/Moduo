@@ -378,9 +378,9 @@ function CollectionHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex h-(--ctrl-h-sm) items-center gap-1.5 font-sans text-sm font-medium text-foreground">
+    <div className="flex h-(--ctrl-h-sm) items-center gap-1.5 font-display text-sm font-medium text-foreground">
       <span>{label}</span>
-      <span className="font-normal text-muted-foreground tabular-nums">{count}</span>
+      <span className="font-sans font-normal text-muted-foreground tabular-nums">{count}</span>
       {action ? <span className="ml-auto flex items-center">{action}</span> : null}
     </div>
   );
@@ -509,7 +509,7 @@ function SubtaskRow({
               <ListChecks className="size-icon-sm" aria-hidden />
             </button>
           </TooltipTrigger>
-          <TooltipContent>{queued ? "Queued — click to remove" : "Add to queue"}</TooltipContent>
+          <TooltipContent>{queued ? "Queued. Click to remove" : "Add to queue"}</TooltipContent>
         </Tooltip>
       ) : null}
     </div>

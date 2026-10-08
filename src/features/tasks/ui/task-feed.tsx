@@ -5,7 +5,7 @@
 // people @mentioned plus the task's participants: its assignee, its creator and
 // earlier commenters (TV-D1). Text and @mentions only; no attachments yet.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { commentAuthorName } from "../../spine/comments";
@@ -64,10 +64,14 @@ export function TaskFeed({ task, api, runtime, workspaceId }: Props) {
     };
   }, [task.id, activityStamp, loadActivity]);
 
-  // Something changed on the task: pick up comments written meanwhile too.
+  // Something changed on the task: pick up comments written meanwhile too. Not
+  // on mount: the thread reads itself then.
+  const seenStamp = useRef(activityStamp);
   // biome-ignore lint/correctness/useExhaustiveDependencies: activityStamp is the trigger
   useEffect(() => {
-    if (activityStamp > 0) reloadThread();
+    if (activityStamp === seenStamp.current) return;
+    seenStamp.current = activityStamp;
+    reloadThread();
   }, [activityStamp]);
 
   const feed = useMemo(
