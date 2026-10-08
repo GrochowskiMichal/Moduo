@@ -16,7 +16,7 @@ export function AuthPage() {
     ignoredLink === "session"
       ? "Links don't sign you in here. Enter your email to get a 6-digit code."
       : ignoredLink === "error"
-        ? "That link has expired or was already used. Enter your email to get a code. New here? Ask for a fresh invite."
+        ? "That link has expired or was already used. Enter your email to get a 6-digit code."
         : null;
 
   useEffect(() => {

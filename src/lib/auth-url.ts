@@ -58,3 +58,8 @@ export function scrubAuthCallbackFromUrl(): IgnoredAuthLink | null {
 export function ignoredAuthLink(): IgnoredAuthLink | null {
   return ignoredLink;
 }
+
+/** Forget the dropped link once someone signs in, so a later sign-out doesn't repeat the notice. */
+export function clearIgnoredAuthLink(): void {
+  ignoredLink = null;
+}

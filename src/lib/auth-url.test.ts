@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
+
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { createClient } from "@supabase/supabase-js";
 
 import {
   authCallbackKind,
+  clearIgnoredAuthLink,
   ignoredAuthLink,
   SUPABASE_AUTH_OPTIONS,
   scrubAuthCallbackFromUrl,
@@ -109,6 +112,14 @@ describe("scrubAuthCallbackFromUrl", () => {
     expect(window.location.hash).toBe("");
     expect(window.location.href).not.toContain("access_token");
     expect(ignoredAuthLink()).toBe("session");
+    clearIgnoredAuthLink(); // what a SIGNED_IN does (runtime.web.ts)
+    expect(ignoredAuthLink()).toBeNull();
+  });
+
+  it("runs before the router: auth-url-boot is main.tsx's first import", () => {
+    const main = readFileSync(new URL("../main.tsx", import.meta.url), "utf8");
+    const firstImport = main.split("\n").find((line) => line.startsWith("import "));
+    expect(firstImport).toBe('import "./lib/auth-url-boot";');
   });
 
   it("does nothing to other URLs", () => {

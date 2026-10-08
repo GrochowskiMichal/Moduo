@@ -125,10 +125,11 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
     const { error: otpErr } = await runtime.auth.sendOtp({ email });
     setBusy(false);
     if (otpErr) {
-      // Sign-ups are closed on the project: only existing or invited people get a code.
+      // Sign-ups are closed on the project, so only confirmed people get a code. A
+      // dashboard invitee is confirmed by clicking their invite link once (auth-url.ts).
       setError(
         /signups? not allowed/i.test(otpErr.message)
-          ? "Moduo is invite-only right now. Ask the person who invited you to use the email they invited."
+          ? "Moduo is invite-only right now. If you were invited, click the link in your invite email first, then ask for a code here. If that link has expired, ask for a new invite."
           : otpErr.message,
       );
       return;

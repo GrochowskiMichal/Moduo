@@ -70,7 +70,7 @@ import {
   type TaskRelation,
 } from "../features/tasks/model";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
-import { SUPABASE_AUTH_OPTIONS } from "./auth-url";
+import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
 import {
@@ -166,6 +166,7 @@ async function getAuthedUser() {
 // it through INITIAL_SESSION and TOKEN_REFRESHED (same user), so those never
 // re-trigger the storm — only a real sign-in/out / user-update clears it.
 supabaseClient.auth.onAuthStateChange((event) => {
+  if (event === "SIGNED_IN") clearIgnoredAuthLink();
   if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
     bootReads.clear();
   }
