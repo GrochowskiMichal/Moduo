@@ -22,14 +22,10 @@ import type { EntityRef } from "../../../lib/entity-links";
 import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
+import { flushFocusSession, registerFocusFlushSink } from "../../focus/engine";
+import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { timeBlockByBucket as invertTimeBlocks, resolveDefaultSelection } from "../default-view";
-import {
-  consumeFocusViewRequest,
-  FOCUS_VIEW_REQUEST_EVENT,
-  flushFocusSession,
-  registerFocusFlushSink,
-} from "../focus-session-store";
 import { type GroupBy, taskMatchesTagFilter } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
@@ -164,18 +160,22 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     return filterTagIds.filter((id) => live.has(id));
   }, [filterTagIds, api.tags]);
 
-  // DF-11 — the app-level Focus session flushes tracked time through the Tasks
-  // module's write path, so register `addTimeSpent` as its sink while /tasks is
-  // mounted. A ref keeps the callback current without re-registering (which would
-  // re-drain each render); registering once drains any backlog accrued while the
-  // module was unmounted, and the cleanup banks accrued-so-far on navigation away.
+  // DF-11 / TV-F1 — the app-level Focus engine saves tracked time through the
+  // Tasks module's write path, so register `persistFocusTime` as this
+  // workspace's sink while /tasks is mounted. A ref keeps the callback current
+  // without re-registering (which would re-drain each render); registering
+  // drains any backlog accrued while the module was unmounted, and the cleanup
+  // banks accrued-so-far on navigation away.
   const apiRef = useRef(api);
   useEffect(() => {
     apiRef.current = api;
   });
   useEffect(
-    () => registerFocusFlushSink((taskId, seconds) => apiRef.current.addTimeSpent(taskId, seconds)),
-    [],
+    () =>
+      registerFocusFlushSink(workspaceId, (taskId, seconds, context) =>
+        apiRef.current.persistFocusTime(taskId, seconds, context),
+      ),
+    [workspaceId],
   );
   // Once the bundle is loaded, drain any seconds the register-time flush had to
   // retain because it fired against the still-empty bundle on remount — so time
@@ -586,6 +586,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const body =
     mode === "execute" ? (
       <ExecuteView
+        workspaceId={workspaceId}
         committedTasks={api.committedTasks}
         bucketNameById={bucketNameById}
         parentTitleFor={parentTitleFor}

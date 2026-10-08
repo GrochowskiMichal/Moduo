@@ -305,7 +305,7 @@ export function consumeLandingRedirect(pathname: string, searchStr: string): str
 
 // ── Imperative reads for non-React consumers ──────────────────────────────────
 
-/** Master sound gate, read imperatively by the Focus chime (focus-session-store). */
+/** Master sound gate, read imperatively by the Focus chime (features/focus/phase-alert). */
 export function areSoundsEnabled(): boolean {
   return store.soundEnabled;
 }
