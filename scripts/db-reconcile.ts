@@ -33,7 +33,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  ANON_DEFINER_ALLOWED,
+  clientCallableDefinerQuery,
   dedupeByLastDefiner,
   dedupeDecls,
   normalizeBody,
@@ -139,22 +139,6 @@ console.log(
 );
 console.log(`-- \`*__*\` helpers are internal: only other SECURITY DEFINER functions call them, as
 -- the owner, so no client role needs EXECUTE. anon gets no definer function outside
--- the allowlist (ANON_DEFINER_ALLOWED in db-reconcile-core.ts). Supabase grants anon
--- and authenticated EXECUTE directly, so a REVOKE naming only PUBLIC leaves both
--- (gotchas §Supabase). Trigger functions are skipped; Postgres won't call them as RPCs.
-with allow(name) as (select unnest(string_to_array(${sqlQuote(Object.keys(ANON_DEFINER_ALLOWED).sort().join(","))},','))),
-defs as (
-  select p.oid::regprocedure::text as object, p.proname, p.prorettype,
-         has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
-         has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth
-  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public' and p.prosecdef
-)
-select 'CLIENT-EXECUTABLE INTERNAL HELPER' as issue, object,
-       concat_ws(',', case when anon then 'anon' end, case when auth then 'authenticated' end) as roles
-from defs where proname like '%\\_\\_%' and (anon or auth)
-union all
-select 'ANON-EXECUTABLE SECURITY DEFINER', object, 'anon'
-from defs where anon and proname not like '%\\_\\_%' and prorettype <> 'trigger'::regtype
-  and proname not in (select name from allow)
-order by 1, 2;`);
+-- ANON_DEFINER_ALLOWED (db-reconcile-core.ts). Supabase grants anon and authenticated
+-- EXECUTE directly, so a REVOKE naming only PUBLIC leaves both (gotchas/supabase.md).
+${clientCallableDefinerQuery()}`);

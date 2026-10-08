@@ -24,24 +24,58 @@ export const UNCHECKED = [
   "table COLUMN SETS — only the 29 explicit ADD COLUMNs are checked, not base CREATE TABLE columns",
   "policy DEFINITIONS — USING / WITH CHECK / target roles are never compared, only the name",
   "which TABLE a trigger is on — query 1 checks it exists on some public table and is enabled, not that it is on the declared one",
-  "grants beyond query 4 — it covers `*__*` SECURITY DEFINER helpers and anything anon can run; whether a SECURITY DEFINER function `authenticated` can call checks its caller is NOT checked",
+  "grants beyond query 4 — it covers `*__*` SECURITY DEFINER helpers and the SECURITY DEFINER functions anon can run (triggers and ANON_DEFINER_ALLOWED excepted); whether a SECURITY DEFINER function `authenticated` can call checks its caller is NOT checked",
+  "SECURITY DEFINER vs INVOKER — a function's mode is never compared with the repo",
   "SET search_path, RLS-enabled, constraints, defaults",
 ] as const;
 
 /**
- * SECURITY DEFINER functions anon may EXECUTE, each for a stated reason. Query 4 reports
- * every other one (trigger functions excluded: Postgres won't call them outside a
- * trigger). Remove an entry once its reason is gone.
+ * SECURITY DEFINER functions anon may EXECUTE, each for a stated reason. Keyed by
+ * signature (`name(type, type)`, as `oidvectortypes` prints it), so a new overload is
+ * not covered by an old entry. Query 4 reports every other one. Remove an entry once
+ * its reason is gone.
  */
 export const ANON_DEFINER_ALLOWED: Record<string, string> = {
-  calendar_public_feed: "public ICS feed; the token is the credential",
-  // OPS-2 group 3 (gotchas §Supabase): RLS policies for role `public` call these, so
+  "calendar_public_feed(text)": "public ICS feed; the token is the credential",
+  // OPS-2 group 3 (gotchas/supabase.md): RLS policies for role `public` call these, so
   // revoking anon turns an anonymous empty read into a permission error. Scope those
   // policies `TO authenticated` first, then revoke and drop these entries.
-  profile_plan_tier_text: "RLS helper for `public`-role policies (OPS-2 group 3)",
-  tasks_module_can_access_workspace: "RLS helper for `public`-role policies (OPS-2 group 3)",
-  workspaces_owned_count_for_user: "RLS helper for `public`-role policies (OPS-2 group 3)",
+  "profile_plan_tier_text(uuid)": "RLS helper for `public`-role policies (OPS-2 group 3)",
+  "tasks_module_can_access_workspace(uuid)":
+    "RLS helper for `public`-role policies (OPS-2 group 3)",
+  "workspaces_owned_count_for_user(uuid)": "RLS helper for `public`-role policies (OPS-2 group 3)",
 };
+
+/**
+ * Query 4: SECURITY DEFINER functions in `public` that a client role can call but
+ * shouldn't. `*__*` helpers are internal (only other definer functions call them, as
+ * the owner), so any client EXECUTE on one is reported. Every other definer function anon
+ * can run is reported unless its signature is in `allowed`. Trigger functions are skipped:
+ * Postgres won't call them as RPCs.
+ */
+export function clientCallableDefinerQuery(
+  allowed: Record<string, string> = ANON_DEFINER_ALLOWED,
+): string {
+  const signatures = Object.keys(allowed).sort().map(sqlQuote).join(", ");
+  return `with allow(sig) as (select unnest(array[${signatures}]::text[])),
+defs as (
+  select p.oid::regprocedure::text as object, p.proname, p.prorettype,
+         p.proname || '(' || oidvectortypes(p.proargtypes) || ')' as sig,
+         has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
+         has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.prosecdef
+)
+select 'CLIENT-EXECUTABLE INTERNAL HELPER' as issue, object,
+       concat_ws(',', case when anon then 'anon' end, case when auth then 'authenticated' end) as roles
+from defs where proname like '%\\_\\_%' and (anon or auth)
+union all
+select 'ANON-EXECUTABLE SECURITY DEFINER', object, 'anon'
+from defs where anon and proname not like '%\\_\\_%'
+  and prorettype not in ('trigger'::regtype, 'event_trigger'::regtype)
+  and sig not in (select sig from allow)
+order by 1, 2;`;
+}
 
 /** Strip SQL comments. Both extractors run on this, so a commented-out CREATE never counts. */
 export function stripComments(sql: string): string {
