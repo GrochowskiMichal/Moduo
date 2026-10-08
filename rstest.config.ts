@@ -16,6 +16,7 @@ export default defineConfig({
       "@contracts": fileURLToPath(
         new URL("./supabase/functions/_shared/contracts", import.meta.url),
       ),
+      "@email": fileURLToPath(new URL("./supabase/functions/_shared/email", import.meta.url)),
     },
   },
   // Edge Functions import from esm.sh, which only Deno can load. Leave those
@@ -36,7 +37,9 @@ export default defineConfig({
     "supabase/functions/_shared/*.test.ts",
     // The MCP connector's own tests mock its esm.sh imports (Deno-only).
     "supabase/functions/moduo-mcp/**/*.test.ts",
+    "supabase/functions/_shared/email/**/*.test.ts",
     "supabase/functions/send-workspace-invite/*.test.ts",
+    "scripts/brand/*.test.ts",
   ],
   globals: true,
   setupFiles: ["./rstest.setup.ts"],

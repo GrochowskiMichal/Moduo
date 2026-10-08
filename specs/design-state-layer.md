@@ -1,6 +1,6 @@
 # Spec: Design-system state layer + shared list primitives (cross-module)
 
-> Status: **DS-1 + DS-2 built 2026-10-08** (PRs #254, #275) · DS-3/DS-4 next · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) §UI review U1–U5, the comp [`.design/tasks-dogfood/ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) · Rules: [`docs/DESIGN_RULES.md`](../docs/DESIGN_RULES.md) (R5 changes here), [`docs/DESIGN_SYSTEM.md`](../docs/DESIGN_SYSTEM.md) · First consumer: [`tasks-v2.md`](./tasks-v2.md)
+> Status: **DS-1 + DS-2 built 2026-10-08** (PRs #254, #275) · **DS-4 built 2026-10-08** (PR #300) · DS-3 next · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) §UI review U1–U5, the comp [`.design/tasks-dogfood/ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) · Rules: [`docs/DESIGN_RULES.md`](../docs/DESIGN_RULES.md) (R5 changes here), [`docs/DESIGN_SYSTEM.md`](../docs/DESIGN_SYSTEM.md) · First consumer: [`tasks-v2.md`](./tasks-v2.md)
 
 ## Scope
 
