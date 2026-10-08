@@ -385,13 +385,45 @@ BEGIN
     'public.account_erasure_new_owner(text, uuid, uuid, uuid)',
     'public.account_erasure_inbox(uuid, uuid)',
     'public.account_erase_workspace_data(uuid, boolean)',
-    'public.account_erasure_only_creator(text, uuid)'
+    'public.account_erasure_only_creator(text, uuid, uuid)'
   ] LOOP
     ASSERT NOT has_function_privilege('anon', fn, 'EXECUTE'), fn || ': anon can execute';
     ASSERT NOT has_function_privilege('authenticated', fn, 'EXECUTE'), fn || ': authenticated can execute';
     ASSERT has_function_privilege('service_role', fn, 'EXECUTE'), fn || ': service_role can''t execute';
   END LOOP;
   RAISE NOTICE 'PASS: only the service role can run the erasure functions';
+END;
+$$;
+
+-- ── The private shortcut agrees with can_access ──────────────────────────────
+-- account_erasure_only_creator mirrors can_access's branches. For every item
+-- here: when it says only the creator can reach the item, nobody else can.
+
+DO $$
+DECLARE
+  v_bad text;
+BEGIN
+  SELECT string_agg(i.item, ', ') INTO v_bad
+  FROM (
+    SELECT 'note' AS t, id, workspace_id, created_by AS creator FROM public.notes
+    UNION ALL SELECT 'bucket', id, workspace_id, owner_id FROM public.buckets
+    UNION ALL SELECT 'contact', id, workspace_id, owner_id FROM public.contacts
+    UNION ALL SELECT 'contact_group', id, workspace_id, owner_id FROM public.contact_groups
+    UNION ALL SELECT 'company', id, workspace_id, owner_id FROM public.companies
+  ) x
+  CROSS JOIN LATERAL (SELECT x.t || ':' || x.id AS item) i
+  WHERE x.creator IS NOT NULL
+    AND public.account_erasure_only_creator(x.t, x.id, x.creator)
+    AND (EXISTS (SELECT 1 FROM public.workspace_members m
+                 WHERE m.workspace_id = x.workspace_id AND m.user_id <> x.creator
+                   AND public.can_access(x.t, x.id, 'view', m.user_id))
+         OR EXISTS (SELECT 1 FROM public.workspaces w
+                    WHERE w.id = x.workspace_id AND w.owner_id <> x.creator
+                      AND public.can_access(x.t, x.id, 'view', w.owner_id)));
+  ASSERT v_bad IS NULL, 'the private shortcut disagrees with can_access: ' || v_bad;
+  ASSERT NOT public.account_erasure_only_creator('note', probe.id('N1'), probe.id('B')),
+    'the shortcut ignored who created the item';
+  RAISE NOTICE 'PASS: the private shortcut agrees with can_access';
 END;
 $$;
 
