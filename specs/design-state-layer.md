@@ -1,6 +1,6 @@
 # Spec: Design-system state layer + shared list primitives (cross-module)
 
-> Status: **Draft — awaiting designer approval** (DS-1 can start now) · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) §UI review U1–U5, the comp [`.design/tasks-dogfood/ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) · Rules: [`docs/DESIGN_RULES.md`](../docs/DESIGN_RULES.md) (R5 changes here), [`docs/DESIGN_SYSTEM.md`](../docs/DESIGN_SYSTEM.md) · First consumer: [`tasks-v2.md`](./tasks-v2.md)
+> Status: **DS-1 built 2026-10-08** (`t/maciej/ds-1-state-tokens`, PR #254) · DS-2 onward follow in order · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) §UI review U1–U5, the comp [`.design/tasks-dogfood/ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) · Rules: [`docs/DESIGN_RULES.md`](../docs/DESIGN_RULES.md) (R5 changes here), [`docs/DESIGN_SYSTEM.md`](../docs/DESIGN_SYSTEM.md) · First consumer: [`tasks-v2.md`](./tasks-v2.md)
 
 ## Scope
 
@@ -108,6 +108,8 @@ This spec adds a state layer of tokens, fixes the primitives that inherit the pr
    - `--control-raised`: fg 14% over `--muted` on dark; card + shadow on light
 
    *Rejected: redefining `--accent` in place — it backs ~300 button/icon-button hovers, ~118 menu items and 86 hand-written hovers, and `/60` variants would vanish.*
+
+   *As built (DS-1):* each formula is declared once on `:root, [data-theme], [data-shade], [data-accent]` and `@theme inline` maps the utilities to `var(--state-…)`, rather than inlining the `color-mix()` into each utility. Same scoped-accent result, one formula per token, and plain `var()` consumers scope too. `--control-raised` gained `--shadow-control-raised` for the light lift, and `--scroll-thumb` / `--scroll-thumb-hover` carry the scrollbar thumb. See [decisions/design-system.md](../docs/decisions/design-system.md) 2026-10-08.
 2. **`--selected-bg` / `--selected-border` stay as aliases** during migration. Each of the 23 consumers is moved explicitly in DS-2 (opaque → translucent is checked per surface).
 3. **Global scrollbar** — a low-specificity base-layer rule (`@layer base { * { scrollbar-width: thin; scrollbar-color: … } }` + `::-webkit-scrollbar*` rules) with a thumb at fg 16% / hover 32%:
    - `.scrollbar-thin` stays as an alias (46 refs);

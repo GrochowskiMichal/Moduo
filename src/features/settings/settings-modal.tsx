@@ -163,7 +163,7 @@ export function SettingsModal() {
           >
             <nav
               aria-label="Settings sections"
-              className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto border-r border-border bg-muted/40 p-3"
+              className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto border-r border-border bg-muted/40 p-3"
             >
               <div className="flex items-center justify-between px-2 pt-1">
                 <Eyebrow>Settings</Eyebrow>
@@ -202,7 +202,7 @@ export function SettingsModal() {
               ))}
             </nav>
 
-            <div className="min-h-0 overflow-y-auto px-2 py-4">
+            <div className="pane-scroll min-h-0 overflow-y-auto px-2 py-4">
               {SECTIONS.map(({ id, Component }) => (
                 <TabsContent key={id} value={id} className="data-[state=inactive]:hidden">
                   {id === section ? <Component /> : null}
