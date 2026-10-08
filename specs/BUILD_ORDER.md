@@ -114,7 +114,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **TV-D3 — Time entries** · tasks-v2 block 5 · deps: TV-D1, TV-F1 · lane data · migration + legacy backfill/shim
 - [ ] **TV-T1 — Shared tag store** · tasks-v2 block 6 · deps: TV-D1 · lane data
 - [ ] **DS-3 — NavRow + MetaCount (+ Tasks rail)** · design-state-layer block 3 · deps: DS-2, TV-Q1 · lane design · also: return focus to the rail when a row menu's dialog closes (TV-Q1's delete-bucket confirm leaves it on the page body, like notes' Delete forever)
-- [~] **DS-4 — FilterBar/Chip, DisplayMenu, drag visuals, view-prefs helper** · design-state-layer block 4 · deps: DS-2 · lane design · _claimed 2026-10-08 · `t/maciej/ds-4-filterbar-displaymenu`_
+- [x] **DS-4 — FilterBar/Chip, DisplayMenu, drag visuals, view-prefs helper** · design-state-layer block 4 · deps: DS-2 · lane design · _done 2026-10-08 · `t/maciej/ds-4-filterbar-displaymenu` (GrochowskiMichal/Moduo#300): generic primitives + stories + `src/lib/view-prefs.ts`; Tasks adopts them in TV-U2/TV-U4; NavRow (DS-3) should take `DROP_TARGET` from `drag-visuals.tsx`_
 - [ ] **TV-D4 — Queue & assignee in the UI (claims, My tasks)** · tasks-v2 block 7 · deps: TV-D2, DS-3 · lane tasks-ui
 - [ ] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
 - [ ] **TV-U1 — Rows, board, completed** · tasks-v2 block 9 · deps: DS-3, TV-D4 · lane tasks-ui
