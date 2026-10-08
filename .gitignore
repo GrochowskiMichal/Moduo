@@ -50,6 +50,9 @@ src-tauri/*.sqlite3
 src-tauri/*.redb
 src-tauri/*.redb.lock
 
+# Supabase CLI per-machine state (update-check cache, `supabase link` output) — see docs/gotchas/supabase.md
+supabase/.temp/
+
 # Claude Code runtime files — ignore all, but version the shared workflow tooling
 .claude/*
 !.claude/skills/

@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manifesto — Moduo</title>
+    <meta
+      name="description"
+      content="Moduo is a modular workspace. One home. Only the page in front of you. Everything else connected, and out of the room."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#161616" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://www.moduo.app/manifesto" />
+    <meta property="og:title" content="Manifesto — Every app you need. None you don’t." />
+    <meta
+      property="og:description"
+      content="Moduo is a modular workspace. One home. Only the page in front of you. Everything else connected, and out of the room."
+    />
+    <meta property="og:image" content="https://www.moduo.app/assets/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://www.moduo.app/assets/og.png" />
+    <link rel="canonical" href="https://www.moduo.app/manifesto" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link
+      rel="preload"
+      href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <script>
+      // Before first paint: apply the remembered theme, and decide once whether
+      // this visit animates. data-anim="on" is the single switch every motion
+      // rule hangs off; without it (no JS, reduced motion) the page is static.
+      (function () {
+        var d = document.documentElement;
+        var t, m;
+        try {
+          t = localStorage.getItem("moduo-manifesto-theme");
+          m = localStorage.getItem("moduo-manifesto-motion");
+        } catch (e) {}
+        if (t === "light" || t === "dark") d.setAttribute("data-theme", t);
+        if (m === "reduce" || m === "full") d.setAttribute("data-motion", m);
+        var osReduce = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+        var reduce = m === "reduce" || (m !== "full" && osReduce);
+        d.setAttribute("data-anim", reduce ? "off" : "on");
+        if (!reduce) d.classList.add("intro");
+      })();
+    </script>
+    <style>
+      /* ─── Fonts ──────────────────────────────────────────────────────────
+         One family (Geist), as on the landing. The fallback is metric-matched
+         to Geist (measured: x-height 0.53, avg glyph 0.472em) so the swap does
+         not shift layout. */
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-400-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-500-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-600-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: "Geist Mono";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5.2.5/files/geist-mono-latin-400-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: "Geist Fallback";
+        src: local("Arial"), local("Helvetica Neue"), local("Helvetica");
+        size-adjust: 103.3%;
+        ascent-override: 89.1%;
+        descent-override: 21.3%;
+        line-gap-override: 0%;
+      }
+
+      /* ─── Tokens ─────────────────────────────────────────────────────────
+         Dark is the brand default, on off-black (#161616) with off-white text
+         (not #000 / #fff) to cut halation. Light follows the OS or the toggle.
+         Contrast (WCAG / APCA Lc), dark: heading 16.4:1 / −99 · body 13.2:1 /
+         −85 · muted 8.4:1 / −59. Light: heading 18.6:1 / 103 · body 14.4:1 /
+         99 · muted 6.5:1 / 81. */
+      :root {
+        color-scheme: dark;
+        --bg: oklch(0.2 0 0);
+        --surface: oklch(0.235 0 0);
+        --fg-strong: oklch(0.965 0 0);
+        --fg: oklch(0.895 0 0);
+        --fg-muted: oklch(0.76 0 0);
+        --fg-faint: oklch(0.6 0 0);
+        --fg-ghost: oklch(0.42 0 0);
+        --hairline: oklch(0.3 0 0);
+        --hairline-strong: oklch(0.4 0 0);
+        --hover: oklch(0.26 0 0);
+        --primary: oklch(0.95 0 0);
+        --primary-hover: oklch(1 0 0);
+        --primary-fg: oklch(0.1 0 0);
+        --ring: oklch(0.95 0 0);
+        /* Light text on dark reads slightly bolder (irradiation): open the
+           tracking a hair and add leading instead of thinning the face. */
+        --body-tracking: 0.006em;
+        --body-leading: 1.65;
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: oklch(0.985 0 0);
+        --surface: oklch(0.955 0 0);
+        --fg-strong: oklch(0.16 0 0);
+        --fg: oklch(0.27 0 0);
+        --fg-muted: oklch(0.47 0 0);
+        --fg-faint: oklch(0.58 0 0);
+        --fg-ghost: oklch(0.8 0 0);
+        --hairline: oklch(0.9 0 0);
+        --hairline-strong: oklch(0.82 0 0);
+        --hover: oklch(0.94 0 0);
+        --primary: oklch(0.16 0 0);
+        --primary-hover: oklch(0 0 0);
+        --primary-fg: oklch(0.985 0 0);
+        --ring: oklch(0.16 0 0);
+        --body-tracking: 0em;
+        --body-leading: 1.6;
+      }
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme="dark"]) {
+          color-scheme: light;
+          --bg: oklch(0.985 0 0);
+          --surface: oklch(0.955 0 0);
+          --fg-strong: oklch(0.16 0 0);
+          --fg: oklch(0.27 0 0);
+          --fg-muted: oklch(0.47 0 0);
+          --fg-faint: oklch(0.58 0 0);
+          --fg-ghost: oklch(0.8 0 0);
+          --hairline: oklch(0.9 0 0);
+          --hairline-strong: oklch(0.82 0 0);
+          --hover: oklch(0.94 0 0);
+          --primary: oklch(0.16 0 0);
+          --primary-hover: oklch(0 0 0);
+          --primary-fg: oklch(0.985 0 0);
+          --ring: oklch(0.16 0 0);
+          --body-tracking: 0em;
+          --body-leading: 1.6;
+        }
+      }
+
+      :root {
+        --font-sans: Geist, "Geist Fallback", system-ui, -apple-system, sans-serif;
+        --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+        /* Type scale. Body is fluid 16 → 19px. Steps use a ratio that grows
+           with the viewport: ~1.25 on phones → ~1.333 on desktop. */
+        --step--1: 0.75rem; /* 12px — eyebrow, controls */
+        --step-0: clamp(1rem, 0.925rem + 0.375vw, 1.1875rem); /* body 16 → 19 */
+        --step-1: clamp(1.125rem, 1rem + 0.55vw, 1.4375rem); /* lede, peak 18 → 23 */
+        --step-2: clamp(1.5rem, 1.2rem + 1.3vw, 2.125rem); /* h2 24 → 34 */
+        --step-3: clamp(1.75rem, 1.25rem + 2.2vw, 3rem); /* closing 28 → 48 */
+        --step-4: clamp(2.375rem, 1.5rem + 3.9vw, 4.5rem); /* h1 38 → 72 */
+
+        /* Measure: ~66 characters per line (Geist averages 0.472em/char). */
+        --measure: 31.5em;
+
+        /* Spacing, on a 4px base. */
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-6: 1.5rem;
+        --space-8: 2rem;
+        --space-12: 3rem;
+        --space-16: 4rem;
+        --space-section: clamp(4.5rem, 3rem + 6vw, 8rem);
+        --space-closing: clamp(7rem, 5rem + 10vw, 13rem);
+        --gutter: clamp(1rem, 0.5rem + 2.5vw, 2rem);
+
+        /* Motion. Slow, soft, one-shot. Every entrance finishes and then holds
+           still; nothing loops and nothing moves while it is being read. */
+        --motion-duration-xs: 140ms; /* hover, focus, switch */
+        --motion-duration-s: 320ms; /* tab close */
+        --motion-duration-m: 560ms; /* tile drop */
+        --motion-duration-l: 820ms; /* rises, paragraph settle */
+        --motion-duration-xl: 1200ms; /* hairline draw, ink fill */
+        --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+        --motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+        --motion-distance-s: 8px;
+        --motion-distance-m: 14px;
+        --motion-stagger: 90ms;
+
+        --radius-sm: 0.375rem;
+        --radius-md: 0.5rem;
+        --ctrl-h: 2rem;
+        --ctrl-h-lg: 2.75rem;
+      }
+
+      /* ─── Base ───────────────────────────────────────────────────────── */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        background: var(--bg);
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      body {
+        min-height: 100dvh;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-sans);
+        font-size: var(--step-0);
+        line-height: var(--body-leading);
+        letter-spacing: var(--body-tracking);
+        font-kerning: normal;
+        font-variant-ligatures: common-ligatures;
+        font-variant-numeric: proportional-nums oldstyle-nums;
+        font-optical-sizing: auto;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+      a {
+        color: inherit;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        cursor: pointer;
+      }
+      svg {
+        display: block;
+        flex-shrink: 0;
+      }
+      ::selection {
+        background: color-mix(in oklab, var(--fg-strong) 24%, transparent);
+      }
+      :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 3px;
+        border-radius: 0.25rem;
+      }
+
+      .skip {
+        position: absolute;
+        left: var(--gutter);
+        top: -4rem;
+        z-index: 10;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        background: var(--primary);
+        color: var(--primary-fg);
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-decoration: none;
+      }
+      .skip:focus {
+        top: var(--space-3);
+      }
+
+      /* One column. Its left edge never moves between sections, so every
+         return sweep lands in the same place. */
+      .col {
+        width: 100%;
+        max-width: calc(var(--measure) + 2 * var(--gutter));
+        margin-inline: auto;
+        padding-inline: var(--gutter);
+      }
+
+      /* ─── Top bar (static, not sticky) ───────────────────────────────── */
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding-block: var(--space-4);
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: var(--ctrl-h);
+        color: var(--fg-strong);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        text-decoration: none;
+      }
+      .brand svg {
+        width: 1.25rem;
+        height: 1.25rem;
+        fill: currentColor;
+      }
+      .prefs {
+        display: flex;
+        gap: var(--space-1);
+      }
+      .pref {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: var(--ctrl-h);
+        padding-inline: var(--space-2);
+        border-radius: var(--radius-md);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        letter-spacing: 0.02em;
+        color: var(--fg-muted);
+        transition:
+          background-color var(--motion-duration-xs) var(--motion-ease-out),
+          color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .pref:hover {
+        background: var(--hover);
+        color: var(--fg-strong);
+      }
+      .pref svg {
+        width: 0.875rem;
+        height: 0.875rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+      }
+      /* The motion control is a visible switch, so its state can be seen. */
+      .switch {
+        position: relative;
+        width: 1.625rem;
+        height: 0.9375rem;
+        border-radius: 999px;
+        border: 1px solid var(--hairline-strong);
+        transition:
+          background-color var(--motion-duration-xs) var(--motion-ease-out),
+          border-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .switch::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 0.5625rem;
+        height: 0.5625rem;
+        border-radius: 50%;
+        background: var(--fg-faint);
+        transition:
+          transform var(--motion-duration-xs) var(--motion-ease-out),
+          background-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .pref[aria-checked="true"] .switch {
+        background: var(--fg-strong);
+        border-color: var(--fg-strong);
+      }
+      .pref[aria-checked="true"] .switch::after {
+        background: var(--bg);
+        transform: translateX(0.6875rem);
+      }
+
+      /* ─── Opening ────────────────────────────────────────────────────── */
+      .opening {
+        padding-top: clamp(3.5rem, 2rem + 8vh, 8rem);
+      }
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        line-height: 1.4;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--fg-muted);
+        margin-bottom: var(--space-6);
+      }
+      .eyebrow::after {
+        content: "";
+        width: 3rem;
+        height: 1px;
+        background: var(--hairline-strong);
+        transform-origin: left center;
+      }
+      h1 {
+        font-size: var(--step-4);
+        line-height: 1.04;
+        font-weight: 600;
+        letter-spacing: -0.032em;
+        color: var(--fg-strong);
+        text-wrap: balance;
+        margin-bottom: clamp(2rem, 1.5rem + 2vw, 3.25rem);
+      }
+      /* Each sentence of a display line owns its own line. */
+      .line {
+        display: block;
+      }
+      /* A mask a line can rise out of. The padding keeps descenders (y, p, g)
+         inside the clip; the negative margin gives the space back. */
+      .mask {
+        display: block;
+        overflow: clip;
+        padding-block: 0.06em 0.14em;
+        margin-block: -0.06em -0.14em;
+      }
+      .rise {
+        display: block;
+      }
+      .lede {
+        font-size: var(--step-1);
+        line-height: 1.55;
+        letter-spacing: -0.003em;
+        color: var(--fg-strong);
+        text-wrap: pretty;
+      }
+      .lede + .lede {
+        margin-top: 0.85em;
+      }
+
+      /* The board: six slots, one tile per principle. A small index that also
+         acts out "It takes the first open slot." */
+      .board {
+        margin-top: clamp(2.5rem, 2rem + 2vw, 3.5rem);
+      }
+      .board ol {
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: var(--space-2);
+      }
+      .board li {
+        position: relative;
+        border-radius: var(--radius-md);
+        /* The empty slot the tile drops into. */
+        background: repeating-linear-gradient(
+            90deg,
+            var(--hairline) 0 4px,
+            transparent 4px 8px
+          )
+          top / 100% 1px no-repeat,
+          repeating-linear-gradient(90deg, var(--hairline) 0 4px, transparent 4px 8px) bottom / 100% 1px no-repeat,
+          repeating-linear-gradient(0deg, var(--hairline) 0 4px, transparent 4px 8px) left / 1px 100% no-repeat,
+          repeating-linear-gradient(0deg, var(--hairline) 0 4px, transparent 4px 8px) right / 1px 100% no-repeat;
+      }
+      .tile {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: var(--space-2);
+        height: clamp(2.75rem, 2.25rem + 2vw, 3.5rem);
+        padding: var(--space-2);
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        color: var(--fg-faint);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        line-height: 1;
+        letter-spacing: 0.04em;
+        font-variant-numeric: tabular-nums lining-nums;
+        text-decoration: none;
+        transition:
+          transform var(--motion-duration-xs) var(--motion-ease-out),
+          color var(--motion-duration-xs) var(--motion-ease-out),
+          border-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .tile::after {
+        content: "";
+        display: block;
+        width: 55%;
+        height: 2px;
+        border-radius: 2px;
+        background: var(--hairline-strong);
+        transition: background-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .tile:hover,
+      .tile:focus-visible {
+        color: var(--fg-strong);
+        border-color: var(--hairline-strong);
+        transform: translateY(-2px);
+      }
+      .tile:hover::after,
+      .tile:focus-visible::after {
+        background: var(--fg-muted);
+      }
+
+      /* ─── Principles ─────────────────────────────────────────────────── */
+      .principle,
+      .closing {
+        scroll-margin-top: var(--space-8);
+      }
+      .principle {
+        margin-top: var(--space-section);
+      }
+      /* A hairline opens each section; it draws itself in on entry. */
+      .principle::before {
+        content: "";
+        display: block;
+        height: 1px;
+        background: var(--hairline);
+        margin-bottom: clamp(1.5rem, 1.25rem + 1vw, 2rem);
+        transform-origin: left center;
+      }
+      h2 {
+        position: relative;
+        font-size: var(--step-2);
+        line-height: 1.15;
+        font-weight: 600;
+        letter-spacing: -0.022em;
+        color: var(--fg-strong);
+        text-wrap: balance;
+        /* Heading sits ~4× closer to its own text than to the previous
+           section (proximity). */
+        margin-bottom: 0.6em;
+      }
+      .principle p {
+        text-wrap: pretty;
+      }
+      .principle p + p {
+        margin-top: 0.85em;
+      }
+      /* Section numbers live in the left margin on wide screens only, so the
+         reading edge stays put. Decorative: hidden from assistive tech. */
+      .num {
+        display: none;
+      }
+      @media (min-width: 1100px) {
+        .num {
+          display: block;
+          position: absolute;
+          right: calc(100% + 2.5rem);
+          top: 0.55em;
+          font-family: var(--font-mono);
+          font-size: var(--step--1);
+          font-weight: 400;
+          letter-spacing: 0.04em;
+          line-height: 1;
+          color: var(--fg-faint);
+          font-variant-numeric: tabular-nums lining-nums;
+        }
+      }
+
+      /* The one isolated line on the page (peak). */
+      .peak {
+        display: block;
+        margin-top: 1.1em;
+        font-size: var(--step-1);
+        line-height: 1.35;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        color: var(--fg-strong);
+      }
+
+      /* ─── Closing (end) ──────────────────────────────────────────────── */
+      .closing {
+        margin-top: var(--space-closing);
+        padding-bottom: var(--space-closing);
+      }
+      .closing p {
+        font-size: var(--step-3);
+        line-height: 1.12;
+        font-weight: 600;
+        letter-spacing: -0.026em;
+        color: var(--fg-strong);
+        text-wrap: balance;
+      }
+      /* A tab strip that acts out the last line. At rest (and without motion)
+         only the Moduo tab is there; the others exist just long enough to be
+         closed. */
+      .tabs {
+        display: flex;
+        align-items: flex-end;
+        gap: 3px;
+        margin-bottom: clamp(1.5rem, 1.25rem + 1vw, 2rem);
+        border-bottom: 1px solid var(--hairline);
+      }
+      .tab {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        width: clamp(2.5rem, 1.5rem + 5vw, 4.75rem);
+        height: 1.75rem;
+        padding-inline: 0.5rem;
+        border: 1px solid var(--hairline);
+        border-bottom: 0;
+        border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+        background: var(--surface);
+        transform-origin: left bottom;
+      }
+      .tab::before {
+        content: "";
+        flex: 1;
+        height: 2px;
+        border-radius: 2px;
+        background: var(--hairline-strong);
+      }
+      .tab-home {
+        border-color: var(--hairline-strong);
+        background: var(--bg);
+        margin-bottom: -1px;
+        height: calc(1.75rem + 1px);
+      }
+      .tab-home::before {
+        display: none;
+      }
+      .tab-home svg {
+        width: 0.875rem;
+        height: 0.875rem;
+        fill: var(--fg-strong);
+      }
+      .tab-home span {
+        flex: 1;
+        height: 2px;
+        border-radius: 2px;
+        background: var(--fg-muted);
+      }
+      .tab-other {
+        display: none;
+      }
+
+      /* ─── After the end ──────────────────────────────────────────────── */
+      .after {
+        border-top: 1px solid var(--hairline);
+        padding-block: var(--space-12) var(--space-16);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-3) var(--space-6);
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        min-height: var(--ctrl-h-lg);
+        padding-inline: 1.25rem;
+        border-radius: var(--radius-md);
+        font-size: 0.9375rem;
+        font-weight: 500;
+        letter-spacing: 0;
+        text-decoration: none;
+        background: var(--primary);
+        color: var(--primary-fg);
+        transition: background-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .btn:hover {
+        background: var(--primary-hover);
+      }
+      .btn svg {
+        width: 1rem;
+        height: 1rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: transform var(--motion-duration-s) var(--motion-ease-out);
+      }
+      .btn:hover svg {
+        transform: translateX(3px);
+      }
+      .back {
+        font-size: 0.9375rem;
+        color: var(--fg-muted);
+        text-decoration: underline;
+        text-decoration-color: var(--hairline);
+        text-underline-offset: 0.25em;
+        transition:
+          color var(--motion-duration-xs) var(--motion-ease-out),
+          text-decoration-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .back:hover {
+        color: var(--fg-strong);
+        text-decoration-color: currentColor;
+      }
+
+      /* Narrow phones: allow hyphenation in body only, never in headings. */
+      @media (max-width: 480px) {
+        .principle p,
+        .lede {
+          hyphens: auto;
+          -webkit-hyphens: auto;
+        }
+        .principle p .peak {
+          hyphens: manual;
+          -webkit-hyphens: manual;
+        }
+      }
+
+      /* ═══ Motion ══════════════════════════════════════════════════════════
+         Everything below applies only under :root[data-anim="on"], which the
+         head script sets when motion is allowed (OS setting + on-page switch).
+         Without it the page is fully static and fully visible: no JS, reduced
+         motion, reader mode, print and crawlers all get the final state.
+         Animated properties: transform, opacity, clip of the masks, and one
+         background-position (the ink fill on a single line). */
+
+      /* 1 · Opening, on load: eyebrow rule draws, headline rises line by line,
+         ledes settle, then the board's tiles drop into their slots. */
+      @keyframes rise {
+        from {
+          transform: translate3d(0, 105%, 0);
+        }
+      }
+      @keyframes settle {
+        from {
+          opacity: 0;
+          transform: translate3d(0, var(--motion-distance-m), 0);
+        }
+      }
+      @keyframes draw {
+        from {
+          transform: scaleX(0);
+        }
+      }
+      @keyframes drop {
+        0% {
+          opacity: 0;
+          transform: translate3d(0, -12px, 0) scale(0.92);
+        }
+        60% {
+          opacity: 1;
+        }
+      }
+      @keyframes fade {
+        from {
+          opacity: 0;
+        }
+      }
+      :root[data-anim="on"].intro .eyebrow {
+        animation: fade var(--motion-duration-l) var(--motion-ease-out) backwards;
+      }
+      :root[data-anim="on"].intro .eyebrow::after {
+        animation: draw var(--motion-duration-xl) var(--motion-ease-out) 120ms backwards;
+      }
+      :root[data-anim="on"].intro h1 .rise {
+        animation: rise var(--motion-duration-l) var(--motion-ease-out) backwards;
+      }
+      :root[data-anim="on"].intro h1 .line:nth-child(1) .rise {
+        animation-delay: 80ms;
+      }
+      :root[data-anim="on"].intro h1 .line:nth-child(2) .rise {
+        animation-delay: 190ms;
+      }
+      :root[data-anim="on"].intro .lede {
+        animation: settle var(--motion-duration-l) var(--motion-ease-out) 480ms backwards;
+      }
+      :root[data-anim="on"].intro .lede + .lede {
+        animation-delay: 580ms;
+      }
+      :root[data-anim="on"].intro .board li,
+      :root[data-anim="on"] .board.replay li {
+        animation: fade var(--motion-duration-m) var(--motion-ease-out) 760ms backwards;
+      }
+      :root[data-anim="on"].intro .tile,
+      :root[data-anim="on"] .board.replay .tile {
+        animation: drop var(--motion-duration-m) var(--motion-ease-out) backwards;
+        animation-delay: calc(980ms + var(--i) * var(--motion-stagger));
+      }
+
+      /* 2 · Sections, once, as they come up from below: the hairline draws,
+         the heading rises out of its mask, the text settles, all in ~1s and
+         before the eye gets there. */
+      :root[data-anim="on"] .is-pending::before {
+        transform: scaleX(0);
+      }
+      :root[data-anim="on"] .is-pending .rise {
+        transform: translate3d(0, 105%, 0);
+      }
+      :root[data-anim="on"] .is-pending p,
+      :root[data-anim="on"] .is-pending .num {
+        opacity: 0;
+        transform: translate3d(0, var(--motion-distance-m), 0);
+      }
+      :root[data-anim="on"] .is-pending .num {
+        transform: none;
+      }
+      :root[data-anim="on"] .is-entering::before {
+        transition: transform var(--motion-duration-xl) var(--motion-ease-out);
+      }
+      :root[data-anim="on"] .is-entering .rise {
+        transition: transform var(--motion-duration-l) var(--motion-ease-out) 140ms;
+      }
+      :root[data-anim="on"] .is-entering .num {
+        transition: opacity var(--motion-duration-l) var(--motion-ease-out) 220ms;
+      }
+      :root[data-anim="on"] .is-entering p {
+        transition:
+          opacity var(--motion-duration-l) var(--motion-ease-out) 300ms,
+          transform var(--motion-duration-l) var(--motion-ease-out) 300ms;
+      }
+      :root[data-anim="on"] .is-entering p + p {
+        transition-delay: 400ms;
+      }
+
+      /* 3 · The peak fills with ink, left to right, after its paragraph has
+         settled. It is legible (faint) the whole time, never hidden. */
+      :root[data-anim="on"] .peak {
+        background-image: linear-gradient(90deg, var(--fg-strong) 0 40%, var(--fg-ghost) 60% 100%);
+        background-size: 250% 100%;
+        background-position: 0 0;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      :root[data-anim="on"] .is-pending .peak {
+        background-position: 100% 0;
+      }
+      :root[data-anim="on"] .is-entering .peak {
+        transition: background-position var(--motion-duration-xl) var(--motion-ease-in-out) 1000ms;
+      }
+
+      /* 4 · The end. Line one, then "Close the other tabs." — and then they
+         close, right to left, leaving the Moduo tab. */
+      :root[data-anim="on"] .closing.is-pending .tab-other,
+      :root[data-anim="on"] .closing.is-entering .tab-other {
+        display: flex;
+      }
+      :root[data-anim="on"] .closing.is-pending .tabs,
+      :root[data-anim="on"] .closing.is-pending p .rise {
+        opacity: 0;
+      }
+      :root[data-anim="on"] .closing.is-pending::before {
+        transform: none;
+      }
+      :root[data-anim="on"] .closing.is-pending p {
+        opacity: 1;
+        transform: none;
+      }
+      :root[data-anim="on"] .closing.is-entering p {
+        transition: none;
+      }
+      :root[data-anim="on"] .closing.is-entering .tabs {
+        animation: fade var(--motion-duration-m) var(--motion-ease-out) backwards;
+      }
+      :root[data-anim="on"] .closing.is-entering .line .rise {
+        animation: rise var(--motion-duration-l) var(--motion-ease-out) 200ms backwards;
+        transition: none;
+      }
+      :root[data-anim="on"] .closing.is-entering .line:nth-child(2) .rise {
+        animation-delay: 320ms;
+      }
+      @keyframes tab-close {
+        to {
+          opacity: 0;
+          transform: translate3d(0, 6px, 0) scale(0.9);
+        }
+      }
+      :root[data-anim="on"] .closing.is-entering .tab-other {
+        animation: tab-close var(--motion-duration-s) var(--motion-ease-in-out) forwards;
+        animation-delay: calc(1500ms + (5 - var(--i)) * 140ms);
+      }
+
+      /* Windows High Contrast / forced colours: plain text, no clip tricks. */
+      @media (forced-colors: active) {
+        :root[data-anim="on"] .peak {
+          background: none;
+          -webkit-text-fill-color: CanvasText;
+        }
+      }
+
+      /* Theme switch: a circular reveal from the button (View Transitions). */
+      ::view-transition-old(root),
+      ::view-transition-new(root) {
+        animation: none;
+        mix-blend-mode: normal;
+      }
+
+      /* ─── Print ──────────────────────────────────────────────────────── */
+      @media print {
+        :root,
+        :root[data-theme] {
+          --bg: #fff;
+          --fg-strong: #000;
+          --fg: #111;
+          --fg-muted: #444;
+        }
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+        .top .prefs,
+        .after .btn,
+        .skip,
+        .num,
+        .board,
+        .tabs {
+          display: none !important;
+        }
+        .is-pending,
+        .is-pending *,
+        .is-pending::before {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+        .peak {
+          background: none !important;
+          -webkit-text-fill-color: currentColor !important;
+        }
+        .principle,
+        .closing {
+          break-inside: avoid;
+        }
+        .closing {
+          margin-top: 3rem;
+          padding-bottom: 2rem;
+        }
+      }
+    </style>
+    <!-- PostHog (EU cloud), same project as the landing. Loaded only when the visitor
+         already accepted analytics on the landing (moduo:consent); no banner here, so
+         without that choice nothing loads and nothing is stored. Skipped on localhost. -->
+    <script>
+      (function () {
+        var granted = false;
+        try {
+          granted = localStorage.getItem("moduo:consent") === "granted";
+        } catch (e) {}
+        if (!granted || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return;
+        var s = document.createElement("script");
+        s.async = true;
+        s.crossOrigin = "anonymous";
+        s.src = "https://eu-assets.i.posthog.com/static/array.full.js";
+        s.onload = function () {
+          if (!window.posthog || !window.posthog.init) return;
+          window.posthog.init("phc_D4Y3CbRVFLqkufdCmhtb2XukD2xgV3GQfXjxemtEhqiN", {
+            api_host: "https://eu.i.posthog.com",
+            ui_host: "https://eu.posthog.com",
+            defaults: "2025-11-30",
+            person_profiles: "identified_only",
+            capture_pageleave: true,
+            autocapture: true,
+            respect_dnt: true,
+            loaded: function (ph) {
+              var h = location.hostname;
+              ph.register({
+                surface: "manifesto",
+                environment: h === "www.moduo.app" || h === "moduo.app" ? "production" : "staging",
+              });
+            },
+          });
+        };
+        document.head.appendChild(s);
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="mark" viewBox="0 0 1000 1000"><path fill-rule="evenodd" d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z" /></symbol>
+    </svg>
+
+    <header class="col top">
+      <a class="brand" href="/">
+        <svg aria-hidden="true"><use href="#mark" /></svg>
+        Moduo
+      </a>
+      <div class="prefs" hidden>
+        <button class="pref" type="button" id="pref-theme">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.25" /><path d="M8 2.75v10.5" /></svg>
+          <span id="pref-theme-label">Light</span>
+        </button>
+        <button class="pref" type="button" id="pref-motion" role="switch" aria-checked="true">
+          <span class="switch" aria-hidden="true"></span>
+          Motion
+        </button>
+      </div>
+    </header>
+
+    <main id="main">
+      <article class="col" aria-labelledby="manifesto-title">
+        <header class="opening">
+          <p class="eyebrow">Manifesto</p>
+          <h1 id="manifesto-title"><span class="line mask"><span class="rise">Every app you need.</span></span> <span class="line mask"><span class="rise">None you don’t.</span></span></h1>
+          <p class="lede">You open the computer to finish an hour. The tools around that hour are a row of apps that never meet, or one suite with the whole product switched on. The screen stops being the work.</p>
+          <p class="lede">Moduo is a modular workspace. One home. Only the page in front of you. Everything else connected, and out of the room.</p>
+          <nav class="board" aria-label="Principles">
+            <ol>
+              <li><a class="tile" style="--i: 0" href="#open-on-the-work" aria-label="Open on the work.">01</a></li>
+              <li><a class="tile" style="--i: 1" href="#the-page-is-the-switch" aria-label="The page is the switch.">02</a></li>
+              <li><a class="tile" style="--i: 2" href="#go-further" aria-label="Go further only when the tile runs out.">03</a></li>
+              <li><a class="tile" style="--i: 3" href="#a-link-happens" aria-label="A link happens while you work.">04</a></li>
+              <li><a class="tile" style="--i: 4" href="#your-ai" aria-label="Your AI sees what you allow.">05</a></li>
+              <li><a class="tile" style="--i: 5" href="#leave-with-everything" aria-label="Leave with everything.">06</a></li>
+            </ol>
+          </nav>
+        </header>
+
+        <section class="principle" id="open-on-the-work" aria-labelledby="h-open-on-the-work" data-reveal>
+          <h2 id="h-open-on-the-work"><span class="num" aria-hidden="true">01</span><span class="mask"><span class="rise">Open on the work.</span></span></h2>
+          <p>Home is a grid, and it is already enough to start. Today’s tasks, which you finish on the tile. What’s left on the calendar. A line you can capture. The time. You don’t build a system. You just work.</p>
+        </section>
+
+        <section class="principle" id="the-page-is-the-switch" aria-labelledby="h-the-page-is-the-switch" data-reveal>
+          <h2 id="h-the-page-is-the-switch"><span class="num" aria-hidden="true">02</span><span class="mask"><span class="rise">The page is the switch.</span></span></h2>
+          <p>Add a widget. Choose its size. It takes the first open slot. Drag it, resize it, take it off. When the page is full, the next widget starts another page.</p>
+          <p>The page you are on is the hour. The other pages wait. Every workspace keeps its own board.</p>
+        </section>
+
+        <section class="principle" id="go-further" aria-labelledby="h-go-further" data-reveal>
+          <h2 id="h-go-further"><span class="num" aria-hidden="true">03</span><span class="mask"><span class="rise">Go further only when the tile runs out.</span></span></h2>
+          <p>Notes, tasks, calendar, email, contacts, and chat sit one click past the widget. The row opens the exact thing. The small act stays on Home. The module is for the rest of it. Then you are back on the same board.</p>
+        </section>
+
+        <section class="principle" id="a-link-happens" aria-labelledby="h-a-link-happens" data-reveal>
+          <h2 id="h-a-link-happens"><span class="num" aria-hidden="true">04</span><span class="mask"><span class="rise">A link happens while you work.</span></span></h2>
+          <p>Drag one thing onto another. Mention it as you write. Moduo offers one suggestion. Accept it, or dismiss it and it stays dismissed. No tagging.</p>
+          <p>The link shows up on Home, and either end opens. A module can be closed. The work still knows itself.</p>
+        </section>
+
+        <section class="principle" id="your-ai" aria-labelledby="h-your-ai" data-reveal>
+          <h2 id="h-your-ai"><span class="num" aria-hidden="true">05</span><span class="mask"><span class="rise">Your AI sees what you allow.</span></span></h2>
+          <p>Plug in Claude, ChatGPT, Cursor, or any assistant. It can search, link, and act across the workspace, tool by tool, with your permission. <strong class="peak">The hour stays yours.</strong></p>
+        </section>
+
+        <section class="principle" id="leave-with-everything" aria-labelledby="h-leave-with-everything" data-reveal>
+          <h2 id="h-leave-with-everything"><span class="num" aria-hidden="true">06</span><span class="mask"><span class="rise">Leave with everything.</span></span></h2>
+          <p>Free to start. Turn on what this workspace needs today. Add the rest when the work asks for it. If you go, your data goes with you.</p>
+        </section>
+
+        <footer class="closing" id="close" data-reveal>
+          <div class="tabs" aria-hidden="true">
+            <span class="tab tab-home"><svg><use href="#mark" /></svg><span></span></span>
+            <span class="tab tab-other" style="--i: 1"></span>
+            <span class="tab tab-other" style="--i: 2"></span>
+            <span class="tab tab-other" style="--i: 3"></span>
+            <span class="tab tab-other" style="--i: 4"></span>
+            <span class="tab tab-other" style="--i: 5"></span>
+          </div>
+          <p><span class="line mask"><span class="rise">The last productivity app you’ll ever set up.</span></span> <span class="line mask"><span class="rise">Close the other tabs.</span></span></p>
+        </footer>
+      </article>
+
+      <nav class="col" aria-label="Next">
+        <div class="after">
+          <a class="btn" href="/#waitlist">Start free<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9.5M8.5 4l4 4-4 4" /></svg></a>
+          <a class="back" href="/">Back to moduo.app</a>
+        </div>
+      </nav>
+    </main>
+
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var reduceMq = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+        var lightMq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+
+        function store(key, value) {
+          try {
+            localStorage.setItem(key, value);
+          } catch (e) {}
+        }
+        function motionReduced() {
+          var m = root.getAttribute("data-motion");
+          if (m === "reduce") return true;
+          if (m === "full") return false;
+          return !!(reduceMq && reduceMq.matches);
+        }
+        function isLight() {
+          var t = root.getAttribute("data-theme");
+          if (t) return t === "light";
+          return !!(lightMq && lightMq.matches);
+        }
+
+        // ── Entrances ───────────────────────────────────────────────────
+        // Blocks already on screen (or above it, e.g. a deep link) are never
+        // hidden. Blocks below enter once, as one unit, when they come ~25%
+        // into view — before the eye gets there — and then never move again.
+        var blocks = Array.prototype.slice.call(document.querySelectorAll("[data-reveal]"));
+        var canObserve = "IntersectionObserver" in window;
+        var io = null;
+        var heard = false;
+        function show(el) {
+          if (io) io.unobserve(el);
+          if (el.classList.contains("is-pending")) {
+            el.classList.add("is-entering");
+            el.classList.remove("is-pending");
+          }
+        }
+        function revealAll() {
+          blocks.forEach(show);
+        }
+        function arm() {
+          if (!canObserve) return;
+          if (!io) {
+            io = new IntersectionObserver(
+              function (entries) {
+                heard = true;
+                entries.forEach(function (e) {
+                  if (e.isIntersecting) show(e.target);
+                });
+              },
+              // The root reaches far above the viewport, so a block a fast
+              // scroll or jump skips past still counts as "in".
+              { rootMargin: "100000px 0px -25% 0px", threshold: 0 }
+            );
+          }
+          var fold = window.innerHeight * 0.92;
+          blocks.forEach(function (el) {
+            if (el.getBoundingClientRect().top > fold) {
+              el.classList.remove("is-entering");
+              el.classList.add("is-pending");
+              io.observe(el);
+            }
+          });
+          // Fail-safe: an observer that never reports (background tab, odd
+          // embed) must not leave anything hidden.
+          heard = false;
+          setTimeout(function () {
+            if (!heard) revealAll();
+          }, 1500);
+        }
+        function setMotion(on) {
+          root.setAttribute("data-anim", on ? "on" : "off");
+          if (on) {
+            arm();
+          } else {
+            // Straight to the final state, with nothing left mid-way.
+            blocks.forEach(function (el) {
+              if (io) io.unobserve(el);
+              el.classList.remove("is-pending", "is-entering");
+            });
+            root.classList.remove("intro");
+          }
+        }
+
+        // ── Preferences (shown only once the script can honour them) ────
+        var prefs = document.querySelector(".prefs");
+        var themeBtn = document.getElementById("pref-theme");
+        var themeLabel = document.getElementById("pref-theme-label");
+        var motionBtn = document.getElementById("pref-motion");
+        var board = document.querySelector(".board");
+
+        function paintPrefs() {
+          var light = isLight();
+          themeLabel.textContent = light ? "Dark" : "Light";
+          themeBtn.setAttribute("aria-label", light ? "Switch to dark theme" : "Switch to light theme");
+          motionBtn.setAttribute("aria-checked", motionReduced() ? "false" : "true");
+        }
+
+        themeBtn.addEventListener("click", function (ev) {
+          var next = isLight() ? "dark" : "light";
+          var apply = function () {
+            root.setAttribute("data-theme", next);
+            store("moduo-manifesto-theme", next);
+            paintPrefs();
+          };
+          if (motionReduced() || !document.startViewTransition) return apply();
+          var r = themeBtn.getBoundingClientRect();
+          var x = ev.clientX || r.left + r.width / 2;
+          var y = ev.clientY || r.top + r.height / 2;
+          var radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+          var t = document.startViewTransition(apply);
+          t.ready
+            .then(function () {
+              root.animate(
+                { clipPath: ["circle(0px at " + x + "px " + y + "px)", "circle(" + radius + "px at " + x + "px " + y + "px)"] },
+                { duration: 760, easing: "cubic-bezier(0.22, 1, 0.36, 1)", pseudoElement: "::view-transition-new(root)" }
+              );
+            })
+            .catch(function () {});
+        });
+
+        motionBtn.addEventListener("click", function () {
+          var on = motionReduced(); // currently reduced → turning motion on
+          root.setAttribute("data-motion", on ? "full" : "reduce");
+          store("moduo-manifesto-motion", on ? "full" : "reduce");
+          setMotion(on);
+          paintPrefs();
+          // Visible confirmation: the board's tiles drop in again.
+          if (on && board) {
+            board.classList.remove("replay");
+            void board.offsetWidth;
+            board.classList.add("replay");
+          }
+        });
+
+        if (reduceMq && reduceMq.addEventListener) {
+          reduceMq.addEventListener("change", function () {
+            if (!root.getAttribute("data-motion")) setMotion(!reduceMq.matches);
+            paintPrefs();
+          });
+        }
+        if (lightMq && lightMq.addEventListener) lightMq.addEventListener("change", paintPrefs);
+
+        prefs.hidden = false;
+        paintPrefs();
+        if (root.getAttribute("data-anim") === "on") arm();
+
+        // Find-in-page and printing reveal everything at once.
+        document.addEventListener("keydown", function (e) {
+          if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F")) revealAll();
+        });
+        window.addEventListener("beforeprint", revealAll);
+      })();
+    </script>
+  </body>
+</html>

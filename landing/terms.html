@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<!--
+  Terms for the free, invite-only Moduo beta, provided by Ringdove on behalf of Moduo.
+  Draft text written from the code and config as of 7 October 2026. It is not legal
+  advice: have a lawyer review it (or regenerate it with a tool like iubenda) once
+  Moduo's own company exists. Paid plans need updated terms before anyone is charged;
+  when the beta changes, update this page and the "Last updated" date.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Beta terms · Moduo</title>
+    <meta
+      name="description"
+      content="The terms for Moduo’s free, invite-only beta: your account, acceptable use, your content, liability, and how the beta can change or end."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#161616" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.moduo.app/terms" />
+    <meta property="og:title" content="Beta terms · Moduo" />
+    <meta
+      property="og:description"
+      content="The terms for Moduo’s free, invite-only beta: your account, acceptable use, your content, liability, and how the beta can change or end."
+    />
+    <meta property="og:image" content="https://www.moduo.app/assets/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://www.moduo.app/assets/og.png" />
+    <link rel="canonical" href="https://www.moduo.app/terms" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link
+      rel="preload"
+      href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <script>
+      // Before first paint: the theme remembered on our text pages (shared with the manifesto).
+      (function () {
+        var t;
+        try {
+          t = localStorage.getItem("moduo-manifesto-theme");
+        } catch (e) {}
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      })();
+    </script>
+    <style>
+      /* ─── Fonts ──────────────────────────────────────────────────────────
+         Same family and metric-matched fallback as the manifesto. */
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-400-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-500-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: Geist;
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.2.5/files/geist-sans-latin-600-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: "Geist Mono";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5.2.5/files/geist-mono-latin-400-normal.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: "Geist Fallback";
+        src: local("Arial"), local("Helvetica Neue"), local("Helvetica");
+        size-adjust: 103.3%;
+        ascent-override: 89.1%;
+        descent-override: 21.3%;
+        line-gap-override: 0%;
+      }
+
+      /* ─── Tokens (the manifesto's, unchanged) ────────────────────────── */
+      :root {
+        color-scheme: dark;
+        --bg: oklch(0.2 0 0);
+        --surface: oklch(0.235 0 0);
+        --fg-strong: oklch(0.965 0 0);
+        --fg: oklch(0.895 0 0);
+        --fg-muted: oklch(0.76 0 0);
+        --fg-faint: oklch(0.6 0 0);
+        --fg-ghost: oklch(0.42 0 0);
+        --hairline: oklch(0.3 0 0);
+        --hairline-strong: oklch(0.4 0 0);
+        --hover: oklch(0.26 0 0);
+        --primary: oklch(0.95 0 0);
+        --primary-hover: oklch(1 0 0);
+        --primary-fg: oklch(0.1 0 0);
+        --ring: oklch(0.95 0 0);
+        --body-tracking: 0.006em;
+        --body-leading: 1.65;
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: oklch(0.985 0 0);
+        --surface: oklch(0.955 0 0);
+        --fg-strong: oklch(0.16 0 0);
+        --fg: oklch(0.27 0 0);
+        --fg-muted: oklch(0.47 0 0);
+        --fg-faint: oklch(0.58 0 0);
+        --fg-ghost: oklch(0.8 0 0);
+        --hairline: oklch(0.9 0 0);
+        --hairline-strong: oklch(0.82 0 0);
+        --hover: oklch(0.94 0 0);
+        --primary: oklch(0.16 0 0);
+        --primary-hover: oklch(0 0 0);
+        --primary-fg: oklch(0.985 0 0);
+        --ring: oklch(0.16 0 0);
+        --body-tracking: 0em;
+        --body-leading: 1.6;
+      }
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme="dark"]) {
+          color-scheme: light;
+          --bg: oklch(0.985 0 0);
+          --surface: oklch(0.955 0 0);
+          --fg-strong: oklch(0.16 0 0);
+          --fg: oklch(0.27 0 0);
+          --fg-muted: oklch(0.47 0 0);
+          --fg-faint: oklch(0.58 0 0);
+          --fg-ghost: oklch(0.8 0 0);
+          --hairline: oklch(0.9 0 0);
+          --hairline-strong: oklch(0.82 0 0);
+          --hover: oklch(0.94 0 0);
+          --primary: oklch(0.16 0 0);
+          --primary-hover: oklch(0 0 0);
+          --primary-fg: oklch(0.985 0 0);
+          --ring: oklch(0.16 0 0);
+          --body-tracking: 0em;
+          --body-leading: 1.6;
+        }
+      }
+
+      :root {
+        --font-sans: Geist, "Geist Fallback", system-ui, -apple-system, sans-serif;
+        --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+        --step--1: 0.75rem;
+        --step-0: clamp(1rem, 0.925rem + 0.375vw, 1.1875rem);
+        --step-1: clamp(1.125rem, 1rem + 0.55vw, 1.4375rem);
+        --step-2: clamp(1.5rem, 1.2rem + 1.3vw, 2.125rem);
+        --step-4: clamp(2.375rem, 1.5rem + 3.9vw, 4.5rem);
+
+        --measure: 31.5em;
+
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-6: 1.5rem;
+        --space-8: 2rem;
+        --space-12: 3rem;
+        --space-16: 4rem;
+        /* Legal pages are long: sections sit closer than the manifesto's. */
+        --space-section: clamp(3.5rem, 2.5rem + 4vw, 5.5rem);
+        --gutter: clamp(1rem, 0.5rem + 2.5vw, 2rem);
+
+        --motion-duration-xs: 140ms;
+        --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+        --radius-sm: 0.375rem;
+        --radius-md: 0.5rem;
+        --radius-lg: 0.75rem;
+        --ctrl-h: 2rem;
+        --ctrl-h-lg: 2.75rem;
+      }
+
+      /* ─── Base ───────────────────────────────────────────────────────── */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        background: var(--bg);
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      body {
+        min-height: 100dvh;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-sans);
+        font-size: var(--step-0);
+        line-height: var(--body-leading);
+        letter-spacing: var(--body-tracking);
+        font-kerning: normal;
+        font-variant-ligatures: common-ligatures;
+        font-variant-numeric: proportional-nums oldstyle-nums;
+        font-optical-sizing: auto;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+      a {
+        color: inherit;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        cursor: pointer;
+      }
+      svg {
+        display: block;
+        flex-shrink: 0;
+      }
+      ::selection {
+        background: color-mix(in oklab, var(--fg-strong) 24%, transparent);
+      }
+      :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 3px;
+        border-radius: 0.25rem;
+      }
+
+      .skip {
+        position: absolute;
+        left: var(--gutter);
+        top: -4rem;
+        z-index: 10;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        background: var(--primary);
+        color: var(--primary-fg);
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-decoration: none;
+      }
+      .skip:focus {
+        top: var(--space-3);
+      }
+
+      .col {
+        width: 100%;
+        max-width: calc(var(--measure) + 2 * var(--gutter));
+        margin-inline: auto;
+        padding-inline: var(--gutter);
+      }
+
+      /* ─── Top bar (static, not sticky) ───────────────────────────────── */
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding-block: var(--space-4);
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: var(--ctrl-h);
+        color: var(--fg-strong);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        text-decoration: none;
+      }
+      .brand svg {
+        width: 1.25rem;
+        height: 1.25rem;
+        fill: currentColor;
+      }
+      .pref {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: var(--ctrl-h);
+        padding-inline: var(--space-2);
+        border-radius: var(--radius-md);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        letter-spacing: 0.02em;
+        color: var(--fg-muted);
+        transition:
+          background-color var(--motion-duration-xs) var(--motion-ease-out),
+          color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .pref:hover {
+        background: var(--hover);
+        color: var(--fg-strong);
+      }
+      .pref svg {
+        width: 0.875rem;
+        height: 0.875rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+      }
+
+      /* ─── Opening ────────────────────────────────────────────────────── */
+      .opening {
+        padding-top: clamp(3rem, 2rem + 6vh, 6rem);
+      }
+      .eyebrow,
+      .label {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        font-weight: 400;
+        line-height: 1.4;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--fg-muted);
+      }
+      .eyebrow {
+        margin-bottom: var(--space-6);
+      }
+      .eyebrow::after {
+        content: "";
+        width: 3rem;
+        height: 1px;
+        background: var(--hairline-strong);
+      }
+      h1 {
+        font-size: var(--step-4);
+        line-height: 1.04;
+        font-weight: 600;
+        letter-spacing: -0.032em;
+        color: var(--fg-strong);
+        text-wrap: balance;
+        margin-bottom: clamp(1.5rem, 1.25rem + 1.5vw, 2.5rem);
+      }
+      .lede {
+        font-size: var(--step-1);
+        line-height: 1.55;
+        letter-spacing: -0.003em;
+        color: var(--fg-strong);
+        text-wrap: pretty;
+      }
+      .updated {
+        margin-top: var(--space-6);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        letter-spacing: 0.04em;
+        color: var(--fg-faint);
+        font-variant-numeric: lining-nums;
+      }
+
+      /* The short version: the whole page in six lines. */
+      .brief {
+        margin-top: clamp(2.5rem, 2rem + 2vw, 3.5rem);
+        padding: clamp(1.25rem, 1rem + 1vw, 1.75rem);
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+      }
+      .brief .label {
+        margin-bottom: var(--space-4);
+      }
+
+      /* Contents: a quiet index, numbered like the sections. */
+      .toc {
+        margin-top: var(--space-12);
+      }
+      .toc .label {
+        margin-bottom: var(--space-3);
+      }
+      .toc ol {
+        list-style: none;
+        border-top: 1px solid var(--hairline);
+      }
+      @media (min-width: 560px) {
+        .toc ol {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          column-gap: var(--space-6);
+        }
+      }
+      .toc a {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-3);
+        padding-block: var(--space-2);
+        border-bottom: 1px solid var(--hairline);
+        font-size: 0.9375rem;
+        line-height: 1.4;
+        color: var(--fg-muted);
+        text-decoration: none;
+        transition: color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .toc a:hover {
+        color: var(--fg-strong);
+      }
+      .toc a span {
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        letter-spacing: 0.04em;
+        color: var(--fg-faint);
+        font-variant-numeric: tabular-nums lining-nums;
+      }
+
+      /* ─── Sections ───────────────────────────────────────────────────── */
+      .clause {
+        margin-top: var(--space-section);
+        scroll-margin-top: var(--space-8);
+      }
+      .clause::before {
+        content: "";
+        display: block;
+        height: 1px;
+        background: var(--hairline);
+        margin-bottom: clamp(1.5rem, 1.25rem + 1vw, 2rem);
+      }
+      h2 {
+        position: relative;
+        font-size: var(--step-2);
+        line-height: 1.15;
+        font-weight: 600;
+        letter-spacing: -0.022em;
+        color: var(--fg-strong);
+        text-wrap: balance;
+        margin-bottom: 0.6em;
+      }
+      h3 {
+        font-size: var(--step-0);
+        line-height: 1.35;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--fg-strong);
+        margin-top: 1.75em;
+        margin-bottom: 0.35em;
+        scroll-margin-top: var(--space-8);
+      }
+      .clause p,
+      .clause li,
+      .brief li {
+        text-wrap: pretty;
+      }
+      .clause > * + p,
+      .clause > * + ul,
+      .clause > * + .entity {
+        margin-top: 0.85em;
+      }
+      .clause > h3 + p,
+      .clause > h3 + ul {
+        margin-top: 0;
+      }
+      .clause ul,
+      .brief ul {
+        list-style: none;
+      }
+      .clause li,
+      .brief li {
+        position: relative;
+        padding-left: 1.25em;
+      }
+      .clause li + li,
+      .brief li + li {
+        margin-top: 0.45em;
+      }
+      .clause li::before,
+      .brief li::before {
+        content: "";
+        position: absolute;
+        left: 0.15em;
+        top: 0.8em;
+        width: 0.55em;
+        height: 1px;
+        background: var(--fg-faint);
+      }
+      .clause a,
+      .brief a {
+        color: var(--fg-strong);
+        text-decoration: underline;
+        text-decoration-color: var(--hairline-strong);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.22em;
+        overflow-wrap: anywhere;
+        transition: text-decoration-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .clause a:hover,
+      .brief a:hover {
+        text-decoration-color: currentColor;
+      }
+      strong {
+        font-weight: 600;
+        color: var(--fg-strong);
+      }
+      code {
+        font-family: var(--font-mono);
+        font-size: 0.82em;
+        letter-spacing: 0;
+        padding: 0.08em 0.35em;
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--fg-strong);
+        overflow-wrap: anywhere;
+        font-variant-numeric: lining-nums;
+      }
+      /* Section numbers in the left margin on wide screens only. */
+      .num {
+        display: none;
+      }
+      @media (min-width: 1100px) {
+        .num {
+          display: block;
+          position: absolute;
+          right: calc(100% + 2.5rem);
+          top: 0.55em;
+          font-family: var(--font-mono);
+          font-size: var(--step--1);
+          font-weight: 400;
+          letter-spacing: 0.04em;
+          line-height: 1;
+          color: var(--fg-faint);
+          font-variant-numeric: tabular-nums lining-nums;
+        }
+      }
+
+      /* Who is responsible. One block, so it's easy to swap later. */
+      .entity {
+        padding: var(--space-4) clamp(1rem, 0.75rem + 1vw, 1.5rem);
+        border: 1px solid var(--hairline-strong);
+        border-radius: var(--radius-md);
+        font-style: normal;
+      }
+      .entity strong {
+        display: block;
+      }
+      .entity .ids {
+        display: block;
+        margin-top: var(--space-2);
+        font-family: var(--font-mono);
+        font-size: 0.8125em;
+        line-height: 1.6;
+        letter-spacing: 0.01em;
+        color: var(--fg-muted);
+        font-variant-numeric: tabular-nums lining-nums;
+      }
+
+      /* Spec lists: what, then why. Stacked on phones, two columns wider. */
+      .specs {
+        margin-top: 1em;
+        border-top: 1px solid var(--hairline);
+      }
+      .specs > div {
+        display: grid;
+        gap: var(--space-1) var(--space-6);
+        padding-block: var(--space-4);
+        border-bottom: 1px solid var(--hairline);
+      }
+      @media (min-width: 640px) {
+        .specs > div {
+          grid-template-columns: minmax(0, 10em) minmax(0, 1fr);
+        }
+      }
+      .specs dt {
+        font-weight: 500;
+        line-height: 1.45;
+        color: var(--fg-strong);
+      }
+      /* Technical names (cookie keys) need the full width: name above, text below. */
+      .specs.is-stacked > div {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .specs dt code {
+        white-space: nowrap;
+      }
+      .specs dd p + p {
+        margin-top: 0.5em;
+      }
+      .where {
+        display: inline-block;
+        margin-top: var(--space-2);
+        padding: 0.1em 0.55em;
+        border: 1px solid var(--hairline-strong);
+        border-radius: 999px;
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        line-height: 1.6;
+        letter-spacing: 0.02em;
+        color: var(--fg-muted);
+        font-variant-numeric: lining-nums;
+      }
+
+      /* ─── After the end ──────────────────────────────────────────────── */
+      .after {
+        margin-top: var(--space-section);
+        border-top: 1px solid var(--hairline);
+        padding-block: var(--space-8) var(--space-16);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-3) var(--space-6);
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        min-height: var(--ctrl-h-lg);
+        padding-inline: 1.25rem;
+        border-radius: var(--radius-md);
+        font-size: 0.9375rem;
+        font-weight: 500;
+        text-decoration: none;
+        background: var(--primary);
+        color: var(--primary-fg);
+        transition: background-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .btn:hover {
+        background: var(--primary-hover);
+      }
+      .btn svg {
+        width: 1rem;
+        height: 1rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .back {
+        font-size: 0.9375rem;
+        color: var(--fg-muted);
+        text-decoration: underline;
+        text-decoration-color: var(--hairline);
+        text-underline-offset: 0.25em;
+        transition:
+          color var(--motion-duration-xs) var(--motion-ease-out),
+          text-decoration-color var(--motion-duration-xs) var(--motion-ease-out);
+      }
+      .back:hover {
+        color: var(--fg-strong);
+        text-decoration-color: currentColor;
+      }
+
+      @media (max-width: 480px) {
+        .clause p,
+        .clause li,
+        .specs dd {
+          hyphens: auto;
+          -webkit-hyphens: auto;
+        }
+      }
+
+      /* Theme switch: a circular reveal from the button (View Transitions). */
+      ::view-transition-old(root),
+      ::view-transition-new(root) {
+        animation: none;
+        mix-blend-mode: normal;
+      }
+
+      /* ─── Print ──────────────────────────────────────────────────────── */
+      @media print {
+        :root,
+        :root[data-theme] {
+          --bg: #fff;
+          --surface: #fff;
+          --fg-strong: #000;
+          --fg: #111;
+          --fg-muted: #444;
+          --fg-faint: #666;
+          --hairline: #ccc;
+          --hairline-strong: #999;
+        }
+        .top .pref,
+        .skip,
+        .num,
+        .toc,
+        .after .btn {
+          display: none !important;
+        }
+        .clause {
+          margin-top: 2rem;
+        }
+        .specs > div,
+        .entity {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="mark" viewBox="0 0 1000 1000"><path fill-rule="evenodd" d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z" /></symbol>
+    </svg>
+
+    <header class="col top">
+      <a class="brand" href="/">
+        <svg aria-hidden="true"><use href="#mark" /></svg>
+        Moduo
+      </a>
+      <button class="pref" type="button" id="pref-theme" hidden>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.25" /><path d="M8 2.75v10.5" /></svg>
+        <span id="pref-theme-label">Light</span>
+      </button>
+    </header>
+
+    <main id="main">
+      <article class="col" aria-labelledby="page-title">
+        <header class="opening">
+          <p class="eyebrow">Terms</p>
+          <h1 id="page-title">Beta terms</h1>
+          <p class="lede">These terms cover the free, invite-only beta of Moduo. They’re short and in plain language. By using Moduo, you agree to them.</p>
+          <p class="updated">Last updated <time datetime="2026-10-07">7 October 2026</time></p>
+
+          <section class="brief" aria-labelledby="brief-title">
+            <h2 class="label" id="brief-title">The short version</h2>
+            <ul>
+              <li>The beta is free and invite-only. It will change, and if it ends, you get 30 days’ notice.</li>
+              <li>Your content stays yours. Export it any time. We don’t train AI models on it.</li>
+              <li>Use Moduo lawfully, and don’t abuse it or other people.</li>
+              <li>We limit our liability as far as the law allows. Your consumer rights always apply.</li>
+              <li>Polish law applies. Paid plans will come with new terms.</li>
+            </ul>
+          </section>
+
+          <nav class="toc" aria-labelledby="toc-title">
+            <h2 class="label" id="toc-title">On this page</h2>
+            <ol>
+              <li><a href="#who"><span>01</span>Who provides Moduo</a></li>
+              <li><a href="#beta"><span>02</span>The beta</a></li>
+              <li><a href="#account"><span>03</span>Your account</a></li>
+              <li><a href="#acceptable-use"><span>04</span>Acceptable use</a></li>
+              <li><a href="#your-content"><span>05</span>Your content</a></li>
+              <li><a href="#moduo"><span>06</span>Moduo itself</a></li>
+              <li><a href="#as-is"><span>07</span>No guarantees</a></li>
+              <li><a href="#liability"><span>08</span>Liability</a></li>
+              <li><a href="#ending"><span>09</span>Ending your account</a></li>
+              <li><a href="#changes"><span>10</span>Changes to these terms</a></li>
+              <li><a href="#law"><span>11</span>Law and complaints</a></li>
+              <li><a href="#contact"><span>12</span>Contact</a></li>
+            </ol>
+          </nav>
+        </header>
+
+        <section class="clause" id="who" aria-labelledby="h-who">
+          <h2 id="h-who"><span class="num" aria-hidden="true">01</span>Who provides Moduo</h2>
+          <!-- PROVIDER: until Moduo has its own company, Ringdove provides Moduo. When the Moduo
+               company exists, change this paragraph and the block below to the new company, do
+               the same in privacy.html, update "Last updated", and email users before the switch. -->
+          <p>Moduo is made by Maciej Grzywacz and Mike Grochowski. It doesn’t have its own company yet, so Ringdove sp. z o.o., Maciej’s company, provides Moduo on its behalf. In these terms, “we” and “us” mean Ringdove, acting for Moduo.</p>
+          <address class="entity">
+            <strong>Ringdove sp. z o.o.</strong>
+            ul. Fatimska 41A/310, 31-831 Kraków, Poland
+            <span class="ids">Registered by the District Court for Kraków-Śródmieście in Kraków, XI Commercial Division of the National Court Register</span>
+            <span class="ids">KRS 0001210192 · NIP 6783233283 · REGON 543448800 · Share capital PLN&nbsp;5,000</span>
+            <span class="ids">Contact: <a href="mailto:hello@moduo.app">hello@moduo.app</a></span>
+          </address>
+          <p>When Moduo’s own company is set up, it will take over these terms from Ringdove. We’ll email you before that happens.</p>
+        </section>
+
+        <section class="clause" id="beta" aria-labelledby="h-beta">
+          <h2 id="h-beta"><span class="num" aria-hidden="true">02</span>The beta</h2>
+          <p>Moduo is in a private beta. You can only join with an invite, and it’s free.</p>
+          <p>The beta is for trying Moduo and telling us what works. Expect changes. We may add, change or remove features, and things will sometimes break.</p>
+          <p>Paid plans aren’t live yet. The prices on moduo.app, including founding prices and trials, describe our plans. When paid plans launch, we’ll publish updated terms, and you’ll accept them before you pay anything. You won’t be charged under these terms.</p>
+          <p>If we end the beta or close Moduo, we’ll email you at least 30 days before, unless the law or a security problem forces us to stop sooner. You can export your data until the end.</p>
+        </section>
+
+        <section class="clause" id="account" aria-labelledby="h-account">
+          <h2 id="h-account"><span class="num" aria-hidden="true">03</span>Your account</h2>
+          <ul>
+            <li>You need an invite, and you must be at least 16.</li>
+            <li>You need an email address you control, an internet connection, and a current version of Chrome, Safari, Firefox or Edge, or the Moduo desktop app.</li>
+            <li>Your email address is how you sign in, so keep your email account secure. If you think someone else got into your Moduo account, tell us at <a href="mailto:hello@moduo.app">hello@moduo.app</a>.</li>
+            <li>If you use Moduo for a company or other organization, you confirm you can accept these terms for it.</li>
+            <li>You’re responsible for what happens in your account.</li>
+          </ul>
+        </section>
+
+        <section class="clause" id="acceptable-use" aria-labelledby="h-acceptable-use">
+          <h2 id="h-acceptable-use"><span class="num" aria-hidden="true">04</span>Acceptable use</h2>
+          <p>Don’t use Moduo to:</p>
+          <ul>
+            <li>break the law or anyone else’s rights</li>
+            <li>send spam or phishing, including through booking pages and invites</li>
+            <li>upload malware, or try to break into Moduo, other people’s accounts or our providers’ systems</li>
+            <li>overload, disrupt or scrape the service</li>
+            <li>harass, threaten or harm anyone</li>
+          </ul>
+          <p>If you find a security problem, tell us at <a href="mailto:hello@moduo.app">hello@moduo.app</a>, and please don’t test it on other people’s data. We may suspend accounts that break these rules (see <a href="#ending">Ending your account</a>).</p>
+        </section>
+
+        <section class="clause" id="your-content" aria-labelledby="h-your-content">
+          <h2 id="h-your-content"><span class="num" aria-hidden="true">05</span>Your content</h2>
+          <p>Your content stays yours. We don’t own what you put into Moduo.</p>
+          <p>You let us store, copy, process and show your content only as needed to run Moduo for you and the people you share it with.</p>
+          <p>We don’t sell your content, and we don’t train AI models on it.</p>
+          <p>You can export a workspace any time in Settings → Advanced → Export workspace data. If you need something the export doesn’t include yet, email us and we’ll help.</p>
+          <p>Make sure you have the right to add what you add. That includes other people’s details, like contacts or booking guests.</p>
+          <p>Shared workspaces are visible to their members, based on their permissions. Published notes and booking pages can be seen by anyone with the link.</p>
+          <p>If you connect your own AI assistant, it acts on your instructions, and its provider handles what it reads under its own terms. You’re responsible for the API keys you create, and you can revoke them any time in Settings → API keys.</p>
+          <p>If you send us feedback or ideas, we may use them to improve Moduo without paying you for them.</p>
+          <p>Our <a href="/privacy">privacy policy</a> explains how we handle personal data.</p>
+        </section>
+
+        <section class="clause" id="moduo" aria-labelledby="h-moduo">
+          <h2 id="h-moduo"><span class="num" aria-hidden="true">06</span>Moduo itself</h2>
+          <p>Moduo’s app, website, design and name are protected by intellectual property law. These terms let you use Moduo. They don’t give you any other rights to it. Don’t copy, resell or reverse engineer Moduo, except where the law allows it.</p>
+        </section>
+
+        <section class="clause" id="as-is" aria-labelledby="h-as-is">
+          <h2 id="h-as-is"><span class="num" aria-hidden="true">07</span>No guarantees</h2>
+          <p>The beta is provided as is and as available. As far as the law allows, we don’t promise that Moduo will always be available, free of bugs, or right for your needs. It may lose data, so keep your own copies of anything important.</p>
+        </section>
+
+        <section class="clause" id="liability" aria-labelledby="h-liability">
+          <h2 id="h-liability"><span class="num" aria-hidden="true">08</span>Liability</h2>
+          <p>Moduo is a free beta, so we limit our liability as far as the law allows. We aren’t liable for indirect losses, like lost profits or lost business, or for data you could have restored from your own copy.</p>
+          <p>Nothing in these terms limits our liability for harm we cause on purpose or through gross negligence, for injury to life or health, or for anything else the law doesn’t let us limit. If you’re a consumer, you keep all the rights consumer law gives you.</p>
+        </section>
+
+        <section class="clause" id="ending" aria-labelledby="h-ending">
+          <h2 id="h-ending"><span class="num" aria-hidden="true">09</span>Ending your account</h2>
+          <p>You can stop using Moduo and delete your account any time in Settings → Account.</p>
+          <p>We may suspend or close your account if you seriously or repeatedly break these terms, if the law requires it, or to protect Moduo or other people. Unless it’s urgent, we’ll tell you why first and give you time to export your data.</p>
+          <p>Because this is an invite-only beta, we may also end someone’s access for other reasons. We’ll give at least 30 days’ notice when we do.</p>
+          <p>When an account is deleted, we delete its data as our <a href="/privacy#retention">privacy policy</a> describes.</p>
+        </section>
+
+        <section class="clause" id="changes" aria-labelledby="h-changes">
+          <h2 id="h-changes"><span class="num" aria-hidden="true">10</span>Changes to these terms</h2>
+          <p>We may update these terms as Moduo grows. The date at the top shows the current version. If a change matters for you, we’ll email you before it takes effect. If you don’t agree, you can stop using Moduo and delete your account.</p>
+        </section>
+
+        <section class="clause" id="law" aria-labelledby="h-law">
+          <h2 id="h-law"><span class="num" aria-hidden="true">11</span>Law and complaints</h2>
+          <p>Polish law applies to these terms. If you’re a consumer, you also keep the protection of the mandatory laws of the country where you live.</p>
+          <p>If something doesn’t work or you want to complain, email <a href="mailto:hello@moduo.app">hello@moduo.app</a> and describe the problem. We’ll reply within 14 days.</p>
+          <p>If we can’t sort it out, disputes go to the Polish courts. If you’re a consumer in the EU, you can also go to court where you live.</p>
+        </section>
+
+        <section class="clause" id="contact" aria-labelledby="h-contact">
+          <h2 id="h-contact"><span class="num" aria-hidden="true">12</span>Contact</h2>
+          <p>Questions about these terms: <a href="mailto:hello@moduo.app">hello@moduo.app</a>. About your data: <a href="mailto:privacy@moduo.app">privacy@moduo.app</a>. By post: Ringdove sp. z o.o., ul. Fatimska 41A/310, 31-831 Kraków, Poland.</p>
+        </section>
+      </article>
+
+      <nav class="col" aria-label="Next">
+        <div class="after">
+          <a class="btn" href="/privacy">Read the privacy policy<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9.5M8.5 4l4 4-4 4" /></svg></a>
+          <a class="back" href="/">Back to moduo.app</a>
+        </div>
+      </nav>
+    </main>
+
+    <script>
+      // Theme toggle, shown only once the script can honour it. Same key as the manifesto.
+      (function () {
+        var root = document.documentElement;
+        var btn = document.getElementById("pref-theme");
+        var label = document.getElementById("pref-theme-label");
+        var lightMq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+        var reduceMq = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+
+        function isLight() {
+          var t = root.getAttribute("data-theme");
+          if (t) return t === "light";
+          return !!(lightMq && lightMq.matches);
+        }
+        function motionReduced() {
+          var m = null;
+          try {
+            m = localStorage.getItem("moduo-manifesto-motion");
+          } catch (e) {}
+          if (m === "reduce") return true;
+          if (m === "full") return false;
+          return !!(reduceMq && reduceMq.matches);
+        }
+        function paint() {
+          var light = isLight();
+          label.textContent = light ? "Dark" : "Light";
+          btn.setAttribute("aria-label", light ? "Switch to dark theme" : "Switch to light theme");
+        }
+
+        btn.addEventListener("click", function (ev) {
+          var next = isLight() ? "dark" : "light";
+          var apply = function () {
+            root.setAttribute("data-theme", next);
+            try {
+              localStorage.setItem("moduo-manifesto-theme", next);
+            } catch (e) {}
+            paint();
+          };
+          if (motionReduced() || !document.startViewTransition) return apply();
+          var r = btn.getBoundingClientRect();
+          var x = ev.clientX || r.left + r.width / 2;
+          var y = ev.clientY || r.top + r.height / 2;
+          var radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+          document
+            .startViewTransition(apply)
+            .ready.then(function () {
+              root.animate(
+                { clipPath: ["circle(0px at " + x + "px " + y + "px)", "circle(" + radius + "px at " + x + "px " + y + "px)"] },
+                { duration: 760, easing: "cubic-bezier(0.22, 1, 0.36, 1)", pseudoElement: "::view-transition-new(root)" }
+              );
+            })
+            .catch(function () {});
+        });
+        if (lightMq && lightMq.addEventListener) lightMq.addEventListener("change", paint);
+
+        btn.hidden = false;
+        paint();
+      })();
+    </script>
+  </body>
+</html>

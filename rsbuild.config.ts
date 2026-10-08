@@ -173,6 +173,9 @@ export default defineConfig({
     // bandwidth after the first paint.
     prefetch: {
       type: "async-chunks",
+      // Except posthog-js: analytics code is fetched only once someone opts in
+      // (src/lib/analytics.ts names that chunk). The first pattern is Rsbuild's default.
+      exclude: [/\.(?:webmanifest|pdf|txt)$/i, /(?:^|\/)posthog\./],
     },
   },
 });
