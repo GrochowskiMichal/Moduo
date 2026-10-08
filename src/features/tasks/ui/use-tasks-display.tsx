@@ -25,16 +25,17 @@ export type TasksDisplayProps = {
 /**
  * `tasks` is every task of the workspace. Two kinds of task stay listed
  * whatever Display says, until the scope changes (`stayingIds`): one checked
- * off here, and one opened here (selected or deep-linked, with its parent), so
- * a link to finished work lands on a row and moving on doesn't pull it out
- * from under the cursor. `isHidden` tells the page's selection backstop which
- * tasks the List and Board won't show, so it never picks one.
+ * off here, and one deep-linked here (`linkedTaskId`, with its parent), so a
+ * link to finished work lands on a row and moving on doesn't pull it out from
+ * under the cursor. Browsing doesn't count: a completed task you only pass
+ * through hides again with "hide". `isHidden` tells the page's selection
+ * backstop which tasks the List and Board won't show, so it never picks one.
  */
 export function useTasksDisplay(
   workspaceId: string,
   scope: string,
   tasks: readonly Task[],
-  selectedTaskId: string | null = null,
+  linkedTaskId: string | null = null,
 ): {
   display: TasksDisplay;
   setDisplay: (next: TasksDisplay) => void;
@@ -48,12 +49,12 @@ export function useTasksDisplay(
   );
   const scopeKey = `${workspaceId}:${scope}`;
   const justCompleted = useJustCompleted(tasks, scopeKey);
-  const selectedParentId = selectedTaskId
-    ? (tasks.find((t) => t.id === selectedTaskId)?.parentId ?? null)
+  const linkedParentId = linkedTaskId
+    ? (tasks.find((t) => t.id === linkedTaskId)?.parentId ?? null)
     : null;
   const opened = useOpenedHere(
     scopeKey,
-    selectedTaskId ? { id: selectedTaskId, parentId: selectedParentId } : null,
+    linkedTaskId ? { id: linkedTaskId, parentId: linkedParentId } : null,
   );
   const stayingIds = useMemo<ReadonlySet<string>>(
     () => (opened.size === 0 ? justCompleted : new Set([...justCompleted, ...opened])),

@@ -475,9 +475,13 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
 
   // Display (tasks-v2 §7): Completed + "Show on rows", remembered per
-  // workspace and scope on this device; a task checked off or opened here
-  // stays listed until the scope changes (TV-U1). TV-U2 adds the rest.
-  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks, selectedTaskId);
+  // workspace and scope on this device; a task checked off or deep-linked
+  // here stays listed until the scope changes (TV-U1). TV-U2 adds the rest.
+  // A deep link's target (and its parent) stays listed in this scope even
+  // when Display hides completed tasks, while it's the one selected.
+  const linkedTaskId =
+    revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
+  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks, linkedTaskId);
   const isHiddenByDisplay = tasksDisplay.isHidden;
 
   // Resolve the selected task live from the bundle so the rail follows edits and
