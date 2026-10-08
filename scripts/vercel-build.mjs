@@ -30,6 +30,28 @@ if (target === "landing") {
   const outDir = path.join(root, "dist", "web");
   fs.renameSync(path.join(outDir, "index.html"), path.join(outDir, "app.html"));
   fs.copyFileSync(path.join(root, "landing", file), path.join(outDir, "index.html"));
+  // Marketing subpages ride along on the public landing (staging keeps its portal at /).
+  // Each one also needs a host rewrite in vercel.json (/manifesto → /manifesto.html, …).
+  if (file === "index.html") {
+    for (const page of ["manifesto.html", "privacy.html", "terms.html"]) {
+      fs.copyFileSync(path.join(root, "landing", page), path.join(outDir, page));
+    }
+  }
+  // The landing's own static files (share image, founder photos, …) go to /assets too.
+  const assets = path.join(root, "landing", "assets");
+  if (fs.existsSync(assets)) fs.cpSync(assets, path.join(outDir, "assets"), { recursive: true });
+  // Staging keeps its portal at /, so the marketing page is published for review at
+  // /landing.html (never indexed) before it's promoted to prod-landing.
+  if (ref === "staging-landing") {
+    let page = fs.readFileSync(path.join(root, "landing", "index.html"), "utf8");
+    if (!/name="robots"/.test(page)) {
+      page = page.replace(
+        "<head>",
+        '<head>\n    <meta name="robots" content="noindex, nofollow" />',
+      );
+    }
+    fs.writeFileSync(path.join(outDir, "landing.html"), page);
+  }
   console.log("[vercel-build] Landing build complete → dist/web/index.html + app.html");
 } else {
   console.log("[vercel-build] Building web app…");

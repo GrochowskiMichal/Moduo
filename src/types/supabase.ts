@@ -2102,6 +2102,8 @@ export type Database = {
           source: string | null
           status: string
           updated_at: string
+          updates_requested: boolean
+          updates_requested_at: string | null
           user_agent: string | null
         }
         Insert: {
@@ -2113,6 +2115,8 @@ export type Database = {
           source?: string | null
           status?: string
           updated_at?: string
+          updates_requested?: boolean
+          updates_requested_at?: string | null
           user_agent?: string | null
         }
         Update: {
@@ -2124,6 +2128,8 @@ export type Database = {
           source?: string | null
           status?: string
           updated_at?: string
+          updates_requested?: boolean
+          updates_requested_at?: string | null
           user_agent?: string | null
         }
         Relationships: []
@@ -4603,6 +4609,7 @@ export type Database = {
           p_ip_hash: string
           p_referrer?: string
           p_source: string
+          p_updates?: boolean
           p_user_agent?: string
         }
         Returns: string
