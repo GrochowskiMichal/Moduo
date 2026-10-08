@@ -80,7 +80,7 @@ export function NoteDetailPanel({
       : undefined;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto scrollbar-thin pb-6">
+    <div className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto scrollbar-thin pb-6">
       {/* key: remount per note so tag state never leaks across a focus switch. */}
       <EntityTagRow
         key={`note:${noteId}`}

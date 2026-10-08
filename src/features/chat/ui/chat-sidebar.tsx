@@ -202,7 +202,7 @@ export function ChatSidebar({
         <IconButton icon={PenSquare} label="New message" size="md" onClick={onNewMessage} />
       </div>
 
-      <div className="scrollbar-thin -mx-1 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1">
+      <div className="pane-scroll scrollbar-thin -mx-1 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1">
         {sections.starred.length > 0 ? (
           <Section label="Starred" entries={sections.starred}>
             {renderEntry}

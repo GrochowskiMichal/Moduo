@@ -63,6 +63,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-10-08 · Subframe is removed.
 - 2026-10-08 · Storybook is 10.6.1, with `@storybook/addon-mcp`.
 - 2026-10-08 · Claude Code gets TypeScript code intelligence from TypeScript 7's own language server, through a project plugin.
 - 2026-10-07 · Biome doesn't lint `landing/**`, and `bun run lint:js` gates CI.
@@ -102,6 +103,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
 - 2026-10-08 · A key's tool list is honest per module: tools that also touch another module need it too, and None means none across modules.
+- 2026-10-08 · Moduo for Claude Code: a mod over `moduo-mcp`, with three new task intent ops.
 - 2026-07-04 · Notes NO-9 + NO-10 landed — publish-to-web + the DoD (MCP manifest/connector + Recent-notes widget); Wave 3 (Notes) COMPLETE.
 - 2026-06-27 · Contacts CO-5 MCP manifest + "Needs attention" widget landed — Wave 1 (Contacts) complete.
 - 2026-06-27 · Spine CT-7 Tasks adoption + MCP manifest + dashboard widget landed (Wave 0 spine complete).
@@ -218,6 +220,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-08 · DS-1 landed: the state layer re-resolves in every appearance scope, thin token scrollbars are the global default, and Storybook switches every appearance axis.
 - 2026-10-07 · A state layer of tokens; selection becomes tint-only (R5 rewrite lands in DS-2).
 - 2026-08-14 · DF-18 (eyebrow / detail-title / toolbar standardization) landed
 - 2026-07-27 · The app accent is MONOCHROME by default; hues are opt-in; pre-workspace surfaces are always monochrome
