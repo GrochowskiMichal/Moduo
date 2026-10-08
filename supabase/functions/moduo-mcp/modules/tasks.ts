@@ -15,6 +15,11 @@
  */
 
 import { TASK_STATUSES, isTaskStatus } from "../../_shared/contracts/vocabularies.ts";
+import {
+  assigneeCandidates,
+  resolveAssigneeArg,
+  taskPeople,
+} from "../../_shared/task-people.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { visibleIds } from "../share.ts";
 import {
@@ -61,11 +66,12 @@ async function rows(query: PromiseLike<{ data: Row[] | null; error: { message: s
 async function loadWorkspace(ctx: ToolContext) {
   const ws = ctx.key.workspaceId;
   const visible = await visibleIds(ctx, "task");
-  const [allTasks, relations, tags, tagLinks] = await Promise.all([
+  const [allTasks, relations, tags, tagLinks, members] = await Promise.all([
     rows(ctx.db.from("tasks").select("*").eq("workspace_id", ws).is("deleted_at", null)),
     rows(ctx.db.from("task_relations").select("*").eq("workspace_id", ws)),
     rows(ctx.db.from("tags").select("id, name, color").eq("workspace_id", ws).is("deleted_at", null)),
     rows(ctx.db.from("tag_links").select("tag_id, entity_type, entity_id").eq("workspace_id", ws).eq("entity_type", "task")),
+    workspaceMembers(ctx),
   ]);
   const tasks = allTasks.filter((t) => visible.has(t.id));
   const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -77,6 +83,8 @@ async function loadWorkspace(ctx: ToolContext) {
     relations.filter((r) => open(r.blocker_task_id) && byId.has(r.blocked_task_id))
       .map((r) => r.blocked_task_id),
   );
+  // Assignees and creators by name; someone no longer a member reads "Former member".
+  const names = new Map(members.map((m) => [m.user_id, m.name]));
   const tagName = new Map(tags.map((t) => [t.id, t.name]));
   const taskTags = new Map<string, string[]>();
   for (const link of tagLinks) {
@@ -86,7 +94,23 @@ async function loadWorkspace(ctx: ToolContext) {
     list.push(name);
     taskTags.set(link.entity_id, list);
   }
-  return { tasks, relations, tags, byId, blockedIds, taskTags };
+  return { tasks, relations, tags, byId, blockedIds, taskTags, names };
+}
+
+/** The workspace's members (the owner is one too), with names and permissions. */
+async function workspaceMembers(
+  ctx: ToolContext,
+): Promise<{ user_id: string; perms: string[] | null; name: string }[]> {
+  const found = await rows(
+    ctx.db.from("workspace_members")
+      .select("user_id, perms, profiles(display_name)")
+      .eq("workspace_id", ctx.key.workspaceId),
+  );
+  return found.map((m) => ({
+    user_id: m.user_id as string,
+    perms: (m.perms as string[] | null) ?? null,
+    name: ((m.profiles?.display_name as string | null) ?? "").trim() || "Member",
+  }));
 }
 
 type WorkspaceData = Awaited<ReturnType<typeof loadWorkspace>>;
@@ -105,6 +129,8 @@ function shapeTask(t: Row, data: WorkspaceData, now: Date, full = false): Row {
     status: t.status,
     drifted: isDrifted(t, now),
     blocked: data.blockedIds.has(t.id),
+    // TV-D1: who it's assigned to (null = Unassigned) and, when known, who made it.
+    ...taskPeople(t, data.names),
   };
   const description = (t.description ?? "").trim();
   if (description) out.description = full ? description : description.slice(0, 280);
@@ -368,6 +394,26 @@ export const tasksConnectorModule: ConnectorModule = {
       },
     },
 
+    {
+      name: "tasks_list_assignees",
+      description:
+        "Who a task can be assigned to: the workspace's members with is_me for the key's creator. Only people with can_be_assigned (they can work on tasks) are accepted by tasks_assign.",
+      access: "view",
+      inputSchema: { type: "object", properties: {} },
+      handler: async (_args, ctx) => {
+        const [members, workspace] = await Promise.all([
+          workspaceMembers(ctx),
+          rows(ctx.db.from("workspaces").select("owner_id").eq("id", ctx.key.workspaceId)),
+        ]);
+        return assigneeCandidates({
+          members,
+          ownerId: (workspace[0]?.owner_id as string | undefined) ?? null,
+          names: new Map(members.map((m) => [m.user_id, m.name])),
+          me: ctx.key.createdBy,
+        });
+      },
+    },
+
     // ── writes (edit scope) — Session 8 intent ops, never raw row writes ──
     {
       name: "tasks_commit",
@@ -461,6 +507,30 @@ export const tasksConnectorModule: ConnectorModule = {
       inputSchema: taskIdSchema,
       handler: (args, ctx) =>
         callOp(ctx, "tasks_op_unschedule", { p_task_id: str(args, "task_id") }),
+    },
+    {
+      name: "tasks_assign",
+      description:
+        "Assign a task to a member who can work on tasks, or unassign it with null. \"me\" is the key's creator. Someone else being assigned gets one \"assigned to you\" notification.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "Task uuid." },
+          assignee_id: {
+            type: ["string", "null"],
+            description: "Member uuid (see tasks_list_assignees), \"me\", or null to unassign.",
+          },
+        },
+        required: ["task_id", "assignee_id"],
+      },
+      handler: async (args, ctx) => {
+        const task = await fetchTask(ctx, str(args, "task_id"));
+        return callOp(ctx, "tasks_op_assign", {
+          p_task_id: task.id,
+          p_assignee_id: resolveAssigneeArg(args.assignee_id, ctx.key.createdBy),
+        });
+      },
     },
     {
       name: "tasks_skip_occurrence",

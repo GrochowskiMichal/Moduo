@@ -12,7 +12,6 @@ import {
   Repeat,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { TagChipList } from "../../../components/tag-chip";
 import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -32,7 +31,8 @@ import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
-import { previewAssign, useAssignees } from "../assignees";
+import { assigneeLabel } from "../assignee-options";
+import { useAssignees } from "../assignees";
 import {
   formatDue,
   formatScheduled,
@@ -43,6 +43,7 @@ import {
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type EnergyLevel, isDrifted, type PriorityLevel, type Task } from "../model";
 import { recurrenceLabel } from "../parse/recurrence";
+import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { LevelDots } from "./level-icons";
 
@@ -128,7 +129,8 @@ export function TaskRow({
   // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
   const blocked = api.blockedTaskIds.has(task.id);
   const { assignees, byId } = useAssignees();
-  const assignee = byId(task.ownerId);
+  const assignee = byId(task.assigneeId);
+  const assigneeName = assigneeLabel(task.assigneeId, byId);
 
   const row = (
     <div
@@ -266,14 +268,11 @@ export function TaskRow({
         {assignees.length > 1 ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span
-                className="flex items-center"
-                aria-label={`Assignee: ${assignee?.name ?? "none"}`}
-              >
+              <span className="flex items-center" aria-label={`Assignee: ${assigneeName}`}>
                 <AssigneeAvatar assignee={assignee} className="size-4" />
               </span>
             </TooltipTrigger>
-            <TooltipContent>{assignee?.name ?? "Unassigned"}</TooltipContent>
+            <TooltipContent>{assigneeName}</TooltipContent>
           </Tooltip>
         ) : null}
 
@@ -373,31 +372,7 @@ export function TaskRow({
           </ContextMenuItem>
         ) : null}
         <ContextMenuSeparator />
-        {assignees.length > 1 ? (
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>Assign to</ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <ContextMenuRadioGroup
-                value={task.ownerId}
-                onValueChange={(v) => {
-                  if (v === task.ownerId) return;
-                  const person = assignees.find((a) => a.userId === v);
-                  if (!person?.canTakeTasks) return;
-                  void previewAssign(task.bucketId, v).then((msg) => {
-                    if (msg) toast.message(msg);
-                  });
-                  api.patchTask(task.id, { ownerId: v });
-                }}
-              >
-                {assignees.map((a) => (
-                  <ContextMenuRadioItem key={a.userId} value={a.userId} disabled={!a.canTakeTasks}>
-                    {a.canTakeTasks ? a.name : `${a.name} (view only)`}
-                  </ContextMenuRadioItem>
-                ))}
-              </ContextMenuRadioGroup>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-        ) : null}
+        <AssignContextMenu task={task} api={api} />
         <ContextMenuSub>
           <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
           <ContextMenuSubContent>

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { pickTagColor } from "../../../components/tag-colors";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { editableTaskFields } from "../../../lib/task-rows";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { setBucketTimeBlock } from "../default-view";
 import {
@@ -357,12 +358,11 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       }
       const bucketTasks = liveTasks.filter((t) => t.bucketId === fields.bucketId);
       const position = endPosition(bucketTasks);
-      const optimistic = makeTask({
-        ...fields,
-        ownerId: fields.ownerId || userId || undefined,
-        workspaceId,
-        position,
-      });
+      const optimistic = makeTask({ ...fields, workspaceId, position });
+      // Shown right away; the server records the same creator. An assignee
+      // left unchosen is the creator (as before TV-D1).
+      optimistic.creatorId = userId ?? "";
+      if (optimistic.assigneeId === "") optimistic.assigneeId = userId;
       const tempId = `tmp-${crypto.randomUUID()}`;
       optimistic.id = tempId;
       setBundle((prev) => ({ ...prev, tasks: [...prev.tasks, optimistic] }));
@@ -407,8 +407,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         title: trimmed,
         workspaceId,
         position,
-        ownerId: userId ?? undefined,
+        assigneeId: userId,
       });
+      optimistic.creatorId = userId ?? "";
       optimistic.committedFor = today;
       optimistic.commitOrder = maxOrder + 1;
       const tempId = `tmp-${crypto.randomUUID()}`;
@@ -447,10 +448,23 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           }
         }
       }
+      // Assignment is an intent op (tasks.assign): the RPC checks the person can
+      // take tasks, and the server notifies them. The rest of the patch, if
+      // any, saves as usual below.
+      if (patch.assigneeId !== undefined) {
+        const assigneeId = patch.assigneeId;
+        applyOp(id, { assigneeId }, () =>
+          runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
+        );
+        const { assigneeId: _assigned, ...rest } = patch;
+        // Without edit access applyOp has already said so; don't say it twice.
+        if (Object.keys(rest).length === 0 || !canEdit) return;
+        patch = rest;
+      }
       // Status changes are an intent op (tasks.set_status): the RPC enforces
       // the invariants server-side and logs attributed activity. Only the
       // status cluster (status / recurrence ride-along / board position) goes
-      // that way — plain field edits below stay raw upserts (contract §1).
+      // that way — plain field edits below are field-level writes (contract §1).
       if (
         patch.status &&
         Object.keys(patch).every((k) => k === "status" || k === "recurrence" || k === "position")
@@ -469,14 +483,25 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
         );
         return;
       }
-      const updated: Task = { ...existing, ...patch, updatedAt: new Date().toISOString() };
-      patchTaskLocal(id, { ...patch, updatedAt: updated.updatedAt });
+      // Field-level save (TV-D1): only the changed columns go to the server,
+      // so this edit can't put back a field a teammate changed meanwhile.
+      const fields = editableTaskFields(patch);
+      if (Object.keys(fields).length === 0) return;
+      if (isTempId(id)) {
+        toast.error("Still saving that task — try again in a moment.");
+        return;
+      }
+      patchTaskLocal(id, { ...fields, updatedAt: new Date().toISOString() });
       guard(async () => {
-        const saved = await runtime!.tasks.upsertTask(updated);
+        const saved = await runtime!.tasks.updateTask({
+          workspaceId: workspaceId!,
+          taskId: id,
+          patch: fields,
+        });
         setBundle((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? saved : t)) }));
       });
     },
-    [bundle.tasks, patchTaskLocal, guard, runtime, workspaceId, applyOp],
+    [bundle.tasks, patchTaskLocal, guard, runtime, workspaceId, applyOp, canEdit],
   );
 
   // ── recurrence catch-up (spec §5d) ──────────────────────────────────────────
@@ -719,12 +744,25 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       guard(async () => {
         await runtime!.tasks.deleteTask({ workspaceId: workspaceId!, taskId: id });
         // Same guarantee as deleting the task from a note (DF-5): soft delete =
-        // a stamp; Undo clears it via the upsert and restores the subtree.
+        // a stamp; Undo clears it and re-attaches the subtasks. Only those two
+        // fields are written back, so edits made meanwhile survive (TV-D1).
         undoToast("Task deleted", {
           onUndo: () => {
             void (async () => {
-              await runtime!.tasks.upsertTask({ ...existing, deletedAt: null });
-              await Promise.all(children.map((c) => runtime!.tasks.upsertTask(c)));
+              await runtime!.tasks.updateTask({
+                workspaceId: workspaceId!,
+                taskId: id,
+                patch: { deletedAt: null },
+              });
+              await Promise.all(
+                children.map((c) =>
+                  runtime!.tasks.updateTask({
+                    workspaceId: workspaceId!,
+                    taskId: c.id,
+                    patch: { parentId: id },
+                  }),
+                ),
+              );
               await load();
             })().catch(() => toast.error("Couldn't restore the task."));
           },
