@@ -47,6 +47,41 @@ export const IconOnly: Story = {
   },
 };
 
+export const Disabled: Story = {
+  render: () => (
+    <SegmentedControl
+      aria-label="Access"
+      disabled
+      value="view"
+      onValueChange={() => {}}
+      items={[
+        { value: "none", label: "None" },
+        { value: "view", label: "View" },
+        { value: "edit", label: "Edit" },
+      ]}
+    />
+  ),
+};
+
+/** One segment locked (a level you can't choose), the rest live. */
+export const DisabledSegment: Story = {
+  render: () => {
+    const [value, setValue] = useState("view");
+    return (
+      <SegmentedControl
+        aria-label="Notes access"
+        value={value}
+        onValueChange={setValue}
+        items={[
+          { value: "none", label: "None" },
+          { value: "view", label: "View" },
+          { value: "edit", label: "Edit", disabled: true },
+        ]}
+      />
+    );
+  },
+};
+
 export const Small: Story = {
   render: () => {
     const [value, setValue] = useState("list");

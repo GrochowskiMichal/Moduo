@@ -6,6 +6,8 @@
 // module-registry.ts is the single list the Moduo MCP connector (Session 9)
 // iterates: onboarding module N+1 is a manifest entry, not architecture.
 
+import type { McpKeyModule } from "@contracts/vocabularies";
+
 /** One intent op: a named, invariant-keeping mutation backed by an RPC. */
 export type ModuleOpDef = {
   /** Op name, `<module>.<op>` — e.g. "tasks.commit". */
@@ -16,19 +18,30 @@ export type ModuleOpDef = {
   summary: string;
   /** Arg name → short doc. Workspace scoping arg included. */
   args: Record<string, string>;
+  /**
+   * Other modules an API key also needs Edit on to run this op, because its
+   * RPC is another module's guard (e.g. a calendar task block is a task).
+   * Mirrored by MCP_TOOL_NEEDS in @contracts/mcp-key-scopes.
+   */
+  alsoNeeds?: McpKeyModule[];
 };
 
 /** One readable resource the module exposes (MCP resources are read-only). */
 export type ModuleResourceDef = {
   name: string;
   summary: string;
+  /** The key scope that exposes it: View, unless it only serves a write (Edit). */
+  access?: "view" | "edit";
 };
 
 export type ModuleManifest = {
-  /** Module id — matches `module_activity.module`. */
+  /** Module id — matches `module_activity.module` and the API key's scope key. */
   module: string;
   summary: string;
-  /** The per-module permission column: workspace_members.permissions_<key>. */
+  /**
+   * The PERM-1 lane a person is checked on (module_member_permission):
+   * notes | tasks | calendar | contacts | chat | email, or spine for links.
+   */
   permissionKey: string;
   /** Entity types this module writes to module_activity. */
   activityEntityTypes: string[];
