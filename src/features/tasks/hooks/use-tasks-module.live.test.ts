@@ -23,8 +23,6 @@ rs.mock("../realtime", () => ({
     };
   },
 }));
-// The hook's focus write imports the Supabase client; nothing here uses it.
-rs.mock("../focus-time-write", () => ({ writeTaskTimeTotal: () => Promise.resolve(null) }));
 
 const WS = "ws-1";
 const ME = "u-me";

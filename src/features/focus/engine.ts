@@ -100,6 +100,12 @@ export interface FocusSaveContext {
   /** When time was last added to this task. A complete task list loaded after
    *  it that lacks the task means the task is gone. */
   earnedAt: number;
+  /** The workspace whose time this is (the one the sink was registered for). */
+  workspaceId: string | null;
+  /** This save's idempotency key: every resend of the same seconds carries it,
+   *  so the server records them once (a save cut off by a reload, a request
+   *  whose answer was lost). */
+  key: string;
 }
 
 /**
@@ -111,13 +117,14 @@ export interface FocusSaveContext {
  *  - `"gone"`: the task can never take this time (deleted, no longer shared) —
  *    the seconds are dropped; the sink tells the person;
  *  - a promise for the write: resolving `false` or rejecting keeps the seconds,
- *    shows "not saved yet" and retries (F1-7).
+ *    shows "not saved yet" and retries (F1-7) with the same key; resolving
+ *    `"gone"` drops them, as above.
  */
 export type FocusFlushSink = (
   taskId: string,
   seconds: number,
   context: FocusSaveContext,
-) => boolean | "gone" | Promise<boolean>;
+) => boolean | "gone" | Promise<boolean | "gone">;
 
 type FocusStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -129,6 +136,8 @@ export interface FocusEngineDeps {
   /** One webview (the desktop shell): this tab always runs the clock. */
   singleWindow: () => boolean;
   tabId: string;
+  /** A fresh idempotency key for a save. */
+  newKey: () => string;
 }
 
 export interface FocusEngine {
@@ -346,13 +355,22 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
 
   /** Hand one item to the sink. A synchronous answer settles synchronously, so a
    *  flush with a synchronous sink (or none) finishes before it returns. */
-  function runSink(sink: FocusFlushSink, item: FlushItem): FlushOutcome | Promise<FlushOutcome> {
+  function runSink(
+    sink: FocusFlushSink,
+    item: FlushItem,
+    workspaceId: string | null,
+  ): FlushOutcome | Promise<FlushOutcome> {
     try {
-      const result = sink(item.taskId, item.seconds, { ownedSince, earnedAt: item.earnedAt });
+      const result = sink(item.taskId, item.seconds, {
+        ownedSince,
+        earnedAt: item.earnedAt,
+        workspaceId,
+        key: item.key,
+      });
       if (result === "gone") return "gone";
       if (typeof result === "boolean") return result ? "saved" : "later";
       return result.then(
-        (ok): FlushOutcome => (ok ? "saved" : "failed"),
+        (ok): FlushOutcome => (ok === "gone" ? "gone" : ok ? "saved" : "failed"),
         (): FlushOutcome => "failed",
       );
     } catch {
@@ -385,6 +403,7 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
           reviveDeadFlights(load(), liveFlights, now, workspaceId),
           workspaceId,
           now,
+          deps.newKey,
         );
         if (batch.items.length === 0) continue;
         save(batch.rec);
@@ -396,11 +415,13 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
             continue;
           }
           liveFlights.add(item.taskId);
-          const pending = runSink(sink, item);
+          const pending = runSink(sink, item, workspaceId);
           const outcome = typeof pending === "string" ? pending : await pending;
           liveFlights.delete(item.taskId);
           // Re-read: the clock kept ticking (and writing) while the save ran.
           saveAt(flushKey, (r) => settleFlush(r, item, outcome, deps.now()));
+          // A resent save went through: the time earned meanwhile goes next.
+          if (outcome === "saved" && item.resend) flushAgain = true;
           if (key === flushKey) publish(prefs);
         }
       }
@@ -566,6 +587,16 @@ function newTabId(): string {
   }
 }
 
+/** A save's idempotency key: what tasks_op_track_time accepts (8–64 of
+ *  A–Z a–z 0–9 _ -). */
+function newSaveKey(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `save-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+  }
+}
+
 let alertImpl: FocusEngineDeps["alert"] = alertPhaseEnd;
 
 function appDeps(): FocusEngineDeps {
@@ -582,6 +613,7 @@ function appDeps(): FocusEngineDeps {
     alert: (end, next) => alertImpl(end, next),
     singleWindow: isTauriRuntime,
     tabId: newTabId(),
+    newKey: newSaveKey,
   };
 }
 

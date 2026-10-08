@@ -111,6 +111,9 @@ type WorkspaceTags = {
    *  tag: a read that started before it can't put back what it changed. */
   liveLinks: Map<string, number>;
   liveTags: Map<string, number>;
+  /** Link ids a live change deleted (a delete carries only the id, and the
+   *  link may not have been loaded yet), with when. */
+  liveDeletedLinks: Map<string, number>;
   ops: Op[];
   view: TagView | null;
 };
@@ -165,6 +168,7 @@ function workspace(workspaceId: string): WorkspaceTags {
       tagsAt: Number.NEGATIVE_INFINITY,
       liveLinks: new Map(),
       liveTags: new Map(),
+      liveDeletedLinks: new Map(),
       ops: [],
       view: null,
     };
@@ -303,8 +307,10 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
       links.set(k, link);
     }
   }
+  const deletedSince = (link: TagLink) => (ws.liveDeletedLinks.get(link.id) ?? 0) > seed.at;
   for (const link of seed.links) {
     const k = linkKey(link.tagId, link.entityType, link.entityId);
+    if (deletedSince(link)) continue;
     if (
       inScope(seed.scope, link.entityType, link.entityId) &&
       !loadedSince(link) &&
@@ -371,6 +377,7 @@ export function applyLiveTags(workspaceId: string, changes: readonly LiveChange[
       );
     } else if (change.table === "tag_links") {
       if (change.kind === "delete") {
+        ws.liveDeletedLinks.set(change.id, now);
         for (const [key, link] of ws.links) {
           if (link.id === change.id) {
             ws.links.delete(key);
@@ -399,6 +406,7 @@ function forgetOldLive(ws: WorkspaceTags): void {
   const cutoff = Date.now() - SETTLED_OP_TTL_MS;
   for (const [key, at] of ws.liveLinks) if (at < cutoff) ws.liveLinks.delete(key);
   for (const [id, at] of ws.liveTags) if (at < cutoff) ws.liveTags.delete(id);
+  for (const [id, at] of ws.liveDeletedLinks) if (at < cutoff) ws.liveDeletedLinks.delete(id);
 }
 
 /** The entity types and single entities that full reads (not "everything") loaded. */

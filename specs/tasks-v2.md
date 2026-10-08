@@ -585,6 +585,8 @@ Layers per AGENTS.md:
    - **Totals** come from **`tasks_time_totals(workspace_id)`** (SECURITY DEFINER), which returns per task `total_focus_seconds`, `my_seconds`, `my_waiting_seconds`. Raw entries are readable only by their author.
    - The entry table *is* the attributed log, so time ops write **no** `module_activity` rows. That's a documented exception to keep the trail quiet; recorded in `docs/decisions/tasks.md`.
    - **Legacy:** `time_spent_seconds` is backfilled as one `legacy` entry per task (excluded from date-window sums). A trigger keeps `tasks.time_spent_seconds` = total for old clients until TV-D7, and turns old-client writes of that column into adjustments.
+
+   *As built in TV-D3 (2026-10-09):* the op appends **closed** stretches (no open entries to heartbeat: the TV-F1 engine keeps the clock on the device), each Focus save under an idempotency key (`client_key`, one entry per task and key), plus `adjust`, `set_total` and `undo` (own adjustments only; a task never owes time). `tasks_time_totals(workspace_id, since)` also returns the caller's share since a time. A lower value from an old build's whole-row upsert is ignored. Details: [docs/decisions/tasks.md](../docs/decisions/tasks.md) 2026-10-08 TV-D3.
 6. **Focus engine** lives outside React (module store, AppChrome-remount-safe):
    - state is `{run, phase timestamps, open stretch startedAt, banked}`;
    - elapsed = banked + (now − startedAt) via `Date.now()` (not `performance.now()`, which freezes in sleep on WebKit);

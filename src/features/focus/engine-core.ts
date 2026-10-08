@@ -72,10 +72,18 @@ export interface FocusCredit {
   workspaceId: string | null;
   /** Work time not saved yet. */
   ms: number;
-  /** The part handed to the sink and not confirmed yet. */
+  /** The part handed to the sink and not confirmed yet: one save, sent under
+   *  `flightKey`. Until it's confirmed it is only ever sent again as it is
+   *  (same seconds, same key), so the server can tell a resend from new time. */
   inFlightMs: number;
-  /** When that hand-off started. */
+  /** When that hand-off started; null = waiting to be sent again (its answer
+   *  never came, or it failed). */
   inFlightAt: number | null;
+  /** The save's idempotency key (TV-D3). Missing on records written before. */
+  flightKey?: string | null;
+  /** When the seconds in that save were last earned: the stretch's end, kept
+   *  for every resend. */
+  flightEarnedAt?: number | null;
   /** When saving this task's time last failed; cleared once it's saved. */
   failedAt: number | null;
   /** When time was last added. A complete task list loaded after this that
@@ -87,6 +95,11 @@ export interface FocusCredit {
  *  "not saved yet" and retries); or gone (the task can never take the time —
  *  the seconds are dropped). */
 export type FlushOutcome = "saved" | "later" | "failed" | "gone";
+
+/** Seconds held for a save that has to be sent again. */
+function parkedMs(c: FocusCredit): number {
+  return c.inFlightAt === null ? c.inFlightMs : 0;
+}
 
 /** A hand-off still unconfirmed after this long died with its page. */
 export const FLIGHT_STALE_MS = 120_000;
@@ -222,6 +235,8 @@ function addCredit(
       ms: (prev?.ms ?? 0) + ms,
       inFlightMs: prev?.inFlightMs ?? 0,
       inFlightAt: prev?.inFlightAt ?? null,
+      flightKey: prev?.flightKey ?? null,
+      flightEarnedAt: prev?.flightEarnedAt ?? null,
       failedAt: prev?.failedAt ?? null,
       earnedAt: Math.max(prev?.earnedAt ?? 0, at),
     },
@@ -492,34 +507,67 @@ export interface FlushItem {
   seconds: number;
   /** When time was last added to this task's credit. */
   earnedAt: number;
+  /** The save's idempotency key: the same on every resend of these seconds. */
+  key: string;
+  /** A save sent again (time earned since waits for the next flush). */
+  resend: boolean;
 }
 
-/** Take whole seconds of every unsaved credit in `workspaceId`, marked in flight. */
+/**
+ * Take every save due in `workspaceId`, marked in flight: a save waiting to be
+ * sent again goes as it was (same seconds, same key); otherwise the whole
+ * seconds not saved yet go as a new save under a fresh key. One per task.
+ */
 export function takeFlushBatch(
   r: FocusRecord,
   workspaceId: string | null,
   now: number,
+  newKey: () => string,
 ): { rec: FocusRecord; items: FlushItem[] } {
   const items: FlushItem[] = [];
   let credits = r.credits;
   for (const [taskId, c] of Object.entries(r.credits)) {
-    if (c.workspaceId !== workspaceId || c.inFlightMs > 0) continue;
+    if (c.workspaceId !== workspaceId) continue;
+    if (c.inFlightMs > 0) {
+      if (c.inFlightAt !== null) continue; // still waiting for its answer
+      const key = c.flightKey ?? newKey();
+      credits = { ...credits, [taskId]: { ...c, inFlightAt: now, flightKey: key } };
+      items.push({
+        taskId,
+        seconds: Math.round(c.inFlightMs / 1000),
+        earnedAt: c.flightEarnedAt ?? c.earnedAt,
+        key,
+        resend: true,
+      });
+      continue;
+    }
     const seconds = Math.floor(c.ms / 1000);
     if (seconds < 1) continue;
+    const key = newKey();
     credits = {
       ...credits,
-      [taskId]: { ...c, ms: c.ms - seconds * 1000, inFlightMs: seconds * 1000, inFlightAt: now },
+      [taskId]: {
+        ...c,
+        ms: c.ms - seconds * 1000,
+        inFlightMs: seconds * 1000,
+        inFlightAt: now,
+        flightKey: key,
+        flightEarnedAt: c.earnedAt,
+      },
     };
-    items.push({ taskId, seconds, earnedAt: c.earnedAt });
+    items.push({ taskId, seconds, earnedAt: c.earnedAt, key, resend: false });
   }
   return items.length ? { rec: { ...r, credits }, items } : { rec: r, items };
 }
 
 /**
  * Settle one flushed item. Saved → gone, and the task's failure mark clears.
- * Not now → back to unsaved, mark unchanged. Failed → back to unsaved, marked
- * (that's what shows "not saved yet"). Gone → the task can never take its
- * time, so the whole credit is dropped.
+ * Not now, or failed → the save waits to be sent again as it is, with its key:
+ * a failed request may still have reached the server, and a resend under the
+ * same key is recorded once. Failed also marks it (that's what shows "not saved
+ * yet"). Gone → the task can never take its time, so the whole credit is
+ * dropped. An answer for a save that isn't this credit's any more changes
+ * nothing.
  */
 export function settleFlush(
   r: FocusRecord,
@@ -535,15 +583,23 @@ export function settleFlush(
       credits: Object.fromEntries(Object.entries(r.credits).filter(([id]) => id !== item.taskId)),
     };
   }
-  const flight = Math.min(c.inFlightMs, item.seconds * 1000);
-  const inFlightMs = c.inFlightMs - flight;
-  const next: FocusCredit = {
-    ...c,
-    ms: outcome === "saved" ? c.ms : c.ms + flight,
-    inFlightMs,
-    inFlightAt: inFlightMs > 0 ? c.inFlightAt : null,
-    failedAt: outcome === "saved" ? null : outcome === "failed" ? now : c.failedAt,
-  };
+  if (c.inFlightMs <= 0 || (c.flightKey != null && c.flightKey !== item.key)) return r;
+  const next: FocusCredit =
+    outcome === "saved"
+      ? {
+          ...c,
+          inFlightMs: 0,
+          inFlightAt: null,
+          flightKey: null,
+          flightEarnedAt: null,
+          failedAt: null,
+        }
+      : {
+          ...c,
+          inFlightAt: null,
+          flightKey: c.flightKey ?? item.key,
+          failedAt: outcome === "failed" ? now : c.failedAt,
+        };
   const credits = Object.fromEntries(
     Object.entries(r.credits).filter(([id]) => id !== item.taskId),
   );
@@ -551,8 +607,9 @@ export function settleFlush(
   return { ...r, credits };
 }
 
-/** A hand-off that died with an earlier page (a reload or crash mid-save) can't
- *  be confirmed any more: once it's stale, count it as unsaved again. Only
+/** A hand-off that died with an earlier page (a reload or crash mid-save) will
+ *  never be answered: once it's stale, it waits to be sent again, under its
+ *  key. (One from before keys existed counts as unsaved again.) Only
  *  `workspaceId`'s credits (the ones about to be saved) are touched, and never
  *  hand-offs this page is still waiting on (`liveTaskIds`). */
 export function reviveDeadFlights(
@@ -567,10 +624,20 @@ export function reviveDeadFlights(
     const dead =
       c.workspaceId === workspaceId &&
       c.inFlightMs > 0 &&
+      c.inFlightAt !== null &&
       !liveTaskIds.has(taskId) &&
-      now - (c.inFlightAt ?? 0) > FLIGHT_STALE_MS;
+      now - c.inFlightAt > FLIGHT_STALE_MS;
     if (dead) {
-      credits[taskId] = { ...c, ms: c.ms + c.inFlightMs, inFlightMs: 0, inFlightAt: null };
+      credits[taskId] = c.flightKey
+        ? { ...c, inFlightAt: null }
+        : {
+            ...c,
+            ms: c.ms + c.inFlightMs,
+            inFlightMs: 0,
+            inFlightAt: null,
+            flightKey: null,
+            flightEarnedAt: null,
+          };
       changed = true;
     } else {
       credits[taskId] = c;
@@ -633,7 +700,8 @@ export function snapshotOf(rec: FocusRecord, now: number, p: FocusRhythm): Focus
     completedWork: r.blocks,
     pomoLeft,
     sitElapsed,
-    accrued: Math.floor((credit?.ms ?? 0) / 1000),
+    // A save waiting to be sent again isn't in the task's saved total yet.
+    accrued: Math.floor(((credit?.ms ?? 0) + (credit ? parkedMs(credit) : 0)) / 1000),
     phaseLabel: phaseLabelOf(r.phase, r.longBreak),
     bigClock: r.pomodoro ? pomoLeft : sitElapsed,
     away: awaySummary(r.away),
@@ -711,6 +779,8 @@ const recordSchema = z.object({
       ms: z.number().nonnegative(),
       inFlightMs: z.number().nonnegative(),
       inFlightAt: z.number().nullable(),
+      flightKey: z.string().nullable().optional(),
+      flightEarnedAt: z.number().nullable().optional(),
       failedAt: z.number().nullable(),
       earnedAt: z.number(),
     }),

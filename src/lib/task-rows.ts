@@ -12,12 +12,24 @@ import {
   tagRowSchema,
   taskQueueRowSchema,
   taskRowSchema,
+  taskTimeAnswerSchema,
+  taskTimeTotalsRowSchema,
 } from "@contracts/rows";
-import type { Bucket, Tag, TagLink, Task, TaskQueueEntry } from "../features/tasks/model";
+import type {
+  Bucket,
+  Tag,
+  TagLink,
+  Task,
+  TaskQueueEntry,
+  TaskTimeResult,
+  TaskTimeTotals,
+} from "../features/tasks/model";
 
 /**
  * The fields an edit can change. The id, workspace, creator and timestamps
- * belong to the server; the assignee changes through `tasks_op_assign`.
+ * belong to the server; the assignee changes through `tasks_op_assign`, and
+ * tracked time through `tasks_op_track_time` (TV-D3): an edit never carries the
+ * time total, so it can't put back time someone else tracked.
  */
 export type TaskFieldPatch = Partial<
   Pick<
@@ -29,7 +41,6 @@ export type TaskFieldPatch = Partial<
     | "dueDate"
     | "scheduledAt"
     | "durationMinutes"
-    | "timeSpentSeconds"
     | "recurrence"
     | "energyLevel"
     | "priority"
@@ -50,7 +61,6 @@ const PATCH_COLUMNS = {
   dueDate: "due_date",
   scheduledAt: "scheduled_at",
   durationMinutes: "duration_minutes",
-  timeSpentSeconds: "time_spent_seconds",
   recurrence: "recurrence",
   energyLevel: "energy_level",
   priority: "priority",
@@ -178,6 +188,31 @@ export function taskQueueRowToModel(raw: unknown): TaskQueueEntry {
     position: r.position,
     queuedAt: r.queued_at,
     updatedAt: r.updated_at,
+  };
+}
+
+/** Map `tasks_op_track_time`'s answer (TV-D3). */
+export function taskTimeAnswerToModel(raw: unknown): TaskTimeResult {
+  const r = requireRow(taskTimeAnswerSchema, raw, "time answer");
+  return {
+    status: r.status,
+    taskId: r.task_id,
+    entryId: r.entry_id ?? null,
+    totalSeconds: r.total_seconds ?? null,
+    mySeconds: r.my_seconds ?? null,
+    myWaitingSeconds: r.my_waiting_seconds ?? null,
+  };
+}
+
+/** Map one row of `tasks_time_totals` (TV-D3). */
+export function taskTimeTotalsRowToModel(raw: unknown): TaskTimeTotals {
+  const r = requireRow(taskTimeTotalsRowSchema, raw, "time totals");
+  return {
+    taskId: r.task_id,
+    totalSeconds: r.total_seconds,
+    mySeconds: r.my_seconds,
+    myWaitingSeconds: r.my_waiting_seconds,
+    mySecondsSince: r.my_seconds_since ?? null,
   };
 }
 

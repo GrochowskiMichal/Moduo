@@ -11,7 +11,6 @@ import { editableTaskFields } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
 import { formatAwaySpan } from "../../focus/away-copy";
 import type { FocusSaveContext } from "../../focus/engine";
-import { readSavedFocusTotal, writeSavedFocusTotal } from "../../focus/saved-totals";
 import {
   applyLiveTags,
   createOrAttachByName,
@@ -24,7 +23,6 @@ import {
 } from "../../tags/store";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { setBucketTimeBlock } from "../default-view";
-import { writeTaskTimeTotal } from "../focus-time-write";
 import {
   betweenPositions,
   blockedTaskIds as computeBlockedTaskIds,
@@ -53,8 +51,10 @@ import {
   type TaskStatus,
   type TasksCatchUpItem,
   type TasksModuleBundle,
+  type TaskTimeResult,
   type TimeBlockMap,
   type TimeBlockSlot,
+  type TrackTimeInput,
 } from "../model";
 import {
   alsoInLabel,
@@ -75,6 +75,13 @@ import {
   recurrenceOnStatusChange,
   skipOccurrencePatch,
 } from "../recurrence-engine";
+
+/** An adjustment `logTimeAdjustment` recorded, as its Undo needs it. */
+export type TimeAdjustment = {
+  /** The entry to remove; null on a database without time entries yet. */
+  entryId: string | null;
+  seconds: number;
+};
 
 type Params = {
   userId: string | null;
@@ -144,17 +151,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   const reqRef = useRef(0);
   /** Bumped on every successful load — the recurrence catch-up trigger. */
   const [loadStamp, setLoadStamp] = useState(0);
-  /** Which workspace the loaded bundle is, when its request started, and which
-   *  tasks the server had then. The focus sink judges freshness and "gone" by
-   *  it; it's set with the bundle so a render sees both. */
-  const [loadedFrom, setLoadedFrom] = useState<{
-    workspaceId: string;
-    at: number;
-    taskIds: ReadonlySet<string>;
-  } | null>(null);
-  /** The ownership the focus sink last reloaded for, and when (one reload per
-   *  takeover, then at most one a minute while loads keep failing). */
-  const focusReload = useRef({ ownedSince: 0, at: 0 });
 
   /**
    * Read the whole module. A quiet read (a refetch on focus or reconnect)
@@ -175,7 +171,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         setBundle(EMPTY_BUNDLE);
         setQueueRows([]);
         setKeptRows([]);
-        setLoadedFrom(null);
         setTimeBlocksState({});
         setLoading(false);
         return;
@@ -213,11 +208,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
             scope: { kind: "all" },
             at: startedAt,
             complete: !next.truncated.some((t) => t.scope === TAG_LINKS_SCOPE),
-          });
-          setLoadedFrom({
-            workspaceId,
-            at: startedAt,
-            taskIds: new Set(next.tasks.map((t) => t.id)),
           });
           setTimeBlocksState(blocks);
           setError(null);
@@ -995,147 +985,198 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [patchTask],
   );
 
+  /** Each task's time writes in flight, chained (see `writeTime`). */
+  const timeChains = useRef(new Map<string, Promise<void>>());
+
   /**
-   * Lightweight time-tracking: fold an elapsed work delta (seconds) into the
-   * task's persisted total through the normal save path. Reads the current
-   * total from the source of truth so repeated flushes accumulate cleanly.
-   * A NEGATIVE delta subtracts (the Calendar "took longer" undo) — reading the
-   * live total means it removes exactly its own contribution, never clobbering
-   * time accrued in between (the result still floors at 0).
+   * Every time write (TV-D3): show it at once, send it through
+   * `tasks_op_track_time`, then take the server's total, which already counts
+   * everyone else's time. Only the task's time changes, never the rest of the
+   * row. `delta` is what the write adds as far as this list can tell; if the
+   * write fails or the task is gone, the shown total goes back (unless it
+   * changed again meanwhile).
+   */
+  const writeTime = useCallback(
+    (id: string, delta: number, input: TrackTimeInput): Promise<TaskTimeResult> => {
+      if (!runtime) return Promise.reject(new Error("Not signed in."));
+      // One task's time writes go one at a time, in order, so each answer's
+      // total includes every earlier write and the last one shown is the latest.
+      const previous = timeChains.current.get(id) ?? Promise.resolve();
+      const sent = previous.then(() => runtime.tasks.trackTime(input));
+      const settled = sent.then(
+        () => undefined,
+        () => undefined,
+      );
+      timeChains.current.set(id, settled);
+      void settled.then(() => {
+        if (timeChains.current.get(id) === settled) timeChains.current.delete(id);
+      });
+      const before = bundle.tasks.find((t) => t.id === id)?.timeSpentSeconds;
+      const shown = before === undefined ? undefined : Math.max(0, before + Math.round(delta));
+      if (before !== undefined && shown !== before) patchTaskLocal(id, { timeSpentSeconds: shown });
+      const putBack = () =>
+        setBundle((prev) => ({
+          ...prev,
+          tasks: prev.tasks.map((t) =>
+            t.id === id && before !== undefined && t.timeSpentSeconds === shown
+              ? { ...t, timeSpentSeconds: before }
+              : t,
+          ),
+        }));
+      return sent.then(
+        (result) => {
+          if (result.totalSeconds === null) putBack();
+          else patchTaskLocal(id, { timeSpentSeconds: result.totalSeconds });
+          return result;
+        },
+        (e) => {
+          putBack();
+          throw e;
+        },
+      );
+    },
+    [runtime, bundle.tasks, patchTaskLocal],
+  );
+
+  /** Why a time write can't be sent right now, or null. */
+  const timeWriteBlocked = useCallback(
+    (id: string): string | null => {
+      if (!runtime || !workspaceId || !canEdit) {
+        return "You don't have edit access to Tasks in this workspace.";
+      }
+      if (isTempId(id)) return "Still saving that task — try again in a moment.";
+      return null;
+    },
+    [runtime, workspaceId, canEdit],
+  );
+
+  /**
+   * Calendar's focus on a block (CAL-5) saving what it tracked, as a finished
+   * focus stretch (a negative delta takes time away). Fire and forget; false
+   * when it can't be sent now. Manual "+5m" and "Took longer" are adjustments:
+   * `logTimeAdjustment`.
    */
   const addTimeSpent = useCallback(
     (id: string, deltaSeconds: number): boolean => {
       if (!Number.isFinite(deltaSeconds) || Math.abs(deltaSeconds) < 1) return true; // nothing to persist
-      const t = bundle.tasks.find((x) => x.id === id);
-      // Not in the local bundle (e.g. the app-level Focus sink drained on a
-      // /tasks remount before load() resolved). Report "not persisted" so the
-      // caller RETAINS the delta and retries once the bundle is loaded — else
-      // time accrued while /tasks was unmounted is silently lost (DF-11).
-      if (!t) return false;
-      patchTask(id, {
-        timeSpentSeconds: Math.max(0, (t.timeSpentSeconds ?? 0) + Math.round(deltaSeconds)),
-      });
+      if (timeWriteBlocked(id) || !workspaceId) return false;
+      const seconds = Math.round(deltaSeconds);
+      void writeTime(
+        id,
+        seconds,
+        seconds > 0
+          ? { workspaceId, taskId: id, action: "focus", seconds }
+          : { workspaceId, taskId: id, action: "adjust", seconds },
+      ).catch((e) => toast.error(e instanceof Error ? e.message : "Couldn't save the time."));
       return true;
     },
-    [bundle.tasks, patchTask],
+    [timeWriteBlocked, workspaceId, writeTime],
   );
 
   /**
-   * The Focus engine's flush sink (TV-F1): fold `seconds` of tracked work into
-   * the task's saved total and report what happened, so the engine keeps the
-   * seconds and retries ("not saved yet", F1-7) instead of losing them. It
-   * writes only the time total (`writeTaskTimeTotal`), never the rest of the row.
-   *  - `false` right away: not now. The list is loading, was requested before
-   *    this tab took the clock (reload first: the other tab may have changed the
-   *    total), is another workspace's for a render, is capped, or doesn't have
-   *    the task yet.
-   *  - `"gone"`: the server's list for the task's workspace, requested after the
-   *    time was tracked, doesn't have it — deleted or no longer shared. The
-   *    seconds are dropped and the person is told.
-   *  - a promise: the write, `false` when it failed (the optimistic total is
-   *    put back) or when there's no edit access, so it shows as not saved.
-   * The total is absolute, so it builds on the fresher of this bundle's row and
-   * the last save any tab on this device made.
+   * Add (or take away) time as one adjustment, like Calendar's "Took longer".
+   * Resolves to what `undoTimeAdjustment` needs to remove exactly that one, or
+   * null when nothing was recorded.
+   */
+  const logTimeAdjustment = useCallback(
+    (id: string, deltaSeconds: number): Promise<TimeAdjustment | null> => {
+      const seconds = Math.round(deltaSeconds);
+      if (!Number.isFinite(seconds) || seconds === 0) return Promise.resolve(null);
+      const blocked = timeWriteBlocked(id);
+      if (blocked || !workspaceId) {
+        toast.error(blocked ?? "Couldn't save the time.");
+        return Promise.resolve(null);
+      }
+      return writeTime(id, seconds, { workspaceId, taskId: id, action: "adjust", seconds }).then(
+        (result) => (result.status === "saved" ? { entryId: result.entryId, seconds } : null),
+        (e) => {
+          toast.error(e instanceof Error ? e.message : "Couldn't save the time.");
+          return null;
+        },
+      );
+    },
+    [timeWriteBlocked, workspaceId, writeTime],
+  );
+
+  /** Undo an adjustment `logTimeAdjustment` made: removes exactly that one. */
+  const undoTimeAdjustment = useCallback(
+    (id: string, adjustment: TimeAdjustment) => {
+      if (timeWriteBlocked(id) || !workspaceId) return;
+      void writeTime(id, -adjustment.seconds, {
+        workspaceId,
+        taskId: id,
+        action: "undo",
+        entryId: adjustment.entryId,
+        seconds: adjustment.seconds,
+      }).catch((e) => toast.error(e instanceof Error ? e.message : "Couldn't undo that."));
+    },
+    [timeWriteBlocked, workspaceId, writeTime],
+  );
+
+  /**
+   * The Focus engine's flush sink (TV-F1, saving through time entries since
+   * TV-D3): record `seconds` of focus that ended at `earnedAt` as one stretch,
+   * under the save's key, so a resend after a reload or a lost answer counts
+   * once. Only the task's time changes.
+   *  - `false` right away: not now (no workspace yet, a task still being
+   *    created, or another workspace's time handed over mid-switch).
+   *  - a promise: `true` saved (or already saved), `false` failed or no edit
+   *    access (kept, "not saved yet", retried with the same key), `"gone"` the
+   *    task was deleted for good or isn't shared any more: the seconds are
+   *    dropped and the person is told.
    */
   const persistFocusTime = useCallback(
     (
       id: string,
       seconds: number,
       context: FocusSaveContext,
-    ): boolean | "gone" | Promise<boolean> => {
+    ): boolean | "gone" | Promise<boolean | "gone"> => {
       if (!Number.isFinite(seconds) || seconds < 1) return true;
-      if (loading || !runtime || !workspaceId || isTempId(id)) return false;
-      if (!loadedFrom || loadedFrom.workspaceId !== workspaceId) return false;
-      if (loadedFrom.at < context.ownedSince) {
-        const last = focusReload.current;
-        if (last.ownedSince !== context.ownedSince || Date.now() - last.at > 60_000) {
-          focusReload.current = { ownedSince: context.ownedSince, at: Date.now() };
-          void load();
-        }
+      if (!runtime || !workspaceId || isTempId(id) || context.workspaceId !== workspaceId) {
         return false;
       }
-      const task = bundle.tasks.find((t) => t.id === id);
-      if (!task || task.workspaceId !== workspaceId) {
-        const complete = !bundle.truncated.some((t) => t.scope === "tasks");
-        const goneFromServer = complete && !loadedFrom.taskIds.has(id);
-        if (!goneFromServer || loadedFrom.at <= context.earnedAt) return false;
-        toast(`${formatAwaySpan(seconds)} of focus time couldn't be saved`, {
-          description: "The task it was tracked on was deleted or isn't shared with you any more.",
-        });
-        return "gone";
-      }
       if (!canEdit) return Promise.resolve(false);
-      const lastSave = userId ? readSavedFocusTotal(userId, id) : null;
-      const base =
-        lastSave && !(Date.parse(task.updatedAt) >= lastSave.at)
-          ? lastSave.total
-          : (task.timeSpentSeconds ?? 0);
-      const total = Math.max(0, base + Math.round(seconds));
-      patchTaskLocal(id, { timeSpentSeconds: total });
-      // This write goes around the runtime, so it tells the live gate itself:
-      // the echo of an earlier flush must not put an older total back.
-      const endWrite = gate.begin();
-      return writeTaskTimeTotal(id, workspaceId, total)
-        .finally(endWrite)
-        .then((saved) => {
-          if (!saved) {
-            // No visible row (hard-deleted, no longer shared): reload, bounded
-            // like the takeover reload, so the next try can say "gone".
-            if (Date.now() - focusReload.current.at > 60_000) {
-              focusReload.current = { ...focusReload.current, at: Date.now() };
-              void load();
-            }
-            throw new Error("task not found");
-          }
-          if (userId) {
-            writeSavedFocusTotal(userId, id, saved.timeSpentSeconds, Date.parse(saved.updatedAt));
-          }
-          setBundle((prev) => ({
-            ...prev,
-            tasks: prev.tasks.map((t) =>
-              t.id === id
-                ? { ...t, timeSpentSeconds: saved.timeSpentSeconds, updatedAt: saved.updatedAt }
-                : t,
-            ),
-          }));
-          return true;
-        })
-        .catch(() => {
-          // Put back exactly what this write added, unless something else has
-          // changed the total since.
-          setBundle((prev) => ({
-            ...prev,
-            tasks: prev.tasks.map((t) =>
-              t.id === id && t.timeSpentSeconds === total
-                ? { ...t, timeSpentSeconds: Math.max(0, base) }
-                : t,
-            ),
-          }));
-          return false;
-        });
+      return writeTime(id, seconds, {
+        workspaceId,
+        taskId: id,
+        action: "focus",
+        seconds: Math.round(seconds),
+        endedAt: context.earnedAt > 0 ? new Date(context.earnedAt).toISOString() : null,
+        key: context.key,
+      }).then(
+        (result) => {
+          if (result.status !== "gone") return true;
+          toast(`${formatAwaySpan(seconds)} of focus time couldn't be saved`, {
+            description:
+              "The task it was tracked on was deleted or isn't shared with you any more.",
+          });
+          return "gone" as const;
+        },
+        () => false,
+      );
     },
-    [
-      loading,
-      loadedFrom,
-      load,
-      bundle.tasks,
-      bundle.truncated,
-      runtime,
-      workspaceId,
-      userId,
-      canEdit,
-      patchTaskLocal,
-      gate,
-    ],
+    [runtime, workspaceId, canEdit, writeTime],
   );
 
-  /** Set the tracked total to an absolute value (manual "edit the value"). */
+  /** Set the tracked total to a typed value: one adjustment makes it exactly that. */
   const setTimeSpent = useCallback(
     (id: string, seconds: number) => {
       if (!Number.isFinite(seconds)) return;
-      patchTask(id, { timeSpentSeconds: Math.max(0, Math.round(seconds)) });
+      const blocked = timeWriteBlocked(id);
+      if (blocked || !workspaceId) {
+        toast.error(blocked ?? "Couldn't save the time.");
+        return;
+      }
+      const total = Math.max(0, Math.round(seconds));
+      const before = bundle.tasks.find((t) => t.id === id)?.timeSpentSeconds ?? total;
+      void writeTime(id, total - before, {
+        workspaceId,
+        taskId: id,
+        action: "set_total",
+        seconds: total,
+      }).catch((e) => toast.error(e instanceof Error ? e.message : "Couldn't save the time."));
     },
-    [patchTask],
+    [timeWriteBlocked, workspaceId, bundle.tasks, writeTime],
   );
 
   /**
@@ -1647,6 +1688,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     markDone,
     archiveTask,
     addTimeSpent,
+    logTimeAdjustment,
+    undoTimeAdjustment,
     persistFocusTime,
     setTimeSpent,
     rescheduleScheduledAt,

@@ -27,6 +27,7 @@ import {
   priorityLevelSchema,
   relationKindSchema,
   taskStatusSchema,
+  taskTimeStatusSchema,
 } from "./vocabularies.ts";
 
 const id = z.string().min(1);
@@ -147,6 +148,26 @@ export const taskQueueRowSchema = z.object({
   position: z.string().min(1),
   queued_at: z.string(),
   updated_at: z.string(),
+});
+
+/** What `tasks_op_track_time` answers (TV-D3). A `gone` answer carries only the
+ *  status and the task id. */
+export const taskTimeAnswerSchema = z.object({
+  status: taskTimeStatusSchema,
+  task_id: id,
+  entry_id: optStr,
+  total_seconds: optNum,
+  my_seconds: optNum,
+  my_waiting_seconds: optNum,
+});
+
+/** One row of `tasks_time_totals` (TV-D3). */
+export const taskTimeTotalsRowSchema = z.object({
+  task_id: id,
+  total_seconds: z.number(),
+  my_seconds: z.number(),
+  my_waiting_seconds: z.number(),
+  my_seconds_since: optNum,
 });
 
 export const activityRowSchema = z.object({

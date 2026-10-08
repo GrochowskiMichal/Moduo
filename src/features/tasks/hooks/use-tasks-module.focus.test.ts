@@ -9,31 +9,22 @@ import {
   attachFocusUser,
   createFocusEngine,
   FOCUS_STORAGE_PREFIX,
+  type FocusSaveContext,
   flushFocusSession,
   registerFocusFlushSink,
 } from "../../focus/engine";
 import { blankRecord, parseRecord } from "../../focus/engine-core";
-import type { SavedTaskTime } from "../focus-time-write";
 import { makeTask } from "../helpers";
-import type { Task, TasksModuleBundle } from "../model";
+import type { Task, TasksModuleBundle, TaskTimeResult, TrackTimeInput } from "../model";
 import { useTasksModule } from "./use-tasks-module";
-
-// The narrow time write goes to the test's in-memory "server".
-const h = rs.hoisted(() => ({
-  write: null as null | ((id: string, ws: string, total: number) => Promise<SavedTaskTime | null>),
-}));
-rs.mock("../focus-time-write", () => ({
-  writeTaskTimeTotal: (id: string, ws: string, total: number) => {
-    if (!h.write) throw new Error("no fake server");
-    return h.write(id, ws, total);
-  },
-}));
 
 // Live updates (TV-D5) need a socket; these tests drive the hook without one.
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-// The Focus engine's flush sink (TV-F1, F1-7): every answer it gives decides
-// whether tracked seconds are kept, retried or saved — never silently lost.
+// Tracked time goes through tasks_op_track_time (TV-D3): the Focus engine's
+// sink records stretches under the save's key, and every answer it gives
+// decides whether tracked seconds are kept, retried or saved — never lost,
+// never counted twice.
 
 const USER = "u1";
 const WS = "ws-1";
@@ -48,29 +39,58 @@ function task(id: string, timeSpentSeconds = 0, workspaceId = WS): Task {
   };
 }
 
-function bundleOf(
-  tasks: Task[],
-  truncated: TasksModuleBundle["truncated"] = [],
-): TasksModuleBundle {
-  return { buckets: [], tasks, tags: [], tagLinks: [], taskRelations: [], truncated };
+function bundleOf(tasks: Task[]): TasksModuleBundle {
+  return { buckets: [], tasks, tags: [], tagLinks: [], taskRelations: [], truncated: [] };
 }
 
-/** A runtime over a tiny in-memory "server" of task rows. */
-function fakeServer(rows: Task[], opts: { fail?: () => boolean; delayList?: number } = {}) {
+/**
+ * A runtime over a tiny in-memory "server": task rows, and the op's rules for
+ * time (one entry per key and task, the total kept on the row).
+ */
+function fakeServer(
+  rows: Task[],
+  opts: { fail?: () => boolean; loseAnswer?: () => boolean; delayList?: number } = {},
+) {
   const server = new Map(rows.map((t) => [t.id, { ...t }]));
-  let clock = Date.parse("2026-10-08T11:00:00.000Z");
-  // Whole-row writes must never come from the focus sink.
-  const upsertTask = rs.fn((t: Task) => Promise.resolve({ ...t }));
-  const writes = rs.fn((id: string, _ws: string, total: number) => {
-    if (opts.fail?.()) return Promise.reject(new Error("offline"));
-    const row = server.get(id);
-    if (!row) return Promise.resolve(null);
-    clock += 1000;
-    const updatedAt = new Date(clock).toISOString();
-    server.set(id, { ...row, timeSpentSeconds: total, updatedAt });
-    return Promise.resolve({ timeSpentSeconds: total, updatedAt });
+  const keys = new Map<string, string>();
+  let next = 0;
+  const answer = (
+    status: TaskTimeResult["status"],
+    taskId: string,
+    entryId: string | null,
+    total: number | null,
+  ): TaskTimeResult => ({
+    status,
+    taskId,
+    entryId,
+    totalSeconds: total,
+    mySeconds: null,
+    myWaitingSeconds: null,
   });
-  h.write = writes;
+  const trackTime = rs.fn(async (input: TrackTimeInput): Promise<TaskTimeResult> => {
+    if (opts.fail?.()) throw new Error("offline");
+    const row = server.get(input.taskId);
+    if (!row || row.workspaceId !== input.workspaceId) {
+      return answer("gone", input.taskId, null, null);
+    }
+    const seen = input.key ? keys.get(`${input.taskId}:${input.key}`) : undefined;
+    if (seen) return answer("duplicate", input.taskId, seen, row.timeSpentSeconds);
+    const seconds = input.seconds ?? 0;
+    const total =
+      input.action === "set_total"
+        ? seconds
+        : input.action === "undo"
+          ? row.timeSpentSeconds - seconds
+          : input.action === "waiting"
+            ? row.timeSpentSeconds
+            : row.timeSpentSeconds + seconds;
+    const entryId = `e${++next}`;
+    if (input.key) keys.set(`${input.taskId}:${input.key}`, entryId);
+    // Only the time changes on the row; never updated_at or anything else.
+    server.set(input.taskId, { ...row, timeSpentSeconds: Math.max(0, total) });
+    if (opts.loseAnswer?.()) throw new Error("connection lost after the write");
+    return answer("saved", input.taskId, entryId, Math.max(0, total));
+  });
   const list = rs.fn((workspaceId: string) => {
     const bundle = bundleOf(
       [...server.values()].filter((t) => t.workspaceId === workspaceId).map((t) => ({ ...t })),
@@ -79,143 +99,206 @@ function fakeServer(rows: Task[], opts: { fail?: () => boolean; delayList?: numb
       ? new Promise<TasksModuleBundle>((r) => setTimeout(() => r(bundle), opts.delayList))
       : Promise.resolve(bundle);
   });
+  // Whole-row and field writes must never come from a time save.
+  const upsertTask = rs.fn((t: Task) => Promise.resolve({ ...t }));
+  const updateTask = rs.fn(() => Promise.reject(new Error("a time save wrote the row")));
   const runtime = {
     tasks: {
       list,
       getTimeBlocks: rs.fn(() => Promise.resolve({})),
       listQueue: rs.fn(() => Promise.resolve([])),
       upsertTask,
+      updateTask,
+      trackTime,
       // A delete that hasn't reached the server yet.
       deleteTask: rs.fn(() => new Promise(() => {})),
       opCatchUp: rs.fn(() => Promise.resolve([])),
     },
   } as unknown as ModuoRuntime;
-  return { runtime, server, upsertTask, writes };
+  return { runtime, server, trackTime, upsertTask, updateTask };
 }
 
 async function mounted(
   rows: Task[],
-  opts: { fail?: () => boolean; permission?: "view" | "edit"; truncated?: boolean } = {},
+  opts: { fail?: () => boolean; permission?: "view" | "edit" } = {},
 ) {
-  const { runtime, server, upsertTask, writes } = fakeServer(rows, { fail: opts.fail });
-  if (opts.truncated) {
-    (runtime.tasks.list as unknown as ReturnType<typeof rs.fn>).mockImplementation(() =>
-      Promise.resolve(bundleOf(rows, [{ scope: "tasks", shown: rows.length, total: 5000 }])),
-    );
-  }
+  const fake = fakeServer(rows, { fail: opts.fail });
   const hook = renderHook(() =>
-    useTasksModule(runtime, {
+    useTasksModule(fake.runtime, {
       userId: USER,
       workspaceId: WS,
       modulePermission: opts.permission ?? "edit",
     }),
   );
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
-  return { hook, runtime, server, upsertTask, writes };
+  return { hook, ...fake };
 }
 
 const totalOf = (tasks: Task[], id: string) => tasks.find((t) => t.id === id)?.timeSpentSeconds;
 
-/** This tab has had the clock since before the list loaded; the time is older than the load. */
-const SETTLED = { ownedSince: 0, earnedAt: 0 };
+const EARNED = Date.parse("2026-10-08T10:30:00.000Z");
+function ctx(key: string, patch: Partial<FocusSaveContext> = {}): FocusSaveContext {
+  return { ownedSince: 0, earnedAt: EARNED, workspaceId: WS, key, ...patch };
+}
 
 beforeEach(() => {
   localStorage.clear();
 });
 
 describe("persistFocusTime — the focus engine's sink", () => {
-  it("saves the seconds into the task's total and says so", async () => {
-    const { hook, writes, server } = await mounted([task("t1", 100)]);
-    await expect(hook.result.current.persistFocusTime("t1", 60, SETTLED)).resolves.toBe(true);
-    expect(writes.mock.calls[0]?.[2]).toBe(160);
+  it("records the seconds as a focus stretch under the save's key, ending when they were earned", async () => {
+    const { hook, trackTime, server } = await mounted([task("t1", 100)]);
+    await expect(hook.result.current.persistFocusTime("t1", 60, ctx("k-1"))).resolves.toBe(true);
+    expect(trackTime).toHaveBeenCalledWith({
+      workspaceId: WS,
+      taskId: "t1",
+      action: "focus",
+      seconds: 60,
+      endedAt: new Date(EARNED).toISOString(),
+      key: "k-1",
+    });
     expect(server.get("t1")?.timeSpentSeconds).toBe(160);
     await waitFor(() => expect(totalOf(hook.result.current.tasks, "t1")).toBe(160));
   });
 
-  it("reports a failed save and puts the total back", async () => {
+  it("shows the server's total, which counts time teammates tracked meanwhile", async () => {
+    const { hook, server } = await mounted([task("t1", 100)]);
+    server.set("t1", { ...(server.get("t1") as Task), timeSpentSeconds: 400 }); // Mike's hour… almost
+    await expect(hook.result.current.persistFocusTime("t1", 60, ctx("k-1"))).resolves.toBe(true);
+    await waitFor(() => expect(totalOf(hook.result.current.tasks, "t1")).toBe(460));
+  });
+
+  it("a save sent again with its key counts once", async () => {
+    const { hook, server } = await mounted([task("t1", 100)]);
+    await hook.result.current.persistFocusTime("t1", 60, ctx("k-1"));
+    await expect(hook.result.current.persistFocusTime("t1", 60, ctx("k-1"))).resolves.toBe(true);
+    expect(server.get("t1")?.timeSpentSeconds).toBe(160);
+    await waitFor(() => expect(totalOf(hook.result.current.tasks, "t1")).toBe(160));
+  });
+
+  it("reports a failed save and puts the shown total back", async () => {
     const { hook } = await mounted([task("t1", 100)], { fail: () => true });
-    await expect(hook.result.current.persistFocusTime("t1", 60, SETTLED)).resolves.toBe(false);
+    await expect(hook.result.current.persistFocusTime("t1", 60, ctx("k-1"))).resolves.toBe(false);
     await waitFor(() => expect(totalOf(hook.result.current.tasks, "t1")).toBe(100));
   });
 
-  it("a second save before React re-renders builds on the first, not on the stale bundle", async () => {
-    const { hook, writes } = await mounted([task("t1", 100)]);
-    const persist = hook.result.current.persistFocusTime; // the same render's closure
-    await persist("t1", 60, SETTLED);
-    await persist("t1", 5, SETTLED);
-    expect(writes.mock.calls.map((c) => c[2])).toEqual([160, 165]);
-  });
-
-  it("says 'not now' while the bundle is loading", () => {
-    const { runtime } = fakeServer([task("t1")]);
-    const hook = renderHook(() =>
-      useTasksModule(runtime, { userId: USER, workspaceId: WS, modulePermission: "edit" }),
-    );
-    expect(hook.result.current.persistFocusTime("t1", 30, SETTLED)).toBe(false);
-  });
-
-  it("a task missing from a complete list loaded after the time was tracked is gone", async () => {
+  it("a task the server no longer has for you is gone", async () => {
     const { hook } = await mounted([task("t1")]);
-    expect(hook.result.current.persistFocusTime("deleted", 30, SETTLED)).toBe("gone");
+    await expect(hook.result.current.persistFocusTime("deleted", 30, ctx("k-1"))).resolves.toBe(
+      "gone",
+    );
   });
 
-  it("keeps the time when the task may just not be in this list yet", async () => {
-    const later = { ownedSince: 0, earnedAt: Date.now() + 60_000 }; // tracked after this list loaded
-    const complete = await mounted([task("t1")]);
-    expect(complete.hook.result.current.persistFocusTime("new-elsewhere", 30, later)).toBe(false);
-    const capped = await mounted([task("t1")], { truncated: true });
-    expect(capped.hook.result.current.persistFocusTime("elsewhere", 30, SETTLED)).toBe(false);
+  it("says 'not now' for another workspace's time or a task still being created", async () => {
+    const { hook, trackTime } = await mounted([task("t1")]);
+    expect(
+      hook.result.current.persistFocusTime("t1", 30, ctx("k-1", { workspaceId: "ws-2" })),
+    ).toBe(false);
+    expect(hook.result.current.persistFocusTime("tmp-123", 30, ctx("k-2"))).toBe(false);
+    expect(trackTime).not.toHaveBeenCalled();
   });
 
-  it("a time save writes only the time: a Done still in flight stays done", async () => {
-    const { hook, server, upsertTask } = await mounted([task("t1", 100)]);
-    // Done went to the server; this render's bundle still says "todo".
+  it("saves while the list is still loading: the server keeps the total", async () => {
+    const fake = fakeServer([task("t1", 100)], { delayList: 50 });
+    const hook = renderHook(() =>
+      useTasksModule(fake.runtime, { userId: USER, workspaceId: WS, modulePermission: "edit" }),
+    );
+    await expect(hook.result.current.persistFocusTime("t1", 30, ctx("k-1"))).resolves.toBe(true);
+    expect(fake.server.get("t1")?.timeSpentSeconds).toBe(130);
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+  });
+
+  it("a time save changes only the time: a Done or a rename in flight stays", async () => {
+    const { hook, server, upsertTask, updateTask } = await mounted([task("t1", 100)]);
+    // Done and a rename went to the server; this render's bundle still says "todo".
     server.set("t1", { ...(server.get("t1") as Task), status: "done", title: "Renamed" });
-    await expect(hook.result.current.persistFocusTime("t1", 60, SETTLED)).resolves.toBe(true);
+    await expect(hook.result.current.persistFocusTime("t1", 60, ctx("k-1"))).resolves.toBe(true);
     expect(server.get("t1")).toMatchObject({
       status: "done",
       title: "Renamed",
       timeSpentSeconds: 160,
     });
     expect(upsertTask).not.toHaveBeenCalled();
-  });
-
-  it("reloads the list before the first save after this tab took the clock", async () => {
-    const { hook, server, runtime } = await mounted([task("t1", 100)]);
-    server.set("t1", { ...task("t1", 250), updatedAt: "2026-10-08T12:00:00.000Z" }); // saved elsewhere
-    const tookClock = { ownedSince: Date.now() + 1, earnedAt: 0 };
-    expect(hook.result.current.persistFocusTime("t1", 60, tookClock)).toBe(false);
-    await waitFor(() => expect(totalOf(hook.result.current.tasks, "t1")).toBe(250));
-    expect(runtime.tasks.list).toHaveBeenCalledTimes(2);
-    await expect(hook.result.current.persistFocusTime("t1", 60, SETTLED)).resolves.toBe(true);
-    expect(server.get("t1")?.timeSpentSeconds).toBe(310);
-  });
-
-  it("reloads once per takeover while loads keep failing, not on every drain", async () => {
-    const { hook, runtime } = await mounted([task("t1", 100)]);
-    const list = runtime.tasks.list as unknown as ReturnType<typeof rs.fn>;
-    list.mockImplementation(() => Promise.reject(new Error("offline")));
-    const tookClock = { ownedSince: Date.now() + 1, earnedAt: 0 };
-    for (let i = 0; i < 5; i++) {
-      expect(hook.result.current.persistFocusTime("t1", 60, tookClock)).toBe(false);
-      await waitFor(() => expect(hook.result.current.loading).toBe(false));
-    }
-    expect(list).toHaveBeenCalledTimes(2); // the first load + one reload
-  });
-
-  it("a task deleted here but not yet on the server isn't gone (Undo can bring it back)", async () => {
-    const { hook } = await mounted([task("t1", 100)]);
-    await act(async () => {
-      hook.result.current.deleteTask("t1");
-    });
-    expect(hook.result.current.tasks.some((t) => t.id === "t1")).toBe(false);
-    expect(hook.result.current.persistFocusTime("t1", 60, SETTLED)).toBe(false);
+    expect(updateTask).not.toHaveBeenCalled();
   });
 
   it("without edit access the save fails visibly instead of waiting forever", async () => {
-    const { hook, upsertTask } = await mounted([task("t1")], { permission: "view" });
-    await expect(hook.result.current.persistFocusTime("t1", 30, SETTLED)).resolves.toBe(false);
-    expect(upsertTask).not.toHaveBeenCalled();
+    const { hook, trackTime } = await mounted([task("t1")], { permission: "view" });
+    await expect(hook.result.current.persistFocusTime("t1", 30, ctx("k-1"))).resolves.toBe(false);
+    expect(trackTime).not.toHaveBeenCalled();
+  });
+});
+
+describe("time corrections (D3-3)", () => {
+  it("typing a total sends the total, not a difference", async () => {
+    const { hook, trackTime, server } = await mounted([task("t1", 100)]);
+    act(() => hook.result.current.setTimeSpent("t1", 1800));
+    await waitFor(() => expect(server.get("t1")?.timeSpentSeconds).toBe(1800));
+    expect(trackTime).toHaveBeenCalledWith({
+      workspaceId: WS,
+      taskId: "t1",
+      action: "set_total",
+      seconds: 1800,
+    });
+    await waitFor(() => expect(totalOf(hook.result.current.tasks, "t1")).toBe(1800));
+  });
+
+  it("took longer adds one adjustment and its Undo removes exactly that one", async () => {
+    const { hook, trackTime, server } = await mounted([task("t1", 100)]);
+    let adjustment: Awaited<ReturnType<typeof hook.result.current.logTimeAdjustment>> = null;
+    await act(async () => {
+      adjustment = await hook.result.current.logTimeAdjustment("t1", 900);
+    });
+    expect(adjustment).toEqual({ entryId: "e1", seconds: 900 });
+    expect(server.get("t1")?.timeSpentSeconds).toBe(1000);
+    // Someone's focus lands in between; the Undo takes only the adjustment back.
+    await hook.result.current.persistFocusTime("t1", 60, ctx("k-1"));
+    await act(async () => {
+      hook.result.current.undoTimeAdjustment("t1", adjustment as never);
+    });
+    await waitFor(() => expect(server.get("t1")?.timeSpentSeconds).toBe(160));
+    expect(trackTime).toHaveBeenLastCalledWith({
+      workspaceId: WS,
+      taskId: "t1",
+      action: "undo",
+      entryId: "e1",
+      seconds: 900,
+    });
+  });
+});
+
+describe("time writes in order", () => {
+  it("one task's writes go one at a time, so the last total shown is the latest", async () => {
+    const { hook, runtime, server } = await mounted([task("t1", 100)]);
+    const real = runtime.tasks.trackTime;
+    const gates: Array<() => void> = [];
+    const sent: number[] = [];
+    // The first answer is slow; a second write mustn't overtake it.
+    (runtime.tasks as { trackTime: typeof real }).trackTime = (input) => {
+      sent.push(input.seconds ?? 0);
+      return new Promise((resolve) => {
+        gates.push(() => resolve(real(input)));
+      });
+    };
+    let first: Promise<unknown> = Promise.resolve();
+    let second: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      first = hook.result.current.logTimeAdjustment("t1", 300);
+      second = hook.result.current.logTimeAdjustment("t1", 300);
+      await Promise.resolve();
+    });
+    expect(sent).toEqual([300]); // the second waits for the first
+    await act(async () => {
+      gates[0]?.();
+      await first;
+    });
+    await waitFor(() => expect(sent).toEqual([300, 300]));
+    await act(async () => {
+      gates[1]?.();
+      await second;
+    });
+    expect(server.get("t1")?.timeSpentSeconds).toBe(700);
+    expect(totalOf(hook.result.current.tasks, "t1")).toBe(700);
   });
 });
 
@@ -238,6 +321,36 @@ function useWiredSink(runtime: ModuoRuntime, workspaceId: string) {
     if (!api.loading) flushFocusSession();
   }, [api.loading]);
   return api;
+}
+
+function memoryStorage() {
+  const data = new Map<string, string>();
+  return {
+    getItem: (k: string) => data.get(k) ?? null,
+    setItem: (k: string, v: string) => void data.set(k, v),
+    removeItem: (k: string) => void data.delete(k),
+  };
+}
+
+function openTab(storage: ReturnType<typeof memoryStorage>, tabId: string) {
+  let n = 0;
+  const engine = createFocusEngine({
+    storage: () => storage,
+    now: () => Date.now(),
+    readPrefs: () => ({ ...DEFAULT_FOCUS_PREFS, soundEnabled: false }) as FocusPrefs,
+    alert: () => {},
+    singleWindow: () => false,
+    tabId,
+    newKey: () => `${tabId}-save-${++n}`,
+  });
+  engine.attach(USER);
+  return engine;
+}
+
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  });
 }
 
 describe("the focus sink across workspaces and tabs", () => {
@@ -280,7 +393,43 @@ describe("the focus sink across workspaces and tabs", () => {
     hook.unmount();
   });
 
-  it("a tab that takes over the clock builds on the other tab's saves", async () => {
+  it("a save whose answer was lost is sent again with its key and counted once", async () => {
+    rs.useFakeTimers();
+    let lose = true;
+    const { runtime, server, trackTime } = fakeServer([task("t1", 0)], {
+      loseAnswer: () => lose,
+    });
+    const tab = renderHook(() =>
+      useTasksModule(runtime, { userId: USER, workspaceId: WS, modulePermission: "edit" }),
+    );
+    await settle();
+    const engine = openTab(memoryStorage(), "a");
+    engine.registerSink(WS, (id, s, c) => tab.result.current.persistFocusTime(id, s, c));
+    engine.bind({ id: "t1", title: "t1", bucketName: "Inbox", workspaceId: WS });
+    engine.start();
+    await act(async () => {
+      await rs.advanceTimersByTimeAsync(30_000);
+    });
+    engine.toggleRunning(); // pause → the save reaches the server, its answer doesn't
+    await settle();
+    expect(server.get("t1")?.timeSpentSeconds).toBe(30);
+    expect(engine.getSnapshot()).toMatchObject({ unsaved: true, accrued: 30 });
+    lose = false;
+    await act(async () => {
+      await rs.advanceTimersByTimeAsync(15_000); // the retry
+    });
+    await settle();
+    expect(trackTime.mock.calls.map(([input]) => [input.seconds, input.key])).toEqual([
+      [30, "a-save-1"],
+      [30, "a-save-1"],
+    ]);
+    expect(server.get("t1")?.timeSpentSeconds).toBe(30);
+    expect(engine.getSnapshot()).toMatchObject({ unsaved: false, accrued: 0 });
+    engine.dispose();
+    tab.unmount();
+  });
+
+  it("a tab that takes over the clock adds to the other tab's saves", async () => {
     rs.useFakeTimers();
     const { runtime: rtA, server } = fakeServer([task("t1", 0)]);
     const tabA = renderHook(() =>
@@ -293,31 +442,12 @@ describe("the focus sink across workspaces and tabs", () => {
     const tabB = renderHook(() =>
       useTasksModule(rtB, { userId: USER, workspaceId: WS, modulePermission: "edit" }),
     );
-    await act(async () => {
-      for (let i = 0; i < 20; i++) await Promise.resolve();
-    });
-    const data = new Map<string, string>();
-    const storage = {
-      getItem: (k: string) => data.get(k) ?? null,
-      setItem: (k: string, v: string) => void data.set(k, v),
-      removeItem: (k: string) => void data.delete(k),
-    };
-    const open = (tabId: string) => {
-      const engine = createFocusEngine({
-        storage: () => storage,
-        now: () => Date.now(),
-        readPrefs: () => ({ ...DEFAULT_FOCUS_PREFS, soundEnabled: false }) as FocusPrefs,
-        alert: () => {},
-        singleWindow: () => false,
-        tabId,
-      });
-      engine.attach(USER);
-      return engine;
-    };
-    const a = open("a");
-    const b = open("b");
-    a.registerSink(WS, (id, s, ctx) => tabA.result.current.persistFocusTime(id, s, ctx));
-    b.registerSink(WS, (id, s, ctx) => tabB.result.current.persistFocusTime(id, s, ctx));
+    await settle();
+    const storage = memoryStorage();
+    const a = openTab(storage, "a");
+    const b = openTab(storage, "b");
+    a.registerSink(WS, (id, s, c) => tabA.result.current.persistFocusTime(id, s, c));
+    b.registerSink(WS, (id, s, c) => tabB.result.current.persistFocusTime(id, s, c));
     a.bind({ id: "t1", title: "t1", bucketName: "Inbox", workspaceId: WS });
     a.start();
     b.storageChanged(KEY);
@@ -330,17 +460,16 @@ describe("the focus sink across workspaces and tabs", () => {
       await rs.advanceTimersByTimeAsync(30_000);
     });
     expect(server.get("t1")?.timeSpentSeconds).toBe(180); // tab A's saves
-    // Tab A closes; tab B picks the clock up by itself and saves with its old bundle.
+    // Tab A closes; tab B picks the clock up by itself and saves from its old list.
     a.release();
     a.dispose();
     await act(async () => {
       await rs.advanceTimersByTimeAsync(61_000);
     });
     b.toggleRunning();
-    await act(async () => {
-      for (let i = 0; i < 20; i++) await Promise.resolve();
-    });
+    await settle();
     expect(server.get("t1")?.timeSpentSeconds).toBe(271);
+    expect(totalOf(tabB.result.current.tasks, "t1")).toBe(271); // its old list shows the server's total
     b.dispose();
     tabA.unmount();
     tabB.unmount();

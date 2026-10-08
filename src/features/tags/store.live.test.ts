@@ -160,6 +160,16 @@ describe("applyLiveTags against reads in flight", () => {
     expect(view.tags.map((t) => t.name)).toEqual(["New", "Renamed"]);
   });
 
+  it("an older read can't bring back a link deleted live before it was ever loaded", async () => {
+    seed([tag()]);
+    await tick();
+    const readStarted = Date.now();
+    await tick();
+    applyLiveTags(WS, [{ table: "tag_links", kind: "delete", id: "l1" }]);
+    seedTags(WS, { tags: [tag()], links: [link()], scope: { kind: "all" }, at: readStarted });
+    expect(tagsOf(getTagView(WS), TASK)).toEqual([]);
+  });
+
   it("a read that started after the change replaces it as usual", () => {
     seed([tag()], [link()]);
     applyLiveTags(WS, [{ table: "tag_links", kind: "delete", id: "l1" }]);

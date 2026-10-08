@@ -1,6 +1,6 @@
 # Manual test checklist — AT-1 attachments storage, limits, trash
 
-> Generated 2026-10-08 · branch `t/maciej/at-1-attachments-storage` · **Live-verified:** partial. The SQL ran end to end on a local Postgres 17 replica of production's tasks schema (`supabase/probes/attachments.probe.sql`, every check passes). AT-1 has no upload UI (that's AT-2), so the app-side checks below are the export, the notification toggle and the account deletion; the rest is SQL and the purge function.
+> Generated 2026-10-08 · branch `t/maciej/at-1-attachments-storage` · **Live-verified:** partial. Applied to production 2026-10-08 ~22:20 UTC: the bucket, tables, triggers, policies and grants were checked there; a rolled-back write probe confirmed a backdated task delete is stamped with the server's time and can be restored; `purge-deleted` answered 401 without the secret and a dry run counted only the 11 tasks trashed over 30 days; the cron job is on; `delete-account` and `moduo-mcp` answer 401 without credentials after the redeploy. The SQL ran end to end on a local Postgres 17 replica of production's tasks schema (`supabase/probes/attachments.probe.sql`, every check passes). AT-1 has no upload UI (that's AT-2), so the app-side checks below are the export, the notification toggle and the account deletion; the rest is SQL and the purge function.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## Server: the migration (`20261008210500_attachments_storage.sql`)
@@ -12,9 +12,9 @@
 - [ ] **Do:** replay the replica probe (command in the header of `supabase/probes/attachments.probe.sql`) → **Expect:** ends with `PASS: all` _(terminal, local Postgres 17)_
 
 ## The purge function (`purge-deleted`)
-- [ ] **Do:** POST `{"dry_run": true}` to `/functions/v1/purge-deleted` with header `x-purge-deleted-secret` → **Expect:** 200 with `preview` counts; on 2026-10-08 production had 11 tasks trashed over 30 days, nothing else _(curl)_
-- [ ] **Do:** the same without the header, and with a wrong one → **Expect:** 401 both times; nothing deleted _(curl)_
-- [ ] **Do:** after the schedule migration (`20261008210600`): `select jobname, schedule from cron.job where jobname = 'purge-deleted';` → **Expect:** `23 4 * * *` _(SQL editor)_
+- [x] **Do:** POST `{"dry_run": true}` to `/functions/v1/purge-deleted` with header `x-purge-deleted-secret` → **Expect:** 200 with `preview` counts; on 2026-10-08 production had 11 tasks trashed over 30 days, nothing else _(curl; agent, 2026-10-08)_
+- [x] **Do:** the same without the header, and with a wrong one → **Expect:** 401 both times; nothing deleted _(curl; agent, 2026-10-08)_
+- [x] **Do:** after the schedule migration (`20261008210600`): `select jobname, schedule from cron.job where jobname = 'purge-deleted';` → **Expect:** `23 4 * * *` _(SQL editor; agent, 2026-10-08)_
 - [ ] **Do:** the morning after the first run, check the function's logs → **Expect:** one `{"purge": …}` line with the counts; the 11 old tasks are gone from `tasks` _(Supabase dashboard → Edge Functions → logs)_
 
 ## Export (AT1-8)
@@ -40,4 +40,5 @@
 ## Known gaps / not-yet-testable
 - Uploads from the app (AT-2), the 📎 mark and Settings → Storage (AT-3): not built yet.
 - The storage alert has no click-through yet (AT-3 adds Settings → Storage).
-- Real uploads above 50 MB fail at Storage until the project's global upload limit is raised (needs Supabase Pro).
+- Real uploads above 50 MB fail at Storage until the project's global upload limit is raised (needs Supabase Pro); per-file limits are held at 50 MB meanwhile (Maciej, 2026-10-08).
+- `tasks_attachments_list` was not called live (it needs an API key); its unit test covers scope, visibility and links.

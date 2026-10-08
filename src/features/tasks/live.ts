@@ -284,8 +284,8 @@ export class LiveGate {
 /**
  * The runtime with every `tasks.*` call counted by the gate, so the module's
  * own saves (and the reads that would replace its state) hold live changes
- * back. A write that goes around the runtime (the focus time total,
- * `focus-time-write.ts`) has to call `gate.begin()` itself.
+ * back. A write that goes around the runtime has to call `gate.begin()`
+ * itself.
  */
 export function trackTaskCalls(runtime: ModuoRuntime, gate: LiveGate): ModuoRuntime {
   // A proxy, not a copy, so a method added to the runtime later is tracked too.
