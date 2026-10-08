@@ -29,8 +29,8 @@ Run in this order. Steps 2–3 are agent steps that need Maciej's OK in the sess
    for f in lockup-light lockup-dark mark-light mark-dark; do curl -sI "https://app.moduo.app/email/$f@2x.png" | grep -i '^content-type'; done
    ```
    If any says `text/html`, the web app hasn't been deployed since BRAND-1 merged. Deploy it first; don't switch the hook on, or every code email shows a broken logo.
-2. **Migration** `20261008160000_email_outbox.sql` applied to prod (agent, with OK). Check: `select count(*) from public.email_outbox;` returns 0, and `select jobname from cron.job;` lists `email-outbox-purge`.
-3. **Function deployed** (agent, with OK):
+2. ✅ (2026-10-08) **Migration** `20261008160000_email_outbox.sql` applied to prod (agent, with OK). Check: `select count(*) from public.email_outbox;` returns 0, and `select jobname from cron.job;` lists `email-outbox-purge`.
+3. ✅ (2026-10-08, v1) **Function deployed** (agent, with OK):
    ```bash
    supabase functions deploy auth-email-hook --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
