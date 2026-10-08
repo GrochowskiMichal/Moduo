@@ -2,8 +2,8 @@
 // controls). The primitive announced it for a long time without keeping it;
 // these lock the behaviour in.
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SegmentedControl } from "./segmented-control";
 import { Toolbar } from "./toolbar";
 
