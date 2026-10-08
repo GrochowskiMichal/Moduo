@@ -34,7 +34,12 @@ function normalizePhrase(value: string) {
     .join(" ");
 }
 
-export function EmailAuthPanel() {
+export type EmailAuthPanelProps = {
+  /** Shown on the email step only, e.g. after an emailed auth link was dropped at boot. */
+  notice?: string | null;
+};
+
+export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
   const { runtime, configError } = useAuth();
   // Cloud auth (email OTP) is the default on web AND desktop (cloud-first).
   // The vault flows below only activate on runtimes that expose a local
@@ -120,10 +125,11 @@ export function EmailAuthPanel() {
     const { error: otpErr } = await runtime.auth.sendOtp({ email });
     setBusy(false);
     if (otpErr) {
-      // Sign-ups are closed on the project: only existing or invited people get a code.
+      // Sign-ups are closed on the project, so only confirmed people get a code. A
+      // dashboard invitee is confirmed by clicking their invite link once (auth-url.ts).
       setError(
         /signups? not allowed/i.test(otpErr.message)
-          ? "Moduo is invite-only right now. Ask the person who invited you to use the email they invited."
+          ? "Moduo is invite-only right now. If you were invited, click the link in your invite email first, then ask for a code here. If that link has expired, ask for a new invite."
           : otpErr.message,
       );
       return;
@@ -398,6 +404,14 @@ export function EmailAuthPanel() {
         {panelSubtitle ? (
           <p className="mx-auto mt-2 max-w-[300px] text-center text-sm leading-5 text-muted-foreground">
             {panelSubtitle}
+          </p>
+        ) : null}
+        {notice && cloudAuth && flow === "email" ? (
+          <p
+            role="status"
+            className="mx-auto mt-4 max-w-[300px] rounded-md bg-muted px-3 py-2 text-center text-sm leading-5 text-foreground"
+          >
+            {notice}
           </p>
         ) : null}
       </div>

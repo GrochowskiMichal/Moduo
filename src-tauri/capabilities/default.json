@@ -3,5 +3,11 @@
   "identifier": "default",
   "description": "Default capability",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default", "updater:default", "process:allow-restart"]
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "updater:default",
+    "process:allow-restart",
+    "notification:default"
+  ]
 }

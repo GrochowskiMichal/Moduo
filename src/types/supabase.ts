@@ -1689,10 +1689,12 @@ export type Database = {
       }
       tasks: {
         Row: {
+          assignee_id: string | null
           bucket_id: string
           commit_order: number | null
           committed_for: string | null
           created_at: string
+          creator_unknown: boolean
           deleted_at: string | null
           description: string
           due_date: string | null
@@ -1713,10 +1715,12 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          assignee_id?: string | null
           bucket_id: string
           commit_order?: number | null
           committed_for?: string | null
           created_at?: string
+          creator_unknown?: boolean
           deleted_at?: string | null
           description?: string
           due_date?: string | null
@@ -1737,10 +1741,12 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          assignee_id?: string | null
           bucket_id?: string
           commit_order?: number | null
           committed_for?: string | null
           created_at?: string
+          creator_unknown?: boolean
           deleted_at?: string | null
           description?: string
           due_date?: string | null
@@ -4290,6 +4296,45 @@ export type Database = {
           commit_order: number | null
           committed_for: string | null
           created_at: string
+          deleted_at: string | null
+          description: string
+          due_date: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          owner_id: string | null
+          parent_id: string | null
+          position: string
+          priority: string | null
+          recurrence: Json | null
+          reschedule_count: number
+          scheduled_at: string | null
+          status: string
+          time_spent_seconds: number
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tasks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      tasks_op_assign: {
+        Args: {
+          p_assignee_id: string | null
+          p_task_id: string
+          p_workspace_id: string
+        }
+        Returns: {
+          assignee_id: string | null
+          bucket_id: string
+          commit_order: number | null
+          committed_for: string | null
+          created_at: string
+          creator_unknown: boolean
           deleted_at: string | null
           description: string
           due_date: string | null

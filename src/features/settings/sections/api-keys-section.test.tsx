@@ -62,7 +62,7 @@ function storedKey(
     id: "k1",
     workspaceId: "w1",
     name: "Claude",
-    keyPrefix: "moduo_sk_ab12cd",
+    keyPrefix: "moduo_sk_000000",
     scopes,
     createdBy: "u-me",
     createdAt: "2026-10-01T00:00:00Z",

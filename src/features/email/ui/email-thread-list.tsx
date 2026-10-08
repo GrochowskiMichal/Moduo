@@ -10,6 +10,7 @@
 
 import { Check, Clock3, CornerUpLeft, MoreHorizontal, Pin, Trash2 } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
+import { SELECTED_ROW } from "@/components/ui/selection";
 import type { LabelColor } from "../../../components/tag-colors";
 import {
   DropdownMenu,
@@ -113,13 +114,10 @@ const ThreadRow = forwardRef<
       onClick={onSelect}
       className={
         "group relative flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors duration-(--motion-fade) ease-(--ease-out) " +
-        (selected ? "bg-(--selected-bg)" : "hover:bg-accent/60")
+        // Tint-only selection (R5): tint + the row hairline switch, no bar.
+        (selected ? SELECTED_ROW : "hover:bg-state-hover")
       }
     >
-      {/* selected marker — the app-wide R5 recipe: quiet accent bar + tint */}
-      {selected ? (
-        <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
-      ) : null}
       {/* Unread rail dot — a weight/presence signal, paired with type weight. */}
       <span className="mt-1.5 flex w-2 shrink-0 justify-center" aria-hidden>
         {unread ? <span className="size-2 rounded-full bg-primary" /> : null}

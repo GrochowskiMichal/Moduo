@@ -10,6 +10,7 @@ import { validateChatSearch } from "../../features/chat/search";
 import { validateContactsSearch } from "../../features/contacts/search";
 import { validateEmailSearch } from "../../features/email/url-search";
 import { validateNotesSearch } from "../../features/notes/search";
+import { validateAuthSearch } from "../../features/settings/delete-account";
 import { validateTasksSearch } from "../../features/tasks/search";
 import { consumeLandingRedirect } from "../../lib/preferences";
 import { AuthProvider } from "../../providers/auth-provider";
@@ -64,6 +65,7 @@ const authRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth",
   component: preWorkspace(AuthPage),
+  validateSearch: validateAuthSearch,
 });
 
 const onboardingRoute = createRoute({

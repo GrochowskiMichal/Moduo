@@ -51,6 +51,7 @@ import type {
 } from "../features/tasks/model";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
+import type { TaskFieldPatch } from "./task-rows";
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -801,7 +802,20 @@ export type ModuoRuntime = {
     seedInbox(workspaceId: string): Promise<Bucket>;
     upsertBucket(bucket: Bucket): Promise<Bucket>;
     deleteBucket(input: { workspaceId: string; bucketId: string }): Promise<void>;
+    /**
+     * Create a task. The server records the creator; an assignee of "" means
+     * the creator. Re-saving a task that exists writes its editable fields only.
+     */
     upsertTask(task: Task): Promise<Task>;
+    /**
+     * Edit a task: sends only the fields in `patch` (TV-D1), so a save can't put
+     * back what a teammate changed meanwhile in another field.
+     */
+    updateTask(input: {
+      workspaceId: string;
+      taskId: string;
+      patch: TaskFieldPatch;
+    }): Promise<Task>;
     deleteTask(input: { workspaceId: string; taskId: string }): Promise<Task>;
     upsertTag(tag: Tag): Promise<Tag>;
     deleteTag(input: { workspaceId: string; tagId: string }): Promise<void>;
@@ -856,6 +870,16 @@ export type ModuoRuntime = {
     opCommit(input: { workspaceId: string; taskId: string; forDate: string }): Promise<Task>;
     opUncommit(input: { workspaceId: string; taskId: string }): Promise<Task>;
     opSkipToday(input: { workspaceId: string; taskId: string }): Promise<Task>;
+    /**
+     * Assign (or, with null, unassign) through `tasks_op_assign`: the person
+     * has to be a member who can work on tasks. Assigning someone else
+     * notifies them once.
+     */
+    opAssign(input: {
+      workspaceId: string;
+      taskId: string;
+      assigneeId: string | null;
+    }): Promise<Task>;
     opSetStatus(input: {
       workspaceId: string;
       taskId: string;

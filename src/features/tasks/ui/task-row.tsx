@@ -12,7 +12,7 @@ import {
   Repeat,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { SELECTED_ROW } from "@/components/ui/selection";
 import { TagChipList } from "../../../components/tag-chip";
 import { Badge } from "../../../components/ui/badge";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
@@ -32,7 +32,8 @@ import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
-import { previewAssign, useAssignees } from "../assignees";
+import { assigneeLabel } from "../assignee-options";
+import { useAssignees } from "../assignees";
 import {
   formatDue,
   formatScheduled,
@@ -43,8 +44,11 @@ import {
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type EnergyLevel, isDrifted, type PriorityLevel, type Task } from "../model";
 import { recurrenceLabel } from "../parse/recurrence";
+import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
+import type { DragActivatorRef } from "./dnd/task-dnd";
 import { LevelDots } from "./level-icons";
+import { ROW_TITLE_ATTR } from "./list-keys";
 
 /** Which inline popover the keyboard asked to open on this row. */
 export type RowCommand = "bucket" | "schedule" | "due" | null;
@@ -86,6 +90,9 @@ type Props = {
    * dnd-kit listeners from the sortable/draggable wrapper, spread on the row
    * root. Absent → the row isn't draggable (looks/behaves as before). */
   dragListeners?: DraggableSyntheticListeners;
+  /** Goes with `dragListeners`: makes the row root the only keyboard drag
+   * activator, so Space/Enter on a button inside the row stay that button's. */
+  dragActivatorRef?: DragActivatorRef;
   /** Highlight as the live drop target during a drag-to-nest (quiet accent +
    * ring, mirrors the board column's drag-over treatment). */
   dropActive?: boolean;
@@ -116,6 +123,7 @@ export function TaskRow({
   nested = false,
   parentTitle = null,
   dragListeners,
+  dragActivatorRef,
   dropActive = false,
   api,
 }: Props) {
@@ -125,13 +133,23 @@ export function TaskRow({
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
   const tags = api.tagsByTask.get(task.id) ?? [];
+  // Menu items that hand focus to something in the row (the title editor, a
+  // chip's popover) run once the context menu has closed: Radix returns focus
+  // to the list a tick after the menu unmounts, and whatever opened sooner
+  // reads that as focus leaving it and closes again.
+  const pendingMenuAction = useRef<(() => void) | null>(null);
+  const afterMenuClose = (action: () => void) => {
+    pendingMenuAction.current = action;
+  };
   // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
   const blocked = api.blockedTaskIds.has(task.id);
   const { assignees, byId } = useAssignees();
-  const assignee = byId(task.ownerId);
+  const assignee = byId(task.assigneeId);
+  const assigneeName = assigneeLabel(task.assigneeId, byId);
 
   const row = (
     <div
+      ref={dragActivatorRef}
       role="row"
       aria-selected={selected}
       data-task-id={task.id}
@@ -148,17 +166,15 @@ export function TaskRow({
         dropActive
           ? "bg-accent/50 ring-1 ring-inset ring-ring/50"
           : selected
-            ? "bg-(--selected-bg)"
-            : "hover:bg-accent/60",
+            ? // Tint-only selection (R5): the accent tint + the row hairline
+              // switch (--state-selected-edge). No bar.
+              SELECTED_ROW
+            : "hover:bg-state-hover",
         nested && "ml-10",
       )}
       // height rides the density setting; py is only a multiline guard
       style={{ minHeight: "var(--row-h)" }}
     >
-      {/* selected marker — a quiet accent bar, distinct from the lighter hover fill */}
-      {selected ? (
-        <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
-      ) : null}
       {/* nested subtask indent guide — a quiet vertical hairline in the indent gutter */}
       {nested ? (
         <span className="absolute inset-y-0 -left-4 w-px bg-border/60" aria-hidden />
@@ -208,6 +224,9 @@ export function TaskRow({
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <button
             type="button"
+            // Clicking the title selects the row, so its Space/Enter stay the
+            // List's (complete / edit), unlike the row's other buttons.
+            {...{ [ROW_TITLE_ATTR]: "" }}
             className={cn(
               // flex-1 so the title keeps priority; chips shrink/truncate first.
               // Body font (content, not chrome) at 15px — quiet, Linear/Todoist-ward.
@@ -266,14 +285,11 @@ export function TaskRow({
         {assignees.length > 1 ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span
-                className="flex items-center"
-                aria-label={`Assignee: ${assignee?.name ?? "none"}`}
-              >
+              <span className="flex items-center" aria-label={`Assignee: ${assigneeName}`}>
                 <AssigneeAvatar assignee={assignee} className="size-4" />
               </span>
             </TooltipTrigger>
-            <TooltipContent>{assignee?.name ?? "Unassigned"}</TooltipContent>
+            <TooltipContent>{assigneeName}</TooltipContent>
           </Tooltip>
         ) : null}
 
@@ -281,7 +297,7 @@ export function TaskRow({
           task={task}
           canEdit={canEdit}
           open={command === "schedule"}
-          onOpenChange={(o) => !o && onClearCommand()}
+          onOpenChange={(o) => (o ? onRequestCommand("schedule") : onClearCommand())}
           label={scheduled}
           drifted={drifted}
           api={api}
@@ -291,20 +307,21 @@ export function TaskRow({
           task={task}
           canEdit={canEdit}
           open={command === "due"}
-          onOpenChange={(o) => !o && onClearCommand()}
+          onOpenChange={(o) => (o ? onRequestCommand("due") : onClearCommand())}
           label={due}
           api={api}
         />
 
-        {showBucket ? (
+        {showBucket || canEdit ? (
           <BucketPopover
             task={task}
             buckets={buckets}
             inboxId={inboxId}
             bucketName={bucketName}
+            showPill={showBucket}
             canEdit={canEdit}
             open={command === "bucket"}
-            onOpenChange={(o) => !o && onClearCommand()}
+            onOpenChange={(o) => (o ? onRequestCommand("bucket") : onClearCommand())}
             api={api}
           />
         ) : null}
@@ -348,8 +365,17 @@ export function TaskRow({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem onSelect={() => onStartEdit()}>Rename</ContextMenuItem>
+      <ContextMenuContent
+        className="w-48"
+        onCloseAutoFocus={(e) => {
+          const action = pendingMenuAction.current;
+          if (!action) return;
+          pendingMenuAction.current = null;
+          e.preventDefault(); // the editor or popover takes focus, not the list
+          action();
+        }}
+      >
+        <ContextMenuItem onSelect={() => afterMenuClose(onStartEdit)}>Rename</ContextMenuItem>
         <ContextMenuItem onSelect={() => api.toggleDone(task)}>
           {done ? "Mark not done" : "Mark done"}
         </ContextMenuItem>
@@ -362,9 +388,13 @@ export function TaskRow({
           </ContextMenuItem>
         ) : null}
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => onRequestCommand("schedule")}>Schedule…</ContextMenuItem>
-        <ContextMenuItem onSelect={() => onRequestCommand("due")}>Set due date…</ContextMenuItem>
-        <ContextMenuItem onSelect={() => onRequestCommand("bucket")}>
+        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand("schedule"))}>
+          Schedule…
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand("due"))}>
+          Set due date…
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand("bucket"))}>
           Move to bucket…
         </ContextMenuItem>
         {task.parentId ? (
@@ -373,31 +403,7 @@ export function TaskRow({
           </ContextMenuItem>
         ) : null}
         <ContextMenuSeparator />
-        {assignees.length > 1 ? (
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>Assign to</ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <ContextMenuRadioGroup
-                value={task.ownerId}
-                onValueChange={(v) => {
-                  if (v === task.ownerId) return;
-                  const person = assignees.find((a) => a.userId === v);
-                  if (!person?.canTakeTasks) return;
-                  void previewAssign(task.bucketId, v).then((msg) => {
-                    if (msg) toast.message(msg);
-                  });
-                  api.patchTask(task.id, { ownerId: v });
-                }}
-              >
-                {assignees.map((a) => (
-                  <ContextMenuRadioItem key={a.userId} value={a.userId} disabled={!a.canTakeTasks}>
-                    {a.canTakeTasks ? a.name : `${a.name} (view only)`}
-                  </ContextMenuRadioItem>
-                ))}
-              </ContextMenuRadioGroup>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-        ) : null}
+        <AssignContextMenu task={task} api={api} />
         <ContextMenuSub>
           <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
           <ContextMenuSubContent>
@@ -478,6 +484,15 @@ function TitleEditor({
 }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLInputElement>(null);
+  // Enter and Esc end the edit by handing focus back to the list, and the blur
+  // that causes must not commit again (or save a draft Esc threw away).
+  const ended = useRef(false);
+  const end = (commit: boolean) => {
+    if (ended.current) return;
+    ended.current = true;
+    if (commit) onCommit(value);
+    else onCancel();
+  };
   useEffect(() => {
     ref.current?.focus();
     ref.current?.select();
@@ -490,10 +505,10 @@ function TitleEditor({
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         e.stopPropagation();
-        if (e.key === "Enter") onCommit(value);
-        else if (e.key === "Escape") onCancel();
+        if (e.key === "Enter") end(true);
+        else if (e.key === "Escape") end(false);
       }}
-      onBlur={() => onCommit(value)}
+      onBlur={() => end(true)}
       className="h-7 px-1.5 py-0 font-display text-sm"
     />
   );
@@ -502,6 +517,11 @@ function TitleEditor({
 // LevelDots (priority/energy glyphs) now lives in ./level-icons.
 
 // ── meta popovers ─────────────────────────────────────────────────────────────
+
+// Closing a row popover hands focus back to the list (onClearCommand). Without
+// this, Radix moves it to the chip once the popover unmounts after a click on
+// the chip itself.
+const keepListFocus = (e: Event) => e.preventDefault();
 
 function MetaChip({
   active,
@@ -568,7 +588,12 @@ function SchedulePopover({
           </MetaChip>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-3" onClick={(e) => e.stopPropagation()} align="end">
+      <PopoverContent
+        className="w-auto p-3"
+        onClick={(e) => e.stopPropagation()}
+        onCloseAutoFocus={keepListFocus}
+        align="end"
+      >
         <label className="mb-1 block text-xs font-medium text-muted-foreground">
           Scheduled time
         </label>
@@ -631,7 +656,12 @@ function DuePopover({
           </MetaChip>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-3" onClick={(e) => e.stopPropagation()} align="end">
+      <PopoverContent
+        className="w-auto p-3"
+        onClick={(e) => e.stopPropagation()}
+        onCloseAutoFocus={keepListFocus}
+        align="end"
+      >
         <label className="mb-1 block text-xs font-medium text-muted-foreground">Due date</label>
         <Input
           type="date"
@@ -665,6 +695,7 @@ function BucketPopover({
   buckets,
   inboxId,
   bucketName,
+  showPill,
   canEdit,
   open,
   onOpenChange,
@@ -674,6 +705,9 @@ function BucketPopover({
   buckets: Array<{ id: string; name: string; isSystem: boolean }>;
   inboxId: string | null;
   bucketName: string;
+  /** False where the bucket is implied (Q1-3). The popover stays mounted so the
+   * `b` key can still open it; the pill then shows as its anchor. */
+  showPill: boolean;
   canEdit: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -685,14 +719,24 @@ function BucketPopover({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild disabled={!canEdit}>
-        <button type="button" onClick={(e) => e.stopPropagation()} aria-label="Bucket">
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Bucket"
+          className={showPill || open ? undefined : "hidden"}
+        >
           <Badge variant="secondary" className="gap-1 font-normal">
             {task.bucketId === inboxId ? <Inbox className="size-3" aria-hidden /> : null}
             {bucketName}
           </Badge>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-48 p-1" onClick={(e) => e.stopPropagation()} align="end">
+      <PopoverContent
+        className="w-48 p-1"
+        onClick={(e) => e.stopPropagation()}
+        onCloseAutoFocus={keepListFocus}
+        align="end"
+      >
         <div className="max-h-64 overflow-auto">
           {options.map((b) => (
             <button

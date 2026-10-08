@@ -57,7 +57,7 @@
 ## Wave C — one-product cohesion
 
 - [x] **DF-14 — Selection + accent unification** · `Sev High (visual)` · effort M · lane: *design-system* · ✅ 2026-07-10 `t/maciej/df-14-selection-unify`
-  One selection recipe (`--selected-bg` tint + dimmed `hover:bg-accent/60`) across contacts/notes/email/calendar lists; de-tint the five appearance pickers (R5); run `moduo-design-quality` audit as the gate. *(§5 A1 + C1 — the highest cohesion-per-effort fixes.)*
+  One selection recipe (`--selected-bg` tint + dimmed `hover:bg-accent/60`) across contacts/notes/email/calendar lists; de-tint the five appearance pickers (R5); run `moduo-design-quality` audit as the gate. **Superseded 2026-10-08 by DS-2:** selection is tint-only on the state layer (no accent bar); see [decisions/design-system.md](../decisions/design-system.md) and DESIGN_RULES R5. *(§5 A1 + C1 — the highest cohesion-per-effort fixes.)*
 - [ ] **DF-15 — Home first-run composition** · `Sev Medium` · effort S–M · deps: — · lane: *dashboard* · ⏳ **STILL OPEN** — gated on the designer's look-approval of the draft layout
   **Ratified: recompose with free slots** — same 4 widgets sized to content, ~2 free slots; draft layout screenshotted for designer look-approval before merge. Anchor/fill widget content in its frame (tasks list growth, capture input placement, clock centering); rename the fallback heading → **"Open"**; move toasts off the edit controls. *(CC-2 residuals.)*
 - [x] **DF-16 — Dead-chrome + copy sweep** · `Sev Medium` · effort M · lane: *platform* · ✅ 2026-07-11 `t/maciej/df-16-dead-chrome`

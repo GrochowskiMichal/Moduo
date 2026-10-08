@@ -22,17 +22,25 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
-import { canNestUnder, type GroupBy, groupTasks, nestedSubtaskIds } from "../helpers";
+import {
+  canNestUnder,
+  type GroupBy,
+  groupTasks,
+  nestedSubtaskIds,
+  showBucketPill,
+} from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task } from "../model";
 import {
   asTaskDropTarget,
   DndBoundary,
+  type DragActivatorRef,
   NestableTask,
   pointerFirstCollision,
   SortableTask,
   useTaskDndSensors,
 } from "./dnd/task-dnd";
+import { listKeyActionFor } from "./list-keys";
 import { type PlanView, PlanViewHeader } from "./plan-view-header";
 import { type RowCommand, TaskRow } from "./task-row";
 
@@ -124,9 +132,7 @@ export function TaskListView({
   // Nesting is drag-onto-target (no SortableContext) → default keyboard sensor.
   const nestSensors = useTaskDndSensors({ sortable: false });
 
-  const crossBucket = selection === "all" || selection === "today";
-  const showBucketTag =
-    crossBucket || groupBy === "status" || groupBy === "priority" || groupBy === "energy";
+  const showBucketTag = showBucketPill(selection, groupBy);
   // Grouping by bucket only makes sense across buckets (the "All" view).
   const groupOptions = GROUP_OPTIONS.filter((o) => o.value !== "bucket" || selection === "all");
 
@@ -265,62 +271,80 @@ export function TaskListView({
   const selectedTask = visibleTasks.find((t) => t.id === selectedId) ?? null;
 
   const onKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      // While inline-editing a title, the Input stops propagation; popovers are
-      // portaled out — so reaching here means plain navigation is safe. During a
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // While inline-editing a title, the Input stops propagation. During a
       // keyboard reorder the dnd sensor owns the arrows — don't also move the cursor.
       if (editingId || reordering) return;
-      const key = e.key.toLowerCase();
-      if (key === "j" || e.key === "ArrowDown") {
-        e.preventDefault();
-        move(1);
-      } else if (key === "k" || e.key === "ArrowUp") {
-        e.preventDefault();
-        move(-1);
-      } else if (key === "x" || e.key === " ") {
-        if (!selectedTask || !canEdit) return;
-        e.preventDefault();
-        api.toggleDone(selectedTask);
-      } else if (key === "enter" || key === "e") {
-        if (!selectedTask || !canEdit) return;
-        e.preventDefault();
-        setEditingId(selectedTask.id);
-      } else if (key === "c") {
-        e.preventDefault();
-        onRequestCapture();
-      } else if (key === "b" && selectedTask && canEdit) {
-        e.preventDefault();
-        setCommand({ taskId: selectedTask.id, kind: "bucket" });
-      } else if (key === "s" && selectedTask && canEdit) {
-        e.preventDefault();
-        setCommand({ taskId: selectedTask.id, kind: "schedule" });
-      } else if (key === "d" && selectedTask && canEdit) {
-        e.preventDefault();
-        setCommand({ taskId: selectedTask.id, kind: "due" });
-      } else if (key === "q" && selectedTask && canEdit) {
-        // Queue/unqueue the selected task (Round D: `q` is the queue key — was
-        // `t` from when the queue was "Today"; the rename makes `q` canonical).
-        e.preventDefault();
-        api.toggleCommit(selectedTask.id);
-      } else if (e.key === "ArrowRight" && selectedTask) {
-        // expand the selected parent's subtasks
-        if ((api.subtasksByParent.get(selectedTask.id)?.length ?? 0) > 0 && nest) {
+      // Keys from a row's portaled popover or context menu, modified keys (⌘K,
+      // ⌘⇧K, ⌘C… stay the app's and the OS's) and a row button's own Space/Enter
+      // aren't the list's — see list-keys.ts.
+      const action = listKeyActionFor(e, e.currentTarget);
+      if (!action) return;
+      // A list key pressed while focus sits on something inside the list (a
+      // button Chromium focused on click, a title) hands focus back to the
+      // list, so the next Space/Enter acts on the selected row, not that button.
+      if (e.target !== e.currentTarget) e.currentTarget.focus({ preventScroll: true });
+      switch (action) {
+        case "next":
           e.preventDefault();
-          setExpandedParents((prev) => new Set(prev).add(selectedTask.id));
-        }
-      } else if (e.key === "ArrowLeft" && selectedTask) {
-        // collapse the selected parent — or jump from a subtask to its parent
-        if (expandedParents.has(selectedTask.id)) {
+          move(1);
+          return;
+        case "prev":
           e.preventDefault();
-          toggleExpandParent(selectedTask.id);
-        } else if (selectedTask.parentId && nestedIds.has(selectedTask.id)) {
+          move(-1);
+          return;
+        case "toggle-done":
+          if (!selectedTask || !canEdit) return;
           e.preventDefault();
-          setSelectedId(selectedTask.parentId);
-        }
-      } else if ((e.metaKey || e.ctrlKey) && (e.key === "Backspace" || e.key === "Delete")) {
-        if (!selectedTask || !canEdit) return;
-        e.preventDefault();
-        api.deleteTask(selectedTask.id);
+          api.toggleDone(selectedTask);
+          return;
+        case "edit":
+          if (!selectedTask || !canEdit) return;
+          e.preventDefault();
+          setEditingId(selectedTask.id);
+          return;
+        case "capture":
+          e.preventDefault();
+          onRequestCapture();
+          return;
+        case "bucket":
+        case "schedule":
+        case "due":
+          if (!selectedTask || !canEdit) return;
+          e.preventDefault();
+          setCommand({ taskId: selectedTask.id, kind: action });
+          return;
+        case "queue":
+          // Queue/unqueue the selected task (Round D: `q` is the queue key — was
+          // `t` from when the queue was "Today"; the rename makes `q` canonical).
+          if (!selectedTask || !canEdit) return;
+          e.preventDefault();
+          api.toggleCommit(selectedTask.id);
+          return;
+        case "expand":
+          // expand the selected parent's subtasks
+          if (!selectedTask || !nest) return;
+          if ((api.subtasksByParent.get(selectedTask.id)?.length ?? 0) > 0) {
+            e.preventDefault();
+            setExpandedParents((prev) => new Set(prev).add(selectedTask.id));
+          }
+          return;
+        case "collapse":
+          // collapse the selected parent — or jump from a subtask to its parent
+          if (!selectedTask) return;
+          if (expandedParents.has(selectedTask.id)) {
+            e.preventDefault();
+            toggleExpandParent(selectedTask.id);
+          } else if (selectedTask.parentId && nestedIds.has(selectedTask.id)) {
+            e.preventDefault();
+            setSelectedId(selectedTask.parentId);
+          }
+          return;
+        case "delete":
+          if (!selectedTask || !canEdit) return;
+          e.preventDefault();
+          api.deleteTask(selectedTask.id);
+          return;
       }
     },
     [
@@ -368,7 +392,14 @@ export function TaskListView({
       },
       onClearCommand: () => {
         setCommand(null);
-        containerRef.current?.focus();
+        // Back to the list, unless closing came from clicking into another field.
+        const active = document.activeElement;
+        const leftForElsewhere =
+          active instanceof HTMLElement &&
+          active !== document.body &&
+          !containerRef.current?.contains(active) &&
+          !active.closest('[data-slot="popover-content"]');
+        if (!leftForElsewhere) containerRef.current?.focus();
       },
       onRequestCommand: (kind: RowCommand) => setCommand({ taskId: t.id, kind }),
       onTagFilter,
@@ -394,7 +425,11 @@ export function TaskListView({
   // listeners and the live drop-target highlight when this list is in nestable mode.
   const renderParentRow = (
     task: Task,
-    drag?: { dragListeners: DraggableSyntheticListeners; dropActive: boolean },
+    drag?: {
+      dragListeners: DraggableSyntheticListeners;
+      dragActivatorRef: DragActivatorRef;
+      dropActive: boolean;
+    },
   ) => {
     const children = nest ? (api.subtasksByParent.get(task.id) ?? []) : [];
     const expanded = expandedParents.has(task.id);
@@ -409,6 +444,7 @@ export function TaskListView({
           progress={api.subtaskProgressByTask.get(task.id) ?? null}
           parentTitle={parentTitleFor(task)}
           dragListeners={drag?.dragListeners}
+          dragActivatorRef={drag?.dragActivatorRef}
           dropActive={drag?.dropActive ?? false}
         />
         {expanded
@@ -528,6 +564,15 @@ export function TaskListView({
         ref={containerRef}
         tabIndex={0}
         onKeyDown={onKeyDown}
+        // Chromium focuses a clicked button; after a mouse click on a row's
+        // button, hand focus back to the list (as desktop WebKit does), so the
+        // next Space/Enter acts on the selected row instead of re-clicking it.
+        // Keyboard activation (detail 0), text fields and portaled popovers keep focus.
+        onClickCapture={(e) => {
+          if (e.detail === 0 || !e.currentTarget.contains(e.target as Node)) return;
+          if (!(e.target instanceof Element) || !e.target.closest("button")) return;
+          e.currentTarget.focus({ preventScroll: true });
+        }}
         role="grid"
         aria-label={`${scopeTitle} tasks`}
         className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -553,11 +598,12 @@ export function TaskListView({
                   key={task.id}
                   id={task.id}
                   from="queue"
-                  render={({ dragListeners }) => (
+                  render={({ dragListeners, dragActivatorRef }) => (
                     <TaskRow
                       {...buildRowProps(task)}
                       parentTitle={parentTitleFor(task)}
                       dragListeners={dragListeners}
+                      dragActivatorRef={dragActivatorRef}
                     />
                   )}
                 />
@@ -583,8 +629,8 @@ export function TaskListView({
                 from="list"
                 canDrag={canDragRow(task)}
                 canDrop={isNestTarget(task)}
-                render={({ dragListeners, isOver }) =>
-                  renderParentRow(task, { dragListeners, dropActive: isOver })
+                render={({ dragListeners, dragActivatorRef, isOver }) =>
+                  renderParentRow(task, { dragListeners, dragActivatorRef, dropActive: isOver })
                 }
               />
             ))}

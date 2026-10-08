@@ -47,7 +47,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 
 1. **Day:** `/s1 <topic>`, the grilling, spec, blocks and Definition-of-Ready gate (read-only; plan mode works).
 2. **Night shift:** one session per block, each in its own worktree (dispatch from `claude agents` or the desktop app). Start each with the `/goal` template from the `/s2` skill, so the session keeps working until the block's definition of done holds. `/s2` claims its block with a draft PR, so parallel sessions never take the same one.
-3. **Morning:** read each Changed · Test this · Next report and run the manual checklist. Then `/s3` runs the review gate the diff's risk calls for, merges into the personal branch, and syncs bigger chunks to `develop`.
+3. **Morning:** read each report's **Status** line first (Built, not landed · Blocked · Not started), then its **To finish this block** and **❓ Needs you** lists, and run the manual checklist. Then `/s3` runs the review gate the diff's risk calls for, merges into the personal branch, and syncs bigger chunks to `develop`.
 4. **Large audits and migrations** across many files run as dynamic workflows (put `ultracode` in the prompt). Watch long CI or release runs with `/loop`.
 
 The only two things you manage: **the work plan** and **your plan limits**.
