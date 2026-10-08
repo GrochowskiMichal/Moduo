@@ -1,13 +1,15 @@
--- Probe for supabase/migrations/20261008013000_account_erase_workspace_data.sql
--- and its follow-up 20261008040000_account_erasure_private_shortcut.sql
--- (PRIV-2a, specs/privacy-account-erasure.md). Run it on a throwaway Postgres 17
--- database that holds nothing else, after the stub and the migrations:
+-- Probe for supabase/migrations/20261008013000_account_erase_workspace_data.sql,
+-- its follow-up 20261008040000_account_erasure_private_shortcut.sql (PRIV-2a) and
+-- 20261008050000_account_scrub_stripe_mirror.sql (PRIV-2b),
+-- specs/privacy-account-erasure.md. Run it on a throwaway Postgres 17 database
+-- that holds nothing else, after the stub and the migrations:
 --
 --   createdb -h /tmp -p 54329 -U postgres erasure_probe
 --   psql -h /tmp -p 54329 -U postgres -d erasure_probe -v ON_ERROR_STOP=1 -q \
 --     -f supabase/probes/account-erasure.stub.sql \
 --     -f supabase/migrations/20261008013000_account_erase_workspace_data.sql \
 --     -f supabase/migrations/20261008040000_account_erasure_private_shortcut.sql \
+--     -f supabase/migrations/20261008050000_account_scrub_stripe_mirror.sql \
 --     -f supabase/probes/account-erasure.probe.sql
 --
 -- Every check stops the run with the failing check's message. A clean run
@@ -16,7 +18,7 @@
 -- Cast: X is the account being deleted. O owns workspace W, where X, B, C and
 -- V (a viewer) are members, and Z was one (Z left; Z's chat rows remain). X
 -- owns WX alone. W3 and W4 (also O's) test member removal (D) and a dashboard
--- deletion (E).
+-- deletion (E). S, T, U and Y have Stripe customers in our stripe.* copy.
 
 CREATE SCHEMA probe;
 GRANT USAGE, CREATE ON SCHEMA probe TO service_role;
@@ -385,7 +387,8 @@ BEGIN
     'public.account_erasure_new_owner(text, uuid, uuid, uuid)',
     'public.account_erasure_inbox(uuid, uuid)',
     'public.account_erase_workspace_data(uuid, boolean)',
-    'public.account_erasure_only_creator(text, uuid, uuid)'
+    'public.account_erasure_only_creator(text, uuid, uuid)',
+    'public.account_scrub_stripe_mirror(uuid, boolean, text[])'
   ] LOOP
     ASSERT NOT has_function_privilege('anon', fn, 'EXECUTE'), fn || ': anon can execute';
     ASSERT NOT has_function_privilege('authenticated', fn, 'EXECUTE'), fn || ': authenticated can execute';
@@ -813,6 +816,183 @@ BEGIN
     AND NOT EXISTS (SELECT 1 FROM probe.before_visible b WHERE b.user_id = a.user_id AND b.item = a.item);
   ASSERT v_new IS NULL, 'new access after the account went: ' || v_new;
   RAISE NOTICE 'PASS: the account cascade finishes the job and hands nothing over';
+END;
+$$;
+
+-- ── AC7: our copy of the Stripe customer is wiped and stays wiped (PRIV-2b) ───
+
+-- S has two customers tagged with them (one the profile lost track of) and a saved
+-- card. T's customer is theirs alone. U's profile points at T's customer (the column
+-- was client-writable once). Y's customer was created before tagging existed.
+INSERT INTO auth.users (id, email)
+SELECT probe.id(n), lower(n) || '@example.com' FROM unnest(ARRAY['S', 'T', 'U', 'Y']) AS n;
+INSERT INTO public.profiles (id, display_name, stripe_customer_id) VALUES
+  (probe.id('S'), 'Sam', 'cus_S'), (probe.id('T'), 'Tia', 'cus_T'),
+  (probe.id('U'), 'Uma', 'cus_T'), (probe.id('Y'), 'Yan', 'cus_Y');
+INSERT INTO stripe.accounts (id) VALUES ('acct_1');
+INSERT INTO stripe.customers (_raw_data, _last_synced_at, _account_id) VALUES
+  (jsonb_build_object('id', 'cus_S', 'object', 'customer', 'email', 's@example.com', 'name', 'Sam Smith',
+     'phone', '+48 600 000 000', 'address', jsonb_build_object('city', 'Kraków'),
+     'metadata', jsonb_build_object('supabase_user_id', probe.id('S'))), now() - interval '1 day', 'acct_1'),
+  (jsonb_build_object('id', 'cus_S2', 'object', 'customer', 'email', 's@example.com',
+     'metadata', jsonb_build_object('supabase_user_id', probe.id('S'))), now() - interval '1 day', 'acct_1'),
+  (jsonb_build_object('id', 'cus_T', 'object', 'customer', 'email', 't@example.com', 'name', 'Tia',
+     'metadata', jsonb_build_object('supabase_user_id', probe.id('T'))), now() - interval '1 day', 'acct_1'),
+  (jsonb_build_object('id', 'cus_Y', 'object', 'customer', 'email', 'y@example.com', 'name', 'Yan',
+     'metadata', '{}'::jsonb), now() - interval '1 day', 'acct_1');
+INSERT INTO stripe.payment_methods (_raw_data, _last_synced_at, _account_id) VALUES
+  (jsonb_build_object('id', 'pm_S', 'object', 'payment_method', 'type', 'card', 'customer', 'cus_S',
+     'card', jsonb_build_object('brand', 'visa', 'last4', '4242'),
+     'billing_details', jsonb_build_object('name', 'Sam Smith', 'email', 's@example.com')),
+   now() - interval '1 day', 'acct_1'),
+  (jsonb_build_object('id', 'pm_T', 'object', 'payment_method', 'type', 'card', 'customer', 'cus_T',
+     'card', jsonb_build_object('brand', 'visa', 'last4', '1111')), now() - interval '1 day', 'acct_1'),
+  -- Cards S detached earlier: no customer left on them, but S paid or subscribed with them.
+  (jsonb_build_object('id', 'pm_S_paid', 'object', 'payment_method', 'type', 'card', 'customer', NULL,
+     'billing_details', jsonb_build_object('name', 'Sam Smith', 'email', 's@example.com')),
+   now() - interval '1 day', 'acct_1'),
+  (jsonb_build_object('id', 'pm_S_sub', 'object', 'payment_method', 'type', 'card', 'customer', NULL,
+     'card', jsonb_build_object('brand', 'mastercard', 'last4', '5454')), now() - interval '1 day', 'acct_1');
+INSERT INTO stripe.payment_intents (_raw_data, _last_synced_at, _account_id) VALUES
+  (jsonb_build_object('id', 'pi_S', 'customer', 'cus_S', 'payment_method', 'pm_S_paid'), now() - interval '1 day', 'acct_1');
+INSERT INTO stripe.subscriptions (_raw_data, _last_synced_at, _account_id) VALUES
+  (jsonb_build_object('id', 'sub_S', 'customer', 'cus_S2', 'default_payment_method', 'pm_S_sub'),
+   now() - interval '1 day', 'acct_1');
+INSERT INTO stripe.invoices (_raw_data, _last_synced_at, _account_id) VALUES
+  (jsonb_build_object('id', 'in_S', 'customer', 'cus_S', 'customer_email', 's@example.com'),
+   now() - interval '1 day', 'acct_1');
+
+-- The engine's write (Stripe Sync Engine 1.0.32): the whole JSON, only when newer.
+CREATE FUNCTION probe.engine_upsert(p_table text, p_raw jsonb, p_ts timestamptz) RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+  EXECUTE format(
+    'INSERT INTO stripe.%I (_raw_data, _last_synced_at, _account_id) VALUES ($1, $2, %L)
+     ON CONFLICT (id) DO UPDATE SET _raw_data = EXCLUDED._raw_data, _last_synced_at = $2
+     WHERE stripe.%I._last_synced_at IS NULL OR stripe.%I._last_synced_at < $2',
+    p_table, 'acct_1', p_table, p_table) USING p_raw, p_ts;
+END;
+$$;
+
+CREATE FUNCTION probe.stripe_state() RETURNS text LANGUAGE sql AS $$
+  SELECT (SELECT md5(string_agg(c::text, E'\n' ORDER BY c.id)) FROM stripe.customers c)
+      || (SELECT md5(string_agg(p::text, E'\n' ORDER BY p.id)) FROM stripe.payment_methods p)
+      || (SELECT md5(string_agg(i::text, E'\n' ORDER BY i.id)) FROM stripe.payment_intents i)
+      || (SELECT md5(string_agg(s::text, E'\n' ORDER BY s.id)) FROM stripe.subscriptions s)
+      || (SELECT md5(string_agg(i::text, E'\n' ORDER BY i.id)) FROM stripe.invoices i)
+$$;
+CREATE TABLE probe.stripe_before AS SELECT probe.stripe_state() AS s;
+
+-- The dry run delete-account makes first, then the wipe with the customers the Stripe
+-- step deleted: cus_S, and cus_S_new, which our copy hasn't received yet.
+SET ROLE service_role;
+CREATE TABLE probe.stripe_preview AS
+  SELECT public.account_scrub_stripe_mirror(probe.id('S')) AS r,
+         public.account_scrub_stripe_mirror(probe.id('S'), NULL) AS r_null;
+RESET ROLE;
+CREATE TABLE probe.stripe_after_preview AS SELECT probe.stripe_state() AS s;
+SET ROLE service_role;
+CREATE TABLE probe.stripe_applied AS
+  SELECT public.account_scrub_stripe_mirror(probe.id('S'), false, ARRAY['cus_S', 'cus_S_new']) AS r;
+RESET ROLE;
+
+DO $$
+DECLARE
+  v_c record;
+  v_pm record;
+BEGIN
+  ASSERT (SELECT r FROM probe.stripe_preview)
+    = '{"preview": true, "stripe_mirror": true, "customers_wiped": 2, "customers_added_as_deleted": 0, "payment_methods_wiped": 3}',
+    'stripe preview: ' || (SELECT r::text FROM probe.stripe_preview);
+  ASSERT (SELECT r_null = r FROM probe.stripe_preview), 'a NULL preview flag did not preview';
+  ASSERT (SELECT s FROM probe.stripe_after_preview) = (SELECT s FROM probe.stripe_before),
+    'the preview changed our Stripe copy';
+  ASSERT (SELECT r FROM probe.stripe_applied)
+    = '{"preview": false, "stripe_mirror": true, "customers_wiped": 2, "customers_added_as_deleted": 1, "payment_methods_wiped": 3}',
+    'stripe wipe: ' || (SELECT r::text FROM probe.stripe_applied);
+
+  FOR v_c IN SELECT * FROM stripe.customers WHERE id IN ('cus_S', 'cus_S2', 'cus_S_new') LOOP
+    ASSERT v_c._raw_data = jsonb_build_object('id', v_c.id, 'object', 'customer', 'deleted', true),
+      v_c.id || ' kept data: ' || v_c._raw_data::text;
+    ASSERT v_c.email IS NULL AND v_c.name IS NULL AND v_c.phone IS NULL AND v_c.address IS NULL
+       AND v_c.metadata IS NULL AND v_c.deleted, v_c.id || ' typed columns still hold data';
+  END LOOP;
+  SELECT * INTO v_pm FROM stripe.payment_methods WHERE id = 'pm_S';
+  ASSERT v_pm._raw_data = '{"id": "pm_S", "type": "card", "object": "payment_method"}',
+    'saved card kept data: ' || v_pm._raw_data::text;
+  ASSERT v_pm.card IS NULL AND v_pm.billing_details IS NULL AND v_pm.customer IS NULL, 'card columns still hold data';
+  ASSERT (SELECT count(*) FROM stripe.payment_methods
+          WHERE id IN ('pm_S_paid', 'pm_S_sub') AND card IS NULL AND billing_details IS NULL) = 2,
+    'a card detached before the deletion kept its details';
+  ASSERT (SELECT count(*) FROM stripe.customers WHERE id = 'cus_S_new') = 1,
+    'a deleted customer our copy did not have yet got no stub';
+  ASSERT (SELECT email FROM stripe.customers WHERE id = 'cus_T') = 't@example.com', 'T customer touched';
+  ASSERT (SELECT card ->> 'last4' FROM stripe.payment_methods WHERE id = 'pm_T') = '1111', 'T card touched';
+  ASSERT (SELECT _raw_data ->> 'customer_email' FROM stripe.invoices WHERE id = 'in_S') = 's@example.com'
+     AND (SELECT payment_method FROM stripe.payment_intents WHERE id = 'pi_S') = 'pm_S_paid',
+    'a billing record was touched (they are kept)';
+  RAISE NOTICE 'PASS AC7: the Stripe copy of the customer and their saved cards is wiped, billing records stay';
+END;
+$$;
+
+-- The webhooks the deletion caused arrive late: older than the wipe, so they lose.
+DO $$
+BEGIN
+  PERFORM probe.engine_upsert('customers', jsonb_build_object('id', 'cus_S', 'object', 'customer',
+    'deleted', true, 'email', 's@example.com', 'name', 'Sam Smith',
+    'metadata', jsonb_build_object('supabase_user_id', probe.id('S'))), clock_timestamp() - interval '2 seconds');
+  PERFORM probe.engine_upsert('payment_methods', jsonb_build_object('id', 'pm_S', 'object', 'payment_method',
+    'type', 'card', 'customer', NULL, 'card', jsonb_build_object('brand', 'visa', 'last4', '4242'),
+    'billing_details', jsonb_build_object('name', 'Sam Smith')), clock_timestamp() - interval '2 seconds');
+  PERFORM probe.engine_upsert('customers', jsonb_build_object('id', 'cus_S_new', 'object', 'customer',
+    'deleted', true, 'email', 's@example.com', 'name', 'Sam Smith',
+    'metadata', jsonb_build_object('supabase_user_id', probe.id('S'))), clock_timestamp() - interval '2 seconds');
+  -- Checked before the retry below, which would wipe a restored customer again.
+  ASSERT (SELECT email IS NULL AND metadata IS NULL FROM stripe.customers WHERE id = 'cus_S'),
+    'a late customer.deleted webhook brought the data back';
+  ASSERT (SELECT email IS NULL AND metadata IS NULL FROM stripe.customers WHERE id = 'cus_S_new'),
+    'the late first webhook of a customer our copy did not have wrote it in full';
+  ASSERT (SELECT card IS NULL AND billing_details IS NULL FROM stripe.payment_methods WHERE id = 'pm_S'),
+    'a late payment_method webhook brought the card back';
+END;
+$$;
+
+-- U's profile (and even the ids handed over) point at T's customer; Y's customer was
+-- never tagged; a retry for S. Then a second Stripe account makes a stub's account
+-- ambiguous, so none is added.
+SET ROLE service_role;
+CREATE TABLE probe.stripe_more AS
+  SELECT public.account_scrub_stripe_mirror(probe.id('U'), false, ARRAY['cus_T']) AS u,
+         public.account_scrub_stripe_mirror(probe.id('Y'), false) AS y,
+         public.account_scrub_stripe_mirror(probe.id('S'), false, ARRAY['cus_S']) AS s_again;
+RESET ROLE;
+INSERT INTO stripe.accounts (id) VALUES ('acct_2');
+SET ROLE service_role;
+CREATE TABLE probe.stripe_ambiguous AS
+  SELECT public.account_scrub_stripe_mirror(probe.id('Y'), false, ARRAY['cus_Y_new']) AS y;
+RESET ROLE;
+
+DO $$
+BEGIN
+  ASSERT (SELECT (u ->> 'customers_wiped')::int + (u ->> 'payment_methods_wiped')::int FROM probe.stripe_more) = 0
+     AND (SELECT email FROM stripe.customers WHERE id = 'cus_T') = 't@example.com'
+     AND (SELECT card ->> 'last4' FROM stripe.payment_methods WHERE id = 'pm_T') = '1111',
+    'a customer our copy tags with someone else, or their card, was wiped';
+  ASSERT (SELECT (y ->> 'customers_added_as_deleted')::int FROM probe.stripe_ambiguous) = 0
+     AND NOT EXISTS (SELECT 1 FROM stripe.customers WHERE id = 'cus_Y_new'),
+    'a stub was added under a guessed Stripe account';
+  ASSERT (SELECT (y ->> 'customers_wiped')::int FROM probe.stripe_more) = 1
+     AND (SELECT email IS NULL FROM stripe.customers WHERE id = 'cus_Y'),
+    'an untagged customer the profile points at was kept';
+  ASSERT (SELECT (s_again ->> 'preview')::boolean = false FROM probe.stripe_more)
+     AND (SELECT email IS NULL FROM stripe.customers WHERE id = 'cus_S'), 'a retry for S misbehaved';
+  BEGIN
+    PERFORM public.account_scrub_stripe_mirror(NULL, true);
+    RAISE EXCEPTION 'FAIL: a NULL user was accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM NOT LIKE '%p_user is required%' THEN RAISE; END IF;
+  END;
+  RAISE NOTICE 'PASS AC7: it stays wiped when late webhooks arrive, never touches a customer tagged with someone else, and a retry is safe';
 END;
 $$;
 
