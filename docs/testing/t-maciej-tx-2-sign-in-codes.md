@@ -5,6 +5,7 @@
 
 ## Before anything: logos are real
 - [ ] **Do:** run the runbook's step 1 `curl` loop → **Expect:** `content-type: image/png` four times. On 2026-10-08 (~16:30 UTC) all four still answered `text/html` (app.moduo.app last deployed 7 October), so step 1 fails until the web app is redeployed. Rechecked ~20:50 UTC: still `text/html` on app.moduo.app (`prod-app` is 398 commits behind `staging-app`), while Vercel's build of `staging-app`'s head (bf3b7d57) served all four as `image/png`, byte-identical to `public/email/` at 192 × 44 and 26 × 26. A "Promote to production → app" run fixes it. _(terminal)_
+- [ ] **Do:** runbook step 1b `curl` → **Expect:** `1`: moduo.app/privacy shows "Emails we sent you" and says Resend sends sign-in codes (PR #319 into `prod-landing`). _(terminal or browser)_
 
 ## Sign-in on web (AC7, AC8, AC9)
 - [ ] **Do:** app.moduo.app → type your address → Continue with email → **Expect:** "Check your email", subtitle "Enter the six-digit code we sent. It works for 10 minutes.", and under the button "Resend in 1:00" counting down, greyed out. _(web)_
@@ -12,6 +13,7 @@
 - [ ] **Do:** type the code → **Expect:** signed in, as before. _(web)_
 - [ ] **Do:** sign out, ask for a code, wait for the countdown to end → "Didn't receive it? Resend code" → **Expect:** a second email arrives and the countdown restarts at 1:00. Only the newest code works. _(web)_
 - [ ] **Do:** ask for a code, press the back arrow, press Continue again with the same address within the minute → **Expect:** straight back to the code step with the countdown still running; no second email. _(web)_
+- [ ] **Do:** ask for a code, reload the page, type the same address and press Continue within the minute → **Expect:** the code step, no error, "Resend in 0:5x" counting down; no second email, and the code from the first email signs you in. _(web; on desktop, quit and reopen the app instead of reloading)_
 - [ ] **Do:** Supabase SQL editor: `select to_email, payload, status, provider_id from public.email_outbox order by created_at desc limit 5;` → **Expect:** one `sent` row per email, `payload` = `{"action": "email", "variant": "sign_in", "fallback": false}` (or `magiclink`), no code anywhere in the row. _(dashboard)_
 
 ## Sign-in on desktop (AC7)

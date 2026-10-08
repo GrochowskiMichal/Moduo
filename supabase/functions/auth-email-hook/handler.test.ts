@@ -229,6 +229,21 @@ describe("auth-email-hook · falls back to plain text", () => {
     expect(reports.map((r) => r.event)).toEqual(["render_failed"]);
   });
 
+  it("keeps the invite's confirmation link when the designed invite throws", async () => {
+    const { deps, sent, logs } = setup([], {
+      render: () => {
+        throw new Error("template bug");
+      },
+    });
+    const response = await handleAuthEmailHook(await signed(payload("invite")), deps);
+    expect(response.status).toBe(200);
+    const link = `${SUPABASE_URL}/auth/v1/verify?token=${TOKEN_HASH}&type=invite&redirect_to=https%3A%2F%2Fapp.moduo.app`;
+    expect(sent[0].body.subject).toBe("You're invited to Moduo");
+    expect(String(sent[0].body.text)).toContain(`Confirm your address: ${link}`);
+    expect(String(sent[0].body.html)).toContain(`href="${link.replaceAll("&", "&amp;")}"`);
+    expect(logs[0].payload).toEqual({ action: "invite", variant: "invite", fallback: true });
+  });
+
   it("retries a temporary Resend failure once, then succeeds", async () => {
     const { deps, sent, logs } = setup([503, 200]);
     const response = await handleAuthEmailHook(await signed(payload("magiclink")), deps);

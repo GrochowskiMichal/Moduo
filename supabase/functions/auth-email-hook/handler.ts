@@ -33,6 +33,7 @@ import {
 } from "../_shared/email/send.ts";
 import { AUTH_CODE_VALID_MINUTES, authCodeEmail } from "../_shared/email/templates/auth-code.ts";
 import { authConfirmCodeEmail, authInviteEmail } from "../_shared/email/templates/auth-variants.ts";
+import type { EmailKind, EmailOutboxStatus, EmailStream } from "../_shared/contracts/vocabularies.ts";
 import { verifyWebhook, type WebhookHeaders } from "./webhook.ts";
 
 /** A sanity cap on what we hash and parse. Auth's payload is a user object and a few tokens. */
@@ -59,13 +60,13 @@ const CONFIRM_ACTIONS = new Set(["recovery", "reauthentication"]);
 
 /** A row for public.email_outbox (TX-2 writes the log role only). Never the code. */
 export type AuthEmailLogRow = {
-  kind: "auth_code";
-  stream: "account";
+  kind: Extract<EmailKind, "auth_code">;
+  stream: Extract<EmailStream, "account">;
   to_email: string;
   to_user_id: string | null;
   payload: { action: string; variant: AuthEmailVariant; fallback: boolean };
   dedupe_key: string;
-  status: "sent" | "failed";
+  status: Extract<EmailOutboxStatus, "sent" | "failed">;
   attempts: number;
   last_error: string | null;
   provider_id: string | null;
@@ -328,18 +329,18 @@ export async function handleAuthEmailHook(request: HookRequest, deps: HookDeps):
       const write = Promise.resolve()
         .then(() =>
           deps.log({
-          kind: "auth_code",
-          stream: "account",
-          to_email: item.to,
-          to_user_id: result.ok || !MAY_CREATE_USER.has(action) ? userId : null,
-          payload: { action, variant: item.variant, fallback },
-          dedupe_key: dedupeKey,
-          status: result.ok ? "sent" : "failed",
-          attempts,
-          last_error: result.ok ? null : result.error.slice(0, 1000),
-          provider_id: result.ok ? result.id : null,
-          sent_at: result.ok ? new Date(now()).toISOString() : null,
-        }),
+            kind: "auth_code",
+            stream: "account",
+            to_email: item.to,
+            to_user_id: result.ok || !MAY_CREATE_USER.has(action) ? userId : null,
+            payload: { action, variant: item.variant, fallback },
+            dedupe_key: dedupeKey,
+            status: result.ok ? "sent" : "failed",
+            attempts,
+            last_error: result.ok ? null : result.error.slice(0, 1000),
+            provider_id: result.ok ? result.id : null,
+            sent_at: result.ok ? new Date(now()).toISOString() : null,
+          }),
         )
         .catch((error: unknown) => {
           report("log_failed", { action, error: error instanceof Error ? error.message : String(error) });

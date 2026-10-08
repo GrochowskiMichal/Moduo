@@ -60,9 +60,10 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
   const [otpCode, setOtpCode] = useState("");
   const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
   // The address the last code went to, and when another may be asked for (TX-2, AC9).
-  const [otpSentTo, setOtpSentTo] = useState<string | null>(null);
-  const [resendAt, setResendAt] = useState<number | null>(null);
+  // Kept together so a countdown never carries over to a different address.
+  const [lastSend, setLastSend] = useState<{ email: string; resendAt: number } | null>(null);
   const [clock, setClock] = useState(() => Date.now());
+  const resendAt = lastSend?.resendAt ?? null;
 
   const [profileExists, setProfileExists] = useState(false);
   const [hasPin, setHasPin] = useState(false);
@@ -144,7 +145,7 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
 
     // The code sent moments ago still works: go back to it rather than asking
     // Auth again inside its one-a-minute limit.
-    if (flow === "email" && email === otpSentTo && resendAt !== null && Date.now() < resendAt) {
+    if (flow === "email" && lastSend?.email === email && Date.now() < lastSend.resendAt) {
       setError(null);
       setInfo(null);
       setFlow("otp_sent");
@@ -160,21 +161,22 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
     if (otpErr) {
       const failure = describeOtpSendError(otpErr);
       if (failure.kind === "wait") {
-        const until = Date.now() + failure.seconds * 1000;
-        setResendAt(until);
-        setClock(Date.now());
-        // A code for this address went out moments ago: let them type it.
-        if (email === otpSentTo) {
-          setFlow("otp_sent");
-          return;
+        // Auth only says "wait" when a code for this address went out within the
+        // last minute, from this screen or before a reload: let them type it.
+        const now = Date.now();
+        if (lastSend?.email !== email) {
+          setOtpSentAt(now - Math.max(0, OTP_RESEND_SECONDS - failure.seconds) * 1000);
         }
+        setLastSend({ email, resendAt: now + failure.seconds * 1000 });
+        setClock(now);
+        setFlow("otp_sent");
+        return;
       }
       setError(failure.message);
       return;
     }
     setOtpSentAt(sentAt);
-    setOtpSentTo(email);
-    setResendAt(sentAt + OTP_RESEND_SECONDS * 1000);
+    setLastSend({ email, resendAt: sentAt + OTP_RESEND_SECONDS * 1000 });
     setClock(Date.now());
     setFlow("otp_sent");
   };

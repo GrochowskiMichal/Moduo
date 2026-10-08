@@ -9,7 +9,7 @@ How Moduo's own emails are switched on, checked and rolled back. The build plan 
 | Template kit | `supabase/functions/_shared/email/` | One renderer for HTML + plain text. Preview: Storybook → Email/Transactional emails. |
 | Sender | Resend, domain `moduo.app` (eu-west-1) | From "Moduo &lt;hello@moduo.app&gt;". Open/click tracking stays off. |
 | Sign-in emails | Supabase Auth → Send Email Hook → Edge Function `auth-email-hook` | Since TX-2. Signed requests (Standard Webhooks). |
-| Log | `public.email_outbox` | One row per email: who, which kind, sent or failed, Resend's id. Never the code. Deleted after 30 days, and within a day of an account's deletion (pg_cron `email-outbox-purge`, 03:17 UTC). |
+| Log | `public.email_outbox` | One row per email: who, which kind, sent or failed, Resend's id. Never the code. Deleted after 30 days; rows tied to a deleted account go at the next daily run after an hour's grace, so within about 25 hours (pg_cron `email-outbox-purge`, 03:17 UTC). A failed send for an invite or first sign-in names no account, so it stays the full 30 days. |
 | Logos | `https://app.moduo.app/email/{lockup,mark}-{light,dark}@2x.png` | From BRAND-1's export in `public/email/`. Served once the web app is deployed with them. |
 
 ### Secrets (Edge Functions)
@@ -29,6 +29,11 @@ Run in this order. Steps 2–3 are agent steps that need Maciej's OK in the sess
    for f in lockup-light lockup-dark mark-light mark-dark; do curl -sI "https://app.moduo.app/email/$f@2x.png" | grep -i '^content-type'; done
    ```
    If any says `text/html`, the web app hasn't been deployed since BRAND-1 merged. Deploy it first; don't switch the hook on, or every code email shows a broken logo. app.moduo.app deploys from `prod-app`, which only moves when someone runs Actions → "Promote to production" → `app` (Mike so far). The files reached `staging-app` on 2026-10-08, and Vercel's build of it served all four as PNGs at the contracted sizes, so one promotion is all step 1 needs. Steps 4 and 5 are safe before that (the hook stays off); 6 and 7 wait for it.
+1b. **The privacy policy says it first.** Once the hook is on, Resend sends sign-in codes and `email_outbox` keeps a 30-day record, so moduo.app/privacy must already say both. The lines ship through PR #319 into `prod-landing` (Mike merges it with a merge commit). Check that the page shows the "Emails we sent you" entry:
+   ```bash
+   curl -s https://moduo.app/privacy | grep -c 'Emails we sent you'
+   ```
+   Expect `1`. Like step 1, this gates step 6.
 2. ✅ (2026-10-08) **Migration** `20261008160000_email_outbox.sql` applied to prod (agent, with OK). Check: `select count(*) from public.email_outbox;` returns 0, and `select jobname from cron.job;` lists `email-outbox-purge`.
 3. ✅ (2026-10-08, v1) **Function deployed** (agent, with OK):
    ```bash
@@ -40,7 +45,7 @@ Run in this order. Steps 2–3 are agent steps that need Maciej's OK in the sess
    ```bash
    supabase secrets set --project-ref wtoonrvuqumihpkbvwvs SEND_EMAIL_HOOK_SECRET='<paste here>'
    ```
-6. **Switch the hook on.** Same dialog → Enable → save. From now on Auth sends no email itself.
+6. **Switch the hook on**, only once steps 1 and 1b pass. Same dialog → Enable → save. From now on Auth sends no email itself.
 7. **Rate limit.** Authentication → Rate Limits → "Rate limit for sending emails": `300` per hour. Save.
 8. **Test** with the checklist in `docs/testing/t-maciej-tx-2-sign-in-codes.md`: web sign-in, desktop sign-in, 31+ codes in an hour, the rollback drill below.
 

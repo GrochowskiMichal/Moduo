@@ -125,6 +125,61 @@ describe("EmailAuthPanel resend countdown", () => {
     expect(screen.getByText("Check your email")).toBeTruthy();
   });
 
+  it("after a reload, asking again inside the minute opens the code step for the code already sent", async () => {
+    let calls = 0;
+    renderPanel(
+      null,
+      withSendOtp(async () => {
+        calls += 1;
+        return {
+          data: {},
+          error: {
+            message: "For security purposes, you can only request this after 42 seconds.",
+            status: 429,
+          },
+        };
+      }),
+    );
+    await screen.findByPlaceholderText("you@example.com");
+    rs.useFakeTimers();
+    await requestCode();
+
+    expect(calls).toBe(1);
+    expect(screen.getByText("Check your email")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    const resend = screen.getByRole("button", { name: /Resend/ }) as HTMLButtonElement;
+    expect(resend.textContent).toBe("Resend in 0:42");
+    expect(resend.disabled).toBe(true);
+  });
+
+  it("a countdown for one address never holds back another", async () => {
+    const sentTo: string[] = [];
+    renderPanel(
+      null,
+      withSendOtp(async ({ email }) => {
+        sentTo.push(email);
+        return email === "a@becker.studio"
+          ? {
+              data: {},
+              error: {
+                message: "For security purposes, you can only request this after 30 seconds.",
+                status: 429,
+              },
+            }
+          : { data: {}, error: null };
+      }),
+    );
+    await screen.findByPlaceholderText("you@example.com");
+    await requestCode("a@becker.studio");
+    fireEvent.click(screen.getByRole("button", { name: "Back to email" }));
+    await requestCode("b@becker.studio");
+
+    expect(sentTo).toEqual(["a@becker.studio", "b@becker.studio"]);
+    expect((screen.getByRole("button", { name: /Resend/ }) as HTMLButtonElement).textContent).toBe(
+      "Resend in 1:00",
+    );
+  });
+
   it("shows our words, not Supabase's, for a rate limit and a failed send", async () => {
     renderPanel(
       null,
