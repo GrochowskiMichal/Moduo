@@ -96,7 +96,7 @@ export function BucketRail({
     <div className="flex h-full min-h-0 flex-col gap-3">
       <ModeToggle mode={mode} onModeChange={onModeChange} />
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="pane-scroll min-h-0 flex-1 overflow-auto">
         <nav className="flex flex-col gap-0.5" aria-label="Buckets">
           <SelectionRow
             icon={<Layers className="size-4" aria-hidden />}

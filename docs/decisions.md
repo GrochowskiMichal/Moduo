@@ -22,6 +22,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
 - 2026-10-08 · A SECURITY DEFINER helper that only other definer functions call is never client-callable, and "Delete forever" works again for edited notes and sub-notes.
+- 2026-10-08 · PRIV-3: switching app analytics off, or deleting the account, deletes what PostHog holds for the person.
 - 2026-10-07 · PRIV-2 planned: what a deleted account leaves in other people's workspaces, its Stripe copy, and a privacy@ admin command
 - 2026-10-07 · App analytics (PostHog) is opt-in per person: asked after sign-in until answered, off until you say yes, tagged `surface: "app"` in the shared PostHog project, and in the privacy policy.
 - 2026-10-07 · Deleting an account also deletes the user's private items in other people's workspaces, and the Danger zone says the plan ends
@@ -102,6 +103,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-08 · Moduo for Claude Code: a mod over `moduo-mcp`, with three new task intent ops.
 - 2026-07-04 · Notes NO-9 + NO-10 landed — publish-to-web + the DoD (MCP manifest/connector + Recent-notes widget); Wave 3 (Notes) COMPLETE.
 - 2026-06-27 · Contacts CO-5 MCP manifest + "Needs attention" widget landed — Wave 1 (Contacts) complete.
 - 2026-06-27 · Spine CT-7 Tasks adoption + MCP manifest + dashboard widget landed (Wave 0 spine complete).
@@ -218,6 +220,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-08 · DS-1 landed: the state layer re-resolves in every appearance scope, thin token scrollbars are the global default, and Storybook switches every appearance axis.
 - 2026-10-07 · A state layer of tokens; selection becomes tint-only (R5 rewrite lands in DS-2).
 - 2026-08-14 · DF-18 (eyebrow / detail-title / toolbar standardization) landed
 - 2026-07-27 · The app accent is MONOCHROME by default; hues are opt-in; pre-workspace surfaces are always monochrome

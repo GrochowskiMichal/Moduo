@@ -345,7 +345,7 @@ export function EmailThreadList({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <div className="pane-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
       {hasSections ? (
         <div className="flex flex-col gap-1 p-1">
           {sections.map((group) => (
