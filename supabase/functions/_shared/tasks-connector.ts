@@ -18,16 +18,16 @@ export function filterByAssignee<T extends Row>(tasks: T[], assignee: Assignee, 
   return assignee === "me" ? tasks.filter((t) => t.owner_id === userId) : tasks;
 }
 
-/** A task is top-level when it has no parent the caller can see. */
-export function topLevelOnly<T extends Row>(tasks: T[], visibleIds: Set<string>): T[] {
-  return tasks.filter((t) => !t.parent_id || !visibleIds.has(t.parent_id));
+/** A task is top-level when its parent is not in `inScope` (a subtask whose parent is filtered out stays visible, as in the app). */
+export function topLevelOnly<T extends Row>(tasks: T[], inScope: Set<string>): T[] {
+  return tasks.filter((t) => !t.parent_id || !inScope.has(t.parent_id));
 }
 
-/** Subtasks per parent, counting only tasks in `tasks` (visible, not deleted). */
+/** Subtasks per parent, counting visible tasks; archived ones are left out, as in the app. */
 export function subtaskCounts(tasks: Row[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const t of tasks) {
-    if (!t.parent_id) continue;
+    if (!t.parent_id || t.parent_id === t.id || t.status === "archived") continue;
     counts.set(t.parent_id, (counts.get(t.parent_id) ?? 0) + 1);
   }
   return counts;
@@ -39,27 +39,40 @@ function compareText(a: string | null | undefined, b: string | null | undefined)
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
+type BucketRow = Record<string, any>;
+
+/** The app's bucket order: Inbox pinned first, then ungrouped buckets by position, then each group section (sections in order of their first bucket). */
+export function bucketRanks(buckets: BucketRow[]): Map<string, number> {
+  const sorted = [...buckets].sort(
+    (a, b) => compareText(a.position, b.position) || compareText(a.id, b.id),
+  );
+  const inbox = sorted.filter((b) => b.is_system);
+  const rest = sorted.filter((b) => !b.is_system);
+  const ungrouped = rest.filter((b) => !b.group_label);
+  const sections: string[] = [];
+  for (const b of rest) {
+    if (b.group_label && !sections.includes(b.group_label)) sections.push(b.group_label);
+  }
+  const ordered = [
+    ...inbox,
+    ...ungrouped,
+    ...sections.flatMap((label) => rest.filter((b) => b.group_label === label)),
+  ];
+  return new Map(ordered.map((b, i) => [b.id as string, i]));
+}
+
 /**
- * The app's order: buckets by `position`, then tasks by `position` inside a
- * bucket (both are fractional-index strings, compared as text). Tasks in an
- * unknown bucket go last. Stable, so equal positions keep the incoming order.
+ * Tasks in the app's order: bucket order (see bucketRanks), then `position`
+ * inside a bucket (fractional-index strings, compared as text). Ties break by
+ * id so paging stays stable. Tasks in an unknown bucket go last.
  */
-export function orderByBucket<T extends Row>(
-  tasks: T[],
-  buckets: { id: string; position?: string | null }[],
-): T[] {
-  const rank = new Map<string, number>();
-  [...buckets]
-    .sort((a, b) => compareText(a.position, b.position))
-    .forEach((b, i) => rank.set(b.id, i));
+export function orderByBucket<T extends Row>(tasks: T[], buckets: BucketRow[]): T[] {
+  const rank = bucketRanks(buckets);
   const last = rank.size;
-  return tasks
-    .map((t, i) => ({ t, i }))
-    .sort((a, b) => {
-      const byBucket = (rank.get(a.t.bucket_id) ?? last) - (rank.get(b.t.bucket_id) ?? last);
-      return byBucket || compareText(a.t.position, b.t.position) || a.i - b.i;
-    })
-    .map(({ t }) => t);
+  return [...tasks].sort((a, b) => {
+    const byBucket = (rank.get(a.bucket_id) ?? last) - (rank.get(b.bucket_id) ?? last);
+    return byBucket || compareText(a.position, b.position) || compareText(a.id, b.id);
+  });
 }
 
 export const MAX_PAGE = 200;

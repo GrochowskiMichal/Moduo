@@ -101,8 +101,6 @@ async function loadWorkspace(ctx: ToolContext) {
   return { tasks, relations, tags, byId, blockedIds, taskTags, subtaskCounts: subtaskCounts(tasks) };
 }
 
-type WorkspaceData = Awaited<ReturnType<typeof loadWorkspace>>;
-
 async function fetchTask(ctx: ToolContext, taskId: string): Promise<Row> {
   const found = await rows(
     ctx.db.from("tasks").select("*")
@@ -181,7 +179,7 @@ export const tasksConnectorModule: ConnectorModule = {
           },
           top_level: {
             type: "boolean",
-            description: "Only top-level tasks (no parent); subtasks are summarised in subtask_count. Default false.",
+            description: "Only top-level tasks (no parent in the result); subtasks are summarised in subtask_count. Default false.",
           },
           limit: { type: "number", description: `Max tasks per page (default 100, max ${MAX_PAGE}).` },
           offset: { type: "number", description: "Skip this many tasks (default 0). A page shorter than limit is the last." },
@@ -196,9 +194,9 @@ export const tasksConnectorModule: ConnectorModule = {
         if (bucketId) list = list.filter((t) => t.bucket_id === bucketId);
         if (status === "open") list = list.filter((t) => OPEN_STATUSES.includes(t.status));
         else if (isTaskStatus(status)) list = list.filter((t) => t.status === status);
-        if (args.top_level === true) list = topLevelOnly(list, new Set(data.byId.keys()));
+        if (args.top_level === true) list = topLevelOnly(list, new Set(list.map((t) => t.id)));
         const buckets = await rows(
-          ctx.db.from("buckets").select("id, position")
+          ctx.db.from("buckets").select("id, position, is_system, group_label")
             .eq("workspace_id", ctx.key.workspaceId).is("deleted_at", null),
         );
         list = pageOf(orderByBucket(list, buckets), args.offset, clampLimit(args, 100, MAX_PAGE));

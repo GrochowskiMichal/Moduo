@@ -74,6 +74,26 @@ describe("tasks connector helpers", () => {
     expect(shapeTask({ ...tasks[0], status: "done", scheduled_at: "2026-10-05T09:00:00Z" }, data, now).drifted).toBe(false);
   });
 
+  it("keeps subtasks whose parent is filtered out as top-level", () => {
+    const tasks = [task("sub", { parent_id: "done-parent" }), task("p2"), task("sub2", { parent_id: "p2" })];
+    expect(topLevelOnly(tasks, new Set(tasks.map((t) => t.id))).map((t) => t.id)).toEqual(["sub", "p2"]);
+    expect(subtaskCounts([task("a", { parent_id: "p" }), task("b", { parent_id: "p", status: "archived" })]).get("p")).toBe(1);
+  });
+
+  it("pins Inbox first and keeps group sections together", () => {
+    const buckets = [
+      { id: "legacy", position: "00" },
+      { id: "inbox", position: "a0", is_system: true },
+      { id: "g1a", position: "b", group_label: "Work" },
+      { id: "plain", position: "c" },
+      { id: "g1b", position: "d", group_label: "Work" },
+    ];
+    const tasks = buckets.map((b) => task(`t-${b.id}`, { bucket_id: b.id }));
+    expect(orderByBucket(tasks, buckets).map((t) => t.id)).toEqual([
+      "t-inbox", "t-legacy", "t-plain", "t-g1a", "t-g1b",
+    ]);
+  });
+
   it("orders by bucket position", () => {
     const buckets = [
       { id: "later", position: "b" },
