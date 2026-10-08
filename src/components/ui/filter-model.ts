@@ -147,8 +147,10 @@ export function replaceCondition(
 /**
  * Reads conditions back from storage or a URL: keeps only well-formed ones on
  * a dimension the module still offers, normalised. Anything else (a renamed
- * dimension, a hand-edited value, corrupt JSON already parsed to junk) is
- * dropped rather than thrown on.
+ * dimension, an unknown operator, non-string values, junk) is dropped rather
+ * than thrown on. Values aren't checked against the dimension's options, so
+ * an option that loads later (a tag, a member) still applies; the chip shows
+ * an unknown value raw.
  */
 export function sanitizeConditions(
   raw: unknown,

@@ -66,10 +66,43 @@ function sameValue(a: DisplayValues, b: DisplayValues): boolean {
     const x = a[key];
     const y = b[key];
     if (Array.isArray(x) && Array.isArray(y)) {
-      if (x.length !== y.length || x.some((v) => !y.includes(v))) return false;
+      // Toggles compare as sets: the same properties in another order are
+      // unchanged.
+      const sx = new Set<string>(x);
+      const sy = new Set<string>(y);
+      if (sx.size !== sy.size || [...sx].some((v) => !sy.has(v))) return false;
     } else if (x !== y) return false;
   }
   return true;
+}
+
+/**
+ * Reads a stored Display value back against the controls that will show it:
+ * a choice the config no longer offers (a removed layout, a renamed grouping)
+ * falls back to the default, and toggles keep only known options, deduped, in
+ * the config's order. Pass it as the view-prefs sanitiser:
+ * `readViewPrefs(key, DEFAULTS, (raw, d) => sanitizeDisplayValue(raw, CONTROLS, d))`.
+ */
+function sanitizeDisplayValue<V extends DisplayValues>(
+  raw: unknown,
+  controls: readonly DisplayControl<V>[],
+  defaults: V,
+): V {
+  const stored =
+    typeof raw === "object" && raw !== null && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const out: DisplayValues = { ...defaults };
+  for (const control of controls) {
+    const value = stored[control.id];
+    const offered = control.options.map((o) => o.value);
+    if (control.type === "toggles") {
+      if (Array.isArray(value)) out[control.id] = offered.filter((v) => value.includes(v));
+    } else if (typeof value === "string" && offered.includes(value)) {
+      out[control.id] = value;
+    }
+  }
+  return out as V;
 }
 
 const ROW_CLASS =
@@ -219,4 +252,4 @@ function DisplayMenu<V extends DisplayValues>({
 }
 
 export type { DisplayChoice, DisplayControl, DisplayMenuProps, DisplayValues };
-export { DisplayMenu };
+export { DisplayMenu, sanitizeDisplayValue };

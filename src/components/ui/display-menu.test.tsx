@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { Columns3, List } from "lucide-react";
 import { useState } from "react";
 
-import { type DisplayControl, DisplayMenu } from "./display-menu";
+import { type DisplayControl, DisplayMenu, sanitizeDisplayValue } from "./display-menu";
 import { TooltipProvider } from "./tooltip";
 
 beforeAll(() => {
@@ -152,5 +152,33 @@ describe("DisplayMenu", () => {
     expect(
       (screen.getByRole("button", { name: "Reset to default" }) as HTMLButtonElement).disabled,
     ).toBe(true);
+  });
+});
+
+describe("sanitizeDisplayValue", () => {
+  it("keeps offered choices and known toggles, defaults the rest", () => {
+    expect(
+      sanitizeDisplayValue(
+        {
+          layout: "carousel",
+          groupBy: "priority",
+          completed: 7,
+          properties: ["due", "gone", "due", "energy"],
+          extra: "x",
+        },
+        CONTROLS,
+        DEFAULTS,
+      ),
+    ).toEqual({
+      layout: "list",
+      groupBy: "priority",
+      completed: "hidden",
+      properties: ["energy", "due"],
+    });
+  });
+
+  it("returns the defaults for junk", () => {
+    expect(sanitizeDisplayValue("nope", CONTROLS, DEFAULTS)).toEqual(DEFAULTS);
+    expect(sanitizeDisplayValue(null, CONTROLS, DEFAULTS)).toEqual(DEFAULTS);
   });
 });

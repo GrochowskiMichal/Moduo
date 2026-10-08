@@ -1,3 +1,4 @@
+import { defaultFilter } from "cmdk";
 import { Check, ChevronRight, ListFilter, Plus, X } from "lucide-react";
 import * as React from "react";
 
@@ -100,6 +101,12 @@ function ValueItems({ dimension, selected, onToggle }: ValueListProps) {
 
 const POPOVER_CLASS = "w-64 rounded-lg border-hairline p-0";
 
+/** Scores an item by its keywords (labels and the option's own keywords)
+ *  only. cmdk's default also scores the item's `value`, which here is an
+ *  internal id ("jump:assignee:me"), so "up" would match every jump row. */
+const keywordFilter = (_value: string, search: string, keywords: string[] = []): number =>
+  defaultFilter(keywords.join(" "), search);
+
 type FilterMenuProps = {
   dimensions: readonly FilterDimension[];
   value: readonly FilterCondition[];
@@ -136,11 +143,16 @@ function FilterMenu({
   const setOpen = (next: boolean) => {
     if (openProp === undefined) setUncontrolledOpen(next);
     onOpenChange?.(next);
-    if (!next) {
+  };
+
+  // Every close starts the next open on the dimension list, including a
+  // close the parent makes through `open` (a shortcut toggling the menu).
+  React.useEffect(() => {
+    if (!open) {
       setDimensionId(null);
       setQuery("");
     }
-  };
+  }, [open]);
 
   const dimension = dimensions.find((d) => d.id === dimensionId) ?? null;
   const selectedOn = (dim: FilterDimension) =>
@@ -155,7 +167,11 @@ function FilterMenu({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent align={align} className={POPOVER_CLASS}>
-        <Command loop label={dimension ? `Filter by ${dimension.label}` : "Filter by"}>
+        <Command
+          loop
+          filter={keywordFilter}
+          label={dimension ? `Filter by ${dimension.label}` : "Filter by"}
+        >
           <CommandInput
             value={query}
             onValueChange={setQuery}
@@ -326,7 +342,7 @@ function FilterChip({ dimension, condition, onChange, className }: FilterChipPro
           <span className="max-w-48 truncate">{conditionValueText(condition, dimension)}</span>
         </PopoverTrigger>
         <PopoverContent align="start" className={POPOVER_CLASS}>
-          <Command loop label={dimension.label}>
+          <Command loop filter={keywordFilter} label={dimension.label}>
             <CommandInput placeholder={`${dimension.label}…`} />
             <CommandList>
               <CommandEmpty>No matches.</CommandEmpty>
@@ -373,7 +389,11 @@ type FilterBarProps = {
 /**
  * The active-filter row under a toolbar. Renders nothing while no filter is
  * active (the toolbar's FilterButton is the way in then). A condition on a
- * dimension the module no longer offers is skipped, not shown raw.
+ * dimension the module no longer offers gets no chip, but it still filters
+ * until it's cleared, so the row (and Clear) stays while one is there; run
+ * stored conditions through `sanitizeConditions` to drop those on read.
+ * When a chip goes away, focus moves to "+ Filter". When the last one goes,
+ * the row unmounts and focus is the module's to place (its Filter button).
  */
 function FilterBar({
   dimensions,
@@ -383,11 +403,19 @@ function FilterBar({
   totalCount,
   className,
 }: FilterBarProps) {
+  const addRef = React.useRef<HTMLButtonElement>(null);
+  const refocus = React.useRef(false);
+  React.useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    addRef.current?.focus();
+  });
+
   const chips = value.flatMap((condition, index) => {
     const dimension = dimensions.find((d) => d.id === condition.dimension);
     return dimension ? [{ condition, dimension, index }] : [];
   });
-  if (chips.length === 0) return null;
+  if (value.length === 0) return null;
 
   return (
     <div data-slot="filter-bar" className={cn("flex flex-wrap items-center gap-1.5", className)}>
@@ -396,16 +424,22 @@ function FilterBar({
           key={`${condition.dimension}:${index}`}
           dimension={dimension}
           condition={condition}
-          onChange={(next) => onValueChange(replaceCondition(value, index, next, dimension))}
+          onChange={(next) => {
+            const updated = replaceCondition(value, index, next, dimension);
+            if (updated.length < value.length) refocus.current = true;
+            onValueChange(updated);
+          }}
         />
       ))}
       <FilterMenu dimensions={dimensions} value={value} onValueChange={onValueChange}>
         <Button
+          ref={addRef}
           variant="ghost"
           size="sm"
+          aria-label="Add filter"
           className="px-2 text-muted-foreground hover:text-foreground data-[state=open]:bg-state-active"
         >
-          <Plus aria-hidden className="size-icon-xs" />
+          <Plus aria-hidden />
           Filter
         </Button>
       </FilterMenu>

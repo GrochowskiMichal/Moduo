@@ -26,8 +26,12 @@ import { cn } from "@/lib/utils";
 /** The dimmed drag source. One value everywhere, apart from `disabled` (50). */
 export const DRAG_SOURCE = "opacity-40";
 
-/** A drop target while a drag hovers it. */
-export const DROP_TARGET = "bg-state-active ring-1 ring-inset ring-primary/60";
+/** A drop target while a drag hovers it. Compose it with `cn()` after the
+ *  row's own classes: the drag overlay doesn't take pointer events, so the
+ *  target row really is `:hover`, and its `hover:bg-state-hover` would
+ *  otherwise beat the plain fill. The `hover:` copy here replaces it. */
+export const DROP_TARGET =
+  "bg-state-active hover:bg-state-active ring-1 ring-inset ring-primary/60";
 
 type InsertionLineProps = {
   /** Which edge of the positioned parent the line sits on. */
@@ -50,7 +54,7 @@ function InsertionLine({ edge = "top", indent = 0, className }: InsertionLinePro
       data-slot="insertion-line"
       data-edge={edge}
       className={cn(
-        "pointer-events-none absolute right-2 z-(--z-sticky) h-0",
+        "pointer-events-none absolute end-2 z-(--z-sticky) h-0",
         edge === "top" ? "top-0" : "bottom-0",
         className,
       )}
@@ -74,7 +78,7 @@ function DragOverlaySurface({ count, className, children, ...props }: DragOverla
     <div
       data-slot="drag-overlay"
       className={cn(
-        "pointer-events-none relative flex min-h-(--row-h) cursor-grabbing items-center gap-2.5 rounded-md border border-hairline bg-popover px-2.5 font-sans text-base text-popover-foreground shadow-lg",
+        "pointer-events-none relative flex min-h-(--row-h) items-center gap-2.5 rounded-md border border-hairline bg-popover px-2.5 font-sans text-base text-popover-foreground shadow-lg",
         className,
       )}
       {...props}
@@ -83,7 +87,7 @@ function DragOverlaySurface({ count, className, children, ...props }: DragOverla
       {count !== undefined && count > 1 ? (
         <span
           aria-hidden
-          className="absolute -top-2 -right-2 inline-grid h-4 min-w-4 place-items-center rounded-full bg-foreground px-1 text-2xs font-semibold tabular-nums text-background"
+          className="absolute -end-2 -top-2 inline-grid h-4 min-w-4 place-items-center rounded-full bg-foreground px-1 text-2xs font-semibold tabular-nums text-background"
         >
           {count}
         </span>

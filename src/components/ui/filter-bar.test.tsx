@@ -214,15 +214,26 @@ describe("FilterBar", () => {
     expect(state()).toEqual([]);
   });
 
-  it("skips a condition on a dimension the module no longer offers", () => {
+  it("gives a stale dimension no chip, but keeps Clear so it can't hide rows unseen", () => {
+    render(<Harness initial={[{ dimension: "gone", operator: "is", values: ["x"] }]} />);
+    expect(screen.queryByRole("group")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(state()).toEqual([]);
+  });
+
+  it("moves focus to '+ Filter' when a chip is removed", () => {
     render(
-      <FilterBar
-        dimensions={DIMENSIONS}
-        value={[{ dimension: "gone", operator: "is", values: ["x"] }]}
-        onValueChange={() => {}}
+      <Harness
+        initial={[
+          { dimension: "assignee", operator: "is", values: ["me"] },
+          { dimension: "tag", operator: "is", values: ["ui"] },
+        ]}
       />,
     );
-    expect(screen.queryByRole("group")).toBeNull();
+    const remove = screen.getByRole("button", { name: "Remove filter: Assignee is Me" });
+    remove.focus();
+    fireEvent.click(remove);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Add filter" }));
   });
 
   it("removes a condition with its ×", () => {
@@ -260,6 +271,50 @@ describe("FilterBar", () => {
 });
 
 describe("FilterMenu", () => {
+  it("matches what you read, not internal ids", () => {
+    render(<Harness initial={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    const search = screen.getByRole("combobox", { name: "Filter by" });
+    // "up" is in no label, though it is in "jump:…" item ids.
+    fireEvent.change(search, { target: { value: "up" } });
+    expect(screen.queryAllByRole("option")).toEqual([]);
+    expect(screen.getByText("No matches.")).toBeTruthy();
+    // "me" finds Assignee › Me, not the Tag dimension (its id is "dimension:tag").
+    fireEvent.change(search, { target: { value: "me" } });
+    const names = screen
+      .getAllByRole("option")
+      .map((o) => o.getAttribute("aria-label") ?? o.textContent);
+    expect(names).toContain("Assignee › Me");
+    expect(names).not.toContain("Tag");
+  });
+
+  it("starts on the dimension list again after its parent closes it", () => {
+    function Controlled() {
+      const [open, setOpen] = useState(true);
+      const [value, setValue] = useState<FilterCondition[]>([]);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen((o) => !o)}>
+            toggle
+          </button>
+          <FilterButton
+            dimensions={DIMENSIONS}
+            value={value}
+            onValueChange={setValue}
+            open={open}
+            onOpenChange={setOpen}
+          />
+        </>
+      );
+    }
+    render(<Controlled />);
+    fireEvent.click(screen.getByRole("option", { name: "Tag" }));
+    expect(screen.getByRole("option", { name: "UI" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "toggle" }));
+    fireEvent.click(screen.getByRole("button", { name: "toggle" }));
+    expect(screen.getByRole("option", { name: "Assignee" })).toBeTruthy();
+  });
+
   it("goes dimension → value from the toolbar button, which then counts the filters", () => {
     render(<Harness initial={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Filter" }));

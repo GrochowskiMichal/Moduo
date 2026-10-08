@@ -1,14 +1,16 @@
 // Persisted view prefs (DS-4): "remember how this view is set up, per
 // workspace and scope, on this device". One helper for the read-sanitise-
 // fallback / write-and-ignore-failures pattern that tasks, calendar and email
-// each wrote their own copy of.
+// each wrote their own copy of. Tasks and calendar keys fit `viewPrefsKey`;
+// email's (`moduo:email:prefs:<user>`) is a user-prefs mirror, so it can use
+// `readViewPrefs` / `writeViewPrefs` with its own key, not `viewPrefsKey`.
 //
 // It is local-only by design: a view setting is a per-device convenience, not
 // account data (cloud-synced user prefs live in preferences.ts / prefs-sync.ts).
 // Every failure — no window, storage disabled, quota, corrupt JSON, a value of
 // the wrong shape — falls back to the defaults instead of throwing.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * `moduo:<module>:view:<part>:<part>…`. Tasks keys a view by workspace and
@@ -127,8 +129,12 @@ export function useViewPrefs<T>(
     current = { key, value: readViewPrefs(key, defaults, sanitize) };
     setState(current);
   }
+  // Synced after commit, so a scope change rendered and then thrown away
+  // (a discarded transition) never retargets `set`.
   const latest = useRef(current);
-  latest.current = current;
+  useLayoutEffect(() => {
+    latest.current = current;
+  });
 
   const set = useCallback((next: T | ((prev: T) => T)) => {
     const { key: k, value: prev } = latest.current;
