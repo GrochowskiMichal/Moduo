@@ -155,11 +155,11 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 
 ## Moduo for Claude Code — My tasks, the queue, Focus · [`specs/moduo-for-claude-code.md`](./moduo-for-claude-code.md)
 
-> A Claude Code mod over Moduo's own connector (dogfoods `moduo-mcp`). Two lanes: connector (MCC-1 → 2 → 3, Tier 2, serialized: shared migration and `modules/tasks.ts`) and mod (MCC-4 after MCC-1). Mod blocks' done gate adds `claude plugin test tools/claude-plugins/moduo-tasks`.
+> A Claude Code mod over Moduo's own connector (dogfoods `moduo-mcp`). Two lanes: connector (MCC-1 → 2 → 3, Tier 2, serialized: each adds a migration and both edit `modules/tasks.ts`) and mod (MCC-4 after MCC-1). Mod blocks' done gate adds `claude plugin test tools/claude-plugins/moduo-tasks`.
 
-- [ ] **MCC-1 — Connector: mine, task shape, focus settings** · deps: — · `assignee` filter, `assignee_id`/`subtask_count`, top-level + bucket order, `tasks_focus_settings`; pure helpers in `_shared/tasks-connector.ts` with tests; redeploy `moduo-mcp`. Tier 2.
-- [ ] **MCC-2 — Connector: reorder queue + log time** · deps: MCC-1 · migration: `tasks_op_reorder_queue`, `tasks_op_log_time`; manifest entries; `tasks_reorder_queue`, `tasks_log_time` tools; Supabase-branch round-trip; migration then redeploy. Tier 2.
-- [ ] **MCC-3 — Connector: create task** · deps: MCC-2 · migration: `tasks_op_create` (Inbox default, commit option); `tasks_create` tool; round-trip; redeploy. Tier 2.
+- [ ] **MCC-1 — Connector: mine, task shape, focus settings** · deps: — · `assignee` filter, `offset` paging, `assignee_id`/`subtask_count`, top-level + bucket order, `tasks_focus_settings`; tool catalog in `docs/moduo-mcp-connector.md`; pure helpers in `_shared/tasks-connector.ts` with tests; redeploy `moduo-mcp`. Tier 2.
+- [ ] **MCC-2 — Connector: reorder queue + log time** · deps: MCC-1 · migration: `tasks_op_reorder_queue`, `tasks_op_log_time`; manifest entries; `tasks_reorder_queue`, `tasks_log_time` tools; connector doc updated; Supabase-branch round-trip; migration then redeploy. Tier 2.
+- [ ] **MCC-3 — Connector: create task** · deps: MCC-2 · migration: `tasks_op_create` (Inbox default, commit option); `tasks_create` tool (due date as a local-midnight timestamp); connector doc's capture note updated; round-trip; redeploy. Tier 2.
 - [ ] **MCC-4 — Mod: My tasks panel (read)** · deps: MCC-1 · `tools/claude-plugins/moduo-tasks`: key + endpoint settings, connector client + error mapping, `/mine` panel (filters, buckets, queue cards, done section, 60 s refresh), band line, reopen flag.
 - [ ] **MCC-5 — Mod: queue actions + work on this** · deps: MCC-2, MCC-4 · c / ⇧c / u / s / [ ] plus buttons; `⏎` fills the prompt, In progress on send.
 - [ ] **MCC-6 — Mod: Focus** · deps: MCC-5 · Focus panel, pomodoro/stopwatch from Moduo settings, band clock, toast + chime, time logging rules, done → next, Claude context.

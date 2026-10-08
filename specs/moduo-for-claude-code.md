@@ -78,6 +78,7 @@ Visual reference: canvas screens 6 (My tasks) and 7 (Focus); screen 5 for the te
 | `supabase/functions/_shared/tasks-connector.test.ts` · "filters by assignee" | AC1, AC2 | "Me" keeps only the key creator's tasks; "everyone" keeps all open ones. |
 | `supabase/functions/_shared/tasks-connector.test.ts` · "shapes subtasks, drift, blocked, recurrence" | AC1 | The panel gets one row per top-level task with the right markers. |
 | `supabase/functions/_shared/tasks-connector.test.ts` · "orders by bucket position" | AC1 | Buckets come back in the app's order. |
+| `supabase/functions/_shared/tasks-connector.test.ts` · "pages past 200" | AC2 | With `offset`, a workspace of 450 open tasks comes back complete in three pages. |
 | `supabase/functions/_shared/tasks-connector.test.ts` · "validates reorder and time log input" | AC5, AC15 | A reorder must name exactly today's queued tasks; time logs outside 1 s–4 h are refused. |
 | Supabase-branch round-trip (`docs/testing/moduo-for-claude-code.md` §Connector) | AC4, AC5, AC8, AC12, AC15 | With a real edit key and a view key: each new action works, writes activity as the key, is refused for view-only and for another workspace's task. |
 | `tools/claude-plugins/moduo-tasks/hooks/client.test.ts` · "maps connector errors" | AC13 | 401 becomes "rejected key", a scope error becomes "view-only", a network error becomes offline. |
@@ -89,7 +90,7 @@ Visual reference: canvas screens 6 (My tasks) and 7 (Focus); screen 5 for the te
 | `tools/claude-plugins/moduo-tasks/hooks/focus.test.ts` · "logs work time, never breaks" | AC8, AC13 | Pause, stop, done, the 5-minute tick and session end each log only unlogged work time; offline time is kept and logged later; over 4 h is capped. |
 | `tools/claude-plugins/moduo-tasks/hooks/focus.test.ts` · "done then next" | AC10 | Done logs, sets done, shows the next queued task and doesn't start it. |
 | `tools/claude-plugins/moduo-tasks/hooks/focus.test.ts` · "tells Claude the task" | AC11 | The session context names the task while Focus runs and drops it after. |
-| `tools/claude-plugins/moduo-tasks/hooks/capture.test.ts` · "parses title, bucket, day and !" | AC12, AC14 | `#setup`, today/tomorrow/weekday (local date) and `!` are understood; unknown bucket falls back to Inbox. |
+| `tools/claude-plugins/moduo-tasks/hooks/capture.test.ts` · "parses title, bucket, day and !" | AC12, AC14 | `#setup`, today/tomorrow/weekday (sent as local midnight) and `!` are understood; unknown bucket falls back to Inbox. |
 | `tools/claude-plugins/moduo-tasks/hooks/client.test.ts` · "silent without a key" | AC13 | No panel, no band, commands reply with setup help. |
 | `tools/claude-plugins/moduo-tasks/hooks/client.test.ts` · "uses the local date" | AC14 | Every date the mod sends is the local calendar day, including just after midnight in Warsaw. |
 
@@ -97,18 +98,19 @@ Visual reference: canvas screens 6 (My tasks) and 7 (Focus); screen 5 for the te
 
 - **Talk to `moduo-mcp`, not Supabase directly.** The mod calls the connector's JSON-RPC endpoint with `$.http.fetch` and `Authorization: Bearer moduo_sk_…`. Rejected: a Supabase session in the mod (would bypass intent ops, activity and key scopes).
 - **The key is a sensitive `userConfig` field** of the plugin (kept in secure storage by Claude Code, never in the repo or settings files); the endpoint is a plain field defaulting to production's `moduo-mcp` URL. Rejected: env vars (end up in shell profiles) and `.mcp.json` headers (committed file, public repo).
-- **"Mine" = `tasks.owner_id = key creator`.** The key already acts as its creator (`ctx.key.createdBy`, PERM-0). `tasks_list` gains `assignee: "me" | "anyone"` (default `anyone`, unchanged behavior) and `shapeTask` gains `assignee_id` and `subtask_count`; top-level filtering and bucket ordering happen in the connector so every agent benefits. No migration.
+- **"Mine" = `tasks.owner_id = key creator`.** The key already acts as its creator (`ctx.key.createdBy`, PERM-0). `tasks_list` gains `assignee: "me" | "anyone"` (default `anyone`, unchanged behavior) and `offset` for paging past its 200-row cap (the mod pages until a short page; the return shape stays an array so existing clients are untouched) and `shapeTask` gains `assignee_id` and `subtask_count`; top-level filtering and bucket ordering happen in the connector so every agent benefits. No migration.
 - **Local dates come from the client.** `tasks_today`, `tasks_commit` and the new tools take an explicit date; the mod always sends the local date. The connector's UTC default stays for backwards compatibility and is recorded as a gotcha.
 - **Three new intent ops** (one migration, written as new functions, `tasks_op__guard` for permission, `module_activity` rows like the existing ops, `module_api_key_id()` path so keys can write):
   - `tasks_op_reorder_queue(p_for date, p_task_ids uuid[])`: sets `commit_order` 1…n; the array must be exactly that day's committed tasks the caller can see.
   - `tasks_op_log_time(p_task_id uuid, p_seconds int)`: adds to `time_spent_seconds`; 1 ≤ seconds ≤ 14400.
-  - `tasks_op_create(p_title text, p_bucket_id uuid, p_due_date date, p_commit_for date)`: null bucket = the workspace's Inbox (`is_system`); owner = caller (key creator for keys); commit appends to the queue.
+  - `tasks_op_create(p_title text, p_bucket_id uuid, p_due_at timestamptz, p_commit_for date)`: `tasks.due_date` is a `timestamptz` and the app stores local midnight, so the mod sends the local-midnight instant, never a bare date; null bucket = the workspace's Inbox (`is_system`); owner = caller (key creator for keys); commit appends to the queue.
   Each gets an `ops-manifest.ts` entry and a connector tool (`tasks_reorder_queue`, `tasks_log_time`, `tasks_create`, all `edit`). Rejected: raw row writes from the connector (breaks the "intent ops only" contract).
 - **Focus settings read:** a new `view` tool `tasks_focus_settings` returns the key creator's `user_preferences.focus` (the same synced object the app uses) with the app's defaults (25/5) filled in. No migration.
 - **Focus state lives in the mod** (`$.state` for the session, `$.store` for the reopen flag and unlogged seconds across a crash). Time is logged with `tasks_log_time`. Live cross-device focus is out of scope (designer call 2026-10-08).
 - **Claude learns the focused task via `prompt.compose`** (a session-scoped system section with title and description), not by injecting chat messages.
 - **"Work on this" uses `prompt.fill`** to put the text in the composer; the mod watches `prompt.submit` for that exact prompt to set In progress via `tasks_set_status`.
 - **Capture parsing lives in the mod** (title, `#bucket`, today/tomorrow/weekday, `!`), matching buckets from `tasks_list_buckets`. Rejected for v1: the app's chrono-based parser (needs npm packages the mod sandbox can't load; can move to the connector later).
+- **One connector contract:** each connector block updates [docs/moduo-mcp-connector.md](../docs/moduo-mcp-connector.md) (tool catalog, and in MCC-3 the note that capture isn't exposed) in the same change.
 - **Plugin location and shape:** `tools/claude-plugins/moduo-tasks/` (hooks module `hooks/register.tsx`, `types/index.d.ts` for state), listed in `.claude-plugin/marketplace.json`, enabled in `.claude/settings.json`. Tests run with `claude plugin test tools/claude-plugins/moduo-tasks` and are part of each mod block's done gate (`bun run verify` doesn't run them).
 - **Risk tier:** MCC-1…MCC-3 touch `moduo-mcp` and add a migration: Tier 2 (`/claude-security` + `/code-review ultra` before merging). MCC-4…MCC-7 are Tier 1.
 - **Deploy order:** each connector block ships its migration first, then redeploys `moduo-mcp` (production deploys ask first via the permission rules); the mod blocks only start once their connector tools are live.
@@ -117,7 +119,7 @@ Visual reference: canvas screens 6 (My tasks) and 7 (Focus); screen 5 for the te
 
 | # | Block | Delivers | Covers ACs | Depends on |
 | --- | --- | --- | --- | --- |
-| 1 | **MCC-1 — Connector: mine, shape, focus settings** | `assignee` filter, `assignee_id`/`subtask_count`, top-level + bucket order, `tasks_focus_settings`; pure helpers in `_shared/tasks-connector.ts` with tests; redeploy | AC1, AC2, AC14 | — |
+| 1 | **MCC-1 — Connector: mine, shape, focus settings** | `assignee` filter, `offset` paging, connector doc, `assignee_id`/`subtask_count`, top-level + bucket order, `tasks_focus_settings`; pure helpers in `_shared/tasks-connector.ts` with tests; redeploy | AC1, AC2, AC14 | — |
 | 2 | **MCC-2 — Connector: reorder queue + log time** | migration with `tasks_op_reorder_queue` and `tasks_op_log_time`, manifest entries, two tools, branch round-trip, redeploy | AC5, AC8, AC15 | MCC-1 |
 | 3 | **MCC-3 — Connector: create task** | `tasks_op_create` migration, manifest entry, `tasks_create` tool, round-trip, redeploy | AC12, AC15 | MCC-2 |
 | 4 | **MCC-4 — Mod: My tasks panel (read)** | plugin skeleton, key + endpoint settings, connector client with error mapping, `/mine` panel with filters, groups, queue cards, done section, 60 s refresh, band line, reopen flag | AC1, AC2, AC3, AC13, AC14 | MCC-1 |
