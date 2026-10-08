@@ -39,6 +39,7 @@ export default defineConfig({
     "supabase/functions/moduo-mcp/**/*.test.ts",
     "supabase/functions/_shared/email/**/*.test.ts",
     "supabase/functions/send-workspace-invite/*.test.ts",
+    "supabase/functions/auth-email-hook/*.test.ts",
     "scripts/brand/*.test.ts",
   ],
   globals: true,
