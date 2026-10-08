@@ -12,6 +12,7 @@ import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";
 import { ensureProfileAvatar } from "../../branding/profile-avatar";
 import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-image";
+import { forgetFocusUser } from "../../focus/engine";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
 import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
 import { DANGER_ZONE_COPY, finishAccountDeletion, matchesDeleteConfirm } from "../delete-account";
@@ -98,10 +99,13 @@ export function AccountSection() {
         throw new Error(payload?.error || "Couldn't delete your account. Try again.");
       }
       // Deleted — the session is now invalid. Land on /auth with the notice, then sign
-      // out locally (the order is explained in finishAccountDeletion).
+      // out locally (the order is explained in finishAccountDeletion). This device's
+      // focus session for the account (task titles, unsaved time) is erased too.
       await finishAccountDeletion({
-        stopAnalytics: () => {
-          if (userId) void stopAnalyticsForDeletedAccount(userId);
+        forgetOnDevice: () => {
+          if (!userId) return;
+          void stopAnalyticsForDeletedAccount(userId);
+          forgetFocusUser(userId);
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
         signOut,

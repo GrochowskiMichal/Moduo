@@ -269,6 +269,9 @@ fn request_app_quit(app: &AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Focus phase-end alerts (TV-F1): the JS engine fires them at the computed
+        // time; the plugin can't schedule on desktop.
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .menu(build_app_menu)

@@ -19,18 +19,19 @@ export function validateAuthSearch(search: Record<string, unknown>): { deleted?:
 }
 
 /**
- * What the Danger zone does once the server has deleted the account. Analytics stops
- * first (signing out would track an event that brings back the PostHog person the
- * server just erased, PRIV-3). Then the sign-in page with the notice, and only then
- * the local sign-out: signed out while still inside the app, the app gate redirects
- * to a plain /auth on its own, and that redirect can win and drop the notice.
+ * What the Danger zone does once the server has deleted the account. What this device
+ * keeps for the account goes first, analytics included (signing out would track an
+ * event that brings back the PostHog person the server just erased, PRIV-3). Then the
+ * sign-in page with the notice, and only then the local sign-out: signed out while
+ * still inside the app, the app gate redirects to a plain /auth on its own, and that
+ * redirect can win and drop the notice.
  */
 export async function finishAccountDeletion(steps: {
-  stopAnalytics: () => void;
+  forgetOnDevice: () => void;
   goToSignInWithNotice: () => Promise<unknown>;
   signOut: () => Promise<unknown>;
 }): Promise<void> {
-  steps.stopAnalytics();
+  steps.forgetOnDevice();
   await steps.goToSignInWithNotice();
   await steps.signOut();
 }

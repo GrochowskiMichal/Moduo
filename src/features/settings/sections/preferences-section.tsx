@@ -52,7 +52,12 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
   {
     type: "assigned",
     title: "Assigned to you",
-    description: "When a task's owner is set to you by someone else.",
+    description: "When someone else assigns a task to you.",
+  },
+  {
+    type: "completed",
+    title: "Completed by someone else",
+    description: "When a teammate completes a task you created.",
   },
   {
     type: "dueFollowUp",

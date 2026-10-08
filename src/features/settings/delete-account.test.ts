@@ -11,7 +11,7 @@ import {
 } from "./delete-account";
 
 describe("finishAccountDeletion (PRIV-2 AC11)", () => {
-  it("stops analytics, lands on the sign-in page with the notice, and only then signs out", async () => {
+  it("forgets the account on this device, lands on the sign-in page with the notice, and only then signs out", async () => {
     const calls: string[] = [];
     let release: () => void = () => {};
     const landed = new Promise<void>((resolve) => {
@@ -19,7 +19,7 @@ describe("finishAccountDeletion (PRIV-2 AC11)", () => {
     });
 
     const done = finishAccountDeletion({
-      stopAnalytics: () => calls.push("stop analytics"),
+      forgetOnDevice: () => calls.push("forget on device"),
       goToSignInWithNotice: async () => {
         calls.push("go to /auth?deleted=1");
         await landed;
@@ -30,11 +30,11 @@ describe("finishAccountDeletion (PRIV-2 AC11)", () => {
       },
     });
     await Promise.resolve();
-    expect(calls).toEqual(["stop analytics", "go to /auth?deleted=1"]);
+    expect(calls).toEqual(["forget on device", "go to /auth?deleted=1"]);
 
     release();
     await done;
-    expect(calls).toEqual(["stop analytics", "go to /auth?deleted=1", "landed", "sign out"]);
+    expect(calls).toEqual(["forget on device", "go to /auth?deleted=1", "landed", "sign out"]);
   });
 });
 
