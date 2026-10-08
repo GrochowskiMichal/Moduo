@@ -11,7 +11,15 @@ const older = "2026-07-10T09:00:00Z";
 const future = "2026-07-20T09:00:00Z";
 
 function task(over: Partial<OverdueTaskInput> & Pick<OverdueTaskInput, "id">): OverdueTaskInput {
-  return { title: `Task ${over.id}`, scheduledAt: past, status: "todo", ownerId: "me", ...over };
+  return {
+    title: `Task ${over.id}`,
+    scheduledAt: past,
+    status: "todo",
+    assigneeId: "me",
+    creatorId: "me",
+    creatorUnknown: false,
+    ...over,
+  };
 }
 
 const ON = { enabled: true, userId: "me", now: NOW } as const;
@@ -35,12 +43,31 @@ describe("selectOverdueTasks", () => {
 
   it("scopes to the current user's own tasks — a teammate's drift is not my overdue", () => {
     const tasks = [
-      task({ id: "mine", ownerId: "me", scheduledAt: past }),
-      task({ id: "theirs", ownerId: "someone-else", scheduledAt: past }),
+      task({ id: "mine", assigneeId: "me", scheduledAt: past }),
+      task({ id: "theirs", assigneeId: "someone-else", scheduledAt: past }),
     ];
     expect(selectOverdueTasks(tasks, ON).map((i) => i.id)).toEqual(["mine"]);
     // No signed-in user → nothing (defensive).
     expect(selectOverdueTasks(tasks, { enabled: true, userId: null, now: NOW })).toEqual([]);
+  });
+
+  it("means assigned to me, else (unassigned) created by me — TV-D1 D1-6", () => {
+    const tasks = [
+      // I made it for a teammate: theirs, not mine.
+      task({ id: "made-for-them", creatorId: "me", assigneeId: "someone-else" }),
+      // A teammate made it for me: mine.
+      task({ id: "made-for-me", creatorId: "someone-else", assigneeId: "me" }),
+      // Nobody's on it: the creator's.
+      task({ id: "unassigned-mine", creatorId: "me", assigneeId: null }),
+      task({ id: "unassigned-theirs", creatorId: "someone-else", assigneeId: null }),
+      // Nobody's on it and the creator is unknown: nobody's.
+      task({ id: "unassigned-unknown", creatorId: "me", creatorUnknown: true, assigneeId: null }),
+    ];
+    expect(
+      selectOverdueTasks(tasks, ON)
+        .map((i) => i.id)
+        .sort(),
+    ).toEqual(["made-for-me", "unassigned-mine"]);
   });
 
   it("excludes done/archived tasks — resolving a task drops it from the section (AC9)", () => {

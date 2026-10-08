@@ -69,6 +69,9 @@ export function spineActivityLine(entry: {
     // closed the last blocker.
     case "tasks.assigned":
       return "assigned this to you";
+    // TV-D1: a teammate finished a task you created.
+    case "tasks.completed":
+      return "completed this";
     case "tasks.unblocked": {
       const blocker = str(p.blocker_title);
       return blocker ? `finished “${blocker}”, unblocking this` : "unblocked this";

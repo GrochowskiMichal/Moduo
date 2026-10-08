@@ -9,7 +9,7 @@
 //     surfaces add a variant + a branch in their drop handler, nothing else.
 //   • `useTaskDndSensors` — shared pointer + keyboard sensors (a11y reorder).
 //   • `SortableTask` / `NestableTask` — wrappers that hand the row its drag
-//     listeners so the whole row is the activator (no separate grip).
+//     listeners + activator ref so the whole row is the activator (no grip).
 //
 // dnd-kit does the geometry; this module is the shared contract on top of it.
 
@@ -220,19 +220,31 @@ export function DndBoundary({
 
 // ── sortable wrapper ─────────────────────────────────────────────────────────
 
+/**
+ * Attach to the element the drag listeners are spread on (the row root). It
+ * makes that element the only keyboard activator: dnd-kit's keyboard sensor
+ * starts a drag only when Space/Enter is pressed ON the activator. Without it,
+ * Space/Enter bubbling up from a button inside the row (the check-off, the
+ * queue toggle) starts a keyboard drag and swallows the button (tasks-v2 Q1-2).
+ */
+export type DragActivatorRef = (element: HTMLElement | null) => void;
+
 type SortableTaskRender = (slot: {
   /** dnd-kit listeners — spread on the row root so the WHOLE row is the drag
    * activator (no separate grip). A 6px activation distance (see
    * {@link useTaskDndSensors}) keeps plain clicks selecting/opening the row. */
   dragListeners: DraggableSyntheticListeners;
+  /** Set on the same element as `dragListeners` — see {@link DragActivatorRef}. */
+  dragActivatorRef: DragActivatorRef;
   isDragging: boolean;
 }) => ReactNode;
 
 /**
  * Wraps a sortable task row/card: owns the sortable node ref + transform and
- * hands the drag listeners back for the child to spread on the whole row. The
- * dragged item lifts (raised z + reduced opacity) while its neighbours animate
- * apart — the insertion affordance comes free from the sortable strategy.
+ * hands the drag listeners + activator ref back for the child to put on the
+ * whole row. The dragged item lifts (raised z + reduced opacity) while its
+ * neighbours animate apart — the insertion affordance comes free from the
+ * sortable strategy.
  */
 export function SortableTask({
   id,
@@ -247,11 +259,12 @@ export function SortableTask({
   className?: string;
   render: SortableTaskRender;
 }) {
-  const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
-    id,
-    data: taskDrag(id, from),
-    disabled,
-  });
+  const { setNodeRef, setActivatorNodeRef, listeners, transform, transition, isDragging } =
+    useSortable({
+      id,
+      data: taskDrag(id, from),
+      disabled,
+    });
 
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -264,7 +277,7 @@ export function SortableTask({
       style={style}
       className={cn(isDragging && "relative z-10 opacity-60", className)}
     >
-      {render({ dragListeners: listeners, isDragging })}
+      {render({ dragListeners: listeners, dragActivatorRef: setActivatorNodeRef, isDragging })}
     </div>
   );
 }
@@ -275,6 +288,8 @@ type NestableTaskRender = (slot: {
   /** dnd-kit listeners — spread on the row root so the WHOLE childless row is
    * the drag activator. Undefined when this row can't be dragged (has children). */
   dragListeners: DraggableSyntheticListeners;
+  /** Set on the same element as `dragListeners` — see {@link DragActivatorRef}. */
+  dragActivatorRef: DragActivatorRef;
   /** A valid drop is currently hovering this row → caller paints the target. */
   isOver: boolean;
   isDragging: boolean;
@@ -308,6 +323,7 @@ export function NestableTask({
 }) {
   const {
     setNodeRef: setDragRef,
+    setActivatorNodeRef,
     listeners,
     isDragging,
   } = useDraggable({ id, data: taskDrag(id, from), disabled: !canDrag });
@@ -327,7 +343,12 @@ export function NestableTask({
 
   return (
     <div ref={setNodeRef} className={cn(isDragging && "opacity-50", className)}>
-      {render({ dragListeners: listeners, isOver, isDragging })}
+      {render({
+        dragListeners: listeners,
+        dragActivatorRef: setActivatorNodeRef,
+        isOver,
+        isDragging,
+      })}
     </div>
   );
 }

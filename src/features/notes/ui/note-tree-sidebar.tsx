@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
+import { SELECTED_ROW } from "@/components/ui/selection";
 import { Toolbar } from "@/components/ui/toolbar";
 import { entityDrag } from "@/lib/drag-payload";
 import { cn } from "@/lib/utils";
@@ -258,16 +259,10 @@ export function NoteTreeSidebar(props: Props) {
                     onClick={() => props.onSelect(r.id)}
                     className={cn(
                       "relative flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      r.id === props.selectedId ? "bg-(--selected-bg)" : "hover:bg-accent/60",
+                      // Tint-only selection (R5): tint + the row hairline switch.
+                      r.id === props.selectedId ? SELECTED_ROW : "hover:bg-state-hover",
                     )}
                   >
-                    {/* selected marker — the app-wide R5 recipe: quiet accent bar + tint */}
-                    {r.id === props.selectedId ? (
-                      <span
-                        className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary"
-                        aria-hidden
-                      />
-                    ) : null}
                     <span className="flex w-full items-center gap-1.5">
                       <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                       <span className="min-w-0 flex-1 truncate text-sm text-foreground">
@@ -538,20 +533,16 @@ function NoteRow({
       className={cn(
         "group relative flex items-center gap-1 rounded-md px-1.5 py-1 text-sm",
         // Drop-target indicators win over selection while a drag is live
-        // (mirrors task-row's dropActive precedence) — otherwise the 2px
-        // primary selection bar reads as a third drop mark.
+        // (mirrors task-row's dropActive precedence) — otherwise the selection
+        // hairline reads as a third drop mark. Tint-only selection (R5).
         selected && !hover
-          ? "bg-(--selected-bg) text-foreground"
-          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+          ? `${SELECTED_ROW} text-foreground`
+          : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
         selected && hover && "text-foreground",
         hover?.zone === "into" && "ring-2 ring-primary/60",
       )}
       style={{ paddingLeft: `${8 + (flat ? 0 : depth) * 14}px` }}
     >
-      {/* selected marker — the app-wide R5 recipe: quiet accent bar + tint */}
-      {selected && !hover ? (
-        <span className="absolute inset-y-1 left-0.5 w-0.5 rounded-full bg-primary" aria-hidden />
-      ) : null}
       {hover?.zone === "before" ? (
         <div className="pointer-events-none absolute inset-x-1 top-0 h-0.5 rounded-full bg-primary" />
       ) : null}
