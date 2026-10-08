@@ -80,13 +80,14 @@ function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
   const tasks = [task("a", "Alpha"), task("b", "Beta", { dueDate: "2026-10-20T00:00:00.000Z" })];
   const api = {
     tasks,
-    today: "2026-10-08",
+    queuedTaskIds: new Set(),
+    queueClaims: new Map(),
     subtasksByParent: new Map(),
     subtaskProgressByTask: new Map(),
     tagsByTask: new Map(),
     blockedTaskIds: new Set(),
     toggleDone: rs.fn(),
-    toggleCommit: rs.fn(),
+    toggleQueue: rs.fn(),
     patchTask: rs.fn(),
     deleteTask: rs.fn(),
     setTaskParent: rs.fn(),

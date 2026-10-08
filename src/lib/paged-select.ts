@@ -26,6 +26,9 @@ export const PGRST_MAX_ROWS = 1000;
  * they exist so a runaway workspace degrades *visibly* (a notice + a number),
  * not silently. Real pagination/virtualization is the follow-up.
  */
+/** The truncation scope of a tag-links read. The tag store reads it to tell a capped read from a full one (TV-T1). */
+export const TAG_LINKS_SCOPE = "tag assignments";
+
 export const READ_CAPS = {
   tasks: 5000,
   buckets: 500,

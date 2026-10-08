@@ -88,6 +88,9 @@ export type AuthListener = (event: AuthChangeEvent, session: RuntimeSession | nu
 
 export type RuntimeResult<T> = Promise<{ data: T; error: { message: string } | null }>;
 
+/** A failed code request: Auth's message plus, when it sent them, its error code and HTTP status. */
+export type OtpSendError = { message: string; code?: string; status?: number };
+
 export type LocalAuthState = {
   profileExists: boolean;
   displayName: string | null;
@@ -238,8 +241,12 @@ export type ModuoRuntime = {
       email: string;
       password: string;
     }): RuntimeResult<{ user: RuntimeSession["user"] | null; session: RuntimeSession | null }>;
-    /** Send a magic OTP code to the given email (web primary auth). */
-    sendOtp(args: { email: string }): RuntimeResult<{}>;
+    /**
+     * Send a magic OTP code to the given email (web primary auth). The error keeps
+     * Supabase's `code` and HTTP `status` so the sign-in screen can say what went
+     * wrong in its own words (otp-send-error.ts) instead of Auth's raw text.
+     */
+    sendOtp(args: { email: string }): Promise<{ data: {}; error: OtpSendError | null }>;
     /** Verify the OTP code received by email and sign the user in. */
     verifyOtp(args: { email: string; token: string; sentAt?: number }): RuntimeResult<{
       user: RuntimeSession["user"] | null;

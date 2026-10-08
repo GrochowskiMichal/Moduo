@@ -36,19 +36,19 @@ function makePanelTask(overrides: Partial<Task> & { title: string }): Task {
 }
 
 describe("groupPanelTasks — the right panel's three groups (AC11)", () => {
-  it("groups committed → Today, due-within-7d → Due soon, open unscheduled → Backlog", () => {
-    const committed = makePanelTask({ title: "invoice run", committedFor: "2026-07-02" });
+  it("groups my queue → Queue, due-within-7d → Due soon, open unscheduled → Backlog", () => {
+    const queued = makePanelTask({ title: "invoice run" });
     const dueSoon = makePanelTask({
       title: "offer draft",
       dueDate: new Date(2026, 6, 5, 0, 0).toISOString(),
     });
     const backlog = makePanelTask({ title: "someday thing" });
     const groups = groupPanelTasks({
-      tasks: [dueSoon, backlog, committed],
-      committedTasks: [committed],
+      tasks: [dueSoon, backlog, queued],
+      queuedTasks: [queued],
       now: NOW,
     });
-    expect(groups.today.map((t) => t.title)).toEqual(["invoice run"]);
+    expect(groups.queue.map((t) => t.title)).toEqual(["invoice run"]);
     expect(groups.dueSoon.map((t) => t.title)).toEqual(["offer draft"]);
     expect(groups.backlog.map((t) => t.title)).toEqual(["someday thing"]);
     expect(groups.emptyBySearch).toBe(false);
@@ -59,15 +59,14 @@ describe("groupPanelTasks — the right panel's three groups (AC11)", () => {
       title: "slipped last week",
       dueDate: new Date(2026, 5, 25).toISOString(),
     });
-    const groups = groupPanelTasks({ tasks: [overdue], committedTasks: [], now: NOW });
+    const groups = groupPanelTasks({ tasks: [overdue], queuedTasks: [], now: NOW });
     expect(groups.dueSoon.map((t) => t.title)).toEqual(["slipped last week"]);
     expect(groups.backlog).toHaveLength(0);
   });
 
-  it("never lists a task twice: committed wins over due-soon; due beyond 7d isn't due-soon", () => {
+  it("never lists a task twice: queued wins over due-soon; due beyond 7d isn't due-soon", () => {
     const both = makePanelTask({
-      title: "committed and due",
-      committedFor: "2026-07-02",
+      title: "queued and due",
       dueDate: new Date(2026, 6, 3).toISOString(),
     });
     const farDue = makePanelTask({
@@ -76,10 +75,10 @@ describe("groupPanelTasks — the right panel's three groups (AC11)", () => {
     });
     const groups = groupPanelTasks({
       tasks: [both, farDue],
-      committedTasks: [both],
+      queuedTasks: [both],
       now: NOW,
     });
-    expect(groups.today).toHaveLength(1);
+    expect(groups.queue).toHaveLength(1);
     expect(groups.dueSoon).toHaveLength(0);
     // Far-due, unscheduled → backlog (still findable).
     expect(groups.backlog.map((t) => t.title)).toEqual(["due in august"]);
@@ -88,24 +87,23 @@ describe("groupPanelTasks — the right panel's three groups (AC11)", () => {
   it("scheduled rows sort to the bottom of their group, never vanish", () => {
     const scheduled = makePanelTask({
       title: "already placed",
-      committedFor: "2026-07-02",
       scheduledAt: new Date(2026, 6, 2, 14, 0).toISOString(),
     });
-    const unscheduled = makePanelTask({ title: "still loose", committedFor: "2026-07-02" });
+    const unscheduled = makePanelTask({ title: "still loose" });
     const groups = groupPanelTasks({
       tasks: [scheduled, unscheduled],
-      committedTasks: [scheduled, unscheduled],
+      queuedTasks: [scheduled, unscheduled],
       now: NOW,
     });
-    expect(groups.today.map((t) => t.title)).toEqual(["still loose", "already placed"]);
+    expect(groups.queue.map((t) => t.title)).toEqual(["still loose", "already placed"]);
   });
 
-  it("scheduled non-backlog rules: a scheduled, uncommitted, undated task appears nowhere but the grid", () => {
+  it("scheduled non-backlog rules: a scheduled, unqueued, undated task appears nowhere but the grid", () => {
     const scheduledLoose = makePanelTask({
       title: "on the grid only",
       scheduledAt: new Date(2026, 6, 2, 9, 0).toISOString(),
     });
-    const groups = groupPanelTasks({ tasks: [scheduledLoose], committedTasks: [], now: NOW });
+    const groups = groupPanelTasks({ tasks: [scheduledLoose], queuedTasks: [], now: NOW });
     expect(groups.backlog).toHaveLength(0);
   });
 
@@ -115,28 +113,28 @@ describe("groupPanelTasks — the right panel's three groups (AC11)", () => {
     const sub = makePanelTask({ title: "subtask", parentId: "parent-1" });
     const groups = groupPanelTasks({
       tasks: [done, archived, sub],
-      committedTasks: [],
+      queuedTasks: [],
       now: NOW,
     });
-    expect(groups.today).toHaveLength(0);
+    expect(groups.queue).toHaveLength(0);
     expect(groups.dueSoon).toHaveLength(0);
     expect(groups.backlog).toHaveLength(0);
   });
 
   it("search filters every group; emptyBySearch flags a dry query", () => {
-    const committed = makePanelTask({ title: "invoice run", committedFor: "2026-07-02" });
+    const queued = makePanelTask({ title: "invoice run" });
     const backlog = makePanelTask({ title: "email Jan" });
     const hit = groupPanelTasks({
-      tasks: [committed, backlog],
-      committedTasks: [committed],
+      tasks: [queued, backlog],
+      queuedTasks: [queued],
       query: "email",
       now: NOW,
     });
-    expect(hit.today).toHaveLength(0);
+    expect(hit.queue).toHaveLength(0);
     expect(hit.backlog.map((t) => t.title)).toEqual(["email Jan"]);
     const dry = groupPanelTasks({
-      tasks: [committed, backlog],
-      committedTasks: [committed],
+      tasks: [queued, backlog],
+      queuedTasks: [queued],
       query: "zzz",
       now: NOW,
     });
@@ -145,13 +143,13 @@ describe("groupPanelTasks — the right panel's three groups (AC11)", () => {
 
   it("the backlog caps and due-date compare normalizes to LOCAL days (timestamptz gotcha)", () => {
     const many = Array.from({ length: 60 }, (_, i) => makePanelTask({ title: `backlog ${i}` }));
-    const capped = groupPanelTasks({ tasks: many, committedTasks: [], now: NOW });
+    const capped = groupPanelTasks({ tasks: many, queuedTasks: [], now: NOW });
     expect(capped.backlog).toHaveLength(50);
     // Due "today" stored as a UTC instant from local midnight must count as
     // due-soon even when the UTC date differs from the local date.
     const localMidnight = new Date(2026, 6, 2, 0, 0); // may be Jul 1 in UTC
     const dueToday = makePanelTask({ title: "due today", dueDate: localMidnight.toISOString() });
-    const groups = groupPanelTasks({ tasks: [dueToday], committedTasks: [], now: NOW });
+    const groups = groupPanelTasks({ tasks: [dueToday], queuedTasks: [], now: NOW });
     expect(groups.dueSoon.map((t) => t.title)).toEqual(["due today"]);
   });
 });

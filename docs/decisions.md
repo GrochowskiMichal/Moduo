@@ -22,6 +22,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-08 · SECURITY DEFINER functions that hand out an item's data check the item, not just its type or module: `links_suggest`, `notes_list_unmaterialized`, `notes_op_duplicate`, `notes_op_mention`, `share_assign_preview`.
 - 2026-10-08 · A contact can point only at a company you can open, and the refusal never says whether a private company exists.
 - 2026-10-08 · A SECURITY DEFINER helper that only other definer functions call is never client-callable, and "Delete forever" works again for edited notes and sub-notes.
 - 2026-10-08 · PRIV-2b: deleting an account also wipes our Stripe copy and what the user leaves in other people's workspaces, and the Danger zone and sign-in page say so
@@ -217,6 +218,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-10-08 · TV-D4: the app reads and writes my personal queue (toggles, `q`, rail, Focus, Home widget, Calendar panel); claims show who else has a task queued; "My tasks" rail row with two or more members.
+- 2026-10-08 · TV-T1 landed: one workspace tag store feeds every surface, and a tag can be created by name and attached before its task exists.
 - 2026-10-08 · TV-D2: each person has their own Queue, not tied to a date (`task_queue` + `tasks_op_queue_*`); old builds' commits land in the committer's queue, skip is no longer a reschedule, MCP `tasks_queue*` with the old tools as aliases.
 - 2026-10-08 · TV-D1 landed: task edits save field by field, a task has its own assignee (`assignee_id`), and `owner_id` is the creator again.
 - 2026-10-08 · TV-F1: Focus keeps time by the wall clock, survives reloads, and asks about away time.
@@ -258,6 +261,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-08 · TX-2: sign-in emails go through a Send Email Hook that keeps dashboard invites working, logs without codes, and erases its log with the account
 - 2026-10-08 · TX-1: the email kit is plain TypeScript at `supabase/functions/_shared/email/`, and its logo images come from the brand pipeline, not from the kit
 - 2026-10-08 · Every email Moduo sends goes through one system: Resend, one template kit, one outbox; invite-only becomes an allow-list
 

@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
-import { nestedSubtaskIds, STATUS_LABELS, showBucketPill } from "../helpers";
+import { groupsByBucket, nestedSubtaskIds, STATUS_LABELS, showBucketPill } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task, TaskStatus } from "../model";
 import { positionForReorder } from "../reorder";
@@ -31,7 +31,7 @@ export type BoardGroupBy = "status" | "bucket";
 type Props = {
   tasks: Task[];
   scopeTitle: string;
-  selection: string; // "all" | "inbox" | "today" | bucketId
+  selection: string; // "all" | "mine" | "inbox" | "today" | bucketId
   view: PlanView;
   onViewChange: (view: PlanView) => void;
   boardGroupBy: BoardGroupBy;
@@ -82,9 +82,11 @@ export function TaskBoardView({
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  // Columns by bucket only make sense across buckets ("All"); otherwise status.
-  const groupDim: BoardGroupBy = selection === "all" ? boardGroupBy : "status";
+  // Columns by bucket only make sense across buckets (All, My tasks); otherwise status.
+  const groupDim: BoardGroupBy = groupsByBucket(selection) ? boardGroupBy : "status";
   const showBucketTag = showBucketPill(selection, groupDim);
+  // In My tasks every card is mine, so cards leave the avatar out (D4-4).
+  const showAssignee = selection !== "mine";
 
   // Subtasks whose parent is on this board stay off it — the parent card
   // carries the quiet n/m mirror and the detail panel lists them. Today stays
@@ -172,21 +174,20 @@ export function TaskBoardView({
 
   const activeTask = activeId ? (tasks.find((t) => t.id === activeId) ?? null) : null;
 
-  const groupControl =
-    selection === "all" ? (
-      <div className="flex items-center gap-1.5">
-        <span className="font-sans text-xs text-muted-foreground">Columns</span>
-        <Select value={boardGroupBy} onValueChange={(v) => onBoardGroupByChange(v as BoardGroupBy)}>
-          <SelectTrigger size="sm" variant="ghost" className="w-28">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="status">Status</SelectItem>
-            <SelectItem value="bucket">Bucket</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    ) : undefined;
+  const groupControl = groupsByBucket(selection) ? (
+    <div className="flex items-center gap-1.5">
+      <span className="font-sans text-xs text-muted-foreground">Columns</span>
+      <Select value={boardGroupBy} onValueChange={(v) => onBoardGroupByChange(v as BoardGroupBy)}>
+        <SelectTrigger size="sm" variant="ghost" className="w-28">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="status">Status</SelectItem>
+          <SelectItem value="bucket">Bucket</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  ) : undefined;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -221,6 +222,7 @@ export function TaskBoardView({
               column={col}
               canEdit={canEdit}
               showBucketTag={showBucketTag}
+              showAssignee={showAssignee}
               buckets={buckets}
               inbox={inbox}
               bucketNameById={bucketNameById}
@@ -242,6 +244,7 @@ export function TaskBoardView({
                       bucketName={bucketNameById(activeTask.bucketId)}
                       inboxId={inbox?.id ?? null}
                       showBucket={showBucketTag}
+                      showAssignee={showAssignee}
                       canEdit={false}
                       api={api}
                     />
@@ -260,6 +263,7 @@ function BoardColumn({
   column,
   canEdit,
   showBucketTag,
+  showAssignee,
   buckets,
   inbox,
   bucketNameById,
@@ -271,6 +275,7 @@ function BoardColumn({
   column: Column;
   canEdit: boolean;
   showBucketTag: boolean;
+  showAssignee: boolean;
   buckets: Bucket[];
   inbox: Bucket | null;
   bucketNameById: (id: string) => string;
@@ -315,6 +320,7 @@ function BoardColumn({
                 buckets={buckets}
                 inboxId={inbox?.id ?? null}
                 showBucket={showBucketTag}
+                showAssignee={showAssignee}
                 canEdit={canEdit}
                 selected={task.id === selectedTaskId}
                 onSelect={() => onSelectTask(task.id)}
