@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { TAG_LINKS_SCOPE } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { editableTaskFields } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
@@ -75,9 +76,6 @@ const EMPTY_BUNDLE: TasksModuleBundle = {
 function byPosition<T extends { position: string }>(a: T, b: T): number {
   return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
 }
-
-/** The bundle's tag-links read, as its SCALE-1 truncation names it. */
-const TAG_LINKS_SCOPE = "tag assignments";
 
 /** Optimistic placeholder id, not yet a real server uuid. */
 const isTempId = (id: string) => id.startsWith("tmp-");

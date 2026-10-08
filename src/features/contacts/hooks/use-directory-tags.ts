@@ -5,7 +5,7 @@
 // simply doesn't offer tags); reload() re-reads the server.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Truncation } from "../../../lib/paged-select";
+import { TAG_LINKS_SCOPE, type Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { seedTags, useTagView } from "../../tags/store";
 
@@ -36,7 +36,7 @@ export function useDirectoryTags(runtime: ModuoRuntime | null, workspaceId: stri
           scope: { kind: "types", entityTypes: DIRECTORY_TYPES },
           at,
           // A capped links read can't tell a removed link from one past the cap (SCALE-1).
-          complete: !res.truncated.some((t) => t.scope === "tag assignments"),
+          complete: !res.truncated.some((t) => t.scope === TAG_LINKS_SCOPE),
         });
         setTruncated(res.truncated);
       })
