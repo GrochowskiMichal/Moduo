@@ -154,13 +154,20 @@
     "skill-creator@claude-plugins-official": true,
     "mattpocock-skills@claude-plugins-official": true,
     "postgres-best-practices@supabase-agent-skills": true,
-    "supabase@supabase-agent-skills": true
+    "supabase@supabase-agent-skills": true,
+    "ts7-lsp@moduo-local": true
   },
   "extraKnownMarketplaces": {
     "supabase-agent-skills": {
       "source": {
         "source": "github",
         "repo": "supabase/agent-skills"
+      }
+    },
+    "moduo-local": {
+      "source": {
+        "source": "github",
+        "repo": "GrochowskiMichal/Moduo"
       }
     }
   }
