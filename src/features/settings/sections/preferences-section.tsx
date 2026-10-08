@@ -52,7 +52,12 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
   {
     type: "assigned",
     title: "Assigned to you",
-    description: "When a task's owner is set to you by someone else.",
+    description: "When someone else assigns a task to you.",
+  },
+  {
+    type: "completed",
+    title: "Completed by someone else",
+    description: "When a teammate completes a task you created.",
   },
   {
     type: "dueFollowUp",
@@ -207,7 +212,7 @@ function AnalyticsConsentGroup() {
     <PrefGroup label="Privacy" description="Saved on this device, for your account only.">
       <PrefRow
         title="Share usage analytics"
-        description="Send events like opening the app, with basic device and browser details, to PostHog so we can improve Moduo. They carry your account ID, never your email or anything you write. Off unless you turn it on."
+        description="Send events like opening the app, with basic device and browser details, to PostHog so we can improve Moduo. They carry your account ID, never your email or anything you write. Turning this off also deletes what your account has sent so far, from every device."
       >
         <Switch
           checked={consent === "granted"}

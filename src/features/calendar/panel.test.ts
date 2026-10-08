@@ -10,7 +10,9 @@ function makePanelTask(overrides: Partial<Task> & { title: string }): Task {
   return {
     id: overrides.id ?? `t${seq}`,
     workspaceId: "ws",
-    ownerId: "u",
+    creatorId: "u",
+    creatorUnknown: false,
+    assigneeId: "u",
     bucketId: "b",
     parentId: null,
     description: "",

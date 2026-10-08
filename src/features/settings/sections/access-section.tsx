@@ -49,9 +49,10 @@ function RailItem({
       aria-current={selected || undefined}
       className={cn(
         "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        // A rail destination: the current one takes the neutral active step.
         selected
-          ? "bg-(--selected-bg) text-foreground"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+          ? "bg-state-active text-foreground"
+          : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
       )}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>

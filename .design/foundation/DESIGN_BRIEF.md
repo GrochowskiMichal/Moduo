@@ -6,7 +6,7 @@
 
 ## Problem
 
-When users open moduo today, the body text disappears into the background. The canvas is one flat near-black plane with no surface hierarchy, so the eye has nothing to grab onto. Every page they open looks slightly different — the same kind of button has a different color in Notes than it does in Email; a sidebar item in the calendar uses different padding than a sidebar item in the mindmap. The app's identity (the Pilat Extended wordmark, the pink AI disc) gets diluted by 5 other accidental fonts and 545 hand-coded hex values spread across 53 files. The user doesn't perceive these problems as "inconsistency." They perceive it as "this app feels rough."
+When users open moduo today, the body text disappears into the background. The canvas is one flat near-black plane with no surface hierarchy, so the eye has nothing to grab onto. Every page they open looks slightly different — the same kind of button has a different color in Notes than it does in Email; a sidebar item in the calendar uses different padding than a sidebar item in the mindmap. The app's identity (the Pilat Extended wordmark, the pink AI disc; *both since retired, see `.design/brand/`*) gets diluted by 5 other accidental fonts and 545 hand-coded hex values spread across 53 files. The user doesn't perceive these problems as "inconsistency." They perceive it as "this app feels rough."
 
 For the maintainer, the problem is downstream: every new feature requires re-deciding the color of a hover state, the radius of a card, the size of a heading — because there's no system to defer to. The same is true for Claude when it writes code in this repo: with no tokens to reach for, it improvises, and the improvisation compounds.
 
@@ -27,7 +27,7 @@ For Claude (and humans), a short `CLAUDE.md` design section + a longer `DESIGN_S
 ## Aesthetic Direction
 
 - **Philosophy**: Refined, content-first, dark-canvas operator's tool. Think of moduo as a quiet instrument the user plays for hours — not a brochure, not an enterprise dashboard, not an AI showroom.
-- **Tone**: Calm, confident, intentional. A single confident pink accent on a black/gray architecture. Never aggressive, never busy, never cute.
+- **Tone**: Calm, confident, intentional. A single confident accent on a black/gray architecture *(mono by default since 2026-07-27; "pink" here was a misread of the first draft, see brand decision 40 in `.design/brand/DECISIONS.md`)*. Never aggressive, never busy, never cute.
 - **Reference points**:
   - **Spotify's surface model** — near-black canvas with elevated gray panels that give the eye structure.
   - **Linear** — the discipline of monochrome + one accent, the design-system rigor.
@@ -38,7 +38,7 @@ For Claude (and humans), a short `CLAUDE.md` design section + a longer `DESIGN_S
   - **Not Material Design / Google** — no FABs, no thick elevation shadows, no Roboto, no overly chromatic semantic colors.
   - **Not enterprise B2B SaaS** (Salesforce / ServiceNow / Workday) — no dense bordered forms, no "every action is a button" patterning.
   - **Not skeuomorphic or playful** (Apple Stocks textures, Bear's tabby cat, Things' decorative icons) — flat-with-elevation, never paper-and-shadow.
-  - **Not corporate AI app** (Copilot, ChatGPT Enterprise) — no gradient borders everywhere, no sparkles on every button, no purple-on-purple AI wash. The pink AI disc stays a single deliberate moment.
+  - **Not corporate AI app** (Copilot, ChatGPT Enterprise) — no gradient borders everywhere, no sparkles on every button, no purple-on-purple AI wash. ~~The pink AI disc stays a single deliberate moment.~~ *(Superseded 2026-10-08: there is no AI disc or AI colour, brand decision 40.)*
 
 ## Existing Patterns
 
