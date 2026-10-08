@@ -101,6 +101,35 @@ export const TASK_TIME_STATUSES = ["saved", "duplicate", "noop", "gone"] as cons
 export type TaskTimeStatus = (typeof TASK_TIME_STATUSES)[number];
 export const taskTimeStatusSchema = z.enum(TASK_TIME_STATUSES);
 
+// ---------------------------------------------------------------------------
+// Queue runs (TV-F2) — mirrors focus_runs' CHECKs and focus_op_run_start's mode
+// check in 20261009120000_focus_runs.
+// ---------------------------------------------------------------------------
+
+/** A run is going, paused, or over (one open run per person). */
+export const FOCUS_RUN_STATUSES = ["running", "paused", "ended"] as const;
+export type FocusRunStatus = (typeof FOCUS_RUN_STATUSES)[number];
+export const focusRunStatusSchema = z.enum(FOCUS_RUN_STATUSES);
+export function isFocusRunStatus(value: unknown): value is FocusRunStatus {
+  return typeof value === "string" && (FOCUS_RUN_STATUSES as readonly string[]).includes(value);
+}
+
+/** Picked once per run. */
+export const FOCUS_RUN_MODES = ["pomodoro", "stopwatch"] as const;
+export type FocusRunMode = (typeof FOCUS_RUN_MODES)[number];
+export const focusRunModeSchema = z.enum(FOCUS_RUN_MODES);
+export function isFocusRunMode(value: unknown): value is FocusRunMode {
+  return typeof value === "string" && (FOCUS_RUN_MODES as readonly string[]).includes(value);
+}
+
+/** The pomodoro phase a run is in (a stopwatch run is always `work`). */
+export const FOCUS_RUN_PHASES = ["work", "break", "long_break"] as const;
+export type FocusRunPhase = (typeof FOCUS_RUN_PHASES)[number];
+export const focusRunPhaseSchema = z.enum(FOCUS_RUN_PHASES);
+export function isFocusRunPhase(value: unknown): value is FocusRunPhase {
+  return typeof value === "string" && (FOCUS_RUN_PHASES as readonly string[]).includes(value);
+}
+
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 export type EnergyLevel = (typeof ENERGY_LEVELS)[number];
 export const energyLevelSchema = z.enum(ENERGY_LEVELS);

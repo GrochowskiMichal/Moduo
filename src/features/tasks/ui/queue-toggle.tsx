@@ -1,41 +1,58 @@
 import { ListChecks } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
+import { LiveDot } from "../../focus/ui/live-dot";
 import { type Assignee, useAssignees } from "../assignees";
+import { onThisLabel, useRunClaims } from "../claims";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task } from "../model";
 import { alsoInLabel, claimLabel } from "../queue";
 import { AssigneeAvatar } from "./assignee-avatar";
 
 /**
- * Who else has a task queued, as names and the first of them (claims, TV-D4).
- * Empty when nobody else does.
+ * Who else has a task queued, as names and the first of them (claims, TV-D4),
+ * and who is on it right now in a running run (`onThis`, TV-F2). Empty when
+ * nobody else is.
  */
 export function useQueueClaim(
   taskId: string,
   api: Pick<TasksModuleApi, "queueClaims">,
-): { names: string[]; first: Assignee | null } {
+  workspaceId?: string | null,
+): { names: string[]; first: Assignee | null; onThis: string[]; onThisFirst: Assignee | null } {
   const { byId } = useAssignees();
   const ids = api.queueClaims.get(taskId) ?? [];
+  const onIds = useRunClaims(workspaceId).get(taskId) ?? [];
   return {
     names: ids.map((id) => byId(id)?.name || "a teammate"),
     first: ids.length > 0 ? byId(ids[0]) : null,
+    onThis: onIds.map((id) => byId(id)?.name || "A teammate"),
+    onThisFirst: onIds.length > 0 ? byId(onIds[0]) : null,
   };
 }
 
-/** The small ringed avatar that marks a task in someone else's queue. */
+/** The small ringed avatar that marks a task in someone else's queue; with
+ *  `live`, they're on it right now (a live dot at its corner). */
 export function ClaimAvatar({
   assignee,
+  live = false,
   className,
 }: {
   assignee: Assignee | null;
+  live?: boolean;
   className?: string;
 }) {
-  return (
+  const avatar = (
     <AssigneeAvatar
       assignee={assignee}
       className={cn("size-4 ring-1 ring-foreground/35", className)}
     />
+  );
+  if (!live) return avatar;
+  return (
+    <span className="relative inline-flex">
+      {avatar}
+      <LiveDot className="absolute -right-0.5 -bottom-0.5" />
+    </span>
   );
 }
 
@@ -56,21 +73,26 @@ export function QueueToggle({
   canEdit: boolean;
 }) {
   const queued = api.queuedTaskIds.has(task.id);
-  const claim = useQueueClaim(task.id, api);
-  const claimed = claim.names.length > 0;
+  const claim = useQueueClaim(task.id, api, task.workspaceId);
+  // Someone running it right now outranks "in their queue" (TV-F2).
+  const live = claim.onThis.length > 0;
+  const claimed = claim.names.length > 0 || live;
   const showClaim = claimed && !queued;
+  const face = live ? claim.onThisFirst : claim.first;
+  const claimText = live ? onThisLabel(claim.onThis) : claimLabel(claim.names);
+  const alsoText = live ? onThisLabel(claim.onThis) : alsoInLabel(claim.names);
   if (task.status === "done" || task.status === "archived") return null;
   // Both of us: their claim stays visible next to my toggle (the toggle's
   // label already says "Also in Mike's queue", so the avatar is decoration).
   const besideClaim =
     claimed && queued ? (
       <span aria-hidden className="flex items-center">
-        <ClaimAvatar assignee={claim.first} />
+        <ClaimAvatar assignee={face} live={live} />
       </span>
     ) : null;
 
   const mark = showClaim ? (
-    <ClaimAvatar assignee={claim.first} />
+    <ClaimAvatar assignee={face} live={live} />
   ) : (
     <ListChecks className="size-3.5" aria-hidden />
   );
@@ -79,9 +101,9 @@ export function QueueToggle({
     if (!queued && !claimed) return null;
     const label = queued
       ? claimed
-        ? `In your queue. ${alsoInLabel(claim.names)}`
+        ? `In your queue. ${alsoText}`
         : "In your queue"
-      : claimLabel(claim.names);
+      : claimText;
     return (
       <>
         {besideClaim}
@@ -102,7 +124,7 @@ export function QueueToggle({
   }
 
   const action = queued ? "Remove from queue" : "Add to queue";
-  const note = queued ? alsoInLabel(claim.names) : claimLabel(claim.names);
+  const note = queued ? alsoText : claimText;
   return (
     <>
       {besideClaim}

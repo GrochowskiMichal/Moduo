@@ -80,8 +80,6 @@ function renderRail({
     return (
       <TooltipProvider>
         <BucketRail
-          mode="plan"
-          onModeChange={() => {}}
           selection={current}
           onSelect={setSelection}
           buckets={buckets}

@@ -56,7 +56,12 @@ type Props = {
   inbox: Bucket | null;
   /** Bucket a captured task lands in by default (current selection, or Inbox). */
   defaultBucketId: string | null;
-  onCreate: (fields: Omit<NewTaskFields, "workspaceId" | "position">) => void;
+  /** "Add to my queue" starts on (during a run, or from the Queue: TV-F2). */
+  queueByDefault?: boolean;
+  onCreate: (
+    fields: Omit<NewTaskFields, "workspaceId" | "position">,
+    opts: { queue: boolean },
+  ) => void;
 };
 
 /** A field that the parser can fill but the user may override manually. */
@@ -76,6 +81,7 @@ export function CaptureModal({
   buckets,
   inbox,
   defaultBucketId,
+  queueByDefault = false,
   onCreate,
 }: Props) {
   const [raw, setRaw] = useState("");
@@ -90,6 +96,7 @@ export function CaptureModal({
     auto<RecurrenceRule>(),
   );
   const [createMore, setCreateMore] = useState(false);
+  const [addToQueue, setAddToQueue] = useState(queueByDefault);
   const { assignees, currentUserId, byId } = useAssignees();
   // undefined = me (the default, which the backend fills in); null = Unassigned.
   const [assigneeId, setAssigneeId] = useState<string | null | undefined>(undefined);
@@ -119,6 +126,7 @@ export function CaptureModal({
     if (open) {
       resetFields(false);
       setBucketId(defaultBucketId);
+      setAddToQueue(queueByDefault);
       const id = window.setTimeout(() => inputRef.current?.focus(), 0);
       return () => window.clearTimeout(id);
     }
@@ -158,7 +166,7 @@ export function CaptureModal({
       energyLevel: energy,
       durationMinutes: duration,
       assigneeId,
-    });
+    }, { queue: addToQueue });
     toast(title, {
       description: summarize(effScheduled, effDue, effRecurrence, bucketName(bucketId)),
     });
@@ -428,6 +436,10 @@ export function CaptureModal({
           <label className="flex items-center gap-2 font-sans text-xs text-muted-foreground">
             <Switch checked={createMore} onCheckedChange={setCreateMore} />
             Create more
+          </label>
+          <label className="ml-auto flex items-center gap-2 font-sans text-xs text-muted-foreground">
+            <Switch checked={addToQueue} onCheckedChange={setAddToQueue} />
+            Add to my queue
           </label>
           <Button size="sm" onClick={submit} disabled={!raw.trim()}>
             Create

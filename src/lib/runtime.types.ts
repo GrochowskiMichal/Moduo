@@ -13,6 +13,7 @@ import type {
 } from "../features/calendar/events";
 import type { CalendarWindow } from "../features/calendar/window";
 import type { ChatRuntime } from "../features/chat/model";
+import type { FocusRunRuntime } from "../features/focus/run-model";
 import type { ContactImportResult, ContactImportRow } from "../features/contacts/import";
 import type {
   Company,
@@ -1019,6 +1020,9 @@ export type ModuoRuntime = {
    */
   /** Chat (specs/chat.md) — Supabase-direct on both surfaces; Duo/Team/Founder workspaces. */
   chat: ChatRuntime;
+
+  /** Queue runs (TV-F2) — Supabase-direct on both surfaces. */
+  focus: FocusRunRuntime;
 
   spine: {
     /**

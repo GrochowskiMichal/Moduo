@@ -15,8 +15,8 @@
 --     phase on shared timestamps (phase_started_at moves forward by pauses, so
 --     every device computes the same countdown), the blocks and focused time
 --     so far, and the tasks done in this run. device_id is the device in
---     control; seen_at is its last write (it saves at least once a minute while
---     the run is on).
+--     control and control_at when it took it; seen_at is its last write (it
+--     saves at least once a minute while the run is on).
 --   * Ops, for the signed-in person only (a run is someone's live session in
 --     the app; no connector tool runs one): focus_op_run_start (ends any open
 --     run of theirs first), focus_op_run_save (a device that isn't in control
@@ -86,14 +86,16 @@ CREATE TABLE public.focus_runs (
   focused_seconds integer NOT NULL DEFAULT 0,
   -- Tasks completed in this run, in order ("2 done this run · show").
   done_task_ids uuid[] NOT NULL DEFAULT '{}',
-  -- The device in control, and its last write.
+  -- The device in control, since when, and its last write. A device that
+  -- loses control gives back the time it credited after control_at.
   device_id text NOT NULL,
+  control_at timestamptz NOT NULL DEFAULT now(),
   seen_at timestamptz NOT NULL DEFAULT now(),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT focus_runs_status_check CHECK (status IN ('running', 'paused', 'ended')),
-  CONSTRAINT focus_runs_mode_check CHECK (mode IN ('pomodoro', 'stopwatch')),
-  CONSTRAINT focus_runs_phase_check CHECK (phase IN ('work', 'break', 'long_break')),
+  CONSTRAINT focus_runs_status_check CHECK (status IN ('running','paused','ended')),
+  CONSTRAINT focus_runs_mode_check CHECK (mode IN ('pomodoro','stopwatch')),
+  CONSTRAINT focus_runs_phase_check CHECK (phase IN ('work','break','long_break')),
   CONSTRAINT focus_runs_ended CHECK ((status = 'ended') = (ended_at IS NOT NULL)),
   CONSTRAINT focus_runs_paused CHECK ((status = 'paused') = (paused_at IS NOT NULL)),
   CONSTRAINT focus_runs_phase_shape CHECK (
@@ -274,7 +276,7 @@ DECLARE
   v_user uuid := public.focus_runs__runner(p_workspace_id);
   r public.focus_runs;
 BEGIN
-  IF p_mode IS NULL OR p_mode NOT IN ('pomodoro', 'stopwatch') THEN
+  IF p_mode IS NULL OR p_mode NOT IN ('pomodoro','stopwatch') THEN
     RAISE EXCEPTION 'A run is a pomodoro or a stopwatch.' USING ERRCODE = '22023';
   END IF;
   IF p_device IS NULL OR p_device !~ '^[A-Za-z0-9_-]{8,64}$' THEN
@@ -299,6 +301,7 @@ BEGIN
   r.focused_seconds := 0;
   r.done_task_ids := '{}';
   r.device_id := p_device;
+  r.control_at := now();
   r.seen_at := now();
   r.created_at := now();
   r.updated_at := now();
@@ -345,6 +348,9 @@ BEGIN
   PERFORM public.focus_runs__runner(r.workspace_id);
 
   r := public.focus_runs__apply(r, p_state);
+  IF r.device_id <> p_device THEN
+    r.control_at := now();
+  END IF;
   r.device_id := p_device;
   r.seen_at := now();
   r.updated_at := now();
@@ -353,7 +359,8 @@ BEGIN
       phase_started_at = r.phase_started_at, phase_seconds = r.phase_seconds,
       paused_at = r.paused_at, blocks_completed = r.blocks_completed,
       focused_seconds = r.focused_seconds, done_task_ids = r.done_task_ids,
-      device_id = r.device_id, seen_at = r.seen_at, updated_at = r.updated_at
+      device_id = r.device_id, control_at = r.control_at, seen_at = r.seen_at,
+      updated_at = r.updated_at
   WHERE f.id = r.id;
   RETURN r;
 END;
@@ -395,7 +402,9 @@ BEGIN
   SET status = 'ended', ended_at = now(), paused_at = NULL, now_task_id = r.now_task_id,
       phase = r.phase, phase_started_at = r.phase_started_at, phase_seconds = r.phase_seconds,
       blocks_completed = r.blocks_completed, focused_seconds = r.focused_seconds,
-      done_task_ids = r.done_task_ids, device_id = p_device, seen_at = now(), updated_at = now()
+      done_task_ids = r.done_task_ids, device_id = p_device,
+      control_at = CASE WHEN r.device_id <> p_device THEN now() ELSE r.control_at END,
+      seen_at = now(), updated_at = now()
   WHERE f.id = r.id
   RETURNING * INTO r;
   RETURN r;

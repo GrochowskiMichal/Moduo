@@ -163,18 +163,24 @@ BEGIN
     format('save: a device not in control wrote %s', row_to_json(r));
   ASSERT (SELECT focused_seconds FROM public.focus_runs WHERE id = run) = 120, 'save: stored a stranger''s snapshot';
 
-  -- Acting on the other device takes control.
+  -- Acting on the other device takes control, from now.
+  UPDATE public.focus_runs SET control_at = now() - interval '1 hour' WHERE id = run;
   r := probe.run_save('A', run, 'device-two', true, '{"status":"running","focused_seconds":130}');
-  ASSERT r.status = 'running' AND r.paused_at IS NULL AND r.device_id = 'device-two' AND r.focused_seconds = 130,
+  ASSERT r.status = 'running' AND r.paused_at IS NULL AND r.device_id = 'device-two' AND r.focused_seconds = 130
+     AND r.control_at > now() - interval '1 second',
     format('save: take over %s', row_to_json(r));
+  -- Saving again from the device in control keeps when it took it.
+  UPDATE public.focus_runs SET control_at = now() - interval '5 seconds' WHERE id = run;
+  r := probe.run_save('A', run, 'device-two', true, '{"focused_seconds":131}');
+  ASSERT r.control_at < now() - interval '4 seconds', 'save: a save by the device in control moved control_at';
   -- And the first device now only reads.
   r := probe.run_save('A', run, 'device-one', false, '{"focused_seconds":1}');
-  ASSERT r.device_id = 'device-two' AND r.focused_seconds = 130, 'save: the old device still writes';
+  ASSERT r.device_id = 'device-two' AND r.focused_seconds = 131, 'save: the old device still writes';
 
   -- Someone else's run: nothing.
   r := probe.run_save('B', run, 'device-bea', true, '{"focused_seconds":5}');
   ASSERT r IS NULL OR r.id IS NULL, 'save: Bea saved Ada''s run';
-  ASSERT (SELECT focused_seconds FROM public.focus_runs WHERE id = run) = 130, 'save: Bea changed Ada''s run';
+  ASSERT (SELECT focused_seconds FROM public.focus_runs WHERE id = run) = 131, 'save: Bea changed Ada''s run';
 
   -- Now on a task Ada can't see, or in another workspace: on nothing.
   r := probe.run_save('A', run, 'device-two', false, jsonb_build_object('now_task_id', probe.id('R4 Bea private')));

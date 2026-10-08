@@ -2,26 +2,71 @@ import { useNavigate } from "@tanstack/react-router";
 import { Pause } from "lucide-react";
 
 import { useFocusSession } from "../../features/focus/engine";
+import { isRunInControl, useQueueRunState, useRunReading } from "../../features/focus/run";
+import { formatClock } from "../../features/focus/run-model";
 import { FocusAwayPrompt } from "../../features/focus/ui/away-prompt";
+import { LiveDot } from "../../features/focus/ui/live-dot";
 import { requestFocusView } from "../../features/focus/view-request";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
+const chipClass =
+  "flex h-8 max-w-64 items-center gap-1.5 rounded-md bg-card px-2.5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
 /**
- * Quiet chrome indicator for a running Focus session (DF-11). It mirrors the
- * app-level focus engine from anywhere in the app and, on click, takes you back
- * to Focus. It never pauses or stops the clock (the live tracker stays
- * Focus-only per the 2026-06-16 lock); the one thing it answers is "while you
- * were away" (TV-F1, spec §5), so held time can be kept from any screen.
- * Renders nothing when no session is being tracked, unless tracked time is
- * still waiting to be saved.
+ * The run follows you around the app (TV-F2, F2-3): while a queue run is on,
+ * the chip shows its phase, clock and Now task, and a click goes back to the
+ * Queue. A run another of your devices is running shows read through. It never
+ * pauses or stops the clock itself; the one thing it answers is "while you were
+ * away" (TV-F1), so held time can be kept from any screen. With no run it shows
+ * a session left over from before runs, or tracked time still waiting to save.
  */
 export function FocusSessionChip() {
   const session = useFocusSession();
+  const { run } = useQueueRunState();
+  const reading = useRunReading(run);
   const navigate = useNavigate();
-  const openFocus = () => {
+  const openRun = () => {
     requestFocusView();
     void navigate({ to: "/tasks" });
   };
+
+  if (run && reading) {
+    const inControl = isRunInControl(run) && session.tracking;
+    const label = (inControl ? session.taskTitle : run.nowTitle) || "Queue run";
+    const phase = !reading.pomodoro
+      ? ""
+      : reading.phase === "work"
+        ? "Focus "
+        : reading.phase === "long_break"
+          ? "Long break "
+          : "Break ";
+    const state = reading.running ? "" : " (paused)";
+    const where = inControl ? "" : " · on your other device";
+    const unsaved = session.unsaved ? " · time not saved yet" : "";
+    const tip = `Queue run — ${label}${state}${where}${unsaved} · click to open`;
+    return (
+      <>
+        <Tooltip>
+          <TooltipTrigger onClick={openRun} aria-label={tip} className={chipClass}>
+            {reading.running ? (
+              <LiveDot />
+            ) : (
+              <Pause className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+            )}
+            <span className="shrink-0 font-sans text-xs tabular-nums text-foreground">
+              {phase}
+              {formatClock(reading.bigClock)}
+            </span>
+            <span className="min-w-0 flex-1 truncate font-sans text-xs text-muted-foreground">
+              {label}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{tip}</TooltipContent>
+        </Tooltip>
+        {inControl && session.away ? <FocusAwayPrompt away={session.away} compact /> : null}
+      </>
+    );
+  }
 
   if (!session.tracking) {
     // Stopped, but some tracked time hasn't saved yet: keep that visible (F1-7).
@@ -29,13 +74,13 @@ export function FocusSessionChip() {
     return (
       <Tooltip>
         <TooltipTrigger
-          onClick={openFocus}
+          onClick={openRun}
           aria-label="Focus time not saved yet · retrying, nothing is lost · click to open"
-          className="flex h-8 items-center gap-1.5 rounded-md bg-card px-2.5 font-sans text-xs text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className={`${chipClass} font-sans text-xs text-muted-foreground`}
         >
           Focus time not saved yet
         </TooltipTrigger>
-        <TooltipContent>Retrying — nothing is lost · click to open Focus</TooltipContent>
+        <TooltipContent>Retrying — nothing is lost · click to open the Queue</TooltipContent>
       </Tooltip>
     );
   }
@@ -50,11 +95,7 @@ export function FocusSessionChip() {
   return (
     <>
       <Tooltip>
-        <TooltipTrigger
-          onClick={openFocus}
-          aria-label={tip}
-          className="flex h-8 max-w-[16rem] items-center gap-1.5 rounded-md bg-card px-2.5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
+        <TooltipTrigger onClick={openRun} aria-label={tip} className={chipClass}>
           {session.running ? (
             <span
               className="track-pulse size-1.5 shrink-0 rounded-full bg-muted-foreground"
@@ -76,10 +117,4 @@ export function FocusSessionChip() {
       {session.away ? <FocusAwayPrompt away={session.away} compact /> : null}
     </>
   );
-}
-
-function formatClock(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }

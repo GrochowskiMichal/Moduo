@@ -14,6 +14,7 @@
 // A value won from the cloud (another device) flows back through the same store,
 // so it propagates to every instance exactly like a local edit.
 
+import { FOCUS_RUN_MODES, type FocusRunMode } from "@contracts/vocabularies";
 import { useCallback, useSyncExternalStore } from "react";
 import { z } from "zod";
 import { useDomainSync } from "./prefs-sync";
@@ -33,6 +34,9 @@ export interface FocusPrefs {
   autoStartNext: boolean;
   /** Play a short chime when an interval ends. */
   soundEnabled: boolean;
+  /** Pomodoro or Stopwatch for the next queue run (TV-F2: picked once per
+   *  run, remembered per person). */
+  runMode: FocusRunMode;
 }
 
 export const DEFAULT_FOCUS_PREFS: FocusPrefs = {
@@ -42,6 +46,7 @@ export const DEFAULT_FOCUS_PREFS: FocusPrefs = {
   sessionsBeforeLongBreak: 4,
   autoStartNext: false,
   soundEnabled: true,
+  runMode: "pomodoro",
 };
 
 const LOCAL_STORAGE_KEY = "moduo.focus";
@@ -62,6 +67,7 @@ const focusPrefsSchema = z.object({
   sessionsBeforeLongBreak: z.coerce.number().catch(DEFAULT_FOCUS_PREFS.sessionsBeforeLongBreak),
   autoStartNext: z.boolean().catch(DEFAULT_FOCUS_PREFS.autoStartNext),
   soundEnabled: z.boolean().catch(DEFAULT_FOCUS_PREFS.soundEnabled),
+  runMode: z.enum(FOCUS_RUN_MODES).catch(DEFAULT_FOCUS_PREFS.runMode),
 });
 
 function sanitize(raw: unknown): FocusPrefs {
@@ -83,6 +89,7 @@ function sanitize(raw: unknown): FocusPrefs {
     ),
     autoStartNext: parsed.autoStartNext,
     soundEnabled: parsed.soundEnabled,
+    runMode: parsed.runMode,
   };
 }
 

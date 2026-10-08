@@ -20,6 +20,9 @@ import {
   CALENDAR_PROVIDERS,
   EMAIL_ACCOUNT_STATUSES,
   EMAIL_PROVIDERS,
+  FOCUS_RUN_MODES,
+  FOCUS_RUN_PHASES,
+  FOCUS_RUN_STATUSES,
   MEMBER_DB_PERMISSIONS,
   MEMBER_DB_ROLES,
   PLAN_TIERS,
@@ -96,6 +99,15 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`kind IN (${inList(TASK_TIME_ENTRY_KINDS)})`);
     expect(sql).toContain(`v_action NOT IN (${inList(TASK_TIME_ACTIONS)})`);
     for (const status of TASK_TIME_STATUSES) expect(sql).toContain(`'${status}'`);
+  });
+
+  it("queue run vocabularies match the focus_runs CHECKs (TV-F2)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261009120000_focus_runs.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`status IN (${inList(FOCUS_RUN_STATUSES)})`);
+    expect(sql).toContain(`mode IN (${inList(FOCUS_RUN_MODES)})`);
+    expect(sql).toContain(`p_mode NOT IN (${inList(FOCUS_RUN_MODES)})`);
+    expect(sql).toContain(`phase IN (${inList(FOCUS_RUN_PHASES)})`);
   });
 
   it("attachment vocabularies match the attachments CHECKs and the ops (AT-1)", () => {
