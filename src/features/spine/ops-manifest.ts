@@ -5,8 +5,8 @@
 // links.suggest). Consumed by the module registry (src/lib/module-registry.ts)
 // and mirrored connector-side by supabase/functions/moduo-mcp/modules/links.ts.
 // Keep in sync with the spine RPCs (supabase/migrations/2026062512…/2026062613…/
-// 2026062712…spine_*.sql). The spine reuses the Tasks permission lane at alpha
-// (permissionKey "tasks"; CT-1 decision a), so its scope rides on permissions_tasks.
+// 2026062712…spine_*.sql). People are checked on the spine lane (PERM-1: Edit on
+// any module); an API key on its own `links` scope.
 
 import type { ModuleManifest } from "../../lib/module-manifest";
 
@@ -14,9 +14,7 @@ export const linksModuleManifest: ModuleManifest = {
   module: "links",
   summary:
     "The connective tissue: typed links between any two entities, polymorphic comments, and the derived notification feed.",
-  // Alpha: the spine rides the Tasks permission lane (permissions_tasks). A
-  // dedicated permissions_spine is a one-line future migration (CT-1).
-  permissionKey: "tasks",
+  permissionKey: "spine",
   // Link/comment activity is polymorphic — logged under the source entity's type.
   activityEntityTypes: [
     "task",
@@ -116,6 +114,8 @@ export const linksModuleManifest: ModuleManifest = {
       name: "links.suggest",
       summary:
         "Deterministic auto-suggested links for an entity (shared tags / email domain / time-window).",
+      // Only there to be accepted: the RPC sits behind the Links Edit guard.
+      access: "edit",
     },
   ],
 };

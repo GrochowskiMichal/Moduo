@@ -2,6 +2,8 @@
 // read + write surface whose RPC names match the real ops, conforming to
 // ModuleManifest, without dropping the Tasks manifest.
 
+import { MCP_TOOL_NEEDS } from "@contracts/mcp-key-scopes";
+import { MCP_KEY_MODULES } from "@contracts/vocabularies";
 import { describe, expect, it } from "@rstest/core";
 import type { ModuleManifest } from "./module-manifest";
 import { moduleManifests } from "./module-registry";
@@ -37,13 +39,31 @@ describe("module registry", () => {
       }
     }
   });
+
+  it("each manifest's module is an API-key scope module (the key card has its row)", () => {
+    for (const m of moduleManifests) expect(MCP_KEY_MODULES).toContain(m.module);
+  });
+
+  it("declares exactly the cross-module key needs the connector enforces (MCP_TOOL_NEEDS)", () => {
+    const declared = moduleManifests.flatMap((m) =>
+      m.ops.flatMap((op) =>
+        (op.alsoNeeds ?? []).map((needs) => `${op.op.replace(".", "_")}>${needs}`),
+      ),
+    );
+    const enforced = MCP_TOOL_NEEDS.map((n) => `${n.tool}>${n.needs}`);
+    expect(declared.sort()).toEqual(enforced.sort());
+  });
 });
 
 describe("links manifest", () => {
   const links = manifest("links");
 
-  it("rides the Tasks permission lane at alpha", () => {
-    expect(links.permissionKey).toBe("tasks");
+  it("checks people on the spine lane (PERM-1: Edit on any module)", () => {
+    expect(links.permissionKey).toBe("spine");
+  });
+
+  it("marks suggestions as an Edit-only aid (their RPC is behind the Links Edit guard)", () => {
+    expect(links.resources.find((r) => r.name === "links.suggest")?.access).toBe("edit");
   });
 
   it("exposes the write surface — the link / comment / notification ops by RPC name", () => {
@@ -77,8 +97,8 @@ describe("links manifest", () => {
 describe("contacts manifest", () => {
   const contacts = manifest("contacts");
 
-  it("rides the Tasks permission lane at alpha", () => {
-    expect(contacts.permissionKey).toBe("tasks");
+  it("has its own permission lane since PERM-1", () => {
+    expect(contacts.permissionKey).toBe("contacts");
   });
 
   it("exposes the write surface — the 6 contacts ops by RPC name", () => {
@@ -106,9 +126,12 @@ describe("contacts manifest", () => {
 describe("calendar manifest", () => {
   const calendar = manifest("calendar");
 
-  it("rides the Tasks permission lane at alpha", () => {
-    expect(calendar.permissionKey).toBe("tasks");
+  it("has its own permission lane since PERM-1, and its loop verbs also need Tasks", () => {
+    expect(calendar.permissionKey).toBe("calendar");
     expect(calendar.activityEntityTypes).toContain("event");
+    const loop = calendar.ops.filter((o) => o.rpc.startsWith("tasks_op_"));
+    expect(loop.length).toBe(4);
+    for (const op of loop) expect(op.alsoNeeds).toEqual(["tasks"]);
   });
 
   it("exposes the write surface — native-event ops + the loop verbs (AC14)", () => {
