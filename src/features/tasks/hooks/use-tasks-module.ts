@@ -27,6 +27,7 @@ import {
   wouldCreateCycle,
 } from "../helpers";
 import { hideBucket, unhideBucket, useHiddenBuckets } from "../hidden-buckets";
+import { LiveGate, mergeBundle, mergeQueue, trackTaskCalls, withoutHeldTags } from "../live";
 import {
   type ActivityEntry,
   type Bucket,
@@ -36,12 +37,14 @@ import {
   type Tag,
   type TagLink,
   type Task,
+  type TaskQueueEntry,
   type TaskRelation,
   type TasksCatchUpItem,
   type TasksModuleBundle,
   type TimeBlockMap,
   type TimeBlockSlot,
 } from "../model";
+import { listenTasksLive } from "../realtime";
 import {
   catchUpItem,
   catchUpPatch,
@@ -85,12 +88,41 @@ function byPosition<T extends { position: string }>(a: T, b: T): number {
 /** Optimistic placeholder id, not yet a real server uuid. */
 const isTempId = (id: string) => id.startsWith("tmp-");
 
-export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
+/** A refetch on focus / reconnect runs at most this often (tasks-v2 decision 10). */
+const REFRESH_THROTTLE_MS = 5_000;
+
+export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params) {
   const { userId, workspaceId, modulePermission = "none" } = params;
   const canRead = modulePermission !== "none";
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
 
   const [bundle, setBundle] = useState<TasksModuleBundle>(EMPTY_BUNDLE);
+  /** Every queue row I can see (TV-D2): mine and teammates' claims. */
+  const [queue, setQueue] = useState<TaskQueueEntry[]>([]);
+  /** Tags whose delete waits on its Undo toast: kept out of refetches and live changes. */
+  const heldTags = useRef<Set<string>>(new Set());
+
+  // Live updates (TV-D5). Teammates' changes arrive through the gate, which
+  // holds them while this module's own calls are in flight so an echo never
+  // reverts an optimistic edit (live.ts). Every `runtime.tasks` call below
+  // goes through the tracked runtime for that reason.
+  const gateRef = useRef<LiveGate | null>(null);
+  if (!gateRef.current) {
+    gateRef.current = new LiveGate((changes) => {
+      setBundle((prev) =>
+        withoutHeldTags(
+          changes.reduce((b, c) => mergeBundle(b, c), prev),
+          heldTags.current,
+        ),
+      );
+      setQueue((prev) => changes.reduce((q, c) => mergeQueue(q, c), prev));
+    });
+  }
+  const gate = gateRef.current;
+  const runtime = useMemo(
+    () => (baseRuntime ? trackTaskCalls(baseRuntime, gate) : null),
+    [baseRuntime, gate],
+  );
   const [timeBlocks, setTimeBlocksState] = useState<TimeBlockMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,41 +141,116 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
    *  takeover, then at most one a minute while loads keep failing). */
   const focusReload = useRef({ ownedSince: 0, at: 0 });
 
-  const load = useCallback(async () => {
-    if (!runtime || !userId || !workspaceId || !canRead) {
-      setBundle(EMPTY_BUNDLE);
-      setLoadedFrom(null);
-      setTimeBlocksState({});
-      setLoading(false);
-      return;
-    }
-    const req = ++reqRef.current;
-    const startedAt = Date.now();
-    setLoading(true);
-    try {
-      // Time-blocks ride along with the bundle but never block it — a failed
-      // read just means the default view skips the time-block step.
-      const [next, blocks] = await Promise.all([
-        runtime.tasks.list(workspaceId),
-        runtime.tasks.getTimeBlocks(workspaceId).catch((): TimeBlockMap => ({})),
-      ]);
-      if (reqRef.current === req) {
-        setBundle(next);
-        setLoadedFrom({
-          workspaceId,
-          at: startedAt,
-          taskIds: new Set(next.tasks.map((t) => t.id)),
-        });
-        setTimeBlocksState(blocks);
-        setError(null);
-        setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
+  /**
+   * Read the whole module. A quiet read (a refetch on focus or reconnect)
+   * leaves the loading flag and the error alone, and is thrown away when one
+   * of our own saves started meanwhile: its snapshot could predate that save
+   * and flick the optimistic edit back. It then tries again once things settle.
+   */
+  const requestRefreshRef = useRef<() => void>(() => {});
+  const loadImpl = useCallback(
+    async (quiet: boolean) => {
+      if (!baseRuntime || !userId || !workspaceId || !canRead) {
+        setBundle(EMPTY_BUNDLE);
+        setQueue([]);
+        setLoadedFrom(null);
+        setTimeBlocksState({});
+        setLoading(false);
+        return;
       }
-    } catch (e) {
-      if (reqRef.current === req) setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      if (reqRef.current === req) setLoading(false);
-    }
-  }, [runtime, userId, workspaceId, canRead]);
+      const rt = baseRuntime;
+      const req = ++reqRef.current;
+      const startedAt = Date.now();
+      const writeSeq = gate.writeSeq;
+      // Live changes wait for the snapshot, then land on top of it.
+      const end = gate.begin({ write: false });
+      let settled = true;
+      if (!quiet) setLoading(true);
+      try {
+        // Time-blocks and queues ride along with the bundle but never block it:
+        // a failed read just means the default view skips the time-block step,
+        // and the queue shows empty until the next read.
+        const [next, blocks, queued] = await Promise.all([
+          rt.tasks.list(workspaceId),
+          rt.tasks.getTimeBlocks(workspaceId).catch((): TimeBlockMap => ({})),
+          Promise.resolve()
+            .then(() => rt.tasks.listQueue(workspaceId))
+            .catch((): TaskQueueEntry[] => []),
+        ]);
+        if (reqRef.current === req) {
+          if (quiet && gate.writeSeq !== writeSeq) {
+            settled = false;
+            requestRefreshRef.current();
+            return;
+          }
+          setBundle(withoutHeldTags(next, heldTags.current));
+          setQueue(queued);
+          setLoadedFrom({
+            workspaceId,
+            at: startedAt,
+            taskIds: new Set(next.tasks.map((t) => t.id)),
+          });
+          setTimeBlocksState(blocks);
+          setError(null);
+          setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
+        }
+      } catch (e) {
+        if (reqRef.current === req && !quiet) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        end();
+        if (reqRef.current === req && settled) setLoading(false);
+      }
+    },
+    [baseRuntime, userId, workspaceId, canRead, gate],
+  );
+
+  const load = useCallback(() => loadImpl(false), [loadImpl]);
+
+  // Refetch on focus / reconnect (D5-3): leading, then at most one trailing
+  // read per REFRESH_THROTTLE_MS, and only once our own calls have settled.
+  const refresh = useRef({
+    lastAt: 0,
+    timer: null as ReturnType<typeof setTimeout> | null,
+    queued: false,
+  });
+  const requestRefresh = useCallback(() => {
+    const r = refresh.current;
+    if (r.timer || r.queued) return;
+    const wait = Math.max(0, r.lastAt + REFRESH_THROTTLE_MS - Date.now());
+    r.timer = setTimeout(() => {
+      r.timer = null;
+      r.queued = true;
+      gate.whenIdle(() => {
+        r.queued = false;
+        r.lastAt = Date.now();
+        void loadImpl(true);
+      });
+    }, wait);
+  }, [gate, loadImpl]);
+  requestRefreshRef.current = requestRefresh;
+
+  useEffect(() => {
+    if (!baseRuntime || !userId || !workspaceId || !canRead) return;
+    const stop = listenTasksLive(workspaceId, userId, (event) => {
+      if (event.type === "resync") {
+        requestRefreshRef.current();
+        return;
+      }
+      const { change } = event;
+      // Deletes aren't filtered by workspace server-side; they carry only an
+      // id, so one from elsewhere matches nothing here.
+      if (change.kind === "upsert" && change.row.workspaceId !== workspaceId) return;
+      gate.push(change);
+    });
+    return () => {
+      stop();
+      gate.reset();
+      const r = refresh.current;
+      if (r.timer) clearTimeout(r.timer);
+      r.timer = null;
+      r.queued = false;
+    };
+  }, [baseRuntime, userId, workspaceId, canRead, gate]);
 
   useEffect(() => {
     void load();
@@ -1394,16 +1501,22 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       // hard-drops every attachment, so it only fires once the undo window
       // closes — Undo just cancels it and puts the local snapshot back.
       let undone = false;
+      heldTags.current.add(tagId);
       window.setTimeout(() => {
         if (undone) return;
         guard(async () => {
-          await runtime!.tasks.deleteTag({ workspaceId: workspaceId!, tagId });
+          try {
+            await runtime!.tasks.deleteTag({ workspaceId: workspaceId!, tagId });
+          } finally {
+            heldTags.current.delete(tagId);
+          }
         });
       }, UNDO_TOAST_MS);
       undoToast("Tag deleted", {
         description: `“${existing.name}” comes off everything it was tagged on.`,
         onUndo: () => {
           undone = true;
+          heldTags.current.delete(tagId);
           setBundle((prev) => ({ ...prev, tags: prevTags, tagLinks: prevTagLinks }));
         },
       });
@@ -1430,6 +1543,8 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     today,
     committedTasks,
     reload: load,
+    /** Every queue row I can see, in line-up order per person (TV-D2), kept live (TV-D5). */
+    queue,
     createTask,
     commitNewTaskToday,
     patchTask,

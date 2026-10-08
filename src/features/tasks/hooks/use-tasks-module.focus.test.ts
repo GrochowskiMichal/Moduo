@@ -29,6 +29,9 @@ rs.mock("../focus-time-write", () => ({
   },
 }));
 
+// Live updates (TV-D5) need a socket; these tests drive the hook without one.
+rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
+
 // The Focus engine's flush sink (TV-F1, F1-7): every answer it gives decides
 // whether tracked seconds are kept, retried or saved — never silently lost.
 

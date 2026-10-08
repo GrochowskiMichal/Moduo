@@ -5,8 +5,15 @@
 // a whole-row save carried every other field as this device last saw it, so
 // one person's edit could put back a field a teammate had just changed.
 
-import { requireRow, taskQueueRowSchema, taskRowSchema } from "@contracts/rows";
-import type { Task, TaskQueueEntry } from "../features/tasks/model";
+import {
+  bucketRowSchema,
+  requireRow,
+  tagLinkRowSchema,
+  tagRowSchema,
+  taskQueueRowSchema,
+  taskRowSchema,
+} from "@contracts/rows";
+import type { Bucket, Tag, TagLink, Task, TaskQueueEntry } from "../features/tasks/model";
 
 /**
  * The fields an edit can change. The id, workspace, creator and timestamps
@@ -215,5 +222,50 @@ export function taskRowToModel(raw: unknown): Task {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
+  };
+}
+
+// The other Tasks rows. Here rather than in runtime.web so the live layer
+// (TV-D5) can map a Realtime payload exactly like a read does.
+
+export function bucketRowToModel(raw: unknown): Bucket {
+  const r = requireRow(bucketRowSchema, raw, "bucket");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    ownerId: r.owner_id ?? "",
+    name: r.name,
+    isSystem: !!r.is_system,
+    group: r.group_label ?? null,
+    position: r.position ?? "",
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+export function tagRowToModel(raw: unknown): Tag {
+  const r = requireRow(tagRowSchema, raw, "tag");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    ownerId: r.owner_id ?? "",
+    name: r.name,
+    color: r.color ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+export function tagLinkRowToModel(raw: unknown): TagLink {
+  const r = requireRow(tagLinkRowSchema, raw, "tag link");
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    tagId: r.tag_id,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    createdAt: r.created_at,
   };
 }
