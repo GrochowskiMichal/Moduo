@@ -640,7 +640,15 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       patchTaskLocal(id, { timeSpentSeconds: total });
       return writeTaskTimeTotal(id, workspaceId, total)
         .then((saved) => {
-          if (!saved) throw new Error("task not found");
+          if (!saved) {
+            // No visible row (hard-deleted, no longer shared): reload, bounded
+            // like the takeover reload, so the next try can say "gone".
+            if (Date.now() - focusReload.current.at > 60_000) {
+              focusReload.current = { ...focusReload.current, at: Date.now() };
+              void load();
+            }
+            throw new Error("task not found");
+          }
           if (userId) {
             writeSavedFocusTotal(userId, id, saved.timeSpentSeconds, Date.parse(saved.updatedAt));
           }

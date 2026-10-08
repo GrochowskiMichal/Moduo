@@ -13,7 +13,8 @@ export interface SavedTaskTime {
 
 /**
  * Set a task's saved time total. Throws when the write fails; null when there's
- * no such row to write (deleted, or no longer visible to you).
+ * no visible row to write (hard-deleted, or no longer shared with you). A task
+ * in the trash still takes its time, so it's there if the delete is undone.
  */
 export async function writeTaskTimeTotal(
   taskId: string,
