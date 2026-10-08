@@ -15,6 +15,18 @@
  */
 
 import { TASK_STATUSES, isTaskStatus } from "../../_shared/contracts/vocabularies.ts";
+import {
+  MAX_PAGE,
+  filterByAssignee,
+  focusSettingsFrom,
+  isDrifted,
+  orderByBucket,
+  pageOf,
+  parseAssignee,
+  shapeTask,
+  subtaskCounts,
+  topLevelOnly,
+} from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { visibleIds } from "../share.ts";
 import {
@@ -86,50 +98,10 @@ async function loadWorkspace(ctx: ToolContext) {
     list.push(name);
     taskTags.set(link.entity_id, list);
   }
-  return { tasks, relations, tags, byId, blockedIds, taskTags };
+  return { tasks, relations, tags, byId, blockedIds, taskTags, subtaskCounts: subtaskCounts(tasks) };
 }
 
 type WorkspaceData = Awaited<ReturnType<typeof loadWorkspace>>;
-
-function isDrifted(t: Row, now: Date): boolean {
-  if (t.status === "done" || t.status === "archived") return false;
-  return !!t.scheduled_at && new Date(t.scheduled_at).getTime() < now.getTime();
-}
-
-/** Quiet, compact task shape for agents — full row noise stays out. */
-function shapeTask(t: Row, data: WorkspaceData, now: Date, full = false): Row {
-  const out: Row = {
-    id: t.id,
-    title: t.title,
-    bucket_id: t.bucket_id,
-    status: t.status,
-    drifted: isDrifted(t, now),
-    blocked: data.blockedIds.has(t.id),
-  };
-  const description = (t.description ?? "").trim();
-  if (description) out.description = full ? description : description.slice(0, 280);
-  if (t.parent_id && data.byId.has(t.parent_id)) out.parent_id = t.parent_id;
-  if (t.due_date) out.due_date = t.due_date;
-  if (t.scheduled_at) out.scheduled_at = t.scheduled_at;
-  if (t.duration_minutes != null) out.duration_minutes = t.duration_minutes;
-  if (t.energy_level) out.energy_level = t.energy_level;
-  if (t.priority) out.priority = t.priority;
-  if (t.committed_for) {
-    out.committed_for = t.committed_for;
-    out.commit_order = t.commit_order;
-  }
-  if (t.reschedule_count) out.reschedule_count = t.reschedule_count;
-  if (t.recurrence) {
-    out.recurrence = { rrule: t.recurrence.rrule, next_occurrence: t.recurrence.nextOccurrence ?? null };
-  }
-  const tags = data.taskTags.get(t.id);
-  if (tags?.length) out.tags = tags;
-  if (full) {
-    out.created_at = t.created_at;
-    out.updated_at = t.updated_at;
-  }
-  return out;
-}
 
 async function fetchTask(ctx: ToolContext, taskId: string): Promise<Row> {
   const found = await rows(
@@ -191,7 +163,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_list",
       description:
-        "Tasks with computed drift/blocked state, subtasks (parent_id), tags and recurrence. Defaults to open tasks (todo + in_progress).",
+        "Tasks with computed drift/blocked state, subtasks (parent_id, subtask_count), assignee_id, tags and recurrence. Defaults to open tasks (todo + in_progress), ordered by bucket then position. Pages with offset.",
       access: "view",
       inputSchema: {
         type: "object",
@@ -202,7 +174,17 @@ export const tasksConnectorModule: ConnectorModule = {
             enum: ["open", ...TASK_STATUSES],
             description: "Filter by status; 'open' = todo + in_progress (default).",
           },
-          limit: { type: "number", description: "Max tasks (default 100, max 200)." },
+          assignee: {
+            type: "string",
+            enum: ["me", "anyone"],
+            description: "'me' = tasks owned by the key's creator; 'anyone' (default) = every task you can see.",
+          },
+          top_level: {
+            type: "boolean",
+            description: "Only top-level tasks (no parent); subtasks are summarised in subtask_count. Default false.",
+          },
+          limit: { type: "number", description: `Max tasks per page (default 100, max ${MAX_PAGE}).` },
+          offset: { type: "number", description: "Skip this many tasks (default 0). A page shorter than limit is the last." },
         },
       },
       handler: async (args, ctx) => {
@@ -210,12 +192,30 @@ export const tasksConnectorModule: ConnectorModule = {
         const now = new Date();
         const status = typeof args.status === "string" ? args.status : "open";
         const bucketId = str(args, "bucket_id", false);
-        let list = data.tasks;
+        let list = filterByAssignee(data.tasks, parseAssignee(args.assignee), ctx.key.createdBy);
         if (bucketId) list = list.filter((t) => t.bucket_id === bucketId);
         if (status === "open") list = list.filter((t) => OPEN_STATUSES.includes(t.status));
         else if (isTaskStatus(status)) list = list.filter((t) => t.status === status);
-        list = list.slice(0, clampLimit(args, 100, 200));
+        if (args.top_level === true) list = topLevelOnly(list, new Set(data.byId.keys()));
+        const buckets = await rows(
+          ctx.db.from("buckets").select("id, position")
+            .eq("workspace_id", ctx.key.workspaceId).is("deleted_at", null),
+        );
+        list = pageOf(orderByBucket(list, buckets), args.offset, clampLimit(args, 100, MAX_PAGE));
         return list.map((t) => shapeTask(t, data, now));
+      },
+    },
+    {
+      name: "tasks_focus_settings",
+      description:
+        "The key creator's Focus (pomodoro) settings from Moduo, with the app's defaults filled in: work/break lengths in minutes, long-break rhythm, auto-start and chime.",
+      access: "view",
+      inputSchema: { type: "object", properties: {} },
+      handler: async (_args, ctx) => {
+        const found = await rows(
+          ctx.db.from("user_preferences").select("focus").eq("user_id", ctx.key.createdBy),
+        );
+        return focusSettingsFrom(found[0]?.focus);
       },
     },
     {
