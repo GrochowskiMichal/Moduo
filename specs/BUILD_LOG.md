@@ -183,6 +183,7 @@ History moved out of [BUILD_ORDER.md](./BUILD_ORDER.md) so sessions don't re-rea
 
 - [x] **DS-1 — State tokens + global scrollbars + Storybook appearance** ✅ · design-state-layer block 1 · deps: — · lane design · _done 2026-10-08 · `t/maciej/ds-1-state-tokens` (PR #254)_
 - [x] **TV-Q1 — Quick fixes** ✅ · tasks-v2 block 1 · deps: — · lane tasks-ui · ⌘K/⌘⇧K no longer swallowed by the list, DnD activator fix, no bucket pill where implied, delete-bucket confirm + Undo, shortcut sheet ⌘1–7 · _done 2026-10-08 · `t/maciej/tv-q1-quick-fixes` (deferred-commit bucket delete; decision in [docs/decisions/tasks.md](../docs/decisions/tasks.md))_
+- [x] **DS-2 — Primitives on the state layer + tint-only selection** · design-state-layer block 2 · deps: DS-1 · lane design · cross-module visual pass (all modules) · _done 2026-10-08 · `t/maciej/ds-2-state-layer-primitives` (PR #275)_
 
 ## Wave D — Dogfood & alpha readiness · _added 2026-07-29 from the whole-project state audit_
 

@@ -3,6 +3,7 @@
 > Generated 2026-10-08 · branch `t/maciej/ds-2-state-layer-primitives` · **Live-verified:** partial.
 > - **Checked by the agent in Storybook:** the raised plates are lighter than their track on all six dark shades (text and icon-only segmented controls and Tabs, ΔL ≈ +0.11) and white with a shadow on light. The secondary button goes 9% → 14% on hover, the outline button 0 → 5% with its hairline kept, and a highlighted dropdown item sits on 9% over the warm popover.
 > - **Not opened live:** the signed-in modules (no session in the preview browser).
+> - **Review pass (validator + `/code-review high`, 2026-10-08):** one MAJOR fixed. On the booking surfaces, an unselected option hovered to a full-strength edge that outshone the chosen one, so it now hovers to a 30% edge. The new class was checked by compiling it against tokens.css; the public page was not opened live.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## Selection: tint, never a bar (DS-AC4)
@@ -32,6 +33,8 @@
 ## Edge cases
 - [ ] **Do:** drag a task onto another row to nest it, and drag a note over another note → **Expect:** the drop highlight still wins over selection while dragging _(web)_
 - [ ] **Do:** public booking page with a hue accent stored → **Expect:** the chosen day, time and meeting option are tinted with a ring, in mono (pre-workspace pages are monochrome) _(web)_
+- [ ] **Do:** on the public booking page, pick a day, then hover a different day, time chip and meeting option → **Expect:** the hovered one shows a quiet edge, clearly weaker than the chosen one's tint + ring _(web)_
+- [ ] **Do:** Notes → toggle the right panel from the header icon, and Chat → Browse channels → the "show archived" toggle → **Expect:** while on, the button keeps a neutral fill and hovers one step lighter (pressed toggles now fill on their own) _(web)_
 - [ ] **Do:** chat message that mentions you, the "New" divider, an @mention, a search hit → **Expect:** they keep their accent marks (status, not selection) _(web)_
 
 ## Migrations / data
@@ -39,6 +42,7 @@
 
 ## Known gaps / not-yet-testable
 - Signed-in module surfaces were not opened live by the agent; the tokens, primitives and class changes are covered by tests and Storybook checks.
+- ❓ **Tint vs tint + hairline is still your call.** `--state-selected-edge` ships ON (tint + hairline) because on the mono accent the tint alone sits about one step from "active". The comp's default toggle was "Tint". Flip it with the Storybook item above.
 - Visual baselines: run `bunx playwright test --project=visual tests/visual/state-ladder.spec.ts --update-snapshots` with Storybook up, review the 18 PNGs, and commit them. That's a human step by design.
 
 ---
