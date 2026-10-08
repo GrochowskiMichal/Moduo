@@ -529,15 +529,6 @@ $function$
 -- they are still in the workspace, else to its assignee if they are; their
 -- order follows the day, then commit_order.
 
-CREATE FUNCTION pg_temp.tasks_queue_in_ws(p_workspace_id uuid, p_user uuid)
-RETURNS boolean LANGUAGE sql STABLE AS $$
-  SELECT p_user IS NOT NULL
-     AND EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = p_user)
-     AND (public.perm_is_owner(p_workspace_id, p_user)
-          OR EXISTS (SELECT 1 FROM public.workspace_members m
-                     WHERE m.workspace_id = p_workspace_id AND m.user_id = p_user))
-$$;
-
 INSERT INTO public.task_queue (workspace_id, user_id, task_id, position)
 SELECT c.workspace_id, c.user_id, c.task_id,
        public.tasks_queue__key(1048576 * row_number() OVER (
@@ -545,8 +536,16 @@ SELECT c.workspace_id, c.user_id, c.task_id,
          ORDER BY c.committed_for, c.commit_order NULLS LAST, c.created_at, c.task_id))
 FROM (
   SELECT x.task_id, x.workspace_id, x.committed_for, x.commit_order, x.created_at,
-         CASE WHEN pg_temp.tasks_queue_in_ws(x.workspace_id, x.committer) THEN x.committer
-              WHEN pg_temp.tasks_queue_in_ws(x.workspace_id, x.assignee_id) THEN x.assignee_id
+         CASE WHEN EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = x.committer)
+                   AND (public.perm_is_owner(x.workspace_id, x.committer)
+                        OR EXISTS (SELECT 1 FROM public.workspace_members m
+                                   WHERE m.workspace_id = x.workspace_id AND m.user_id = x.committer))
+              THEN x.committer
+              WHEN EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = x.assignee_id)
+                   AND (public.perm_is_owner(x.workspace_id, x.assignee_id)
+                        OR EXISTS (SELECT 1 FROM public.workspace_members m
+                                   WHERE m.workspace_id = x.workspace_id AND m.user_id = x.assignee_id))
+              THEN x.assignee_id
          END AS user_id
   FROM (
     SELECT t.id AS task_id, t.workspace_id, t.committed_for, t.commit_order, t.created_at,
