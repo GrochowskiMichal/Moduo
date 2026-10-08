@@ -114,7 +114,6 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **TV-D3 — Time entries** · tasks-v2 block 5 · deps: TV-D1, TV-F1 · lane data · migration + legacy backfill/shim
 - [ ] **TV-T1 — Shared tag store** · tasks-v2 block 6 · deps: TV-D1 · lane data
 - [x] **DS-3 — NavRow + MetaCount (+ Tasks rail)** ✅ · design-state-layer block 3 · deps: DS-2, TV-Q1 · lane design · also: return focus to the rail when a row menu's dialog closes (TV-Q1's delete-bucket confirm leaves it on the page body, like notes' Delete forever) · _done 2026-10-08 · `t/maciej/ds-3-navrow-metacount` (PR #302)_
-- [ ] **DS-4 — FilterBar/Chip, DisplayMenu, drag visuals, view-prefs helper** · design-state-layer block 4 · deps: DS-2 · lane design
 - [ ] **TV-D4 — Queue & assignee in the UI (claims, My tasks)** · tasks-v2 block 7 · deps: TV-D2, DS-3 · lane tasks-ui
 - [ ] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
 - [ ] **TV-U1 — Rows, board, completed** · tasks-v2 block 9 · deps: DS-3, TV-D4 · lane tasks-ui
@@ -158,12 +157,22 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - **`tokens.css` / `global.css`** — DS-1, DS-2.
 - **Migrations** — D1, D2, D3, F2, F4, U6, U8, AT-1, all with distinct timestamps. Never two sessions altering `tasks` at once: D1, D2 and D3 are sequential for that reason.
 
+## Brand system · [`.design/brand/BRAND_BRIEF.md`](../.design/brand/BRAND_BRIEF.md) (§16)
+
+> Planned 2026-10-08 (PR #274). Maciej makes every brand call; agents never edit `brand/masters/`. **BRAND-1 supplies TX-1's logo PNGs** (`public/email/`), so TX-1 takes them instead of rasterising its own. BRAND-0 is design work by Maciej; every later block re-exports when it lands.
+
+- [ ] **BRAND-0 — Redraw the masters (mark at 45° from one stroke, wordmark A, lockup spacing, small master)** · deps: — · *Maciej*
+- [ ] **BRAND-2 — App touch-points (initials default avatar, Pilat out of the picker, dead fonts, staging favicon)** · deps: BRAND-1
+- [ ] **BRAND-3 — The reveal animation (once per launch, reduced-motion fade, video intro)** · deps: BRAND-1
+- [ ] **BRAND-4 — Landing alignment (PR into `prod-landing`)** · deps: BRAND-1
+- [ ] **BRAND-5 — Press kit page + zip, social avatars and banners** · deps: BRAND-1
+- [ ] **BRAND-6 — Rendered brand page** · deps: BRAND-0
+
 ## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
 
 > Planned 2026-10-08. Ratified copy + look: [`.design/transactional-email/email-set.html`](../.design/transactional-email/email-set.html). **TX-1 → TX-4 is the gate for sending the first waitlist invites** (Q57). After TX-3: TX-5 ∥ TX-8 ∥ TX-9a; TX-7 after TX-4; TX-6 after TX-5; TX-9b after TX-4 + TX-9a; TX-10 after TX-8. Every block has prod steps (migration round trip + apply, function deploy with Maciej's OK, and for TX-2/TX-4 a dashboard checklist Maciej runs). Shared files: `supabase/migrations/*` (distinct timestamps), `_shared/email/templates/index.ts`, `docs/email-runbook.md`.
 
-- [ ] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo PNGs, `EMAIL_KINDS`)** · deps: —
-- [ ] **TX-2 — Sign-in codes on Resend (Send Email Hook, `email_outbox` log, 10-min codes, resend countdown)** · deps: TX-1
+- [ ] **TX-2 — Sign-in codes on Resend (Send Email Hook, `email_outbox` log, 10-min codes, resend countdown)** · deps: TX-1, BRAND-1's email exports deployed to app.moduo.app/email (check all four files, `lockup-{light,dark}@2x.png` at 192 × 44 and `mark-{light,dark}@2x.png` at 26 × 26, each answering `content-type: image/png`; until then the URLs serve the app's HTML and emails show a broken image)
 - [ ] **TX-3 — Outbox worker + deliverability (enqueue/cancel, pg_cron + pg_net, retries, suppression webhook, purge, ops alert)** · deps: TX-2
 - [ ] **TX-4 — Invite-only gate + waitlist invite from the dashboard (before-user-created hook, B1)** · deps: TX-3
 - [ ] **TX-5 — Booking emails (C1–C5, .ics, host bell, booking page copy)** · deps: TX-3 (booking origin fix landed in PR #250)
@@ -173,6 +182,8 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **TX-9a — Welcome + trial emails (D1–D3, onboarding 14-day copy)** · deps: TX-3
 - [ ] **TX-9b — Founder access grants (D4, D5; retire the coupon tool)** · deps: TX-4, TX-9a
 - [ ] **TX-10 — Build updates + announcements (B2, E1, E2, `news.moduo.app`, the `moduo.app/email` page)** · deps: TX-8
+
+_Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 ## Running sessions & parallelism
 

@@ -209,8 +209,14 @@ describe("NavRow", () => {
         <NavRow label="Source" dragging />
       </>,
     );
-    expect(rowOf(main("Target")).dataset.dropTarget).toBe("true");
+    const target = rowOf(main("Target"));
+    expect(target.dataset.dropTarget).toBe("true");
     expect(rowOf(main("Source")).dataset.dragging).toBe("true");
+    // DS-4's recipes; the drop target's hover fill replaces the row's own hover.
+    expect(target.className).toContain("ring-primary/60");
+    expect(target.className).toContain("hover:bg-state-active");
+    expect(target.className).not.toContain("hover:bg-state-hover");
+    expect(rowOf(main("Source")).className).toContain("opacity-40");
   });
 
   it("activates on click anywhere on the row through its main button", () => {

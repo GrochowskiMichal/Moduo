@@ -17,6 +17,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "./context-menu";
+import { DRAG_SOURCE, DROP_TARGET } from "./drag-visuals";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -270,8 +271,10 @@ function NavRow({
         current
           ? "bg-state-active text-foreground"
           : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
-        dropTarget && "bg-state-active text-foreground ring-1 ring-inset ring-primary/60",
-        dragging && "opacity-50",
+        // DS-4's shared drag look; after the row's own classes so its hover:
+        // copy replaces the row's hover (the dragged overlay passes the pointer through).
+        dropTarget && [DROP_TARGET, "text-foreground"],
+        dragging && DRAG_SOURCE,
         className,
       )}
       {...props}
