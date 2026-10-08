@@ -607,7 +607,7 @@ export function BookPage() {
                         "transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         choice === chosen
                           ? SELECTED_OPTION
-                          : "border-border hover:border-foreground",
+                          : "border-border hover:border-foreground/30",
                       )}
                     >
                       <span className="font-sans text-xl text-foreground">
