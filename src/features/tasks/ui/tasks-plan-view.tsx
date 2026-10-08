@@ -12,6 +12,7 @@ import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
+import { focusNavRow } from "../../../components/ui/nav-row";
 import {
   asDragPayload,
   asDropLinkTarget,
@@ -31,7 +32,7 @@ import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { isDrifted, type Task } from "../model";
 import { resolveTasksDeepLink } from "../search";
 import { sanitizeTimelineZoom, type TimelineZoom } from "../timeline-geometry";
-import { BucketRail, type TasksMode } from "./bucket-rail";
+import { BucketRail, parseCollapsedSections, type TasksMode } from "./bucket-rail";
 import { CaptureModal } from "./capture-modal";
 import { pointerFirstCollision, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
@@ -103,8 +104,23 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
     sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
   );
+  // Rail sections the user collapsed stay collapsed (tasks-v2 §11).
+  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(() =>
+    parseCollapsedSections(readLS(workspaceId, "collapsedSections")),
+  );
+  const toggleSection = useCallback((name: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [triageBucketId, setTriageBucketId] = useState<string | null>(null);
+  // Triage opens from a rail row and has no trigger to hand focus back to.
+  const railNavRef = useRef<HTMLElement | null>(null);
+  const triageFromRef = useRef<string | null>(null);
   // Committing a blocked task offers its unblocked frontier first (spec §5c).
   const [frontierOfferTaskId, setFrontierOfferTaskId] = useState<string | null>(null);
   // Task-level selection (distinct from `selection`, which is the bucket scope).
@@ -208,6 +224,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   useEffect(() => writeLS(workspaceId, "groupBy", groupBy), [workspaceId, groupBy]);
   useEffect(() => writeLS(workspaceId, "boardGroupBy", boardGroupBy), [workspaceId, boardGroupBy]);
   useEffect(() => writeLS(workspaceId, "timelineZoom", timelineZoom), [workspaceId, timelineZoom]);
+  useEffect(
+    () => writeLS(workspaceId, "collapsedSections", JSON.stringify([...collapsedSections])),
+    [workspaceId, collapsedSections],
+  );
 
   // Remember the last concrete bucket scope (never "all" / "today") so the next
   // open can land back on it (spec §9.2).
@@ -410,10 +430,16 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
       onCreateBucket={api.createBucket}
       onRenameBucket={api.renameBucket}
       onDeleteBucket={api.deleteBucket}
-      onTriageBucket={setTriageBucketId}
+      onTriageBucket={(id) => {
+        triageFromRef.current = id;
+        setTriageBucketId(id);
+      }}
       timeBlockByBucket={timeBlocksByBucket}
       onSetTimeBlock={api.setTimeBlock}
       onSetBucketGroup={api.setBucketGroup}
+      collapsedSections={collapsedSections}
+      onToggleSection={toggleSection}
+      navRef={railNavRef}
     />
   );
 
@@ -812,6 +838,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         onReschedule={(id, days) => api.rescheduleScheduledAt(id, days)}
         onArchive={api.archiveTask}
         onIgnore={api.unscheduleTask}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          focusNavRow(railNavRef.current, triageFromRef.current);
+        }}
       />
       <FrontierOfferDialog
         open={frontierOfferTaskId !== null}

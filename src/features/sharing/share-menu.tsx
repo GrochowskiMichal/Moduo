@@ -8,7 +8,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -58,6 +63,9 @@ export function ShareMenu({
   inheritsFromParent = false,
   label = "Share",
   defaultOpen = false,
+  anchor = "trigger",
+  onOpenChange,
+  onCloseAutoFocus,
 }: {
   resourceType: string;
   resourceId: string;
@@ -70,6 +78,15 @@ export function ShareMenu({
   inheritsFromParent?: boolean;
   label?: string;
   defaultOpen?: boolean;
+  /**
+   * `parent` opens from a menu item instead of its own button: no trigger is
+   * drawn, and the popover anchors to the nearest positioned ancestor (a rail
+   * row), so the row keeps its layout.
+   */
+  anchor?: "trigger" | "parent";
+  onOpenChange?: (open: boolean) => void;
+  /** Where focus goes on close (there is no trigger to return to with `anchor="parent"`). */
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const others = members.filter((m) => m.userId !== selfUserId);
   const [open, setOpen] = useState(defaultOpen);
@@ -169,20 +186,31 @@ export function ShareMenu({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
+        onOpenChange?.(next);
         if (next) void refresh();
       }}
     >
-      <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" aria-label={label}>
-          {shared || inheritsFromParent ? (
-            <Users className="size-icon-sm" aria-hidden />
-          ) : (
-            <Lock className="size-icon-sm" aria-hidden />
-          )}
-          {label}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="flex w-72 flex-col gap-3">
+      {anchor === "parent" ? (
+        <PopoverAnchor asChild>
+          <span aria-hidden className="pointer-events-none absolute inset-0" />
+        </PopoverAnchor>
+      ) : (
+        <PopoverTrigger asChild>
+          <Button type="button" variant="ghost" size="sm" aria-label={label}>
+            {shared || inheritsFromParent ? (
+              <Users className="size-icon-sm" aria-hidden />
+            ) : (
+              <Lock className="size-icon-sm" aria-hidden />
+            )}
+            {label}
+          </Button>
+        </PopoverTrigger>
+      )}
+      <PopoverContent
+        align="end"
+        className="flex w-72 flex-col gap-3"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <p className="font-display text-base">Who can open this</p>
         {inheritsFromParent ? (
           <p className="text-xs text-muted-foreground">
