@@ -13,7 +13,7 @@ Numbered decisions from the 2026-10-08 brand grilling session. The numbers match
 6. "Moduo" in running text, titles, legal and subjects. Never MODUO, "Moduo App" or "Moduo AI".
 7. Lowercase "moduo" only inside the logo artwork.
 8. **The name story ("mod + duo, sharing the d") is not official.** It stays as landing content on the footer plate and isn't repeated in press, About or the app.
-9. ❓ **Pronunciation.** Maciej: in Polish "moduo", "modziuou" and "moduou" all work for us; asked for a direction. **Recommended:** "mo + duo", stress on *du*, said however your language says "duo". English *mo-DOO-oh*; Polish "moduo"/"moduou" (and "modziuou" is the *dyoo* way of saying duo, also right); Japanese **モデュオ**. Awaiting confirmation of the rule and the katakana.
+9. **Pronunciation: "mo + duo", stress on *du***, said however your language says "duo". English *mo-DOO-oh*; Polish "moduo"/"moduou" ("modziuou" is the *dyoo* way of saying duo, also right); Japanese **モデュオ**. Never *MOJ-oo-oh* in our own material, but nobody gets corrected. (Confirmed 2026-10-08.)
 10. Handles `moduo_app` where renaming is possible; display name "Moduo".
 
 ## C. The mark

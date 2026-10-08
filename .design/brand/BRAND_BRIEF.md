@@ -1,6 +1,6 @@
 # Moduo brand system: brief and plan
 
-> **Status:** planned 2026-10-08 in a grilling session with Maciej (designer, sole decision-maker on brand). Every rule here traces to a numbered decision in [DECISIONS.md](./DECISIONS.md); the numbers in brackets, like (18), point there. **Open:** ❓9 (pronunciation + Japanese spelling) and ❓40 (where pink may still live). **In progress:** Maciej is redrawing the mark and wordmark masters (BRAND-0); everything downstream is generated from them, so it can be built now and re-exported later.
+> **Status:** planned 2026-10-08 in a grilling session with Maciej (designer, sole decision-maker on brand). Every rule here traces to a numbered decision in [DECISIONS.md](./DECISIONS.md); the numbers in brackets, like (18), point there. **Open:** ❓40 (the AI dot and where pink may still live). **In progress:** Maciej is redrawing the mark and wordmark masters (BRAND-0); everything downstream is generated from them, so it can be built now and re-exported later.
 >
 > **Authority.** This file governs everything outside the app (landing, emails, social, press, store listings, decks) and, inside the app, only the logo, the app icon, the AI dot and the voice (3). The app UI stays under [docs/DESIGN_SYSTEM.md](../../docs/DESIGN_SYSTEM.md), [docs/DESIGN_RULES.md](../../docs/DESIGN_RULES.md) and [src/styles/tokens.css](../../src/styles/tokens.css). Values live in `tokens.css`; this file names them and says where they may appear. If this file and the token file disagree on a value, the token file wins and this file gets fixed.
 
@@ -34,9 +34,9 @@
 
 - **The name story is not an official brand story** (8). "mod + duo, sharing the d" stays on the landing's footer plate as landing content. It is not repeated in the press kit, About, or the app.
 - **Handles:** `moduo_app` everywhere renaming is possible; display name "Moduo" (10). X today is `@Moduo_App` (same handle, X ignores case; change the display casing only).
-- **Pronunciation ❓9.** Recommended rule: **"mo + duo", stress on "du"**, said however your language says "duo".
+- **Pronunciation (9):** **"mo + duo", stress on "du"**, said however your language says "duo".
   - English: *mo-DOO-oh*. Polish: "moduo" read naturally (Polish penultimate stress lands on *du*); your "moduou" is the same sound. "modziuou" is the British/Japanese way of saying *duo* (*dyoo*) and is also right.
-  - Japanese: **モデュオ** (mo-dyu-o), which reuses the existing loanword デュオ (*duo*). Recommended because you're moving to Japan before release: the katakana spelling becomes a brand asset (business cards, a Japanese store listing) and pins the sound.
+  - Japanese: **モデュオ** (mo-dyu-o), reusing the loanword デュオ (*duo*). The katakana spelling is a brand asset (business cards, a Japanese store listing) since the founders move to Japan before release.
   - Don't correct people who say *MOJ-oo-oh* (as in "module"). Never use it in our own videos.
 
 ---
@@ -287,7 +287,7 @@ Already compatible: light-first, mono, Geist with system fallback, weight 300 on
 A page at **moduo.app/press** (the landing footer's "Press kit · Soon" link) plus one zip:
 - Logo pack: mark, lockup, wordmark. SVG and PNG, Paper and Ink, on transparent.
 - App icon (1024 PNG).
-- Boilerplate (one line + paragraph), the brand line, pronunciation (once ❓9 is settled).
+- Boilerplate (one line + paragraph), the brand line, pronunciation, katakana モデュオ.
 - Founders: names, photos.
 - Usage rules on one page: clear space, minimum sizes, misuse.
 - Contact: hello@moduo.app.
