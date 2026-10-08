@@ -15,6 +15,15 @@ type UndoToastOptions = {
   /** Runs when the user clicks Undo. Do the restore (and your own error toast) here. */
   onUndo: () => void;
   /**
+   * Runs once if the toast closes WITHOUT Undo: it timed out (sonner holds the
+   * clock while the toasts are hovered or the window is hidden) or was swiped
+   * or dismissed away. The seam for a deferred commit — hold the server write
+   * until Undo is off screen, so Undo never races a write that already landed.
+   * The `danger` escalation dismisses the toast, so it commits too — after the
+   * escalation runs (sonner applies a dismiss on its next render).
+   */
+  onCommit?: () => void;
+  /**
    * An optional destructive escalation ("Delete the tasks too") rendered as a
    * quiet destructive text link in the toast BODY — never in sonner's `cancel`
    * slot, where a destructive verb reads as the dismiss button.
@@ -24,6 +33,14 @@ type UndoToastOptions = {
 
 /** Neutral toast + 8s Undo — returns the toast id. */
 export function undoToast(label: string, opts: UndoToastOptions): string | number {
+  // With `onCommit`, the toast settles exactly once: Undo, or closing → commit.
+  let settled = false;
+  const settle = (run: () => void) => () => {
+    if (settled) return;
+    settled = true;
+    run();
+  };
+  const commit = opts.onCommit ? settle(opts.onCommit) : undefined;
   // `toastId` is referenced only inside the danger onClick (which runs at click
   // time, after toast() has returned) — so the const is always initialized by
   // the time the closure reads it.
@@ -50,7 +67,8 @@ export function undoToast(label: string, opts: UndoToastOptions): string | numbe
     ) : (
       opts.description
     ),
-    action: { label: "Undo", onClick: opts.onUndo },
+    action: { label: "Undo", onClick: commit ? settle(opts.onUndo) : opts.onUndo },
+    ...(commit ? { onAutoClose: commit, onDismiss: commit } : {}),
   });
   return toastId;
 }
