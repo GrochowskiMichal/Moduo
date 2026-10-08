@@ -243,7 +243,7 @@ export function NoteTreeSidebar(props: Props) {
           </div>
         </div>
       ) : null}
-      <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 pb-6">
+      <div className="pane-scroll scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 pb-6">
         {searchQuery.trim() ? (
           searching && searchResults.length === 0 ? (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">Searching…</p>

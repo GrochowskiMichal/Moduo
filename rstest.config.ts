@@ -36,6 +36,7 @@ export default defineConfig({
     "supabase/functions/_shared/*.test.ts",
     // The MCP connector's own tests mock its esm.sh imports (Deno-only).
     "supabase/functions/moduo-mcp/**/*.test.ts",
+    "supabase/functions/send-workspace-invite/*.test.ts",
   ],
   globals: true,
   setupFiles: ["./rstest.setup.ts"],

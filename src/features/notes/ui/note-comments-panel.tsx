@@ -225,7 +225,7 @@ export function NoteCommentsPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto scrollbar-thin pb-3">
+      <div className="pane-scroll min-h-0 flex-1 space-y-3 overflow-y-auto scrollbar-thin pb-3">
         {loading ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
         ) : comments.length === 0 ? (

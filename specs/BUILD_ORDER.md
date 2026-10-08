@@ -110,7 +110,6 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 - [ ] **TV-Q1 — Quick fixes** ✅ · tasks-v2 block 1 · deps: — · lane tasks-ui · ⌘K/⌘⇧K no longer swallowed by the list, DnD activator fix, no bucket pill where implied, delete-bucket confirm + Undo, shortcut sheet ⌘1–7
 - [ ] **TV-F1 — Focus engine (wall-clock, persisted, away, notifications)** ✅ · tasks-v2 block 2 · deps: — · lane focus
-- [ ] **DS-1 — State tokens + global scrollbars + Storybook appearance** ✅ · design-state-layer block 1 · deps: — · lane design
 - [ ] **TV-D1 — Safer saves + assignee data** ✅ · tasks-v2 block 3 · deps: — · lane data · migration (expand only; shims for old desktop builds) — round-trip, then apply to prod in-session
 - [ ] **AT-1 — Attachments storage, limits, trash** ✅ · attachments block 1 · deps: — · lane attachments · migration + `purge-deleted` Edge Function; confirm the hosted upload limit ≥ 500 MB
 - [ ] **DS-2 — Primitives on the state layer + tint-only selection** · design-state-layer block 2 · deps: DS-1 · lane design · cross-module visual pass (all modules)
@@ -139,6 +138,8 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] 🔴 **TV-D7 — Contract cleanup (drop legacy columns, view, shims, MCP aliases)** · tasks-v2 block 21 · deps: all TV-* above + ≥2 desktop releases and 14 days after TV-D3 ships
 - [ ] **GR-0 — `/s1` the app-wide reference grammar (`@` / `#` / `/`)** · own spec, not written yet · deps: — · `#tag` in text = Link (decided 2026-10-08)
 
+_Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
+
 ### Tasks v2 lanes (parallel once merged into `maciej`)
 
 | Once merged into `maciej` | Ready to run in parallel | Width |
@@ -159,6 +160,22 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - **`bucket-rail.tsx`** — Q1, DS-3, U6.
 - **`tokens.css` / `global.css`** — DS-1, DS-2.
 - **Migrations** — D1, D2, D3, F2, F4, U6, U8, AT-1, all with distinct timestamps. Never two sessions altering `tasks` at once: D1, D2 and D3 are sequential for that reason.
+
+## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
+
+> Planned 2026-10-08. Ratified copy + look: [`.design/transactional-email/email-set.html`](../.design/transactional-email/email-set.html). **TX-1 → TX-4 is the gate for sending the first waitlist invites** (Q57). After TX-3: TX-5 ∥ TX-8 ∥ TX-9a; TX-7 after TX-4; TX-6 after TX-5; TX-9b after TX-4 + TX-9a; TX-10 after TX-8. Every block has prod steps (migration round trip + apply, function deploy with Maciej's OK, and for TX-2/TX-4 a dashboard checklist Maciej runs). Shared files: `supabase/migrations/*` (distinct timestamps), `_shared/email/templates/index.ts`, `docs/email-runbook.md`.
+
+- [ ] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo PNGs, `EMAIL_KINDS`)** · deps: —
+- [ ] **TX-2 — Sign-in codes on Resend (Send Email Hook, `email_outbox` log, 10-min codes, resend countdown)** · deps: TX-1
+- [ ] **TX-3 — Outbox worker + deliverability (enqueue/cancel, pg_cron + pg_net, retries, suppression webhook, purge, ops alert)** · deps: TX-2
+- [ ] **TX-4 — Invite-only gate + waitlist invite from the dashboard (before-user-created hook, B1)** · deps: TX-3
+- [ ] **TX-5 — Booking emails (C1–C5, .ics, host bell, booking page copy)** · deps: TX-3 (booking origin fix landed in PR #250)
+- [ ] **TX-6 — Booking reminders + host-side cancel (C6, C7, per-link "Remind guests")** · deps: TX-5
+- [ ] **TX-7 — Workspace emails (B3–B5, invite only for its address, 20/day cap, pending-join fix; retire `send-workspace-invite`)** · deps: TX-4
+- [ ] **TX-8 — Account deleted email + Settings → Email preferences** · deps: TX-3
+- [ ] **TX-9a — Welcome + trial emails (D1–D3, onboarding 14-day copy)** · deps: TX-3
+- [ ] **TX-9b — Founder access grants (D4, D5; retire the coupon tool)** · deps: TX-4, TX-9a
+- [ ] **TX-10 — Build updates + announcements (B2, E1, E2, `news.moduo.app`, the `moduo.app/email` page)** · deps: TX-8
 
 ## Running sessions & parallelism
 
@@ -208,7 +225,7 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 
 ### Lane: alpha — make it sendable (goal 2)
 
-- [ ] 🔴 **`/s1 ALPHA` — Alpha launch plan** · deps: — · **NOT DoR-ready — needs `/s1`, and several answers only the designer has.** A friend currently **cannot obtain the app at all**: there is **no web deploy** (no Vercel/Netlify/Docker config anywhere; `PUBLIC_WEB_ORIGIN` is empty, so invite links and `/p/<token>` share links point at `localhost`), and the macOS build is signed with an **Apple *Development*** certificate with no notarization and no updater, so Gatekeeper refuses it on anyone else's Mac. Beyond distribution: the trial is 7 days and then the paywall hard-blocks, with Stripe in **test mode**; **invites are gated on the Team tier while trials provision Pro**, so friends can't be invited at all; email OTP runs on Supabase's default sender (low hourly cap, unverified — the cheapest way to make the whole alpha look broken); and the invite→join→redeem loop has **never been run by two humans**. Decisions needed: hosting target + domain, trial length / comping for alpha, whether to drop the Team gate for alpha, Resend (or similar) for transactional email, Developer ID cert + notarization (**start early — it has lead time**), and error monitoring (`posthog-js` is a dependency but unwired).
+- [ ] 🔴 **`/s1 ALPHA` — Alpha launch plan** · deps: — · **NOT DoR-ready — needs `/s1`, and several answers only the designer has.** A friend currently **cannot obtain the app at all**: there is **no web deploy** (no Vercel/Netlify/Docker config anywhere; `PUBLIC_WEB_ORIGIN` is empty, so invite links and `/p/<token>` share links point at `localhost`), and the macOS build is signed with an **Apple *Development*** certificate with no notarization and no updater, so Gatekeeper refuses it on anyone else's Mac. Beyond distribution: the trial is 7 days and then the paywall hard-blocks, with Stripe in **test mode**; **invites are gated on the Team tier while trials provision Pro**, so friends can't be invited at all; email OTP runs through custom SMTP on Mike's Hostinger mailbox with a 30-per-hour project cap (corrected 2026-10-08 from a live config read; the cheapest way to make the whole alpha look broken — now planned in [`transactional-email.md`](./transactional-email.md) TX-2); and the invite→join→redeem loop has **never been run by two humans**. Decisions needed: hosting target + domain, trial length / comping for alpha, whether to drop the Team gate for alpha, Resend (or similar) for transactional email, Developer ID cert + notarization (**start early — it has lead time**), and error monitoring (`posthog-js` is a dependency but unwired).
 - [ ] **DF-15 — Home first-run composition** *(existing block, see Wave C)* · **needs the designer's look-approval on the draft** — the only remaining block that literally cannot complete without you.
 - [~] **PRIV-1 — Account deletion erases Stripe, Storage, booking links, integration tokens, waitlist** · deps: ~~DF-19h ✓~~ · _code + tests 2026-10-07 · `t/maciej/delete-account-erasure`_ (closes the five deletion gaps found 2026-10-07, plus private contact notes and legacy busy windows; Stripe still keeps invoices and our `stripe.*` mirror keeps a copy, see PRIV-2. Live check passed and `delete-account` v15 deployed 2026-10-07. **Open:** the throwaway-account pass in [docs/testing/t-maciej-delete-account-erasure.md](../docs/testing/t-maciej-delete-account-erasure.md) §2. Decision: [docs/decisions.md](../docs/decisions.md) 2026-10-07.)
 - [ ] **PRIV-2a — Erase what a deleted user leaves in other people's workspaces (SQL)** · deps: PRIV-1 (deployed as `delete-account` v15) · **DoR-ready** · spec [`specs/privacy-account-erasure.md`](privacy-account-erasure.md) block 1 · private items deleted with every trace, shared items to the owner or closest teammate, tasks unassigned, member-removal fixes; local probe, then prod apply + read-only preview with OK. Tier 2 review.
@@ -216,6 +233,18 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 - [ ] **PRIV-2c — Admin command for privacy@ deletion requests** · deps: PRIV-2a, PRIV-2b · **DoR-ready** · spec block 3 · designer creates `ACCOUNT_ADMIN_SECRET`. Tier 2 review.
 - [ ] **PRIV-2d — Privacy policy wording** · deps: — · **DoR-ready** · spec block 4 + appendix · landing branch flow; Mike redeploys Vercel.
 - [ ] **PRIV-3 — Erase a person's PostHog analytics on account deletion and when they switch analytics off** · deps: PRIV-1 · **Do before setting `PUBLIC_POSTHOG_KEY` on a live build (recommended).** App analytics ([src/lib/analytics.ts](../src/lib/analytics.ts), opt-in) are keyed by the Supabase user id, and `$identify` creates a PostHog person. Today nothing deletes them: `delete-account`'s erasure steps (`supabase/functions/_shared/account-erasure.ts`) skip PostHog, and switching analytics off only stops collection. The privacy policy (GrochowskiMichal/Moduo#232) says deletion is on request via privacy@moduo.app until this lands; update it to "automatic" when it does. Add a `posthog` erasure step that deletes the person and their events by distinct id. That needs a PostHog personal API key with person-delete scope, stored as a Supabase secret (Maciej creates it in PostHog), and it's a Tier-2 path (`delete-account`): `/code-review ultra` + `/claude-security`. Withdrawal needs a small signed-in endpoint doing the same, called from `setAnalyticsConsent(…, "denied")`. Context: [docs/decisions/permissions.md](../docs/decisions/permissions.md) 2026-10-07.
+
+## Moduo for Claude Code — My tasks, the queue, Focus · [`specs/moduo-for-claude-code.md`](./moduo-for-claude-code.md)
+
+> A Claude Code mod over Moduo's own connector (dogfoods `moduo-mcp`). Two lanes: connector (MCC-1 → 2 → 3, Tier 2, serialized: each adds a migration and both edit `modules/tasks.ts`) and mod (MCC-4 after MCC-1). Mod blocks' done gate adds `claude plugin test tools/claude-plugins/moduo-tasks`.
+
+- [ ] **MCC-1 — Connector: mine, task shape, focus settings** · deps: — · `assignee` filter, `offset` paging, `assignee_id`/`subtask_count`, top-level + bucket order, `tasks_focus_settings`; tool catalog in `docs/moduo-mcp-connector.md`; pure helpers in `_shared/tasks-connector.ts` with tests; redeploy `moduo-mcp`. Tier 2.
+- [ ] **MCC-2 — Connector: reorder queue + log time** · deps: MCC-1 · migration: `tasks_op_reorder_queue`, `tasks_op_log_time`; manifest entries; `tasks_reorder_queue`, `tasks_log_time` tools; connector doc updated; Supabase-branch round-trip; migration then redeploy. Tier 2.
+- [ ] **MCC-3 — Connector: create task** · deps: MCC-2 · migration: `tasks_op_create` (Inbox default, commit option); `tasks_create` tool (due date as a local-midnight timestamp); connector doc's capture note updated; round-trip; redeploy. Tier 2.
+- [ ] **MCC-4 — Mod: My tasks panel (read)** · deps: MCC-1 · `tools/claude-plugins/moduo-tasks`: key + endpoint settings, connector client + error mapping, `/mine` panel (filters, buckets, queue cards, done section, 60 s refresh), band line, reopen flag.
+- [ ] **MCC-5 — Mod: queue actions + work on this** · deps: MCC-2, MCC-4 · c / ⇧c / u / s / [ ] plus buttons; `⏎` fills the prompt, In progress on send.
+- [ ] **MCC-6 — Mod: Focus** · deps: MCC-5 · Focus panel, pomodoro/stopwatch from Moduo settings, band clock, toast + chime, time logging rules, done → next, Claude context.
+- [ ] **MCC-7 — Mod: quick capture** · deps: MCC-3, MCC-4 · `/task` parse (title, #bucket, today/tomorrow/weekday, !) + preview + create.
 
 ---
 
