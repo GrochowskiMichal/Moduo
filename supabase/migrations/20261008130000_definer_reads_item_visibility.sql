@@ -37,8 +37,11 @@
 -- note (title, body, CRDT state and update tail) into one the caller owns;
 -- notes_op_mention logged its title into an activity row the caller (as its
 -- actor) and the people named can read; share_assign_preview quoted the
--- bucket's name. Each now needs View on the item first, and answers as it
--- does for a missing one ("Note not found in this workspace." / NULL).
+-- bucket's name. Duplicate and mention now need View on the note, checked
+-- before the row is read, so a hidden note (trashed or not) answers exactly
+-- like a missing one ("Note not found in this workspace."). The preview names
+-- the bucket only to someone who can see it; someone with just a task in it
+-- still gets the warning without the name, anyone else gets NULL.
 --
 -- Signatures and return types are unchanged, so CREATE OR REPLACE keeps the
 -- grants; they are re-asserted below to match prod (authenticated +
@@ -194,12 +197,14 @@ DECLARE
   src public.notes;
   n public.notes;
 BEGIN
-  src := public.notes_op__guard_note(p_workspace_id, p_source_note_id);
   -- The copy carries the whole note, so only from a note the caller can open.
-  -- Same answer as a missing note.
-  IF NOT coalesce(public.can_access('note', src.id, 'view'), false) THEN
+  -- Checked before the guard reads (and locks) the row, so a hidden note gets
+  -- the same answer as a missing one, trashed or not.
+  PERFORM public.notes_op__guard(p_workspace_id);
+  IF NOT coalesce(public.can_access('note', p_source_note_id, 'view'), false) THEN
     RAISE EXCEPTION 'Note not found in this workspace.';
   END IF;
+  src := public.notes_op__guard_note(p_workspace_id, p_source_note_id);
   INSERT INTO public.notes
     (workspace_id, created_by, parent_id, title, icon, kind, position,
      doc_state, doc_version, body_text, body_md)
@@ -241,12 +246,14 @@ AS $$
 DECLARE
   n public.notes;
 BEGIN
-  n := public.notes_op__guard_note(p_workspace_id, p_note_id);
   -- The activity row carries the title, and both the caller (its actor) and
   -- the people named can read it, so only for a note the caller can open.
-  IF NOT coalesce(public.can_access('note', n.id, 'view'), false) THEN
+  -- Checked before the guard reads (and locks) the row, as in duplicate.
+  PERFORM public.notes_op__guard(p_workspace_id);
+  IF NOT coalesce(public.can_access('note', p_note_id, 'view'), false) THEN
     RAISE EXCEPTION 'Note not found in this workspace.';
   END IF;
+  n := public.notes_op__guard_note(p_workspace_id, p_note_id);
   IF p_mentioned_user_ids IS NULL OR array_length(p_mentioned_user_ids, 1) IS NULL THEN
     RETURN;
   END IF;
@@ -267,11 +274,23 @@ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_name text;
   v_person text;
+  v_sees_bucket boolean;
 BEGIN
-  -- The warning quotes the bucket's name: only for a bucket the caller can see.
-  IF NOT coalesce(public.can_access('bucket', p_bucket_id, 'view'), false) THEN RETURN NULL; END IF;
+  -- The warning quotes the bucket's name, so the name only for a bucket the
+  -- caller can see. Someone who only has a task in it (a task-level share)
+  -- still gets the warning, without the name; anyone else gets nothing.
+  v_sees_bucket := coalesce(public.can_access('bucket', p_bucket_id, 'view'), false);
+  IF NOT v_sees_bucket AND NOT EXISTS (
+    SELECT 1 FROM public.tasks t
+    WHERE t.bucket_id = p_bucket_id AND t.deleted_at IS NULL
+      AND public.can_access('task', t.id, 'view')
+  ) THEN
+    RETURN NULL;
+  END IF;
   IF public.can_access('bucket', p_bucket_id, 'view', p_user_id) THEN RETURN NULL; END IF;
-  SELECT name INTO v_name FROM public.buckets WHERE id = p_bucket_id;
+  IF v_sees_bucket THEN
+    SELECT name INTO v_name FROM public.buckets WHERE id = p_bucket_id;
+  END IF;
   SELECT coalesce(nullif(display_name, ''), 'They') INTO v_person FROM public.profiles WHERE id = p_user_id;
   RETURN coalesce(v_person, 'They') || ' can''t see "' || coalesce(v_name, 'this bucket') || '" — they''ll only see this task.';
 END;
