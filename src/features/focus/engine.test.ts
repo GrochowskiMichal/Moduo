@@ -23,7 +23,7 @@ import {
   toggleFocusPomodoro,
   toggleFocusRunning,
 } from "./engine";
-import { parseRecord } from "./engine-core";
+import { blankRecord, parseRecord, settleFlush, takeFlushBatch } from "./engine-core";
 import type { FocusPhaseNext } from "./phase-alert";
 
 const USER = "user-1";
@@ -825,6 +825,48 @@ describe("F1-7 — tracked time is never lost", () => {
 });
 
 // Two engines over one storage behave like two browser tabs.
+describe("saves and their keys (TV-D3)", () => {
+  const rec = (credit: object) => ({
+    ...blankRecord(Date.now()),
+    credits: {
+      t1: {
+        workspaceId: WS,
+        ms: 0,
+        inFlightMs: 0,
+        inFlightAt: null,
+        failedAt: null,
+        earnedAt: 1_000,
+        ...credit,
+      },
+    },
+  });
+
+  it("a late answer for a save that isn't the task's current one changes nothing", () => {
+    const r = rec({ inFlightMs: 30_000, inFlightAt: 5_000, flightKey: "new-key" });
+    const late = { taskId: "t1", seconds: 20, earnedAt: 1_000, key: "old-key", resend: false };
+    expect(settleFlush(r, late, "saved", 6_000)).toBe(r);
+    expect(settleFlush(r, late, "failed", 6_000)).toBe(r);
+    expect(settleFlush(r, late, "later", 6_000)).toBe(r);
+  });
+
+  it("a resend carries the end time the save had when it was first taken", () => {
+    const first = takeFlushBatch(rec({ ms: 30_000, earnedAt: 2_000 }), WS, 3_000, () => "k1");
+    expect(first.items).toEqual([
+      { taskId: "t1", seconds: 30, earnedAt: 2_000, key: "k1", resend: false },
+    ]);
+    // It fails; more time is earned on the task later.
+    const failed = settleFlush(first.rec, first.items[0]!, "failed", 4_000);
+    const moreTime = {
+      ...failed,
+      credits: { t1: { ...failed.credits.t1!, ms: 10_000, earnedAt: 9_000 } },
+    };
+    const again = takeFlushBatch(moreTime, WS, 10_000, () => "k2");
+    expect(again.items).toEqual([
+      { taskId: "t1", seconds: 30, earnedAt: 2_000, key: "k1", resend: true },
+    ]);
+  });
+});
+
 describe("focus engine — several tabs", () => {
   function memoryStorage() {
     const data = new Map<string, string>();

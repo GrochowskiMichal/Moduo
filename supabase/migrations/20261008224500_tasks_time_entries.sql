@@ -107,7 +107,21 @@ CREATE POLICY task_time_entries_read_own ON public.task_time_entries FOR SELECT 
 
 -- ── 3. Helpers ───────────────────────────────────────────────────────────────
 
--- A task's total: every entry but waiting, never below zero.
+-- The raw sum of a task's entries but waiting. Every writer keeps it at zero
+-- or more (adjustments stop at zero, an Undo is evened out), so later time
+-- always counts in full.
+CREATE OR REPLACE FUNCTION public.tasks_time__sum(p_task_id uuid)
+RETURNS bigint
+LANGUAGE sql
+STABLE
+SET search_path = public
+AS $$
+  SELECT coalesce(sum(e.seconds), 0)::bigint
+  FROM public.task_time_entries e
+  WHERE e.task_id = p_task_id AND e.kind <> 'waiting'
+$$;
+
+-- A task's total: that sum, never below zero.
 CREATE OR REPLACE FUNCTION public.tasks_time__total(p_task_id uuid)
 RETURNS integer
 LANGUAGE sql
@@ -264,9 +278,9 @@ BEGIN
     RETURNING id INTO v_entry;
   ELSIF v_action IN ('adjust', 'set_total') THEN
     IF v_action = 'adjust' THEN
-      v_seconds := greatest(p_seconds, -public.tasks_time__total(t.id));
+      v_seconds := greatest(p_seconds, -greatest(public.tasks_time__sum(t.id), 0))::integer;
     ELSE
-      v_seconds := p_seconds - public.tasks_time__total(t.id);
+      v_seconds := (p_seconds - public.tasks_time__sum(t.id))::integer;
     END IF;
     IF v_seconds = 0 THEN
       v_status := 'noop';
@@ -281,6 +295,12 @@ BEGIN
     RETURNING e.id INTO v_entry;
     IF v_entry IS NULL THEN
       v_status := 'noop';
+    ELSIF public.tasks_time__sum(t.id) < 0 THEN
+      -- Someone took time away after the adjustment being undone (typed 0,
+      -- say): the task stays at zero rather than owing time, so focus saved
+      -- later counts in full. The evening-out entry is nobody's to undo.
+      INSERT INTO public.task_time_entries (workspace_id, task_id, user_id, kind, seconds)
+      VALUES (t.workspace_id, t.id, NULL, 'adjustment', -public.tasks_time__sum(t.id));
     END IF;
   END IF;
 
@@ -393,7 +413,7 @@ BEGIN
     RETURN NEW;
   END IF;
   v_total := public.tasks_time__total(NEW.id);
-  v_delta := NEW.time_spent_seconds - v_total;
+  v_delta := (NEW.time_spent_seconds - public.tasks_time__sum(NEW.id))::integer;
   IF v_upsert AND v_delta < 0 THEN
     NEW.time_spent_seconds := v_total;
     RETURN NEW;
@@ -451,6 +471,7 @@ BEGIN
   END LOOP;
   -- Helpers and triggers: only the definer functions above call them.
   FOREACH fn IN ARRAY ARRAY[
+    'tasks_time__sum(uuid)',
     'tasks_time__total(uuid)',
     'tasks_time__mine(uuid, uuid)',
     'tasks_time__store_total(uuid)',

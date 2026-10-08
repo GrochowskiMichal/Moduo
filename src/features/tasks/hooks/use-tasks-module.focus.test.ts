@@ -264,6 +264,41 @@ describe("time corrections (D3-3)", () => {
   });
 });
 
+describe("time writes in order", () => {
+  it("one task's writes go one at a time, so the last total shown is the latest", async () => {
+    const { hook, runtime, server } = await mounted([task("t1", 100)]);
+    const real = runtime.tasks.trackTime;
+    const gates: Array<() => void> = [];
+    const sent: number[] = [];
+    // The first answer is slow; a second write mustn't overtake it.
+    (runtime.tasks as { trackTime: typeof real }).trackTime = (input) => {
+      sent.push(input.seconds ?? 0);
+      return new Promise((resolve) => {
+        gates.push(() => resolve(real(input)));
+      });
+    };
+    let first: Promise<unknown> = Promise.resolve();
+    let second: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      first = hook.result.current.logTimeAdjustment("t1", 300);
+      second = hook.result.current.logTimeAdjustment("t1", 300);
+      await Promise.resolve();
+    });
+    expect(sent).toEqual([300]); // the second waits for the first
+    await act(async () => {
+      gates[0]?.();
+      await first;
+    });
+    await waitFor(() => expect(sent).toEqual([300, 300]));
+    await act(async () => {
+      gates[1]?.();
+      await second;
+    });
+    expect(server.get("t1")?.timeSpentSeconds).toBe(700);
+    expect(totalOf(hook.result.current.tasks, "t1")).toBe(700);
+  });
+});
+
 // The sink as tasks-plan-view wires it: registered per workspace while /tasks
 // is mounted, drained again once the bundle has loaded.
 function useWiredSink(runtime: ModuoRuntime, workspaceId: string) {

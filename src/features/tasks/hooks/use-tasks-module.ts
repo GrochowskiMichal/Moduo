@@ -878,6 +878,9 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
     [patchTask],
   );
 
+  /** Each task's time writes in flight, chained (see `writeTime`). */
+  const timeChains = useRef(new Map<string, Promise<void>>());
+
   /**
    * Every time write (TV-D3): show it at once, send it through
    * `tasks_op_track_time`, then take the server's total, which already counts
@@ -889,6 +892,18 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const writeTime = useCallback(
     (id: string, delta: number, input: TrackTimeInput): Promise<TaskTimeResult> => {
       if (!runtime) return Promise.reject(new Error("Not signed in."));
+      // One task's time writes go one at a time, in order, so each answer's
+      // total includes every earlier write and the last one shown is the latest.
+      const previous = timeChains.current.get(id) ?? Promise.resolve();
+      const sent = previous.then(() => runtime.tasks.trackTime(input));
+      const settled = sent.then(
+        () => undefined,
+        () => undefined,
+      );
+      timeChains.current.set(id, settled);
+      void settled.then(() => {
+        if (timeChains.current.get(id) === settled) timeChains.current.delete(id);
+      });
       const before = bundle.tasks.find((t) => t.id === id)?.timeSpentSeconds;
       const shown = before === undefined ? undefined : Math.max(0, before + Math.round(delta));
       if (before !== undefined && shown !== before) patchTaskLocal(id, { timeSpentSeconds: shown });
@@ -901,7 +916,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
               : t,
           ),
         }));
-      return runtime.tasks.trackTime(input).then(
+      return sent.then(
         (result) => {
           if (result.totalSeconds === null) putBack();
           else patchTaskLocal(id, { timeSpentSeconds: result.totalSeconds });

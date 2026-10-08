@@ -18,6 +18,9 @@
 -- prints one PASS line per check and ends with "PASS: all". Two sessions
 -- writing at once is a separate shell check (docs/testing/t-maciej-tv-d3-time-entries.md).
 
+-- The seed captured timestamps as text in UTC; compare them the same way.
+SET timezone = 'UTC';
+
 GRANT USAGE ON SCHEMA probe TO anon, authenticated, service_role;
 
 -- One call of the op, as a person or key; the answer.
@@ -253,7 +256,25 @@ BEGIN
     'adjust: the clamped adjustment';
   r := probe.track('A', 'T1 ninety minutes', 'undo', p_entry => (r->>'entry_id')::uuid);
   ASSERT (r->>'total_seconds')::int = 5490, format('adjust: undo of the clamp: %s', r);
-  ASSERT probe.consistent('T1 ninety minutes') AND probe.consistent('T2 no time yet'), 'adjust: totals disagree';
+  -- Undo after someone typed 0: the task stays at 0 and doesn't owe time, so
+  -- the next focus counts in full and a typed value is reached exactly.
+  PERFORM probe.new_task('T11 undo after zero', 'A', 'A');
+  r := probe.track('A', 'T11 undo after zero', 'adjust', 900, 'ada-t11-long-01');
+  longer := (r->>'entry_id')::uuid;
+  PERFORM probe.track('B', 'T11 undo after zero', 'set_total', 0);
+  r := probe.track('A', 'T11 undo after zero', 'undo', p_entry => longer);
+  ASSERT r->>'status' = 'saved' AND (r->>'total_seconds')::int = 0, format('undo after a zero: %s', r);
+  ASSERT public.tasks_time__sum(probe.id('T11 undo after zero')) = 0, 'undo after a zero: the task owes time';
+  ASSERT NOT EXISTS (SELECT 1 FROM public.task_time_entries
+                     WHERE task_id = probe.id('T11 undo after zero') AND kind = 'adjustment' AND seconds > 0
+                       AND user_id IS NOT NULL),
+    'undo after a zero: the evening-out entry is someone''s to undo';
+  r := probe.track('A', 'T11 undo after zero', 'focus', 600, 'ada-t11-focus-1');
+  ASSERT (r->>'total_seconds')::int = 600, format('undo after a zero: later focus was swallowed: %s', r);
+  r := probe.track('B', 'T11 undo after zero', 'set_total', 1200);
+  ASSERT (r->>'total_seconds')::int = 1200, format('undo after a zero: a typed value: %s', r);
+  ASSERT probe.consistent('T1 ninety minutes') AND probe.consistent('T2 no time yet')
+     AND probe.consistent('T11 undo after zero'), 'adjust: totals disagree';
   RAISE NOTICE 'PASS adjust: a typed value is reached exactly; took-longer adds one adjustment and Undo removes exactly that one';
 END;
 $$;
@@ -468,7 +489,7 @@ BEGIN
     ASSERT has_function_privilege('service_role', 'public.' || fn, 'EXECUTE'), 'grants: service_role can''t call ' || fn;
   END LOOP;
   FOREACH fn IN ARRAY ARRAY[
-    'tasks_time__total(uuid)', 'tasks_time__mine(uuid, uuid)', 'tasks_time__store_total(uuid)',
+    'tasks_time__sum(uuid)', 'tasks_time__total(uuid)', 'tasks_time__mine(uuid, uuid)', 'tasks_time__store_total(uuid)',
     'tasks_time__answer(uuid, uuid, text, uuid)', 'tasks_time_legacy()', 'tasks_time_legacy_created()'
   ] LOOP
     ASSERT NOT has_function_privilege('anon', 'public.' || fn, 'EXECUTE'), 'grants: anon can call ' || fn;

@@ -81,6 +81,9 @@ export interface FocusCredit {
   inFlightAt: number | null;
   /** The save's idempotency key (TV-D3). Missing on records written before. */
   flightKey?: string | null;
+  /** When the seconds in that save were last earned: the stretch's end, kept
+   *  for every resend. */
+  flightEarnedAt?: number | null;
   /** When saving this task's time last failed; cleared once it's saved. */
   failedAt: number | null;
   /** When time was last added. A complete task list loaded after this that
@@ -233,6 +236,7 @@ function addCredit(
       inFlightMs: prev?.inFlightMs ?? 0,
       inFlightAt: prev?.inFlightAt ?? null,
       flightKey: prev?.flightKey ?? null,
+      flightEarnedAt: prev?.flightEarnedAt ?? null,
       failedAt: prev?.failedAt ?? null,
       earnedAt: Math.max(prev?.earnedAt ?? 0, at),
     },
@@ -531,7 +535,7 @@ export function takeFlushBatch(
       items.push({
         taskId,
         seconds: Math.round(c.inFlightMs / 1000),
-        earnedAt: c.earnedAt,
+        earnedAt: c.flightEarnedAt ?? c.earnedAt,
         key,
         resend: true,
       });
@@ -548,6 +552,7 @@ export function takeFlushBatch(
         inFlightMs: seconds * 1000,
         inFlightAt: now,
         flightKey: key,
+        flightEarnedAt: c.earnedAt,
       },
     };
     items.push({ taskId, seconds, earnedAt: c.earnedAt, key, resend: false });
@@ -581,7 +586,14 @@ export function settleFlush(
   if (c.inFlightMs <= 0 || (c.flightKey != null && c.flightKey !== item.key)) return r;
   const next: FocusCredit =
     outcome === "saved"
-      ? { ...c, inFlightMs: 0, inFlightAt: null, flightKey: null, failedAt: null }
+      ? {
+          ...c,
+          inFlightMs: 0,
+          inFlightAt: null,
+          flightKey: null,
+          flightEarnedAt: null,
+          failedAt: null,
+        }
       : {
           ...c,
           inFlightAt: null,
@@ -618,7 +630,14 @@ export function reviveDeadFlights(
     if (dead) {
       credits[taskId] = c.flightKey
         ? { ...c, inFlightAt: null }
-        : { ...c, ms: c.ms + c.inFlightMs, inFlightMs: 0, inFlightAt: null, flightKey: null };
+        : {
+            ...c,
+            ms: c.ms + c.inFlightMs,
+            inFlightMs: 0,
+            inFlightAt: null,
+            flightKey: null,
+            flightEarnedAt: null,
+          };
       changed = true;
     } else {
       credits[taskId] = c;
@@ -761,6 +780,7 @@ const recordSchema = z.object({
       inFlightMs: z.number().nonnegative(),
       inFlightAt: z.number().nullable(),
       flightKey: z.string().nullable().optional(),
+      flightEarnedAt: z.number().nullable().optional(),
       failedAt: z.number().nullable(),
       earnedAt: z.number(),
     }),

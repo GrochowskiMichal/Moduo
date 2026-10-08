@@ -5,6 +5,9 @@
 -- K), the way production held time until now: one absolute total per task,
 -- tasks.time_spent_seconds.
 
+-- Production runs in UTC; the probe compares these timestamps as text.
+SET timezone = 'UTC';
+
 DO $$
 BEGIN
   PERFORM probe.new_task('T1 ninety minutes', 'A', 'A');

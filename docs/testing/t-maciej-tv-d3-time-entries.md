@@ -16,6 +16,7 @@ No screen looks different in this block: totals read the same, and "you 50m" / "
 - [ ] **Do:** In the detail panel, type a Time value (e.g. 45 min) → **Expect:** the total is exactly 45m; one `adjustment` entry with the difference; typing 45 again adds nothing _(both)_
 - [ ] **Do:** In Focus → Timer options, press **+5m**, then **Set total** to 10 → **Expect:** +5m is one adjustment of 300; the total then reads 10m _(both)_
 - [ ] **Do:** In Calendar, triage a past block → **Took longer**, then **Undo** in the toast → **Expect:** "+Nm logged", then the total goes back exactly; the adjustment row is gone (time tracked on the task in between stays) _(web)_
+- [ ] **Do:** **Took longer** on a task, then (before Undo) type 0 in its Time field, then press **Undo** → **Expect:** the total stays 0, and focusing on it afterwards adds the full time _(web)_
 - [ ] **Do:** Calendar → focus on a task block for a minute, then stop → **Expect:** a `focus` entry, not an adjustment _(web)_
 
 ## Edge cases
@@ -26,6 +27,7 @@ No screen looks different in this block: totals read the same, and "you 50m" / "
 - [ ] **Do:** `rpc('tasks_time_totals', { p_workspace_id, p_since: <Monday> })` as two people → **Expect:** the same `total_seconds` per task for both; `my_seconds` is each one's own; legacy time never counts in `my_seconds_since` _(web devtools)_
 
 ## Old desktop builds (keep one pre-TV-D3 build installed)
+- [ ] **Do:** Once this is on `maciej`, rebuild and install the desktop app on every Mac you use (`bun run build:desktop --bundles app`) → **Expect:** focus saved from the desktop app shows up as `focus` entries with a `client_key` (an old build's saves arrive as adjustments without one) _(desktop)_
 - [ ] **Do:** In an old build, track focus time on a task → **Expect:** it saves; the server records the difference as your `adjustment`, and the total is what the old build wrote _(desktop)_
 - [ ] **Do:** In an old build (from before TV-D1), rename a task someone has just tracked time on (from a list loaded before their time) → **Expect:** the rename saves and their time stays (the stale lower total is ignored) _(desktop)_
 
