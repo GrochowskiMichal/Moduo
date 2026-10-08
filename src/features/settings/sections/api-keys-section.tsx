@@ -161,6 +161,8 @@ function KeyScopeFields({
 /** Who a key acts as, in words, and what that leaves it. */
 type KeyOwner = {
   actor: KeyActor | null;
+  /** False while the member list hasn't loaded: the creator's access isn't known yet. */
+  known: boolean;
   isMine: boolean;
   /** "you", a teammate's name, or a placeholder. */
   name: string;
@@ -194,8 +196,9 @@ function ApiKeyRow({
   onRevoke: () => void;
 }) {
   const scopes = toKeyScopes(apiKey.scopes);
-  // What it can do today: its scopes, capped by its creator's access.
-  const effective = effectiveScopes(scopes, owner.actor);
+  // What it can do today: its scopes, capped by its creator's access (or just
+  // its scopes while that access isn't known).
+  const effective = owner.known ? effectiveScopes(scopes, owner.actor) : scopes;
   const limited = !sameScopes(effective, scopes);
   const draftGrantsAccess = grantsAnyAccess(draft);
   const editButtonRef = useRef<HTMLButtonElement>(null);
@@ -400,17 +403,30 @@ export function ApiKeysSection() {
     if (!key.createdBy) {
       return {
         actor: null,
+        known: true,
         isMine: false,
         name: "its creator",
         line: "No creator on record, so it can't connect. Revoke it and make a new one.",
       };
     }
     if (key.createdBy === userId)
-      return { actor: me, isMine: true, name: "you", line: "Acts as you" };
+      return { actor: me, known: true, isMine: true, name: "you", line: "Acts as you" };
     const member = members.find((m) => m.userId === key.createdBy);
+    // A loaded member list always includes you, so an empty one hasn't loaded
+    // (or failed to): the creator is unknown, not gone.
+    if (!member && members.length === 0) {
+      return {
+        actor: null,
+        known: false,
+        isMine: false,
+        name: "a teammate",
+        line: "Acts as a teammate",
+      };
+    }
     if (!member) {
       return {
         actor: null,
+        known: true,
         isMine: false,
         name: "a former member",
         line: "Acts as a former member, so it has no access",
@@ -419,6 +435,7 @@ export function ApiKeysSection() {
     const name = member.displayName?.trim() || "a teammate";
     return {
       actor: { role: member.role, perms: member.perms },
+      known: true,
       isMine: false,
       name,
       line: `Acts as ${name}`,

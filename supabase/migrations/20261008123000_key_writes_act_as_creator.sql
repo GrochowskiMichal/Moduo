@@ -25,9 +25,11 @@
 --
 -- Bodies are the newest definitions, which db:reconcile shows match prod
 -- (noted per function). Only the attribution expressions change, plus the
--- author columns in comments_op_add and a contact-type check in
+-- author columns in comments_op_add, a contact-type check in
 -- contacts_op_link (it accepted any source type, so Contacts edit access
--- could link two unrelated items). Signatures are unchanged, so CREATE OR
+-- could link two unrelated items), and contacts_op_import matching only
+-- companies the importer can open (a same-named private company used to take
+-- the contact, which then exposed it). Signatures are unchanged, so CREATE OR
 -- REPLACE keeps every grant.
 
 ALTER TABLE public.comments
@@ -362,8 +364,14 @@ BEGIN
     v_company_id := NULL;
 
     IF v_company_nm IS NOT NULL THEN
+      -- New here: match only a company the importer can open. A teammate's
+      -- private company of the same name would otherwise take the contact,
+      -- and the contact would then show that company to the importer
+      -- (can_access 'company' grants View through any visible contact).
       SELECT id INTO v_company_id FROM public.companies
-        WHERE workspace_id = p_workspace_id AND deleted_at IS NULL AND lower(name) = lower(v_company_nm) LIMIT 1;
+        WHERE workspace_id = p_workspace_id AND deleted_at IS NULL AND lower(name) = lower(v_company_nm)
+          AND public.can_access('company', id, 'view', public.perm_actor_id())
+        LIMIT 1;
       IF v_company_id IS NULL THEN
         INSERT INTO public.companies (workspace_id, owner_id, name)
         VALUES (p_workspace_id, public.perm_actor_id(), v_company_nm) RETURNING id INTO v_company_id;

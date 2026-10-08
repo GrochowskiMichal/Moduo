@@ -322,6 +322,18 @@ describe("a key's row", () => {
     expect(within(keyRow("Old")).getByText(/can't connect/)).toBeTruthy();
   });
 
+  it("doesn't call a teammate's key dead while the member list hasn't loaded", async () => {
+    mocks.ws.current = { ...mocks.ws.current, members: [] };
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      storedKey({ tasks: "edit", notes: "view" }, { name: "Annas", createdBy: "u-anna" }),
+    ]);
+    renderSection();
+    await screen.findByText("Annas");
+    expect(within(keyRow("Annas")).getByText("Acts as a teammate")).toBeTruthy();
+    expect(within(keyRow("Annas")).getByText("Edit: Tasks · View: Notes")).toBeTruthy();
+    expect(within(keyRow("Annas")).queryByText(/former member/)).toBeNull();
+  });
+
   it("shows what a key can actually do: its scopes, capped by its creator", async () => {
     mocks.ws.current = { ...mocks.ws.current, members: [anna] };
     mocks.workspace.listApiKeys.mockResolvedValue([

@@ -3,7 +3,7 @@
 > Generated 2026-10-08 · branch `t/maciej/api-key-module-scopes` · **Live-verified:** partial.
 > - **UI:** the real `ApiKeysSection` was driven in the browser pane through a temporary harness (in-memory runtime, removed before commit), as owner and as a member: new-key caps, editing someone else's key, the save payload, and the "Acts as" lines. The app only offers emailed-code sign-in, so the signed-in screen itself is your pass.
 > - **Server, before the migrations:** a keyed write round-trip on prod (rolled back, nothing kept) ran every connector write op under a real key context. It found six broken writes (see Migrations).
-> - **Server, the migrations:** `20261008120000` ran on a throwaway local Postgres with a stub schema (40 cases). All four ran on a local replica of prod's schema (the recipe is at the end). The replica reproduced prod's bugs before the migrations and passed 24 cases after, re-run after the review fixes (contact links start only at a contact or a company; a key with no creator can only be lowered). Auto mode refused running migration DDL against prod, even rolled back.
+> - **Server, the migrations:** `20261008120000` ran on a throwaway local Postgres with a stub schema (40 cases). All four ran on a local replica of prod's schema (the recipe is at the end). The replica reproduced prod's bugs before the migrations and passed 26 cases after, re-run after the review fixes (contact links start only at a contact or a company; a key with no creator can only be lowered; an import no longer takes a teammate's private company by name). Auto mode refused running migration DDL against prod, even rolled back.
 > - **Connector:** 19 unit tests (`supabase/functions/moduo-mcp/key-scopes.test.ts`) run the real tool gating, reach checks and cross-module filters against an in-memory database. Each fix's test was checked to fail on the old code.
 > - **Not yet:** the connector redeploy and the prod apply (they wait for Maciej's go-ahead), then the same keyed round-trip on prod.
 >
@@ -38,6 +38,7 @@
 - [ ] **Do:** With Contacts = Edit and Links = None, call `contacts_delete` on a throwaway contact. → **Expect:** it succeeds (no Links scope needed). _(web)_
 - [ ] **Do:** Call a tool the key can't use. → **Expect:** "This API key can't use <tool>: it needs <Module>: Edit [and <Module>: Edit]. Change the key's access in Moduo → Settings → API keys." _(web)_
 - [ ] **Do:** With Contacts = Edit, call `contacts_link` with `contact_type: "task"`. → **Expect:** refused before anything is written (`contact_type` must be `contact` or `company`); the database refuses it too. _(web)_
+- [ ] **Do:** With Contacts = Edit, `contacts_import` a row whose `company` is the name of a teammate's private company. → **Expect:** the contact gets a new company of that name, owned by you; the teammate's company isn't attached and stays hidden from you. _(web)_
 - [ ] **Do:** With Links = Edit, call `links_delete` with a real link id written without hyphens. → **Expect:** "No link with that id in this workspace." and the link is still there. _(web)_
 - [ ] **Do:** With Tasks = View and Links = View in a workspace with many notes, call `links_search_entities` with no query. → **Expect:** your tasks come back (a full page when there are enough), not an empty list. _(web)_
 
@@ -46,6 +47,7 @@
 
 ## Edge cases
 - [ ] **Do:** Open a key made before this change (Tasks + Chat only). → **Expect:** summary "View: Tasks" (or "Edit: Tasks", plus Chat if set); Edit access shows the rest at None. _(both)_
+- [ ] **Do:** Open API keys while the member list is still loading (or fails to load). → **Expect:** a teammate's key reads "Acts as a teammate" with its stored access, never "former member" or "No access". _(both)_
 - [ ] **Do:** Switch workspace with Settings open. → **Expect:** the list reloads for the new workspace; no editor, secret banner or revoke dialog carries over; the new-key form resets. _(both)_
 - [ ] **Do:** A teammate with Email but no module edit rights removes one of their email threads from Moduo (in the app or via their key). → **Expect:** refused, "You don't have edit access to links in this workspace."; their key gets the same answer as they do. _(both)_
 
@@ -61,7 +63,7 @@
 - **MCP-1 leftovers, not part of this change:** `notes_append` / `notes_update` don't reach an already-materialized note's live editor (CRDT path); there's no MCP tool to create a task (the landing's "Add a task…" demo prompt can't happen over MCP today).
 - The client cap mirror reads Email from the member's tier (viewer → View, else Edit). `workspace_members.permissions_email` is unset for everyone today; if it's ever set, the server is still right and the screen may offer a level the server refuses with a clear error.
 - People can link or comment onto an item they can't open by id (the SQL ops guard the module, not the item). Keys can't any more (`assertReach`); the person-side gap predates this branch.
-- **Older privacy gap, not fixed here:** someone with Contacts edit (or their key) can give a new contact a teammate's private company id and then read that company, because `contacts_op_create` doesn't check `p_company_id` and `can_access('company')` grants View through any visible contact that points at it. Company ids are readable in `entity_links`. Same for a person and their key, so a key still never exceeds its creator. Fix: require `can_access('company', p_company_id, 'view')` in `contacts_op_create` and `contacts_op_update`.
+- **Older privacy gap, not fixed here:** someone with Contacts edit (or their key) can give a new contact a teammate's private company id and then read that company, because `contacts_op_create` doesn't check `p_company_id` and `can_access('company')` grants View through any visible contact that points at it. Company ids are readable in `entity_links`. Same for a person and their key, so a key still never exceeds its creator. Fix: require `can_access('company', p_company_id, 'view')` in `contacts_op_create` and `contacts_op_update` (spun off as its own task). The same leak by company *name* in `contacts_op_import` is fixed here, since this branch redefines that op.
 
 ## Recipe: verify migrations on a local replica (used here)
 1. `initdb --no-locale` with `LANG=C LC_ALL=C`, start on a free port with `-k /tmp` (a scratchpad socket path is too long), and check no other session's Postgres owns the port.
