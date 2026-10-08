@@ -67,7 +67,6 @@ All blocks done. Notes and blocks: [BUILD_LOG.md](./BUILD_LOG.md).
 Shared Zod 4 contracts + closed vocabularies. Wave 1 (tasks 1–4) landed on `t/mike/zod-enum-foundation` and is on `develop`. Wave 2–3 (tasks 5–12) continues on `t/mike/zod-enum-wave2`.
 
 ---
-- [ ] **LINT-1 — Biome back to green, then gated in CI** · deps: — · lane housekeeping · `bun run lint:js` reports 57 errors on develop (found 2026-10-07), so `bun run verify`, the block-done gate, fails for every session. Apply Biome's safe fixes (`bunx biome check --write`), fix the rest by hand (`noArrayIndexKey`, a11y in `workspace-switcher.tsx`/`tag-input.tsx`/`src/tw`), then add a `bun run lint:js` step to `.github/workflows/checks.yml`. Done when `bun run verify` and CI are green on the branch. See `docs/gotchas/workflow.md`.
 - [ ] **MCP-1 — Pre-alpha connector hardening** · deps: ~~the alpha feature set (post-Notes + Email + the Dashboard/**Mindmap** reworks)~~ → **DEPS MET as of 2026-07-29.** Notes ✅, Email ✅ (EM-1…EM-11), the Dashboard rework ✅ (Wave 6, DB-1…DB-8), and the **Mindmap rework was removed from alpha** that day, so MCP-1 no longer waits on it. Finance stays post-v1. **Nothing blocks it — buildable with no further planning.** (Still *designed* to run late: the redeploy picks up everything since the last one, so schedule it after the rest of Wave D.) · Redeploy `moduo-mcp` (picks up the calendar module + anything since the last deploy), then a **keyed round-trip per module** (view + edit scopes: tasks, links, contacts, calendar, notes, email — dashboard/mindmap expose no ops; finance is post-v1) against the hosted workspace — the api-key permission gotcha proved reads can pass while writes are silently dead, so every module's write path gets exercised with a real scoped key; fix findings; refresh `docs/moduo-mcp-connector.md`. *(Note: the 20260702170000 permission fix is already live server-side — the deployed connector's contacts/spine/tasks writes work today; the redeploy mainly adds the calendar tools.)*
 - [ ] **DESKTOP-1 — macOS updater + CI release (hands-off dogfood updates)** · deps: Wave-6 dashboard rebuild done + app "ready" (designer deferred 2026-07-09) · **macOS-first — Windows deprioritized** (~80–90% Mac usage). Today's loop is a local rebuild: `bun run build:desktop --bundles app` + drop-in replace `/Applications/Moduo.app` (Rust is cargo-cached, so frontend-only rebuilds are ~30s–2min; identifier `com.moduo.desktop` stable → data untouched). This block makes it hands-off: add `@tauri-apps/plugin-updater` + a signing keypair + a GitHub Actions **release** job on push to `maciej` (build the `.app`, sign the update, publish `latest.json` + bundle to Releases) so the app self-updates on launch. Also prune the dead `PUBLIC_*` stock-API secrets from [`windows-portable.yml`](../.github/workflows/windows-portable.yml) (widgets deleted in DB-2). **Later endgame** (separate, needs a deployed web app — `PUBLIC_WEB_ORIGIN` is empty today): point the desktop shell at the deployed web URL for **zero-rebuild** frontend updates (only Rust changes then need a build). Data-safety reminder for any of this: Supabase = truth, local redb = disposable cache, dashboard layout local-only **until DB-4**.
 
@@ -100,6 +99,65 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **PERM-6b — Contact groups list + share screen; merge moves links/activity and is scoped to the workspace; then re-enable the contact share bar** · deps: PERM-6
 
 _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
+
+## Tasks v2 — dogfood rework · [`specs/tasks-v2.md`](./tasks-v2.md) + [`specs/design-state-layer.md`](./design-state-layer.md) + [`specs/attachments.md`](./attachments.md)
+
+> **Planned 2026-10-07 (`/s1`, from [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md)).**
+> - **Land on `maciej` only:** no pushes or merges to `develop` until Maciej says so. Mike is rebuilding on `develop`, so this overrides the standing develop authorization for these blocks.
+> - **DoR status:** ✅ means ready now; the rest follow their dependencies. All designer calls are answered (2026-10-08).
+> - **Order:** top to bottom, every dep listed above its dependents. The lane table below shows what can run at once.
+
+- [ ] **TV-Q1 — Quick fixes** ✅ · tasks-v2 block 1 · deps: — · lane tasks-ui · ⌘K/⌘⇧K no longer swallowed by the list, DnD activator fix, no bucket pill where implied, delete-bucket confirm + Undo, shortcut sheet ⌘1–7
+- [ ] **TV-F1 — Focus engine (wall-clock, persisted, away, notifications)** ✅ · tasks-v2 block 2 · deps: — · lane focus
+- [ ] **DS-1 — State tokens + global scrollbars + Storybook appearance** ✅ · design-state-layer block 1 · deps: — · lane design
+- [ ] **TV-D1 — Safer saves + assignee data** ✅ · tasks-v2 block 3 · deps: — · lane data · migration (expand only; shims for old desktop builds) — round-trip, then apply to prod in-session
+- [ ] **AT-1 — Attachments storage, limits, trash** ✅ · attachments block 1 · deps: — · lane attachments · migration + `purge-deleted` Edge Function; confirm the hosted upload limit ≥ 500 MB
+- [ ] **DS-2 — Primitives on the state layer + tint-only selection** · design-state-layer block 2 · deps: DS-1 · lane design · cross-module visual pass (all modules)
+- [ ] **TV-D2 — Personal queue (data)** · tasks-v2 block 4 · deps: TV-D1 · lane data · migration + legacy op shims + MCP queue tools
+- [ ] **TV-D3 — Time entries** · tasks-v2 block 5 · deps: TV-D1, TV-F1 · lane data · migration + legacy backfill/shim
+- [ ] **TV-T1 — Shared tag store** · tasks-v2 block 6 · deps: TV-D1 · lane data
+- [ ] **DS-3 — NavRow + MetaCount (+ Tasks rail)** · design-state-layer block 3 · deps: DS-2, TV-Q1 · lane design
+- [ ] **DS-4 — FilterBar/Chip, DisplayMenu, drag visuals, view-prefs helper** · design-state-layer block 4 · deps: DS-2 · lane design
+- [ ] **TV-D4 — Queue & assignee in the UI (claims, My tasks)** · tasks-v2 block 7 · deps: TV-D2, DS-3 · lane tasks-ui
+- [ ] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
+- [ ] **TV-U1 — Rows, board, completed** · tasks-v2 block 9 · deps: DS-3, TV-D4 · lane tasks-ui
+- [ ] **TV-U3 — Detail panel + comments** · tasks-v2 block 10 · deps: DS-2, TV-D1, TV-D3 · lane tasks-ui
+- [ ] **TV-F2 — Queue run (line-up, run, Now/Up next, claims "is on this")** · tasks-v2 block 11 · deps: TV-F1, TV-D2, TV-D3, DS-2 · lane focus · migration (`focus_runs`)
+- [ ] **TV-F3 — Pomodoro per run, break, summary, empty, Home pomodoro widget** · tasks-v2 block 12 · deps: TV-F2 · lane focus
+- [ ] **TV-U2 — Toolbar, Filter, Display, search** · tasks-v2 block 13 · deps: DS-4, TV-U1, TV-D4 · lane tasks-ui
+- [ ] **TV-U4 — Drag and drop (reorder vs nest, sidebar drops, cross-group)** · tasks-v2 block 14 · deps: TV-U1, DS-4, TV-D4 · lane tasks-ui
+- [ ] **TV-U5 — Multi-select, bulk actions, keyboard, `?` sheet** · tasks-v2 block 15 · deps: TV-U4 · lane tasks-ui
+- [ ] **TV-U6 — Sidebar: bucket colours/reorder, archive, delete-with-tasks, Recently deleted** · tasks-v2 block 16 · deps: DS-3, TV-D4, AT-1 · lane tasks-ui · migration (`buckets.color/archived_at`, batch ids)
+- [ ] **TV-U7 — Capture v2 (`#tag`, pills, queue switch, filter seed)** · tasks-v2 block 17 · deps: DS-2, TV-T1, TV-D2, TV-U2 · lane tasks-ui
+- [ ] **TV-F4 — In flight (hand-off, check-backs, linked waits)** · tasks-v2 block 18 · deps: TV-F3, TV-U3 · lane focus · migration (`focus_in_flight`)
+- [ ] **TV-F5 — Calendar & Home on one engine** · tasks-v2 block 19 · deps: TV-F2, TV-D3 · lane focus
+- [ ] **AT-2 — Upload pipeline + panel attachments + viewer** · attachments block 2 · deps: AT-1, TV-U3 · lane attachments
+- [ ] **AT-3 — Attachments everywhere + Settings → Storage** · attachments block 3 · deps: AT-2, TV-U1, TV-U7 · lane attachments
+- [ ] **TV-U8 — Saved views** · tasks-v2 block 20 · deps: TV-U2, TV-U6 · lane tasks-ui · migration (`task_views`)
+- [ ] **DS-5 — Sweep: NavRow + state layer in every module, lint guards** · design-state-layer block 5 · deps: DS-3, DS-4 · lane design
+- [ ] 🔴 **TV-D7 — Contract cleanup (drop legacy columns, view, shims, MCP aliases)** · tasks-v2 block 21 · deps: all TV-* above + ≥2 desktop releases and 14 days after TV-D3 ships
+- [ ] **GR-0 — `/s1` the app-wide reference grammar (`@` / `#` / `/`)** · own spec, not written yet · deps: — · `#tag` in text = Link (decided 2026-10-08)
+
+### Tasks v2 lanes (parallel once merged into `maciej`)
+
+| Once merged into `maciej` | Ready to run in parallel | Width |
+| --- | --- | --- |
+| *(start)* | **TV-Q1** · **TV-F1** · **DS-1** · **TV-D1** · **AT-1** | 5 (recommend 3–4 live at once) |
+| DS-1 | **DS-2** | 1 |
+| TV-D1 | **TV-D2** · **TV-T1** (+ **TV-D3** once TV-F1 is in) | 2–3 |
+| DS-2 (+ TV-Q1) | **DS-3** · **DS-4** | 2 |
+| TV-D2 + DS-3 | **TV-D4** · **TV-D5** | 2 |
+| DS-2, D1, D3 | **TV-U3** | 1 |
+| TV-D4 | **TV-U1** → then **TV-U2** · **TV-U4** | 2 |
+| F1, D2, D3, DS-2 | **TV-F2** → **TV-F3** → **TV-F4** · **TV-F5** | 1–2 |
+
+**Tasks v2 serialization points** (they share files, so expect small merges if run together):
+- **`src/lib/runtime.web.ts` + `runtime.types.ts`** — D1, D2, D3, T1, AT-1, F2.
+- **`src/features/tasks/hooks/use-tasks-module.ts`** — Q1, D1, D2, D3, T1, D4.
+- **`task-row.tsx` / `task-card.tsx`** — Q1, D1, D4, U1.
+- **`bucket-rail.tsx`** — Q1, DS-3, U6.
+- **`tokens.css` / `global.css`** — DS-1, DS-2.
+- **Migrations** — D1, D2, D3, F2, F4, U6, U8, AT-1, all with distinct timestamps. Never two sessions altering `tasks` at once: D1, D2 and D3 are sequential for that reason.
 
 ## Running sessions & parallelism
 
@@ -164,5 +222,5 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 
 **Planned — not yet specced, timing open** (Maciej + Mike call 2026-10-02; await `/s1` — nothing to build now): **Communication module — chat + calls**, Duo (2 seats) and Team (3+ seats) plans only, competing with Slack on features. Reverses the 2026-06-24 "no chat module, keep Slack" line. Whether it lands before or after the alpha is not decided; add its blocks here only once its spec passes the Definition-of-Ready gate. Rationale: [docs/ROADMAP.md](../docs/ROADMAP.md) (*Communication module* + Q14) + [docs/decisions.md](../docs/decisions.md) (2026-10-02).
 
-**Post-alpha / out of v1** (designer calls 2026-07-04 — kept for later, *not* deleted): **Finance** (Midday-lite, ROADMAP Wave 4). **Email was pulled BACK IN the same day** (pm designer call — EM-1…EM-11 above, next to build); its post-v1 remainder: Outlook/Workspace-Google providers, send-as aliases, scheduled send, full web client (the relay decision). Rationale in [docs/ROADMAP.md](../docs/ROADMAP.md) + [docs/decisions.md](../docs/decisions.md) (2026-07-04 entries). The Cmd-K Search/Capture modes and the Universal Inbox screen are deferred spine sub-features (see `specs/connective-tissue.md` → Out of scope).
+**Post-alpha / out of v1** (designer calls 2026-07-04 — kept for later, *not* deleted): ~~**Finance**~~ — **not planned at all** (Maciej, 2026-10-07: not soon, possibly never). **Email was pulled BACK IN the same day** (pm designer call — EM-1…EM-11 above, next to build); its post-v1 remainder: Outlook/Workspace-Google providers, send-as aliases, scheduled send, full web client (the relay decision). Rationale in [docs/ROADMAP.md](../docs/ROADMAP.md) + [docs/decisions.md](../docs/decisions.md) (2026-07-04 entries). The Cmd-K Search/Capture modes and the Universal Inbox screen are deferred spine sub-features (see `specs/connective-tissue.md` → Out of scope).
 _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
