@@ -10,6 +10,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
+import {
+  RightPanelSwitcher,
+  type RightPanelVariant,
+} from "../../../components/app/right-panel-switcher";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
 import { restoreNavFocus } from "../../../components/ui/nav-row";
@@ -112,6 +116,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>(() =>
     sanitizeTimelineZoom(readLS(workspaceId, "timelineZoom")),
   );
+  // Which right-panel view is showing (see `panelVariants`).
+  const [panelView, setPanelView] = useState("details");
   // Rail sections the user collapsed stay collapsed (tasks-v2 §11).
   const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(() =>
     parseCollapsedSections(readLS(workspaceId, "collapsedSections")),
@@ -838,12 +844,25 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
   // The hub is a drop target within the ONE page-level DndContext (below); no
   // own context — that's exactly what let center rows reach it (DF-22).
-  const right = selectedTask ? (
+  const details = selectedTask ? (
     <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!canEdit}>
       {detailPanel}
     </HubDropZone>
   ) : (
     detailPanel
+  );
+  // The right panel is a switchable surface of hand-picked views (never one
+  // purpose): Details today; TV-F4 adds In flight beside it.
+  const panelVariants: RightPanelVariant[] = [
+    { id: "details", label: "Details", render: () => details },
+  ];
+  const right = (
+    <RightPanelSwitcher
+      variants={panelVariants}
+      activeId={panelView}
+      onChange={setPanelView}
+      hideWhenSingle
+    />
   );
 
   return (
