@@ -52,12 +52,18 @@ SELECT pg_temp.ok((SELECT schedule FROM cron.job WHERE jobname = 'email-outbox-h
 SELECT pg_temp.ok((SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.email_outbox'::regclass AND NOT tgisinternal) = 1, 'one kick trigger');
 
 -- ===== Grants =====
+-- Control: the stub hands a fresh public function to anon, as Supabase does, so
+-- the checks below test the migration's revokes, not the stub.
+CREATE FUNCTION public.probe_control() RETURNS integer LANGUAGE sql AS 'SELECT 1';
+SELECT pg_temp.ok(has_function_privilege('anon', 'public.probe_control()', 'EXECUTE'), 'control: anon can run a fresh public function in this stub');
+DROP FUNCTION public.probe_control();
 SELECT pg_temp.ok(bool_and(NOT has_function_privilege('anon', f, 'EXECUTE') AND NOT has_function_privilege('authenticated', f, 'EXECUTE') AND has_function_privilege('service_role', f, 'EXECUTE')),
-  'every TX-3 function: service_role only')
+  'every TX-3 function (14): service_role only')
 FROM unnest(ARRAY[
   'public.email_enqueue(text, text, uuid, jsonb, text, timestamptz)', 'public.email_cancel(text)',
   'public.email_outbox__kick()', 'public.email_outbox__after_insert()', 'public.email_outbox__tick()',
-  'public.email_outbox__authorize(text)', 'public.email_outbox__claim(integer, integer)',
+  'public.email_outbox__authorize(text)', 'public.email_outbox__run_start(integer)', 'public.email_outbox__run_stop(uuid)',
+  'public.email_outbox__claim(integer, integer)',
   'public.email_outbox__finish(uuid, text, text, text, timestamptz)', 'public.email_suppression__add(text, text, text)',
   'public.email_outbox__delivered(text, timestamptz)', 'public.email_outbox__health()', 'public.email_outbox__purge()'
 ]) AS f;
@@ -177,7 +183,9 @@ SELECT count(*) FROM public.email_outbox__claim(10);
 UPDATE public.email_outbox SET locked_until = now() - interval '1 second' WHERE dedupe_key = 'l:1';
 SELECT pg_temp.ok((SELECT c.attempts FROM public.email_outbox__claim(10) c WHERE c.dedupe_key = 'l:1') = 2, 'a row whose lease ended is claimed again (same dedupe key, so Resend sends it once)');
 UPDATE public.email_outbox SET locked_until = now() - interval '1 second', attempts = 5 WHERE dedupe_key = 'l:1';
-SELECT pg_temp.ok((SELECT count(*) FROM public.email_outbox__claim(10)) = 0, 'a lost row with no attempts left is not claimed');
+SELECT pg_temp.ok((SELECT c.attempts FROM public.email_outbox__claim(10) c WHERE c.dedupe_key = 'l:1') = 6, 'a row lost on its 5th attempt gets one more (idempotent) claim');
+UPDATE public.email_outbox SET locked_until = now() - interval '1 second' WHERE dedupe_key = 'l:1';
+SELECT pg_temp.ok((SELECT count(*) FROM public.email_outbox__claim(10)) = 0, 'a row lost again after that is not claimed');
 SELECT pg_temp.ok((SELECT status = 'failed' AND last_error = 'worker_lost' FROM public.email_outbox WHERE dedupe_key = 'l:1'), 'it is marked failed (worker_lost)');
 
 -- ===== suppressions (AC17) =====

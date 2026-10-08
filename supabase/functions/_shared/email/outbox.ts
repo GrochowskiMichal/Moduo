@@ -11,14 +11,19 @@
  *   between sending and recording never sends twice: the next run's resend gets
  *   Resend's first answer back.
  * - A temporary failure (timeout, 429, 5xx) goes back to the queue after 1, 5,
- *   15, then 60 minutes; the 5th failed attempt, a permanent refusal, or a row
- *   no template can render is marked failed (the health job then alerts).
+ *   15, then 60 minutes; the 5th failed attempt, a permanent refusal, or a
+ *   payload its template refuses is marked failed (the health job then alerts).
+ *   A kind the deployed worker has no template for is retried the same way, so
+ *   a feature whose migration ships before its worker deploy loses nothing.
+ *   A run lost between sending and recording gets one extra, idempotent claim
+ *   in SQL before it counts as failed.
  * - One run at a time (the database's run lease, `lock`), and its sends are
  *   paced, so a burst stays well inside Resend's per-team rate limit, which
  *   sign-in codes share. A kick that finds a run going exits; the running loop
  *   or the next minute's kick picks its rows up.
  * - A run stays short: 30 s of claiming, sends that give up after 5 s, so the
- *   longest run (~90 s) ends inside the run lease (120 s) and the Edge
+ *   longest run (~90 s, ~170 s if every database call also times out) ends
+ *   inside the run lease (180 s) and the Edge
  *   Function's wall-clock limit (150 s on the free plan).
  */
 
@@ -218,7 +223,10 @@ async function runBatches(deps: OutboxDeps): Promise<OutboxRunSummary> {
       let outcome: OutboxOutcome;
       if (!built.ok) {
         report("unsendable", { id: row.id, kind: row.kind, error: redactAddresses(built.error) });
-        outcome = { id: row.id, outcome: "failed", error: built.error };
+        const retryAt = built.error.startsWith("no_template:") ? nextRetryAt(row.attempts, now()) : null;
+        outcome = retryAt
+          ? { id: row.id, outcome: "retry", error: built.error, retryAt }
+          : { id: row.id, outcome: "failed", error: built.error };
       } else {
         if (lastSendAt !== null) {
           const wait = paceMs - (now() - lastSendAt);

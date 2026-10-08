@@ -124,9 +124,10 @@ describe("claim, send, retry", () => {
     expect(queue.finished).toEqual([{ id: "row-1", outcome: "failed", error: "Invalid `to` field" }]);
   });
 
-  it("marks a row no template can render failed without sending it", async () => {
+  it("never sends a row it can't render; a kind without a template waits for a deploy, a bad payload fails", async () => {
     const queue = fakeQueue([
       row({ id: "a", kind: "welcome" }),
+      row({ id: "a5", kind: "welcome", attempts: OUTBOX_MAX_ATTEMPTS }),
       row({ id: "b", kind: "not_a_kind" }),
       row({ id: "c", payload: { reason: "nonsense" } }),
       row({ id: "d", payload: null }),
@@ -134,7 +135,8 @@ describe("claim, send, retry", () => {
     await runOutbox(queue.deps);
     expect(queue.sent).toHaveLength(0);
     expect(queue.finished.map((outcome) => [outcome.id, outcome.outcome, "error" in outcome ? outcome.error : ""])).toEqual([
-      ["a", "failed", "no_template:welcome"],
+      ["a", "retry", "no_template:welcome"],
+      ["a5", "failed", "no_template:welcome"],
       ["b", "failed", "unknown_kind:not_a_kind"],
       ["c", "failed", "render_failed:ops_alert: unknown reason"],
       ["d", "failed", "payload_not_object"],
@@ -247,8 +249,8 @@ describe("one run at a time", () => {
 describe("the SQL side agrees", () => {
   const sql = readFileSync(MIGRATION, "utf8");
 
-  it("caps attempts at the same number the worker does", () => {
-    expect(sql).toContain(`o.attempts >= ${OUTBOX_MAX_ATTEMPTS}`);
+  it("caps attempts at the same number the worker does (plus one idempotent claim for a lost run)", () => {
+    expect(sql).toContain(`o.attempts >= ${OUTBOX_MAX_ATTEMPTS + 1};`);
     expect(sql).toContain(`WHEN p_outcome = 'retry' AND o.attempts < ${OUTBOX_MAX_ATTEMPTS} THEN 'queued'`);
   });
 

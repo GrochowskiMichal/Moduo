@@ -321,7 +321,7 @@ END;
 $$;
 
 -- Returns a token when this run holds the lease, NULL when another run does.
-CREATE OR REPLACE FUNCTION public.email_outbox__run_start(p_lease_seconds integer DEFAULT 120)
+CREATE OR REPLACE FUNCTION public.email_outbox__run_start(p_lease_seconds integer DEFAULT 180)
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -331,7 +331,7 @@ DECLARE
   v_token uuid;
 BEGIN
   INSERT INTO public.email_outbox_runner AS r (id, token, locked_until)
-  VALUES (true, gen_random_uuid(), now() + make_interval(secs => greatest(30, least(coalesce(p_lease_seconds, 120), 600))))
+  VALUES (true, gen_random_uuid(), now() + make_interval(secs => greatest(30, least(coalesce(p_lease_seconds, 180), 600))))
   ON CONFLICT (id) DO UPDATE
      SET token = EXCLUDED.token, locked_until = EXCLUDED.locked_until
    WHERE r.locked_until < now()
@@ -372,14 +372,17 @@ SET search_path = ''
 AS $$
 #variable_conflict use_column
 BEGIN
-  -- A crashed run's row that has used all 5 attempts: give up on it.
+  -- A lost lease means the run died between sending and recording, so the
+  -- send may well have gone out. It gets one extra claim beyond the 5 attempts
+  -- (the same Idempotency-Key makes Resend answer with the first send); only a
+  -- row lost after that is given up on.
   UPDATE public.email_outbox o
      SET status = 'failed',
          locked_until = NULL,
          last_error = coalesce(o.last_error, 'worker_lost')
    WHERE o.status = 'sending'
      AND o.locked_until < now()
-     AND o.attempts >= 5;
+     AND o.attempts >= 6;
 
   -- Due rows to a suppressed address are never sent (sign-in codes aside).
   UPDATE public.email_outbox o
