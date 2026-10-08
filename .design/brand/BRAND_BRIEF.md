@@ -173,7 +173,7 @@ The brand palette is the app's neutral system. No brand hue (36).
 - **Tracking** (51): hero −0.035em · section titles −0.02em · small lockup-style or heading text −0.015em · body 0 · eyebrows +0.04em uppercase 11px.
 - **Marketing scale:** as in `landing-agents-readme.md` (hero `clamp(36px, 7.2vw, 88px)`/600, section 36/600, body 18/400, manifesto 22/400). Product frames inside marketing use the app's 14px scale.
 - **Numbers:** tabular figures for times, dates, prices and codes.
-- **Email** (52): Geist where the client loads it (Apple Mail), system sans elsewhere. The logo is an image, so the brand survives either way.
+- **Email** (52): Geist where the reader has it installed, system sans elsewhere. The logo is an image, so the brand survives either way. *(Amended 2026-10-08, Maciej: emails don't load Geist from Google Fonts, because that sends every reader's IP address to Google; see docs/decisions/product.md, TX-1.)*
 
 ---
 
