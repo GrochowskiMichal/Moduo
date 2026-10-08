@@ -22,6 +22,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-08 · PRIV-2a built: one SQL function erases what a deleted account leaves in other people's workspaces, and member removal is fixed
 - 2026-10-08 · PRIV-3: switching app analytics off, or deleting the account, deletes what PostHog holds for the person.
 - 2026-10-07 · PRIV-2 planned: what a deleted account leaves in other people's workspaces, its Stripe copy, and a privacy@ admin command
 - 2026-10-07 · App analytics (PostHog) is opt-in per person: asked after sign-in until answered, off until you say yes, tagged `surface: "app"` in the shared PostHog project, and in the privacy policy.
@@ -110,6 +111,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-08 · Google and Zoom connects are finished by the signed-in app, not by the OAuth callback.
 - 2026-10-07 · Emailed links use fixed, allow-listed origins, and public booking is rate-limited.
 - 2026-10-02 · A booked meeting is one event, and booking links can be deleted.
 - 2026-10-02 · A booking link's video is Google Meet, Zoom, or "Their choice".
