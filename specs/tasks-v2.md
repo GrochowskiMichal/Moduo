@@ -158,6 +158,8 @@ The cross-module visual foundation (state tokens, scrollbars, NavRow/MetaCount/F
   - A task you check off stays in place, struck through, until you change scope or reload (undo stays one click away).
   - Archived ("won't do") tasks are reachable through Filter → Status: Archived.
 
+*As built in TV-U1 (2026-10-09):* the date column shows the scheduled time or the due date, whichever comes first by day (scheduled wins a tie). "7 days" is measured from the task's last update, since no completion time is stored. A done parent with open subtasks stays listed. Display ships Completed and "Show on rows" (Priority, Energy, Date, Assignee) per scope; TV-U2 adds the rest. Details: [docs/decisions/tasks.md](../docs/decisions/tasks.md) 2026-10-09 TV-U1.
+
 ### 7. Filter, Display, search, saved views
 
 - **Toolbar** (one control language, comp §1):

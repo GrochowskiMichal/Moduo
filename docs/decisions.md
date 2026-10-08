@@ -218,6 +218,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-10-09 · TV-U1: task rows get fixed right-hand columns (priority · date · assignee · queue, empty ones collapse) and quiet counts (`# N` tags); completed tasks hide behind "N completed · show" (Display → Hidden · 7 days · All, per scope); a checked-off task stays until the scope changes; board columns flex 280–400 px with one meta line per card.
 - 2026-10-08 · TV-D3: tracked time is a log of entries (`task_time_entries`, `tasks_op_track_time`, `tasks_time_totals`); a save resent after a reload counts once, saving time never puts back anyone's edit, and old builds' writes become adjustments.
 - 2026-10-08 · TV-D4: the app reads and writes my personal queue (toggles, `q`, rail, Focus, Home widget, Calendar panel); claims show who else has a task queued; "My tasks" rail row with two or more members.
 - 2026-10-08 · TV-T1 landed: one workspace tag store feeds every surface, and a tag can be created by name and attached before its task exists.
