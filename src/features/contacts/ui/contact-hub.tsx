@@ -55,6 +55,7 @@ import { cn } from "@/lib/utils";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { MentionCandidate } from "../../spine/mention";
 import { LinkSuggestionStrip } from "../../spine/ui/link-suggestion-strip";
+import { EntityTagRow } from "../../tags/ui/entity-tag-row";
 import type { ActivityEntry } from "../../tasks/model";
 import { birthdayCountdown } from "../dates";
 import { parseFieldOptions, selectOptionsFor } from "../field-defs";
@@ -72,7 +73,6 @@ import { ActivityTrail } from "./activity-trail";
 import { initials } from "./contact-directory";
 import { ContactStatusBadge, ContactStatusDot } from "./contact-status-badge";
 import { EntityLinkPicker } from "./entity-link-picker";
-import { EntityTagRow } from "./entity-tag-row";
 import { LinkedSections } from "./linked-sections";
 
 // Radix Select forbids an empty-string item value, so "No status" rides a sentinel.

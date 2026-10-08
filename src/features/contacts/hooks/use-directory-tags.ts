@@ -1,43 +1,41 @@
 // FX-3 — the directory's tag-filter data: all live workspace tags + every
-// contact/company tag link, in one light read. Quiet on failure (the filter
-// simply doesn't offer tags); reload() refreshes after tagging elsewhere.
+// contact/company tag link, in one light read that seeds the shared tag store
+// (TV-T1). Reads come back out of the store, so tagging a card (or anything
+// else) updates an active tag filter at once. Quiet on failure (the filter
+// simply doesn't offer tags); reload() re-reads the server.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import type { Tag, TagLink } from "../../tasks/model";
-import { CONTACT_TAGS_CHANGED_EVENT } from "../tags";
+import { seedTags, useTagView } from "../../tags/store";
+
+const DIRECTORY_TYPES = ["contact", "company"] as const;
 
 export function useDirectoryTags(runtime: ModuoRuntime | null, workspaceId: string | null) {
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [links, setLinks] = useState<TagLink[]>([]);
   /** SCALE-1: a workspace with more tag links than the cap — surfaced, never silent. */
   const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
+  const view = useTagView(workspaceId);
 
-  // A tag mutation on any card (hub tag row) refreshes the filter data, so an
-  // ACTIVE tag filter reflects the change without reopening the menu.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.addEventListener(CONTACT_TAGS_CHANGED_EVENT, reload);
-    return () => window.removeEventListener(CONTACT_TAGS_CHANGED_EVENT, reload);
-  }, [reload]);
-
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` is the reload cue.
   useEffect(() => {
     if (!runtime || !workspaceId) {
-      setTags([]);
-      setLinks([]);
       setTruncated([]);
       return;
     }
     let cancelled = false;
+    const at = Date.now();
     runtime.tasks
-      .listTagLinks({ workspaceId, entityTypes: ["contact", "company"] })
+      .listTagLinks({ workspaceId, entityTypes: [...DIRECTORY_TYPES] })
       .then((res) => {
         if (cancelled) return;
-        setTags(res.tags);
-        setLinks(res.links);
+        seedTags(workspaceId, {
+          tags: res.tags,
+          links: res.links,
+          scope: { kind: "types", entityTypes: DIRECTORY_TYPES },
+          at,
+        });
         setTruncated(res.truncated);
       })
       .catch(() => {
@@ -48,5 +46,10 @@ export function useDirectoryTags(runtime: ModuoRuntime | null, workspaceId: stri
     };
   }, [runtime, workspaceId, tick]);
 
-  return { tags, links, truncated, reload };
+  const links = useMemo(
+    () => view.links.filter((l) => (DIRECTORY_TYPES as readonly string[]).includes(l.entityType)),
+    [view.links],
+  );
+
+  return { tags: view.tags, links, truncated, reload };
 }

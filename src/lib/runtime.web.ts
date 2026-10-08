@@ -2227,12 +2227,9 @@ export const webRuntime: ModuoRuntime = {
               .is("deleted_at", null),
           order: (q) => q.order("created_at").order("id"),
         }),
-        supabaseClient
-          .from("tag_links")
-          .select("*")
-          .eq("workspace_id", workspaceId)
-          .is("deleted_at", null)
-          .order("created_at"),
+        // Only this entity's links. (A stray workspace-wide read here filtered
+        // on `tag_links.deleted_at`, a column that doesn't exist, so the whole
+        // read failed and every hub's tag row stayed empty until TV-T1.)
         supabaseClient
           .from("tag_links")
           .select("*")
