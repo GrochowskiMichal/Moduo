@@ -16,6 +16,7 @@ export default defineConfig({
       "@contracts": fileURLToPath(
         new URL("./supabase/functions/_shared/contracts", import.meta.url),
       ),
+      "@email": fileURLToPath(new URL("./supabase/functions/_shared/email", import.meta.url)),
     },
   },
   testEnvironment: "jsdom",
@@ -24,6 +25,7 @@ export default defineConfig({
     "src/**/*.test.tsx",
     "supabase/functions/_shared/contracts/**/*.test.ts",
     "supabase/functions/_shared/*.test.ts",
+    "supabase/functions/_shared/email/**/*.test.ts",
     "supabase/functions/send-workspace-invite/*.test.ts",
   ],
   globals: true,

@@ -13,7 +13,8 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@contracts/*": ["./supabase/functions/_shared/contracts/*"]
+      "@contracts/*": ["./supabase/functions/_shared/contracts/*"],
+      "@email/*": ["./supabase/functions/_shared/email/*"]
     }
   },
   "include": [
@@ -22,6 +23,7 @@
     "playwright.config.ts",
     "rstest.config.ts",
     "supabase/functions/_shared/contracts",
+    "supabase/functions/_shared/email",
     "supabase/functions/_shared/account-erasure.ts",
     "supabase/functions/_shared/account-erasure.test.ts",
     "supabase/functions/_shared/analytics-forget.ts",

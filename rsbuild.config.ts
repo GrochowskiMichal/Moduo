@@ -132,6 +132,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname),
       "@contracts": path.resolve(__dirname, "supabase/functions/_shared/contracts"),
+      "@email": path.resolve(__dirname, "supabase/functions/_shared/email"),
       // In web builds, replace Tauri packages with stubs so the runtime
       // is never bundled into the web output.
       ...(isWeb
