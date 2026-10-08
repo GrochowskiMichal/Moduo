@@ -75,7 +75,10 @@ describe("tasks connector helpers", () => {
       assignee: { id: "u2", name: "Bea" },
       creator: { id: "u1", name: "Ada" },
     });
-    expect(handedOver.assignee_id).toBeUndefined();
+    // The flat assignee_id is the real assignee, not the creator, and null when Unassigned.
+    expect(handedOver.assignee_id).toBe("u2");
+    expect(unassigned.assignee_id).toBeNull();
+    expect(unknownCreator.assignee_id).toBe("u2");
     expect(unassigned.assignee).toBeNull();
     expect(unassigned.creator).toEqual({ id: "u1", name: "Ada" });
     expect(unknownCreator.assignee).toEqual({ id: "u2", name: "Bea" });
@@ -112,6 +115,7 @@ describe("tasks connector helpers", () => {
     );
     expect(shaped).toMatchObject({
       id: "parent",
+      assignee_id: "u1",
       assignee: { id: "u1", name: "Ada" },
       creator: { id: "u1", name: "Ada" },
       subtask_count: 2,

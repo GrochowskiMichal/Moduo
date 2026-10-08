@@ -186,7 +186,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_list",
       description:
-        "Tasks with computed drift/blocked state, subtasks (parent_id, subtask_count), assignee (null = Unassigned) and creator, tags and recurrence. Defaults to open tasks (todo + in_progress), ordered by bucket then position. Pages with offset.",
+        "Tasks with computed drift/blocked state, subtasks (parent_id, subtask_count), assignee and assignee_id (null = Unassigned) and creator, tags and recurrence. Defaults to open tasks (todo + in_progress), ordered by bucket then position. Pages with offset.",
       access: "view",
       inputSchema: {
         type: "object",

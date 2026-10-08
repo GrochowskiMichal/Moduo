@@ -155,6 +155,8 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
     status: t.status,
     drifted: isDrifted(t, now),
     blocked: data.blockedIds.has(t.id),
+    // MCC-1's flat field, now the real assignee (TV-D1): null = Unassigned, never the creator.
+    assignee_id: assigneeIdOf(t),
     // TV-D1: who it's assigned to (null = Unassigned) and, when known, who made it.
     ...taskPeople(t, data.names),
   };
