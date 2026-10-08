@@ -25,6 +25,7 @@ export default defineConfig({
     "supabase/functions/_shared/contracts/**/*.test.ts",
     "supabase/functions/_shared/*.test.ts",
     "supabase/functions/send-workspace-invite/*.test.ts",
+    "scripts/brand/*.test.ts",
   ],
   globals: true,
   setupFiles: ["./rstest.setup.ts"],
