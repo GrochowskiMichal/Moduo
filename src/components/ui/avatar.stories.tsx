@@ -21,6 +21,9 @@ type Story = StoryObj<typeof meta>;
 export const FallbackOnly: Story = {
   render: () => (
     <div className="flex items-center gap-4">
+      <Avatar size="icon">
+        <AvatarFallback>E</AvatarFallback>
+      </Avatar>
       <Avatar size="sm">
         <AvatarFallback>EN</AvatarFallback>
       </Avatar>

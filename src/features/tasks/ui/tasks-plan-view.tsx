@@ -55,6 +55,7 @@ import { TASK_DETAIL_REFRESH_EVENT, TaskDetailPanel } from "./task-detail-panel"
 import { TaskListView } from "./task-list-view";
 import { ActiveTagFilters, TagFilterButton } from "./task-tag-filter";
 import { TaskTimelineView } from "./task-timeline-view";
+import { useTasksDisplay } from "./use-tasks-display";
 
 type Props = {
   api: TasksModuleApi;
@@ -473,6 +474,16 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     />
   );
 
+  // Display (tasks-v2 §7): Completed + "Show on rows", remembered per
+  // workspace and scope on this device; a task checked off or deep-linked
+  // here stays listed until the scope changes (TV-U1). TV-U2 adds the rest.
+  // A deep link's target (and its parent) stays listed in this scope even
+  // when Display hides completed tasks, while it's the one selected.
+  const linkedTaskId =
+    revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
+  const tasksDisplay = useTasksDisplay(workspaceId, selection, tasks, linkedTaskId);
+  const isHiddenByDisplay = tasksDisplay.isHidden;
+
   // Resolve the selected task live from the bundle so the rail follows edits and
   // empties when the task is deleted.
   const selectedTask = useMemo(
@@ -491,8 +502,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     if (api.loading || inboundPending) return;
     if (selectedTaskId && scopeTasks.some((t) => t.id === selectedTaskId)) return;
     if (selectedTask?.parentId && scopeTasks.some((t) => t.id === selectedTask.parentId)) return;
-    setSelectedTaskId(scopeTasks[0]?.id ?? null);
-  }, [api.loading, inboundPending, selectedTaskId, selectedTask, scopeTasks]);
+    // Never a completed task Display hides (TV-U1): the Board has no
+    // fallback of its own, so it would open the panel on a card it doesn't show.
+    setSelectedTaskId(scopeTasks.find((t) => !isHiddenByDisplay(t))?.id ?? null);
+  }, [api.loading, inboundPending, selectedTaskId, selectedTask, scopeTasks, isHiddenByDisplay]);
 
   // ── DF-1: URL-held selection ─────────────────────────────────────────────────
   // Inbound apply — honor a deep-link target once the bundle is CLEANLY loaded
@@ -634,9 +647,10 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     onSelectTask: setSelectedTaskId,
     tagFilterControl,
     activeTagFilters,
-    onTagFilter: toggleTagFilter,
     api: viewApi,
   };
+  // List and Board follow Display; the Timeline keeps its own rules.
+  const displayProps = tasksDisplay.viewProps;
 
   // Execute mode is enclosed in the center panel (rails stay visible).
   const body =
@@ -662,6 +676,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     ) : view === "board" ? (
       <TaskBoardView
         {...sharedViewProps}
+        {...displayProps}
         dndMode="external"
         boardGroupBy={boardGroupBy}
         onBoardGroupByChange={setBoardGroupBy}
@@ -671,6 +686,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     ) : (
       <TaskListView
         {...sharedViewProps}
+        {...displayProps}
         dndMode="external"
         groupBy={effectiveGroupBy}
         onGroupByChange={setGroupBy}

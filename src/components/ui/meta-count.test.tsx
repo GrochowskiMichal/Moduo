@@ -31,6 +31,19 @@ describe("MetaCount", () => {
     expect(screen.getByTestId("group").childElementCount).toBe(0);
   });
 
+  it("can show a value other than the count (subtask progress), still hidden at zero", () => {
+    render(
+      <MetaCounts data-testid="group">
+        <MetaCount icon={Paperclip} count={3} value="1/3" label={() => "1 of 3 subtasks done"} />
+        <MetaCount icon={Paperclip} count={0} value="0/0" label="subtasks" />
+      </MetaCounts>,
+    );
+    const group = screen.getByTestId("group");
+    expect(group.childElementCount).toBe(1);
+    expect(group.textContent).toContain("1/3");
+    expect(screen.getByText("1 of 3 subtasks done").className).toContain("sr-only");
+  });
+
   it("lets the caller word the label (singulars)", () => {
     render(
       <MetaCount icon={Paperclip} count={1} label={(n) => (n === 1 ? "1 attachment" : `${n}`)} />,

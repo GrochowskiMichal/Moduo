@@ -20,6 +20,7 @@ export function PlanViewHeader({
   onViewChange,
   groupControl,
   filterControl,
+  displayControl,
   activeFilters,
   canEdit,
   onRequestCapture,
@@ -30,6 +31,8 @@ export function PlanViewHeader({
   groupControl?: ReactNode;
   /** Tag-filter trigger, sits next to the group control (both views). */
   filterControl?: ReactNode;
+  /** The Display menu (completed, row properties), after the filter. */
+  displayControl?: ReactNode;
   /** Active filter chips — a quiet second row under the header when present. */
   activeFilters?: ReactNode;
   canEdit: boolean;
@@ -43,6 +46,7 @@ export function PlanViewHeader({
         <Toolbar.Group>
           {groupControl}
           {filterControl}
+          {displayControl}
           <ViewSwitcher view={view} onViewChange={onViewChange} />
         </Toolbar.Group>
         <Toolbar.Primary>
