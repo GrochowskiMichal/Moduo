@@ -29,6 +29,7 @@ type RunApi = Pick<
   TasksModuleApi,
   | "loading"
   | "error"
+  | "loadedWorkspaceId"
   | "tasks"
   | "queuedTasks"
   | "markDone"
@@ -38,6 +39,9 @@ type RunApi = Pick<
   | "loadActivity"
   | "currentUserId"
 >;
+
+/** How long to wait before asking the trail again who completed a task. */
+const COMPLETION_RECHECK_MS = 2000;
 
 /** Why a Now task left the run when nobody pressed anything here: `live` is
  *  what the task list holds for it now. */
@@ -120,9 +124,12 @@ export function useQueueRun({
   // moves it; an emptied queue ends the run. Runs when the head's id, title or
   // bucket changes, not on every new `head` object a reload makes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the head's fields, see above.
+  // Only on data loaded for this workspace: right after a switch back, the
+  // list still holds the other workspace's and my queue here reads as empty.
+  const ready = !api.loading && !api.error && api.loadedWorkspaceId === workspaceId;
   useEffect(() => {
-    if (!runHere || !inControl || api.loading || api.error) {
-      prevHead.current = head;
+    if (!runHere || !inControl || !ready) {
+      prevHead.current = ready ? head : null;
       return;
     }
     const previous = prevHead.current;
@@ -132,16 +139,7 @@ export function useQueueRun({
     }
     if (previous?.id !== head?.id) expectedLeave.current = null;
     moveQueueRun(workspaceId, head ? taskRef(head) : null, { explicit: false });
-  }, [
-    runHere,
-    inControl,
-    api.loading,
-    api.error,
-    head?.id,
-    head?.title,
-    head?.bucketId,
-    workspaceId,
-  ]);
+  }, [runHere, inControl, ready, head?.id, head?.title, head?.bucketId, workspaceId]);
 
   /** Now left the run without anyone pressing anything here: say why. */
   function explainLeave(task: Task): void {
@@ -153,23 +151,32 @@ export function useQueueRun({
       return;
     }
     if (why !== "completed") return;
-    // Who completed it: the trail knows. Done by me elsewhere counts for the run.
+    // Who completed it: the trail knows. Done by me elsewhere counts for the
+    // run. My own completion from a list row here shows at once (optimistic)
+    // but reaches the trail a moment later, so an empty answer is asked again.
     const me = apiRef.current.currentUserId;
-    void apiRef.current
-      .loadActivity(task.id)
-      .then((entries) => {
-        const entry = entries.find(
-          (e) =>
-            e.op === "tasks.completed" || (e.op === "tasks.set_status" && e.payload?.to === "done"),
-        );
-        if (entry?.actorId && me && entry.actorId === me) {
-          recordRunDone(task.id, resolveTask);
-          return;
-        }
-        const who = entry ? activityActorName(entry, me) : null;
-        setQueueRunNotice(who ? `${who} completed “${title}”.` : `“${title}” was completed.`);
-      })
-      .catch(() => setQueueRunNotice(`“${title}” was completed.`));
+    const ask = (attempt: number) =>
+      apiRef.current
+        .loadActivity(task.id)
+        .then((entries) => {
+          const entry = entries.find(
+            (e) =>
+              e.op === "tasks.completed" ||
+              (e.op === "tasks.set_status" && e.payload?.to === "done"),
+          );
+          if (!entry && attempt === 0) {
+            setTimeout(() => void ask(1), COMPLETION_RECHECK_MS);
+            return;
+          }
+          if (entry?.actorId && me && entry.actorId === me) {
+            recordRunDone(task.id, resolveTask);
+            return;
+          }
+          const who = entry ? activityActorName(entry, me) : null;
+          setQueueRunNotice(who ? `${who} completed “${title}”.` : `“${title}” was completed.`);
+        })
+        .catch(() => setQueueRunNotice(`“${title}” was completed.`));
+    void ask(0);
   }
 
   const next = useCallback(

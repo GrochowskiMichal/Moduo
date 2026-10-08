@@ -203,6 +203,20 @@ describe("the clock on shared timestamps (F2-4: every device shows the same)", (
     expect(reading.focusedSeconds).toBe(42);
   });
 
+  it("a run whose device stopped saving doesn't keep adding focus", () => {
+    const stale = run({
+      mode: "stopwatch",
+      phaseSeconds: null,
+      focusedSeconds: 600,
+      seenAt: iso(T0),
+    });
+    const reading = readRunClock(stale, T0 + 3 * 3600_000);
+    expect(reading.focusedSeconds).toBe(600 + 180);
+    expect(reading.bigClock).toBe(780);
+    const pomo = run({ focusedSeconds: 1200, seenAt: iso(T0) });
+    expect(readRunClock(pomo, T0 + 3600_000).focusedSeconds).toBe(1380);
+  });
+
   it("hands a run to the engine as the record has it now", () => {
     const ref = { id: "t1", title: "t1", bucketName: "Inbox", workspaceId: "w" };
     const clock = runClockForAdopt(

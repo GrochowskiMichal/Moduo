@@ -115,6 +115,19 @@ let chain: Promise<void> = Promise.resolve();
 const serverIds = new Map<string, string>();
 /** What the last session change looked like (status/phase/blocks/task). */
 let lastSessionKey = "";
+/** Server writes queued or on their way. While any is, a server copy that
+ *  isn't a write's own answer may predate it: it's set aside, and the run is
+ *  read again once the writes are done. */
+let writesInFlight = 0;
+/** Bumped by every write: a read that started before one is stale. */
+let writeGen = 0;
+let recheckAfterWrites = false;
+/** The newest `seen_at` seen per run: an older copy never replaces a newer one. */
+const lastSeen = new Map<string, number>();
+/** Runs ended on this device: a late copy of one never brings it back. */
+const endedHere = new Set<string>();
+/** A start whose request failed (offline): sent again on the next look. */
+let startRetry: { localId: string; mode: FocusRunMode } | null = null;
 let windowListening = false;
 let lastRefreshAt = 0;
 
@@ -212,13 +225,29 @@ function iso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+/** Queue a server write: one at a time, in the order made. */
 function queue(op: () => Promise<void>): void {
   const e = epoch;
+  writesInFlight += 1;
+  writeGen += 1;
   chain = chain
     .then(() => (e === epoch ? op() : undefined))
     .catch((error) => {
       console.warn("[focus] run sync failed", error);
+    })
+    .finally(() => {
+      if (e !== epoch) return;
+      writesInFlight -= 1;
+      if (writesInFlight === 0 && saveTimer === null && recheckAfterWrites) {
+        recheckAfterWrites = false;
+        void refreshRun();
+      }
     });
+}
+
+/** A write is queued, on its way, or about to be sent. */
+function writing(): boolean {
+  return writesInFlight > 0 || saveTimer !== null;
 }
 
 function inControlOf(run: FocusRun | null): boolean {
@@ -247,6 +276,12 @@ function receive(server: FocusRun | null, opts: { full?: boolean } = {}): void {
     if (opts.full && local && !local.local) endedElsewhere(local, Date.now());
     return;
   }
+  // Copies arrive out of order (Realtime, polls, answers): an older one never
+  // replaces a newer, and a run ended here stays ended.
+  const seen = Date.parse(server.seenAt);
+  if (seen < (lastSeen.get(server.id) ?? Number.NEGATIVE_INFINITY)) return;
+  lastSeen.set(server.id, seen);
+  if (endedHere.has(server.id) && server.status !== "ended") return;
   if (local?.local) {
     // Started here and not answered yet (or runs aren't on the server): only
     // a newer run from elsewhere replaces it.
@@ -276,7 +311,16 @@ function receive(server: FocusRun | null, opts: { full?: boolean } = {}): void {
   if (nowMine && local && local.id === server.id) {
     // This device writes the run; keep its fresher copy, take the server's
     // control fields.
-    set({ ...state, run: { ...local, controlAt: server.controlAt, seenAt: server.seenAt } });
+    const run = {
+      ...local,
+      deviceId: server.deviceId,
+      controlAt: server.controlAt,
+      seenAt: server.seenAt,
+    };
+    set({ ...state, run });
+    // The server says this device runs it, but its clock stopped (a copy that
+    // predated the takeover got here first): take the run up again.
+    if (!getFocusSession().tracking) readopt(run);
     return;
   }
   const nowTitle = local && local.nowTaskId === server.nowTaskId ? local.nowTitle : null;
@@ -287,14 +331,42 @@ function receive(server: FocusRun | null, opts: { full?: boolean } = {}): void {
   });
 }
 
+/** The engine takes the run up again as its record says it is now. */
+function readopt(run: FocusRun): void {
+  const task = run.nowTaskId
+    ? {
+        id: run.nowTaskId,
+        title: run.nowTitle ?? "",
+        bucketName: null,
+        workspaceId: run.workspaceId,
+      }
+    : null;
+  adoptFocusRun(runClockForAdopt(run, task, Date.now()));
+  lastSessionKey = "";
+}
+
+/** A copy of the run from Realtime: set aside while this device is writing. */
+function receiveLive(server: FocusRun | null): void {
+  if (writing()) {
+    recheckAfterWrites = true;
+    return;
+  }
+  receive(server);
+}
+
 async function refreshRun(): Promise<void> {
   if (!rt || !user) return;
   const e = epoch;
+  const gen = writeGen;
   try {
     const server = await rt.latestRun();
     if (e !== epoch) return;
-    // Don't let a slow read land over a write in flight; the write answers.
-    if (saveTimer !== null) return;
+    // A read that a write overtook (or that would land over one) may predate
+    // it; read again once the writes are done.
+    if (gen !== writeGen || writing()) {
+      recheckAfterWrites = true;
+      return;
+    }
     receive(server, { full: true });
   } catch {
     /* offline: keep what this device has */
@@ -385,6 +457,7 @@ function onVisible(): void {
   const now = Date.now();
   if (now - lastRefreshAt < REFRESH_THROTTLE_MS) return;
   lastRefreshAt = now;
+  retryStart();
   void refreshRun();
 }
 
@@ -442,6 +515,11 @@ export function attachRunUser(
   epoch += 1;
   chain = Promise.resolve();
   serverIds.clear();
+  lastSeen.clear();
+  endedHere.clear();
+  writesInFlight = 0;
+  recheckAfterWrites = false;
+  startRetry = null;
   lastSessionKey = "";
   user = userId;
   rt = nextRt;
@@ -462,7 +540,7 @@ export function attachRunUser(
     if (subscribe) {
       unsubRealtime = subscribe(
         userId,
-        (row) => receive(focusRunRowToModel(row)),
+        (row) => receiveLive(focusRunRowToModel(row)),
         () => void refreshRun(),
       );
     }
@@ -479,8 +557,9 @@ export function forgetRunUser(userId: string): void {
   }
 }
 
-/** Look at the server now (a test seam, and after a reconnect). */
+/** Look at the server now, sending a failed start again first. */
 export function refreshQueueRun(): Promise<void> {
+  retryStart();
   return refreshRun();
 }
 
@@ -501,7 +580,6 @@ export function startQueueRun(input: {
 }): void {
   if (!user) return;
   const me = user;
-  const previous = state.run;
   bindFocusTask(input.task);
   setFocusPomodoro(input.mode === "pomodoro");
   startFocus();
@@ -536,27 +614,41 @@ export function startQueueRun(input: {
     phaseSeconds: snap.phaseSeconds,
   };
   lastSessionKey = "";
+  // Any open run of mine ends on the server when this one starts.
   set({ run: local, ended: null, notice: null });
-  if (previous && !previous.local && previous.id !== local.id) {
-    // The server ends it when this one starts; nothing to send for it.
-  }
+  sendStart(local.id, input.mode);
+}
+
+/** Start the run on the server (again, after a failed request). */
+function sendStart(localId: string, mode: FocusRunMode): void {
   if (!rt) return;
   const runtime = rt;
+  startRetry = null;
   queue(async () => {
-    const saved = await runtime.startRun({
-      workspaceId: input.workspaceId,
-      deviceId,
-      mode: input.mode,
-      state: snapshotFor(state.run?.id === local.id ? state.run : local, Date.now()),
-    });
-    if (!saved) return; // runs aren't on the server yet: it stays on this device
-    serverIds.set(local.id, saved.id);
     const current = state.run;
-    if (current?.id === local.id) {
+    if (!current || current.id !== localId) return; // ended or replaced meanwhile
+    let saved: FocusRun | null;
+    try {
+      saved = await runtime.startRun({
+        workspaceId: current.workspaceId,
+        deviceId,
+        mode,
+        state: snapshotFor(current, Date.now()),
+      });
+    } catch (error) {
+      // Offline or refused for now: send it again on the next look.
+      startRetry = { localId, mode };
+      throw error;
+    }
+    if (!saved) return; // runs aren't on the server yet: it stays on this device
+    serverIds.set(localId, saved.id);
+    lastSeen.set(saved.id, Date.parse(saved.seenAt));
+    const latest = state.run;
+    if (latest?.id === localId) {
       set({
         ...state,
         run: {
-          ...current,
+          ...latest,
           id: saved.id,
           local: undefined,
           controlAt: saved.controlAt,
@@ -565,8 +657,19 @@ export function startQueueRun(input: {
       });
       // Anything that changed while the start was on its way.
       scheduleSave();
+    } else if (endedHere.has(localId)) {
+      // Ended while the start was on its way: the queued end sends it under
+      // this id; a late copy must not bring it back meanwhile.
+      endedHere.add(saved.id);
     }
   });
+}
+
+/** A start that failed goes again on the next look at the server. */
+function retryStart(): void {
+  const pending = startRetry;
+  if (!pending || state.run?.id !== pending.localId) return;
+  sendStart(pending.localId, pending.mode);
 }
 
 /**
@@ -620,6 +723,10 @@ export function endQueueRun(): void {
     focusedSeconds,
     blocksCompleted,
   };
+  endedHere.add(run.id);
+  const serverId = serverIds.get(run.id);
+  if (serverId) endedHere.add(serverId);
+  if (startRetry?.localId === run.id) startRetry = null;
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = null;
   pendingTake = false;
@@ -767,6 +874,11 @@ export function __resetQueueRunForTest(): void {
   epoch += 1;
   chain = Promise.resolve();
   serverIds.clear();
+  lastSeen.clear();
+  endedHere.clear();
+  writesInFlight = 0;
+  recheckAfterWrites = false;
+  startRetry = null;
   lastSessionKey = "";
   user = null;
   rt = null;
@@ -775,16 +887,21 @@ export function __resetQueueRunForTest(): void {
   listeners.clear();
 }
 
-/** Test seam: wait for queued server writes. */
+/** Test seam: send what's waiting and wait until no server write is left. */
 export async function __flushRunSyncForTest(): Promise<void> {
-  if (saveTimer !== null) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-    const withTake = pendingTake;
-    pendingTake = false;
-    queue(() => saveNow(withTake));
+  for (let i = 0; i < 20; i++) {
+    if (saveTimer !== null) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      const withTake = pendingTake;
+      pendingTake = false;
+      queue(() => saveNow(withTake));
+    }
+    const current = chain;
+    await current;
+    for (let j = 0; j < 5; j++) await Promise.resolve();
+    if (current === chain && saveTimer === null) return;
   }
-  await chain;
 }
 
 /** Test seam: pretend to be another device. */

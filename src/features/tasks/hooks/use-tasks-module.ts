@@ -121,6 +121,10 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const [timeBlocks, setTimeBlocksState] = useState<TimeBlockMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** The workspace the loaded data belongs to: right after a switch it is
+   *  still the last one, until the new read lands (the queue run, TV-F2,
+   *  mustn't read an empty queue there as "the queue emptied"). */
+  const [loadedWorkspaceId, setLoadedWorkspaceId] = useState<string | null>(null);
   const reqRef = useRef(0);
   /** Bumped on every successful load — the recurrence catch-up trigger. */
   const [loadStamp, setLoadStamp] = useState(0);
@@ -131,6 +135,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       setQueueRows([]);
       setKeptRows([]);
       setTimeBlocksState({});
+      setLoadedWorkspaceId(null);
       setLoading(false);
       return;
     }
@@ -159,6 +164,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           complete: !next.truncated.some((t) => t.scope === TAG_LINKS_SCOPE),
         });
         setTimeBlocksState(blocks);
+        setLoadedWorkspaceId(workspaceId);
         setError(null);
         setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
       }
@@ -1571,6 +1577,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   return {
     loading,
     error,
+    loadedWorkspaceId,
     canRead,
     canEdit,
     buckets,

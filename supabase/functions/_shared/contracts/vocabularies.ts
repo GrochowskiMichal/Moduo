@@ -113,6 +113,13 @@ export const focusRunStatusSchema = z.enum(FOCUS_RUN_STATUSES);
 export function isFocusRunStatus(value: unknown): value is FocusRunStatus {
   return typeof value === "string" && (FOCUS_RUN_STATUSES as readonly string[]).includes(value);
 }
+/** Read bridge: an unknown status reads as ended (a run nobody can act on). */
+export function normalizeFocusRunStatus(input: unknown): FocusRunStatus {
+  return isFocusRunStatus(input) ? input : "ended";
+}
+export function parseFocusRunStatus(input: unknown): SafeParseResult<FocusRunStatus> {
+  return parseOrError(focusRunStatusSchema, input);
+}
 
 /** Picked once per run. */
 export const FOCUS_RUN_MODES = ["pomodoro", "stopwatch"] as const;
@@ -121,6 +128,13 @@ export const focusRunModeSchema = z.enum(FOCUS_RUN_MODES);
 export function isFocusRunMode(value: unknown): value is FocusRunMode {
   return typeof value === "string" && (FOCUS_RUN_MODES as readonly string[]).includes(value);
 }
+/** Read bridge: an unknown mode reads as the default, pomodoro. */
+export function normalizeFocusRunMode(input: unknown): FocusRunMode {
+  return isFocusRunMode(input) ? input : "pomodoro";
+}
+export function parseFocusRunMode(input: unknown): SafeParseResult<FocusRunMode> {
+  return parseOrError(focusRunModeSchema, input);
+}
 
 /** The pomodoro phase a run is in (a stopwatch run is always `work`). */
 export const FOCUS_RUN_PHASES = ["work", "break", "long_break"] as const;
@@ -128,6 +142,13 @@ export type FocusRunPhase = (typeof FOCUS_RUN_PHASES)[number];
 export const focusRunPhaseSchema = z.enum(FOCUS_RUN_PHASES);
 export function isFocusRunPhase(value: unknown): value is FocusRunPhase {
   return typeof value === "string" && (FOCUS_RUN_PHASES as readonly string[]).includes(value);
+}
+/** Read bridge: an unknown phase reads as work. */
+export function normalizeFocusRunPhase(input: unknown): FocusRunPhase {
+  return isFocusRunPhase(input) ? input : "work";
+}
+export function parseFocusRunPhase(input: unknown): SafeParseResult<FocusRunPhase> {
+  return parseOrError(focusRunPhaseSchema, input);
 }
 
 export const ENERGY_LEVELS = ["low", "medium", "high"] as const;

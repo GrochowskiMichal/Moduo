@@ -40,7 +40,9 @@ import { Kbd } from "../../../components/ui/kbd";
 import { MetaCount, MetaCounts } from "../../../components/ui/meta-count";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
+import { SELECTED_ROW } from "../../../components/ui/selection";
 import { Toolbar } from "../../../components/ui/toolbar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -64,10 +66,12 @@ import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { resolveEntityIcon } from "../../spine/icon-map";
 import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { useAssignees } from "../assignees";
+import { onThisLabel } from "../claims";
 import { formatDue, formatScheduled, PRIORITY_LABELS } from "../helpers";
 import type { QueueRunApi } from "../hooks/use-queue-run";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task } from "../model";
+import { claimLabel } from "../queue";
 import { AssigneeAvatar } from "./assignee-avatar";
 import {
   DndBoundary,
@@ -144,15 +148,23 @@ export function QueueRunView({
       }
       const typing =
         !!target && target.closest("input, textarea, select, [contenteditable='true']") !== null;
+      // Typing keeps its keys (a title, the Add row, a comment: their own ⌘↵).
+      if (typing) return;
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
         if (k.running || !k.canEdit || !k.queueRun.head) return;
         e.preventDefault();
         k.queueRun.start(k.mode);
         return;
       }
-      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
-      const interactive = !!target && target.closest("button, a, [role='button']") !== null;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const interactive =
+        !!target && target.closest("button, a, [role='button'], [role='listitem']") !== null;
+      // A held ⏎ completes one task, not one per key repeat.
       if (e.key === "Enter" && !e.shiftKey && !interactive && k.running && k.canEdit) {
+        if (e.repeat) {
+          e.preventDefault();
+          return;
+        }
         if (!k.queueRun.nowTask) return;
         e.preventDefault();
         k.queueRun.done();
@@ -620,7 +632,7 @@ function PhasePill({
         <button
           type="button"
           aria-label={`${text} ${clock} · time options`}
-          className="flex h-(--ctrl-h-sm) items-center gap-2 rounded-md bg-state-active px-2.5 font-sans text-sm font-medium text-foreground transition-colors hover:bg-state-active-hover"
+          className="flex h-(--ctrl-h-sm) items-center gap-2 rounded-md bg-state-active px-2.5 font-display text-base font-medium text-foreground transition-colors hover:bg-state-active-hover"
         >
           <Timer className="size-icon-xs shrink-0" aria-hidden />
           <span>{text}</span>
@@ -1071,46 +1083,68 @@ function QueueRow({
       onClick={onSelect}
       className={cn(
         "group flex min-h-(--row-h) cursor-default items-center gap-3 rounded-md px-2 transition-colors hover:bg-state-hover",
-        selected && "bg-state-selected hover:bg-state-selected",
+        selected && `${SELECTED_ROW} hover:bg-state-selected`,
         dim && "opacity-60",
       )}
     >
-      <span className="flex w-5 shrink-0 justify-end font-sans text-xs tabular-nums text-muted-foreground">
+      <span className="relative flex w-5 shrink-0 justify-end font-sans text-xs tabular-nums text-muted-foreground">
         {index === null ? (
           <Check className="size-icon-xs" aria-hidden />
         ) : (
           <>
-            <span className={cn(canEdit && dragListeners && "group-hover:hidden")}>
+            {/* The number swaps for the grip on hover (a fade, R6). */}
+            <span
+              className={cn(
+                "transition-opacity duration-(--motion-fade) ease-(--ease-out)",
+                canEdit && dragListeners && "group-hover:opacity-0",
+              )}
+            >
               {index + 1}
             </span>
             {canEdit && dragListeners ? (
-              <GripVertical className="hidden size-icon-xs group-hover:block" aria-hidden />
+              <GripVertical
+                className="absolute inset-y-0 right-0 my-auto size-icon-xs opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) group-hover:opacity-100"
+                aria-hidden
+              />
             ) : null}
           </>
         )}
       </span>
-      <span
+      {/* The title opens the task (keyboard too); ⏎ on it isn't Done. */}
+      <button
+        type="button"
+        aria-current={selected ? "true" : undefined}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
         className={cn(
-          "min-w-0 flex-1 truncate font-sans text-md",
+          "min-w-0 flex-1 truncate rounded-sm text-left font-sans text-md outline-none focus-visible:ring-2 focus-visible:ring-ring",
           done ? "text-muted-foreground line-through" : "text-foreground",
         )}
       >
         {task.title || "Untitled"}
-      </span>
+      </button>
       {task.durationMinutes ? (
         <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground">
           ~{formatMinutes(task.durationMinutes)}
         </span>
       ) : null}
       {face ? (
-        <span
-          className="flex shrink-0 items-center"
-          title={
-            live ? `${claim.onThis.join(", ")} on this` : `In ${claim.names.join(", ")}'s queue`
-          }
-        >
-          <ClaimAvatar assignee={face} live={live} />
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              role="img"
+              aria-label={live ? onThisLabel(claim.onThis) : claimLabel(claim.names)}
+              className="flex shrink-0 items-center"
+            >
+              <ClaimAvatar assignee={face} live={live} />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {live ? onThisLabel(claim.onThis) : claimLabel(claim.names)}
+          </TooltipContent>
+        </Tooltip>
       ) : task.assigneeId ? (
         <AssigneeAvatar assignee={byId(task.assigneeId)} className="size-4 shrink-0" />
       ) : null}

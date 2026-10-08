@@ -14,7 +14,7 @@
 // A value won from the cloud (another device) flows back through the same store,
 // so it propagates to every instance exactly like a local edit.
 
-import { FOCUS_RUN_MODES, type FocusRunMode } from "@contracts/vocabularies";
+import { type FocusRunMode, normalizeFocusRunMode } from "@contracts/vocabularies";
 import { useCallback, useSyncExternalStore } from "react";
 import { z } from "zod";
 import { useDomainSync } from "./prefs-sync";
@@ -67,7 +67,7 @@ const focusPrefsSchema = z.object({
   sessionsBeforeLongBreak: z.coerce.number().catch(DEFAULT_FOCUS_PREFS.sessionsBeforeLongBreak),
   autoStartNext: z.boolean().catch(DEFAULT_FOCUS_PREFS.autoStartNext),
   soundEnabled: z.boolean().catch(DEFAULT_FOCUS_PREFS.soundEnabled),
-  runMode: z.enum(FOCUS_RUN_MODES).catch(DEFAULT_FOCUS_PREFS.runMode),
+  runMode: z.unknown().transform(normalizeFocusRunMode),
 });
 
 function sanitize(raw: unknown): FocusPrefs {

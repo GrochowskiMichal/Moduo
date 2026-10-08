@@ -15,6 +15,8 @@ rs.mock("../assignees", () => ({
 }));
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
+import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { __resetFocusEngineForTest, attachFocusUser, getFocusSession } from "../../focus/engine";
 import { __resetQueueRunForTest, attachRunUser, getQueueRunState } from "../../focus/run";
 import type { FocusRunRuntime } from "../../focus/run-model";
@@ -69,6 +71,7 @@ function makeApi(queued: Task[], ageDays = 0) {
   return {
     loading: false,
     error: null,
+    loadedWorkspaceId: WS,
     tasks: queued,
     queuedTasks: queued,
     myQueueEntries: queued.map((t) => entry(t.id, ageDays)),
@@ -91,7 +94,7 @@ function makeApi(queued: Task[], ageDays = 0) {
   } as unknown as TasksModuleApi;
 }
 
-function Harness({ api }: { api: TasksModuleApi }) {
+function Harness({ api, runtime = null }: { api: TasksModuleApi; runtime?: ModuoRuntime | null }) {
   const queueRun = useQueueRun({ api, workspaceId: WS, bucketNameById: () => "Inbox" });
   return (
     <TooltipProvider>
@@ -99,7 +102,7 @@ function Harness({ api }: { api: TasksModuleApi }) {
         api={api}
         queueRun={queueRun}
         workspaceId={WS}
-        runtime={null}
+        runtime={runtime}
         otherRunWorkspaceName={null}
         bucketNameById={() => "Inbox"}
         parentTitleFor={() => null}
@@ -147,6 +150,16 @@ describe("the line-up", () => {
       fireEvent.keyDown(window, { key: "Enter", metaKey: true });
     });
     expect(getQueueRunState().run?.nowTaskId).toBe("t1");
+  });
+
+  it("⌘↵ while typing belongs to the field, not Start run", () => {
+    render(<Harness api={makeApi([task("t1")])} />);
+    const field = screen.getByRole("textbox", { name: "Add a task to your queue" });
+    field.focus();
+    act(() => {
+      fireEvent.keyDown(field, { key: "Enter", metaKey: true });
+    });
+    expect(getQueueRunState().run).toBeNull();
   });
 
   it("an empty queue can't start a run", () => {
@@ -205,6 +218,30 @@ describe("the run (F2-1, F2-2)", () => {
     expect(getFocusSession().taskId).toBe("t2");
   });
 
+  it("a held ⏎ completes one task, not one per repeat", () => {
+    const api = makeApi([task("t1"), task("t2"), task("t3")]);
+    render(<Harness api={api} />);
+    fireEvent.click(screen.getByRole("button", { name: /Start run/ }));
+    act(() => {
+      fireEvent.keyDown(window, { key: "Enter" });
+      fireEvent.keyDown(window, { key: "Enter", repeat: true });
+      fireEvent.keyDown(window, { key: "Enter", repeat: true });
+    });
+    expect(api.markDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("⏎ on a row's title opens that task instead of completing Now", () => {
+    const api = makeApi([task("t1"), task("t2")]);
+    render(<Harness api={api} />);
+    fireEvent.click(screen.getByRole("button", { name: /Start run/ }));
+    const title = screen.getByRole("button", { name: "Task t2" });
+    title.focus();
+    act(() => {
+      fireEvent.keyDown(title, { key: "Enter" });
+    });
+    expect(api.markDone).not.toHaveBeenCalled();
+  });
+
   it("Skip sends Now to the end; End run goes back to the line-up", () => {
     const api = makeApi([task("t1"), task("t2")]);
     render(<Harness api={api} />);
@@ -215,6 +252,47 @@ describe("the run (F2-1, F2-2)", () => {
     expect(screen.getByRole("button", { name: /Start run/ })).not.toBeNull();
     expect(screen.getByText(/Run ended · 0 done/)).not.toBeNull();
     expect(getFocusSession().tracking).toBe(false);
+  });
+
+  it("the Now task's linked items open in their module (F2-3)", async () => {
+    const runtime = {
+      spine: {
+        listLinks: async () => [
+          {
+            id: "l1",
+            workspaceId: WS,
+            sourceType: "task",
+            sourceId: "t1",
+            targetType: "note",
+            targetId: "n1",
+            relationKind: "references",
+            origin: "manual",
+            createdBy: null,
+            createdAt: "2026-10-09T10:00:00Z",
+            deletedAt: null,
+          },
+        ],
+        getEntities: async () => [
+          {
+            workspaceId: WS,
+            type: "note",
+            id: "n1",
+            label: "QA checklist",
+            icon: null,
+            deletedAt: null,
+          },
+        ],
+      },
+    } as unknown as ModuoRuntime;
+    render(<Harness api={makeApi([task("t1"), task("t2")])} runtime={runtime} />);
+    fireEvent.click(screen.getByRole("button", { name: /Start run/ }));
+    const chip = await screen.findByRole("button", { name: /QA checklist/ });
+    const opened: unknown[] = [];
+    const listen = (e: Event) => opened.push((e as CustomEvent).detail);
+    window.addEventListener(ENTITY_OPEN_EVENT, listen);
+    fireEvent.click(chip);
+    window.removeEventListener(ENTITY_OPEN_EVENT, listen);
+    expect(opened).toEqual([{ type: "note", id: "n1" }]);
   });
 
   it("Pause and Resume", () => {

@@ -38,6 +38,7 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
 import { LinkedNotesPanel } from "../../notes/ui/linked-notes-panel";
+import { routeCapture } from "../../tasks/capture-route";
 import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
 import { CaptureModal } from "../../tasks/ui/capture-modal";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
@@ -1187,10 +1188,7 @@ export function CalendarPageView({
         buckets={api.buckets}
         inbox={api.inbox}
         defaultBucketId={api.inbox?.id ?? null}
-        onCreate={(fields, opts) => {
-          if (opts.queue) api.captureToQueue(fields);
-          else void api.createTask(fields);
-        }}
+        onCreate={(fields, opts) => routeCapture(api, fields, opts)}
       />
 
       <Dialog open={deleteEvent !== null} onOpenChange={(open) => !open && setDeleteEventId(null)}>

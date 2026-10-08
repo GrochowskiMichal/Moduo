@@ -28,10 +28,12 @@ import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-ope
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { flushFocusSession, registerFocusFlushSink } from "../../focus/engine";
+import { getQueueRunState } from "../../focus/run";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
+import { captureQueuesByDefault, routeCapture } from "../capture-route";
 import { useRunClaimsPoll } from "../claims";
 import {
   timeBlockByBucket as invertTimeBlocks,
@@ -218,15 +220,22 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   // fresh-mount case (chip clicked from another route, event fired before this
   // listener existed); the event covers the already-mounted case.
   // It also stands in for the default-scope resolution below, so that can't
-  // move the view away from the Queue once the bundle loads.
+  // move the view away from the Queue once the bundle loads. A run in another
+  // workspace switches to that workspace first.
+  const workspaceCtx = useContext(WorkspaceContext);
   const workspaceRef = useRef(workspaceId);
+  const selectWorkspaceRef = useRef(workspaceCtx?.selectWorkspace);
   useEffect(() => {
     workspaceRef.current = workspaceId;
+    selectWorkspaceRef.current = workspaceCtx?.selectWorkspace;
   });
   const resolvedForRef = useRef<string | null>(null);
   useEffect(() => {
     const showQueue = () => {
-      resolvedForRef.current = workspaceRef.current;
+      const runWs = getQueueRunState().run?.workspaceId;
+      const target = runWs ?? workspaceRef.current;
+      if (runWs && runWs !== workspaceRef.current) selectWorkspaceRef.current?.(runWs);
+      resolvedForRef.current = target;
       setSelection("today");
     };
     if (consumeFocusViewRequest()) showQueue();
@@ -242,7 +251,14 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
     return () => window.removeEventListener(FOCUS_VIEW_REQUEST_EVENT, onRequest);
   }, []);
 
-  // Persist preferences.
+  // Persist preferences. (The Plan/Focus mode is gone: TV-F2 drops its key.)
+  useEffect(() => {
+    try {
+      window.localStorage.removeItem(lsKey(workspaceId, "mode"));
+    } catch {
+      /* ignore */
+    }
+  }, [workspaceId]);
   useEffect(() => writeLS(workspaceId, "view", view), [workspaceId, view]);
   useEffect(() => writeLS(workspaceId, "groupBy", groupBy), [workspaceId, groupBy]);
   useEffect(() => writeLS(workspaceId, "boardGroupBy", boardGroupBy), [workspaceId, boardGroupBy]);
@@ -460,7 +476,7 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   );
   useRunClaimsPoll(loadClaims, workspaceId, currentUserId);
   // A run in another workspace: the line-up says so (Start run here ends it).
-  const workspaces = useContext(WorkspaceContext)?.workspaces ?? [];
+  const workspaces = workspaceCtx?.workspaces ?? [];
   // During a run the right panel is the Now task's (spec §3: the Task tab).
   const runNowId = runHere && selection === "today" ? (queueRun.nowTask?.id ?? null) : null;
   useEffect(() => {
@@ -903,11 +919,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
         inbox={inbox}
         defaultBucketId={captureBucketId}
         // During a run, and from the Queue, a capture joins my queue (F2-5).
-        queueByDefault={runHere || selection === "today"}
-        onCreate={(fields, opts) => {
-          if (opts.queue) api.captureToQueue(fields);
-          else void api.createTask(fields);
-        }}
+        queueByDefault={captureQueuesByDefault(runHere, selection)}
+        onCreate={(fields, opts) => routeCapture(api, fields, opts)}
       />
       <DriftTriageDialog
         open={triageBucketId !== null}

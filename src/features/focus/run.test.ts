@@ -368,13 +368,15 @@ describe("reloads and other devices (F2-4)", () => {
     startQueueRun({ workspaceId: WS, mode: "stopwatch", task: refs.t1 });
     await __flushRunSyncForTest();
     rs.advanceTimersByTime(120_000);
+    await __flushRunSyncForTest(); // this device's heartbeats
     // The other device took over a minute in (Realtime brings the row).
     const taken = {
       ...rows[0],
       deviceId: "device-other",
       controlAt: iso(T0 + 60_000),
-      seenAt: iso(T0 + 60_000),
+      seenAt: iso(T0 + 120_000),
     };
+    rows[0] = taken;
     pushRow?.(dbRow(taken));
     expect(getFocusSession().tracking).toBe(false);
     expect(isRunInControl(getQueueRunState().run)).toBe(false);
@@ -394,9 +396,17 @@ describe("reloads and other devices (F2-4)", () => {
     startQueueRun({ workspaceId: WS, mode: "stopwatch", task: refs.t1 });
     await __flushRunSyncForTest();
     rs.advanceTimersByTime(30_000);
-    pushRow?.(
-      dbRow({ ...rows[0], status: "ended", endedAt: iso(T0 + 30_000), deviceId: "device-other" }),
-    );
+    rows[0] = {
+      ...rows[0],
+      status: "ended",
+      endedAt: iso(T0 + 30_000),
+      deviceId: "device-other",
+      seenAt: iso(T0 + 30_000),
+    };
+    pushRow?.(dbRow(rows[0]));
+    // A save may have been on its way: then the run is read again after it.
+    await __flushRunSyncForTest();
+    await settle();
     expect(getQueueRunState().run).toBeNull();
     expect(getQueueRunState().ended?.id).toBe(rows[0].id);
     expect(getFocusSession().tracking).toBe(false);
@@ -414,6 +424,136 @@ describe("reloads and other devices (F2-4)", () => {
     await __flushRunSyncForTest();
     pushRow?.(dbRow({ ...first, status: "running" }));
     expect(getQueueRunState().run?.nowTaskId).toBe("t2");
+  });
+});
+
+describe("copies of the run that arrive out of order (F2-4)", () => {
+  /** A promise the test settles. */
+  function defer<T>() {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  function otherDevicesRun(over: Partial<FocusRun> = {}): FocusRun {
+    return {
+      id: "srv-1",
+      workspaceId: WS,
+      userId: USER,
+      status: "running",
+      mode: "stopwatch",
+      startedAt: iso(T0 - 600_000),
+      endedAt: null,
+      nowTaskId: "t1",
+      phase: "work",
+      phaseStartedAt: iso(T0 - 600_000),
+      phaseSeconds: null,
+      pausedAt: null,
+      blocksCompleted: 0,
+      focusedSeconds: 600,
+      doneTaskIds: [],
+      deviceId: "device-other",
+      controlAt: iso(T0 - 600_000),
+      seenAt: iso(T0),
+      ...over,
+    };
+  }
+
+  it("a read that started before a takeover can't stop this device's clock", async () => {
+    const reads: Array<ReturnType<typeof defer<FocusRun | null>>> = [];
+    const saves: Array<ReturnType<typeof defer<FocusRun | null>>> = [];
+    const { rt } = fakeServer();
+    const racing: FocusRunRuntime = {
+      ...rt,
+      latestRun: () => {
+        const d = defer<FocusRun | null>();
+        reads.push(d);
+        return d.promise;
+      },
+      saveRun: () => {
+        const d = defer<FocusRun | null>();
+        saves.push(d);
+        return d.promise;
+      },
+    };
+    attach(racing);
+    reads[0].resolve(otherDevicesRun());
+    await settle();
+    expect(isRunInControl(getQueueRunState().run)).toBe(false);
+
+    const refreshing = refreshQueueRun(); // a window-focus read, still out
+    takeRunControl(resolve); // the person acts here
+    rs.advanceTimersByTime(0);
+    await settle();
+    expect(saves).toHaveLength(1);
+    // The old read lands while the take is on its way: set aside.
+    reads[1].resolve(otherDevicesRun());
+    await refreshing;
+    expect(getFocusSession().tracking).toBe(true);
+    // The take answers: this device is in control and its clock runs.
+    rs.advanceTimersByTime(1000);
+    saves[0].resolve(
+      otherDevicesRun({
+        deviceId: runDeviceId(),
+        controlAt: iso(Date.now()),
+        seenAt: iso(Date.now()),
+      }),
+    );
+    for (let i = 0; i < 5; i++) await settle();
+    expect(isRunInControl(getQueueRunState().run)).toBe(true);
+    expect(getFocusSession()).toMatchObject({ tracking: true, taskId: "t1" });
+    // Once this device's writes are done, the run is read once more.
+    rs.advanceTimersByTime(500);
+    await settle();
+    for (const d of saves.slice(1)) {
+      d.resolve(otherDevicesRun({ deviceId: runDeviceId(), seenAt: iso(Date.now()) }));
+    }
+    for (let i = 0; i < 5; i++) await settle();
+    expect(reads.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("an older copy never replaces a newer one", async () => {
+    const { rows, rt } = fakeServer();
+    rows.push(otherDevicesRun({ nowTaskId: "t2", seenAt: iso(T0 + 5000) }));
+    attach(rt);
+    await refreshQueueRun();
+    expect(getQueueRunState().run?.nowTaskId).toBe("t2");
+    pushRow?.(dbRow(otherDevicesRun({ nowTaskId: "t1", seenAt: iso(T0) })));
+    expect(getQueueRunState().run?.nowTaskId).toBe("t2");
+  });
+
+  it("a late copy of a run ended here doesn't bring it back", async () => {
+    const { rows, rt } = fakeServer();
+    attach(rt);
+    startQueueRun({ workspaceId: WS, mode: "stopwatch", task: refs.t1 });
+    await __flushRunSyncForTest();
+    const before = { ...rows[0] };
+    endQueueRun();
+    await __flushRunSyncForTest();
+    rs.advanceTimersByTime(1000);
+    pushRow?.(dbRow({ ...before, seenAt: iso(Date.now()) }));
+    expect(getQueueRunState().run).toBeNull();
+    expect(getFocusSession().tracking).toBe(false);
+  });
+
+  it("a start that failed offline is sent again on the next look", async () => {
+    const { rows, rt } = fakeServer();
+    let offline = true;
+    attach({
+      ...rt,
+      startRun: (input) => (offline ? Promise.reject(new Error("offline")) : rt.startRun(input)),
+    });
+    startQueueRun({ workspaceId: WS, mode: "stopwatch", task: refs.t1 });
+    await __flushRunSyncForTest();
+    expect(getQueueRunState().run?.local).toBe(true);
+    offline = false;
+    await refreshQueueRun();
+    await __flushRunSyncForTest();
+    expect(rows).toHaveLength(1);
+    expect(getQueueRunState().run?.id).toBe(rows[0].id);
+    expect(getQueueRunState().run?.local).toBeUndefined();
   });
 });
 

@@ -43,6 +43,7 @@ function makeApi(queued: Task[], over: Partial<Api> = {}): Api {
   return {
     loading: false,
     error: null,
+    loadedWorkspaceId: WS,
     tasks: queued,
     queuedTasks: queued,
     markDone: rs.fn(),
@@ -192,6 +193,43 @@ describe("Done, Skip, Remove, Do now (F2-2)", () => {
   });
 });
 
+describe("switching workspaces", () => {
+  it("coming back to the run's workspace before its list loads keeps the run", () => {
+    const w1 = [task("t1"), task("t2")];
+    const other = { ...task("x1"), workspaceId: "w2" };
+    const hook = renderHook(
+      ({ a, ws }: { a: Api; ws: string }) =>
+        useQueueRun({ api: a, workspaceId: ws, bucketNameById: () => "Inbox" }),
+      { initialProps: { a: makeApi(w1), ws: WS } },
+    );
+    act(() => hook.result.current.start("stopwatch"));
+    expect(getQueueRunState().run).not.toBeNull();
+    // To w2: the first render still holds w1's list, my queue there is empty.
+    hook.rerender({ a: { ...makeApi([]), tasks: w1 }, ws: "w2" });
+    hook.rerender({ a: { ...makeApi([other]), loadedWorkspaceId: "w2" }, ws: "w2" });
+    // Back to w1: w2's list until the read lands.
+    hook.rerender({ a: { ...makeApi([]), tasks: [other], loadedWorkspaceId: "w2" }, ws: WS });
+    expect(getQueueRunState().run).not.toBeNull();
+    expect(getFocusSession()).toMatchObject({ tracking: true, taskId: "t1" });
+    // w1's list lands: the run is still on t1.
+    hook.rerender({ a: makeApi(w1), ws: WS });
+    expect(getQueueRunState().run?.nowTaskId).toBe("t1");
+    expect(getQueueRunState().notice).toBeNull();
+  });
+
+  it("a queue that's really empty after a load ends the run", () => {
+    const w1 = [task("t1")];
+    const hook = renderHook(
+      ({ a }: { a: Api }) =>
+        useQueueRun({ api: a, workspaceId: WS, bucketNameById: () => "Inbox" }),
+      { initialProps: { a: makeApi(w1) } },
+    );
+    act(() => hook.result.current.start("stopwatch"));
+    hook.rerender({ a: makeApi([]) });
+    expect(getQueueRunState().run).toBeNull();
+  });
+});
+
 describe("Now leaves by someone else's hand", () => {
   it("names who completed it", async () => {
     const loadActivity = rs.fn(async () => [
@@ -237,6 +275,38 @@ describe("Now leaves by someone else's hand", () => {
       t.update({ tasks: [task("t1", { status: "done" }), task("t2")], queuedTasks: [task("t2")] });
       for (let i = 0; i < 5; i++) await Promise.resolve();
     });
+    expect(getQueueRunState().notice).toBeNull();
+    expect(getQueueRunState().run?.doneTaskIds).toEqual(["t1"]);
+  });
+
+  it("my own completion that hasn't reached the trail yet is asked again, and counts", async () => {
+    let calls = 0;
+    const loadActivity = rs.fn(async () => {
+      calls += 1;
+      return calls === 1
+        ? []
+        : ([
+            {
+              op: "tasks.set_status",
+              actorId: USER,
+              actorLabel: "Me",
+              actorType: "user",
+              payload: { to: "done" },
+            },
+          ] as unknown as ActivityEntry[]);
+    });
+    const t = setup([task("t1"), task("t2")], { loadActivity });
+    act(() => t.hook.result.current.start("stopwatch"));
+    await act(async () => {
+      t.update({ tasks: [task("t1", { status: "done" }), task("t2")], queuedTasks: [task("t2")] });
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    expect(getQueueRunState().run?.doneTaskIds).toEqual([]);
+    await act(async () => {
+      rs.advanceTimersByTime(2000);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    });
+    expect(loadActivity).toHaveBeenCalledTimes(2);
     expect(getQueueRunState().notice).toBeNull();
     expect(getQueueRunState().run?.doneTaskIds).toEqual(["t1"]);
   });

@@ -196,6 +196,10 @@ export function runSnapshotFromSession(
   };
 }
 
+/** How far past the device's last save a read-through clock keeps counting:
+ *  the claims window (focus_claims, 3 minutes). */
+export const READ_THROUGH_MAX_S = 180;
+
 /** A run's clock read from its record (another device's run, read through). */
 export interface FocusRunReading {
   running: boolean;
@@ -217,18 +221,20 @@ export function readRunClock(run: FocusRun, now: number): FocusRunReading {
   const at = running ? now : run.pausedAt ? Date.parse(run.pausedAt) : now;
   const phaseElapsed = Math.max(0, Math.floor((at - Date.parse(run.phaseStartedAt)) / 1000));
   const phaseLeft = pomodoro ? Math.max(0, (run.phaseSeconds ?? 0) - phaseElapsed) : 0;
+  // Focus since the device's last save counts only as long as that save is
+  // live (a device that slept or died keeps no clock): never an inflated total.
   const sinceSeen =
     running && run.phase === "work"
-      ? Math.max(0, Math.floor((now - Date.parse(run.seenAt)) / 1000))
+      ? Math.min(READ_THROUGH_MAX_S, Math.max(0, Math.floor((now - Date.parse(run.seenAt)) / 1000)))
       : 0;
-  const focusedSeconds = pomodoro ? run.focusedSeconds + sinceSeen : phaseElapsed;
+  const focusedSeconds = run.focusedSeconds + sinceSeen;
   return {
     running,
     pomodoro,
     phase: run.phase,
     phaseElapsed,
     phaseLeft,
-    bigClock: pomodoro ? phaseLeft : phaseElapsed,
+    bigClock: pomodoro ? phaseLeft : focusedSeconds,
     focusedSeconds,
   };
 }
