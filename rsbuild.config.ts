@@ -145,6 +145,10 @@ export default defineConfig({
               __dirname,
               "src/lib/tauri-plugin-process-stub.ts",
             ),
+            "@tauri-apps/plugin-notification": path.resolve(
+              __dirname,
+              "src/lib/tauri-plugin-notification-stub.ts",
+            ),
           }
         : {}),
     },

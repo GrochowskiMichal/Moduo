@@ -65,6 +65,7 @@
     "@tailwindcss/postcss": "4.3.3",
     "@tanstack/react-router": "^1.170.41",
     "@tauri-apps/api": "2.12.1",
+    "@tauri-apps/plugin-notification": "2.5.1",
     "@tauri-apps/plugin-process": "2.4.0",
     "@tauri-apps/plugin-updater": "2.13.1",
     "@xyflow/react": "^12.12.0",
