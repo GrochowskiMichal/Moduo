@@ -350,6 +350,9 @@ export function seedTags(workspaceId: string, seed: TagSeed): void {
 export function applyLiveTags(workspaceId: string, changes: readonly LiveChange[]): void {
   const ws = workspaces.get(workspaceId);
   if (!ws) return;
+  // Deletes reach us from every workspace (they carry only an id), so keep
+  // the marks bounded here too, not only when a read lands.
+  forgetOldLive(ws);
   const now = Date.now();
   let touched = false;
   const giveWay = (gone: (op: Op) => boolean) => {
