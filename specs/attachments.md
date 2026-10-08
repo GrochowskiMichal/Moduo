@@ -1,6 +1,6 @@
 # Spec: Attachments (platform + Tasks surfaces)
 
-> Status: **Draft — awaiting designer approval** (AT-1 can start now; no open questions) · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) T11 + rounds 3/3b (attachments-only, doubled limits, error handling) · Comp: [`ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) §5/§6 · First consumer: [`tasks-v2.md`](./tasks-v2.md) · Reuse later: Notes, comments, Chat
+> Status: **AT-1 built 2026-10-09** (PR #317; migrations not applied to prod yet) · AT-2 next, after TV-U3 · no open questions · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) T11 + rounds 3/3b (attachments-only, doubled limits, error handling) · Comp: [`ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) §5/§6 · First consumer: [`tasks-v2.md`](./tasks-v2.md) · Reuse later: Notes, comments, Chat
 
 ## Scope
 
@@ -164,6 +164,7 @@ The storage layer is polymorphic (`entity_type`), so Notes, comments and Chat ca
 1. **Bucket** `attachments`: `public = false`, `type = 'STANDARD'` (NOT NULL on hosted). Bucket `file_size_limit = 500 MB` (the highest plan cap); per-plan caps are enforced by ops.
    - Object paths: `{workspace_id}/{attachment_id}/original.{ext}` and `…/preview.{jpg|png|webp}`.
    - **AT-1 must confirm the hosted project's global upload limit is ≥ 500 MB** (raise it in the dashboard if not; Maciej/Mike).
+     → **2026-10-09: it's 50 MB, the Supabase Free plan's ceiling.** Until Maciej decides (Supabase Pro + 500 MB, or 50 MB per file for everyone), every per-file limit is held at 50 MB by `attachments__platform_file_cap()` ([decision](../docs/decisions/data.md)).
 2. **Table** `attachments(id, workspace_id, entity_type, entity_id, uploader_id null, file_name, mime, size_bytes, preview_path null, preview_mime null, width null, height null, status pending|ready|failed, deleted_at null, deleted_reason user|task|bucket null, deleted_batch_id null, created_at, updated_at)`.
    - Visibility via `can_access(entity_type, entity_id, 'view')` (develop's PERM sharing).
    - **All writes through SECURITY DEFINER ops that return the row.** This avoids the insert-then-read-back RLS trap noted in the PERM hotfix.
