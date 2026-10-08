@@ -31,7 +31,7 @@
   --m-btn-fg-l: oklch(0.98 0 0);
   --m-fixed-l: oklch(0.16 0 0 / 0.35);
   /* email: dark (the legal pages' off-black, not the app's pure black) */
-  --m-canvas-d: oklch(0.19 0 0);
+  --m-canvas-d: oklch(0.2 0 0);
   --m-fg-d: oklch(0.96 0 0);
   --m-body-d: oklch(0.86 0 0);
   --m-muted-d: oklch(0.68 0 0);
@@ -187,7 +187,7 @@ p { margin: 0; }
     <h1>Every email Moduo sends, in one place</h1>
     <p class="lede">The copy and the look of each email, ratified on 8 October 2026. The example people are made up (Tom books Anna, Anna invites Tom). Nothing here is built yet; the build plan is <span class="addr">specs/transactional-email.md</span>.</p>
     <div class="controls">
-      <div class="seg" role="group" aria-label="Email colour mode">
+      <div class="seg" role="group" aria-label="Email color mode">
         <button type="button" id="mode-auto" data-mode="auto" aria-pressed="true">Match page</button>
         <button type="button" id="mode-light" data-mode="light" aria-pressed="false">Light</button>
         <button type="button" id="mode-dark" data-mode="dark" aria-pressed="false">Dark</button>
@@ -214,7 +214,7 @@ p { margin: 0; }
       <span class="eyebrow">The shell</span>
       <h2>One frame for every email</h2>
       <ul>
-        <li>Mark and wordmark top left, or the host's face on booking emails, like the booking page.</li>
+        <li>The drawn Moduo lockup top left, as one image from the brand pipeline (typed here only as a stand-in), or the host's face on booking emails, like the booking page.</li>
         <li>One heading, short paragraphs, at most one button.</li>
         <li>Booking emails reuse the booking page's sentence, with the fixed words underlined.</li>
         <li>Every email has a plain-text twin.</li>
@@ -242,7 +242,7 @@ p { margin: 0; }
         <li><b>Sign-in screen</b>"Resend code" shows a 60-second countdown instead of Supabase's raw error.</li>
         <li><b>Settings → Notifications → Email</b>Three switches: Bookings (on), Trial and billing reminders (on), Build updates (off).</li>
         <li><b>Each booking link</b>A "Remind guests" setting: Off, 1 hour before or 24 hours before. New links start at 24 hours.</li>
-        <li><b>Host bell notifications</b>New booking and guest cancelled, alongside the emails.</li>
+        <li><b>Host bell notifications</b>New booking and guest canceled, alongside the emails.</li>
         <li><b>Booking page</b>Stops promising a calendar invite on Zoom-only links.</li>
         <li><b>Onboarding</b>Says 14-day trial, not 7.</li>
         <li><b>Privacy policy</b>Names Resend as the sender of sign-in emails, which Supabase sends today.</li>
@@ -253,7 +253,7 @@ p { margin: 0; }
       <h2>Emails other services send</h2>
       <ul class="plainlist">
         <li><b>Google Calendar</b>Booking invites and cancellations, sent as the host's Google account. We can't restyle these.</li>
-        <li><b>Stripe</b>Receipts, invoices, failed payments and card reminders. Styled with our logo and colours in Stripe's settings, switched on at paid launch.</li>
+        <li><b>Stripe</b>Receipts, invoices, failed payments and card reminders. Styled with our logo and colors in Stripe's settings, switched on at paid launch.</li>
         <li><b>Your own mail</b>What you send from the Moduo mail client is your email, not ours.</li>
       </ul>
     </section>
@@ -269,7 +269,7 @@ p { margin: 0; }
 <script>
 const ADDR = "Moduo · Ringdove sp. z o.o., Fatimska 41A/310, 31-831 Kraków, Poland";
 const HELLO = "Moduo <hello@moduo.app>";
-const VIA = "Anna Kowalska via Moduo <hello@moduo.app>";
+const VIA = "Anna Carter via Moduo <hello@moduo.app>";
 
 const GROUPS = [
   { id: "account", letter: "A", name: "Account", blurb: "Signing in and leaving. These always send; you can't turn them off." },
@@ -300,7 +300,7 @@ const EMAILS = [
     blocks: [
       ["h", "Your account is deleted"],
       ["p", "We deleted your Moduo account and your data on 8 October 2026, as you asked."],
-      ["p", "Things you shared in other people's workspaces stay with those workspaces. Your plan is cancelled, and you won't be charged again."],
+      ["p", "Things you shared in other people's workspaces stay with those workspaces. Your plan is canceled, and you won't be charged again."],
       ["muted", "This is the last email we'll send to tom@becker.studio, and we're removing the address from our records now. To come back later, you'd need a new invite."],
     ],
     why: "You got this email because the Moduo account for this address was deleted.",
@@ -342,27 +342,27 @@ const EMAILS = [
   { g: "access", id: "B3", name: "Workspace invite", status: "fix",
     when: "An owner or admin invites someone in Settings → Members and access.",
     to: "The invited address", off: "Always sends",
-    from: VIA + " · replies go to Anna", subject: "Anna Kowalska invited you to Northwind Studio", pre: "Join as a member. The invite works until 15 October.",
+    from: VIA + " · replies go to Anna", subject: "Anna Carter invited you to Northwind Studio", pre: "Join as a member. The invite works until 15 October.",
     blocks: [
       ["ws", "N", "Northwind Studio"],
       ["h", "Join Northwind Studio on Moduo"],
-      ["p", "Anna Kowalska (anna@northwind.studio) invited you to their workspace in Moduo."],
+      ["p", "Anna Carter (anna@northwind.studio) invited you to their workspace in Moduo."],
       ["rows", [["Role", "Member"], ["Works until", "Thursday 15 October"]]],
       ["btn", "Accept invite"],
       ["muted", "New to Moduo? Accepting sets up your account. Sign in with tom@becker.studio, the address this invite was sent to."],
       ["muted", "Not expecting this? Ignore it and nothing happens."],
     ],
-    why: "You got this email because Anna Kowalska invited this address to a Moduo workspace.",
+    why: "You got this email because Anna Carter invited this address to a Moduo workspace.",
     notes: ["Today every invite tries to send this and fails: the trigger calls it without its secret, and its link points to a page that doesn't exist.", "The copy-a-link option in Settings stays (Q25).", "Lets a brand-new person into Moduo without the waitlist (Q26), and only for this address (S1).", "Owners and admins only, at most 20 a day per workspace (S2). No free-text message field, and names are length-limited, so nobody can use it to send spam."] },
 
   { g: "access", id: "B4", name: "You're the owner now", status: "new",
     when: "An owner hands a workspace over to someone else.",
     to: "The new owner", off: "Always sends",
-    from: HELLO, subject: "You're now the owner of Northwind Studio", pre: "Anna Kowalska handed the workspace over to you.",
+    from: HELLO, subject: "You're now the owner of Northwind Studio", pre: "Anna Carter handed the workspace over to you.",
     blocks: [
       ["ws", "N", "Northwind Studio"],
       ["h", "You own Northwind Studio now"],
-      ["p", "Anna Kowalska made you the owner of Northwind Studio on 8 October. You can now manage its members, roles and settings, and only you can delete it."],
+      ["p", "Anna Carter made you the owner of Northwind Studio on 8 October. You can now manage its members, roles and settings, and only you can delete it."],
       ["btn", "Open workspace settings"],
     ],
     why: "You got this email because ownership of a Moduo workspace moved to you.",
@@ -375,7 +375,7 @@ const EMAILS = [
     blocks: [
       ["lock"],
       ["h", "You've been removed from Northwind Studio"],
-      ["p", "Anna Kowalska removed you from Northwind Studio on 8 October. Your own workspaces and your account aren't affected."],
+      ["p", "Anna Carter removed you from Northwind Studio on 8 October. Your own workspaces and your account aren't affected."],
       ["muted", "If you think this is a mistake, ask Anna."],
     ],
     why: "You got this email because you were a member of Northwind Studio on Moduo.",
@@ -384,9 +384,9 @@ const EMAILS = [
   { g: "bookings", id: "C1", name: "Booking confirmed (guest)", status: "redo",
     when: "A guest books time on a booking link.",
     to: "The person who booked", off: "Always sends",
-    from: VIA + " · replies go to Anna", subject: "Booked: Anna Kowalska, Fri 16 Oct at 14:00", pre: "30 minutes on Google Meet, Warsaw time.",
+    from: VIA + " · replies go to Anna", subject: "Booked: Anna Carter, Fri 16 Oct at 14:00", pre: "30 minutes on Google Meet, Warsaw time.",
     blocks: [
-      ["host", "AK", "Anna Kowalska"],
+      ["host", "AC", "Anna Carter"],
       ["sentence", "You're meeting Anna on {Friday 16 October} at {14:00}."],
       ["p", "30 minutes on Google Meet, Warsaw time. Google is sending the calendar invite separately."],
       ["rows", [["Also invited", "Sam Lee, Priya Nair"]]],
@@ -394,23 +394,23 @@ const EMAILS = [
       ["link", "Can't make it? Cancel the meeting"],
       ["muted", "Questions for Anna? Reply to this email."],
     ],
-    why: "You got this email because you booked time with Anna Kowalska through Moduo.",
+    why: "You got this email because you booked time with Anna Carter through Moduo.",
     sent: true,
     notes: ["Today it's four lines of plain text.", "Attaches a calendar file only when Google isn't sending an invite, as on Zoom-only links (Q32).", "The guest's own note is left out on purpose, so the booking form can't be used to send someone spam.", "Times use the zone the guest picked on the booking page (Q37).", "When Moduo Meet ships, the button becomes \"Join call\"."] },
 
   { g: "bookings", id: "C2", name: "Added to a booking (extra guest)", status: "new",
     when: "The booker adds people, and Google isn't sending them an invite (Zoom-only links).",
     to: "Each added guest", off: "Always sends",
-    from: VIA, subject: "Tom Becker added you: Anna Kowalska, Fri 16 Oct at 14:00", pre: "30 minutes on Zoom, Warsaw time.",
+    from: VIA, subject: "Tom Becker added you: Anna Carter, Fri 16 Oct at 14:00", pre: "30 minutes on Zoom, Warsaw time.",
     blocks: [
-      ["host", "AK", "Anna Kowalska"],
+      ["host", "AC", "Anna Carter"],
       ["sentence", "Tom Becker added you to a meeting with Anna on {Friday 16 October} at {14:00}."],
       ["p", "30 minutes on Zoom, Warsaw time."],
       ["attach", "invite.ics"],
       ["btn", "Join Zoom"],
       ["muted", "Can't make it? Let Tom know."],
     ],
-    why: "You got this email because Tom Becker added this address when booking time with Anna Kowalska.",
+    why: "You got this email because Tom Becker added this address when booking time with Anna Carter.",
     sent: true,
     notes: ["Today these people get nothing at all on Zoom-only links (Q33).", "No cancel link: only the person who booked can cancel."] },
 
@@ -429,53 +429,51 @@ const EMAILS = [
     settings: true,
     notes: ["Plus a bell notification. Today the host hears nothing at all (Q30).", "Times are in the host's own zone."] },
 
-  { g: "bookings", id: "C4", name: "Guest cancelled (host)", status: "new",
+  { g: "bookings", id: "C4", name: "Guest canceled (host)", status: "new",
     when: "A guest uses the cancel link.",
     to: "The host", off: "Settings → Notifications → Bookings",
-    from: HELLO + " · replies go to Tom", subject: "Cancelled: Tom Becker, Fri 16 Oct at 14:00", pre: "The time is open on your Intro call link again.",
+    from: HELLO + " · replies go to Tom", subject: "Canceled: Tom Becker, Fri 16 Oct at 14:00", pre: "The time is open on your Intro call link again.",
     blocks: [
       ["lock"],
-      ["sentence", "Tom Becker cancelled your meeting on {Friday 16 October} at {14:00}."],
+      ["sentence", "Tom Becker canceled your meeting on {Friday 16 October} at {14:00}."],
       ["p", "We took it off your calendars, and the time is open on your Intro call link again."],
     ],
-    why: "You got this email because a booking on your Moduo booking link was cancelled.",
+    why: "You got this email because a booking on your Moduo booking link was canceled.",
     settings: true,
     notes: ["Plus a bell notification (Q34)."] },
 
-  { g: "bookings", id: "C5", name: "You cancelled (guest)", status: "new",
+  { g: "bookings", id: "C5", name: "You canceled (guest)", status: "new",
     when: "A guest uses the cancel link.",
     to: "The person who booked", off: "Always sends",
-    from: VIA, subject: "You cancelled your meeting with Anna Kowalska", pre: "Anna knows. Pick another time whenever suits.",
+    from: VIA, subject: "You canceled your meeting with Anna Carter", pre: "Anna knows. Pick another time whenever suits.",
     blocks: [
-      ["host", "AK", "Anna Kowalska"],
-      ["sentence", "You cancelled your meeting with Anna on {Friday 16 October} at {14:00}."],
+      ["host", "AC", "Anna Carter"],
+      ["sentence", "You canceled your meeting with Anna on {Friday 16 October} at {14:00}."],
       ["p", "Anna knows."],
       ["btn", "Pick another time"],
     ],
-    why: "You got this email because you cancelled a meeting booked through Moduo.",
-    sent: true,
-    notes: ["The button reopens Anna's booking page."] },
+    why: "You got this email because you canceled a meeting booked through Moduo.",
+    notes: ["The button reopens Anna's booking page.", "No \"Scheduled with Moduo\" badge: nothing is scheduled any more."] },
 
-  { g: "bookings", id: "C6", name: "Host cancelled (guest)", status: "new",
+  { g: "bookings", id: "C6", name: "Host canceled (guest)", status: "new",
     when: "The host deletes the booked meeting in Moduo, or cancels it in Google Calendar.",
     to: "The person who booked and anyone they added", off: "Always sends",
-    from: VIA + " · replies go to Anna", subject: "Anna Kowalska cancelled your meeting on Fri 16 Oct", pre: "Pick another time, or reply to reach Anna.",
+    from: VIA + " · replies go to Anna", subject: "Anna Carter canceled your meeting on Fri 16 Oct", pre: "Pick another time, or reply to reach Anna.",
     blocks: [
-      ["host", "AK", "Anna Kowalska"],
-      ["sentence", "Anna cancelled your meeting on {Friday 16 October} at {14:00}."],
+      ["host", "AC", "Anna Carter"],
+      ["sentence", "Anna canceled your meeting on {Friday 16 October} at {14:00}."],
       ["btn", "Pick another time"],
       ["muted", "Reply to this email to reach Anna."],
     ],
-    why: "You got this email because you had a meeting with Anna Kowalska booked through Moduo.",
-    sent: true,
+    why: "You got this email because you had a meeting with Anna Carter booked through Moduo.",
     notes: ["Sent even when Google sends its own cancellation, because only ours has the rebooking link (Q35).", "Waits 2 minutes, so undoing the delete in Moduo cancels it.", "Today nothing happens at all: the slot stays blocked and the guest hears nothing from Moduo."] },
 
   { g: "bookings", id: "C7", name: "Meeting reminder (guest)", status: "new",
     when: "24 hours (or 1 hour) before the meeting, if the booking link's reminder is on.",
     to: "The person who booked and anyone they added", off: "Per booking link: Remind guests",
-    from: VIA, subject: "Tomorrow at 14:00: Anna Kowalska", pre: "30 minutes on Google Meet, Warsaw time.",
+    from: VIA, subject: "Tomorrow at 14:00: Anna Carter", pre: "30 minutes on Google Meet, Warsaw time.",
     blocks: [
-      ["host", "AK", "Anna Kowalska"],
+      ["host", "AC", "Anna Carter"],
       ["sentence", "You're meeting Anna {tomorrow} at {14:00}."],
       ["p", "30 minutes on Google Meet, Warsaw time."],
       ["btn", "Join Google Meet"],
@@ -543,7 +541,7 @@ const EMAILS = [
       ["p", "Thanks for telling us about what you're building. As promised, your Moduo account has Pro free until 8 October 2027."],
       ["p", "It's already on. There's no code to enter and no card needed."],
       ["btn", "Open Moduo"],
-      ["p", "If Moduo helps, tell us how. If it gets in the way, tell us that too. Just reply."],
+      ["p", "If Moduo helps, tell us how. If it gets in the way, tell us that too. Reply any time."],
       ["sign", "Maciej & Mike"],
     ],
     why: "You got this email because we gave this address Moduo Pro.",
@@ -633,7 +631,7 @@ function footHtml(e) {
   if (e.settings) links.unshift("Notification settings");
   if (e.unsub) links.unshift("Unsubscribe");
   return `<div class="m-foot">
-    ${e.sent ? `<span class="sent">${markSvg}Booked with Moduo</span>` : ""}
+    ${e.sent ? `<span class="sent">${markSvg}Scheduled with Moduo</span>` : ""}
     <span>${e.why}</span>
     <span>${ADDR}</span>
     <span class="links">${links.map((l) => `<a href="#" onclick="return false">${l}</a>`).join(" · ")}</span>

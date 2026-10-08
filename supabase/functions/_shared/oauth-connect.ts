@@ -161,8 +161,8 @@ export function finishRefusal(
  * code (the person declined) it carries only `connect`, which the app reports
  * as not connected. Names avoid `code`/`error`, which supabase-js reads from
  * the URL as a sign-in callback. It ends in an empty `#`: a redirect without a
- * fragment keeps the incoming request's (RFC 9110 §10.2.2), and a
- * `#access_token=…` carried onto the app would sign it in as someone else.
+ * fragment keeps the incoming request's (RFC 9110 §10.2.2). The app no longer
+ * signs in from a `#access_token=…` fragment (#281); this keeps one off its URL anyway.
  */
 export function connectReturnUrl(
   origin: string,
