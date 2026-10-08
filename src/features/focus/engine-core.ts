@@ -78,10 +78,15 @@ export interface FocusCredit {
   inFlightAt: number | null;
   /** When saving this task's time last failed; cleared once it's saved. */
   failedAt: number | null;
+  /** When time was last added. A complete task list loaded after this that
+   *  lacks the task means the task is gone. */
+  earnedAt: number;
 }
 
-/** How a hand-off to the sink ended: saved, not now (silent), or failed. */
-export type FlushOutcome = "saved" | "later" | "failed";
+/** How a hand-off to the sink ended: saved; not now (silent); failed (shows
+ *  "not saved yet" and retries); or gone (the task can never take the time —
+ *  the seconds are dropped). */
+export type FlushOutcome = "saved" | "later" | "failed" | "gone";
 
 /** A hand-off still unconfirmed after this long died with its page. */
 export const FLIGHT_STALE_MS = 120_000;
@@ -110,9 +115,6 @@ export interface FocusRecord {
   sitMs: number;
   credits: Record<string, FocusCredit>;
   away: FocusAwayBlock[];
-  /** Workspaces the owner tab can save into right now (it has their sink). A
-   *  tab that can save a workspace the owner can't takes the clock over. */
-  sinkWorkspaces: string[];
 }
 
 export interface FocusAwaySummary {
@@ -185,7 +187,6 @@ export function blankRecord(now: number): FocusRecord {
     sitMs: 0,
     credits: {},
     away: [],
-    sinkWorkspaces: [],
   };
 }
 
@@ -210,6 +211,7 @@ function addCredit(
   taskId: string,
   workspaceId: string | null,
   ms: number,
+  at: number,
 ): Record<string, FocusCredit> {
   if (ms <= 0) return credits;
   const prev = credits[taskId];
@@ -221,6 +223,7 @@ function addCredit(
       inFlightMs: prev?.inFlightMs ?? 0,
       inFlightAt: prev?.inFlightAt ?? null,
       failedAt: prev?.failedAt ?? null,
+      earnedAt: Math.max(prev?.earnedAt ?? 0, at),
     },
   };
 }
@@ -284,14 +287,14 @@ function runUntil(rec: FocusRecord, until: number, p: FocusRhythm, away: boolean
   return { rec: r, workMs, ends };
 }
 
-function creditRun(base: FocusRecord, run: Run): Run {
+function creditRun(base: FocusRecord, run: Run, at: number): Run {
   const task = base.task;
   if (!task || run.workMs <= 0) return run;
   return {
     ...run,
     rec: {
       ...run.rec,
-      credits: addCredit(run.rec.credits, task.id, task.workspaceId, run.workMs),
+      credits: addCredit(run.rec.credits, task.id, task.workspaceId, run.workMs, at),
       sitMs: run.rec.sitMs + run.workMs,
     },
   };
@@ -313,16 +316,16 @@ export function observe(rec: FocusRecord, now: number, p: FocusRhythm): Observed
   if (!isRunning(rec)) return { rec: { ...rec, seenAt: now }, liveEnds: [] };
   if (now < rec.seenAt) {
     // The wall clock moved backwards: keep what was seen, restart the stretch here.
-    const seen = creditRun(rec, runUntil(rec, rec.seenAt, p, false));
+    const seen = creditRun(rec, runUntil(rec, rec.seenAt, p, false), rec.seenAt);
     const restarted = seen.rec.since === null ? seen.rec : { ...seen.rec, since: now };
     return { rec: { ...restarted, seenAt: now }, liveEnds: seen.ends };
   }
   if (now - rec.seenAt <= AWAY_GAP_MS) {
-    const live = creditRun(rec, runUntil(rec, now, p, false));
+    const live = creditRun(rec, runUntil(rec, now, p, false), now);
     return { rec: { ...live.rec, seenAt: now }, liveEnds: live.ends };
   }
   // Away. Credit up to the last look, then replay the gap with its work held.
-  const before = creditRun(rec, runUntil(rec, rec.seenAt, p, false));
+  const before = creditRun(rec, runUntil(rec, rec.seenAt, p, false), rec.seenAt);
   const gap = runUntil(before.rec, now, p, true);
   let next: FocusRecord = { ...gap.rec, seenAt: now };
   const held = rec.task ? gap.workMs : 0;
@@ -462,7 +465,7 @@ export function resolveAway(
       if (!block.taskId || block.workMs <= 0) continue;
       next = {
         ...next,
-        credits: addCredit(next.credits, block.taskId, block.workspaceId, block.workMs),
+        credits: addCredit(next.credits, block.taskId, block.workspaceId, block.workMs, now),
         sitMs: next.sitMs + block.workMs,
       };
     }
@@ -487,6 +490,8 @@ export function resolveAway(
 export interface FlushItem {
   taskId: string;
   seconds: number;
+  /** When time was last added to this task's credit. */
+  earnedAt: number;
 }
 
 /** Take whole seconds of every unsaved credit in `workspaceId`, marked in flight. */
@@ -505,7 +510,7 @@ export function takeFlushBatch(
       ...credits,
       [taskId]: { ...c, ms: c.ms - seconds * 1000, inFlightMs: seconds * 1000, inFlightAt: now },
     };
-    items.push({ taskId, seconds });
+    items.push({ taskId, seconds, earnedAt: c.earnedAt });
   }
   return items.length ? { rec: { ...r, credits }, items } : { rec: r, items };
 }
@@ -513,7 +518,8 @@ export function takeFlushBatch(
 /**
  * Settle one flushed item. Saved → gone, and the task's failure mark clears.
  * Not now → back to unsaved, mark unchanged. Failed → back to unsaved, marked
- * (that's what shows "not saved yet").
+ * (that's what shows "not saved yet"). Gone → the task can never take its
+ * time, so the whole credit is dropped.
  */
 export function settleFlush(
   r: FocusRecord,
@@ -523,6 +529,12 @@ export function settleFlush(
 ): FocusRecord {
   const c = r.credits[item.taskId];
   if (!c) return r;
+  if (outcome === "gone") {
+    return {
+      ...r,
+      credits: Object.fromEntries(Object.entries(r.credits).filter(([id]) => id !== item.taskId)),
+    };
+  }
   const flight = Math.min(c.inFlightMs, item.seconds * 1000);
   const inFlightMs = c.inFlightMs - flight;
   const next: FocusCredit = {
@@ -540,18 +552,23 @@ export function settleFlush(
 }
 
 /** A hand-off that died with an earlier page (a reload or crash mid-save) can't
- *  be confirmed any more: once it's stale, count it as unsaved again. Hand-offs
- *  this page is still waiting on (`liveTaskIds`) are never touched. */
+ *  be confirmed any more: once it's stale, count it as unsaved again. Only
+ *  `workspaceId`'s credits (the ones about to be saved) are touched, and never
+ *  hand-offs this page is still waiting on (`liveTaskIds`). */
 export function reviveDeadFlights(
   r: FocusRecord,
   liveTaskIds: ReadonlySet<string>,
   now: number,
+  workspaceId: string | null,
 ): FocusRecord {
   let changed = false;
   const credits: Record<string, FocusCredit> = {};
   for (const [taskId, c] of Object.entries(r.credits)) {
     const dead =
-      c.inFlightMs > 0 && !liveTaskIds.has(taskId) && now - (c.inFlightAt ?? 0) > FLIGHT_STALE_MS;
+      c.workspaceId === workspaceId &&
+      c.inFlightMs > 0 &&
+      !liveTaskIds.has(taskId) &&
+      now - (c.inFlightAt ?? 0) > FLIGHT_STALE_MS;
     if (dead) {
       credits[taskId] = { ...c, ms: c.ms + c.inFlightMs, inFlightMs: 0, inFlightAt: null };
       changed = true;
@@ -567,13 +584,6 @@ export function hasFailedSaves(r: FocusRecord): boolean {
   return Object.values(r.credits).some(
     (c) => c.failedAt !== null && (c.ms >= 1000 || c.inFlightMs > 0),
   );
-}
-
-/** Workspaces with whole seconds waiting to be saved. */
-export function workspacesWithUnsaved(r: FocusRecord): Set<string | null> {
-  const out = new Set<string | null>();
-  for (const c of Object.values(r.credits)) if (c.ms >= 1000) out.add(c.workspaceId);
-  return out;
 }
 
 // ── reading ───────────────────────────────────────────────────────────────────
@@ -606,7 +616,7 @@ function awaySummary(blocks: FocusAwayBlock[]): FocusAwaySummary | null {
 export function snapshotOf(rec: FocusRecord, now: number, p: FocusRhythm): FocusSession {
   const r =
     isRunning(rec) && now >= rec.seenAt && now - rec.seenAt <= AWAY_GAP_MS
-      ? creditRun(rec, runUntil(rec, now, p, false)).rec
+      ? creditRun(rec, runUntil(rec, now, p, false), now).rec
       : rec;
   const credit = r.task ? r.credits[r.task.id] : undefined;
   const pomoLeft = Math.round(Math.max(0, r.phaseMs - r.phaseDoneMs) / 1000);
@@ -702,6 +712,7 @@ const recordSchema = z.object({
       inFlightMs: z.number().nonnegative(),
       inFlightAt: z.number().nullable(),
       failedAt: z.number().nullable(),
+      earnedAt: z.number(),
     }),
   ),
   away: z.array(
@@ -715,7 +726,6 @@ const recordSchema = z.object({
       parked: z.boolean(),
     }),
   ),
-  sinkWorkspaces: z.array(z.string()),
 });
 
 /** Parse a stored record; anything malformed or from another version is null. */

@@ -32,13 +32,15 @@
 
 ## Saving
 - [ ] **Do:** turn Wi-Fi off, track 30 s, pause (✅ checked with a simulated failed save, not real Wi-Fi) → **Expect:** "· not saved yet" next to the total (and in the chip's tooltip); the total doesn't drop. Turn Wi-Fi on → **Expect:** within about 15 s to 2 min it saves and the note goes away; the total is right (not doubled). _(both)_
-- [ ] **Do:** open Moduo in two browser tabs, start Focus in one → **Expect:** both show the session; after stopping, the task's time went up once, not twice. _(web)_
+- [ ] **Do:** open Moduo in two browser tabs, start Focus in one, then rename the task in the other tab and pause from there → **Expect:** both show the session; the task's time went up once, not twice, and the rename stays. _(web)_
 
 ## Edge cases
+- [ ] **Do:** track time, turn Wi-Fi off and pause ("not saved yet"), delete the task from another device, turn Wi-Fi on → **Expect:** a note that the focus time couldn't be saved because the task is gone, and "not saved yet" clears. _(both)_
+- [ ] **Do:** in a second tab, mark the session's task **Done** → **Expect:** the session moves to the next task in that tab. _(web)_
 - [ ] **Do:** finish the last task in the queue mid-session → **Expect:** the session ends; the end screen appears; time banked. _(both)_
 - [ ] **Do:** have someone delete the task you're focusing on, then pause → **Expect:** no error toast; nothing breaks. _(both)_
 - [ ] **Do:** as a view-only member of a workspace, track time → **Expect:** "· not saved yet" stays (view-only members can't save time). _(both)_
-- [ ] **Do:** start Focus in workspace A, switch to workspace B → **Expect:** A's tracked time isn't lost; it saves once you're back in A's Tasks. _(both)_
+- [ ] **Do:** start Focus in workspace A, switch to workspace B and open Focus there → **Expect:** the chip still shows A's task and keeps counting (B's queue doesn't take it over); A's time saves once you're back in A's Tasks. _(both)_
 
 ## Migrations / data
 - [ ] **Do:** none to apply — no migration in this block. The running session lives in localStorage under `moduo:tasks:focus:<your user id>`; tracked time is still saved into each task's time total (time entries come in TV-D3). → **Expect:** nothing to check beyond the items above.
@@ -46,7 +48,8 @@
 ## Known gaps / not-yet-testable
 - **Desktop notifications and background accrual were not run here.** This Mac has no code-signing identity, and an unsigned build shares its bundle id and storage with the installed Moduo.app. The plugin is known to fail silently when signing doesn't match, and in `tauri dev` its notifications show as Terminal. If the signed build shows nothing, the spec's fallback is a small UNUserNotificationCenter command.
 - **Two browser tabs:** only the tab running the clock shows the phase-end toast, so it can land in a hidden tab.
-- **A teammate's edit to the focused task can be reverted** by the next time save (whole-row write, pre-existing). TV-D1's field-level saves fix it.
+- **An edit made in another tab or device can be reverted** by the next focus save from the tab running the clock (whole-row write; pre-existing). A tab that takes the clock reloads first, which covers the common two-tab case. TV-D1's field-level saves fix the rest.
+- **Time on a tab without Tasks open waits.** If the tab running the clock has left Tasks, its time is held on the device (not lost) and saves when that tab opens Tasks again or you act on the session in a tab that has it open.
 - **Idle without sleep** (walking away from an awake machine) isn't detected — out of scope per the spec.
 
 ---

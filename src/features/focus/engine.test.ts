@@ -53,7 +53,7 @@ function task(id: string, workspaceId = WS) {
 }
 
 /** A sink that records every hand-off; `result` models the Tasks write. */
-function recordingSink(result: () => boolean | Promise<boolean> = () => true) {
+function recordingSink(result: () => boolean | "gone" | Promise<boolean> = () => true) {
   const calls: Array<{ taskId: string; seconds: number }> = [];
   const sink: FocusFlushSink = (taskId, seconds) => {
     calls.push({ taskId, seconds });
@@ -703,9 +703,30 @@ describe("F1-7 — tracked time is never lost", () => {
     bindFocusTask(task("t1"));
     startFocus();
     rs.advanceTimersByTime(5000);
+    localStorage.setItem(`moduo:tasks:focus:saved:${USER}`, "{}");
     forgetFocusUser(USER);
     expect(localStorage.getItem(KEY)).toBeNull();
+    expect(localStorage.getItem(`moduo:tasks:focus:saved:${USER}`)).toBeNull();
     expect(getFocusSession().tracking).toBe(false);
+    window.dispatchEvent(new Event("focus")); // a late look at the clock
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("time on a task that's gone is dropped, not retried forever", async () => {
+    const { calls, sink } = recordingSink(() => Promise.resolve(false));
+    registerFocusFlushSink(WS, sink);
+    bindFocusTask(task("t1"));
+    startFocus();
+    rs.advanceTimersByTime(30_000);
+    toggleFocusRunning(); // the save fails: "not saved yet"
+    await settle();
+    expect(getFocusSession().unsaved).toBe(true);
+    const gone = recordingSink(() => "gone");
+    registerFocusFlushSink(WS, gone.sink); // the task was deleted meanwhile
+    expect(gone.calls).toEqual([{ taskId: "t1", seconds: 30 }]);
+    expect(getFocusSession()).toMatchObject({ unsaved: false, accrued: 0 });
+    await rs.advanceTimersByTimeAsync(5 * MIN);
+    expect(calls).toHaveLength(1);
   });
 
   it("the 60 s safety net saves while running", () => {
@@ -825,10 +846,10 @@ describe("focus engine — several tabs", () => {
     expect(a.getSnapshot()).toMatchObject({ taskId: "t1", running: true });
   });
 
-  it("a tab that can save takes the clock from a tab that can't", () => {
+  it("a background tab with Tasks open doesn't take the clock just to save; the time is held", () => {
     const storage = memoryStorage();
     const a = openTab(storage, "a"); // runs the clock, but has left Tasks (no sink)
-    const b = openTab(storage, "b"); // has Tasks open
+    const b = openTab(storage, "b"); // has Tasks open, with an older task list
     tabs = [a, b];
     const sb = recordingSink();
     b.registerSink(WS, sb.sink);
@@ -836,7 +857,26 @@ describe("focus engine — several tabs", () => {
     a.start();
     b.storageChanged(KEY);
     rs.advanceTimersByTime(2 * MIN);
-    expect(sb.total("t1")).toBeGreaterThanOrEqual(60);
-    expect(sb.total("t1") + b.getSnapshot().accrued).toBe(120);
+    expect(sb.calls).toHaveLength(0);
+    expect(a.getSnapshot()).toMatchObject({ running: true, accrued: 120 });
+  });
+
+  it("a tab that takes the clock tells its sink when, so it can reload first", () => {
+    const storage = memoryStorage();
+    const a = openTab(storage, "a");
+    const b = openTab(storage, "b");
+    tabs = [a, b];
+    const contexts: Array<{ ownedSince: number }> = [];
+    b.registerSink(WS, (_id, _s, ctx) => {
+      contexts.push(ctx);
+      return true;
+    });
+    a.bind(task("t1"));
+    a.start();
+    b.storageChanged(KEY);
+    rs.advanceTimersByTime(30_000);
+    const takenAt = Date.now();
+    b.toggleRunning(); // acting in B takes the clock, then saves
+    expect(contexts.at(-1)?.ownedSince).toBe(takenAt);
   });
 });

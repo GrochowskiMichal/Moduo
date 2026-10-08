@@ -26,9 +26,11 @@
 //
 // Tabs: only one tab runs the clock — it credits, saves and alerts. Others
 // mirror the record and take over when you act in them, when the running tab
-// closes, when it stops looking for OWNER_STALE_MS, or when they can save a
-// workspace the running tab can't. So two tabs never save the same seconds
-// twice. The desktop app has one webview and always runs it.
+// closes, or when it stops looking for OWNER_STALE_MS. So two tabs never save
+// the same seconds twice. A tab that just took the clock tells its sink so
+// (`ownedSince`): its task list may predate edits made in the other tab, so it
+// reloads before its first save. The desktop app has one webview and always
+// runs it.
 //
 // Saving is at-least-once: a save confirmed by the server but not by the page
 // (a reload or crash mid-save) is sent again once it's stale. TV-D3's time
@@ -68,7 +70,6 @@ import {
   stopSession,
   takeFlushBatch,
   togglePomodoro,
-  workspacesWithUnsaved,
 } from "./engine-core";
 import { alertPhaseEnd, type FocusPhaseNext } from "./phase-alert";
 import { FOCUS_SAVED_TOTALS_PREFIX } from "./saved-totals";
@@ -91,16 +92,32 @@ const FLUSH_INTERVAL_MS = 60_000;
 const RETRY_MIN_MS = 15_000;
 const RETRY_MAX_MS = 120_000;
 
+/** What the sink is told with each hand-off. */
+export interface FocusSaveContext {
+  /** When this tab took the clock: data loaded before it may predate edits
+   *  made in the tab that had it, so reload before writing from it. */
+  ownedSince: number;
+  /** When time was last added to this task. A complete task list loaded after
+   *  it that lacks the task means the task is gone. */
+  earnedAt: number;
+}
+
 /**
  * Where tracked time is saved. The Tasks module registers one per workspace
  * while it's mounted. Return:
  *  - `true`: saved;
- *  - `false`: not now (the bundle hasn't loaded, the task isn't in it) — kept
- *    and offered again later, silently;
+ *  - `false`: not now (the list is loading or stale, the task isn't in it yet)
+ *    — kept and offered again later, silently;
+ *  - `"gone"`: the task can never take this time (deleted, no longer shared) —
+ *    the seconds are dropped; the sink tells the person;
  *  - a promise for the write: resolving `false` or rejecting keeps the seconds,
  *    shows "not saved yet" and retries (F1-7).
  */
-export type FocusFlushSink = (taskId: string, seconds: number) => boolean | Promise<boolean>;
+export type FocusFlushSink = (
+  taskId: string,
+  seconds: number,
+  context: FocusSaveContext,
+) => boolean | "gone" | Promise<boolean>;
 
 type FocusStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -151,6 +168,8 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
   const sinks = new Map<string | null, FocusFlushSink>();
   /** Tasks whose hand-off this page is still waiting on. */
   const liveFlights = new Set<string>();
+  /** When this tab last took the clock (from another tab, or from nobody). */
+  let ownedSince = 0;
   let tickHandle: ReturnType<typeof setInterval> | null = null;
   let flushHandle: ReturnType<typeof setInterval> | null = null;
   let retryHandle: ReturnType<typeof setTimeout> | null = null;
@@ -230,26 +249,10 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     );
   }
 
-  function sinkWorkspaces(): string[] {
-    return [...sinks.keys()].filter((ws): ws is string => ws !== null).sort();
-  }
-
-  /** Take the clock, recording which workspaces this tab can save into. */
   function claim(r: FocusRecord): FocusRecord {
-    const mine = sinkWorkspaces();
-    const same =
-      r.owner === deps.tabId &&
-      r.sinkWorkspaces.length === mine.length &&
-      r.sinkWorkspaces.every((ws, i) => ws === mine[i]);
-    return same ? r : { ...r, owner: deps.tabId, sinkWorkspaces: mine };
-  }
-
-  /** This tab can save time the running tab can't (it has no sink for it). */
-  function canSaveForOwner(r: FocusRecord): boolean {
-    for (const ws of workspacesWithUnsaved(r)) {
-      if (sinks.has(ws) && (ws === null || !r.sinkWorkspaces.includes(ws))) return true;
-    }
-    return false;
+    if (r.owner === deps.tabId) return r;
+    ownedSince = deps.now();
+    return { ...r, owner: deps.tabId };
   }
 
   // ── timers ────────────────────────────────────────────────────────────────
@@ -345,7 +348,8 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
    *  flush with a synchronous sink (or none) finishes before it returns. */
   function runSink(sink: FocusFlushSink, item: FlushItem): FlushOutcome | Promise<FlushOutcome> {
     try {
-      const result = sink(item.taskId, item.seconds);
+      const result = sink(item.taskId, item.seconds, { ownedSince, earnedAt: item.earnedAt });
+      if (result === "gone") return "gone";
       if (typeof result === "boolean") return result ? "saved" : "later";
       return result.then(
         (ok): FlushOutcome => (ok ? "saved" : "failed"),
@@ -364,9 +368,8 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     }
     const startedAt = deps.now();
     const first = load();
-    // Only the tab that runs the clock saves it, so no second is saved twice —
-    // unless it can't save a workspace this tab can; then this tab takes over.
-    if (!mayRun(first, startedAt) && !canSaveForOwner(first)) return;
+    // Only the tab that runs the clock saves it, so no second is saved twice.
+    if (!mayRun(first, startedAt)) return;
     // The person whose time this is, even if they sign out mid-save.
     const flushKey = key;
     flushing = true;
@@ -378,11 +381,20 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
       for (const [workspaceId, sink] of [...sinks]) {
         if (key !== flushKey) break;
         const now = deps.now();
-        const batch = takeFlushBatch(reviveDeadFlights(load(), liveFlights, now), workspaceId, now);
+        const batch = takeFlushBatch(
+          reviveDeadFlights(load(), liveFlights, now, workspaceId),
+          workspaceId,
+          now,
+        );
         if (batch.items.length === 0) continue;
         save(batch.rec);
         publish(prefs);
         for (const item of batch.items) {
+          if (key !== flushKey) {
+            // Signed out mid-batch: hand the rest back untouched.
+            saveAt(flushKey, (r) => settleFlush(r, item, "later", deps.now()));
+            continue;
+          }
           liveFlights.add(item.taskId);
           const pending = runSink(sink, item);
           const outcome = typeof pending === "string" ? pending : await pending;
@@ -437,6 +449,8 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
       /* storage unavailable — nothing to erase */
     }
     if (userId !== user) return;
+    // Nothing for this person is written to this device again.
+    key = null;
     stopTimers();
     clearRetry();
     lastRaw = null;

@@ -172,8 +172,8 @@ export function TasksPlanView({ api, workspaceId, runtime, urlTaskId, onUrlTaskI
   });
   useEffect(
     () =>
-      registerFocusFlushSink(workspaceId, (taskId, seconds) =>
-        apiRef.current.persistFocusTime(taskId, seconds),
+      registerFocusFlushSink(workspaceId, (taskId, seconds, context) =>
+        apiRef.current.persistFocusTime(taskId, seconds, context),
       ),
     [workspaceId],
   );

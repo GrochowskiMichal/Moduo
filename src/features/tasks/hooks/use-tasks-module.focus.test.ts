@@ -93,6 +93,9 @@ async function mounted(
 
 const totalOf = (tasks: Task[], id: string) => tasks.find((t) => t.id === id)?.timeSpentSeconds;
 
+/** This tab has had the clock since before the list loaded; the time is older than the load. */
+const SETTLED = { ownedSince: 0, earnedAt: 0 };
+
 beforeEach(() => {
   localStorage.clear();
 });
@@ -100,22 +103,22 @@ beforeEach(() => {
 describe("persistFocusTime — the focus engine's sink", () => {
   it("saves the seconds into the task's total and says so", async () => {
     const { hook, upsertTask } = await mounted([task("t1", 100)]);
-    await expect(hook.result.current.persistFocusTime("t1", 60)).resolves.toBe(true);
+    await expect(hook.result.current.persistFocusTime("t1", 60, SETTLED)).resolves.toBe(true);
     expect(upsertTask.mock.calls[0]?.[0].timeSpentSeconds).toBe(160);
     await waitFor(() => expect(totalOf(hook.result.current.tasks, "t1")).toBe(160));
   });
 
   it("reports a failed save and puts the total back", async () => {
     const { hook } = await mounted([task("t1", 100)], { fail: () => true });
-    await expect(hook.result.current.persistFocusTime("t1", 60)).resolves.toBe(false);
+    await expect(hook.result.current.persistFocusTime("t1", 60, SETTLED)).resolves.toBe(false);
     await waitFor(() => expect(totalOf(hook.result.current.tasks, "t1")).toBe(100));
   });
 
   it("a second save before React re-renders builds on the first, not on the stale bundle", async () => {
     const { hook, upsertTask } = await mounted([task("t1", 100)]);
     const persist = hook.result.current.persistFocusTime; // the same render's closure
-    await persist("t1", 60);
-    await persist("t1", 5);
+    await persist("t1", 60, SETTLED);
+    await persist("t1", 5, SETTLED);
     expect(upsertTask.mock.calls.map((c) => c[0].timeSpentSeconds)).toEqual([160, 165]);
   });
 
@@ -124,19 +127,39 @@ describe("persistFocusTime — the focus engine's sink", () => {
     const hook = renderHook(() =>
       useTasksModule(runtime, { userId: USER, workspaceId: WS, modulePermission: "edit" }),
     );
-    expect(hook.result.current.persistFocusTime("t1", 30)).toBe(false);
+    expect(hook.result.current.persistFocusTime("t1", 30, SETTLED)).toBe(false);
   });
 
-  it("never reads a task missing from the bundle as gone: the time is kept", async () => {
+  it("a task missing from a complete list loaded after the time was tracked is gone", async () => {
+    const { hook } = await mounted([task("t1")]);
+    expect(hook.result.current.persistFocusTime("deleted", 30, SETTLED)).toBe("gone");
+  });
+
+  it("keeps the time when the task may just not be in this list yet", async () => {
+    const later = { ownedSince: 0, earnedAt: Date.now() + 60_000 }; // tracked after this list loaded
     const complete = await mounted([task("t1")]);
-    expect(complete.hook.result.current.persistFocusTime("elsewhere", 30)).toBe(false);
+    expect(complete.hook.result.current.persistFocusTime("new-elsewhere", 30, later)).toBe(false);
     const capped = await mounted([task("t1")], { truncated: true });
-    expect(capped.hook.result.current.persistFocusTime("elsewhere", 30)).toBe(false);
+    expect(capped.hook.result.current.persistFocusTime("elsewhere", 30, SETTLED)).toBe(false);
+  });
+
+  it("reloads the list before the first save after this tab took the clock", async () => {
+    const { hook, upsertTask, server } = await mounted([task("t1", 100)]);
+    server.set("t1", { ...task("t1", 100), title: "Renamed in the other tab" });
+    const tookClock = { ownedSince: Date.now() + 1, earnedAt: 0 };
+    expect(hook.result.current.persistFocusTime("t1", 60, tookClock)).toBe(false);
+    await waitFor(() =>
+      expect(hook.result.current.tasks.find((t) => t.id === "t1")?.title).toBe(
+        "Renamed in the other tab",
+      ),
+    );
+    await expect(hook.result.current.persistFocusTime("t1", 60, SETTLED)).resolves.toBe(true);
+    expect(upsertTask.mock.calls.at(-1)?.[0].title).toBe("Renamed in the other tab");
   });
 
   it("without edit access the save fails visibly instead of waiting forever", async () => {
     const { hook, upsertTask } = await mounted([task("t1")], { permission: "view" });
-    await expect(hook.result.current.persistFocusTime("t1", 30)).resolves.toBe(false);
+    await expect(hook.result.current.persistFocusTime("t1", 30, SETTLED)).resolves.toBe(false);
     expect(upsertTask).not.toHaveBeenCalled();
   });
 });
@@ -151,8 +174,8 @@ function useWiredSink(runtime: ModuoRuntime, workspaceId: string) {
   });
   useEffect(
     () =>
-      registerFocusFlushSink(workspaceId, (taskId, seconds) =>
-        apiRef.current.persistFocusTime(taskId, seconds),
+      registerFocusFlushSink(workspaceId, (taskId, seconds, context) =>
+        apiRef.current.persistFocusTime(taskId, seconds, context),
       ),
     [workspaceId],
   );
@@ -181,6 +204,7 @@ describe("the focus sink across workspaces and tabs", () => {
             inFlightMs: 0,
             inFlightAt: null,
             failedAt: null,
+            earnedAt: Date.now(),
           },
         },
       }),
@@ -237,8 +261,8 @@ describe("the focus sink across workspaces and tabs", () => {
     };
     const a = open("a");
     const b = open("b");
-    a.registerSink(WS, (id, s) => tabA.result.current.persistFocusTime(id, s));
-    b.registerSink(WS, (id, s) => tabB.result.current.persistFocusTime(id, s));
+    a.registerSink(WS, (id, s, ctx) => tabA.result.current.persistFocusTime(id, s, ctx));
+    b.registerSink(WS, (id, s, ctx) => tabB.result.current.persistFocusTime(id, s, ctx));
     a.bind({ id: "t1", title: "t1", bucketName: "Inbox", workspaceId: WS });
     a.start();
     b.storageChanged(KEY);

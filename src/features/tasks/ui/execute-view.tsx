@@ -16,6 +16,7 @@ import {
   followFocusTask,
   previewFocusInterval,
   startFocus,
+  getFocusSession,
   stopFocus,
   toggleFocusPomodoro,
   toggleFocusRunning,
@@ -105,6 +106,25 @@ export function ExecuteView({
     );
   }, [loading, current?.id, current?.title, current?.bucketId, bucketNameById, workspaceId]);
 
+  // Done / Skip on the task the session is on is an action in this tab: the
+  // session moves to the next task right away (and takes the clock if another
+  // tab had it), instead of waiting for this view's follow.
+  const moveSessionPast = (id: string) => {
+    if (getFocusSession().taskId !== id) return;
+    const next = upcoming[0] ?? null;
+    if (next?.id.startsWith("tmp-")) return;
+    bindFocusTask(
+      next
+        ? {
+            id: next.id,
+            title: next.title || "Untitled",
+            bucketName: bucketNameById(next.bucketId),
+            workspaceId,
+          }
+        : null,
+    );
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-3 flex shrink-0 items-center">
@@ -128,8 +148,14 @@ export function ExecuteView({
               bucketName={bucketNameById(current.bucketId)}
               parentTitle={parentTitleFor(current)}
               blockedNote={blockedNoteFor(current)}
-              onMarkDone={() => onMarkDone(current.id)}
-              onSkip={() => onSkip(current.id)}
+              onMarkDone={() => {
+                onMarkDone(current.id);
+                moveSessionPast(current.id);
+              }}
+              onSkip={() => {
+                onSkip(current.id);
+                moveSessionPast(current.id);
+              }}
               onAddTime={onAddTime}
               onSetTime={onSetTime}
               tags={tagsFor(current.id)}

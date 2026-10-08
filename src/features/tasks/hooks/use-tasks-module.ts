@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { pickTagColor } from "../../../components/tag-colors";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
+import type { FocusSaveContext } from "../../focus/engine";
 import { readSavedFocusTotal, writeSavedFocusTotal } from "../../focus/saved-totals";
 import { setBucketTimeBlock } from "../default-view";
 import {
@@ -80,6 +81,13 @@ function byPosition<T extends { position: string }>(a: T, b: T): number {
 /** Optimistic placeholder id, not yet a real server uuid. */
 const isTempId = (id: string) => id.startsWith("tmp-");
 
+/** "12 min" / "1 h 5 min" for the dropped-focus-time note. */
+function formatTrackedMinutes(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  const h = Math.floor(minutes / 60);
+  return h > 0 ? `${h} h ${minutes % 60} min` : `${minutes} min`;
+}
+
 export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const { userId, workspaceId, modulePermission = "none" } = params;
   const canRead = modulePermission !== "none";
@@ -92,10 +100,14 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
   const reqRef = useRef(0);
   /** Bumped on every successful load — the recurrence catch-up trigger. */
   const [loadStamp, setLoadStamp] = useState(0);
+  /** Which workspace the loaded bundle is, and when it arrived (the focus sink
+   *  judges freshness by it). Set with the bundle so a render sees both. */
+  const [loadedFrom, setLoadedFrom] = useState<{ workspaceId: string; at: number } | null>(null);
 
   const load = useCallback(async () => {
     if (!runtime || !userId || !workspaceId || !canRead) {
       setBundle(EMPTY_BUNDLE);
+      setLoadedFrom(null);
       setTimeBlocksState({});
       setLoading(false);
       return;
@@ -111,6 +123,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
       ]);
       if (reqRef.current === req) {
         setBundle(next);
+        setLoadedFrom({ workspaceId, at: Date.now() });
         setTimeBlocksState(blocks);
         setError(null);
         setLoadStamp((s) => s + 1); // triggers the recurrence catch-up pass
@@ -563,21 +576,36 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
    * The Focus engine's flush sink (TV-F1): fold `seconds` of tracked work into
    * the task's saved total and report what happened, so the engine keeps the
    * seconds and retries ("not saved yet", F1-7) instead of losing them.
-   *  - `false` right away: not now. The bundle isn't loaded, or the task isn't
-   *    in it: a bundle can be another workspace's for a render, capped, or
-   *    older than the task. It's never read as "gone": tracked time is kept.
+   *  - `false` right away: not now. The list is loading, was loaded before this
+   *    tab took the clock (reload first: the other tab may have edited the
+   *    task, and the write sends the whole row), is another workspace's for a
+   *    render, is capped, or simply doesn't have the task yet.
+   *  - `"gone"`: the task is missing from a complete list of its workspace
+   *    loaded after the time was tracked — deleted or no longer shared. The
+   *    seconds are dropped, and the person is told.
    *  - a promise: the write, `false` when it failed (the optimistic total is
    *    put back) or when there's no edit access, so it shows as not saved.
    * The total is absolute, so it builds on the fresher of this bundle's row and
-   * the last save any tab on this device made (another tab may have saved
-   * since this bundle loaded, or a save may have settled before the re-render).
+   * the last save any tab on this device made.
    */
   const persistFocusTime = useCallback(
-    (id: string, seconds: number): boolean | Promise<boolean> => {
+    (id: string, seconds: number, context: FocusSaveContext): boolean | "gone" | Promise<boolean> => {
       if (!Number.isFinite(seconds) || seconds < 1) return true;
       if (loading || !runtime || !workspaceId || isTempId(id)) return false;
+      if (!loadedFrom || loadedFrom.workspaceId !== workspaceId) return false;
+      if (loadedFrom.at < context.ownedSince) {
+        void load();
+        return false;
+      }
       const task = bundle.tasks.find((t) => t.id === id);
-      if (!task || task.workspaceId !== workspaceId) return false;
+      if (!task || task.workspaceId !== workspaceId) {
+        const complete = !bundle.truncated.some((t) => t.scope === "tasks");
+        if (!complete || loadedFrom.at <= context.earnedAt) return false;
+        toast(`${formatTrackedMinutes(seconds)} of focus time couldn't be saved`, {
+          description: "The task it was tracked on was deleted or isn't shared with you any more.",
+        });
+        return "gone";
+      }
       if (!canEdit) return Promise.resolve(false);
       const lastSave = userId ? readSavedFocusTotal(userId, id) : null;
       const base =
@@ -613,7 +641,18 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           return false;
         });
     },
-    [loading, bundle.tasks, runtime, workspaceId, userId, canEdit, patchTaskLocal],
+    [
+      loading,
+      loadedFrom,
+      load,
+      bundle.tasks,
+      bundle.truncated,
+      runtime,
+      workspaceId,
+      userId,
+      canEdit,
+      patchTaskLocal,
+    ],
   );
 
   /** Set the tracked total to an absolute value (manual "edit the value"). */
