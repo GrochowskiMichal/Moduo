@@ -35,8 +35,8 @@ export function useDirectoryTags(runtime: ModuoRuntime | null, workspaceId: stri
           links: res.links,
           scope: { kind: "types", entityTypes: DIRECTORY_TYPES },
           at,
-          // A capped read only adds what it saw (SCALE-1).
-          complete: res.truncated.length === 0,
+          // A capped links read can't tell a removed link from one past the cap (SCALE-1).
+          complete: !res.truncated.some((t) => t.scope === "tag assignments"),
         });
         setTruncated(res.truncated);
       })

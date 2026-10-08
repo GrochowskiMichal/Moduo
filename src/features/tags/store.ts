@@ -10,8 +10,9 @@
 // - **Reads seed it.** Each read hands in what it loaded and what it covered
 //   (`seedTags`): the Tasks bundle covers every link, a hub covers one entity,
 //   the contacts directory covers contacts and companies. A seed replaces only
-//   the part it covered, and never a part a newer read already loaded. A read
-//   that hit its row cap only adds what it saw.
+//   the part it covered, never a part a newer read already loaded, and never
+//   a link written after it started. A read that hit its row cap also leaves
+//   alone what full reads of single items loaded.
 // - **Writes go through it** (`attachTag`, `detachTag`, `toggleTag`,
 //   `createOrAttachByName`, `recolorTag`, `deleteTag`). Each is an op laid on
 //   top of what the reads loaded, so the change shows on every surface at
@@ -60,8 +61,10 @@ export type TagSeed = {
   /** When the read's request started (`Date.now()`). */
   at: number;
   /**
-   * False when the read hit its row cap (SCALE-1): it then only adds what it
-   * saw, since a missing row may just be past the cap. Default true.
+   * False when the read's links hit their row cap (SCALE-1). A link missing
+   * from it may just be past the cap, so it doesn't count as having loaded its
+   * scope, and it leaves alone what full reads of single items or types loaded.
+   * Default true.
    */
   complete?: boolean;
 };
@@ -242,57 +245,83 @@ function opCoveredBy(op: Op, scope: LinkScope): boolean {
 /** Hand the store what a read loaded. */
 export function seedTags(workspaceId: string, seed: TagSeed): void {
   const ws = workspace(workspaceId);
-  if (seed.complete === false) {
-    mergeSeed(ws, seed);
-    return;
-  }
+  const complete = seed.complete !== false;
   const newer = [...ws.seeds.values()].filter((n) => n.at > seed.at);
   // A newer read already loaded everything this one did: this one is stale.
   if (newer.some((n) => covers(n.scope, seed.scope))) return;
   // Parts a newer read loaded keep that read's links.
   const loadedSince = (link: TagLink) =>
     newer.some((n) => inScope(n.scope, link.entityType, link.entityId));
-  // This read now stands for its scope; older reads it covers are forgotten.
-  for (const [key, old] of ws.seeds) {
-    if (old.at <= seed.at && covers(seed.scope, old.scope)) ws.seeds.delete(key);
+  // A capped read can't tell a removed link from one past its cap, so it
+  // leaves alone what a full read of one item or type loaded.
+  const fullyRead = complete ? null : narrowSeedsIndex(ws);
+  const keep = (link: TagLink) =>
+    loadedSince(link) ||
+    (fullyRead !== null &&
+      (fullyRead.types.has(link.entityType) ||
+        fullyRead.entities.has(entityKey(link.entityType, link.entityId))));
+  // A link written since this read started is the write's to say.
+  const changedSince = new Set<string>();
+  for (const op of ws.ops) {
+    if (op.kind === "link" && (op.settledAt === null || op.settledAt > seed.at)) {
+      changedSince.add(linkKey(op.tagId, op.entityType, op.entityId));
+    }
   }
-  ws.seeds.set(scopeKey(seed.scope), { scope: seed.scope, at: seed.at });
+  if (complete) {
+    // This read now stands for its scope; older reads it covers are forgotten.
+    for (const [key, old] of ws.seeds) {
+      if (old.at <= seed.at && covers(seed.scope, old.scope)) ws.seeds.delete(key);
+    }
+    ws.seeds.set(scopeKey(seed.scope), { scope: seed.scope, at: seed.at });
+  }
+  // Every read loads the workspace's live tags (a capped list is the same first rows each time).
   if (seed.at >= ws.tagsAt) {
     ws.tagsAt = seed.at;
     ws.tags = new Map(seed.tags.map((t) => [t.id, t]));
   }
   const links = new Map<string, TagLink>();
   for (const [k, link] of ws.links) {
-    if (!inScope(seed.scope, link.entityType, link.entityId) || loadedSince(link)) {
+    if (!inScope(seed.scope, link.entityType, link.entityId) || keep(link) || changedSince.has(k)) {
       links.set(k, link);
     }
   }
   for (const link of seed.links) {
-    if (inScope(seed.scope, link.entityType, link.entityId) && !loadedSince(link)) {
-      links.set(linkKey(link.tagId, link.entityType, link.entityId), link);
+    const k = linkKey(link.tagId, link.entityType, link.entityId);
+    if (
+      inScope(seed.scope, link.entityType, link.entityId) &&
+      !loadedSince(link) &&
+      !changedSince.has(k)
+    ) {
+      links.set(k, link);
     }
   }
   ws.links = links;
-  // A saved op is in any read that started after it saved; keep the rest on top.
+  // A saved op is in any read that started after it saved and covers it; keep
+  // the rest on top. A capped read lacking a link the op attached may just
+  // have stopped short of it, so that op stays (until it expires).
   const now = Date.now();
-  ws.ops = ws.ops.filter(
-    (op) =>
-      op.settledAt === null ||
-      (now - op.settledAt < SETTLED_OP_TTL_MS &&
-        (op.settledAt > seed.at || !opCoveredBy(op, seed.scope))),
-  );
+  const seen = complete
+    ? null
+    : new Set(seed.links.map((l) => linkKey(l.tagId, l.entityType, l.entityId)));
+  ws.ops = ws.ops.filter((op) => {
+    if (op.settledAt === null) return true;
+    if (now - op.settledAt >= SETTLED_OP_TTL_MS) return false;
+    if (op.settledAt > seed.at || !opCoveredBy(op, seed.scope)) return true;
+    if (seen === null || op.kind !== "link" || !op.present) return false;
+    return !seen.has(linkKey(op.tagId, op.entityType, op.entityId));
+  });
   changed(ws);
 }
 
-/** A capped read: add what it saw, remove nothing, and don't count it as covering anything. */
-function mergeSeed(ws: WorkspaceTags, seed: TagSeed): void {
-  for (const tag of seed.tags) if (!ws.tags.has(tag.id)) ws.tags.set(tag.id, tag);
-  for (const link of seed.links) {
-    if (!inScope(seed.scope, link.entityType, link.entityId)) continue;
-    const key = linkKey(link.tagId, link.entityType, link.entityId);
-    if (!ws.links.has(key)) ws.links.set(key, link);
+/** The entity types and single entities that full reads (not "everything") loaded. */
+function narrowSeedsIndex(ws: WorkspaceTags): { types: Set<string>; entities: Set<string> } {
+  const types = new Set<string>();
+  const entities = new Set<string>();
+  for (const { scope } of ws.seeds.values()) {
+    if (scope.kind === "types") for (const t of scope.entityTypes) types.add(t);
+    else if (scope.kind === "entity") entities.add(entityKey(scope.entityType, scope.entityId));
   }
-  changed(ws);
+  return { types, entities };
 }
 
 // ── ops ───────────────────────────────────────────────────────────────────────

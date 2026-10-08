@@ -343,19 +343,96 @@ describe("reads seed the store", () => {
     expect(names(tagsOf(getTagView(WS), note))).toEqual(["design"]);
   });
 
-  it("a read that hit its row cap adds what it saw and removes nothing", () => {
-    const tags = [tag("g1", "design")];
-    seedTags(WS, { tags, links: [link("g1", "note", "n1")], scope: { kind: "all" }, at: 1 });
+  it("a capped read refreshes tags and links but keeps what a full read of one item loaded", () => {
     seedTags(WS, {
-      tags,
+      tags: [tag("g1", "design", "blue")],
+      links: [link("g1", "task", "t2")],
+      scope: { kind: "all" },
+      at: 1,
+    });
+    seedTags(WS, {
+      tags: [tag("g1", "design", "blue")],
+      links: [link("g1", "note", "n1")],
+      scope: { kind: "entity", entityType: "note", entityId: "n1" },
+      at: 2,
+    });
+    // n1's link is past the cap; t2's was removed; t1's is new; the tag was recolored.
+    seedTags(WS, {
+      tags: [tag("g1", "design", "red")],
       links: [link("g1", "task", "t1")],
       scope: { kind: "all" },
-      at: 2,
+      at: 3,
       complete: false,
     });
     const view = getTagView(WS);
     expect(names(tagsOf(view, { entityType: "note", entityId: "n1" }))).toEqual(["design"]);
     expect(names(tagsOf(view, { entityType: "task", entityId: "t1" }))).toEqual(["design"]);
+    expect(tagsOf(view, { entityType: "task", entityId: "t2" })).toEqual([]);
+    expect(view.tags[0]?.color).toBe("red");
+  });
+
+  it("a capped read that started before a tag came off can't put it back", async () => {
+    const server = fakeServer({
+      tags: [tag("g1", "design")],
+      links: [link("g1", "note", "n1"), link("g1", "task", "t1")],
+    });
+    const note = { entityType: "note", entityId: "n1" };
+    const task1 = { entityType: "task", entityId: "t1" };
+    seedTags(WS, {
+      tags: server.db.tags,
+      links: server.db.links,
+      scope: { kind: "entity", ...note },
+      at: 1,
+    });
+    seedTags(WS, { tags: server.db.tags, links: server.db.links, scope: { kind: "all" }, at: 1 });
+    const cappedReadStarted = Date.now() - 1;
+    const staleLinks = [...server.db.links];
+    toggleTag(ctx(server), note, "g1");
+    toggleTag(ctx(server), task1, "g1");
+    await waitFor(() => expect(server.db.links).toEqual([]));
+    // The hub re-reads the note, then the slow capped read lands.
+    seedTags(WS, {
+      tags: server.db.tags,
+      links: [],
+      scope: { kind: "entity", ...note },
+      at: Date.now() + 1,
+    });
+    seedTags(WS, {
+      tags: server.db.tags,
+      links: staleLinks,
+      scope: { kind: "all" },
+      at: cappedReadStarted,
+      complete: false,
+    });
+    // Even once the saved ops have expired, nothing brings the tag back.
+    const later = Date.now() + 11 * 60_000;
+    const clock = rs.spyOn(Date, "now").mockReturnValue(later);
+    seedTags(WS, {
+      tags: server.db.tags,
+      links: [],
+      scope: { kind: "entity", entityType: "note", entityId: "n9" },
+      at: later,
+    });
+    clock.mockRestore();
+    expect(tagsOf(getTagView(WS), note)).toEqual([]);
+    expect(tagsOf(getTagView(WS), task1)).toEqual([]);
+  });
+
+  it("a capped read that started after a tag came off shows a teammate putting it back", async () => {
+    const server = fakeServer({ tags: [tag("g1", "design")], links: [link("g1", "task", "t1")] });
+    const task1 = { entityType: "task", entityId: "t1" };
+    seedTags(WS, { tags: server.db.tags, links: server.db.links, scope: { kind: "all" }, at: 1 });
+    toggleTag(ctx(server), task1, "g1");
+    await waitFor(() => expect(server.db.links).toEqual([]));
+    server.db.links.push(link("g1", "task", "t1")); // a teammate tags it again
+    seedTags(WS, {
+      tags: server.db.tags,
+      links: server.db.links,
+      scope: { kind: "all" },
+      at: Date.now() + 1,
+      complete: false,
+    });
+    expect(names(tagsOf(getTagView(WS), task1))).toEqual(["design"]);
   });
 
   it("signing in as someone else starts from an empty store; the same person keeps it", () => {

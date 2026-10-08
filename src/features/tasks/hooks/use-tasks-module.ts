@@ -76,8 +76,8 @@ function byPosition<T extends { position: string }>(a: T, b: T): number {
   return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
 }
 
-/** The bundle reads (SCALE-1 truncation scopes) that feed the tag store. */
-const TAG_READ_SCOPES = new Set(["tags", "tag assignments"]);
+/** The bundle's tag-links read, as its SCALE-1 truncation names it. */
+const TAG_LINKS_SCOPE = "tag assignments";
 
 /** Optimistic placeholder id, not yet a real server uuid. */
 const isTempId = (id: string) => id.startsWith("tmp-");
@@ -132,7 +132,7 @@ export function useTasksModule(runtime: ModuoRuntime | null, params: Params) {
           links: next.tagLinks,
           scope: { kind: "all" },
           at: startedAt,
-          complete: !next.truncated.some((t) => TAG_READ_SCOPES.has(t.scope)),
+          complete: !next.truncated.some((t) => t.scope === TAG_LINKS_SCOPE),
         });
         setLoadedFrom({
           workspaceId,
