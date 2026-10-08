@@ -110,7 +110,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > - **DoR status:** ✅ means ready now; the rest follow their dependencies. All designer calls are answered (2026-10-08).
 > - **Order:** top to bottom, every dep listed above its dependents. The lane table below shows what can run at once.
 
-- [~] **TV-D3 — Time entries** · tasks-v2 block 5 · deps: TV-D1, TV-F1 · lane data · migration + legacy backfill/shim
+- [x] **TV-D3 — Time entries** · tasks-v2 block 5 · deps: TV-D1, TV-F1 · lane data · migration + legacy backfill/shim · `task_time_entries` + `tasks_op_track_time` (keyed saves, adjustments, Undo) + `tasks_time_totals` + old-build shim · migration `20261008224500_tasks_time_entries` APPLIED to prod 2026-10-09 (as `20261008221907`, after AT-1; rolled-back probe there) · _done 2026-10-09 · `t/maciej/tv-d3-time-entries` (PR #318; decision in [docs/decisions/tasks.md](../docs/decisions/tasks.md))_
 - [ ] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
 - [ ] **TV-U1 — Rows, board, completed** · tasks-v2 block 9 · deps: DS-3, TV-D4 · lane tasks-ui
 - [ ] **TV-U3 — Detail panel + comments** · tasks-v2 block 10 · deps: DS-2, TV-D1, TV-D3 · lane tasks-ui

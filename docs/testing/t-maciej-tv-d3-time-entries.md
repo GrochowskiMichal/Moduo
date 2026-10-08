@@ -1,6 +1,6 @@
 # Manual test checklist — TV-D3 time entries
 
-> Generated 2026-10-08 · branch `t/maciej/tv-d3-time-entries` · **Live-verified:** no (the migration isn't on production yet). On a local Postgres 17 replica of production's schema, `supabase/probes/tasks-time.probe.sql` passes all 12 checks, and the two-sessions run below gave exact totals. Unit tests cover the app side (keys, resends, adjustments, the fallback).
+> Generated 2026-10-08 · branch `t/maciej/tv-d3-time-entries` · **Live-verified:** partial. The migration is on production (2026-10-09, version `20261008221907`, after AT-1): 11 legacy entries adding up to 15,358 s, every cached total matching its entries, grants and RLS as designed. A rolled-back probe there, as a workspace owner on a real task, passed the focus save, its resend (`duplicate`), adjustment + Undo, a typed total, `gone`, own-rows-only reads, the totals read and an old build's write; nothing was left behind. On a local Postgres 17 replica, `supabase/probes/tasks-time.probe.sql` passes all 12 checks, with AT-1's migration and TV-D5's stamp in either order, and the two-sessions run below gave exact totals. **The app itself wasn't driven live** (no signed-in session in this worktree): unit tests cover the app side (keys, resends, ordering, adjustments, the fallback).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 No screen looks different in this block: totals read the same, and "you 50m" / "waited 1h" arrive with TV-U3 and TV-F4. What changes is how time is saved.
@@ -32,7 +32,7 @@ No screen looks different in this block: totals read the same, and "you 50m" / "
 - [ ] **Do:** In an old build (from before TV-D1), rename a task someone has just tracked time on (from a list loaded before their time) → **Expect:** the rename saves and their time stays (the stale lower total is ignored) _(desktop)_
 
 ## Migrations / data
-- [ ] **Do:** `select version, name from supabase_migrations.schema_migrations where version = '20261008224500'` → **Expect:** `tasks_time_entries` _(SQL)_
+- [ ] **Do:** `select version, name from supabase_migrations.schema_migrations where name = 'tasks_time_entries'` → **Expect:** `20261008221907` (applied 2026-10-09; the file is `20261008224500`) _(SQL)_
 - [ ] **Do:** `select count(*), sum(seconds) from task_time_entries where kind = 'legacy'` right after the apply → **Expect:** one row per task that had time, adding up to the old totals (11 tasks, 15,358 s on 2026-10-08) _(SQL)_
 - [ ] **Do:** `select count(*) from tasks t where t.time_spent_seconds <> (select greatest(coalesce(sum(e.seconds),0),0) from task_time_entries e where e.task_id = t.id and e.kind <> 'waiting')` → **Expect:** 0 (every cached total matches its entries) _(SQL)_
 - [ ] **Do:** `select has_function_privilege('anon','public.tasks_op_track_time(uuid,uuid,text,integer,timestamptz,text,uuid)','EXECUTE'), has_table_privilege('authenticated','public.task_time_entries','INSERT')` → **Expect:** false, false _(SQL)_
