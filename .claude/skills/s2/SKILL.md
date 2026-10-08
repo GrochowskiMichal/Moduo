@@ -1,6 +1,6 @@
 ---
 name: s2
-description: Stage 2 — Execute (build one block). Builds one approved execution block from a Moduo spec autonomously (auto-selecting and claiming the next ready block from specs/BUILD_ORDER.md when none is named) — quietly, with subagents for noisy work, ending with the verify gate (bun run verify), the validator subagent and a local code review, then reporting once in the Changed/Test this/Next format. Use after /s1 when the designer approves a block and presses play, ideally inside /goal. Not for planning (that is /s1) or wrap-up/commit/merge (that is /s3).
+description: Stage 2 — Execute (build one block). Builds one approved execution block from a Moduo spec autonomously (auto-selecting and claiming the next ready block from specs/BUILD_ORDER.md when none is named) — quietly, with subagents for noisy work, ending with the verify gate (bun run verify), the validator subagent and a local code review, then reporting once in the Status/Changed/Test this/To finish format. Use after /s1 when the designer approves a block and presses play, ideally inside /goal. Not for planning (that is /s1) or wrap-up/commit/merge (that is /s3).
 effort: high
 ---
 
@@ -8,10 +8,12 @@ effort: high
 
 ## Rules that always hold
 - **Stay silent between tool calls.** Report exactly once, at the end, in the format below. The designer reads only that report.
-- **Don't ask the designer new questions.** Everything technical was settled in `/s1`. The only acceptable interruption is a hard blocker research can't resolve: report it under **❓ Your call** / **⚠ Broke**.
+- **Don't ask the designer new questions.** Everything technical was settled in `/s1`. The only acceptable interruption is a hard blocker research can't resolve: report it under **❓ Needs you** / **⚠ Broke**.
 - **Done means:** `bun run verify` passes after the last edit, every acceptance criterion is proven by a test or a live check, and the `validator` subagent reports no BLOCKER or MAJOR.
 - **Tokens only, shadcn primitives, `docs/DESIGN_RULES.md`.** A missing value becomes a token in `src/styles/tokens.css`, never an inline literal. The design hook will wake you if you slip.
-- **Stay inside the block's scope.** Note anything else under **🔎 Found** instead of fixing it.
+- **Stay inside the block's scope.** Note anything else under **🔎 Found** instead of fixing it. Don't turn a finding into a task chip or a new session unless it's in the designer's current focus area or an unfixed security hole.
+- **One block per session.** When the block is built, stop. Don't claim the next block in this session; `/s3` suggests it as a fresh session with its own title.
+- **Never leave work only in the worktree.** Before any stop with unlanded work (usage limit, blocker, end of turn), commit it to the task branch and push. Exception: an unfixed security hole stays a local commit, because the repo is public; say so under **Session**.
 - **Use subagents for noisy work** (broad recon, long logs, big reads) so your own context stays lean.
 
 ## Running unattended
@@ -33,11 +35,15 @@ On a Max plan, `/advisor fable` adds Fable 5.1 as an advisor at decision points.
 7. **Record.** Tick the block `[x]` in `specs/BUILD_ORDER.md` (date + branch). Add any decision as a full entry at the top of `docs/decisions/<area>.md` plus one line in `docs/decisions.md`, and any new trap to `docs/gotchas/<area>.md`. A trap that bit twice becomes a hook, lint rule or test instead.
 
 ## Report (exactly once, this shape)
-- **Changed**: what landed (files and behavior), tight.
+The designer often has many sessions open and reads only this report, so it must answer at a glance: is this block done, what does it still need, and what needs them.
+
+Open with one line: **Status: Built, not landed · Blocked · Not started**, plus the PR link. (From `/s2` it is normally "Built, not landed — run `/s3`".)
+- **Changed**: what was built (files and behavior), tight.
 - **Test this**: concrete steps the designer runs (step → expected → surface).
-- **Next**: the next block, or what remains.
+- **To finish this block**: only the steps still required for this block to count as done, numbered (a validator re-run, a prod apply, `/s3`). Write "Nothing; run `/s3`" when that's all. Never list anything outside the block here.
+- **❓ Needs you** *(only if applicable)*: numbered decisions or actions only the designer can take: product calls, validator findings that need one, prod go-aheads, `/code-review ultra`. Each one says what you recommend and what happens on yes.
 - **⚠ Broke** *(only if applicable)*: what failed, plus the designer's options.
-- **🔎 Found** *(only if applicable)*: context that changes the plan or spec.
-- **❓ Your call** *(only if applicable)*: a decision you couldn't make alone, including validator findings that need a product call.
+- **🔎 Found, not needed for this block** *(only if applicable)*: one line each, with where you logged it (gotchas, BUILD_ORDER). Context only: nothing here blocks the block.
+- **Session**: "Safe to archive once landed", or "Keep: <why>" (uncommitted work, a commit that only exists locally, waiting on Needs you #n).
 
 Never suppress breakage, a blocker or a needed decision for brevity. Then stop for the designer's checkpoint; `/s3` lands the work.

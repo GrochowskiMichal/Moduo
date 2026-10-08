@@ -35,9 +35,16 @@ Close out the session so nothing is lost and the next one picks up cleanly. **Th
    - Run `bun run verify`, then open `<personal> → develop`. A ruleset requires the `static-checks` job on `develop`, so wait for it (`gh pr checks <n> --watch --required`) and merge with `gh pr merge <n> --merge` once it passes. If it fails, fix it on the personal branch; never try to bypass the ruleset.
    - Afterwards `git fetch` and merge `origin/develop` back into the personal branch, so the two stay aligned.
    - Skip this step if the designer said to keep the work on the task branch, if the chunk is a one-line typo or doc nit, or if the duplication guard against open PRs into `develop` shows overlap.
-7. **Report.** Tell the designer what shipped, whether `bun run verify` is green, which gates ran and what they found, what merged (PR links), what's left undone, which next sessions you suggest and why (one line each), and whether it's safe to archive the session.
+7. **Report**, in the same shape as `/s2`'s, so every session ends the same way:
+   - Open with **Status: Landed · Built, not landed · Blocked**, plus the PR links and what merged where.
+   - **Changed**: what shipped, whether `bun run verify` is green, which gates ran and what they found.
+   - **To finish this block**: what still stands between this block and Landed, numbered, or "Nothing".
+   - **❓ Needs you**: numbered decisions or actions only the designer can take (`/code-review ultra`, a prod go-ahead, a product call), each with your recommendation.
+   - **🔎 Found, not needed for this block**: one line each, with where it's logged.
+   - **Session**: "Safe to archive", or "Keep: <why>" (an open PR waiting on Needs you, work not yet pushed).
+   - Then the next-session suggestions from step 8.
 8. **Suggest at most 2 next sessions as ready-to-paste prompts.** First re-read `specs/BUILD_ORDER.md` on the **updated** personal branch.
-   - **What qualifies:** the next `[ ]` block in this session's lane, or a block whose last unmet dependency this merge just satisfied. Never another lane's queue, and never a block an open PR already claims.
+   - **What qualifies:** the next `[ ]` block in this session's lane, or a block whose last unmet dependency this merge just satisfied. Never another lane's queue, never a block an open PR already claims, and never a 🔎 Found item outside the designer's current focus area.
    - **Format:** a title (`/s2 <BLOCK> — <short name>`), one plain sentence on why it's ready now, and a fenced prompt.
    - **The prompt's first instruction is always** to verify the block is still `[ ]` and unclaimed on the fresh personal branch. Then it gives the scope, the spec and gotcha pointers, any lane contention, and the done gate.
    - Use explicit block IDs, never `next`. If nothing is DoR-ready, suggest a `/s1 <topic>` prompt instead. If nothing is ready at all, suggest nothing.
