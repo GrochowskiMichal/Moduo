@@ -47,9 +47,9 @@ export function parseMaster(name: string, svg: string): Master {
   // presentation defaults there (Figma always writes fill="none" on it).
   const body = root ? svg.replace(root, "") : svg;
   // …but nothing on the root that changes how the paths render.
-  if (root && /\s(?:fill-rule|(?:fill-)?opacity|transform|style)\s*=/i.test(root)) {
+  if (root && /\s(?:fill-rule|(?:fill-)?opacity|transform|style|stroke)\s*=/i.test(root)) {
     throw new Error(
-      `brand/masters/${name}: the <svg> root sets a fill rule, opacity, transform or style. Set fills on each path.`,
+      `brand/masters/${name}: the <svg> root sets a fill rule, opacity, stroke, transform or style. Set fills on each path.`,
     );
   }
   for (const [pattern, what] of FORBIDDEN) {

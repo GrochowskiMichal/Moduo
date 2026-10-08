@@ -20,6 +20,7 @@ import { CANVAS, ICON_BLACK, ICON_WHITE, INK, oklchGrayToHex, PAPER } from "./pa
 import {
   AVATAR_MARK_SHARE,
   EMAIL_LOCKUP_CANVAS,
+  EMAIL_MARK_DISPLAY_PX,
   EMAIL_MARK_SIZE,
   FAVICON_TAB_PX,
   markForDisplay,
@@ -59,6 +60,7 @@ describe("parseMaster", () => {
     ['<svg viewBox="0 0 1 1"><g fill-rule="evenodd"><path d="M0 0Z"/></g></svg>', /on a group/],
     ['<svg viewBox="0 0 1 1" fill-rule="evenodd"><path d="M0 0Z"/></svg>', /root/],
     ['<svg viewBox="0 0 1 1" opacity="0.3"><path d="M0 0Z"/></svg>', /root/],
+    ['<svg viewBox="0 0 1 1" stroke="#000"><path d="M0 0Z"/></svg>', /root/],
     ['<svg viewBox="0 0 1 1"><svg x="5"><path d="M0 0Z"/></svg></svg>', /nested/],
   ])("rejects a master that isn't flat paths (%#)", (svg, message) => {
     expect(() => parseMaster("bad.svg", svg)).toThrow(message);
@@ -229,7 +231,7 @@ describe("exports match the masters", () => {
     const lockupSvg = (fill: string) => canvasSvg({ master: lockup, fill, ...EMAIL_LOCKUP_CANVAS });
     const markSvg = (fill: string) =>
       canvasSvg({
-        master: markForDisplay(EMAIL_MARK_SIZE / 2, mark, small),
+        master: markForDisplay(EMAIL_MARK_DISPLAY_PX, mark, small),
         fill,
         width: EMAIL_MARK_SIZE,
         height: EMAIL_MARK_SIZE,

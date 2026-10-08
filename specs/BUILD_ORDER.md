@@ -163,7 +163,6 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > Planned 2026-10-08 (PR #274). Maciej makes every brand call; agents never edit `brand/masters/`. **BRAND-1 supplies TX-1's logo PNGs** (`public/email/`), so TX-1 takes them instead of rasterising its own. BRAND-0 is design work by Maciej; every later block re-exports when it lands.
 
 - [ ] **BRAND-0 — Redraw the masters (mark at 45° from one stroke, wordmark A, lockup spacing, small master)** · deps: — · *Maciej*
-- [x] **BRAND-1 — Asset pipeline (`brand/` tree, `bun run brand:export`, every export, consumers wired, old files deleted)** · deps: — · 2026-10-08 · `t/maciej/brand-1-asset-pipeline`
 - [ ] **BRAND-2 — App touch-points (initials default avatar, Pilat out of the picker, dead fonts, staging favicon)** · deps: BRAND-1
 - [ ] **BRAND-3 — The reveal animation (once per launch, reduced-motion fade, video intro)** · deps: BRAND-1
 - [ ] **BRAND-4 — Landing alignment (PR into `prod-landing`)** · deps: BRAND-1

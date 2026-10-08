@@ -32,6 +32,7 @@ import { CANVAS, ICON_BLACK, ICON_WHITE, INK, PAPER } from "./palette";
 import {
   AVATAR_MARK_SHARE,
   EMAIL_LOCKUP_CANVAS,
+  EMAIL_MARK_DISPLAY_PX,
   EMAIL_MARK_SIZE,
   FAVICON_TAB_PX,
   markForDisplay,
@@ -161,7 +162,7 @@ write("brand/exports/og/og-base.png", png(og, 1200));
 const lockupCanvas = (fill: string) => canvasSvg({ master: lockup, fill, ...EMAIL_LOCKUP_CANVAS });
 const markCanvas = (fill: string) =>
   canvasSvg({
-    master: markForDisplay(EMAIL_MARK_SIZE / 2, mark, markSmall),
+    master: markForDisplay(EMAIL_MARK_DISPLAY_PX, mark, markSmall),
     fill,
     width: EMAIL_MARK_SIZE,
     height: EMAIL_MARK_SIZE,

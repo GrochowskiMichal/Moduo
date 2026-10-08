@@ -38,8 +38,8 @@ export const AVATAR_MARK_SHARE = 0.55;
  */
 export const EMAIL_LOCKUP_CANVAS = { width: 192, height: 44 } as const;
 export const EMAIL_MARK_SIZE = 26;
+/** The footer-badge mark as displayed (CSS px), which decides the small master. */
+export const EMAIL_MARK_DISPLAY_PX = 13;
 
-/**
- * No halo (brand decision 74a): the email shows the Ink ("light") or Paper
- * ("dark") file to match the reader's light or dark mode instead.
- */
+// No halo (brand decision 74a): emails show the Ink ("light") or Paper ("dark")
+// file to match the reader's light or dark mode instead.

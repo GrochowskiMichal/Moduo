@@ -1,7 +1,8 @@
 /**
- * Geometry measured from the rendered mark, shared by the exporter and the
- * drift test so both compute the same avatar scale. Bounding boxes come from
- * resvg's geometry pass (no rasterising), so they're stable across platforms.
+ * Geometry measured from the rendered mark, for the exporter only. The drift
+ * test can't load resvg's native binding, so it reads the recorded value in
+ * brand/exports/measurements.json instead; never import this from a test.
+ * Bounding boxes come from resvg's geometry pass (no rasterising).
  */
 
 import { Resvg } from "@resvg/resvg-js";
