@@ -21,7 +21,8 @@
 
 ## Workflow skills
 - [ ] **Do:** `/s1 <small topic>` → **Expect:** it grills with recommended answers and uses `grilling` (no "grill-me not found") _(Claude Code)_
-- [ ] **Do:** start a block with the `/goal` template from the `/s2` skill → **Expect:** a draft PR titled `[<ID>] …` appears before building, and the run ends with the Changed · Test this · Next report _(Claude Code)_
+- [ ] **Do:** start a block with the `/goal` template from the `/s2` skill → **Expect:** a draft PR titled `[<ID>] …` appears before building, and the run ends with a report that opens with a **Status** line, keeps **To finish this block** apart from **🔎 Found, not needed for this block**, and closes with a **Session** line _(Claude Code)_
+- [ ] **Do:** let a `/s2` run reach its first green `bun run verify` → **Expect:** the task branch is already pushed (the draft PR shows the commit) _(GitHub)_
 - [ ] **Do:** `/s3` on a branch that touches `supabase/migrations/` → **Expect:** it runs the security scan and asks you to launch `/code-review ultra <PR>` before merging _(Claude Code)_
 
 ## Knowledge files

@@ -6,6 +6,8 @@
 > **How `/s3` uses this:** at session end it reconciles this file (ticks any block completed that session) and syncs each spec's `Status:` line.
 > **Invariant:** every block's dependencies appear **above** it, so strict top-to-bottom is always a valid order. Items at the same depth with disjoint deps may be built in parallel/any order.
 
+**Focus:** _unset_ — the designer's current focus area, edited by Mike or Maciej. `/s2` and `/s3` turn a 🔎 Found item into a chip or next-session suggestion only when it falls inside this; while it's unset, none do.
+
 Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in the trailing note).
 
 > **⚠ Reading the trailing notes: "migration deploy-ready but unapplied" is HISTORY, not current state.**
