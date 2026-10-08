@@ -110,9 +110,8 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > - **DoR status:** ✅ means ready now; the rest follow their dependencies. All designer calls are answered (2026-10-08).
 > - **Order:** top to bottom, every dep listed above its dependents. The lane table below shows what can run at once.
 
-- [ ] **TV-D5 — Live updates (Realtime)** · tasks-v2 block 8 · deps: TV-D2 · lane data · adds tables to the `supabase_realtime` publication
 - [ ] **TV-U1 — Rows, board, completed** · tasks-v2 block 9 · deps: DS-3, TV-D4 · lane tasks-ui
-- [ ] **TV-U3 — Detail panel + comments** · tasks-v2 block 10 · deps: DS-2, TV-D1, TV-D3 · lane tasks-ui
+- [ ] **TV-U3 — Detail panel + comments** · tasks-v2 block 10 · deps: DS-2, TV-D1, TV-D3 · lane tasks-ui · note: listen to `comments` live (TV-D5 published the table; D5-1's comment count lands here)
 - [ ] **TV-F2 — Queue run (line-up, run, Now/Up next, claims "is on this")** · tasks-v2 block 11 · deps: TV-F1, TV-D2, TV-D3, DS-2 · lane focus · migration (`focus_runs`)
 - [ ] **TV-F3 — Pomodoro per run, break, summary, empty, Home pomodoro widget** · tasks-v2 block 12 · deps: TV-F2 · lane focus
 - [ ] **TV-U2 — Toolbar, Filter, Display, search** · tasks-v2 block 13 · deps: DS-4, TV-U1, TV-D4 · lane tasks-ui
@@ -122,7 +121,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **TV-U7 — Capture v2 (`#tag`, pills, queue switch, filter seed)** · tasks-v2 block 17 · deps: DS-2, TV-T1, TV-D2, TV-U2 · lane tasks-ui
 - [ ] **TV-F4 — In flight (hand-off, check-backs, linked waits)** · tasks-v2 block 18 · deps: TV-F3, TV-U3 · lane focus · migration (`focus_in_flight`)
 - [ ] **TV-F5 — Calendar & Home on one engine** · tasks-v2 block 19 · deps: TV-F2, TV-D3 · lane focus
-- [ ] **AT-2 — Upload pipeline + panel attachments + viewer** · attachments block 2 · deps: AT-1, TV-U3 · lane attachments
+- [ ] **AT-2 — Upload pipeline + panel attachments + viewer** · attachments block 2 · deps: AT-1, TV-U3 · lane attachments · note: add `attachments` to the `supabase_realtime` publication (TV-D5 published the other Tasks tables; attachments didn't exist yet), unless AT-1 already did
 - [ ] **AT-3 — Attachments everywhere + Settings → Storage** · attachments block 3 · deps: AT-2, TV-U1, TV-U7 · lane attachments
 - [ ] **TV-U8 — Saved views** · tasks-v2 block 20 · deps: TV-U2, TV-U6 · lane tasks-ui · migration (`task_views`)
 - [ ] **DS-5 — Sweep: NavRow + state layer in every module, lint guards** · design-state-layer block 5 · deps: DS-3, DS-4 · lane design
