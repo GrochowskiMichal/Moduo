@@ -1601,6 +1601,72 @@ export type Database = {
           },
         ]
       }
+      task_queue: {
+        Row: {
+          id: string
+          position: string
+          queued_at: string
+          task_id: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          id?: string
+          position: string
+          queued_at?: string
+          task_id: string
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          id?: string
+          position?: string
+          queued_at?: string
+          task_id?: string
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_queue_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_queue_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_with_drift"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_queue_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_queue_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "task_queue_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_relations: {
         Row: {
           blocked_task_id: string
@@ -4425,6 +4491,82 @@ export type Database = {
           to: "tasks"
           isOneToOne: true
           isSetofReturn: false
+        }
+      }
+      tasks_op_queue_add: {
+        Args: { p_at?: string; p_task_id: string; p_workspace_id: string }
+        Returns: {
+          id: string
+          position: string
+          queued_at: string
+          task_id: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "task_queue"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      tasks_op_queue_move_to_end: {
+        Args: { p_task_id: string; p_workspace_id: string }
+        Returns: {
+          id: string
+          position: string
+          queued_at: string
+          task_id: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "task_queue"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      tasks_op_queue_remove: {
+        Args: { p_task_id: string; p_workspace_id: string }
+        Returns: {
+          id: string
+          position: string
+          queued_at: string
+          task_id: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "task_queue"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      tasks_op_queue_reorder: {
+        Args: {
+          p_after_task_id?: string
+          p_task_id: string
+          p_workspace_id: string
+        }
+        Returns: {
+          id: string
+          position: string
+          queued_at: string
+          task_id: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "task_queue"
+          isOneToOne: false
+          isSetofReturn: true
         }
       }
       tasks_op_reschedule: {
