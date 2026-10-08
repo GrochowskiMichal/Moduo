@@ -74,7 +74,13 @@ import {
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
-import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
+import {
+  collectTruncations,
+  READ_CAPS,
+  readPaged,
+  TAG_LINKS_SCOPE,
+  type Truncation,
+} from "./paged-select";
 import {
   missingOptionalPrefsDomain,
   optionalPrefsAvailable,
@@ -2021,7 +2027,7 @@ export const webRuntime: ModuoRuntime = {
           order: (q) => q.order("created_at").order("id"),
         }),
         selectCapped<any>({
-          scope: "tag assignments",
+          scope: TAG_LINKS_SCOPE,
           cap: READ_CAPS.tagLinks,
           build: all("tag_links"),
           order: (q) => q.order("id"),
@@ -2265,12 +2271,9 @@ export const webRuntime: ModuoRuntime = {
               .is("deleted_at", null),
           order: (q) => q.order("created_at").order("id"),
         }),
-        supabaseClient
-          .from("tag_links")
-          .select("*")
-          .eq("workspace_id", workspaceId)
-          .is("deleted_at", null)
-          .order("created_at"),
+        // Only this entity's links. (A stray workspace-wide read here filtered
+        // on `tag_links.deleted_at`, a column that doesn't exist, so the whole
+        // read failed and every hub's tag row stayed empty until TV-T1.)
         supabaseClient
           .from("tag_links")
           .select("*")
@@ -2303,7 +2306,7 @@ export const webRuntime: ModuoRuntime = {
           order: (q) => q.order("created_at").order("id"),
         }),
         selectCapped<any>({
-          scope: "tag assignments",
+          scope: TAG_LINKS_SCOPE,
           cap: READ_CAPS.tagLinks,
           build: (opts) => {
             const q = supabaseClient
