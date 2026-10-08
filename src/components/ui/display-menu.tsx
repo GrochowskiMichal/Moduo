@@ -73,7 +73,7 @@ function sameValue(a: DisplayValues, b: DisplayValues): boolean {
 }
 
 const ROW_CLASS =
-  "flex min-h-(--ctrl-h) items-center justify-between gap-3 px-2 font-sans text-sm text-muted-foreground";
+  "flex min-h-(--ctrl-h) items-center justify-between gap-3 px-2 font-display text-sm text-muted-foreground";
 
 function DisplayMenu<V extends DisplayValues>({
   controls,
@@ -105,6 +105,13 @@ function DisplayMenu<V extends DisplayValues>({
         align={align}
         aria-label="Display options"
         className="flex w-80 flex-col rounded-lg border-hairline p-1.5"
+        // Focus the panel, not its first control: that's an icon-only
+        // segment, whose tooltip would pop up on every open. Tab still
+        // reaches the controls in order.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement | null)?.focus();
+        }}
       >
         {controls.map((control, index) => {
           const labelId = `${idPrefix}-${control.id}`;
@@ -130,7 +137,7 @@ function DisplayMenu<V extends DisplayValues>({
                         size="sm"
                         aria-pressed={pressed}
                         className={cn(
-                          "px-2 font-sans",
+                          "px-2",
                           pressed ? "border-transparent" : "text-muted-foreground",
                         )}
                         onClick={() =>
@@ -197,7 +204,7 @@ function DisplayMenu<V extends DisplayValues>({
               <Button
                 variant="ghost"
                 size="sm"
-                className="px-2 font-sans text-muted-foreground hover:text-foreground"
+                className="px-2 text-muted-foreground hover:text-foreground"
                 disabled={sameValue(value, defaultValue)}
                 onClick={() => onValueChange(defaultValue)}
               >

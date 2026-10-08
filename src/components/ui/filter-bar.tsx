@@ -209,7 +209,7 @@ function FilterMenu({
                     the list, so a value is one Enter away. */}
                 {query.trim()
                   ? dimensions.map((dim) => (
-                      <CommandGroup key={dim.id} heading={dim.label}>
+                      <CommandGroup key={dim.id}>
                         {dim.options.map((option) => {
                           const on = selectedOn(dim).includes(option.value);
                           return (

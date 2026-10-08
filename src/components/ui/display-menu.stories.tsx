@@ -141,7 +141,7 @@ export const WithFooter: Story = {
         defaultValue={DEFAULTS}
         defaultOpen
         footer={
-          <Button variant="ghost" size="sm" className="me-auto px-2 font-sans">
+          <Button variant="ghost" size="sm" className="me-auto px-2">
             Save as view…
           </Button>
         }
