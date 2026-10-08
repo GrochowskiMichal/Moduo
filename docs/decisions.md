@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-08 · Every `/s2` and `/s3` report opens with a Status line and keeps "to finish this block" apart from findings; one block per session; unlanded work is always pushed.
 - 2026-10-08 · `main` and `develop` change only through a pull request whose `static-checks` job passed, and a weekly cloud routine gardens the knowledge files.
 - 2026-10-07 · The repo is public, so Entire checkpoints are local-only and never pushed.
 - 2026-10-07 · Claude Code is the only harness, on Anthropic models, and AGENTS.md is the single instruction file.
@@ -21,6 +22,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-08 · PRIV-3: switching app analytics off, or deleting the account, deletes what PostHog holds for the person.
 - 2026-10-07 · PRIV-2 planned: what a deleted account leaves in other people's workspaces, its Stripe copy, and a privacy@ admin command
 - 2026-10-07 · App analytics (PostHog) is opt-in per person: asked after sign-in until answered, off until you say yes, tagged `surface: "app"` in the shared PostHog project, and in the privacy policy.
 - 2026-10-07 · Deleting an account also deletes the user's private items in other people's workspaces, and the Danger zone says the plan ends
@@ -62,6 +64,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-10-08 · Subframe is removed.
 - 2026-10-08 · Storybook is 10.6.1, with `@storybook/addon-mcp`.
 - 2026-10-08 · Claude Code gets TypeScript code intelligence from TypeScript 7's own language server, through a project plugin.
 - 2026-10-07 · Biome doesn't lint `landing/**`, and `bun run lint:js` gates CI.
@@ -100,6 +103,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-08 · The "Moduo for Claude Code" mod was dropped; the connector improvements it came with stay.
 - 2026-07-04 · Notes NO-9 + NO-10 landed — publish-to-web + the DoD (MCP manifest/connector + Recent-notes widget); Wave 3 (Notes) COMPLETE.
 - 2026-06-27 · Contacts CO-5 MCP manifest + "Needs attention" widget landed — Wave 1 (Contacts) complete.
 - 2026-06-27 · Spine CT-7 Tasks adoption + MCP manifest + dashboard widget landed (Wave 0 spine complete).
@@ -205,6 +209,9 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-10-08 · TV-D1 landed: task edits save field by field, a task has its own assignee (`assignee_id`), and `owner_id` is the creator again.
+- 2026-10-08 · TV-F1: Focus keeps time by the wall clock, survives reloads, and asks about away time.
+- 2026-10-08 · TV-Q1: the List leaves modified keys alone, a row's buttons keep Space/Enter, the bucket pill shows only where the bucket isn't implied, and deleting a bucket confirms, then commits when its Undo toast closes.
 - 2026-10-08 · Tasks v2 calls answered: saved views are personal and synced; buckets get Archive, "Delete the tasks too" and a 30-day Recently deleted.
 - 2026-10-07 · Tasks v2 planned: one optional assignee, a personal Queue not tied to a date, Focus as a run of your Queue, time entries and live updates.
 - 2026-07-11 · DF-22: Tasks unifies to ONE app-level `DndContext`, but the Timeline deliberately keeps its own nested one.
@@ -217,6 +224,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-08 · DS-2 landed: primitives use the state layer, selection is tint-only, hover ≠ current everywhere it collided.
+- 2026-10-08 · DS-1 landed: the state layer re-resolves in every appearance scope, thin token scrollbars are the global default, and Storybook switches every appearance axis.
 - 2026-10-07 · A state layer of tokens; selection becomes tint-only (R5 rewrite lands in DS-2).
 - 2026-08-14 · DF-18 (eyebrow / detail-title / toolbar standardization) landed
 - 2026-07-27 · The app accent is MONOCHROME by default; hues are opt-in; pre-workspace surfaces are always monochrome
@@ -229,7 +238,14 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - Control-sizing rung contract.
 - Theme shades.
 
+## Brand: logo, colour, type, motion, voice → [decisions/brand.md](decisions/brand.md)
+
+- 2026-10-08 · Pink is not Moduo's accent and there is no "AI disc"; pink stays only as one ordinary accent/tag option.
+- 2026-10-08 · Brand system planned: the product is the brand; drawn wordmark; no brand hue; pink isn't a brand colour; the mark reveals itself out of nothing.
+
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
+
+- 2026-10-08 · Every email Moduo sends goes through one system: Resend, one template kit, one outbox; invite-only becomes an allow-list
 
 - 2026-10-07 · Finance is not planned — not soon, possibly never.
 - 2026-10-02 · Chat + calls becomes a planned module (Duo/Team plans only), reversing "no chat module, keep Slack"; whiteboard not planned; Mindmap stays hidden

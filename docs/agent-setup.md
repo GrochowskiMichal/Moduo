@@ -22,7 +22,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
   - `notify.sh`: desktop notifications when a block finishes or Claude needs you.
   - Entire capture hooks.
 - **Permissions:** `.env` files can't be read, and production deploys and migrations (`supabase db push`, `supabase functions deploy`, `az deployment … create`, Supabase MCP `apply_migration` / `execute_sql` / `deploy_edge_function`) always ask first.
-- **MCP servers** (`.mcp.json`): `supabase` (scoped to the Moduo project), `subframe`, `vercel`. There is no GitHub MCP: GitHub's server rejects Claude Code's sign-in (no dynamic client registration), and agents use the `gh` CLI for everything GitHub.
+- **MCP servers** (`.mcp.json`): `supabase` (scoped to the Moduo project), `vercel`. There is no GitHub MCP: GitHub's server rejects Claude Code's sign-in (no dynamic client registration), and agents use the `gh` CLI for everything GitHub.
 - **Review rules** ([REVIEW.md](../REVIEW.md)) and the risk tiers in `/s3`.
 
 ## What GitHub and the cloud provide
@@ -35,7 +35,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 1. **Claude Code ≥ 2.1.277** (`claude update`), signed in with your claude.ai account (Max).
 2. **gitleaks** for the commit guard: `brew install gitleaks`.
 3. **rust-analyzer** on PATH for Rust diagnostics: `rustup component add rust-analyzer`. The TypeScript server needs nothing extra: it runs from `node_modules` after `bun install`.
-4. **MCP auth**, once per server: `claude mcp login supabase` (then `subframe`, `vercel`). `gh auth login` for GitHub.
+4. **MCP auth**, once per server: `claude mcp login supabase`, then `vercel`. `gh auth login` for GitHub.
    - **If you already connected Supabase or Vercel as claude.ai connectors** (they also work in cloud routines), turn off the project copies on your machine so Claude doesn't load the same tools twice: in `.claude/settings.local.json` set `"disabledMcpjsonServers": ["supabase", "vercel"]`. The `guard-prod-db.sh` hook asks before production writes through either route. The Supabase plugins bring two more copies (`plugin:supabase:supabase`, `plugin:postgres-best-practices:supabase`); turn those off in `/mcp`. The plugins' skills keep working.
    - **Storybook MCP** (optional, for UI work): `claude mcp add --transport http storybook http://localhost:6006/mcp`. It works only while `bun run storybook` runs, and gives Claude component docs, props and story previews.
 5. **Trust the project** when Claude Code asks; that installs the project plugins and the Supabase skills marketplace.
@@ -47,7 +47,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 
 1. **Day:** `/s1 <topic>`, the grilling, spec, blocks and Definition-of-Ready gate (read-only; plan mode works).
 2. **Night shift:** one session per block, each in its own worktree (dispatch from `claude agents` or the desktop app). Start each with the `/goal` template from the `/s2` skill, so the session keeps working until the block's definition of done holds. `/s2` claims its block with a draft PR, so parallel sessions never take the same one.
-3. **Morning:** read each Changed · Test this · Next report and run the manual checklist. Then `/s3` runs the review gate the diff's risk calls for, merges into the personal branch, and syncs bigger chunks to `develop`.
+3. **Morning:** read each report's **Status** line first (Built, not landed · Blocked · Not started), then its **To finish this block** and **❓ Needs you** lists, and run the manual checklist. Then `/s3` runs the review gate the diff's risk calls for, merges into the personal branch, and syncs bigger chunks to `develop`.
 4. **Large audits and migrations** across many files run as dynamic workflows (put `ultracode` in the prompt). Watch long CI or release runs with `/loop`.
 
 The only two things you manage: **the work plan** and **your plan limits**.

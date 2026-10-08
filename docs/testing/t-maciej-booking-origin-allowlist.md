@@ -1,15 +1,15 @@
 # Manual test checklist — t/maciej/booking-origin-allowlist (PR #250)
 
-> Generated 2026-10-08 · branch `t/maciej/booking-origin-allowlist` · **Live-verified:** no — nothing is deployed yet. Unit tests (Rstest) cover the origin allow-list and escaping; the migration was executed in PGlite (limits, grants, prune, cascade). The steps below are the deploy and the first live pass.
+> Generated 2026-10-08 · branch `t/maciej/booking-origin-allowlist` · **Live-verified:** partial. Deployed 2026-10-08 01:38 UTC: migration `booking_rate_limit` (prod version 20261008013817), `booking-public` v21, `send-workspace-invite` v17. Grants probed on prod; smoke probes passed (OPTIONS 204, unknown slug 404 for preview and book with no ledger row, bad JSON 400, invite without secret 503). The booking and email steps below still need a real booking.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## Deploy (in this order, with Maciej's OK)
 
 Pre-checked read-only on 2026-10-08: no `booking_attempts` table, no `booking_rate_check` function and no migration row on prod; all 3 live booking links have owners that exist in `auth.users`; deployed `booking-public` v19 matches the last booking-public commit on `maciej` (8d025b3), so this deploy only adds this PR.
 
-- [ ] **Do:** apply `supabase/migrations/20261007120000_booking_rate_limit.sql` (MCP `apply_migration`, name `booking_rate_limit`) → **Expect:** `select has_function_privilege('anon','public.booking_rate_check(text,uuid)','EXECUTE')` is `false`, and the same for `authenticated`; `service_role` is `true`; `has_table_privilege('anon','public.booking_attempts','SELECT')` and `has_sequence_privilege('anon','public.booking_attempts_id_seq','USAGE')` are `false`.
-- [ ] **Do:** `supabase functions deploy booking-public --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api` from this branch → **Expect:** a new version, `verify_jwt=false`.
-- [ ] **Do:** `supabase functions deploy send-workspace-invite --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api` → **Expect:** a new version, `verify_jwt=false`.
+- [x] **Do:** apply `supabase/migrations/20261007120000_booking_rate_limit.sql` (MCP `apply_migration`, name `booking_rate_limit`) → **Expect:** `select has_function_privilege('anon','public.booking_rate_check(text,uuid)','EXECUTE')` is `false`, and the same for `authenticated`; `service_role` is `true`; `has_table_privilege('anon','public.booking_attempts','SELECT')` and `has_sequence_privilege('anon','public.booking_attempts_id_seq','USAGE')` are `false`.
+- [x] **Do:** `supabase functions deploy booking-public --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api` from this branch → **Expect:** a new version, `verify_jwt=false`.
+- [x] **Do:** `supabase functions deploy send-workspace-invite --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api` → **Expect:** a new version, `verify_jwt=false`.
 - [ ] **Do:** ship the web app the normal way (maciej → staging-app → prod-app) → **Expect:** the guest page has the new rate-limit messages. Booking works before this step too; only the copy waits for it.
 
 ## Booking (guest page)

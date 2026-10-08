@@ -113,7 +113,7 @@ export function LinkedNotesPanel({
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+      <div className="pane-scroll min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {status === "loading" ? (
           <p className="px-2 py-6 text-center text-sm text-muted-foreground">Loading…</p>
         ) : status === "error" ? (

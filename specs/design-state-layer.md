@@ -1,6 +1,6 @@
 # Spec: Design-system state layer + shared list primitives (cross-module)
 
-> Status: **Draft — awaiting designer approval** (DS-1 can start now) · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) §UI review U1–U5, the comp [`.design/tasks-dogfood/ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) · Rules: [`docs/DESIGN_RULES.md`](../docs/DESIGN_RULES.md) (R5 changes here), [`docs/DESIGN_SYSTEM.md`](../docs/DESIGN_SYSTEM.md) · First consumer: [`tasks-v2.md`](./tasks-v2.md)
+> Status: **DS-1 + DS-2 built 2026-10-08** (PRs #254, #275) · DS-3/DS-4 next · Owner: maciej · Source: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) §UI review U1–U5, the comp [`.design/tasks-dogfood/ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) · Rules: [`docs/DESIGN_RULES.md`](../docs/DESIGN_RULES.md) (R5 changes here), [`docs/DESIGN_SYSTEM.md`](../docs/DESIGN_SYSTEM.md) · First consumer: [`tasks-v2.md`](./tasks-v2.md)
 
 ## Scope
 
@@ -26,7 +26,7 @@ This spec adds a state layer of tokens, fixes the primitives that inherit the pr
   Distinct on all 6 shades, all 8 accents, light theme (structural), and every density, radius and font.
 - **Raised controls** — the active segment of a segmented control or tab list is *lighter* than its track on dark (white + shadow on light). It reads at a glance in the icon-only view switcher.
 - **Scrollbars** — thin and token-coloured everywhere by default, no opt-in needed. `.no-scrollbar` hides them where a design wants none. Old WebKit gets the same look.
-- **Selection** — a tint, optionally with a 1 px inset hairline in the accent (designer picks in DS-2; the comp has both). **No bars anywhere.** The chat "attention" bar and the calendar focus edge are not selection and stay.
+- **Selection** — a tint, optionally with a 1 px inset hairline in the accent (designer picks in DS-2; the comp has both). *As built (DS-2):* list rows ship tint + hairline behind one token (`--state-selected-edge`; `transparent` = tint only; Maciej kept tint + hairline, 2026-10-08); cards and bordered options always carry the ring; rail/nav "current" items are the neutral `--state-active`, not selection. **No bars anywhere.** The chat "attention" bar and the calendar focus edge are not selection and stay.
 - **NavRow** (sidebar row for every module):
   - **anatomy:** icon/dot slot · label · trailing slot;
   - **count ⇄ ⋯ swap:** the count sits flush right; on hover / keyboard focus / open menu it fades out and **⋯** fades in *in the same slot*, so nothing reflows (R6). ⋯ is also reachable by right-click and keyboard;
@@ -108,6 +108,8 @@ This spec adds a state layer of tokens, fixes the primitives that inherit the pr
    - `--control-raised`: fg 14% over `--muted` on dark; card + shadow on light
 
    *Rejected: redefining `--accent` in place — it backs ~300 button/icon-button hovers, ~118 menu items and 86 hand-written hovers, and `/60` variants would vanish.*
+
+   *As built (DS-1):* each formula is declared once on `:where(:root, [data-theme], [data-shade], [data-accent])` (zero specificity, so theme overrides win regardless of order) and `@theme inline` maps the utilities to `var(--state-…)`, rather than inlining the `color-mix()` into each utility. Same scoped-accent result, one formula per token, and plain `var()` consumers scope too. `--control-raised` gained `--shadow-control-raised` for the light lift, and `--scroll-thumb` / `--scroll-thumb-hover` carry the scrollbar thumb. See [decisions/design-system.md](../docs/decisions/design-system.md) 2026-10-08.
 2. **`--selected-bg` / `--selected-border` stay as aliases** during migration. Each of the 23 consumers is moved explicitly in DS-2 (opaque → translucent is checked per surface).
 3. **Global scrollbar** — a low-specificity base-layer rule (`@layer base { * { scrollbar-width: thin; scrollbar-color: … } }` + `::-webkit-scrollbar*` rules) with a thumb at fg 16% / hover 32%:
    - `.scrollbar-thin` stays as an alias (46 refs);

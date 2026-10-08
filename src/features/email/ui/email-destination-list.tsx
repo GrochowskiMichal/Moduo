@@ -129,7 +129,7 @@ export function EmailDestinationList({
   }
 
   return (
-    <div className="scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto p-2">
+    <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto p-2">
       <Eyebrow as="div" className="px-1">
         {mode === "snoozed" ? "Snoozed" : "Follow-ups"}
       </Eyebrow>

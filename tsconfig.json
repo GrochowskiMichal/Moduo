@@ -24,6 +24,8 @@
     "supabase/functions/_shared/contracts",
     "supabase/functions/_shared/account-erasure.ts",
     "supabase/functions/_shared/account-erasure.test.ts",
+    "supabase/functions/_shared/analytics-forget.ts",
+    "supabase/functions/_shared/analytics-forget.test.ts",
     "supabase/functions/_shared/app-origin.ts",
     "supabase/functions/_shared/app-origin.test.ts",
     "supabase/functions/_shared/client-ip.ts",
@@ -32,6 +34,8 @@
     "supabase/functions/_shared/escape.test.ts",
     "supabase/functions/_shared/oauth-connect.ts",
     "supabase/functions/_shared/oauth-connect.test.ts",
+    "supabase/functions/_shared/posthog-erasure.ts",
+    "supabase/functions/_shared/posthog-erasure.test.ts",
     "supabase/functions/send-workspace-invite/email.ts",
     "supabase/functions/send-workspace-invite/email.test.ts"
   ],

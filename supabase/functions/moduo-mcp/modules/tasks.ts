@@ -15,6 +15,19 @@
  */
 
 import { TASK_STATUSES, isTaskStatus } from "../../_shared/contracts/vocabularies.ts";
+import { assigneeCandidates, resolveAssigneeArg } from "../../_shared/task-people.ts";
+import {
+  MAX_PAGE,
+  filterByAssignee,
+  focusSettingsFrom,
+  isDrifted,
+  orderByBucket,
+  pageOf,
+  parseAssignee,
+  shapeTask,
+  subtaskCounts,
+  topLevelOnly,
+} from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { visibleIds } from "../share.ts";
 import {
@@ -26,6 +39,10 @@ import {
 type Row = Record<string, any>;
 
 const OPEN_STATUSES = ["todo", "in_progress"] as const;
+// The creator's "completed" notification (TV-D1). The trail already says so
+// through tasks.set_status, so agents don't get it twice (like the app's
+// isTrailEntry).
+const NOTIFICATION_ONLY_OP = "tasks.completed";
 
 function str(args: Row, name: string, required = true): string {
   const v = args?.[name];
@@ -61,11 +78,12 @@ async function rows(query: PromiseLike<{ data: Row[] | null; error: { message: s
 async function loadWorkspace(ctx: ToolContext) {
   const ws = ctx.key.workspaceId;
   const visible = await visibleIds(ctx, "task");
-  const [allTasks, relations, tags, tagLinks] = await Promise.all([
+  const [allTasks, relations, tags, tagLinks, members] = await Promise.all([
     rows(ctx.db.from("tasks").select("*").eq("workspace_id", ws).is("deleted_at", null)),
     rows(ctx.db.from("task_relations").select("*").eq("workspace_id", ws)),
     rows(ctx.db.from("tags").select("id, name, color").eq("workspace_id", ws).is("deleted_at", null)),
     rows(ctx.db.from("tag_links").select("tag_id, entity_type, entity_id").eq("workspace_id", ws).eq("entity_type", "task")),
+    workspaceMembers(ctx),
   ]);
   const tasks = allTasks.filter((t) => visible.has(t.id));
   const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -77,6 +95,8 @@ async function loadWorkspace(ctx: ToolContext) {
     relations.filter((r) => open(r.blocker_task_id) && byId.has(r.blocked_task_id))
       .map((r) => r.blocked_task_id),
   );
+  // Assignees and creators by name; someone no longer a member reads "Former member".
+  const names = new Map(members.map((m) => [m.user_id, m.name]));
   const tagName = new Map(tags.map((t) => [t.id, t.name]));
   const taskTags = new Map<string, string[]>();
   for (const link of tagLinks) {
@@ -86,49 +106,24 @@ async function loadWorkspace(ctx: ToolContext) {
     list.push(name);
     taskTags.set(link.entity_id, list);
   }
-  return { tasks, relations, tags, byId, blockedIds, taskTags };
+  // names: shapeTask's assignee/creator (TV-D1); subtaskCounts: MCC-1's subtask_count.
+  return { tasks, relations, tags, byId, blockedIds, taskTags, names, subtaskCounts: subtaskCounts(tasks) };
 }
 
-type WorkspaceData = Awaited<ReturnType<typeof loadWorkspace>>;
-
-function isDrifted(t: Row, now: Date): boolean {
-  if (t.status === "done" || t.status === "archived") return false;
-  return !!t.scheduled_at && new Date(t.scheduled_at).getTime() < now.getTime();
-}
-
-/** Quiet, compact task shape for agents — full row noise stays out. */
-function shapeTask(t: Row, data: WorkspaceData, now: Date, full = false): Row {
-  const out: Row = {
-    id: t.id,
-    title: t.title,
-    bucket_id: t.bucket_id,
-    status: t.status,
-    drifted: isDrifted(t, now),
-    blocked: data.blockedIds.has(t.id),
-  };
-  const description = (t.description ?? "").trim();
-  if (description) out.description = full ? description : description.slice(0, 280);
-  if (t.parent_id && data.byId.has(t.parent_id)) out.parent_id = t.parent_id;
-  if (t.due_date) out.due_date = t.due_date;
-  if (t.scheduled_at) out.scheduled_at = t.scheduled_at;
-  if (t.duration_minutes != null) out.duration_minutes = t.duration_minutes;
-  if (t.energy_level) out.energy_level = t.energy_level;
-  if (t.priority) out.priority = t.priority;
-  if (t.committed_for) {
-    out.committed_for = t.committed_for;
-    out.commit_order = t.commit_order;
-  }
-  if (t.reschedule_count) out.reschedule_count = t.reschedule_count;
-  if (t.recurrence) {
-    out.recurrence = { rrule: t.recurrence.rrule, next_occurrence: t.recurrence.nextOccurrence ?? null };
-  }
-  const tags = data.taskTags.get(t.id);
-  if (tags?.length) out.tags = tags;
-  if (full) {
-    out.created_at = t.created_at;
-    out.updated_at = t.updated_at;
-  }
-  return out;
+/** The workspace's members (the owner is one too), with names and permissions. */
+async function workspaceMembers(
+  ctx: ToolContext,
+): Promise<{ user_id: string; perms: string[] | null; name: string }[]> {
+  const found = await rows(
+    ctx.db.from("workspace_members")
+      .select("user_id, perms, profiles(display_name)")
+      .eq("workspace_id", ctx.key.workspaceId),
+  );
+  return found.map((m) => ({
+    user_id: m.user_id as string,
+    perms: (m.perms as string[] | null) ?? null,
+    name: ((m.profiles?.display_name as string | null) ?? "").trim() || "Member",
+  }));
 }
 
 async function fetchTask(ctx: ToolContext, taskId: string): Promise<Row> {
@@ -191,7 +186,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_list",
       description:
-        "Tasks with computed drift/blocked state, subtasks (parent_id), tags and recurrence. Defaults to open tasks (todo + in_progress).",
+        "Tasks with computed drift/blocked state, subtasks (parent_id, subtask_count), assignee and assignee_id (null = Unassigned) and creator, tags and recurrence. Defaults to open tasks (todo + in_progress), ordered by bucket then position. Pages with offset.",
       access: "view",
       inputSchema: {
         type: "object",
@@ -202,7 +197,17 @@ export const tasksConnectorModule: ConnectorModule = {
             enum: ["open", ...TASK_STATUSES],
             description: "Filter by status; 'open' = todo + in_progress (default).",
           },
-          limit: { type: "number", description: "Max tasks (default 100, max 200)." },
+          assignee: {
+            type: "string",
+            enum: ["me", "anyone"],
+            description: "'me' = tasks assigned to the key's creator (not ones they only created; Unassigned tasks are nobody's); 'anyone' (default) = every task you can see.",
+          },
+          top_level: {
+            type: "boolean",
+            description: "Only top-level tasks (no parent in the result); subtasks are summarised in subtask_count. Default false.",
+          },
+          limit: { type: "number", description: `Max tasks per page (default 100, max ${MAX_PAGE}).` },
+          offset: { type: "number", description: "Skip this many tasks (default 0). A page shorter than limit is the last." },
         },
       },
       handler: async (args, ctx) => {
@@ -210,12 +215,30 @@ export const tasksConnectorModule: ConnectorModule = {
         const now = new Date();
         const status = typeof args.status === "string" ? args.status : "open";
         const bucketId = str(args, "bucket_id", false);
-        let list = data.tasks;
+        let list = filterByAssignee(data.tasks, parseAssignee(args.assignee), ctx.key.createdBy);
         if (bucketId) list = list.filter((t) => t.bucket_id === bucketId);
         if (status === "open") list = list.filter((t) => OPEN_STATUSES.includes(t.status));
         else if (isTaskStatus(status)) list = list.filter((t) => t.status === status);
-        list = list.slice(0, clampLimit(args, 100, 200));
+        if (args.top_level === true) list = topLevelOnly(list, new Set(list.map((t) => t.id)));
+        const buckets = await rows(
+          ctx.db.from("buckets").select("id, position, is_system, group_label")
+            .eq("workspace_id", ctx.key.workspaceId).is("deleted_at", null),
+        );
+        list = pageOf(orderByBucket(list, buckets), args.offset, clampLimit(args, 100, MAX_PAGE));
         return list.map((t) => shapeTask(t, data, now));
+      },
+    },
+    {
+      name: "tasks_focus_settings",
+      description:
+        "The key creator's Focus (pomodoro) settings from Moduo, with the app's defaults filled in: work/break lengths in minutes, long-break rhythm, auto-start and chime.",
+      access: "view",
+      inputSchema: { type: "object", properties: {} },
+      handler: async (_args, ctx) => {
+        const found = await rows(
+          ctx.db.from("user_preferences").select("focus").eq("user_id", ctx.key.createdBy),
+        );
+        return focusSettingsFrom(found[0]?.focus);
       },
     },
     {
@@ -314,6 +337,7 @@ export const tasksConnectorModule: ConnectorModule = {
             .select("op, actor_type, actor_label, payload, created_at")
             .eq("workspace_id", ctx.key.workspaceId).eq("module", "tasks")
             .eq("entity_type", "task").eq("entity_id", taskId)
+            .neq("op", NOTIFICATION_ONLY_OP)
             .order("created_at", { ascending: false }).limit(10),
         );
         return {
@@ -347,6 +371,7 @@ export const tasksConnectorModule: ConnectorModule = {
         let query = ctx.db.from("module_activity")
           .select("entity_type, entity_id, op, actor_type, actor_label, payload, created_at")
           .eq("workspace_id", ctx.key.workspaceId).eq("module", "tasks")
+          .neq("op", NOTIFICATION_ONLY_OP)
           .order("created_at", { ascending: false });
         const taskId = str(args, "task_id", false);
         if (taskId) {
@@ -365,6 +390,26 @@ export const tasksConnectorModule: ConnectorModule = {
           .filter((r) => tasks.has(r.entity_id) || buckets.has(r.entity_id))
           .slice(0, limit)
           .map(({ entity_type: _type, ...rest }) => rest);
+      },
+    },
+
+    {
+      name: "tasks_list_assignees",
+      description:
+        "Who a task can be assigned to: the workspace's members with is_me for the key's creator. Only people with can_be_assigned (they can work on tasks) are accepted by tasks_assign.",
+      access: "view",
+      inputSchema: { type: "object", properties: {} },
+      handler: async (_args, ctx) => {
+        const [members, workspace] = await Promise.all([
+          workspaceMembers(ctx),
+          rows(ctx.db.from("workspaces").select("owner_id").eq("id", ctx.key.workspaceId)),
+        ]);
+        return assigneeCandidates({
+          members,
+          ownerId: (workspace[0]?.owner_id as string | undefined) ?? null,
+          names: new Map(members.map((m) => [m.user_id, m.name])),
+          me: ctx.key.createdBy,
+        });
       },
     },
 
@@ -461,6 +506,30 @@ export const tasksConnectorModule: ConnectorModule = {
       inputSchema: taskIdSchema,
       handler: (args, ctx) =>
         callOp(ctx, "tasks_op_unschedule", { p_task_id: str(args, "task_id") }),
+    },
+    {
+      name: "tasks_assign",
+      description:
+        "Assign a task to a member who can work on tasks, or unassign it with null. \"me\" is the key's creator. Someone else being assigned gets one \"assigned to you\" notification.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "Task uuid." },
+          assignee_id: {
+            type: ["string", "null"],
+            description: "Member uuid (see tasks_list_assignees), \"me\", or null to unassign.",
+          },
+        },
+        required: ["task_id", "assignee_id"],
+      },
+      handler: async (args, ctx) => {
+        const task = await fetchTask(ctx, str(args, "task_id"));
+        return callOp(ctx, "tasks_op_assign", {
+          p_task_id: task.id,
+          p_assignee_id: resolveAssigneeArg(args.assignee_id, ctx.key.createdBy),
+        });
+      },
     },
     {
       name: "tasks_skip_occurrence",

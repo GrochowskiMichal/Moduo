@@ -1,21 +1,15 @@
-// Assignee helpers. A task's assignee IS its `ownerId` (the notification trigger
-// and the overdue inbox already read it that way) — there is no separate column.
-// Candidates are the workspace's active members.
+// Assignee hook and the access preview. A task's assignee is `assigneeId`
+// (null = Unassigned); `creatorId` is who made it. The pure rules the pickers
+// share live in assignee-options.ts.
 
 import { useMemo } from "react";
 
 import { supabaseClient } from "../../lib/runtime.web";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../workspaces/workspace-context";
+import { type Assignee, toAssignees } from "./assignee-options";
 
-export type Assignee = {
-  userId: string;
-  name: string;
-  avatarUrl: string | null;
-  isMe: boolean;
-  /** Viewers can't complete tasks, so they can't be assigned. */
-  canTakeTasks: boolean;
-};
+export type { Assignee } from "./assignee-options";
 
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -44,16 +38,7 @@ export function useAssignees(): {
   const { members } = useWorkspace();
   const { userId } = useAuth();
   return useMemo(() => {
-    const list: Assignee[] = members
-      .filter((m) => m.isActive && !m.removedAt)
-      .map((m) => ({
-        userId: m.userId,
-        name: m.userId === userId ? "Me" : (m.displayName?.trim() ?? "Member"),
-        avatarUrl: m.avatarUrl,
-        isMe: m.userId === userId,
-        canTakeTasks: m.perms.includes("tasks.edit"),
-      }))
-      .sort((a, b) => Number(b.isMe) - Number(a.isMe) || a.name.localeCompare(b.name));
+    const list = toAssignees(members, userId);
     const map = new Map(list.map((a) => [a.userId, a]));
     return {
       assignees: list,

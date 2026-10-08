@@ -18,7 +18,6 @@
       "!storybook-static",
       "!coverage",
       "!**/*.css",
-      "!src/ui",
       "!src/types/supabase.ts",
       "!bun.lock",
       "!scripts/icons/source",

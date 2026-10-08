@@ -28,7 +28,7 @@ Marked rules are enforced in code; the rest you hold yourself.
 The user is a **product designer, not an engineer**: authoritative on product, UX, edge cases, scope and priorities; not on infrastructure, data models or testing.
 
 - **Plan (`/s1`, read-only):** grill exhaustively on product behavior (50–100 questions up front, each with a recommended answer). **Never ask implementation, infra, data-model or library questions**: research and decide them, and record decision + assumption in the spec. Surface a technical choice only when the user would feel it, in product terms, with a recommendation. End at the Definition-of-Ready gate in [specs/_template.md](./specs/_template.md).
-- **Execute (`/s2`, autonomous):** stay silent between tool calls; report once as **Changed · Test this · Next** (+ **⚠ Broke / 🔎 Found / ❓ Your call** when they apply). A block is done when `bun run verify` passes **and** the `validator` subagent reports no BLOCKER/MAJOR. The only acceptable mid-run interruption is a hard blocker research can't resolve.
+- **Execute (`/s2`, autonomous):** stay silent between tool calls; report once, opening with a **Status** line, then **Changed · Test this · To finish this block** (+ **❓ Needs you / ⚠ Broke / 🔎 Found, not needed for this block** when they apply) and a **Session** line saying whether it's safe to archive. One block per session; never leave unlanded work only in the worktree. A block is done when `bun run verify` passes **and** the `validator` subagent reports no BLOCKER/MAJOR. The only acceptable mid-run interruption is a hard blocker research can't resolve.
 - **Wrap (`/s3`):** manual test checklist in `docs/testing/<branch-or-sprint>.md` ([template](./docs/testing/TEMPLATE.md)), live-verified first; decisions + gotchas appended; commit, PR, merge; review gates by risk.
 
 ## Models (Anthropic only, Claude Max plan, October 2026)
@@ -101,7 +101,7 @@ Closed vocabularies (plan tier, task status, roles, link origins, …) live in `
 - **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
 - **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates every block.
 - **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the three guards above.
-- **MCP:** `supabase`, `subframe`, `vercel` in `.mcp.json` (`claude mcp login <name>` once per machine). GitHub work goes through the `gh` CLI.
+- **MCP:** `supabase`, `vercel` in `.mcp.json` (`claude mcp login <name>` once per machine). GitHub work goes through the `gh` CLI.
 - **Parallel work:** one block per session, each session in its own worktree; dispatch background lanes with `claude agents`. Audits and migrations across many files run as dynamic workflows (`ultracode`). Agent teams stay off.
 
 ## Personal layer

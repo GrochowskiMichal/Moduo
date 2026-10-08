@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "@rstest/core";
 
-import { activityActorName, activityLine } from "./activity";
+import { activityActorName, activityLine, isTrailEntry } from "./activity";
 import type { ActivityEntry, RecurrenceRule, Task } from "./model";
 import { catchUpItem } from "./recurrence-engine";
 
@@ -77,10 +77,25 @@ describe("activityLine", () => {
   it("renders DF-9 spine notifications in the trail with a neutral, third-person voice", () => {
     // The trail is read by anyone, so it must NOT use the notification card's "…to you".
     expect(activityLine(entry("tasks.assigned"))).toBe("assigned this");
+    // TV-D1: every assignee change is in the trail, not only the notified ones.
+    expect(activityLine(entry("tasks.assigned", { to: "u2", self: false }))).toBe("assigned this");
+    expect(activityLine(entry("tasks.assigned", { from: "u2", to: null, self: false }))).toBe(
+      "unassigned this",
+    );
+    expect(activityLine(entry("tasks.assigned", { to: "u1", self: true }))).toBe("took this");
     expect(activityLine(entry("tasks.unblocked", { blocker_title: "Ship the API" }))).toBe(
       "finished “Ship the API”, unblocking this",
     );
     expect(activityLine(entry("tasks.unblocked"))).toBe("unblocked this");
+  });
+
+  it("keeps the completed-by-someone-else notification out of the trail (TV-D1)", () => {
+    // tasks.set_status already says "completed this" there; the notification
+    // copy would repeat it.
+    expect(isTrailEntry(entry("tasks.completed"))).toBe(false);
+    expect(isTrailEntry(entry("tasks.set_status", { to: "done" }))).toBe(true);
+    expect(isTrailEntry(entry("tasks.assigned"))).toBe(true);
+    expect(activityLine(entry("tasks.completed"))).toBe("completed this");
   });
 
   it("never lies by omission — unknown ops fall back to the op name", () => {
